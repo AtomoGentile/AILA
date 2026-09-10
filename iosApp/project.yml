@@ -22,6 +22,7 @@ targets:
       - name: Embed and Sign Apple Framework
         script: |
           cd "$SRCROOT/.."
+          chmod +x ./gradlew
           ./gradlew :shared:embedAndSignAppleFrameworkForXcode
 
 schemes:
