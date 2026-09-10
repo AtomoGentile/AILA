@@ -110,17 +110,30 @@ jobs:
           echo "App: $APP_PATH"
 
           xcrun simctl install "$UDID" "$APP_PATH"
-          xcrun simctl launch "$UDID" com.circolareplus
+
+          # "simctl launch" stampa "bundle.id: PID" su stdout. I processi delle app nel
+          # simulatore girano come normali processi HOST (macOS), non come job di launchd:
+          # il PID stampato qui e' interrogabile direttamente con kill -0 sul runner, senza
+          # passare da "simctl spawn ... launchctl list" (che lista servizi di sistema, non
+          # le app in foreground, e quindi non trovava mai nulla - falso allarme di crash
+          # nella versione precedente di questo step).
+          LAUNCH_OUTPUT=$(xcrun simctl launch "$UDID" com.circolareplus)
+          echo "$LAUNCH_OUTPUT"
+          APP_PID=$(echo "$LAUNCH_OUTPUT" | grep -oE '[0-9]+$')
+          if [ -z "$APP_PID" ]; then
+            echo "Impossibile leggere il PID dall'output di 'simctl launch'"
+            exit 1
+          fi
 
           # Da' all'app qualche secondo per completare l'avvio (init Kotlin/Compose,
-          # iniezione del bridge Apple Intelligence) prima di controllare se e' ancora viva:
-          # e' il controllo piu' diretto che abbiamo per un crash all'avvio senza un Mac vero.
+          # iniezione dei bridge nativi) prima di controllare se e' ancora viva: e' il
+          # controllo piu' diretto che abbiamo per un crash all'avvio senza un Mac vero.
           sleep 8
 
-          if xcrun simctl spawn "$UDID" launchctl list | grep -q com.circolareplus; then
-            echo "App avviata e ancora in esecuzione dopo 8s."
+          if kill -0 "$APP_PID" 2>/dev/null; then
+            echo "App avviata (PID $APP_PID) e ancora in esecuzione dopo 8s."
           else
-            echo "L'app non risulta piu' in esecuzione: probabile crash all'avvio."
+            echo "L'app (PID $APP_PID) non risulta piu' in esecuzione: probabile crash all'avvio."
             xcrun simctl spawn "$UDID" log show --predicate 'process == "Circolare+"' --last 1m || true
             exit 1
           fi
