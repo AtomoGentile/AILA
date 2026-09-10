@@ -55,12 +55,68 @@ jobs:
           cd iosApp
           xcodegen generate
 
+      - name: Find an available iOS simulator
+        id: sim
+        run: |
+          set -e
+          # Un dispositivo iPhone gia' creato sul runner, sul runtime iOS piu' recente
+          # disponibile (deve essere iOS 26+: FoundationModels non esiste prima).
+          UDID=$(xcrun simctl list devices available --json \
+            | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+best = None
+for runtime, devices in data['devices'].items():
+    if 'iOS' not in runtime:
+        continue
+    for d in devices:
+        if d['name'].startswith('iPhone'):
+            best = (runtime, d)
+if best is None:
+    sys.exit('Nessun simulatore iPhone disponibile sul runner')
+print(best[1]['udid'])
+")
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          echo "Simulatore scelto: $UDID"
+          xcrun simctl list devices | grep "$UDID"
+
       - name: Build iOS app
         run: |
           xcodebuild \
             -project iosApp/iosApp.xcodeproj \
             -scheme iosApp \
-            -destination 'generic/platform=iOS Simulator' \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO \
             build
+
+      - name: Boot simulator and smoke-test the app launch
+        run: |
+          set -e
+          UDID="${{ steps.sim.outputs.udid }}"
+          xcrun simctl bootstatus "$UDID" -b
+
+          APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "Circolare+.app" -path "*Debug-iphonesimulator*" -print -quit)
+          if [ -z "$APP_PATH" ]; then
+            echo "Circolare+.app non trovata nella DerivedData"
+            exit 1
+          fi
+          echo "App: $APP_PATH"
+
+          xcrun simctl install "$UDID" "$APP_PATH"
+          xcrun simctl launch "$UDID" com.circolareplus
+
+          # Da' all'app qualche secondo per completare l'avvio (init Kotlin/Compose,
+          # iniezione del bridge Apple Intelligence) prima di controllare se e' ancora viva:
+          # e' il controllo piu' diretto che abbiamo per un crash all'avvio senza un Mac vero.
+          sleep 8
+
+          if xcrun simctl spawn "$UDID" launchctl list | grep -q com.circolareplus; then
+            echo "App avviata e ancora in esecuzione dopo 8s."
+          else
+            echo "L'app non risulta piu' in esecuzione: probabile crash all'avvio."
+            xcrun simctl spawn "$UDID" log show --predicate 'process == "Circolare+"' --last 1m || true
+            exit 1
+          fi
+
+          xcrun simctl shutdown "$UDID" || true
