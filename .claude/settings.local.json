@@ -5,7 +5,14 @@
       "Bash(grep -v \"//.*aiProvider\")",
       "Bash(gh repo *)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(git remote *)",
+      "Bash(git push *)",
+      "Bash(git pull *)",
+      "Bash(git checkout *)",
+      "Bash(git commit *)",
+      "Bash(chmod +x gradlew)",
+      "Bash(git commit -m 'Fix: Add execute permission to gradlew and update iOS deployment target to 18.5 *)"
     ]
   }
 }
