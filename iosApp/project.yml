@@ -8,7 +8,7 @@ targets:
   iosApp:
     type: application
     platform: iOS
-    deploymentTarget: "26.0"
+    deploymentTarget: "18.5"
     sources:
       - path: iosApp
     info:
