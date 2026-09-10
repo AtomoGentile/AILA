@@ -6,6 +6,7 @@ build/
 *.aab
 *.aar
 *.jar
+!gradle/wrapper/gradle-wrapper.jar
 
 # === IDE ===
 .idea/
