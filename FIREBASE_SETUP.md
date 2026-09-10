@@ -13,8 +13,10 @@ attivarle, questi sono gli unici passaggi che mancano — nessuno richiede di ri
      `applicationId` in `androidApp/build.gradle.kts`).
    - Scarica il file **`google-services.json`** che ti propone e mettilo in
      `androidApp/google-services.json` (stessa cartella di `androidApp/build.gradle.kts`).
-4. (Quando avrai un progetto Xcode, più avanti) aggiungi anche un'app iOS con bundle ID
-   `com.circolareplus` e scarica `GoogleService-Info.plist` da inserire nel progetto Xcode.
+4. Aggiungi anche un'app iOS con bundle ID `com.circolareplus` e scarica
+   `GoogleService-Info.plist`: va messo in `iosApp/iosApp/GoogleService-Info.plist` (stessa
+   cartella di `iOSApp.swift`). È nel `.gitignore` come `google-services.json`: resta locale,
+   non va committato.
 
 ## 2. Attiva il plugin Android
 
@@ -50,21 +52,29 @@ Non serve nessun'altra modifica: `backend/src/services/fcm.ts` usa già la HTTP 
 (l'unica ancora supportata da Google) e resta silenziosamente disattivato finché questi due
 secret non sono impostati — nessun errore, nessuna notifica.
 
-## 4. (Solo iOS) Registrazione token — richiede lavoro aggiuntivo in Xcode
+## 4. iOS — già cablato, basta il file al punto 1.4
 
-Su Android il token del dispositivo si ottiene automaticamente (vedi
-`shared/src/androidMain/kotlin/circolareplus/push/PushTokenProvider.android.kt`). Su iOS,
-Apple richiede che la registrazione alle notifiche remote (APNs) passi dall'AppDelegate nativo
-in Swift, prima che Firebase possa restituire un token — un passaggio che non si può fare da
-codice Kotlin condiviso. Il file
-`shared/src/iosMain/kotlin/circolareplus/push/PushTokenProvider.ios.kt` contiene le istruzioni
-dettagliate su cosa aggiungere una volta che esisterà un vero progetto Xcode con Firebase
-importato (via Swift Package Manager). Fino ad allora l'app iOS funziona normalmente, solo senza
-notifiche push.
+A differenza di Android, su iOS la registrazione alle notifiche remote (APNs) passa
+dall'AppDelegate nativo in Swift prima che Firebase possa restituire un token — non è
+raggiungibile da Kotlin condiviso puro. È già tutto scritto:
+
+- `iosApp/iosApp/AppDelegate.swift` chiama `FirebaseApp.configure()` e registra il device alle
+  notifiche remote, ma **solo se** `GoogleService-Info.plist` è presente nel bundle — altrimenti
+  salta silenziosamente questi passaggi (l'app resta utilizzabile, semplicemente senza notifiche,
+  esattamente come oggi).
+- `iosApp/iosApp/FirebasePushTokenBridge.swift` espone il token FCM (via
+  `Messaging.messaging().token(completion:)`) a
+  `shared/src/iosMain/kotlin/circolareplus/push/PushTokenProvider.ios.kt`, con lo stesso pattern
+  di bridge Kotlin↔Swift già usato per l'AI locale (`AppleIntelligenceBridge`).
+- `iosApp/project.yml` dichiara Firebase (`FirebaseMessaging` + `FirebaseCore`) come pacchetto
+  Swift Package Manager: nessun CocoaPods, nessun `.xcworkspace` da gestire a parte.
+
+Con `GoogleService-Info.plist` al suo posto (punto 1.4), non serve altro: la prima build Xcode
+scarica il pacchetto Firebase da SPM da sola.
 
 ## Come verificare che funzioni
 
-Dopo i passaggi 1-3, fai login nell'app Android: al primo avvio registra automaticamente il
-token su `/api/fcm/token`. Da rappresentante, pubblica una nuova mappa posti o apri una proposta
-in bacheca: dovrebbe arrivare una notifica push a tutta la classe (vedi le chiamate a
+Dopo i passaggi 1-3, fai login nell'app (Android o iOS): al primo avvio registra automaticamente
+il token su `/api/fcm/token`. Da rappresentante, pubblica una nuova mappa posti o apri una
+proposta in bacheca: dovrebbe arrivare una notifica push a tutta la classe (vedi le chiamate a
 `notifyClass(...)` in `backend/src/routes/*.ts`).

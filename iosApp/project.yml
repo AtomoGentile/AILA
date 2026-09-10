@@ -4,12 +4,25 @@ options:
     iOS: "26.0"
   bundleIdPrefix: com.circolareplus
 
+packages:
+  # Firebase Messaging via Swift Package Manager (non CocoaPods): resta coerente con lo
+  # scheletro XcodeGen-only gia' in uso, senza dover generare un .xcworkspace separato.
+  # FirebaseMessaging usa FirebaseCore internamente ma FirebaseApp.configure() va chiamato
+  # esplicitamente da AppDelegate.swift, quindi serve anche come dipendenza diretta.
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    from: "11.0.0"
+
 targets:
   iosApp:
     type: application
     platform: iOS
     deploymentTarget: "26.0"
     sources:
+      # GoogleService-Info.plist, quando presente in questa cartella, viene raccolto
+      # automaticamente da questo glob come risorsa dell'app (bundle). In CI non c'e'
+      # (locale, vedi .gitignore, come google-services.json per Android): xcodegen non
+      # fallisce se manca, semplicemente non lo trova e non lo include.
       - path: iosApp
     info:
       path: iosApp/Info.plist
@@ -23,6 +36,11 @@ targets:
       # x86_64 per il simulatore (default ARCHS = arm64 x86_64) e Gradle fallisce con
       # "Xcode Requested Architecture Not Configured in Gradle: ios_x64".
       EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
+    dependencies:
+      - package: Firebase
+        product: FirebaseMessaging
+      - package: Firebase
+        product: FirebaseCore
     preBuildScripts:
       - name: Embed and Sign Apple Framework
         script: |
