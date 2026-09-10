@@ -1,0 +1,265 @@
+package circolareplus.data.local
+
+import circolareplus.domain.model.NotificationLogEntry
+import circolareplus.platform.currentTimeMillis
+import com.russhwolf.settings.Settings
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+
+/**
+ * Gestione dello storage locale delle impostazioni utente su Android e iOS
+ * (API Key personale per AI locale, silenziare notifiche bacheca, credenziali locali,
+ * storico notifiche ricevute)
+ */
+class LocalSettingsManager(
+    private val settings: Settings = Settings()
+) {
+    companion object {
+        private const val KEY_USER_AI_API_KEY = "user_ai_api_key"
+        private const val KEY_AI_PROVIDER = "ai_provider"
+        private const val KEY_LOCAL_AI_MODEL = "local_ai_model_id"
+        private const val KEY_BOARD_NOTIFICATIONS_ENABLED = "board_notifications_enabled"
+        private const val KEY_SYSTEM_NOTIFICATIONS_ENABLED = "system_notifications_enabled"
+        private const val KEY_AUTH_TOKEN = "auth_token"
+        private const val KEY_USER_ID = "user_id"
+        private const val KEY_CACHED_USER = "cached_user_json"
+        private const val KEY_API_BASE_URL = "api_base_url"
+        private const val KEY_NOTIFICATION_LOG = "notification_log_json"
+        private const val KEY_ONBOARDING_SEEN = "onboarding_seen"
+        private const val KEY_RECENT_SEARCHES = "recent_searches"
+        private const val KEY_SUBMITTED_POLLS = "submitted_polls"
+        private const val KEY_DARK_MODE = "dark_mode"
+        private const val KEY_MUTED_NOTIFICATIONS = "muted_notification_kinds"
+        private const val KEY_LAST_SEEN_CIRCULAR = "last_seen_circular_number"
+        private const val KEY_LAST_SEEN_PROPOSAL = "last_seen_proposal_id"
+        private const val KEY_LAST_SEEN_SEATMAP = "last_seen_seatmap_signature"
+        private const val KEY_LAST_SEEN_PREFERENCES_OPEN = "last_seen_preferences_open"
+        private const val KEY_LAST_SEEN_POLL_ID = "last_seen_poll_id"
+        /** Quante ricerche recenti tenere: quante ne mostra la schermata di ricerca. */
+        private const val MAX_RECENT_SEARCHES = 5
+
+        /** Le notifiche più vecchie di così vengono scartate automaticamente ad ogni lettura. */
+        private const val NOTIFICATION_RETENTION_DAYS = 7
+        private const val NOTIFICATION_RETENTION_MILLIS = NOTIFICATION_RETENTION_DAYS * 24L * 60 * 60 * 1000
+    }
+
+    private val json = Json { ignoreUnknownKeys = true }
+
+    /** URL del Worker Cloudflare. Vuoto = usa [circolareplus.data.remote.ApiConfig.DEFAULT_BASE_URL]. */
+    var apiBaseUrlOverride: String
+        get() = settings.getString(KEY_API_BASE_URL, "")
+        set(value) = settings.putString(KEY_API_BASE_URL, value)
+
+    var userAiApiKey: String
+        get() = settings.getString(KEY_USER_AI_API_KEY, "")
+        set(value) = settings.putString(KEY_USER_AI_API_KEY, value)
+
+    /**
+     * Provider AI scelto: uno degli `id` di [circolareplus.ai.AiProvider].
+     *
+     * Le installazioni aggiornate da una versione precedente possono avere ancora
+     * `"GITHUB_MODELS"` salvato qui. Non serve una migrazione: `AiProvider.fromId` non riconosce
+     * quel valore e ricade su Google AI Studio, che è esattamente il provider che quelle
+     * installazioni stavano già usando davvero (GitHub Models non era mai stato collegato alla
+     * classificazione).
+     */
+    var aiProvider: String
+        get() = settings.getString(KEY_AI_PROVIDER, "GOOGLE_AI_STUDIO")
+        set(value) = settings.putString(KEY_AI_PROVIDER, value)
+
+    /**
+     * `id` del modello di AI locale scelto (vedi `LocalAiCatalog`). Vuoto = nessuna scelta
+     * ancora fatta, quindi vale il consigliato per la fascia di RAM del telefono.
+     *
+     * Si salva l'id e non il percorso del file: il percorso cambia a ogni reinstallazione
+     * dell'app, l'id no.
+     */
+    var localAiModelId: String
+        get() = settings.getString(KEY_LOCAL_AI_MODEL, "")
+        set(value) = settings.putString(KEY_LOCAL_AI_MODEL, value)
+
+    var isBoardNotificationEnabled: Boolean
+        get() = settings.getBoolean(KEY_BOARD_NOTIFICATIONS_ENABLED, true)
+        set(value) = settings.putBoolean(KEY_BOARD_NOTIFICATIONS_ENABLED, value)
+
+    var isSystemNotificationsEnabled: Boolean
+        get() = settings.getBoolean(KEY_SYSTEM_NOTIFICATIONS_ENABLED, true)
+        set(value) = settings.putBoolean(KEY_SYSTEM_NOTIFICATIONS_ENABLED, value)
+
+    /**
+     * Onboarding a 3 schermate già visto: mostrato una sola volta al primo avvio, prima del
+     * login. Si azzera solo svuotando i dati dell'app (o con [clear], cioè al logout).
+     */
+    var hasSeenOnboarding: Boolean
+        get() = settings.getBoolean(KEY_ONBOARDING_SEEN, false)
+        set(value) = settings.putBoolean(KEY_ONBOARDING_SEEN, value)
+
+    /**
+     * Ultime ricerche fatte nella ricerca globale, più recente per prima. Salvate in locale e
+     * mai inviate al server: servono solo a ripresentare le voci nella schermata di ricerca.
+     */
+    val recentSearches: List<String>
+        get() = settings.getStringOrNull(KEY_RECENT_SEARCHES)
+            ?.split("\n")
+            ?.filter { it.isNotBlank() }
+            ?: emptyList()
+
+    /** Registra una ricerca in cima all'elenco, senza duplicati e tenendone al massimo cinque. */
+    fun rememberSearch(query: String) {
+        val clean = query.trim()
+        if (clean.isBlank()) return
+        val updated = (listOf(clean) + recentSearches.filter { !it.equals(clean, ignoreCase = true) })
+            .take(MAX_RECENT_SEARCHES)
+        settings.putString(KEY_RECENT_SEARCHES, updated.joinToString("\n"))
+    }
+
+    fun clearRecentSearches() {
+        settings.remove(KEY_RECENT_SEARCHES)
+    }
+
+    /**
+     * Sondaggi per cui lo studente ha premuto "Invia le mie scelte".
+     *
+     * **Per ora è solo locale.** Perché l'algoritmo possa partire "quando tutti hanno finito"
+     * serve che l'invio arrivi al server: una colonna `submitted_at` su `interrogation_votes` (o
+     * una tabella a parte) e un endpoint che la valorizzi. Finché non c'è, questo flag serve a
+     * chiudere il flusso lato studente — sa di aver finito e non tocca più i voti per sbaglio —
+     * ma il Rappresentante non può vedere chi ha inviato.
+     */
+    fun isPollSubmitted(pollId: String): Boolean =
+        pollId in (settings.getStringOrNull(KEY_SUBMITTED_POLLS)?.split("\n").orEmpty())
+
+    fun setPollSubmitted(pollId: String, submitted: Boolean) {
+        val current = settings.getStringOrNull(KEY_SUBMITTED_POLLS)?.split("\n")
+            ?.filter { it.isNotBlank() }.orEmpty()
+        val updated = if (submitted) (current + pollId).distinct() else current.filter { it != pollId }
+        settings.putString(KEY_SUBMITTED_POLLS, updated.joinToString("\n"))
+    }
+
+    // --- Aspetto -----------------------------------------------------------------------------
+
+    var isDarkMode: Boolean
+        get() = settings.getBoolean(KEY_DARK_MODE, false)
+        set(value) = settings.putBoolean(KEY_DARK_MODE, value)
+
+    // --- Filtri delle notifiche ----------------------------------------------------------------
+
+    /**
+     * Categorie di notifiche silenziate. Si memorizzano quelle SPENTE e non quelle accese, così
+     * una categoria nuova aggiunta in futuro parte attiva senza bisogno di migrazioni.
+     */
+    fun isNotificationKindEnabled(kind: String): Boolean =
+        kind !in (settings.getStringOrNull(KEY_MUTED_NOTIFICATIONS)?.split("\n").orEmpty())
+
+    fun setNotificationKindEnabled(kind: String, enabled: Boolean) {
+        val muted = settings.getStringOrNull(KEY_MUTED_NOTIFICATIONS)?.split("\n")
+            ?.filter { it.isNotBlank() }.orEmpty()
+        val updated = if (enabled) muted.filter { it != kind } else (muted + kind).distinct()
+        settings.putString(KEY_MUTED_NOTIFICATIONS, updated.joinToString("\n"))
+    }
+
+    // --- Rilevamento novità --------------------------------------------------------------------
+    // Servono a capire cosa è cambiato dall'ultima volta che l'utente ha guardato, per poter
+    // scrivere una notifica locale. Il push vero (FCM) resta, ma copre solo i casi in cui il
+    // server manda davvero un messaggio: tutto il resto (nuova circolare vista al primo
+    // caricamento, nuova proposta, nuova disposizione dei banchi) prima non lasciava traccia.
+
+    var lastSeenCircularNumber: Int
+        get() = settings.getInt(KEY_LAST_SEEN_CIRCULAR, 0)
+        set(value) = settings.putInt(KEY_LAST_SEEN_CIRCULAR, value)
+
+    var lastSeenProposalId: String
+        get() = settings.getString(KEY_LAST_SEEN_PROPOSAL, "")
+        set(value) = settings.putString(KEY_LAST_SEEN_PROPOSAL, value)
+
+    var lastSeenSeatMapSignature: String
+        get() = settings.getString(KEY_LAST_SEEN_SEATMAP, "")
+        set(value) = settings.putString(KEY_LAST_SEEN_SEATMAP, value)
+
+    var lastSeenPreferencesOpen: Boolean
+        get() = settings.getBoolean(KEY_LAST_SEEN_PREFERENCES_OPEN, false)
+        set(value) = settings.putBoolean(KEY_LAST_SEEN_PREFERENCES_OPEN, value)
+
+    var lastSeenPollId: String
+        get() = settings.getString(KEY_LAST_SEEN_POLL_ID, "")
+        set(value) = settings.putString(KEY_LAST_SEEN_POLL_ID, value)
+
+    var authToken: String
+        get() = settings.getString(KEY_AUTH_TOKEN, "")
+        set(value) = settings.putString(KEY_AUTH_TOKEN, value)
+
+    var currentUserId: String
+        get() = settings.getString(KEY_USER_ID, "")
+        set(value) = settings.putString(KEY_USER_ID, value)
+
+    /**
+     * Ultimo profilo utente ricevuto dal server, in JSON.
+     *
+     * Serve a una cosa sola: poter entrare nell'app senza rete. Prima, all'avvio in modalità
+     * aereo, il ripristino della sessione falliva e l'app cancellava il token — cioè faceva
+     * uscire dall'account invece di mostrare gli stati "nessuna connessione". Con questa copia,
+     * il token resta e si entra con l'ultimo profilo conosciuto. Viene svuotata al logout.
+     */
+    var cachedUserJson: String
+        get() = settings.getString(KEY_CACHED_USER, "")
+        set(value) = settings.putString(KEY_CACHED_USER, value)
+
+    /**
+     * Aggiunge una notifica al log locale (mai inviata al server) e scarta quelle più vecchie
+     * della soglia di conservazione. Va chiamata dal lato piattaforma che riceve davvero il push
+     * (es. il FirebaseMessagingService su Android), non dal solo invio.
+     */
+    fun addNotification(title: String, body: String, category: String = "") {
+        val now = currentTimeMillis()
+        val entry = NotificationLogEntry(
+            id = "$now-${(0..999999).random()}",
+            title = title,
+            body = body,
+            receivedAtMillis = now,
+            category = category
+        )
+        val updated = (readNotifications(now) + entry).sortedByDescending { it.receivedAtMillis }
+        writeNotifications(updated)
+    }
+
+    /** Elenco notifiche non scadute, più recenti prima. Scarta e ripulisce quelle scadute. */
+    fun listNotifications(): List<NotificationLogEntry> {
+        val fresh = readNotifications(currentTimeMillis())
+        writeNotifications(fresh) // ripulisce lo storage se qualcosa era scaduto
+        return fresh.sortedByDescending { it.receivedAtMillis }
+    }
+
+    fun markAllNotificationsRead() {
+        writeNotifications(readNotifications(currentTimeMillis()).map { it.copy(read = true) })
+    }
+
+    fun clearNotifications() {
+        settings.remove(KEY_NOTIFICATION_LOG)
+    }
+
+    private fun readNotifications(now: Long): List<NotificationLogEntry> {
+        val raw = settings.getStringOrNull(KEY_NOTIFICATION_LOG) ?: return emptyList()
+        val all = try {
+            json.decodeFromString<List<NotificationLogEntry>>(raw)
+        } catch (e: Exception) {
+            emptyList()
+        }
+        return all.filter { now - it.receivedAtMillis <= NOTIFICATION_RETENTION_MILLIS }
+    }
+
+    private fun writeNotifications(entries: List<NotificationLogEntry>) {
+        settings.putString(KEY_NOTIFICATION_LOG, json.encodeToString(entries))
+    }
+
+    /**
+     * Svuota le impostazioni (usato al logout) tenendo però il flag dell'onboarding: dopo un
+     * logout si torna al login, non alle schermate di presentazione — quelle si vedono una volta
+     * sola per installazione.
+     */
+    fun clear() {
+        val onboardingSeen = hasSeenOnboarding
+        settings.clear()
+        hasSeenOnboarding = onboardingSeen
+    }
+}

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Tema di avvio (androidx.core.splashscreen). Prima non esisteva alcuna configurazione di
+    splash: sotto Android 12+ il sistema ne genera uno da sé ingrandendo l'icona del launcher su
+    sfondo bianco, e a quella dimensione i bordi morbidi dell'icona (allora un PNG raster)
+    comparivano sfocati/"pixelosi" — il difetto segnalato da Simone. Qui lo sfondo è il blu notte
+    del brand (lo stesso della piastrella dell'icona, ic_launcher_background.xml) e l'icona è il
+    marchio vettoriale, nitido a ogni dimensione.
+-->
+<resources>
+    <style name="Theme.App.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#0A1330</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <!-- Al termine dello splash, MainActivity riparte dal tema che aveva prima. -->
+        <item name="postSplashScreenTheme">@android:style/Theme.Material.Light.NoActionBar</item>
+    </style>
+</resources>

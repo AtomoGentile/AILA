@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Livello primo piano dell'icona adattiva AILA, ricostruito a vettori con la stessa geometria del
+    marchio disegnato in shared/src/commonMain/kotlin/circolareplus/design/AilaLogo.kt (AilaGlyph):
+    due gambe dritte che si chiudono in una punta arrotondata più il pallino centrale.
+
+    Prima qui c'era un PNG raster (ic_launcher_foreground.png, uno per densità): a schermo intero
+    — come nell'animazione di avvio di sistema, che lo ingrandisce ben oltre le dimensioni
+    dell'icona sulla home — i bordi morbidi del PNG si vedevano sfocati/"pixelosi". Un vettore
+    resta nitido a qualunque dimensione.
+
+    Coordinate: il segno di AilaGlyph è definito in percentuale (0..1) di un riquadro quadrato;
+    qui sono state riportate dentro la "safe zone" da 66dp centrata nel riquadro da 108dp
+    dell'icona adattiva (offset di 21dp per lato), così nessun launcher la ritaglia scegliendo una
+    maschera non circolare.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M34.53,77.43 L48.39,37.83 Q54,24.63 59.61,37.83 L73.47,77.43"
+        android:strokeWidth="10.23"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:type="linear"
+                android:startX="34.53"
+                android:startY="77.43"
+                android:endX="73.47"
+                android:endY="37.83"
+                android:startColor="#FF6FA8FF"
+                android:endColor="#FFA78BFA" />
+        </aapt:attr>
+    </path>
+    <path
+        android:pathData="M54,55.782 C57.208,55.782 59.808,58.382 59.808,61.59 C59.808,64.798 57.208,67.398 54,67.398 C50.792,67.398 48.192,64.798 48.192,61.59 C48.192,58.382 50.792,55.782 54,55.782 Z"
+        android:fillColor="#FFEDF2FF" />
+</vector>

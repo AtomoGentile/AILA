@@ -1,0 +1,38 @@
+name: iosApp
+options:
+  deploymentTarget:
+    iOS: "26.0"
+  bundleIdPrefix: com.circolareplus
+
+targets:
+  iosApp:
+    type: application
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: iosApp
+    info:
+      path: iosApp/Info.plist
+    settings:
+      PRODUCT_NAME: Circolare+
+      FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)
+      OTHER_LDFLAGS: -framework shared
+    preBuildScripts:
+      - name: Embed and Sign Apple Framework
+        script: |
+          cd "$SRCROOT/.."
+          ./gradlew :shared:embedAndSignAppleFrameworkForXcode
+
+schemes:
+  iosApp:
+    build:
+      targets:
+        iosApp: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+    profile:
+      config: Release
+    archive:
+      config: Release

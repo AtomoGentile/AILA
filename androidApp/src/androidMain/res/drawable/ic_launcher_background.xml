@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Livello di sfondo dell'icona adattiva AILA: gradiente blu notte in diagonale, ripreso dalla
+    variante "Icona app (principale)" del brand kit. Deve riempire tutti i 108dp del livello:
+    il launcher ne mostra solo la porzione centrale ritagliata con la propria maschera (cerchio,
+    quadrato arrotondato, squircle...), e ne sposta i livelli per gli effetti di parallasse.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:type="linear"
+        android:angle="315"
+        android:startColor="#1E3C93"
+        android:endColor="#0A1330" />
+</shape>
