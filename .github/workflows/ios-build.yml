@@ -97,9 +97,17 @@ jobs:
             build
 
       - name: Boot simulator and smoke-test the app launch
+        # "xcrun simctl bootstatus -b" può restare bloccato per ore su alcuni runner (bug
+        # noto dei runner macOS ospitati, soprattutto quando xcodebuild ha già avviato da
+        # solo il simulatore come parte della build con destinazione concreta): un timeout
+        # esplicito trasforma un blocco silenzioso in un fallimento chiaro e veloce, invece
+        # di consumare le 6 ore di timeout massimo del job.
+        timeout-minutes: 5
         run: |
           set -e
           UDID="${{ steps.sim.outputs.udid }}"
+          echo "Stato del simulatore prima del boot:"
+          xcrun simctl list devices | grep "$UDID" || true
           xcrun simctl bootstatus "$UDID" -b
 
           APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "Circolare+.app" -path "*Debug-iphonesimulator*" -print -quit)
