@@ -38,11 +38,11 @@ class AppleIntelligenceEngine: AppleIntelligenceBridge {
             switch reason {
             case .deviceNotEligible:
                 return "Questo iPhone non supporta Apple Intelligence. Serve un iPhone 15 Pro o successivo."
-            case .systemLanguageNotSupported:
-                return "La lingua del tuo dispositivo non è supportata da Apple Intelligence. Prova l'inglese nelle Impostazioni."
-            case .notInstalled:
-                return "Apple Intelligence non è ancora installato. Riprova tra poco."
-            default:
+            case .appleIntelligenceNotEnabled:
+                return "Attiva Apple Intelligence nelle Impostazioni di sistema per usare l'AI locale."
+            case .modelNotReady:
+                return "Il modello si sta preparando. Riprova tra poco."
+            @unknown default:
                 return "Apple Intelligence non disponibile. Controlla le Impostazioni di sistema."
             }
         }
@@ -87,9 +87,11 @@ class AppleIntelligenceEngine: AppleIntelligenceBridge {
             // Task 1: Generazione vera
             group.addTask {
                 do {
-                    // Genera in streaming
-                    for try await chunk in session.streamResponse(to: userPrompt) {
-                        accumulatedText += chunk
+                    // Genera in streaming: ogni elemento e' uno snapshot con il testo
+                    // CUMULATIVO prodotto finora (non un delta), quindi si sostituisce
+                    // accumulatedText invece di concatenarla.
+                    for try await partial in session.streamResponse(to: userPrompt) {
+                        accumulatedText = partial.content
 
                         // Chiama Kotlin per decidere se fermarsi
                         let shouldStop = stopWhen(accumulatedText).boolValue
