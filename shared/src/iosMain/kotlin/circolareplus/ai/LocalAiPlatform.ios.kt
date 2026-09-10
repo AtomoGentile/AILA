@@ -14,7 +14,7 @@ import platform.Foundation.NSProcessInfo
 actual fun totalDeviceRamMb(): Int {
     // Memoria fisica totale in byte → MB
     val bytes = NSProcessInfo.processInfo.physicalMemory
-    return (bytes / 1_000_000L).toInt()
+    return (bytes.toLong() / 1_000_000L).toInt()
 }
 
 actual fun isOnDeviceAiAvailable(): Boolean {
