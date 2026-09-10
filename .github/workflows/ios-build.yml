@@ -69,23 +69,19 @@ jobs:
         id: sim
         run: |
           set -e
-          # Un dispositivo iPhone gia' creato sul runner, sul runtime iOS piu' recente
-          # disponibile (deve essere iOS 26+: FoundationModels non esiste prima).
-          UDID=$(xcrun simctl list devices available --json \
-            | python3 -c "
-import json, sys
-data = json.load(sys.stdin)
-best = None
-for runtime, devices in data['devices'].items():
-    if 'iOS' not in runtime:
-        continue
-    for d in devices:
-        if d['name'].startswith('iPhone'):
-            best = (runtime, d)
-if best is None:
-    sys.exit('Nessun simulatore iPhone disponibile sul runner')
-print(best[1]['udid'])
-")
+          # Un dispositivo iPhone gia' creato sul runner, sul runtime iOS 26 (deve essere
+          # 26+: FoundationModels non esiste prima). Solo comandi di testo (grep/sed), niente
+          # script multi-riga incorporato nel blocco YAML: un python -c multilinea qui dentro
+          # aveva rotto la sintassi YAML del workflow (indentazione del blocco letterale).
+          UDID=$(xcrun simctl list devices available \
+            | sed -n '/^-- iOS 26/,/^--/p' \
+            | grep -m1 'iPhone' \
+            | grep -oE '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}')
+          if [ -z "$UDID" ]; then
+            echo "Nessun simulatore iPhone su iOS 26 disponibile sul runner"
+            xcrun simctl list devices available
+            exit 1
+          fi
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
           echo "Simulatore scelto: $UDID"
           xcrun simctl list devices | grep "$UDID"
