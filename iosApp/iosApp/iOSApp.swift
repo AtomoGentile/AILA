@@ -14,10 +14,10 @@ struct iOSApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     init() {
-        // Inietta il bridge Apple Intelligence prima di creare la UI.
-        // AppleIntelligenceBridgeHolder è esportato da Kotlin/Native come holder singleton.
-        // Il metodo di accesso dipende dalla configurazione Kotlin, però il pattern standard è:
+        // Inietta i bridge nativi prima di creare la UI.
+        // I due holder sono esportati da Kotlin/Native come singleton (pattern standard: .shared).
         AppleIntelligenceBridgeHolder.shared.bridge = AppleIntelligenceEngine()
+        PushTokenBridgeHolder.shared.bridge = FirebasePushTokenBridge()
     }
 
     var body: some Scene {

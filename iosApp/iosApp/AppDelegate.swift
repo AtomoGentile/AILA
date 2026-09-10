@@ -1,18 +1,17 @@
 import UIKit
 import UserNotifications
+import FirebaseCore
+import FirebaseMessaging
 
 /**
- * AppDelegate per la registrazione delle notifiche remote (APNs) su iOS.
+ * AppDelegate per la registrazione delle notifiche remote (APNs) su iOS, e per l'avvio di
+ * Firebase quando è configurato.
  *
- * Implementa i callback necessari perché il sistema operativo registri il dispositivo alle
- * notifiche push di Apple. Una volta registrato, il token APNs viene salvato in una property
- * statica, dove Firebase Messaging potrà leggerlo (quando Firebase sarà aggiunto via SPM).
- *
- * Attualmente il token è solo salvato; non viene ancora inviato a Firebase o al backend.
- * Quel passaggio richiede:
- * 1. GoogleService-Info.plist importato nel progetto Xcode
- * 2. Firebase iOS SDK aggiunto via Swift Package Manager
- * 3. Integrazione con PushTokenProvider.ios.kt per comunicare il token al backend
+ * `FirebaseApp.configure()` va chiamato una sola volta, il prima possibile, ma SOLO se
+ * `GoogleService-Info.plist` è presente nel bundle: chiamarlo senza quel file crasha subito
+ * l'app. Il file esiste solo in locale (vedi .gitignore, come google-services.json per
+ * Android) — quindi qui si controlla la sua presenza invece di assumerla, per restare
+ * compilabile ed eseguibile anche in CI, dove non c'è.
  */
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
@@ -33,6 +32,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
+        // Configura Firebase solo se GoogleService-Info.plist è nel bundle (vedi doc classe).
+        if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
+            FirebaseApp.configure()
+        }
+
         // Richiedi il permesso di notifica (mostra il dialog all'utente la prima volta)
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             if let error = error {
@@ -72,15 +76,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         AppDelegate.apnsToken = token
         print("APNs token registrato: \(token)")
 
-        // TODO Firebase: Quando Firebase iOS SDK sarà aggiunto via SPM e
-        // GoogleService-Info.plist sarà presente nel progetto, qui si dovrà aggiungere:
-        //
-        // import FirebaseMessaging
-        // ...
-        // Messaging.messaging().apnsToken = deviceToken
-        //
-        // Questo permetterà a Firebase di ottenere un token FCM (diverso da questo token APNs,
-        // ma derivato da esso) che il backend userà per mandare notifiche tramite FCM.
+        // Solo se Firebase e' stato configurato (vedi didFinishLaunchingWithOptions): senza
+        // GoogleService-Info.plist, FirebaseApp.app() e' nil e Messaging.messaging() crasherebbe.
+        if FirebaseApp.app() != nil {
+            Messaging.messaging().apnsToken = deviceToken
+        }
     }
 
     /**

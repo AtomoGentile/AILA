@@ -47,6 +47,16 @@ jobs:
         with:
           xcode-version: latest-stable
 
+      - name: Cache Swift Package Manager dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm
+          # Firebase (firebase-ios-sdk) e' un pacchetto grosso da risolvere/clonare: senza
+          # cache ogni run lo riscarica da zero, aggiungendo diversi minuti.
+          key: ${{ runner.os }}-spm-${{ hashFiles('iosApp/project.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
       - name: Install XcodeGen
         run: brew install xcodegen
 
