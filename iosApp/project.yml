@@ -18,6 +18,11 @@ targets:
       PRODUCT_BUNDLE_IDENTIFIER: com.circolareplus
       FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)
       OTHER_LDFLAGS: -framework shared
+      # shared/build.gradle.kts non dichiara iosX64 (simulatore Mac Intel): Compose Multiplatform
+      # ha smesso di pubblicare per quel target. Senza questa esclusione Xcode chiede comunque
+      # x86_64 per il simulatore (default ARCHS = arm64 x86_64) e Gradle fallisce con
+      # "Xcode Requested Architecture Not Configured in Gradle: ios_x64".
+      EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
     preBuildScripts:
       - name: Embed and Sign Apple Framework
         script: |
