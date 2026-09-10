@@ -354,7 +354,7 @@ fun SettingsScreen(
                             if (circolareplus.platform.isIos()) {
                                 // --- iOS: Apple Intelligence è sempre "installato" se il dispositivo lo supporta ---
                                 val aiAvailable = circolareplus.ai.isOnDeviceAiAvailable()
-                                val statusColor = if (aiAvailable) AppTheme.TextSuccess else AppTheme.TextMuted
+                                val statusColor = if (aiAvailable) AppTheme.TintGreenInk else AppTheme.TextMuted
                                 val statusText = if (aiAvailable) {
                                     "✓ Apple Intelligence disponibile"
                                 } else {

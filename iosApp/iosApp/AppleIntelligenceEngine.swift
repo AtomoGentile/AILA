@@ -70,8 +70,8 @@ class AppleIntelligenceEngine: AppleIntelligenceBridge {
     func generate(
         systemPrompt: String,
         userPrompt: String,
-        timeoutMillis: Long,
-        stopWhen: (String) -> KotlinBoolean
+        timeoutMillis: Int64,
+        stopWhen: @escaping (String) -> KotlinBoolean
     ) async throws -> String {
         // Timeout in secondi
         let timeoutSeconds = Double(timeoutMillis) / 1000.0
@@ -128,4 +128,6 @@ class AppleIntelligenceEngine: AppleIntelligenceBridge {
                 code: -3,
                 userInfo: [NSLocalizedDescriptionKey: "Errore sconosciuto nella generazione"]
             )
-    
+        }
+    }
+}
