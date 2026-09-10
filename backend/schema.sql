@@ -1,0 +1,284 @@
+-- =============================================================================
+-- CIRCOLARE+ / AILA — SCHEMA DATABASE CLOUDFLARE D1 (SQLITE DISTRIBUITO)
+-- Versione: 4.0 — Multi-classe
+-- =============================================================================
+--
+-- COSA È CAMBIATO RISPETTO ALLA 3.0
+-- La 3.0 assumeva "classe singola implicita server-side": una riga in app_config con
+-- class_id = 'DEFAULT_CLASS', e nessuna tabella che sapesse a quale classe appartenesse un
+-- utente, un evento o una proposta. Bastava che si registrasse uno studente di un'altra classe
+-- per vedere la bacheca, il calendario e la mappa posti altrui.
+--
+-- Ora ogni utente appartiene a una classe (`users.class_id`) che sceglie in fase di
+-- registrazione, e i contenuti di classe portano la stessa colonna. Le circolari restano
+-- volutamente FUORI da questa divisione: arrivano da Spaggiari e valgono per tutto l'istituto,
+-- quindi duplicarle per classe significherebbe scaricare lo stesso PDF N volte.
+--
+-- Per un database già popolato non usare questo file: c'è migrations/001_multiclasse.sql, che
+-- aggiunge le colonne senza distruggere i dati.
+
+-- 1. CLASSI
+-- L'elenco non è precompilato con classi inventate: parte da quella che esiste già e cresce
+-- quando qualcuno si registra indicando una classe nuova (la rotta di registrazione valida il
+-- formato dell'etichetta prima di crearla, così non nascono voci come "4a csa " e "4^CSA").
+CREATE TABLE IF NOT EXISTS classes (
+    id TEXT PRIMARY KEY,
+    label TEXT UNIQUE NOT NULL,           -- come la scrive uno studente: "4 CSA"
+    academic_year TEXT NOT NULL DEFAULT '2026/2027',
+    preferences_open BOOLEAN NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- La classe che esisteva prima, per non perdere i dati già inseriti.
+INSERT OR IGNORE INTO classes (id, label, preferences_open)
+VALUES ('DEFAULT_CLASS', '4 CSA', 0);
+
+-- 1b. CONFIGURAZIONE GLOBALE (retrocompatibilità)
+-- Resta per non rompere installazioni esistenti, ma `preferences_open` che conta è ora quello
+-- della singola classe: una classe che apre le preferenze non deve aprirle a tutte le altre.
+CREATE TABLE IF NOT EXISTS app_config (
+    class_id TEXT PRIMARY KEY DEFAULT 'DEFAULT_CLASS',
+    class_label TEXT NOT NULL DEFAULT '4^ CSA',
+    preferences_open BOOLEAN NOT NULL DEFAULT 0,
+    academic_year TEXT NOT NULL DEFAULT '2026/2027',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT OR IGNORE INTO app_config (class_id, class_label, preferences_open)
+VALUES ('DEFAULT_CLASS', '4^ CSA', 0);
+
+-- 2. TABELLA UTENTI (ognuno appartiene a una classe)
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    role TEXT CHECK(role IN ('STUDENT', 'REPRESENTATIVE', 'SECURITY_GUARD')) NOT NULL DEFAULT 'STUDENT',
+    class_id TEXT NOT NULL DEFAULT 'DEFAULT_CLASS' REFERENCES classes(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_class ON users(class_id);
+
+-- 3. PROFILO STUDENTE
+-- Altezza salvata una tantum al login (range 140-210 cm, intervalli discreti di 5cm)
+CREATE TABLE IF NOT EXISTS student_profiles (
+    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    height_cm INTEGER NOT NULL CHECK(height_cm >= 140 AND height_cm <= 210 AND height_cm % 5 = 0),
+    priority_pass BOOLEAN NOT NULL DEFAULT 0,
+    notification_board_enabled BOOLEAN NOT NULL DEFAULT 1
+);
+
+-- 4. VALUTAZIONI RISERVATE DEL RAPPRESENTANTE (1-5)
+CREATE TABLE IF NOT EXISTS representative_ratings (
+    student_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    didactic INTEGER NOT NULL CHECK(didactic BETWEEN 1 AND 5),
+    behavior INTEGER NOT NULL CHECK(behavior BETWEEN 1 AND 5),
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 5. PREFERENZE INTERPERSONALI (+2, +1, 0, -1, -2)
+-- Attive solo quando preferences_open = 1
+CREATE TABLE IF NOT EXISTS social_preferences (
+    from_student_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+    to_student_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+    score INTEGER NOT NULL CHECK(score IN (-2, -1, 0, 1, 2)),
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (from_student_id, to_student_id)
+);
+
+-- 6. CIRCOLARI SCOLASTICHE (Deduplicazione Spaggiari & Cache R2)
+-- Volutamente NON divise per classe: Spaggiari le pubblica per tutto l'istituto e il PDF è lo
+-- stesso per tutti. È l'analisi AI, che gira sul telefono con la chiave dello studente, a dire
+-- se una circolare riguarda o no chi la sta leggendo.
+CREATE TABLE IF NOT EXISTS circulars (
+    number INTEGER PRIMARY KEY,
+    title TEXT NOT NULL,
+    publish_date DATE NOT NULL,
+    r2_pdf_key TEXT NOT NULL,
+    original_url TEXT,
+    -- Allegati della colonna "Allegati" della tabella Spaggiari (0, 1 o piu' per circolare: es.
+    -- "Allegato a/b/c/d", oppure un singolo link "Allegati" verso un'altra pagina del sito). JSON
+    -- di oggetti { label, pdfKey? , url? }: pdfKey quando il file e' stato scaricato e messo in
+    -- cache su R2 come il PDF principale, url quando punta altrove (pagina non-PDF) e si apre
+    -- esternamente. Default '[]' additivo: le righe scritte prima di questa colonna restano valide.
+    attachments_json TEXT NOT NULL DEFAULT '[]',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 6b. ANALISI AI DELLE CIRCOLARI (Cache condivisa)
+-- Una circolare vale per tutto l'istituto e (finora) il contesto studente passato all'AI è
+-- sempre lo stesso default per classe, quindi la prima analisi fatta da qualcuno vale per tutti:
+-- niente lo rifà da capo consumando quota/tempo per lo stesso risultato. La chiave è solo
+-- circular_number: se in futuro l'analisi diventasse per-classe/per-studente, andrà aggiunta una
+-- colonna alla chiave primaria invece di riusare questa tabella così com'è.
+-- Salva solo l'ESITO dell'analisi (badge, riassunto, scadenze), mai il testo del PDF: il
+-- documento stesso non deve transitare dal server, per coerenza con la scelta di non farlo
+-- transitare nemmeno durante l'analisi (vedi commento sulla tabella `circulars`).
+-- Sovrascrivibile da chiunque: chi rigenera un'analisi di bassa qualità la reinvia e sostituisce
+-- quella salvata, non serve un flusso di approvazione.
+CREATE TABLE IF NOT EXISTS circular_ai_analysis (
+    circular_number INTEGER PRIMARY KEY REFERENCES circulars(number) ON DELETE CASCADE,
+    badge TEXT NOT NULL CHECK(badge IN ('RELEVANT', 'POTENTIAL', 'NOT_RELEVANT')),
+    summary TEXT NOT NULL,
+    deadlines_json TEXT NOT NULL DEFAULT '[]',
+    is_fallback BOOLEAN NOT NULL DEFAULT 0,
+    model_label TEXT NOT NULL DEFAULT 'Sconosciuto',
+    submitted_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 7. CALENDARIO DI CLASSE ED EVENTI AI
+CREATE TABLE IF NOT EXISTS calendar_events (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    event_date DATE NOT NULL,
+    start_time TEXT,
+    category TEXT NOT NULL CHECK(category IN ('VERIFICA', 'INTERROGAZIONE', 'PAGAMENTO', 'USCITA_DIDATTICA', 'AVVISO', 'ALTRO')),
+    is_for_all BOOLEAN NOT NULL DEFAULT 1,
+    is_ai_generated BOOLEAN NOT NULL DEFAULT 0,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    class_id TEXT NOT NULL DEFAULT 'DEFAULT_CLASS' REFERENCES classes(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    notes TEXT,
+    -- Array JSON di id utente (es. '["u1","u2"]'), NULL quando is_for_all = 1.
+    visible_to_user_ids_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_calendar_class ON calendar_events(class_id);
+
+-- 8. BACHECA PROPOSTE CON OPZIONE ANONIMATO
+CREATE TABLE IF NOT EXISTS proposals (
+    id TEXT PRIMARY KEY,
+    author_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    is_anonymous BOOLEAN NOT NULL DEFAULT 0,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'GENERALE',
+    status TEXT NOT NULL CHECK(status IN ('NUOVA', 'IN_ANALISI', 'CHIUSA')) DEFAULT 'NUOVA',
+    modified_by_rep BOOLEAN NOT NULL DEFAULT 0,
+    -- Valorizzata a ogni modifica del testo, da chiunque provenga: serve alla dicitura
+    -- "Modificato" in bacheca. modified_by_rep resta separata perché distingue il caso in cui a
+    -- modificare sia stato il Rappresentante e non l'autore.
+    edited_at DATETIME,
+    class_id TEXT NOT NULL DEFAULT 'DEFAULT_CLASS' REFERENCES classes(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_proposals_class ON proposals(class_id);
+
+-- Voti favorevoli (+1) e contrari (-1) alle proposte
+CREATE TABLE IF NOT EXISTS proposal_votes (
+    proposal_id TEXT NOT NULL REFERENCES proposals(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    vote_type INTEGER NOT NULL CHECK(vote_type IN (-1, 1)),
+    PRIMARY KEY (proposal_id, user_id)
+);
+
+-- Commenti alle proposte
+CREATE TABLE IF NOT EXISTS proposal_comments (
+    id TEXT PRIMARY KEY,
+    proposal_id TEXT NOT NULL REFERENCES proposals(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Audit sblocco identità anonima (Quorum: 2 Rappresentanti + 1 Guardia di Sicurezza)
+CREATE TABLE IF NOT EXISTS anonymity_unlock_audits (
+    id TEXT PRIMARY KEY,
+    proposal_id TEXT NOT NULL REFERENCES proposals(id) ON DELETE CASCADE,
+    rep_1_id TEXT NOT NULL REFERENCES users(id),
+    rep_2_id TEXT NOT NULL REFERENCES users(id),
+    security_guard_id TEXT NOT NULL REFERENCES users(id),
+    reason TEXT NOT NULL,
+    unlocked_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 9. SONDAGGI INTERROGAZIONI & SLOT DATE
+CREATE TABLE IF NOT EXISTS interrogation_grids (
+    id TEXT PRIMARY KEY,
+    subject TEXT NOT NULL,
+    is_published BOOLEAN NOT NULL DEFAULT 0,
+    -- Scadenza della compilazione. Passata questa data l'algoritmo può girare anche se manca
+    -- qualcuno: senza, bastava un compagno che non votava per bloccare tutta la classe.
+    closes_at DATETIME,
+    class_id TEXT NOT NULL DEFAULT 'DEFAULT_CLASS' REFERENCES classes(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_grids_class ON interrogation_grids(class_id);
+
+-- Invio definitivo delle scelte di uno studente per una griglia.
+-- Prima l'invio era solo un flag locale sul telefono: il Rappresentante non poteva sapere chi
+-- avesse finito, e l'algoritmo non aveva modo di partire "quando hanno votato tutti".
+CREATE TABLE IF NOT EXISTS interrogation_submissions (
+    grid_id TEXT NOT NULL REFERENCES interrogation_grids(id) ON DELETE CASCADE,
+    student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (grid_id, student_id)
+);
+
+CREATE TABLE IF NOT EXISTS interrogation_slots (
+    id TEXT PRIMARY KEY,
+    grid_id TEXT NOT NULL REFERENCES interrogation_grids(id) ON DELETE CASCADE,
+    slot_date DATE NOT NULL,
+    capacity INTEGER NOT NULL DEFAULT 1,
+    teacher_mandatory BOOLEAN NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS interrogation_votes (
+    slot_id TEXT NOT NULL REFERENCES interrogation_slots(id) ON DELETE CASCADE,
+    student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    vote_score INTEGER NOT NULL CHECK(vote_score IN (50, 0, -80, -300)),
+    PRIMARY KEY (slot_id, student_id)
+);
+
+-- Tracciamento Storico Bonus Sacrificio (+100 / +250 pt per materia)
+CREATE TABLE IF NOT EXISTS student_sacrifice_bonus (
+    student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    subject TEXT NOT NULL,
+    bonus_points INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (student_id, subject)
+);
+
+-- Assegnazioni e scambio posti (Swap)
+CREATE TABLE IF NOT EXISTS interrogation_assignments (
+    id TEXT PRIMARY KEY,
+    slot_id TEXT NOT NULL REFERENCES interrogation_slots(id) ON DELETE CASCADE,
+    student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (slot_id, student_id)
+);
+
+-- 10. STORICO DISPOSIZIONE MAPPA POSTI (Finestra regressiva su 4 mappe)
+CREATE TABLE IF NOT EXISTS seat_map_history (
+    id TEXT PRIMARY KEY,
+    map_index INTEGER NOT NULL CHECK(map_index BETWEEN 1 AND 4), -- 1 per N-1, 2 per N-2, 3 per N-3, 4 per N-4
+    layout_json TEXT NOT NULL,
+    class_id TEXT NOT NULL DEFAULT 'DEFAULT_CLASS' REFERENCES classes(id),
+    published_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_seatmap_class ON seat_map_history(class_id);
+
+-- 11. TOKEN FCM DISPOSITIVI (Notifiche Push)
+-- Un token per utente per piattaforma
+CREATE TABLE IF NOT EXISTS fcm_tokens (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token TEXT NOT NULL,
+    platform TEXT NOT NULL CHECK(platform IN ('android', 'ios')),
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, platform)
+);
+
+-- 12. RICHIESTE SCAMBIO POSTO INTERROGAZIONI
+CREATE TABLE IF NOT EXISTS swap_requests (
+    id TEXT PRIMARY KEY,
+    grid_id TEXT NOT NULL REFERENCES interrogation_grids(id) ON DELETE CASCADE,
+    requester_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    target_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status TEXT NOT NULL CHECK(status IN ('PENDING', 'ACCEPTED', 'REJECTED')) DEFAULT 'PENDING',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);

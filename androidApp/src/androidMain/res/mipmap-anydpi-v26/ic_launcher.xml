@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Icona adattiva (Android 8+). Prima l'icona era un PNG quadrato "legacy" che conteneva già
+    dentro di sé la piastrella bianca con angoli arrotondati e ombra: il launcher lo rimpiccioliva
+    e lo incollava dentro la propria maschera, per cui sulla home compariva un quadratino bianco
+    con il logo piccolo dentro, diverso da tutte le altre icone.
+
+    Ora sfondo e simbolo sono due livelli separati: il fondo riempie l'intera area e il simbolo
+    sta dentro la "safe zone" centrale (66dp su 108dp), così il launcher può ritagliare la forma
+    che preferisce senza mai tagliare la A.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <!-- Vettore invece del PNG raster: a piena grandezza (es. nell'animazione di avvio di
+         sistema, che la ingrandisce oltre la dimensione dell'icona sulla home) il PNG mostrava
+         bordi sfocati/"pixelosi". Vedi il commento in ic_launcher_foreground.xml. -->
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <!-- Icone a tema di Android 13+: il sistema ricolora questa silhouette con i colori
+         del tema dell'utente. Senza, con le "icone a tema" attive AILA resterebbe l'unica
+         icona a colori in mezzo a tutte le altre uniformate. -->
+    <monochrome android:drawable="@drawable/ic_launcher_monochrome" />
+</adaptive-icon>

@@ -1,0 +1,174 @@
+# === Gradle & Build ===
+.gradle/
+build/
+.gradle
+*.apk
+*.aab
+*.aar
+*.jar
+
+# === IDE ===
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+*.swp
+*.swo
+*~
+.DS_Store
+.project
+.classpath
+.c9/
+.settings/
+*.sublime-workspace
+
+# === Android Studio ===
+local.properties
+*.jks
+*.keystore
+
+# === Xcode (iOS) ===
+iosApp/iosApp.xcodeproj/
+iosApp/iosApp.xcworkspace/
+iosApp/Pods/
+iosApp/Podfile.lock
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xcworkspace
+*.xcodeproj
+*.xcarchive
+*.dSYM/
+*.playground
+
+# === Kotlin/Native Build ===
+shared/build/
+.kotlinNative/
+**/kotlin-native/
+*.so
+*.dylib
+
+# === Firebase ===
+google-services.json
+GoogleService-Info.plist
+firebase.json
+
+# === Node & Package Managers ===
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# === Cloudflare/Backend ===
+backend/node_modules/
+backend/.wrangler/
+backend/dist/
+.wrangler/
+wrangler.toml.local
+
+# === Environment ===
+.env
+.env.local
+.env.*.local
+
+# === OS ===
+Thumbs.db
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# === Generated Files ===
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+*.class
+*.pyc
+*.pyo
+
+# === Temp & Cache ===
+*.tmp
+*.temp
+*.log
+*.bak
+.cache/
+.tmp/
+
+# === KMP Common ===
+.kotlin_build/
+.k2/
+
+# === Android Specific ===
+*.lint
+lint-report.html
+AndroidManifest.xml~
+
+# === iOS Specific ===
+DerivedData/
+xcuserdata/
+*.playground
+Archive.zip
+
+# === Secrets & Private ===
+secrets/
+private/
+*.key
+*.pem
+*.p8
+
+# === Java/Kotlin ===
+target/
+.classpath
+.factorypath
+.gradle/
+.project
+.settings/
+.toolbarMarkers
+.c9/
+*.c9search*
+.idea/*
+*.iml
+*.ipr
+*.iws
+*~.nib
+*.pbxuser
+*.perspectivev3
+
+# === Xcode Specific ===
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM/
+*.playground
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+
+# === Edge Cases ===
+*.jnilib
+*.dylib
+*.dll
+*.exe
+*.o
+.svn/
+
+# === Project Specific ===
+claude_outputs/
+*.hprof
+extracted_specs.json
+Circolare_*.pdf
+CircolarePlus_*.pdf
+Specifiche_Tecniche_*.pdf
+FIREBASE_SETUP.md.local
+prompt_claude_code_*.pdf

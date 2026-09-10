@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Il download del modello di AI locale e la sincronizzazione delle circolari girano ora in
+         WorkManager con notifica in primo piano, cosi' sopravvivono a schermo spento o app in
+         background invece di fermarsi appena si esce dalla schermata che li ha avviati (vedi
+         circolareplus.work.LocalModelDownloadWorker / CircularsSyncWorker). Da Android 14 (API 34)
+         un servizio in primo piano deve dichiarare il proprio tipo. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <application
+        android:name=".CircolarePlusApplication"
+        android:allowBackup="true"
+        android:label="AILA"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+
+        <!-- Accelerazione GPU dell'AI locale. Da Android 12 le librerie native di sistema vanno
+             dichiarate esplicitamente: senza queste righe il motore non trova OpenCL e ricade
+             sulla CPU, che per un modello da qualche miliardo di parametri significa attese di
+             minuti invece che di secondi. required="false" perche' su un telefono senza driver
+             OpenCL l'app deve comunque installarsi e funzionare (LocalLlm ricade su CPU). -->
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
+        <uses-native-library android:name="libOpenCL-car.so" android:required="false" />
+        <uses-native-library android:name="libOpenCL-pixel.so" android:required="false" />
+        <uses-native-library android:name="libvndksupport.so" android:required="false" />
+        <activity
+            android:name=".MainActivity"
+            android:theme="@style/Theme.App.Starting"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Senza questo servizio i push arrivavano solo a schermo chiuso (comportamento di
+             default di FCM); ad app aperta venivano scartati senza lasciare traccia. -->
+        <service
+            android:name=".CircolareMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

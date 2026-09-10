@@ -1,0 +1,39 @@
+name = "circolare-plus-worker"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+# Cron Trigger per controllo Spaggiari ogni 15 minuti
+[triggers]
+crons = ["*/15 * * * *"]
+
+# Database Cloudflare D1
+[[d1_databases]]
+binding = "DB"
+database_name = "circolare_d1"
+database_id = "93627e51-035c-4077-8f4b-19b71714b969"
+
+# Cloudflare R2 Storage (Cache centralizzata PDF circolari)
+[[r2_buckets]]
+binding = "CIRCULARS_BUCKET"
+bucket_name = "circolare-plus-pdf-cache"
+
+# Variabili non sensibili (pubbliche, ok nel file)
+# Il nome reale della classe (4^ CSA) è salvato in D1 (app_config.class_label), non qui.
+[vars]
+SPAGGIARI_URL = "https://www.iisprimolevi.edu.it/pagine/circolari-studenti-202627"
+
+# Secrets (configurare con: wrangler secret put <NAME>)
+# JWT_SECRET               — chiave segreta per firma JWT (obbligatoria)
+# REPRESENTATIVE_SIGNUP_CODE — codice segreto opzionale: chi lo inserisce in fase di registrazione
+#                           riceve il ruolo REPRESENTATIVE invece di STUDENT. Senza questo secret
+#                           impostato, nessuno può registrarsi come rappresentante tramite l'app
+#                           (resta comunque possibile assegnare il ruolo a mano via D1, vedi TODO.md).
+# FCM_PROJECT_ID          — ID progetto Firebase (es. "circolare-plus-xxxxx")
+# FCM_SERVICE_ACCOUNT_KEY — contenuto JSON del Service Account Firebase (Impostazioni progetto →
+#                           Account di servizio → Genera nuova chiave privata). Finché questi due
+#                           secret non sono impostati, le notifiche push sono semplicemente
+#                           disattivate (nessun errore): vedi backend/src/services/fcm.ts.
+#
+# NOTA: la vecchia "Legacy HTTP API" (una singola FCM_SERVER_KEY) è stata dismessa da Google
+# il 20 giugno 2024 e non funziona più su nessun progetto Firebase, incluso uno creato oggi:
+# per questo il Worker usa solo la HTTP v1 API con Service Account.

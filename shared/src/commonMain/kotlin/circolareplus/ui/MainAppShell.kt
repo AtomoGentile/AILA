@@ -1,0 +1,3486 @@
+package circolareplus.ui.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import circolareplus.algorithms.DeskAssignment
+import circolareplus.algorithms.InterrogationVoteType
+import circolareplus.algorithms.OptimizerWeights
+import circolareplus.algorithms.SeatMapHistoryRecord
+import circolareplus.algorithms.SeatMapOptimizer
+import circolareplus.algorithms.SeatMapProposal
+import circolareplus.domain.model.RepresentativeRating
+import circolareplus.data.AppContainer
+import circolareplus.data.remote.dto.PollDetailDto
+import circolareplus.data.remote.dto.CreatePollSlotRequestDto
+import circolareplus.data.remote.dto.RatingEntryDto
+import circolareplus.data.repository.SessionRestore
+import circolareplus.design.AppIcons
+import circolareplus.design.AppTheme
+// Estensione (non richiamabile per nome qualificato come le altre composable di
+// circolareplus.design usate in questo file): va importata per poterla usare come Modifier.ailaPressable(...).
+import circolareplus.design.ailaPressable
+import circolareplus.domain.model.CalendarEvent
+import circolareplus.domain.model.CalendarEventCategory
+import circolareplus.domain.model.Circular
+import circolareplus.domain.model.CircularAiClassification
+import circolareplus.ai.ATTACHMENT_TEXT_MARKER
+import circolareplus.ai.EventDraft
+import circolareplus.ai.HeuristicClassification
+import circolareplus.domain.model.Proposal
+import circolareplus.domain.model.SocialPreferenceScore
+import circolareplus.domain.model.StudentProfile
+import circolareplus.domain.model.User
+import circolareplus.domain.model.UserRole
+import circolareplus.platform.currentTimeMillis
+import circolareplus.push.currentPushPlatform
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+
+// Bottom bar riorganizzata secondo il nuovo IA di AILA: Circolari e Bacheca non sono più tab
+// separate, ma vivono dentro "Classe" (con un selettore interno); Mappa Posti diventa una tab
+// vera e propria invece di un flusso aperto solo dalla Home; "Profilo" diventa "Altro".
+enum class MainTab(val title: String) {
+    HOME("Home"),
+    CALENDAR("Calendario"),
+    CLASS("Classe"),
+    SEATMAP("Mappa posti"),
+    MORE("Altro")
+}
+
+/** Sotto-sezione mostrata dentro la tab "Classe" (Circolari e Bacheca condividono la stessa tab). */
+enum class ClassSection(val title: String) {
+    CIRCULARS("Circolari"),
+    BOARD("Bacheca")
+}
+
+/**
+ * Categoria di [circolareplus.domain.model.NotificationLogEntry] più specifica di
+ * [NotificationKind.SEATMAP]: dice a NotificationsScreen di portare direttamente alla votazione
+ * preferenze invece che alla sola mappa dei posti.
+ */
+const val NOTIFICATION_CATEGORY_SEATMAP_PREFERENCES = "seatmap_preferences"
+
+@Composable
+fun MainAppShell(
+    initialUser: User? = null,
+    initialProfile: StudentProfile? = null
+) {
+    var currentUser by remember { mutableStateOf<User?>(initialUser) }
+    var currentProfile by remember { mutableStateOf<StudentProfile?>(initialProfile) }
+
+    // All'avvio, se non ci sono già uno user/profile forniti dall'esterno, prova a ripristinare
+    // la sessione da un token salvato localmente (persistenza login tra un avvio e l'altro).
+    var isRestoringSession by remember { mutableStateOf(currentUser == null && AppContainer.authRepository.hasStoredSession()) }
+
+    // L'app è partita senza rete ma con una sessione valida: si entra con l'ultimo profilo
+    // salvato e lo si dice, invece di far finta che sia tutto normale (o, come prima, invece di
+    // buttare fuori dall'account).
+    var startedOffline by remember { mutableStateOf(false) }
+    var offlineBannerDismissed by remember { mutableStateOf(false) }
+
+    // Sessione valida ma nessun profilo in cache: non si può entrare, però il token resta.
+    // Prima questo caso finiva schiacciato sul login con le credenziali già cancellate.
+    var offlineWithoutCache by remember { mutableStateOf(false) }
+    var restoreAttempt by remember { mutableStateOf(0) }
+
+    // Onboarding: dichiarato qui insieme agli altri remember, prima di qualunque return
+    // anticipato, perché i remember di Compose sono posizionali e metterlo più in basso lo
+    // renderebbe condizionale.
+    var hasSeenOnboarding by remember { mutableStateOf(AppContainer.settings.hasSeenOnboarding) }
+
+    // Dichiarati qui (invece che più sotto, dove servono davvero) perché lo schermo di
+    // caricamento qui sotto prova ad anticipare la classificazione AI delle circolari più recenti
+    // mentre comunque aspetta il giro di rete del ripristino sessione — così, se ci riesce in
+    // tempo, l'utente trova già pronte le analisi appena entra invece di aspettarle una per una
+    // aprendo ciascuna circolare.
+    var circulars by remember { mutableStateOf<List<Circular>>(emptyList()) }
+    var isCircularsLoading by remember { mutableStateOf(false) }
+    var circularsError by remember { mutableStateOf<String?>(null) }
+    // Contatore di ricarica: serve al pulsante "Riprova" del nuovo stato d'errore, che prima
+    // non esisteva (l'errore era solo una riga di testo rosso, senza modo di ritentare).
+    var circularsRefreshTrigger by remember { mutableStateOf(0) }
+    val classifications = remember { mutableStateMapOf<Int, CircularAiClassification>() }
+    var isClassifyingCircular by remember { mutableStateOf(false) }
+    // Circolari attualmente in fase di classificazione (splash, sfondo, o apertura manuale):
+    // evita che due punti diversi del codice scarichino/classifichino la stessa circolare in
+    // parallelo, sprecando chiamate AI e banda per lo stesso risultato.
+    val inFlightClassification = remember { mutableSetOf<Int>() }
+
+    // Un solo posto che sa come classificare una circolare, usato sia dall'anticipo durante il
+    // caricamento, sia dal ciclo in background mentre si è dentro l'app, sia dall'apertura
+    // manuale di una circolare — prima questa logica era duplicata in più punti.
+    suspend fun classifyCircularIfNeeded(
+        circular: Circular,
+        forceReanalyze: Boolean = false,
+        allowLocalFallback: Boolean = true
+    ) {
+        if (classifications.containsKey(circular.number) || circular.number in inFlightClassification) return
+        inFlightClassification += circular.number
+        try {
+            // Prima di rifare l'analisi sul telefono si controlla se qualcuno l'ha già mandata al
+            // server: la cache è condivisa fra tutti gli utenti (stesso numero circolare, stesso
+            // contesto studente di default), quindi non ha senso spendere quota/tempo AI per un
+            // risultato che esiste già. "Rianalizza" salta questo controllo di proposito: serve
+            // proprio a rifare un'analisi giudicata scadente.
+            if (!forceReanalyze) {
+                val cached = try {
+                    AppContainer.circularsRepository.getCachedAnalysis(circular.number)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null // Server irraggiungibile: si procede con l'analisi locale come prima.
+                }
+                if (cached != null) {
+                    classifications[circular.number] = cached
+                    return
+                }
+            }
+
+            val pdfBytes = AppContainer.circularsRepository.downloadPdfBytes(circular.r2PdfKey)
+            var pdfText = AppContainer.pdfTextExtractor.extractText(pdfBytes)
+
+            // Gli allegati PDF (colonna "Allegati" di Spaggiari) entrano nello stesso testo
+            // analizzato dall'AI: un'informativa pubblicata come allegato invece che nel corpo
+            // della circolare non deve passare inosservata al riassunto/classificazione. Un
+            // allegato che non si scarica o non si legge viene saltato senza far fallire
+            // l'intera analisi — meglio un riassunto senza quell'allegato che nessun riassunto.
+            for (attachment in circular.attachments) {
+                val pdfKey = attachment.pdfKey ?: continue
+                try {
+                    val attBytes = AppContainer.circularsRepository.downloadPdfBytes(pdfKey)
+                    val attText = AppContainer.pdfTextExtractor.extractText(attBytes)
+                    if (attText.isNotBlank()) {
+                        pdfText += "$ATTACHMENT_TEXT_MARKER${attachment.label} ---\n\n$attText"
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Ignorato di proposito: vedi commento sopra.
+                }
+            }
+
+            val result = AppContainer.newAiClassifier(allowLocalFallback = allowLocalFallback).classifyCircularText(
+                circularNumber = circular.number,
+                circularTitle = circular.title,
+                pdfText = pdfText
+            )
+            classifications[circular.number] = result
+
+            // Si condivide il risultato con tutti gli altri utenti, qualunque sia il provider che
+            // l'ha prodotto: mostra sempre in app il modello usato (modelLabel), così chi la legge
+            // sa quanto fidarsene senza dover indovinare. Un fallimento nel salvataggio non deve
+            // rompere la classificazione già ottenuta: il telefono ha comunque il suo risultato.
+            try {
+                AppContainer.circularsRepository.saveAnalysis(result)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Ignorato di proposito: vedi commento sopra.
+            }
+        } catch (e: CancellationException) {
+            // Va sempre rilanciata: è così che funzionano la cancellazione strutturata e il
+            // timeout dell'anticipo durante il caricamento (withTimeoutOrNull più sotto).
+            // Inghiottirla qui romperebbe entrambi i meccanismi.
+            throw e
+        } catch (e: Exception) {
+            // Fallimento prima ancora di arrivare a un classificatore (download del PDF o
+            // estrazione testo falliti): passa dalla stessa euristica di riserva usata dai
+            // classificatori, invece di una CircularAiClassification costruita a mano con
+            // isFallback di default a false — altrimenti questo errore si mimetizzava da vera
+            // classificazione POTENTIAL, esattamente il problema descritto nel punto 1.
+            classifications[circular.number] = HeuristicClassification.classify(
+                circularNumber = circular.number,
+                title = circular.title,
+                text = "",
+                failureReason = "impossibile analizzare il PDF: ${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}",
+                notConfiguredMessage = "Analisi AI non disponibile."
+            )
+        } finally {
+            inFlightClassification -= circular.number
+        }
+    }
+
+    // --- Stato Notifiche (storico locale, mai sul server) -------------------------------------
+    var notificationLog by remember { mutableStateOf(AppContainer.settings.listNotifications()) }
+    val hasUnreadNotifications = notificationLog.any { !it.read }
+
+    /**
+     * Confronta quello che è appena arrivato dal server con l'ultima cosa vista e, se c'è
+     * qualcosa di nuovo, scrive una notifica nello storico locale (quello della campanella).
+     *
+     * Perché serve: il push FCM copre solo i casi in cui il server manda davvero un messaggio, e
+     * non è configurato finché non esiste il progetto Firebase. Senza questo, aprire l'app e
+     * trovare una circolare nuova non lasciava alcuna traccia: la campanella restava vuota e
+     * l'unico modo di accorgersene era guardare l'elenco.
+     *
+     * Al primo avvio non si notifica nulla: si prende solo nota del punto di partenza, altrimenti
+     * la campanella si riempirebbe di avvisi per roba che era già lì da settimane.
+     *
+     * I filtri per categoria delle Impostazioni valgono anche qui: una categoria spenta aggiorna
+     * comunque il segnalibro (così riaccendendola non arriva un arretrato di notifiche vecchie)
+     * ma non scrive nulla.
+     */
+    fun noteNovelties(
+        freshCirculars: List<Circular>? = null,
+        freshProposals: List<Proposal>? = null,
+        freshSeatMap: List<DeskAssignment>? = null,
+        freshPreferencesOpen: Boolean? = null
+    ) {
+        val settings = AppContainer.settings
+        var wroteSomething = false
+
+        if (freshCirculars != null && freshCirculars.isNotEmpty()) {
+            val newest = freshCirculars.maxOf { it.number }
+            val lastSeen = settings.lastSeenCircularNumber
+            if (lastSeen == 0) {
+                settings.lastSeenCircularNumber = newest
+            } else if (newest > lastSeen) {
+                if (settings.isNotificationKindEnabled(NotificationKind.CIRCULARS.key)) {
+                    freshCirculars
+                        .filter { it.number > lastSeen }
+                        .sortedBy { it.number }
+                        .forEach { settings.addNotification("Circolare n. ${it.number}", it.title, NotificationKind.CIRCULARS.key) }
+                    wroteSomething = true
+                }
+                settings.lastSeenCircularNumber = newest
+            }
+        }
+
+        if (freshProposals != null && freshProposals.isNotEmpty()) {
+            // Le proposte non hanno un numero progressivo: si usa l'id della più recente come
+            // segnalibro, e si notificano quelle che nell'elenco stanno prima di esso.
+            val ordered = freshProposals.sortedByDescending { it.createdAt }
+            val newestId = ordered.first().id
+            val lastSeenId = settings.lastSeenProposalId
+            if (lastSeenId.isBlank()) {
+                settings.lastSeenProposalId = newestId
+            } else if (newestId != lastSeenId) {
+                if (settings.isNotificationKindEnabled(NotificationKind.BOARD.key)) {
+                    val markerIndex = ordered.indexOfFirst { it.id == lastSeenId }
+                    // Segnalibro non più nell'elenco (proposta cancellata): si notifica solo la
+                    // più recente, invece di rovesciare in campanella tutta la bacheca.
+                    val fresh = if (markerIndex >= 0) ordered.take(markerIndex) else ordered.take(1)
+                    fresh.reversed().forEach {
+                        settings.addNotification(
+                            "Nuova proposta in bacheca",
+                            "${it.title} — ${if (it.isAnonymous) "Anonimo" else it.authorName}",
+                            NotificationKind.BOARD.key
+                        )
+                    }
+                    wroteSomething = true
+                }
+                settings.lastSeenProposalId = newestId
+            }
+        }
+
+        if (freshSeatMap != null && freshSeatMap.isNotEmpty()) {
+            // La mappa non ha id né data di pubblicazione nel modello del client: come
+            // segnalibro si usa una firma della disposizione, cioè chi siede dove. Cambia
+            // esattamente quando cambia la disposizione, che è la cosa da notificare.
+            val signature = freshSeatMap
+                .sortedWith(compareBy({ it.row }, { it.column }))
+                .joinToString("|") { "${it.row},${it.column},${it.studentAId},${it.studentBId}" }
+            val lastSeen = settings.lastSeenSeatMapSignature
+            if (lastSeen.isBlank()) {
+                settings.lastSeenSeatMapSignature = signature
+            } else if (signature != lastSeen) {
+                if (settings.isNotificationKindEnabled(NotificationKind.SEATMAP.key)) {
+                    settings.addNotification(
+                        "Nuova disposizione dei banchi",
+                        "Il Rappresentante ha pubblicato una nuova mappa dei posti.",
+                        NotificationKind.SEATMAP.key
+                    )
+                    wroteSomething = true
+                }
+                settings.lastSeenSeatMapSignature = signature
+            }
+        }
+
+        if (freshPreferencesOpen != null) {
+            val lastSeen = settings.lastSeenPreferencesOpen
+            if (freshPreferencesOpen && !lastSeen) {
+                // Notifichiamo solo quando si APRE, non quando si chiude (sarebbe rumore).
+                if (settings.isNotificationKindEnabled(NotificationKind.SEATMAP.key)) {
+                    settings.addNotification(
+                        "Preferenze compagni di banco",
+                        "Il Rappresentante ha aperto la votazione preferenze. Tocca per votare →",
+                        NOTIFICATION_CATEGORY_SEATMAP_PREFERENCES
+                    )
+                    wroteSomething = true
+                }
+            }
+            settings.lastSeenPreferencesOpen = freshPreferencesOpen
+        }
+
+        if (wroteSomething) {
+            notificationLog = AppContainer.settings.listNotifications()
+        }
+    }
+
+    LaunchedEffect(restoreAttempt) {
+        if (isRestoringSession) {
+            // Vedi SessionRestore: distinguere "sessione scaduta" da "non c'è rete" è ciò che
+            // impedisce alla modalità aereo di far uscire dall'account.
+            val outcome = AppContainer.authRepository.restoreSession()
+            val restored = when (outcome) {
+                is SessionRestore.Online -> outcome.user to outcome.profile
+                is SessionRestore.Offline -> outcome.user to outcome.profile
+                else -> null
+            }
+            startedOffline = outcome is SessionRestore.Offline
+            offlineWithoutCache = outcome is SessionRestore.OfflineWithoutCache
+            if (restored != null) {
+                currentUser = restored.first
+                currentProfile = restored.second
+
+                // Budget di tempo volutamente breve: lo schermo di caricamento serve già a
+                // coprire il giro di rete del ripristino sessione, ma non deve trasformarsi in
+                // un'attesa lunga e fastidiosa solo per classificare circolari in anticipo. Se il
+                // tempo scade prima di finire, si procede comunque: il ciclo in background (una
+                // volta dentro l'app, vedi più sotto) continua da dove questo si è fermato.
+                // Ridotto a 1500ms per evitare delay di 10+ secondi al boot su dispositivi lenti.
+                // Con l'AI locale l'anticipazione si salta completamente: i modelli locali
+                // sono troppo lenti (decine di secondi per circolare) e occuperebbero il motore
+                // proprio mentre l'utente entra nell'app. In rete, il caricamento della lista è
+                // prioritario e la classificazione aspetta.
+                if (!AppContainer.isUsingLocalAiFirst()) {
+                    withTimeoutOrNull(1500L) {
+                        try {
+                            val fetched = AppContainer.circularsRepository.listCirculars()
+                            circulars = fetched
+                            noteNovelties(freshCirculars = fetched)
+                            // Le più recenti prima: sono quelle che l'utente vede subito in Home
+                            // e apre più probabilmente per prime.
+                            for (circular in fetched.sortedByDescending { it.number }) {
+                                classifyCircularIfNeeded(circular)
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            // Nessuna connessione o elenco circolari non raggiungibile: si procede
+                            // comunque, verranno ricaricate normalmente una volta dentro l'app.
+                        }
+                    }
+                } else {
+                    // Carica la lista senza classificare subito
+                    try {
+                        val fetched = AppContainer.circularsRepository.listCirculars()
+                        circulars = fetched
+                        noteNovelties(freshCirculars = fetched)
+                    } catch (e: Exception) {
+                        // Silenziosamente ignorato: il caricamento si ripeterà alla navigazione
+                    }
+                }
+            }
+            isRestoringSession = false
+        }
+    }
+
+    if (isRestoringSession) {
+        // Prima: spinner generico su sfondo bianco. Ora nello stile della schermata
+        // "Caricamento" del kit AILA (sfondo scuro sfumato, logo, testo).
+        AilaLoadingScreen()
+        return
+    }
+
+    // Primo avvio in assoluto: le 3 schermate di presentazione del mockup, prima del login.
+    // Chi ha già una sessione salvata non le vede (non passa di qui: currentUser è valorizzato).
+    if (currentUser == null && !hasSeenOnboarding) {
+        OnboardingScreen(
+            onFinish = {
+                AppContainer.settings.hasSeenOnboarding = true
+                hasSeenOnboarding = true
+            }
+        )
+        return
+    }
+
+    // Sessione ancora valida ma nessuna copia locale del profilo e niente rete: prima si finiva
+    // qui con il token appena cancellato, cioè con un logout mascherato da schermata di login.
+    // Ora il token resta e si può semplicemente riprovare quando la rete torna.
+    if (offlineWithoutCache && currentUser == null) {
+        OfflineGateScreen(
+            onRetry = {
+                offlineWithoutCache = false
+                isRestoringSession = true
+                restoreAttempt++
+            },
+            onLogout = {
+                AppContainer.authRepository.logout()
+                offlineWithoutCache = false
+            }
+        )
+        return
+    }
+
+    // Se l'utente non è autenticato, mostra la schermata di Login / Registrazione
+    if (currentUser == null || currentProfile == null) {
+        AuthScreen(
+            onLoginSuccess = { user, profile ->
+                currentUser = user
+                currentProfile = profile
+            }
+        )
+        return
+    }
+
+    val user = currentUser!!
+    val profile = currentProfile!!
+    val isRepresentative = user.role == UserRole.REPRESENTATIVE
+    val coroutineScope = rememberCoroutineScope()
+    val uriHandler = LocalUriHandler.current
+
+    // Registra il token push per questo dispositivo una volta per sessione (utente loggato).
+    // Restituisce silenziosamente null finché Firebase non è configurato (vedi PushTokenProvider):
+    // in quel caso la registrazione viene semplicemente saltata, senza errori visibili.
+    LaunchedEffect(user.id) {
+        val token = AppContainer.pushTokenProvider.getToken()
+        if (token != null) {
+            try {
+                AppContainer.fcmRepository.registerToken(token, currentPushPlatform())
+            } catch (e: Exception) {
+                // Non bloccante: l'app resta utilizzabile anche se la registrazione fallisce.
+            }
+        }
+    }
+
+    var selectedTab by rememberSaveable { mutableStateOf(MainTab.HOME) }
+    var isInPollsScreen by rememberSaveable { mutableStateOf(false) }
+    var isInClassRosterScreen by rememberSaveable { mutableStateOf(false) }
+    var isInNotificationsScreen by rememberSaveable { mutableStateOf(false) }
+    var isInSettingsScreen by rememberSaveable { mutableStateOf(false) }
+    // Ricomposizione dopo il salvataggio della chiave: la schermata legge il valore da
+    // LocalSettingsManager, che non è stato di Compose e da solo non farebbe ridisegnare nulla.
+    var apiKeyRevision by remember { mutableStateOf(0) }
+    var selectedCircularForDetail by remember { mutableStateOf<Circular?>(null) }
+
+    // --- Stato Scheda Classe (solo Rappresentante) ------------------------------------------
+    var classRosterEntries by remember { mutableStateOf<List<RatingEntryDto>>(emptyList()) }
+    var isClassRosterLoading by remember { mutableStateOf(false) }
+    var classRosterError by remember { mutableStateOf<String?>(null) }
+    // Errore di una singola azione (stepper/switch), separato dall'errore di caricamento iniziale:
+    // prima entrambi finivano nella stessa variabile passata a LoadableContent, che sostituisce
+    // TUTTO il contenuto con il messaggio di errore — un salvataggio fallito faceva sparire
+    // l'intera Scheda Classe invece di segnalare solo quella riga, sembrando "non succede nulla".
+    var classRosterActionError by remember { mutableStateOf<String?>(null) }
+
+    // --- Stato Calendario --------------------------------------------------------------
+    var calendarEvents by remember { mutableStateOf<List<CalendarEvent>>(emptyList()) }
+    var isCalendarLoading by remember { mutableStateOf(false) }
+    var calendarError by remember { mutableStateOf<String?>(null) }
+    var calendarRefreshTrigger by remember { mutableStateOf(0) }
+    var showAddEventDialog by remember { mutableStateOf(false) }
+    // Con quale passo si apre il foglio "Nuovo evento" e quale data preselezionare: impostati da
+    // dove si tocca "+" (menu generico dall'header, scorciatoia AILA, o "+" sul giorno scelto nella
+    // griglia, che prima non permetteva di creare un evento per quel giorno specifico).
+    var addEventInitialStep by remember { mutableStateOf(EventCreationStep.MENU) }
+    var addEventInitialDateIso by remember { mutableStateOf<String?>(null) }
+    var pendingDuplicateWarning by remember { mutableStateOf<String?>(null) }
+    // Evento su cui si è toccato "vedi dettagli" dal calendario: prima onEventClick non faceva
+    // nulla, quindi orario, note e destinatari specifici erano invisibili fuori dalla card
+    // riassuntiva.
+    var eventDetailToShow by remember { mutableStateOf<CalendarEvent?>(null) }
+
+    // --- Stato Bacheca ---------------------------------------------------------------------
+    var proposals by remember { mutableStateOf<List<Proposal>>(emptyList()) }
+    var isProposalsLoading by remember { mutableStateOf(false) }
+    var proposalsError by remember { mutableStateOf<String?>(null) }
+    var proposalsRefreshTrigger by remember { mutableStateOf(0) }
+    var showAddProposalDialog by remember { mutableStateOf(false) }
+
+    // --- Stato tab "Classe" (Circolari + Bacheca unite in un'unica tab, con selettore interno) --
+    var classSection by rememberSaveable { mutableStateOf(ClassSection.CIRCULARS) }
+
+    // --- Stato Ricerca globale --------------------------------------------------------------
+    var isInSearchScreen by rememberSaveable { mutableStateOf(false) }
+    var recentSearches by remember { mutableStateOf(AppContainer.settings.recentSearches) }
+
+    // --- Stato Mappa Posti & Preferenze Sociali --------------------------------------------
+    var classmates by remember { mutableStateOf<List<User>>(emptyList()) }
+    var isClassmatesLoading by remember { mutableStateOf(false) }
+    var seatMapAssignments by remember { mutableStateOf<List<DeskAssignment>>(emptyList()) }
+    var isSeatMapLoading by remember { mutableStateOf(false) }
+    var seatMapError by remember { mutableStateOf<String?>(null) }
+    var seatMapRefreshTrigger by remember { mutableStateOf(0) }
+    var isPreferencesOpen by remember { mutableStateOf(false) }
+    var seatMapMode by rememberSaveable { mutableStateOf("MAP") } // "MAP" | "VOTE_PREFERENCES"
+    val socialVotes = remember { mutableStateMapOf<String, SocialPreferenceScore>() }
+    var proposalOptions by remember { mutableStateOf<List<SeatMapProposal>>(emptyList()) }
+    var isGeneratingProposals by remember { mutableStateOf(false) }
+    var seatMapActionError by remember { mutableStateOf<String?>(null) }
+    // Disposizione in editing manuale (dopo aver scelto una delle 3 proposte) e copia originale
+    // per il pulsante "Ripristina Proposta Algoritmo"; null quando l'editor non è aperto.
+    var editingSeatMapProposal by remember { mutableStateOf<List<DeskAssignment>?>(null) }
+    var originalSeatMapProposal by remember { mutableStateOf<List<DeskAssignment>?>(null) }
+    // Input dell'ultimo calcolo dell'ottimizzatore, tenuti in stato per poter ricalcolare live il
+    // punteggio nell'editor manuale senza rifare le chiamate di rete (ratings/matrice/storico).
+    var seatMapOptimizerProfiles by remember { mutableStateOf<Map<String, StudentProfile>>(emptyMap()) }
+    var seatMapOptimizerRatings by remember { mutableStateOf<Map<String, RepresentativeRating>>(emptyMap()) }
+    var seatMapOptimizerSocialMap by remember { mutableStateOf<Map<Pair<String, String>, SocialPreferenceScore>>(emptyMap()) }
+    var seatMapOptimizerHistory by remember { mutableStateOf<List<SeatMapHistoryRecord>>(emptyList()) }
+    var seatMapOptimizerWeights by remember { mutableStateOf(OptimizerWeights()) }
+    var seatMapOptimizerIsSmallClass by remember { mutableStateOf(false) }
+
+    // --- Stato Sondaggi Interrogazioni ------------------------------------------------------
+    var currentPoll by remember { mutableStateOf<PollDetailDto?>(null) }
+    var isPollLoading by remember { mutableStateOf(false) }
+    var pollError by remember { mutableStateOf<String?>(null) }
+    var pollsRefreshTrigger by remember { mutableStateOf(0) }
+    var showCreatePollDialog by remember { mutableStateOf(false) }
+    var isCreatingPoll by remember { mutableStateOf(false) }
+    var showPollHistory by remember { mutableStateOf(false) }
+    var allPolls by remember { mutableStateOf<List<circolareplus.data.remote.dto.PollSummaryDto>>(emptyList()) }
+    var expandedResultsPollId by remember { mutableStateOf<String?>(null) }
+    var isLoadingPollResults by remember { mutableStateOf(false) }
+    var pollResultsError by remember { mutableStateOf<String?>(null) }
+
+    // Avanzamento della compilazione lato classe (quanti hanno inviato, scadenza, se è scaduto).
+    // Arriva dalla stessa risposta del dettaglio, letta con un secondo DTO.
+    var pollProgress by remember { mutableStateOf<circolareplus.data.remote.dto.PollProgressDto?>(null) }
+    var isSubmittingPoll by remember { mutableStateOf(false) }
+    var isCalculatingPoll by remember { mutableStateOf(false) }
+    var pollAssignments by remember { mutableStateOf<List<circolareplus.data.remote.dto.PollAssignmentDto>>(emptyList()) }
+    // Sondaggi per cui questo studente ha già premuto "Invia le mie scelte" (solo locale, vedi
+    // LocalSettingsManager.isPollSubmitted).
+    var submittedPollIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+
+    fun reloadCalendar() { calendarRefreshTrigger++ }
+    fun reloadProposals() { proposalsRefreshTrigger++ }
+
+    LaunchedEffect(selectedTab, calendarRefreshTrigger) {
+        // Carica il calendario solo se:
+        // 1. È stato esplicitamente richiesto un refresh (calendarRefreshTrigger cambiato)
+        // 2. Non abbiamo ancora dati e siamo nella tab giusta
+        val shouldLoadCalendar = (calendarRefreshTrigger > 0 && selectedTab == MainTab.CALENDAR) ||
+            (calendarEvents.isEmpty() && !isCalendarLoading && (selectedTab == MainTab.CALENDAR || selectedTab == MainTab.HOME))
+        if (shouldLoadCalendar) {
+            isCalendarLoading = true
+            calendarError = null
+            try {
+                calendarEvents = AppContainer.calendarRepository.listEvents()
+            } catch (e: Exception) {
+                calendarError = "Impossibile caricare il calendario. Controlla la connessione."
+            } finally {
+                isCalendarLoading = false
+            }
+        }
+        // Anche qui, non solo alla tab Mappa Posti: il dettaglio di un evento con destinatari
+        // specifici deve poter mostrare i loro nomi anche se il rappresentante non ha ancora
+        // aperto la Mappa Posti in questa sessione.
+        if (selectedTab == MainTab.CALENDAR && classmates.isEmpty() && !isClassmatesLoading) {
+            isClassmatesLoading = true
+            try {
+                classmates = AppContainer.usersRepository.listStudents()
+            } catch (e: Exception) {
+                // Non bloccante: il calendario resta usabile, i nomi dei destinatari specifici
+                // ripiegano su un placeholder finché il caricamento non riesce.
+            } finally {
+                isClassmatesLoading = false
+            }
+        }
+    }
+
+    LaunchedEffect(selectedTab, circularsRefreshTrigger) {
+        if ((selectedTab == MainTab.CLASS || selectedTab == MainTab.HOME) && circulars.isEmpty() && !isCircularsLoading) {
+            isCircularsLoading = true
+            circularsError = null
+            try {
+                circulars = AppContainer.circularsRepository.listCirculars()
+                noteNovelties(freshCirculars = circulars)
+                // Nota: la classificazione AI (client-side, con la chiave personale dello
+                // studente) richiede il testo estratto dal PDF della circolare. L'estrazione
+                // testo PDF multipiattaforma è un modulo separato non ancora implementato:
+                // finché non è pronto, le circolari restano visibili come "Da classificare"
+                // invece di mostrare un'etichetta finta.
+            } catch (e: Exception) {
+                circularsError = "Impossibile caricare le circolari. Controlla la connessione."
+            } finally {
+                isCircularsLoading = false
+            }
+        }
+    }
+
+    LaunchedEffect(selectedTab, proposalsRefreshTrigger) {
+        val shouldLoadProposals = selectedTab == MainTab.CLASS ||
+            (selectedTab == MainTab.HOME && proposals.isEmpty() && !isProposalsLoading)
+        if (shouldLoadProposals) {
+            isProposalsLoading = true
+            proposalsError = null
+            try {
+                proposals = AppContainer.proposalsRepository.listProposals()
+                noteNovelties(freshProposals = proposals)
+            } catch (e: Exception) {
+                proposalsError = "Impossibile caricare la bacheca. Controlla la connessione."
+            } finally {
+                isProposalsLoading = false
+            }
+        }
+    }
+
+    // Ingresso nella tab Mappa Posti: carica compagni, mappa attuale e stato finestra preferenze.
+    // Prima era un flusso aperto solo dalla Home (isInSeatMapScreen); ora è una tab vera e
+    // propria della bottom bar, quindi si aggancia direttamente al cambio di selectedTab.
+    LaunchedEffect(selectedTab, seatMapRefreshTrigger) {
+        if (selectedTab == MainTab.SEATMAP) {
+            seatMapMode = "MAP"
+            seatMapError = null
+            if (classmates.isEmpty() && !isClassmatesLoading) {
+                isClassmatesLoading = true
+                try {
+                    classmates = AppContainer.usersRepository.listStudents()
+                } catch (e: Exception) {
+                    seatMapError = "Impossibile caricare l'elenco dei compagni."
+                } finally {
+                    isClassmatesLoading = false
+                }
+            }
+            isSeatMapLoading = true
+            try {
+                seatMapAssignments = AppContainer.seatMapRepository.getCurrentSeatMap() ?: emptyList()
+                val config = AppContainer.preferencesRepository.getConfig()
+                isPreferencesOpen = config.preferencesOpen
+                noteNovelties(freshSeatMap = seatMapAssignments, freshPreferencesOpen = isPreferencesOpen)
+            } catch (e: Exception) {
+                seatMapError = "Impossibile caricare la mappa posti attuale."
+            } finally {
+                isSeatMapLoading = false
+            }
+        }
+    }
+
+    // Ingresso nella votazione preferenze: precarica i voti già espressi dallo studente.
+    LaunchedEffect(seatMapMode) {
+        if (seatMapMode == "VOTE_PREFERENCES") {
+            // Notifica di apertura votazione preferenze
+            if (AppContainer.settings.isNotificationKindEnabled(NotificationKind.SEATMAP.key)) {
+                AppContainer.settings.addNotification(
+                    "Votazione Preferenze Aperta",
+                    "Esprimi i tuoi voti sulle preferenze di seduta",
+                    NOTIFICATION_CATEGORY_SEATMAP_PREFERENCES
+                )
+                notificationLog = AppContainer.settings.listNotifications()
+            }
+
+            try {
+                val myVotes = AppContainer.preferencesRepository.myVotes()
+                socialVotes.clear()
+                myVotes.votes.forEach { v ->
+                    socialVotes[v.toStudentId] = SocialPreferenceScore.fromValue(v.score)
+                }
+            } catch (e: Exception) {
+                seatMapActionError = "Impossibile caricare i tuoi voti precedenti."
+            }
+        }
+    }
+
+    // Apertura del dettaglio di una circolare non ancora classificata: la classifica subito
+    // (con priorità sul ciclo in background qui sotto, che nel frattempo potrebbe già essere al
+    // lavoro su di lei — classifyCircularIfNeeded evita il doppio lavoro).
+    LaunchedEffect(selectedCircularForDetail) {
+        val circular = selectedCircularForDetail
+        if (circular != null && !classifications.containsKey(circular.number)) {
+            isClassifyingCircular = true
+            try {
+                classifyCircularIfNeeded(circular)
+            } finally {
+                isClassifyingCircular = false
+            }
+        }
+    }
+
+    // Mentre si è dentro l'app, continua a classificare in background le circolari rimaste
+    // indietro (quelle che l'anticipo durante il caricamento non ha fatto in tempo a coprire):
+    // così, quando l'utente arriva ad aprirle, sono già pronte invece di dover aspettare lì per
+    // lì. Una alla volta (non in parallelo) per non consumare la quota della chiave AI personale
+    // più in fretta del necessario, con una pausa breve tra un tentativo e l'altro.
+    LaunchedEffect(Unit) {
+        // Quante volte di fila, in questo ciclo, il provider cloud ha fallito ed e' scattata
+        // l'escalation al modello locale: e' quello che scalda il telefono anche con il
+        // provider cloud selezionato (vedi il commento su ChainedAiClassifier.escalateToSecondary).
+        // Oltre la soglia si smette di scaricare il lavoro sul locale per il resto del ciclo: le
+        // circolari restanti prendono il fallback euristico, istantaneo, e l'utente puo' sempre
+        // forzare l'analisi completa aprendo la singola circolare e premendo "Rianalizza".
+        var consecutiveLocalFallbacks = 0
+        while (isActive) {
+            val next = circulars.sortedByDescending { it.number }
+                .firstOrNull { it.number !in classifications && it.number !in inFlightClassification }
+            // Con l'AI locale questo ciclo non gira affatto, e non e' una prudenza: e' la
+            // ragione principale per cui aprire una circolare sembrava non finire mai. Il motore
+            // e' uno solo e le richieste sono in coda su un mutex, quindi la circolare appena
+            // aperta finiva **dietro** a quella che il ciclo aveva gia' cominciato in sottofondo,
+            // e doveva aspettare che quella finisse prima ancora di iniziare. Con una
+            // generazione da decine di secondi, l'attesa vista dall'utente raddoppiava o peggio.
+            //
+            // In rete l'anticipo ha senso — un secondo a circolare, e trovarle gia' pronte e'
+            // meglio. Sul telefono no: si classifica quello che si apre, quando lo si apre.
+            if (AppContainer.isUsingLocalAiFirst()) {
+                delay(3000L)
+            } else if (next != null) {
+                classifyCircularIfNeeded(
+                    next,
+                    allowLocalFallback = consecutiveLocalFallbacks < 2
+                )
+                val usedLocal = classifications[next.number]?.modelLabel?.startsWith("AI locale") == true
+                consecutiveLocalFallbacks = if (usedLocal) consecutiveLocalFallbacks + 1 else 0
+            } else {
+                delay(3000L)
+            }
+        }
+    }
+
+    // Controllo periodico delle novità mentre l'app è aperta.
+    //
+    // Senza, una novità si scopriva solo entrando nella sua sezione: la campanella restava vuota
+    // per tutto il tempo in cui si stava, per dire, sul calendario. Il push FCM coprirebbe il
+    // caso, ma vale solo quando il server manda davvero un messaggio e non è configurato finché
+    // non esiste il progetto Firebase.
+    //
+    // Volutamente non aggiorna le liste a schermo: si limita a rilevare e a scrivere in
+    // campanella. Sovrascrivere quello che l'utente sta guardando mentre lo guarda è il tipo di
+    // cosa che fa "saltare" una lista sotto il dito.
+    LaunchedEffect(user.id) {
+        while (isActive) {
+            delay(5 * 60 * 1000L)
+            try {
+                noteNovelties(freshCirculars = AppContainer.circularsRepository.listCirculars())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Rete assente: si riproverà al giro dopo.
+            }
+            try {
+                noteNovelties(freshProposals = AppContainer.proposalsRepository.listProposals())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Idem.
+            }
+            try {
+                noteNovelties(
+                    freshSeatMap = AppContainer.seatMapRepository.getCurrentSeatMap(),
+                    freshPreferencesOpen = AppContainer.preferencesRepository.getConfig().preferencesOpen
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Idem.
+            }
+        }
+    }
+
+    LaunchedEffect(isInPollsScreen, pollsRefreshTrigger) {
+        if (isInPollsScreen) {
+            isPollLoading = true
+            pollError = null
+            try {
+                val polls = AppContainer.pollsRepository.listPolls()
+                allPolls = polls
+
+                // Notifica per nuovo sondaggio pubblicato
+                val publishedPolls = polls.filter { it.isPublished }
+                // Un sondaggio con le assegnazioni già calcolate (tutti hanno inviato, l'algoritmo
+                // è già girato lato server) è chiuso: deve sparire da "Sondaggio" e restare visibile
+                // solo nello Storico, altrimenti resterebbe "aperto" all'infinito anche a risultato
+                // già pronto.
+                val openPolls = publishedPolls.filterNot {
+                    it.isCalculated && it.totalStudents > 0 && it.submittedCount >= it.totalStudents
+                }
+                if (publishedPolls.isNotEmpty()) {
+                    val lastSeenId = AppContainer.settings.lastSeenPollId
+                    if (lastSeenId.isBlank()) {
+                        AppContainer.settings.lastSeenPollId = publishedPolls.first().id
+                    } else {
+                        val newPolls = publishedPolls.filter { it.id != lastSeenId && it.createdAt > lastSeenId }
+                        if (newPolls.isNotEmpty()) {
+                            newPolls.forEach { poll ->
+                                if (AppContainer.settings.isNotificationKindEnabled(NotificationKind.POLLS.key)) {
+                                    AppContainer.settings.addNotification("Nuovo sondaggio: ${poll.subject}", "Apertura prenotazioni", NotificationKind.POLLS.key)
+                                }
+                            }
+                            AppContainer.settings.lastSeenPollId = publishedPolls.first().id
+                            notificationLog = AppContainer.settings.listNotifications()
+                        }
+                    }
+                }
+
+                val target = openPolls.firstOrNull() ?: polls.firstOrNull { !it.isCalculated }
+                if (target != null) {
+                    val loaded = AppContainer.pollsRepository.getPollWithProgress(target.id)
+                    currentPoll = loaded.detail
+                    pollProgress = loaded.progress
+                    AppContainer.settings.setPollSubmitted(target.id, loaded.progress.hasSubmitted)
+                } else {
+                    currentPoll = null
+                    pollProgress = null
+                }
+                submittedPollIds = polls
+                    .filter { AppContainer.settings.isPollSubmitted(it.id) }
+                    .map { it.id }
+                    .toSet()
+            } catch (e: Exception) {
+                pollError = "Impossibile caricare i sondaggi. Controlla la connessione."
+            } finally {
+                isPollLoading = false
+            }
+        }
+    }
+
+    // Espande/carica i risultati (assegnazioni) di un sondaggio dello storico: li calcola al volo
+    // con l'algoritmo già esistente (`assignments/run`) invece di richiedere un passaggio separato.
+    LaunchedEffect(expandedResultsPollId) {
+        val pollId = expandedResultsPollId
+        if (pollId != null) {
+            isLoadingPollResults = true
+            pollResultsError = null
+            try {
+                // runAssignments (ri)calcola le assegnazioni ma risponde solo con id grezzi;
+                // getAssignments rilegge le stesse righe appena salvate con nome studente e data
+                // leggibili, pronte per la UI.
+                AppContainer.pollsRepository.runAssignments(pollId)
+                pollAssignments = AppContainer.pollsRepository.getAssignments(pollId).assignments
+            } catch (e: Exception) {
+                pollResultsError = "Impossibile calcolare i risultati: ${e.message}"
+            } finally {
+                isLoadingPollResults = false
+            }
+        }
+    }
+
+    // Ingresso nella Scheda Classe: carica le valutazioni correnti (solo Rappresentante).
+    LaunchedEffect(isInClassRosterScreen) {
+        if (isInClassRosterScreen) {
+            isClassRosterLoading = true
+            classRosterError = null
+            classRosterActionError = null
+            try {
+                classRosterEntries = AppContainer.ratingsRepository.listRatings()
+            } catch (e: Exception) {
+                classRosterError = "Impossibile caricare la scheda classe."
+            } finally {
+                isClassRosterLoading = false
+            }
+        }
+    }
+
+    // Ingresso nella schermata Notifiche: ricarica lo storico (elimina quelle scadute) e,
+    // uscendo, segna tutto come letto (così il pallino sulla campanella sparisce).
+    LaunchedEffect(isInNotificationsScreen) {
+        if (isInNotificationsScreen) {
+            notificationLog = AppContainer.settings.listNotifications()
+        } else if (notificationLog.any { !it.read }) {
+            AppContainer.settings.markAllNotificationsRead()
+            notificationLog = AppContainer.settings.listNotifications()
+        }
+    }
+
+    if (showAddEventDialog) {
+        AddCalendarEventDialog(
+            onDismiss = {
+                showAddEventDialog = false
+                addEventInitialStep = EventCreationStep.MENU
+                addEventInitialDateIso = null
+            },
+            initialStep = addEventInitialStep,
+            initialDateIso = addEventInitialDateIso,
+            onConfirm = { title, date, time, category, visibleToUserIds, notes ->
+                coroutineScope.launch {
+                    try {
+                        val response = AppContainer.calendarRepository.createEvent(
+                            title = title,
+                            eventDate = date,
+                            startTime = time,
+                            category = category,
+                            visibleToUserIds = visibleToUserIds,
+                            notes = notes
+                        )
+                        if (response.warning != null) {
+                            pendingDuplicateWarning = response.warning
+                        } else {
+                            showAddEventDialog = false
+                            addEventInitialStep = EventCreationStep.MENU
+                            addEventInitialDateIso = null
+                            reloadCalendar()
+                        }
+                    } catch (e: Exception) {
+                        calendarError = "Impossibile creare l'evento: ${e.message}"
+                    }
+                }
+            }
+        )
+    }
+
+    if (pendingDuplicateWarning != null) {
+        AlertDialog(
+            onDismissRequest = { pendingDuplicateWarning = null },
+            title = { Text("Possibile doppione") },
+            text = { Text(pendingDuplicateWarning ?: "") },
+            confirmButton = {
+                TextButton(onClick = { pendingDuplicateWarning = null; showAddEventDialog = false }) {
+                    Text("Ho capito")
+                }
+            }
+        )
+    }
+
+    eventDetailToShow?.let { event ->
+        EventDetailDialog(
+            event = event,
+            classmates = classmates,
+            currentUser = user,
+            onDismiss = { eventDetailToShow = null },
+            onDelete = {
+                coroutineScope.launch {
+                    try {
+                        AppContainer.calendarRepository.deleteEvent(event.id)
+                        eventDetailToShow = null
+                        reloadCalendar()
+                    } catch (e: Exception) {
+                        calendarError = "Impossibile eliminare l'evento: ${e.message}"
+                    }
+                }
+            }
+        )
+    }
+
+    if (showAddProposalDialog) {
+        AddProposalDialog(
+            onDismiss = { showAddProposalDialog = false },
+            onConfirm = { title, description, category, isAnonymous ->
+                coroutineScope.launch {
+                    try {
+                        AppContainer.proposalsRepository.createProposal(title, description, category, isAnonymous)
+                        showAddProposalDialog = false
+                        reloadProposals()
+                    } catch (e: Exception) {
+                        proposalsError = "Impossibile pubblicare la proposta: ${e.message}"
+                    }
+                }
+            }
+        )
+    }
+
+    if (showCreatePollDialog) {
+        CreatePollDialog(
+            isSubmitting = isCreatingPoll,
+            onDismiss = { showCreatePollDialog = false },
+            onConfirm = { subject, slots ->
+                coroutineScope.launch {
+                    isCreatingPoll = true
+                    try {
+                        val created = AppContainer.pollsRepository.createPoll(subject, slots)
+                        val newId = created.id
+                        if (newId != null) {
+                            AppContainer.pollsRepository.publishPoll(newId)
+                        }
+                        showCreatePollDialog = false
+                        pollsRefreshTrigger++
+                    } catch (e: Exception) {
+                        pollError = "Impossibile creare il sondaggio: ${e.message}"
+                    } finally {
+                        isCreatingPoll = false
+                    }
+                }
+            }
+        )
+    }
+
+    if (proposalOptions.isNotEmpty()) {
+        SeatMapProposalsDialog(
+            proposals = proposalOptions,
+            isPublishing = isGeneratingProposals,
+            onDismiss = { proposalOptions = emptyList() },
+            // Scegliere una proposta non la pubblica più direttamente: apre l'editor manuale
+            // (swap-by-tap con ricalcolo live) da cui il Rappresentante pubblica quando è pronto.
+            onSelect = { chosen ->
+                originalSeatMapProposal = chosen.assignments
+                editingSeatMapProposal = chosen.assignments
+                proposalOptions = emptyList()
+            }
+        )
+    }
+
+    if (seatMapActionError != null) {
+        AlertDialog(
+            onDismissRequest = { seatMapActionError = null },
+            title = { Text("Attenzione") },
+            text = { Text(seatMapActionError ?: "") },
+            confirmButton = {
+                TextButton(onClick = { seatMapActionError = null }) { Text("Ho capito") }
+            }
+        )
+    }
+
+    val circularForDetail = selectedCircularForDetail
+    if (circularForDetail != null) {
+        // Prima lo swipe/tasto indietro di sistema chiudeva l'app anche da qui: nessuna
+        // schermata a schermo intero intercettava il back di sistema, solo la freccia disegnata
+        // nella UI. Ora il back di sistema fa la stessa cosa della freccia.
+        circolareplus.platform.PlatformBackHandler { selectedCircularForDetail = null }
+        CircularDetailScreen(
+            circular = circularForDetail,
+            classification = classifications[circularForDetail.number],
+            isClassifying = isClassifyingCircular,
+            onBackClick = { selectedCircularForDetail = null },
+            onDownloadPdfClick = {
+                circularForDetail.downloadUrl?.let { uriHandler.openUri(it) }
+            },
+            // Allegati (colonna "Allegati" di Spaggiari): sia quelli in cache R2 sia i link
+            // esterni si aprono allo stesso modo del PDF principale, nel browser di sistema —
+            // niente anteprima inline per loro, solo per il documento principale.
+            onOpenAttachmentClick = { attachment ->
+                if (attachment.downloadUrl.isNotBlank()) {
+                    uriHandler.openUri(attachment.downloadUrl)
+                }
+            },
+            // Scaricare il PDF è già una cosa che l'app sa fare (serve alla classificazione AI):
+            // qui gli stessi byte alimentano l'anteprima interna, senza una seconda strada.
+            onLoadPdfBytes = {
+                AppContainer.circularsRepository.downloadPdfBytes(circularForDetail.r2PdfKey)
+            },
+            // Allegati PDF (colonna "Allegati" di Spaggiari): stessa rotta del documento
+            // principale, con la loro chiave R2 invece che quella della circolare.
+            onLoadAttachmentPdfBytes = { attachment ->
+                AppContainer.circularsRepository.downloadPdfBytes(
+                    attachment.pdfKey ?: error("Allegato \"${attachment.label}\" senza chiave PDF")
+                )
+            },
+            // La scadenza riconosciuta dall'AI diventa un evento vero. `isAiGenerated = true`
+            // esiste gia' nell'API: serve a distinguere in calendario cosa ha proposto l'AI da
+            // cosa ha inserito una persona.
+            onCreateCalendarEvent = { deadline ->
+                try {
+                    val category = try {
+                        circolareplus.domain.model.CalendarEventCategory.valueOf(deadline.category)
+                    } catch (e: IllegalArgumentException) {
+                        circolareplus.domain.model.CalendarEventCategory.ALTRO
+                    }
+                    val response = AppContainer.calendarRepository.createEvent(
+                        title = deadline.title,
+                        eventDate = deadline.dueDate,
+                        startTime = deadline.time,
+                        category = category,
+                        isAiGenerated = true
+                    )
+                    when {
+                        // Il server, sui possibili doppioni, avvisa invece di creare: l'evento
+                        // NON esiste, e dirlo e' l'unico modo perche' non si creda il contrario.
+                        response.warning != null ->
+                            "Non aggiunto: ${response.warning}"
+                        response.success -> {
+                            // Senza questo, l'evento veniva creato sul server ma restava invisibile
+                            // in Calendario/Home finché l'app non veniva riavviata: calendarEvents
+                            // si ricarica solo quando calendarRefreshTrigger cambia (vedi sopra),
+                            // e qui non veniva mai toccato.
+                            reloadCalendar()
+                            "Aggiunto al calendario."
+                        }
+                        else ->
+                            "Il server non ha creato l'evento."
+                    }
+                } catch (e: Exception) {
+                    "Non aggiunto: ${e.message ?: e::class.simpleName}"
+                }
+            },
+            onReanalyze = {
+                coroutineScope.launch {
+                    // Si toglie il risultato dalla cache in memoria e si riclassifica da capo:
+                    // classifyCircularIfNeeded salta le circolari già presenti nella mappa.
+                    classifications.remove(circularForDetail.number)
+                    isClassifyingCircular = true
+                    try {
+                        classifyCircularIfNeeded(circularForDetail, forceReanalyze = true)
+                    } finally {
+                        isClassifyingCircular = false
+                    }
+                }
+            }
+        )
+        return
+    }
+
+    Scaffold(
+        bottomBar = {
+            if (!isInPollsScreen && !isInClassRosterScreen && !isInNotificationsScreen && !isInSearchScreen && !isInSettingsScreen && editingSeatMapProposal == null) {
+                NavigationBar(
+                    containerColor = AppTheme.SurfaceWhite,
+                    tonalElevation = AppTheme.Space8
+                ) {
+                    MainTab.entries.forEach { tab ->
+                        val isSelected = selectedTab == tab
+                        val iconColor = if (isSelected) AppTheme.PrimaryBlue else AppTheme.TextFaint
+
+                        NavigationBarItem(
+                            selected = isSelected,
+                            onClick = { selectedTab = tab },
+                            icon = {
+                                when (tab) {
+                                    MainTab.HOME -> AppIcons.Home(modifier = Modifier.size(24.dp), color = iconColor)
+                                    MainTab.CALENDAR -> AppIcons.Calendar(modifier = Modifier.size(24.dp), color = iconColor)
+                                    MainTab.CLASS -> AppIcons.Document(modifier = Modifier.size(24.dp), color = iconColor)
+                                    MainTab.SEATMAP -> AppIcons.Chair(modifier = Modifier.size(24.dp), color = iconColor)
+                                    MainTab.MORE -> AppIcons.Profile(modifier = Modifier.size(24.dp), color = iconColor)
+                                }
+                            },
+                            label = {
+                                // maxLines/softWrap espliciti: "Mappa posti" andava a capo su due
+                                // righe e sballava l'altezza della barra rispetto alle altre voci.
+                                Text(
+                                    text = tab.title,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Normal,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = AppTheme.PrimaryBlue,
+                                unselectedIconColor = AppTheme.TextFaint,
+                                selectedTextColor = AppTheme.PrimaryBlue,
+                                unselectedTextColor = AppTheme.TextFaint,
+                                indicatorColor = AppTheme.TintBlue
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    ) { innerPadding ->
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            color = AppTheme.BackgroundLight
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Striscia "sei offline": compare solo se l'avvio è avvenuto senza rete, e si
+                // può chiudere. Prima, in quel caso, non compariva niente perché l'app aveva
+                // già fatto uscire dall'account.
+                if (startedOffline && !offlineBannerDismissed) {
+                    OfflineBanner(
+                        onRetry = {
+                            startedOffline = false
+                            offlineBannerDismissed = false
+                            isRestoringSession = true
+                            restoreAttempt++
+                        },
+                        onDismiss = { offlineBannerDismissed = true }
+                    )
+                }
+                // Il contenuto prende l'altezza che resta: senza weight, i figli con
+                // fillMaxSize prenderebbero tutta l'altezza della Column e la striscia offline
+                // spingerebbe la barra inferiore fuori dallo schermo.
+                Box(modifier = Modifier.weight(1f)) {
+            when {
+                isInSettingsScreen -> {
+                    circolareplus.platform.PlatformBackHandler { isInSettingsScreen = false }
+                    SettingsScreen(
+                        apiKey = run {
+                            apiKeyRevision
+                            AppContainer.settings.userAiApiKey
+                        },
+                        onSaveApiKey = { newKey ->
+                            AppContainer.settings.userAiApiKey = newKey
+                            apiKeyRevision++
+                        },
+                        onTestApiKey = { key ->
+                            // Si costruisce un classificatore con la chiave appena digitata, non
+                            // con quella salvata: così si può provare una chiave prima di salvarla.
+                            circolareplus.ai.ClientSideAiClassifier(userApiKey = key).testKey()
+                        },
+                        isDarkMode = AppTheme.isDarkMode,
+                        onDarkModeChange = { enabled ->
+                            AppTheme.isDarkMode = enabled
+                            AppContainer.settings.isDarkMode = enabled
+                        },
+                        isNotificationKindEnabled = { kind ->
+                            AppContainer.settings.isNotificationKindEnabled(kind.key)
+                        },
+                        onNotificationKindChange = { kind, enabled ->
+                            AppContainer.settings.setNotificationKindEnabled(kind.key, enabled)
+                        },
+                        boardNotificationsEnabled = currentProfile?.notificationBoardEnabled ?: true,
+                        onToggleBoardNotifications = { enabled ->
+                            coroutineScope.launch {
+                                try {
+                                    AppContainer.authRepository.toggleBoardNotifications(enabled)
+                                } catch (e: Exception) {
+                                    // Best-effort
+                                }
+                            }
+                        },
+                        systemNotificationsEnabled = AppContainer.settings.isSystemNotificationsEnabled,
+                        onToggleSystemNotifications = { enabled ->
+                            AppContainer.settings.isSystemNotificationsEnabled = enabled
+                        },
+                        aiProvider = AppContainer.settings.aiProvider,
+                        onAiProviderChange = { provider ->
+                            AppContainer.settings.aiProvider = provider
+                        },
+                        localAiUnavailableReason = circolareplus.ai.onDeviceAiUnavailableReason(),
+                        deviceRamMb = circolareplus.ai.totalDeviceRamMb(),
+                        localModels = circolareplus.ai.LocalAiCatalog.selectableFor(
+                            circolareplus.ai.totalDeviceRamMb()
+                        ),
+                        selectedLocalModelId = AppContainer.selectedLocalModel().id,
+                        onSelectLocalModel = { model ->
+                            AppContainer.settings.localAiModelId = model.id
+                            // Il motore tiene in memoria il modello caricato in precedenza: se
+                            // non lo si scarica, la prima classificazione dopo il cambio userebbe
+                            // ancora quello vecchio.
+                            AppContainer.localLlm.unload()
+                        },
+                        isLocalModelInstalled = { model ->
+                            AppContainer.localModelStore.isInstalled(model)
+                        },
+                        downloadLocalModel = { model, onProgress ->
+                            when (val result = AppContainer.localModelStore.download(model, onProgress)) {
+                                is circolareplus.ai.ModelDownloadState.Installed ->
+                                    "${model.displayName} è pronto. Le prossime circolari verranno " +
+                                        "analizzate sul telefono, anche senza connessione."
+                                is circolareplus.ai.ModelDownloadState.Failed -> result.reason
+                                else -> "Download non completato."
+                            }
+                        },
+                        onDeleteLocalModel = { model ->
+                            AppContainer.localLlm.unload()
+                            AppContainer.localModelStore.delete(model)
+                        },
+                        orphanModelBytes = AppContainer.localModelStore.orphanBytes(),
+                        onDeleteOrphanModels = { AppContainer.localModelStore.deleteOrphans() },
+                        onTestLocalModel = {
+                            val model = AppContainer.selectedLocalModel()
+                            circolareplus.ai.LocalAiClassifier(
+                                model = model,
+                                modelPath = AppContainer.localModelStore.installedPath(model),
+                                llm = AppContainer.localLlm
+                            ).testConfiguration()
+                        },
+                        onBackClick = { isInSettingsScreen = false }
+                    )
+                }
+                isInPollsScreen -> {
+                    // Se si è nello storico, il back torna prima al sondaggio corrente (come la
+                    // freccia in ScreenBackBar sotto), solo un secondo back chiude il flusso.
+                    circolareplus.platform.PlatformBackHandler {
+                        if (showPollHistory) showPollHistory = false else isInPollsScreen = false
+                    }
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        ScreenBackBar(
+                            title = "Sondaggi Interrogazioni",
+                            onBackClick = { if (showPollHistory) showPollHistory = false else isInPollsScreen = false }
+                        )
+                        if (isRepresentative) {
+                            // I due tasti erano entrambi sempre nello stesso stato: "Nuovo
+                            // sondaggio" restava blu anche mentre si guardava lo storico, e non
+                            // si capiva quale delle due viste fosse attiva. Ora è un selettore
+                            // che mostra dove sei, con l'azione "nuovo" separata accanto.
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space8),
+                                horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                circolareplus.design.AilaSegmentedTabs(
+                                    labels = listOf("Sondaggio", "Storico"),
+                                    selectedIndex = if (showPollHistory) 1 else 0,
+                                    onSelect = { index -> showPollHistory = index == 1 },
+                                    modifier = Modifier.weight(1f),
+                                    key = showPollHistory
+                                )
+                                circolareplus.design.AilaPrimaryButton(
+                                    text = "Nuovo",
+                                    onClick = { showCreatePollDialog = true },
+                                    compact = true,
+                                    icon = { tint -> AppIcons.Plus(modifier = Modifier.size(13.dp), color = tint) }
+                                )
+                            }
+                        }
+                        if (showPollHistory) {
+                            PollHistoryScreen(
+                                polls = allPolls,
+                                expandedPollId = expandedResultsPollId,
+                                isLoadingResults = isLoadingPollResults,
+                                resultsError = pollResultsError,
+                                assignments = pollAssignments,
+                                onToggleResults = { pollId ->
+                                    expandedResultsPollId = if (expandedResultsPollId == pollId) null else pollId
+                                },
+                                onDelete = { pollId ->
+                                    coroutineScope.launch {
+                                        try {
+                                            AppContainer.pollsRepository.deletePoll(pollId)
+                                            if (expandedResultsPollId == pollId) expandedResultsPollId = null
+                                            pollsRefreshTrigger++
+                                        } catch (e: Exception) {
+                                            pollResultsError = "Impossibile eliminare: ${e.message}"
+                                        }
+                                    }
+                                }
+                            )
+                        } else {
+                        LoadableContent(
+                            isLoading = isPollLoading,
+                            error = pollError,
+                            onRetry = { pollsRefreshTrigger++ }
+                        ) {
+                            val poll = currentPoll
+                            if (poll == null) {
+                                // Tipo esplicito: un lambda scritto direttamente dentro un "if"
+                                // come argomento nullable è ambiguo da leggere (e da inferire).
+                                val createPollAction: (() -> Unit)? =
+                                    if (isRepresentative) {
+                                        { showCreatePollDialog = true }
+                                    } else {
+                                        null
+                                    }
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                                    circolareplus.design.AilaEmptyState(
+                                        title = "Nessun sondaggio aperto",
+                                        message = if (isRepresentative)
+                                            "Crea un sondaggio per far prenotare alla classe le date delle interrogazioni."
+                                        else
+                                            "Quando il Rappresentante apre un sondaggio, lo trovi qui.",
+                                        actionLabel = if (isRepresentative) "+ Nuovo sondaggio" else null,
+                                        onAction = createPollAction,
+                                        icon = { AppIcons.Check(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
+                                    )
+                                }
+                            } else {
+                                PollsScreen(
+                                    subjectName = poll.subject,
+                                    slots = poll.slots.map { s ->
+                                        SlotUiItem(
+                                            slotId = s.id,
+                                            dateLabel = s.slotDate,
+                                            subject = poll.subject,
+                                            capacity = s.capacity,
+                                            isMandatory = s.teacherMandatory,
+                                            currentVote = s.myVote?.let { InterrogationVoteType.fromScore(it) }
+                                        )
+                                    },
+                                    sacrificeBonus = poll.mySacrificeBonus,
+                                    onCastVote = { slotId, voteType ->
+                                        // Aggiornamento ottimistico: la selezione cambia subito,
+                                        // la richiesta parte in background.
+                                        //
+                                        // **Il "balbettio" dei pulsanti veniva da qui**: dopo ogni
+                                        // voto si ricaricava l'intero sondaggio dal server e si
+                                        // sovrascriveva lo stato locale. Cambiando scelta due o tre
+                                        // volte di fila, le risposte arrivavano in ordine sparso e
+                                        // ognuna riportava indietro la selezione a un valore
+                                        // precedente, finché l'ultima non vinceva. Ora la ricarica
+                                        // non si fa più: lo stato locale è già quello giusto, e il
+                                        // server viene riletto solo se la chiamata fallisce.
+                                        val previousPoll = currentPoll
+                                        currentPoll = currentPoll?.copy(
+                                            slots = currentPoll!!.slots.map {
+                                                if (it.id == slotId) it.copy(myVote = voteType.score) else it
+                                            }
+                                        )
+                                        coroutineScope.launch {
+                                            try {
+                                                AppContainer.pollsRepository.voteSlot(poll.id, slotId, voteType.score)
+                                            } catch (e: Exception) {
+                                                currentPoll = previousPoll
+                                                pollError = "Voto non registrato: ${e.message}"
+                                            }
+                                        }
+                                    },
+                                    isSubmitted = submittedPollIds.contains(poll.id),
+                                    submittedCount = pollProgress?.submittedCount ?: 0,
+                                    totalStudents = pollProgress?.totalStudents ?: 0,
+                                    closesAtLabel = pollProgress?.closesAt
+                                        ?.let { circolareplus.util.formatDayMonth(it) }
+                                        ?.takeIf { it.isNotBlank() },
+                                    isExpired = pollProgress?.isExpired == true,
+                                    isSubmitting = isSubmittingPoll,
+                                    onSubmit = {
+                                        // L'invio adesso arriva al server: è così che il
+                                        // Rappresentante vede chi ha finito e che l'algoritmo
+                                        // può partire quando hanno inviato tutti. Prima era solo
+                                        // un interruttore sul telefono di chi votava.
+                                        if (!isSubmittingPoll) {
+                                            isSubmittingPoll = true
+                                            coroutineScope.launch {
+                                                try {
+                                                    val result = AppContainer.pollsRepository.submitVotes(poll.id)
+                                                    AppContainer.settings.setPollSubmitted(poll.id, true)
+                                                    submittedPollIds = submittedPollIds + poll.id
+                                                    pollProgress = pollProgress?.copy(
+                                                        hasSubmitted = true,
+                                                        submittedCount = result.submittedCount,
+                                                        totalStudents = result.totalStudents
+                                                    )
+                                                } catch (e: Exception) {
+                                                    pollError = "Invio non riuscito: ${e.message}"
+                                                } finally {
+                                                    isSubmittingPoll = false
+                                                }
+                                            }
+                                        }
+                                    },
+                                    onReopen = {
+                                        coroutineScope.launch {
+                                            try {
+                                                AppContainer.pollsRepository.withdrawSubmission(poll.id)
+                                                AppContainer.settings.setPollSubmitted(poll.id, false)
+                                                submittedPollIds = submittedPollIds - poll.id
+                                                pollProgress = pollProgress?.copy(
+                                                    hasSubmitted = false,
+                                                    submittedCount = (pollProgress?.submittedCount ?: 1) - 1
+                                                )
+                                            } catch (e: Exception) {
+                                                pollError = "Non sono riuscito ad annullare l'invio: ${e.message}"
+                                            }
+                                        }
+                                    },
+                                    isRepresentative = isRepresentative,
+                                    isCalculating = isCalculatingPoll,
+                                    onRunAssignments = {
+                                        if (!isCalculatingPoll) {
+                                            isCalculatingPoll = true
+                                            coroutineScope.launch {
+                                                try {
+                                                    // `force=true`: il Rappresentante può far partire l'algoritmo a mano
+                                                    // anche se manca qualcuno, dato che l'avvio automatico all'ultimo
+                                                    // invio non è affidabile. Dopo il calcolo il sondaggio è chiuso, quindi
+                                                    // si ricarica la lista: sparisce da qui e compare nello Storico.
+                                                    AppContainer.pollsRepository.runAssignments(poll.id, force = true)
+                                                    pollsRefreshTrigger++
+                                                } catch (e: Exception) {
+                                                    pollError = "Impossibile calcolare i risultati: ${e.message}"
+                                                } finally {
+                                                    isCalculatingPoll = false
+                                                }
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                        }
+                    }
+                }
+                isInClassRosterScreen -> {
+                    circolareplus.platform.PlatformBackHandler { isInClassRosterScreen = false }
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        ScreenBackBar(title = "Scheda Classe", onBackClick = { isInClassRosterScreen = false })
+                        if (classRosterActionError != null) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space8)
+                                    .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                                    .background(AppTheme.TintRed)
+                                    .clickable { classRosterActionError = null }
+                                    .padding(AppTheme.Space12),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    AppIcons.Warning(modifier = Modifier.size(15.dp), color = AppTheme.TintRedInk)
+                                    Spacer(modifier = Modifier.width(AppTheme.Space8))
+                                    Text(
+                                        text = "$classRosterActionError",
+                                        fontSize = 12.sp,
+                                        color = AppTheme.TintRedInk
+                                    )
+                                }
+                                Text(text = "✕", fontSize = 14.sp, color = AppTheme.TintRedInk)
+                            }
+                        }
+                        LoadableContent(isLoading = isClassRosterLoading, error = classRosterError) {
+                            ClassRosterScreen(
+                                entries = classRosterEntries,
+                                currentUserId = user.id,
+                                onDidacticChange = { studentId, value ->
+                                    val previous = classRosterEntries
+                                    classRosterEntries = classRosterEntries.map {
+                                        if (it.studentId == studentId) it.copy(didactic = value) else it
+                                    }
+                                    coroutineScope.launch {
+                                        try {
+                                            AppContainer.ratingsRepository.setRating(studentId, value, null)
+                                        } catch (e: Exception) {
+                                            classRosterEntries = previous
+                                            classRosterActionError = "Valutazione non salvata: ${e.message}"
+                                        }
+                                    }
+                                },
+                                onBehaviorChange = { studentId, value ->
+                                    val previous = classRosterEntries
+                                    classRosterEntries = classRosterEntries.map {
+                                        if (it.studentId == studentId) it.copy(behavior = value) else it
+                                    }
+                                    coroutineScope.launch {
+                                        try {
+                                            AppContainer.ratingsRepository.setRating(studentId, null, value)
+                                        } catch (e: Exception) {
+                                            classRosterEntries = previous
+                                            classRosterActionError = "Valutazione non salvata: ${e.message}"
+                                        }
+                                    }
+                                },
+                                onPriorityPassChange = { studentId, enabled ->
+                                    val previous = classRosterEntries
+                                    classRosterEntries = classRosterEntries.map {
+                                        if (it.studentId == studentId) it.copy(priorityPass = enabled) else it
+                                    }
+                                    coroutineScope.launch {
+                                        try {
+                                            AppContainer.ratingsRepository.setPriorityPass(studentId, enabled)
+                                        } catch (e: Exception) {
+                                            classRosterEntries = previous
+                                            classRosterActionError = "Priority Pass non salvato: ${e.message}"
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+                isInSearchScreen -> {
+                    circolareplus.platform.PlatformBackHandler { isInSearchScreen = false }
+                    SearchScreen(
+                        circulars = circulars,
+                        calendarEvents = calendarEvents,
+                        proposals = proposals,
+                        recentSearches = recentSearches,
+                        onBackClick = { isInSearchScreen = false },
+                        onSubmitQuery = { query ->
+                            AppContainer.settings.rememberSearch(query)
+                            recentSearches = AppContainer.settings.recentSearches
+                        },
+                        onOpenCircular = { circular ->
+                            isInSearchScreen = false
+                            selectedCircularForDetail = circular
+                            classSection = ClassSection.CIRCULARS
+                            selectedTab = MainTab.CLASS
+                        },
+                        onOpenCalendar = {
+                            isInSearchScreen = false
+                            selectedTab = MainTab.CALENDAR
+                        },
+                        onOpenBoard = {
+                            isInSearchScreen = false
+                            classSection = ClassSection.BOARD
+                            selectedTab = MainTab.CLASS
+                        }
+                    )
+                }
+                isInNotificationsScreen -> {
+                    circolareplus.platform.PlatformBackHandler { isInNotificationsScreen = false }
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        ScreenBackBar(title = "Notifiche", onBackClick = { isInNotificationsScreen = false })
+                        NotificationsScreen(
+                            notifications = notificationLog,
+                            onNotificationClick = { entry ->
+                                when (entry.category) {
+                                    NotificationKind.CIRCULARS.key -> {
+                                        classSection = ClassSection.CIRCULARS
+                                        selectedTab = MainTab.CLASS
+                                        isInNotificationsScreen = false
+                                    }
+                                    NotificationKind.BOARD.key -> {
+                                        classSection = ClassSection.BOARD
+                                        selectedTab = MainTab.CLASS
+                                        isInNotificationsScreen = false
+                                    }
+                                    NOTIFICATION_CATEGORY_SEATMAP_PREFERENCES -> {
+                                        selectedTab = MainTab.SEATMAP
+                                        seatMapMode = "VOTE_PREFERENCES"
+                                        isInNotificationsScreen = false
+                                    }
+                                    NotificationKind.SEATMAP.key -> {
+                                        selectedTab = MainTab.SEATMAP
+                                        seatMapMode = "MAP"
+                                        isInNotificationsScreen = false
+                                    }
+                                    NotificationKind.POLLS.key -> {
+                                        isInNotificationsScreen = false
+                                        isInPollsScreen = true
+                                    }
+                                    NotificationKind.CALENDAR.key -> {
+                                        selectedTab = MainTab.CALENDAR
+                                        isInNotificationsScreen = false
+                                    }
+                                    // Categoria sconosciuta (es. push generica senza tipo): niente
+                                    // destinazione certa, NotificationsScreen mostra il dettaglio.
+                                    else -> {}
+                                }
+                            }
+                        )
+                    }
+                }
+                editingSeatMapProposal != null -> {
+                    val currentAssignments = editingSeatMapProposal!!
+                    circolareplus.platform.PlatformBackHandler {
+                        editingSeatMapProposal = null
+                        originalSeatMapProposal = null
+                    }
+                    val editorBreakdown = remember(
+                        currentAssignments,
+                        seatMapOptimizerProfiles,
+                        seatMapOptimizerRatings,
+                        seatMapOptimizerSocialMap,
+                        seatMapOptimizerHistory,
+                        seatMapOptimizerWeights,
+                        seatMapOptimizerIsSmallClass
+                    ) {
+                        SeatMapOptimizer.scoreLayout(
+                            assignments = currentAssignments,
+                            profiles = seatMapOptimizerProfiles,
+                            ratings = seatMapOptimizerRatings,
+                            socialPreferences = seatMapOptimizerSocialMap,
+                            history = seatMapOptimizerHistory,
+                            weights = seatMapOptimizerWeights,
+                            isSmallClass = seatMapOptimizerIsSmallClass
+                        )
+                    }
+                    val editorMaxPossibleScore = classmates.size * 50.0
+                    val editorSatisfactionPct = if (editorMaxPossibleScore > 0) {
+                        (editorBreakdown.total / editorMaxPossibleScore * 100).coerceIn(0.0, 100.0)
+                    } else 0.0
+                    val editorStudentsMap = remember(classmates, user) {
+                        classmates.associateBy { it.id } + (user.id to user)
+                    }
+
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        ScreenBackBar(
+                            title = "Modifica disposizione",
+                            onBackClick = {
+                                editingSeatMapProposal = null
+                                originalSeatMapProposal = null
+                            }
+                        )
+                        SeatMapEditorScreen(
+                            assignments = currentAssignments,
+                            studentsMap = editorStudentsMap,
+                            socialPreferences = seatMapOptimizerSocialMap,
+                            totalScore = editorBreakdown.total,
+                            satisfactionPercentage = editorSatisfactionPct,
+                            isPublishing = isGeneratingProposals,
+                            onSwapSeats = { deskIndex1, isSeatA1, deskIndex2, isSeatA2 ->
+                                editingSeatMapProposal = SeatMapOptimizer.swapSeats(
+                                    currentAssignments,
+                                    SeatMapOptimizer.SeatRef(deskIndex1, isSeatA1),
+                                    SeatMapOptimizer.SeatRef(deskIndex2, isSeatA2)
+                                )
+                            },
+                            onRestore = { editingSeatMapProposal = originalSeatMapProposal },
+                            onPublish = {
+                                coroutineScope.launch {
+                                    isGeneratingProposals = true
+                                    try {
+                                        AppContainer.seatMapRepository.publish(currentAssignments)
+                                        seatMapAssignments = currentAssignments
+                                        editingSeatMapProposal = null
+                                        originalSeatMapProposal = null
+                                    } catch (e: Exception) {
+                                        seatMapActionError = "Pubblicazione non riuscita: ${e.message}"
+                                    } finally {
+                                        isGeneratingProposals = false
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+                else -> {
+                    // Da qualunque tab diversa da Home, il back di sistema torna a Home invece di
+                    // chiudere l'app subito — comportamento standard delle bottom bar Android. Da
+                    // Home il back non viene intercettato: lì si comporta come sempre (chiude
+                    // l'app), coerente con le altre app che usano una bottom bar. Caso speciale:
+                    // dentro "Preferenze Sociali" (sotto-schermata di Mappa Posti) il back torna
+                    // prima alla mappa, non subito a Home.
+                    circolareplus.platform.PlatformBackHandler(enabled = selectedTab != MainTab.HOME) {
+                        if (selectedTab == MainTab.SEATMAP && seatMapMode == "VOTE_PREFERENCES") {
+                            seatMapMode = "MAP"
+                        } else {
+                            selectedTab = MainTab.HOME
+                        }
+                    }
+                    when (selectedTab) {
+                        MainTab.HOME -> {
+                            HomeScreen(
+                                studentFirstName = user.firstName,
+                                circulars = circulars,
+                                calendarEvents = calendarEvents,
+                                openProposalsCount = proposals.size,
+                                onNavigateToCircularDetail = { number ->
+                                    selectedCircularForDetail = circulars.firstOrNull { it.number == number }
+                                    classSection = ClassSection.CIRCULARS
+                                    selectedTab = MainTab.CLASS
+                                },
+                                onNavigateToSeatMap = { selectedTab = MainTab.SEATMAP },
+                                onNavigateToBoard = {
+                                    classSection = ClassSection.BOARD
+                                    selectedTab = MainTab.CLASS
+                                },
+                                onNavigateToPolls = { isInPollsScreen = true },
+                                onNavigateToCalendar = { selectedTab = MainTab.CALENDAR },
+                                onNavigateToCirculars = {
+                                    classSection = ClassSection.CIRCULARS
+                                    selectedTab = MainTab.CLASS
+                                },
+                                onNavigateToNotifications = { isInNotificationsScreen = true },
+                                onNavigateToSearch = { isInSearchScreen = true },
+                                hasUnreadNotifications = hasUnreadNotifications
+                            )
+                        }
+                        MainTab.CALENDAR -> {
+                            LoadableContent(
+                                isLoading = isCalendarLoading,
+                                error = calendarError,
+                                onRetry = { reloadCalendar() }
+                            ) {
+                                CalendarScreen(
+                                    events = calendarEvents,
+                                    onAddEventClick = {
+                                        addEventInitialStep = EventCreationStep.MENU
+                                        addEventInitialDateIso = null
+                                        showAddEventDialog = true
+                                    },
+                                    onAddEventForDayClick = { dateIso ->
+                                        addEventInitialStep = EventCreationStep.MANUAL
+                                        addEventInitialDateIso = dateIso
+                                        showAddEventDialog = true
+                                    },
+                                    onEventClick = { event -> eventDetailToShow = event },
+                                    onDeleteEventClick = { event ->
+                                        coroutineScope.launch {
+                                            try {
+                                                AppContainer.calendarRepository.deleteEvent(event.id)
+                                                reloadCalendar()
+                                            } catch (e: Exception) {
+                                                calendarError = "Impossibile eliminare l'evento: ${e.message}"
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                        MainTab.SEATMAP -> {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                LoadableContent(
+                                    isLoading = isSeatMapLoading || isClassmatesLoading,
+                                    error = seatMapError,
+                                    onRetry = { seatMapRefreshTrigger++ }
+                                ) {
+                                    if (seatMapMode == "VOTE_PREFERENCES") {
+                                        Column(modifier = Modifier.fillMaxSize()) {
+                                            ScreenBackBar(
+                                                title = "Preferenze Sociali",
+                                                onBackClick = { seatMapMode = "MAP" }
+                                            )
+                                            SocialPreferencesVotingScreen(
+                                                classmates = classmates.filter { it.id != user.id },
+                                                currentVotes = socialVotes,
+                                                onVoteChanged = { targetId, score ->
+                                                    coroutineScope.launch {
+                                                        try {
+                                                            AppContainer.preferencesRepository.vote(targetId, score)
+                                                            socialVotes[targetId] = score
+                                                        } catch (e: Exception) {
+                                                            seatMapActionError = "Voto non registrato: ${e.message}"
+                                                        }
+                                                    }
+                                                },
+                                                onSubmitVotes = { seatMapMode = "MAP" }
+                                            )
+                                        }
+                                    } else {
+                                        Column(modifier = Modifier.fillMaxSize()) {
+                                            // Il banner per votare le preferenze compariva solo
+                                            // agli studenti NON rappresentanti: il rappresentante
+                                            // apriva la votazione e poi non aveva alcun modo di
+                                            // votare a sua volta, pur sedendo in classe come tutti.
+                                            if (isPreferencesOpen) {
+                                                PreferencesOpenBanner(onClick = { seatMapMode = "VOTE_PREFERENCES" })
+                                            }
+                                            val memoizedStudentsMap = remember(classmates, user) {
+                                                classmates.associateBy { it.id } + (user.id to user)
+                                            }
+                                            SeatMapScreen(
+                                                currentUserId = user.id,
+                                                isRepresentative = isRepresentative,
+                                                assignments = seatMapAssignments,
+                                                studentsMap = memoizedStudentsMap,
+                                                isPreferencesOpen = isPreferencesOpen,
+                                                onTogglePreferencesWindow = { open ->
+                                                    coroutineScope.launch {
+                                                        try {
+                                                            isPreferencesOpen = AppContainer.preferencesRepository.setPreferencesOpen(open).preferencesOpen
+                                                        } catch (e: Exception) {
+                                                            seatMapActionError = "Impossibile aggiornare la finestra preferenze: ${e.message}"
+                                                        }
+                                                    }
+                                                },
+                                                onGenerateProposals = { weights ->
+                                                    coroutineScope.launch {
+                                                        isGeneratingProposals = true
+                                                        try {
+                                                            val (ratings, matrix, history) = coroutineScope {
+                                                                val ratingsDeferred = async { AppContainer.ratingsRepository.listRatings() }
+                                                                val matrixDeferred = async { AppContainer.preferencesRepository.matrixForAlgorithm().matrix }
+                                                                val historyDeferred = async { AppContainer.seatMapRepository.getHistoryForOptimizer() }
+                                                                Triple(ratingsDeferred.await(), matrixDeferred.await(), historyDeferred.await())
+                                                            }
+                                                            val ratingsMap = ratings.associate { rating ->
+                                                                rating.studentId to circolareplus.domain.model.RepresentativeRating(
+                                                                    studentId = rating.studentId,
+                                                                    didactic = rating.didactic ?: 3,
+                                                                    behavior = rating.behavior ?: 3
+                                                                )
+                                                            }
+                                                            val profiles = ratings.associate { rating ->
+                                                                rating.studentId to StudentProfile(
+                                                                    userId = rating.studentId,
+                                                                    heightCm = (rating.heightCm ?: 175).let { h -> (h / 5) * 5 }.coerceIn(140, 210),
+                                                                    priorityPass = rating.priorityPass
+                                                                )
+                                                            }
+                                                            val socialMap = matrix.associate { entry ->
+                                                                (entry.from to entry.to) to SocialPreferenceScore.fromValue(entry.score)
+                                                            }
+                                                            // Tenuti in stato per il ricalcolo live nell'editor manuale (swap-by-tap),
+                                                            // che riusa questi stessi input invece di rifare le chiamate di rete.
+                                                            seatMapOptimizerProfiles = profiles
+                                                            seatMapOptimizerRatings = ratingsMap
+                                                            seatMapOptimizerSocialMap = socialMap
+                                                            seatMapOptimizerHistory = history
+                                                            seatMapOptimizerWeights = weights
+                                                            seatMapOptimizerIsSmallClass = classmates.size < 22
+                                                            proposalOptions = withContext(Dispatchers.Default) {
+                                                                AppContainer.seatMapRepository.generateThreeProposals(
+                                                                    students = classmates,
+                                                                    profiles = profiles,
+                                                                    ratings = ratingsMap,
+                                                                    socialPreferences = socialMap,
+                                                                    history = history,
+                                                                    weights = weights
+                                                                )
+                                                            }
+                                                        } catch (e: Exception) {
+                                                            seatMapActionError = "Impossibile calcolare le proposte: ${e.message}"
+                                                        } finally {
+                                                            isGeneratingProposals = false
+                                                        }
+                                                    }
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        MainTab.CLASS -> {
+                            // "Classe" unisce quello che prima erano le tab separate "Circolari" e
+                            // "Bacheca" (design AILA): un selettore interno sostituisce le due tab.
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                // Intestazione della tab: prima Circolari e Bacheca erano due chip
+                                // identiche a quelle dei filtri di contenuto, quindi non si capiva
+                                // che cambiavano schermata invece di filtrare la lista. Ora sono un
+                                // selettore a segmenti su barra bianca, come nel mockup.
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(AppTheme.SurfaceWhite)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(
+                                                start = AppTheme.Space16,
+                                                end = AppTheme.Space16,
+                                                top = AppTheme.Space20,
+                                                bottom = AppTheme.Space12
+                                            ),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        circolareplus.design.AilaSegmentedTabs(
+                                            labels = listOf(ClassSection.CIRCULARS.title, ClassSection.BOARD.title),
+                                            selectedIndex = if (classSection == ClassSection.CIRCULARS) 0 else 1,
+                                            onSelect = { index ->
+                                                classSection = if (index == 0) ClassSection.CIRCULARS else ClassSection.BOARD
+                                            },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        if (isRepresentative) {
+                                            Spacer(modifier = Modifier.width(AppTheme.Space8))
+                                            circolareplus.design.AilaSecondaryButton(
+                                                text = "Scheda",
+                                                onClick = { isInClassRosterScreen = true },
+                                                compact = true,
+                                                icon = { tint -> AppIcons.Crown(modifier = Modifier.size(14.dp), color = tint) }
+                                            )
+                                        }
+                                    }
+                                    HorizontalDivider(color = AppTheme.Hairline)
+                                }
+                                // Dissolvenza tra le due sezioni: prima il contenuto veniva
+                                // sostituito di colpo, e con liste lunghe sembrava un salto.
+                                androidx.compose.animation.Crossfade(
+                                    targetState = classSection,
+                                    label = "classSection"
+                                ) { section ->
+                                when (section) {
+                                    ClassSection.CIRCULARS -> {
+                                        LoadableContent(
+                                            isLoading = isCircularsLoading,
+                                            error = circularsError,
+                                            onRetry = { circularsRefreshTrigger++ }
+                                        ) {
+                                            CircularsScreen(
+                                                circulars = circulars,
+                                                classifications = classifications,
+                                                onSelectCircular = { selectedCircularForDetail = it }
+                                            )
+                                        }
+                                    }
+                                    ClassSection.BOARD -> {
+                                        LoadableContent(
+                                            isLoading = isProposalsLoading,
+                                            error = proposalsError,
+                                            onRetry = { reloadProposals() }
+                                        ) {
+                                            BoardScreen(
+                                                proposals = proposals,
+                                                currentUserId = user.id,
+                                                isRepresentative = isRepresentative,
+                                                onVote = { proposalId, voteType ->
+                                                    coroutineScope.launch {
+                                                        try {
+                                                            AppContainer.proposalsRepository.vote(proposalId, voteType)
+                                                        } catch (e: Exception) {
+                                                            proposalsError = "Voto non riuscito: ${e.message}"
+                                                        }
+                                                    }
+                                                },
+                                                onChangeStatus = { proposalId, status ->
+                                                    coroutineScope.launch {
+                                                        try {
+                                                            AppContainer.proposalsRepository.changeStatus(proposalId, status)
+                                                            reloadProposals()
+                                                        } catch (e: Exception) {
+                                                            proposalsError = "Impossibile cambiare stato: ${e.message}"
+                                                        }
+                                                    }
+                                                },
+                                                onEdit = { proposalId, newTitle, newDescription ->
+                                                    coroutineScope.launch {
+                                                        try {
+                                                            AppContainer.proposalsRepository.updateProposal(
+                                                                proposalId = proposalId,
+                                                                title = newTitle,
+                                                                description = newDescription
+                                                            )
+                                                            reloadProposals()
+                                                        } catch (e: Exception) {
+                                                            proposalsError = "Modifica non riuscita: ${e.message}"
+                                                        }
+                                                    }
+                                                },
+                                                onCreateProposalClick = { showAddProposalDialog = true },
+                                                onLoadComments = { proposalId ->
+                                                    AppContainer.proposalsRepository.listComments(proposalId)
+                                                },
+                                                onAddComment = { proposalId, content ->
+                                                    AppContainer.proposalsRepository.addComment(proposalId, content)
+                                                    reloadProposals()
+                                                },
+                                                onDelete = { proposalId ->
+                                                    coroutineScope.launch {
+                                                        try {
+                                                            AppContainer.proposalsRepository.delete(proposalId)
+                                                            reloadProposals()
+                                                        } catch (e: Exception) {
+                                                            proposalsError = "Impossibile eliminare la proposta: ${e.message}"
+                                                        }
+                                                    }
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                                }
+                            }
+                        }
+                        MainTab.MORE -> {
+                            ProfileScreen(
+                                user = user,
+                                profile = profile,
+                                userAiApiKey = run {
+                                    apiKeyRevision // dipendenza esplicita: rilegge dopo un salvataggio
+                                    AppContainer.settings.userAiApiKey
+                                },
+                                onOpenSettings = { isInSettingsScreen = true },
+                                onManageClassRoster = { isInClassRosterScreen = true },
+                                onLogoutClick = {
+                                    coroutineScope.launch {
+                                        try {
+                                            AppContainer.fcmRepository.clearTokens(currentPushPlatform())
+                                        } catch (e: Exception) {
+                                            // Non bloccante: il logout locale procede comunque.
+                                        }
+                                    }
+                                    AppContainer.authRepository.logout()
+                                    currentUser = null
+                                    currentProfile = null
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Barra superiore con freccia indietro per le schermate a schermo intero fuori dalla bottom bar.
+ * Ora è solo un rinvio ad [circolareplus.design.AilaBackBar]: prima ognuna di queste schermate
+ * aveva una barra scritta a mano con altezze e spaziature leggermente diverse.
+ */
+@Composable
+private fun ScreenBackBar(title: String, onBackClick: () -> Unit) {
+    circolareplus.design.AilaBackBar(title = title, onBackClick = onBackClick)
+}
+
+@Composable
+private fun PreferencesOpenBanner(onClick: () -> Unit) {
+    Card(
+        shape = RoundedCornerShape(AppTheme.CardCornerRadius),
+        colors = CardDefaults.cardColors(containerColor = AppTheme.TintBlue),
+        modifier = Modifier
+            .fillMaxWidth()
+            // Il banner sta sopra l'intestazione della Mappa Posti: senza padding superiore
+            // finiva incollato al bordo alto dello schermo.
+            .padding(horizontal = AppTheme.Space16)
+            .padding(top = AppTheme.Space16)
+            .clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(AppTheme.Space12),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Il Rappresentante ha aperto la votazione preferenze. Tocca per votare →",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = AppTheme.TintBlueInk,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+    Spacer(modifier = Modifier.height(AppTheme.Space8))
+}
+
+@Composable
+private fun SeatMapProposalsDialog(
+    proposals: List<SeatMapProposal>,
+    isPublishing: Boolean,
+    onDismiss: () -> Unit,
+    onSelect: (SeatMapProposal) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = { if (!isPublishing) onDismiss() },
+        title = { Text("Scegli la disposizione da rivedere e pubblicare") },
+        text = {
+            Column {
+                proposals.forEach { proposal ->
+                    Card(
+                        shape = RoundedCornerShape(AppTheme.SmallElementRadius),
+                        colors = CardDefaults.cardColors(containerColor = AppTheme.SurfaceWhite),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(AppTheme.Space12),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(text = proposal.id, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = "Soddisfazione stimata: ${proposal.satisfactionPercentage.toInt()}%",
+                                    fontSize = 12.sp,
+                                    color = AppTheme.TextMuted
+                                )
+                            }
+                            TextButton(enabled = !isPublishing, onClick = { onSelect(proposal) }) {
+                                Text("Scegli")
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !isPublishing, onClick = onDismiss) { Text("Chiudi") }
+        }
+    )
+}
+
+/**
+ * Overlay di caricamento/errore comune a tutte le tab con dati remoti. L'errore non è più una
+ * riga di testo rosso al centro dello schermo (senza alcun modo di ritentare se non uscire e
+ * rientrare dalla scheda) ma lo stato curato del mockup, con il pulsante "Riprova" quando la
+ * schermata sa come ricaricarsi.
+ */
+@Composable
+private fun LoadableContent(
+    isLoading: Boolean,
+    error: String?,
+    onRetry: (() -> Unit)? = null,
+    content: @Composable () -> Unit
+) {
+    when {
+        isLoading -> {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = AppTheme.PrimaryBlue)
+            }
+        }
+        error != null -> {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                circolareplus.design.AilaErrorState(message = error, onRetry = onRetry)
+            }
+        }
+        else -> content()
+    }
+}
+
+/** Converte epoch millis (UTC, mezzanotte) in "AAAA-MM-GG" senza dipendenze esterne (funziona
+ * identica su Android/iOS): algoritmo civil_from_days di Howard Hinnant. */
+private fun epochMillisToIsoDate(millis: Long): String {
+    val z = millis / 86_400_000L + 719468L
+    val era = (if (z >= 0) z else z - 146096) / 146097
+    val doe = z - era * 146097
+    val yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    val y = yoe + era * 400
+    val doy = doe - (365 * yoe + yoe / 4 - yoe / 100)
+    val mp = (5 * doy + 2) / 153
+    val d = doy - (153 * mp + 2) / 5 + 1
+    val m = if (mp < 10) mp + 3 else mp - 9
+    val year = if (m <= 2) y + 1 else y
+    fun pad(n: Long, width: Int) = n.toString().padStart(width, '0')
+    return "${pad(year, 4)}-${pad(m, 2)}-${pad(d, 2)}"
+}
+
+/** Ordine di visualizzazione delle categorie nel selettore "Tipo di evento". */
+private val EVENT_CATEGORY_ORDER = listOf(
+    CalendarEventCategory.VERIFICA,
+    CalendarEventCategory.INTERROGAZIONE,
+    CalendarEventCategory.PAGAMENTO,
+    CalendarEventCategory.USCITA_DIDATTICA,
+    CalendarEventCategory.AVVISO,
+    CalendarEventCategory.ALTRO
+)
+
+private fun eventCategoryLabel(category: CalendarEventCategory): String = when (category) {
+    CalendarEventCategory.VERIFICA -> "Verifica"
+    CalendarEventCategory.INTERROGAZIONE -> "Interrogazione"
+    CalendarEventCategory.PAGAMENTO -> "Pagamento"
+    CalendarEventCategory.USCITA_DIDATTICA -> "Uscita"
+    CalendarEventCategory.AVVISO -> "Avviso"
+    CalendarEventCategory.ALTRO -> "Altro"
+}
+
+@Composable
+private fun eventCategoryIcon(category: CalendarEventCategory, modifier: Modifier, color: Color) {
+    when (category) {
+        CalendarEventCategory.VERIFICA -> AppIcons.Pencil(modifier, color)
+        CalendarEventCategory.INTERROGAZIONE -> AppIcons.ChatBubble(modifier, color)
+        CalendarEventCategory.PAGAMENTO -> AppIcons.Card(modifier, color)
+        CalendarEventCategory.USCITA_DIDATTICA -> AppIcons.Bus(modifier, color)
+        CalendarEventCategory.AVVISO -> AppIcons.Warning(modifier, color)
+        CalendarEventCategory.ALTRO -> AppIcons.Sparkle(modifier, color)
+    }
+}
+
+/** Passi del foglio di creazione evento: menu di scelta, assistente AILA, compilazione manuale. */
+private enum class EventCreationStep { MENU, ASSISTANT, MANUAL }
+
+/** Bozza estratta dal testo libero scritto nell'assistente AILA. */
+private data class AiEventDraft(
+    val title: String,
+    val subject: String,
+    val category: CalendarEventCategory,
+    val dateMillis: Long?,
+    val time: String?,
+    val notes: String?
+)
+
+private val AI_PROMPT_EXAMPLES = listOf(
+    "Compito di inglese domani",
+    "Interrogazione di storia lunedì alle 9",
+    "Verifica di matematica venerdì alle 10",
+    "Uscita didattica al museo giovedì"
+)
+
+/**
+ * Converte una data civile in millisecondi epoch (UTC, mezzanotte): l'inverso di
+ * [circolareplus.util.civilFromEpochMillis], algoritmo days_from_civil di Howard Hinnant.
+ */
+private fun civilToEpochMillis(year: Int, month: Int, day: Int): Long {
+    val y = if (month <= 2) year - 1 else year
+    val era = (if (y >= 0) y else y - 399) / 400
+    val yoe = y - era * 400
+    val mp = (month + 9) % 12
+    val doy = (153 * mp + 2) / 5 + day - 1
+    val doe = yoe * 365L + yoe / 4 - yoe / 100 + doy
+    val days = era * 146097L + doe - 719468L
+    return days * 86_400_000L
+}
+
+/**
+ * Interpretazione euristica del testo libero scritto nell'assistente AILA: niente chiamata di
+ * rete, solo pattern matching su parole chiave italiane (tipologia, materia, giorno, ora). Non è
+ * un vero modello linguistico, ma basta a mostrare all'utente un evento già compilato da
+ * rifinire prima di salvarlo, come nel mockup di riferimento.
+ */
+/**
+ * Converte EventDraft (da AI) a AiEventDraft (formato UI).
+ */
+private fun aiEventDraftFromAi(draft: EventDraft): AiEventDraft {
+    val category = try {
+        CalendarEventCategory.valueOf(draft.category)
+    } catch (e: Exception) {
+        CalendarEventCategory.ALTRO
+    }
+
+    val dateMillis = draft.dateIso?.let { iso ->
+        circolareplus.util.parseIsoDate(iso)?.let { civil ->
+            civilToEpochMillis(civil.year, civil.month, civil.day)
+        }
+    }
+
+    return AiEventDraft(
+        title = draft.title,
+        subject = draft.subject,
+        category = category,
+        dateMillis = dateMillis,
+        time = draft.timeHm,
+        notes = draft.notes
+    )
+}
+
+private fun parseAiEventPrompt(raw: String): AiEventDraft {
+    val text = raw.trim()
+    val lower = text.lowercase()
+
+    val category = when {
+        Regex("\\b(verifica|compito in classe)\\b").containsMatchIn(lower) -> CalendarEventCategory.VERIFICA
+        Regex("\\b(interrogazione|orale)\\b").containsMatchIn(lower) -> CalendarEventCategory.INTERROGAZIONE
+        Regex("\\b(pagamento|quota|contributo|versamento)\\b").containsMatchIn(lower) -> CalendarEventCategory.PAGAMENTO
+        Regex("\\b(uscita|gita|visita)\\b").containsMatchIn(lower) -> CalendarEventCategory.USCITA_DIDATTICA
+        Regex("\\b(avviso|comunicazione|scadenza)\\b").containsMatchIn(lower) -> CalendarEventCategory.AVVISO
+        else -> CalendarEventCategory.ALTRO
+    }
+
+    val subject = Regex("\\bdi ([a-zàèéìòù]+)").find(lower)
+        ?.groupValues?.get(1)
+        ?.replaceFirstChar { it.uppercase() }
+        ?: ""
+
+    val timeMatch = Regex("\\balle?\\s+(\\d{1,2})([:.](\\d{2}))?").find(lower)
+    val time = timeMatch?.let { m ->
+        val h = m.groupValues[1].padStart(2, '0')
+        val min = m.groupValues[3].ifBlank { "00" }
+        "$h:$min"
+    }
+
+    fun dateInDays(days: Int): Long {
+        val civil = circolareplus.util.civilFromEpochMillis(currentTimeMillis() + days * 86_400_000L)
+        return civilToEpochMillis(civil.year, civil.month, civil.day)
+    }
+
+    val today = circolareplus.util.today()
+    val todayWeekday = circolareplus.util.weekdayOf(today)
+    val weekdayNames = listOf(
+        "lunedì" to 0, "martedì" to 1, "mercoledì" to 2, "giovedì" to 3,
+        "venerdì" to 4, "sabato" to 5, "domenica" to 6
+    )
+    val dateMillis: Long? = when {
+        lower.contains("dopodomani") -> dateInDays(2)
+        lower.contains("domani") -> dateInDays(1)
+        lower.contains("oggi") -> dateInDays(0)
+        else -> weekdayNames.firstOrNull { (name, _) -> lower.contains(name) }?.let { (_, idx) ->
+            val delta = ((idx - todayWeekday + 7) % 7).let { if (it == 0) 7 else it }
+            dateInDays(delta)
+        }
+    }
+
+    return AiEventDraft(
+        title = text.replaceFirstChar { it.uppercase() },
+        subject = subject,
+        category = category,
+        dateMillis = dateMillis,
+        time = time,
+        notes = null
+    )
+}
+
+/**
+ * Foglio di creazione evento in stile Material 3: al posto del vecchio `AlertDialog` con tutti i
+ * campi già in vista, si apre su un menu con due scelte rapide ("Chiedi ad AILA" per compilazione
+ * assistita, "Crea manualmente" per i campi classici), che è il pattern del mockup di riferimento.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun AddCalendarEventDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String, String, String?, CalendarEventCategory, List<String>?, String?) -> Unit,
+    initialStep: EventCreationStep = EventCreationStep.MENU,
+    initialDateIso: String? = null
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var step by remember { mutableStateOf(initialStep) }
+
+    var title by remember { mutableStateOf("") }
+    var subject by remember { mutableStateOf("") }
+    var notes by remember { mutableStateOf("") }
+    // Precompilata quando si tocca "+" su un giorno specifico della griglia: prima non c'era modo
+    // di legare un nuovo evento a un giorno preciso, si doveva sempre riaprire il selettore data.
+    var selectedDateMillis by remember {
+        mutableStateOf(
+            initialDateIso?.let { iso -> circolareplus.util.parseIsoDate(iso) }
+                ?.let { civil -> civilToEpochMillis(civil.year, civil.month, civil.day) }
+        )
+    }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var time by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf(CalendarEventCategory.VERIFICA) }
+    var aiPrompt by remember { mutableStateOf("") }
+    var aiFilled by remember { mutableStateOf(false) }
+    var isForAllClass by remember { mutableStateOf(true) }
+    var selectedRecipientUserIds by remember { mutableStateOf<List<String>>(emptyList()) }
+    // Elenco selezionabile per "Persone specifiche": prima non veniva caricato da nessuna parte,
+    // la sezione mostrava solo la scritta "Seleziona fino a 5 persone" senza un solo nome sotto.
+    // Si carica qui, non da `classmates` di MainAppShell, perché quello arriva popolato solo dopo
+    // una visita alla tab Mappa Posti — un rappresentante che apre "Nuovo evento" per primo non lo
+    // troverebbe mai valorizzato.
+    var recipientCandidates by remember { mutableStateOf<List<User>>(emptyList()) }
+    var isLoadingRecipients by remember { mutableStateOf(false) }
+    var recipientsError by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(isForAllClass) {
+        if (!isForAllClass && recipientCandidates.isEmpty() && !isLoadingRecipients) {
+            isLoadingRecipients = true
+            recipientsError = null
+            try {
+                recipientCandidates = AppContainer.usersRepository.listStudents()
+            } catch (e: Exception) {
+                recipientsError = "Impossibile caricare l'elenco della classe."
+            } finally {
+                isLoadingRecipients = false
+            }
+        }
+    }
+    var isGeneratingEvent by remember { mutableStateOf(false) }
+    // Solo per il messaggio "sto ancora elaborando" sotto al pulsante: sull'AI locale una
+    // generazione può durare fino a 90 secondi (vedi GENERATION_TIMEOUT_MILLIS in
+    // LocalAiClassifier), e senza un segnale che si muove il pulsante "Generando..." fermo per
+    // decine di secondi sembra bloccato, non lento.
+    var generatingElapsedSeconds by remember { mutableStateOf(0) }
+    LaunchedEffect(isGeneratingEvent) {
+        if (isGeneratingEvent) {
+            generatingElapsedSeconds = 0
+            while (isGeneratingEvent) {
+                kotlinx.coroutines.delay(1000)
+                generatingElapsedSeconds++
+            }
+        }
+    }
+
+    val scope = rememberCoroutineScope()
+
+    val dateLabel = selectedDateMillis?.let { millis ->
+        val civil = circolareplus.util.parseIsoDate(epochMillisToIsoDate(millis))
+        if (civil != null) {
+            val weekday = circolareplus.util.ITALIAN_WEEKDAYS.getOrNull(circolareplus.util.weekdayOf(civil))?.take(3) ?: ""
+            val month = circolareplus.util.ITALIAN_MONTHS.getOrNull(civil.month)?.lowercase() ?: ""
+            "$weekday ${civil.day} $month ${civil.year}"
+        } else "Scegli una data"
+    } ?: "Scegli una data"
+
+    // Solo stile iOS: stessa data del ramo Android, ma come CivilDate per il wheel picker, e
+    // sempre valorizzata (oggi come default) perché il wheel non ha uno stato "vuoto".
+    val selectedCivilDate = remember(selectedDateMillis) {
+        selectedDateMillis?.let { circolareplus.util.civilFromEpochMillis(it) } ?: circolareplus.util.today()
+    }
+    val (parsedHour, parsedMinute) = remember(time) {
+        val match = Regex("^(\\d{1,2}):(\\d{2})$").find(time.trim())
+        if (match != null) {
+            val h = match.groupValues[1].toIntOrNull()?.coerceIn(0, 23) ?: 9
+            val m = match.groupValues[2].toIntOrNull()?.coerceIn(0, 59) ?: 0
+            h to m
+        } else 9 to 0
+    }
+    val timeLabel = time.ifBlank { "Scegli un orario" }
+
+    // submit estratto in funzione locale: il ramo iOS lo richiama anche dal "Fine" dell'intestazione,
+    // il ramo Android solo dal pulsante in fondo — nessuna logica duplicata fra i due punti.
+    fun submitManualEvent() {
+        val date = selectedDateMillis?.let { epochMillisToIsoDate(it) }
+        if (title.isNotBlank() && date != null) {
+            val finalTitle = if (subject.isNotBlank()) "${subject.trim()}: ${title.trim()}" else title.trim()
+            val visibleToUserIds = if (isForAllClass) null else selectedRecipientUserIds.ifEmpty { null }
+            onConfirm(
+                finalTitle,
+                date,
+                time.trim().ifBlank { null },
+                category,
+                visibleToUserIds,
+                notes.trim().ifBlank { null }
+            )
+        }
+    }
+    val canSubmitManualEvent = title.isNotBlank() && selectedDateMillis != null
+
+    // Il DatePickerDialog Material a griglia resta solo per il ramo Android: in stile iOS
+    // "Data" apre invece il wheel picker inline dentro il foglio (vedi più sotto).
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = selectedDateMillis)
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    selectedDateMillis = datePickerState.selectedDateMillis
+                    showDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Annulla") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = AppTheme.SurfaceWhite
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = AppTheme.Space20)
+                .padding(bottom = AppTheme.Space32)
+        ) {
+            // Intestazione Material: freccia indietro (fuori dal menu iniziale) + titolo + chiudi.
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = AppTheme.Space16),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (step != EventCreationStep.MENU) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                            .background(AppTheme.TintSlate)
+                            .clickable { step = EventCreationStep.MENU },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AppIcons.ChevronLeft(modifier = Modifier.size(16.dp), color = AppTheme.TextDark)
+                    }
+                    Spacer(modifier = Modifier.width(AppTheme.Space12))
+                }
+                Text(
+                    text = when (step) {
+                        EventCreationStep.MENU -> "Nuovo evento"
+                        EventCreationStep.ASSISTANT -> "Chiedi ad AILA"
+                        EventCreationStep.MANUAL -> "Dettagli evento"
+                    },
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AppTheme.TextDark,
+                    modifier = Modifier.weight(1f)
+                )
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                        .background(AppTheme.TintSlate)
+                        .clickable { onDismiss() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("✕", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = AppTheme.TextMuted)
+                }
+            }
+
+            when (step) {
+                EventCreationStep.MENU -> {
+                    Text(
+                        text = "Come vuoi crearlo?",
+                        fontSize = 13.sp,
+                        color = AppTheme.TextMuted,
+                        modifier = Modifier.padding(bottom = AppTheme.Space16)
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
+                        EventCreationOptionCard(
+                            title = "Chiedi ad AILA",
+                            subtitle = "Lascia che l'AI inserisca l'evento per te",
+                            highlighted = true,
+                            icon = { color ->
+                                circolareplus.design.AilaAssistantGlyph(
+                                    size = 20.dp,
+                                    brush = androidx.compose.ui.graphics.SolidColor(color),
+                                    badgeColor = color,
+                                    avatarColor = AppTheme.PrimaryBlue
+                                )
+                            },
+                            modifier = Modifier.weight(1f),
+                            onClick = { step = EventCreationStep.ASSISTANT }
+                        )
+                        EventCreationOptionCard(
+                            title = "Crea manualmente",
+                            subtitle = "Inserisci i dettagli da solo",
+                            highlighted = false,
+                            icon = { color -> AppIcons.Pencil(modifier = Modifier.size(20.dp), color = color) },
+                            modifier = Modifier.weight(1f),
+                            onClick = { step = EventCreationStep.MANUAL }
+                        )
+                    }
+                }
+
+                EventCreationStep.ASSISTANT -> {
+                    Text(
+                        text = "Descrivi cosa vuoi inserire e l'AI compila tutto per te.",
+                        fontSize = 13.sp,
+                        color = AppTheme.TextMuted,
+                        modifier = Modifier.padding(bottom = AppTheme.Space12)
+                    )
+                    OutlinedTextField(
+                        value = aiPrompt,
+                        onValueChange = { aiPrompt = it },
+                        placeholder = { Text("Es. Inserisci la verifica di matematica di venerdì alle 10") },
+                        minLines = 3,
+                        colors = circolareplus.design.ailaFieldColors(),
+                        shape = RoundedCornerShape(AppTheme.SmallElementRadius),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(AppTheme.Space16))
+                    Text(
+                        text = "Esempi rapidi",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AppTheme.TextMuted,
+                        modifier = Modifier.padding(bottom = AppTheme.Space8)
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                        AI_PROMPT_EXAMPLES.forEach { example ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                                    .background(AppTheme.TintSlate)
+                                    .clickable { aiPrompt = example }
+                                    .padding(horizontal = AppTheme.Space12, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                AppIcons.Sparkle(modifier = Modifier.size(13.dp), color = AppTheme.TintVioletInk)
+                                Spacer(modifier = Modifier.width(AppTheme.Space8))
+                                Text(text = "\"$example\"", fontSize = 13.sp, color = AppTheme.TextDark)
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(AppTheme.Space20))
+                    circolareplus.design.AilaPrimaryButton(
+                        text = if (isGeneratingEvent) "Generando..." else "Genera evento",
+                        onClick = {
+                            scope.launch {
+                                isGeneratingEvent = true
+                                try {
+                                    val aiDraft = AppContainer.newAiClassifier()
+                                        .parseEventPrompt(aiPrompt)
+                                    val draft = aiEventDraftFromAi(aiDraft)
+                                    title = draft.title
+                                    subject = draft.subject
+                                    category = draft.category
+                                    selectedDateMillis = draft.dateMillis
+                                    draft.time?.let { time = it }
+                                    draft.notes?.let { notes = it }
+                                    aiFilled = true
+                                    step = EventCreationStep.MANUAL
+                                } finally {
+                                    isGeneratingEvent = false
+                                }
+                            }
+                        },
+                        enabled = aiPrompt.isNotBlank() && !isGeneratingEvent,
+                        fillMaxWidth = true,
+                        icon = { color -> AppIcons.Sparkle(modifier = Modifier.size(14.dp), color = color) }
+                    )
+                    if (isGeneratingEvent) {
+                        Spacer(modifier = Modifier.height(AppTheme.Space8))
+                        Text(
+                            text = if (generatingElapsedSeconds < 5) {
+                                "Sto leggendo la richiesta..."
+                            } else {
+                                "Con l'AI locale può richiedere fino a un minuto ($generatingElapsedSeconds s) — resta in attesa, sta ancora lavorando."
+                            },
+                            fontSize = 12.sp,
+                            color = AppTheme.TextMuted,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
+
+                EventCreationStep.MANUAL -> {
+                    if (aiFilled) {
+                        circolareplus.design.AilaAiBadge(
+                            text = "Generato da AILA",
+                            modifier = Modifier.padding(bottom = AppTheme.Space12)
+                        )
+                    }
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = { title = it },
+                        label = { Text("Titolo") },
+                        singleLine = true,
+                        colors = circolareplus.design.ailaFieldColors(),
+                        shape = RoundedCornerShape(AppTheme.SmallElementRadius),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    OutlinedTextField(
+                        value = subject,
+                        onValueChange = { subject = it },
+                        label = { Text("Materia (opzionale)") },
+                        singleLine = true,
+                        colors = circolareplus.design.ailaFieldColors(),
+                        shape = RoundedCornerShape(AppTheme.SmallElementRadius),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(AppTheme.Space16))
+                    Text(
+                        text = "Quando",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AppTheme.TextMuted,
+                        modifier = Modifier.padding(bottom = AppTheme.Space8)
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                        Row(
+                            modifier = Modifier
+                                .weight(1.4f)
+                                .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                                .border(1.dp, AppTheme.Hairline, RoundedCornerShape(AppTheme.SmallElementRadius))
+                                .clickable { showDatePicker = true }
+                                .padding(horizontal = AppTheme.Space12, vertical = 13.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AppIcons.Calendar(modifier = Modifier.size(16.dp), color = AppTheme.PrimaryBlue)
+                            Spacer(modifier = Modifier.width(AppTheme.Space8))
+                            Text(
+                                text = dateLabel,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = if (selectedDateMillis != null) AppTheme.TextDark else AppTheme.TextFaint,
+                                maxLines = 1
+                            )
+                        }
+                        OutlinedTextField(
+                            value = time,
+                            onValueChange = { time = it },
+                            placeholder = { Text("Ora") },
+                            singleLine = true,
+                            colors = circolareplus.design.ailaFieldColors(),
+                            shape = RoundedCornerShape(AppTheme.SmallElementRadius),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(AppTheme.Space16))
+                    Text(
+                        text = "Tipo di evento",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AppTheme.TextMuted,
+                        modifier = Modifier.padding(bottom = AppTheme.Space8)
+                    )
+                    // FlowRow invece di Row: con 6 categorie una singola riga non ci stava (venivano
+                    // tagliate fuori dallo schermo su molti telefoni).
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
+                        verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+                    ) {
+                        EVENT_CATEGORY_ORDER.forEach { cat ->
+                            circolareplus.design.AnimatedFilterChip(
+                                label = eventCategoryLabel(cat),
+                                isSelected = category == cat,
+                                onClick = { category = cat },
+                                icon = { color -> eventCategoryIcon(cat, Modifier.size(13.dp), color) }
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(AppTheme.Space16))
+                    Text(
+                        text = "Note",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AppTheme.TextMuted,
+                        modifier = Modifier.padding(bottom = AppTheme.Space8)
+                    )
+                    OutlinedTextField(
+                        value = notes,
+                        onValueChange = { notes = it },
+                        placeholder = { Text("Aggiungi note (facoltativo)") },
+                        singleLine = false,
+                        maxLines = 3,
+                        colors = circolareplus.design.ailaFieldColors(),
+                        shape = RoundedCornerShape(AppTheme.SmallElementRadius),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(AppTheme.Space16))
+                    Text(
+                        text = "Visibilità",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AppTheme.TextMuted,
+                        modifier = Modifier.padding(bottom = AppTheme.Space8)
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+                    ) {
+                        circolareplus.design.AnimatedFilterChip(
+                            label = "Tutta la classe",
+                            isSelected = isForAllClass,
+                            onClick = { isForAllClass = true; selectedRecipientUserIds = emptyList() },
+                            modifier = Modifier.weight(1f)
+                        )
+                        circolareplus.design.AnimatedFilterChip(
+                            label = "Persone specifiche",
+                            isSelected = !isForAllClass,
+                            onClick = { isForAllClass = false },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    if (!isForAllClass) {
+                        Spacer(modifier = Modifier.height(AppTheme.Space12))
+                        Text(
+                            text = "Seleziona fino a 5 persone",
+                            fontSize = 11.sp,
+                            color = AppTheme.TextFaint
+                        )
+                        Spacer(modifier = Modifier.height(AppTheme.Space8))
+                        when {
+                            isLoadingRecipients -> Text(
+                                text = "Carico l'elenco della classe...",
+                                fontSize = 12.sp,
+                                color = AppTheme.TextMuted
+                            )
+                            recipientsError != null -> Text(
+                                text = recipientsError ?: "",
+                                fontSize = 12.sp,
+                                color = AppTheme.TintRedInk
+                            )
+                            recipientCandidates.isEmpty() -> Text(
+                                text = "Nessun compagno registrato ancora. Compariranno qui appena si iscrivono.",
+                                fontSize = 12.sp,
+                                color = AppTheme.TextMuted
+                            )
+                            else -> FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
+                                verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+                            ) {
+                                recipientCandidates.forEach { candidate ->
+                                    val isSelected = candidate.id in selectedRecipientUserIds
+                                    val atLimit = !isSelected && selectedRecipientUserIds.size >= 5
+                                    circolareplus.design.AnimatedFilterChip(
+                                        label = "${candidate.firstName} ${candidate.lastName}".trim(),
+                                        isSelected = isSelected,
+                                        onClick = {
+                                            selectedRecipientUserIds = when {
+                                                isSelected -> selectedRecipientUserIds - candidate.id
+                                                atLimit -> selectedRecipientUserIds
+                                                else -> selectedRecipientUserIds + candidate.id
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(AppTheme.Space24))
+                    circolareplus.design.AilaPrimaryButton(
+                        text = "Aggiungi evento",
+                        onClick = { submitManualEvent() },
+                        enabled = canSubmitManualEvent,
+                        fillMaxWidth = true
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Foglio di dettaglio di un evento del calendario, aperto toccando la sua card.
+ *
+ * Prima `onEventClick` non faceva nulla: l'unica informazione visibile era quella già nella card
+ * riassuntiva (titolo, ora o "Tutto il giorno", categoria). Note, destinatari specifici e chi ha
+ * creato l'evento non erano raggiungibili da nessun'altra schermata.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EventDetailDialog(
+    event: CalendarEvent,
+    classmates: List<User>,
+    currentUser: User,
+    onDismiss: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    val dateLabel = remember(event.date) {
+        val civil = circolareplus.util.parseIsoDate(event.date)
+        if (civil != null) {
+            val weekday = circolareplus.util.ITALIAN_WEEKDAYS.getOrNull(circolareplus.util.weekdayOf(civil)) ?: ""
+            val month = circolareplus.util.ITALIAN_MONTHS.getOrNull(civil.month)?.lowercase() ?: ""
+            "$weekday ${civil.day} $month ${civil.year}"
+        } else event.date
+    }
+
+    // Nomi dei destinatari specifici: risolti da `classmates` (compagni + rappresentante, caricati
+    // altrove) più l'utente corrente, che da solo non basterebbe a coprire il caso in cui il
+    // rappresentante includa se stesso fra i destinatari.
+    val peopleById = remember(classmates, currentUser) {
+        classmates.associateBy { it.id } + (currentUser.id to currentUser)
+    }
+    val recipientNames = remember(event.visibleToUserIds, peopleById) {
+        event.visibleToUserIds?.map { id ->
+            peopleById[id]?.let { "${it.firstName} ${it.lastName}".trim() } ?: "Utente rimosso"
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = AppTheme.SurfaceWhite
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = AppTheme.Space20)
+                .padding(bottom = AppTheme.Space32)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = AppTheme.Space16),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                circolareplus.design.AilaIconTile(tint = eventCategoryTint(event.category)) {
+                    eventCategoryIcon(event.category, Modifier.size(20.dp), eventCategoryInk(event.category))
+                }
+                Spacer(modifier = Modifier.width(AppTheme.Space12))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = event.title,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AppTheme.TextDark
+                    )
+                    Text(
+                        text = eventCategoryLabel(event.category),
+                        fontSize = 12.sp,
+                        color = AppTheme.TextMuted
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                        .background(AppTheme.TintSlate)
+                        .clickable { onDismiss() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("✕", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = AppTheme.TextMuted)
+                }
+            }
+
+            if (event.isAiGenerated) {
+                circolareplus.design.AilaAiBadge(
+                    text = "Inserito dall'AI",
+                    modifier = Modifier.padding(bottom = AppTheme.Space16)
+                )
+            }
+
+            EventDetailRow(label = "Data", value = dateLabel)
+            EventDetailRow(label = "Ora", value = event.time ?: "Tutto il giorno")
+            EventDetailRow(
+                label = "Visibile a",
+                value = if (event.isForAll || recipientNames == null) {
+                    "Tutta la classe"
+                } else if (recipientNames.isEmpty()) {
+                    "Nessuno (controlla la selezione)"
+                } else {
+                    recipientNames.joinToString(", ")
+                }
+            )
+
+            if (!event.notes.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                Text(
+                    text = "Note",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AppTheme.TextMuted,
+                    modifier = Modifier.padding(bottom = AppTheme.Space4)
+                )
+                Text(
+                    text = event.notes,
+                    fontSize = 14.sp,
+                    color = AppTheme.TextDark
+                )
+            }
+
+            Spacer(modifier = Modifier.height(AppTheme.Space24))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(AppTheme.ButtonCornerRadius))
+                    .background(AppTheme.TintRed)
+                    .clickable { onDelete() }
+                    .padding(vertical = 14.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AppIcons.Trash(modifier = Modifier.size(14.dp), color = AppTheme.TintRedInk)
+                Spacer(modifier = Modifier.width(AppTheme.Space8))
+                Text(
+                    text = "Elimina evento",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AppTheme.TintRedInk
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EventDetailRow(label: String, value: String) {
+    Column(modifier = Modifier.padding(bottom = AppTheme.Space12)) {
+        Text(text = label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AppTheme.TextMuted)
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(text = value, fontSize = 14.sp, color = AppTheme.TextDark)
+    }
+}
+
+private fun eventCategoryTint(category: CalendarEventCategory): Color = when (category) {
+    CalendarEventCategory.VERIFICA, CalendarEventCategory.INTERROGAZIONE -> AppTheme.TintBlue
+    CalendarEventCategory.PAGAMENTO -> AppTheme.TintAmber
+    CalendarEventCategory.USCITA_DIDATTICA -> AppTheme.TintGreen
+    CalendarEventCategory.AVVISO -> AppTheme.TintRed
+    else -> AppTheme.TintSlate
+}
+
+private fun eventCategoryInk(category: CalendarEventCategory): Color = when (category) {
+    CalendarEventCategory.VERIFICA, CalendarEventCategory.INTERROGAZIONE -> AppTheme.TintBlueInk
+    CalendarEventCategory.PAGAMENTO -> AppTheme.TintAmberInk
+    CalendarEventCategory.USCITA_DIDATTICA -> AppTheme.TintGreenInk
+    CalendarEventCategory.AVVISO -> AppTheme.TintRedInk
+    else -> AppTheme.TintSlateInk
+}
+
+/**
+ * Card di scelta rapida del foglio "Nuovo evento": "Chiedi ad AILA" (riempimento sfumato) e
+ * "Crea manualmente" (contorno), affiancate come nel mockup di riferimento.
+ */
+@Composable
+private fun EventCreationOptionCard(
+    title: String,
+    subtitle: String,
+    highlighted: Boolean,
+    icon: @Composable (Color) -> Unit,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(AppTheme.CardCornerRadius))
+            .then(
+                if (highlighted) Modifier.background(AppTheme.PrimaryGradient)
+                else Modifier
+                    .background(AppTheme.SurfaceWhite)
+                    .border(1.dp, AppTheme.Hairline, RoundedCornerShape(AppTheme.CardCornerRadius))
+            )
+            .clickable { onClick() }
+            .padding(AppTheme.Space16)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                .background(if (highlighted) Color.White.copy(alpha = 0.2f) else AppTheme.TintViolet),
+            contentAlignment = Alignment.Center
+        ) {
+            icon(if (highlighted) Color.White else AppTheme.TintVioletInk)
+        }
+        Spacer(modifier = Modifier.height(AppTheme.Space12))
+        Text(
+            text = title,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (highlighted) Color.White else AppTheme.TextDark
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = subtitle,
+            fontSize = 11.sp,
+            color = if (highlighted) AppTheme.OnHeroSecondary else AppTheme.TextMuted,
+            lineHeight = 14.sp
+        )
+    }
+}
+
+/** Bozza locale di uno slot data mentre il rappresentante compila il modulo di creazione. */
+private data class PollSlotDraft(val dateMillis: Long, val capacity: Int, val teacherMandatory: Boolean)
+
+/**
+ * Creazione di un sondaggio interrogazioni (solo Rappresentante). `PollsRepository.createPoll()`
+ * esisteva già, ma senza questo modulo non c'era alcun modo di popolarlo dall'app: gli studenti
+ * vedevano sempre "Nessun sondaggio disponibile".
+ */
+/**
+ * Intestazione condivisa dei fogli di creazione (evento, sondaggio, proposta): titolo a sinistra,
+ * chiudi a destra. Stessa struttura del foglio "Nuovo evento" del Calendario, perché prima
+ * ognuna delle tre creazioni aveva un aspetto diverso — questa era ancora un `AlertDialog` con
+ * campi Material di default, mentre il Calendario era già passato al foglio.
+ */
+@Composable
+private fun CreationSheetHeader(title: String, onClose: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(bottom = AppTheme.Space16),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            fontSize = 19.sp,
+            fontWeight = FontWeight.Bold,
+            color = AppTheme.TextDark,
+            modifier = Modifier.weight(1f)
+        )
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                .background(AppTheme.TintSlate)
+                .clickable { onClose() },
+            contentAlignment = Alignment.Center
+        ) {
+            Text("✕", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = AppTheme.TextMuted)
+        }
+    }
+}
+
+/**
+ * Creazione di un sondaggio interrogazioni (solo Rappresentante). `PollsRepository.createPoll()`
+ * esisteva già, ma senza questo modulo non c'era alcun modo di popolarlo dall'app: gli studenti
+ * vedevano sempre "Nessun sondaggio disponibile".
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CreatePollDialog(
+    isSubmitting: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (String, List<CreatePollSlotRequestDto>) -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var subject by remember { mutableStateOf("") }
+    val slots = remember { mutableStateListOf<PollSlotDraft>() }
+    var pendingDateMillis by remember { mutableStateOf<Long?>(null) }
+    var showDatePicker by remember { mutableStateOf(false) }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = pendingDateMillis)
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        slots.add(PollSlotDraft(dateMillis = millis, capacity = 3, teacherMandatory = false))
+                    }
+                    showDatePicker = false
+                }) { Text("Aggiungi") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Annulla") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = AppTheme.SurfaceWhite
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = AppTheme.Space20)
+                .padding(bottom = AppTheme.Space32)
+        ) {
+            CreationSheetHeader(title = "Nuovo sondaggio interrogazioni", onClose = onDismiss)
+
+            OutlinedTextField(
+                value = subject,
+                onValueChange = { subject = it },
+                label = { Text("Materia") },
+                singleLine = true,
+                colors = circolareplus.design.ailaFieldColors(),
+                shape = RoundedCornerShape(AppTheme.SmallElementRadius),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(AppTheme.Space16))
+
+            if (slots.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                    slots.forEachIndexed { index, slot ->
+                        PollSlotDraftRow(
+                            slot = slot,
+                            onCapacityChange = { newCapacity -> slots[index] = slot.copy(capacity = newCapacity) },
+                            onMandatoryChange = { checked -> slots[index] = slot.copy(teacherMandatory = checked) },
+                            onRemove = { slots.removeAt(index) }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(AppTheme.Space12))
+            }
+
+            circolareplus.design.AilaSecondaryButton(
+                text = "+ Aggiungi data/slot",
+                onClick = { showDatePicker = true },
+                icon = { color -> AppIcons.Calendar(modifier = Modifier.size(15.dp), color = color) },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                text = "Casella di spunta = presenza obbligatoria decisa dal docente",
+                fontSize = 11.sp,
+                color = AppTheme.TextMuted,
+                modifier = Modifier.padding(top = AppTheme.Space8)
+            )
+
+            Spacer(modifier = Modifier.height(AppTheme.Space24))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
+                circolareplus.design.AilaSecondaryButton(
+                    text = "Annulla",
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                )
+                circolareplus.design.AilaPrimaryButton(
+                    text = if (isSubmitting) "Creazione..." else "Crea e pubblica",
+                    onClick = {
+                        onConfirm(
+                            subject.trim(),
+                            slots.map { CreatePollSlotRequestDto(epochMillisToIsoDate(it.dateMillis), it.capacity, it.teacherMandatory) }
+                        )
+                    },
+                    enabled = !isSubmitting && subject.isNotBlank() && slots.isNotEmpty(),
+                    fillMaxWidth = true,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+/** Una riga di data/slot nel foglio "Nuovo sondaggio", nello stesso stile a card delle altre liste. */
+@Composable
+private fun PollSlotDraftRow(
+    slot: PollSlotDraft,
+    onCapacityChange: (Int) -> Unit,
+    onMandatoryChange: (Boolean) -> Unit,
+    onRemove: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+            .background(AppTheme.TintSlate)
+            .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = epochMillisToIsoDate(slot.dateMillis),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            color = AppTheme.TextDark,
+            modifier = Modifier.weight(1f)
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(26.dp)
+                    .clip(CircleShape)
+                    .background(AppTheme.SurfaceWhite)
+                    .clickable(enabled = slot.capacity > 1) { onCapacityChange(slot.capacity - 1) },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("−", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = AppTheme.TextDark)
+            }
+            Text(
+                text = "${slot.capacity}",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = AppTheme.TextDark,
+                modifier = Modifier.padding(horizontal = AppTheme.Space8)
+            )
+            Box(
+                modifier = Modifier
+                    .size(26.dp)
+                    .clip(CircleShape)
+                    .background(AppTheme.SurfaceWhite)
+                    .clickable { onCapacityChange(slot.capacity + 1) },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("+", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = AppTheme.TextDark)
+            }
+        }
+        Spacer(modifier = Modifier.width(AppTheme.Space8))
+        Checkbox(
+            checked = slot.teacherMandatory,
+            onCheckedChange = onMandatoryChange,
+            colors = CheckboxDefaults.colors(checkedColor = AppTheme.PrimaryBlue)
+        )
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                .clickable { onRemove() }
+                .padding(6.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            AppIcons.Trash(modifier = Modifier.size(15.dp), color = AppTheme.TintRedInk)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddProposalDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String, String, String, Boolean) -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var title by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var isAnonymous by remember { mutableStateOf(false) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = AppTheme.SurfaceWhite
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = AppTheme.Space20)
+                .padding(bottom = AppTheme.Space32)
+        ) {
+            CreationSheetHeader(title = "Nuova proposta", onClose = onDismiss)
+
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                label = { Text("Titolo") },
+                singleLine = true,
+                colors = circolareplus.design.ailaFieldColors(),
+                shape = RoundedCornerShape(AppTheme.SmallElementRadius),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(AppTheme.Space12))
+            OutlinedTextField(
+                value = description,
+                onValueChange = { description = it },
+                label = { Text("Descrizione") },
+                minLines = 3,
+                colors = circolareplus.design.ailaFieldColors(),
+                shape = RoundedCornerShape(AppTheme.SmallElementRadius),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(AppTheme.Space12))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.clickable { isAnonymous = !isAnonymous }
+            ) {
+                Checkbox(
+                    checked = isAnonymous,
+                    onCheckedChange = { isAnonymous = it },
+                    colors = CheckboxDefaults.colors(checkedColor = AppTheme.PrimaryBlue)
+                )
+                Text("Pubblica in forma anonima", fontSize = 13.sp, color = AppTheme.TextDark)
+            }
+
+            Spacer(modifier = Modifier.height(AppTheme.Space24))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
+                circolareplus.design.AilaSecondaryButton(
+                    text = "Annulla",
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                )
+                circolareplus.design.AilaPrimaryButton(
+                    text = "Pubblica",
+                    onClick = {
+                        if (title.isNotBlank() && description.isNotBlank()) {
+                            onConfirm(title.trim(), description.trim(), "GENERALE", isAnonymous)
+                        }
+                    },
+                    enabled = title.isNotBlank() && description.isNotBlank(),
+                    fillMaxWidth = true,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Striscia "nessuna connessione", mostrata sopra al contenuto quando l'app è partita senza rete.
+ *
+ * Esiste perché prima quel caso non aveva alcuna rappresentazione: il ripristino della sessione
+ * falliva, l'app cancellava il token e l'utente si ritrovava alla schermata di login senza
+ * capire perché. Ora la sessione resta e questa riga dice cosa sta succedendo, con il modo per
+ * riprovare quando la rete torna.
+ */
+@Composable
+private fun OfflineBanner(
+    onRetry: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(AppTheme.TintAmber)
+            .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AppIcons.Warning(modifier = Modifier.size(18.dp), color = AppTheme.TintAmberInk)
+        Spacer(modifier = Modifier.width(AppTheme.Space12))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Nessuna connessione",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = AppTheme.TintAmberInk
+            )
+            Text(
+                text = "Sei entrato con gli ultimi dati salvati. Resti collegato al tuo account.",
+                fontSize = 11.sp,
+                color = AppTheme.TintAmberInk,
+                lineHeight = 15.sp
+            )
+        }
+        Spacer(modifier = Modifier.width(AppTheme.Space8))
+        Text(
+            text = "Riprova",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = AppTheme.TintAmberInk,
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onRetry() }
+                .padding(horizontal = 10.dp, vertical = 6.dp)
+        )
+        Text(
+            text = "Chiudi",
+            fontSize = 12.sp,
+            color = AppTheme.TintAmberInk.copy(alpha = 0.75f),
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onDismiss() }
+                .padding(horizontal = 8.dp, vertical = 6.dp)
+        )
+    }
+}
+
+/**
+ * Schermata mostrata quando la sessione è ancora valida ma non c'è né rete né una copia locale
+ * del profilo (caso raro: primo avvio dopo l'installazione senza connessione). Non è un login,
+ * perché il token c'è ancora: è un'attesa con un pulsante per riprovare. Il logout resta a
+ * disposizione, ma è una scelta esplicita e non più una conseguenza automatica dell'assenza di rete.
+ */
+@Composable
+private fun OfflineGateScreen(
+    onRetry: () -> Unit,
+    onLogout: () -> Unit
+) {
+    Box(
+        modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier.padding(AppTheme.Space32),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            circolareplus.design.AilaLogoTile(size = 64.dp, glow = true)
+            Spacer(modifier = Modifier.height(AppTheme.Space24))
+            Text(
+                text = "Nessuna connessione",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = AppTheme.TextDark
+            )
+            Spacer(modifier = Modifier.height(AppTheme.Space8))
+            Text(
+                text = "Non riesco a raggiungere il server e non ho ancora una copia del tuo " +
+                    "profilo su questo dispositivo. Il tuo accesso è salvo: riprova appena torni online.",
+                fontSize = 13.sp,
+                color = AppTheme.TextMuted,
+                lineHeight = 19.sp,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(AppTheme.Space24))
+            circolareplus.design.AilaPrimaryButton(
+                text = "Riprova",
+                onClick = onRetry,
+                fillMaxWidth = true
+            )
+            Spacer(modifier = Modifier.height(AppTheme.Space12))
+            circolareplus.design.AilaSecondaryButton(
+                text = "Esci dall'account",
+                onClick = onLogout,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}

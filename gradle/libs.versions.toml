@@ -1,0 +1,73 @@
+[versions]
+kotlin = "2.4.20"
+compose-multiplatform = "1.11.1"
+agp = "8.13.2"
+coroutines = "1.11.0"
+serialization = "1.11.0"
+ktor = "2.3.13"
+multiplatformSettings = "1.3.0"
+pdfboxAndroid = "2.0.27.0"
+firebaseBom = "34.18.0"
+googleServices = "4.5.0"
+activityCompose = "1.11.0"
+androidxCoreKtx = "1.17.0"
+litertlm = "0.17.0"
+androidxWork = "2.10.0"
+# API ufficiale di splash screen (androidx.core.splashscreen): senza, sotto Android 12+ il
+# sistema genera da sé uno splash di default ingrandendo l'icona dell'app, con bordi sfocati —
+# il difetto segnalato da Simone. Con questa libreria lo splash è quello disegnato da noi
+# (sfondo blu notte del brand + marchio vettoriale) fin dalla prima API supportata (26).
+androidxSplashscreen = "1.0.1"
+
+[libraries]
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
+ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
+ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
+ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
+ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
+ktor-client-logging = { module = "io.ktor:ktor-client-logging", version.ref = "ktor" }
+multiplatform-settings = { module = "com.russhwolf:multiplatform-settings", version.ref = "multiplatformSettings" }
+multiplatform-settings-no-arg = { module = "com.russhwolf:multiplatform-settings-no-arg", version.ref = "multiplatformSettings" }
+# Estrazione testo PDF lato Android (fork puro-Java di Apache PDFBox per Android, nessuna dipendenza AWT).
+# Verifica su https://github.com/TomRoush/PdfBox-Android/releases che 2.0.27.0 sia ancora l'ultima release
+# stabile al momento della build: se ne esce una più recente aggiorna solo questo numero.
+pdfbox-android = { module = "com.tom-roush:pdfbox-android", version.ref = "pdfboxAndroid" }
+# Notifiche push (FCM). Il BOM fissa le versioni di tutte le librerie Firebase tra loro coerenti:
+# firebase-messaging-ktx non ha bisogno di version.ref perché la prende dal BOM.
+firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
+# Da Firebase BOM 33 in poi le API Kotlin sono state assorbite negli artefatti principali e i
+# "-ktx" sono stati ritirati: con il BOM 34 "firebase-messaging-ktx" non esiste piu' e la build
+# falliva con "Could not find com.google.firebase:firebase-messaging-ktx:".
+firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
+androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCoreKtx" }
+# Inferenza LLM on-device (AI locale). E' il runtime ufficiale di Google per far girare
+# modelli linguistici su Android, e sostituisce com.google.mediapipe:tasks-genai, che Google ha
+# messo in manutenzione.
+#
+# Il cambio non e' stato una preferenza: tasks-genai legge solo modelli con tokenizer
+# SentencePiece, cioe' in pratica la sola famiglia Gemma — Qwen, Llama e Mistral fallivano il
+# caricamento con "SentencePiece tokenizer is not found in the model" — e non espone alcuna API
+# di tool calling. LiteRT-LM supporta tutti quei modelli e ha ToolSet/@Tool nativi.
+#
+# E' la ragione per cui Kotlin e' stato portato a 2.4: questa libreria e' scritta in Kotlin e i
+# suoi .class portano metadata 2.4, illeggibili dal compilatore 2.0.20 di prima.
+litertlm-android = { module = "com.google.ai.edge.litertlm:litertlm-android", version.ref = "litertlm" }
+# Elaborazione in background reale (download modello locale, download PDF, classificazione in
+# coda): sopravvive a schermo spento, app in background o processo ucciso dal sistema, cosa che
+# prima non c'era — tutto girava in coroutine legate al lifecycle della UI Compose.
+androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "androidxWork" }
+androidx-core-splashscreen = { module = "androidx.core:core-splashscreen", version.ref = "androidxSplashscreen" }
+
+[plugins]
+kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
+composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+androidApplication = { id = "com.android.application", version.ref = "agp" }
+androidLibrary = { id = "com.android.library", version.ref = "agp" }
+# NON ancora applicato da nessun modulo (vedi FIREBASE_SETUP.md): richiede androidApp/google-services.json,
+# che non esiste finché Simone non crea il progetto Firebase. Applicarlo prima farebbe fallire la build.
+googleServices = { id = "com.google.gms.google-services", version.ref = "googleServices" }
