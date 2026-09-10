@@ -1,14 +1,14 @@
 name: iosApp
 options:
   deploymentTarget:
-    iOS: "18.5"
+    iOS: "26.0"
   bundleIdPrefix: com.circolareplus
 
 targets:
   iosApp:
     type: application
     platform: iOS
-    deploymentTarget: "18.5"
+    deploymentTarget: "26.0"
     sources:
       - path: iosApp
     info:
