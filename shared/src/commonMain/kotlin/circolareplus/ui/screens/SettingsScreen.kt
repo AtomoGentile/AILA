@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,6 +23,7 @@ import circolareplus.design.AilaPrimaryButton
 import circolareplus.design.AilaSectionTitle
 import circolareplus.design.AilaSecondaryButton
 import circolareplus.design.AilaSegmentedTabs
+import circolareplus.design.AilaSwitch
 import circolareplus.design.ailaAppear
 import circolareplus.design.ailaFieldColors
 import circolareplus.design.AppIcons
@@ -163,7 +163,7 @@ fun SettingsScreen(
                             tint = AppTheme.TintBlue,
                             icon = { AppIcons.Bell(modifier = Modifier.size(19.dp), color = AppTheme.TintBlueInk) },
                             trailing = {
-                                Switch(
+                                AilaSwitch(
                                     checked = run {
                                         notificationRevision
                                         isNotificationKindEnabled(kind)
@@ -183,7 +183,7 @@ fun SettingsScreen(
                         tint = AppTheme.TintBlue,
                         icon = { AppIcons.Bell(modifier = Modifier.size(19.dp), color = AppTheme.TintBlueInk) },
                         trailing = {
-                            Switch(
+                            AilaSwitch(
                                 checked = boardNotificationsEnabled,
                                 onCheckedChange = { onToggleBoardNotifications(it) }
                             )
@@ -196,7 +196,7 @@ fun SettingsScreen(
                         tint = AppTheme.TintBlue,
                         icon = { AppIcons.Bell(modifier = Modifier.size(19.dp), color = AppTheme.TintBlueInk) },
                         trailing = {
-                            Switch(
+                            AilaSwitch(
                                 checked = systemNotificationsEnabled,
                                 onCheckedChange = { onToggleSystemNotifications(it) }
                             )
@@ -206,7 +206,7 @@ fun SettingsScreen(
             }
 
             // --- AI ------------------------------------------------------------------------
-            item { AilaSectionTitle(text = "Analisi AI delle circolari", modifier = Modifier.ailaAppear(4)) }
+            item { AilaSectionTitle(text = "Chiave AI di AILA Assistant", modifier = Modifier.ailaAppear(4)) }
             item {
                 AilaCard(modifier = Modifier.ailaAppear(5)) {
                     Column(modifier = Modifier.padding(AppTheme.Space16)) {

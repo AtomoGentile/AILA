@@ -123,7 +123,7 @@ proposals.post('/', async (c) => {
   ).bind(id, payload.sub, isAnonymous ? 1 : 0, title, description, category, classId).run();
 
   // Notify users who have board notifications enabled
-  await notifyClass(c.env, 'Nuova Proposta in Bacheca', title, { proposal_id: id }, classId);
+  await notifyClass(c.env, 'Nuova Proposta in Bacheca', title, { action: 'new_proposal', proposal_id: id }, classId);
 
   return c.json({ success: true, id }, 201);
 });

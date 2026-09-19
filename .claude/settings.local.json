@@ -12,7 +12,10 @@
       "Bash(git checkout *)",
       "Bash(git commit *)",
       "Bash(chmod +x gradlew)",
-      "Bash(git commit -m 'Fix: Add execute permission to gradlew and update iOS deployment target to 18.5 *)"
+      "Bash(git commit -m 'Fix: Add execute permission to gradlew and update iOS deployment target to 18.5 *)",
+      "Bash(git commit -m 'Fix: Update iOS deployment target to 18.5 \\(max supported\\) *)",
+      "Bash(git commit -m 'Fix: Add chmod +x for gradlew in pre-build script *)",
+      "Bash(git commit -m 'Final: iOS deployment target 26.0 with simulator architecture optimization *)"
     ]
   }
 }

@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import circolareplus.algorithms.DeskAssignment
 import circolareplus.algorithms.OptimizerWeights
+import circolareplus.algorithms.SeatMapOptimizer
 import circolareplus.design.AilaCard
 import circolareplus.design.AilaPrimaryButton
 import circolareplus.design.AilaEmptyState
@@ -36,7 +37,9 @@ fun SeatMapScreen(
     studentsMap: Map<String, User>,
     isPreferencesOpen: Boolean,
     onTogglePreferencesWindow: (Boolean) -> Unit = {},
-    onGenerateProposals: (OptimizerWeights) -> Unit = {}
+    onGenerateProposals: (OptimizerWeights, seatsPerDesk: Int) -> Unit = { _, _ -> },
+    isExportingPdf: Boolean = false,
+    onExportPdf: () -> Unit = {}
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var focusedStudentId by remember { mutableStateOf<String?>(null) }
@@ -45,6 +48,13 @@ fun SeatMapScreen(
     var wSocial by remember { mutableStateOf(1.0f) }
     var wDiscipline by remember { mutableStateOf(1.0f) }
     var wDidactic by remember { mutableStateOf(1.0f) }
+    // Banchi da coppia (2) o da trio (3): stesso algoritmo, vedi SeatMapOptimizer.optimize.
+    var seatsPerDesk by remember { mutableStateOf(SeatMapOptimizer.SEATS_PER_DESK_PAIR) }
+
+    // Una disposizione pubblicata usa banchi da trio se ANCHE UN SOLO banco ha un terzo
+    // occupante: da qui la griglia sa se disegnare due o tre righe per banco, senza bisogno di
+    // tenere lo stato "modalità" separato dai dati (che sopravviverebbe male a un riavvio app).
+    val hasTrioDesks = remember(assignments) { assignments.any { it.studentCId != null } }
 
     Column(
         modifier = Modifier
@@ -56,12 +66,24 @@ fun SeatMapScreen(
             title = "Mappa Posti Aula",
             subtitle = "Layout 2D orientato rispetto alla Cattedra",
             action = {
-                // Tasto Rapido Studente: "Dov'è il mio posto?"
-                AilaPrimaryButton(
-                    text = "Il mio posto",
-                    onClick = { focusedStudentId = currentUserId },
-                    compact = true
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                    // Esporta la disposizione pubblicata in PDF (disegno del layout, non solo
+                    // testo): utile a chiunque veda la mappa, non solo al Rappresentante.
+                    if (assignments.isNotEmpty()) {
+                        AilaPrimaryButton(
+                            text = if (isExportingPdf) "Genero…" else "Esporta PDF",
+                            onClick = onExportPdf,
+                            compact = true,
+                            enabled = !isExportingPdf
+                        )
+                    }
+                    // Tasto Rapido Studente: "Dov'è il mio posto?"
+                    AilaPrimaryButton(
+                        text = "Il mio posto",
+                        onClick = { focusedStudentId = currentUserId },
+                        compact = true
+                    )
+                }
             }
         )
 
@@ -156,6 +178,34 @@ fun SeatMapScreen(
 
                     Spacer(modifier = Modifier.height(AppTheme.Space8))
 
+                    // Banchi da coppia o da trio: stesso algoritmo (stesse funzioni di
+                    // punteggio, applicate a tutte le coppie del banco), cambia solo quante
+                    // persone ci mette insieme.
+                    Text(
+                        text = "Posti per banco",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AppTheme.TextDark
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+                    ) {
+                        SeatsPerDeskOption(
+                            label = "Coppie (2)",
+                            isSelected = seatsPerDesk == SeatMapOptimizer.SEATS_PER_DESK_PAIR,
+                            onClick = { seatsPerDesk = SeatMapOptimizer.SEATS_PER_DESK_PAIR }
+                        )
+                        SeatsPerDeskOption(
+                            label = "Trii (3)",
+                            isSelected = seatsPerDesk == SeatMapOptimizer.SEATS_PER_DESK_TRIO,
+                            onClick = { seatsPerDesk = SeatMapOptimizer.SEATS_PER_DESK_TRIO }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(AppTheme.Space8))
+
                     AilaPrimaryButton(
                         text = "Calcola 3 proposte",
                         onClick = {
@@ -164,7 +214,8 @@ fun SeatMapScreen(
                                     wSocial = wSocial.toDouble(),
                                     wDiscipline = wDiscipline.toDouble(),
                                     wDidactic = wDidactic.toDouble()
-                                )
+                                ),
+                                seatsPerDesk
                             )
                         },
                         fillMaxWidth = true
@@ -211,8 +262,11 @@ fun SeatMapScreen(
             items(assignments) { desk ->
                 val sA = desk.studentAId?.let { studentsMap[it] }
                 val sB = desk.studentBId?.let { studentsMap[it] }
+                val sC = desk.studentCId?.let { studentsMap[it] }
 
-                val isMeAtDesk = desk.studentAId == focusedStudentId || desk.studentBId == focusedStudentId
+                val isMeAtDesk = desk.studentAId == focusedStudentId ||
+                    desk.studentBId == focusedStudentId ||
+                    desk.studentCId == focusedStudentId
 
                 Card(
                     shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
@@ -254,6 +308,20 @@ fun SeatMapScreen(
                             fontWeight = if (desk.studentBId == focusedStudentId) FontWeight.Bold else FontWeight.Normal,
                             color = AppTheme.TextDark
                         )
+                        // Terzo posto (banchi da trio): mostrato solo se la disposizione
+                        // corrente li usa, così i banchi da coppia restano a due righe come sempre.
+                        if (hasTrioDesks) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 2.dp),
+                                color = AppTheme.Hairline
+                            )
+                            Text(
+                                text = sC?.firstName ?: "Vuoto",
+                                fontSize = 12.sp,
+                                fontWeight = if (desk.studentCId == focusedStudentId) FontWeight.Bold else FontWeight.Normal,
+                                color = AppTheme.TextDark
+                            )
+                        }
                     }
                 }
             }
@@ -295,6 +363,32 @@ private fun WeightSlider(
             onValueChange = onValueChange,
             valueRange = 0.5f..1.5f,
             steps = 9
+        )
+    }
+}
+
+/** Una delle due opzioni "Coppie (2)" / "Trii (3)" per i posti per banco. */
+@Composable
+private fun RowScope.SeatsPerDeskOption(label: String, isSelected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+            .background(if (isSelected) AppTheme.PrimaryBlue else AppTheme.SurfaceWhite)
+            .border(
+                1.dp,
+                if (isSelected) AppTheme.PrimaryBlue else AppTheme.Hairline,
+                RoundedCornerShape(AppTheme.SmallElementRadius)
+            )
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (isSelected) Color.White else AppTheme.TextDark
         )
     }
 }

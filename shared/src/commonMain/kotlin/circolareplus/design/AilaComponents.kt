@@ -2,15 +2,18 @@ package circolareplus.design
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -28,11 +31,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -113,7 +123,8 @@ fun AilaScreenHeader(
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
                     color = AppTheme.TextDark,
-                    maxLines = 1
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 if (subtitle != null) {
                     Spacer(modifier = Modifier.height(2.dp))
@@ -177,6 +188,7 @@ fun AilaBackBar(
                 fontWeight = FontWeight.Bold,
                 color = AppTheme.TextDark,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
             if (action != null) {
@@ -201,30 +213,59 @@ fun AilaSegmentedTabs(
     modifier: Modifier = Modifier,
     key: Any? = null
 ) {
-    Row(
+    // Il pill non compare/scompare più a scatti su un segmento o sull'altro: è un unico riquadro
+    // condiviso che scivola e cambia larghezza dall'uno all'altro. Niente scala/pressione di tocco
+    // qui (quella resta ai pulsanti veri) — questa è un'animazione di posizione, non di feedback.
+    val interactionSources = remember(labels.size) { List(labels.size) { MutableInteractionSource() } }
+    // Altezza reale della riga di tab, misurata via onSizeChanged: `fillMaxHeight()` sull'indicatore
+    // prendeva per buono il vincolo verticale ereditato dal contenitore esterno (spesso molto più
+    // alto della riga stessa), quindi il pill si gonfiava a riempire tutto lo spazio disponibile
+    // invece di restare alto quanto i tab.
+    var rowHeightPx by remember { mutableStateOf(0) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+
+    BoxWithConstraints(
         modifier = modifier
             .clip(RoundedCornerShape(AppTheme.SmallElementRadius + 3.dp))
             .background(AppTheme.TintSlate)
             .padding(4.dp)
     ) {
-        labels.forEachIndexed { index, label ->
-            val isSelected = index == selectedIndex
-            // `key(isSelected)` forza Compose a ricreare da zero il nodo di layout/disegno del
-            // segmento quando cambia la selezione, invece di riusare quello già composto. Senza,
-            // dopo un giro "Sondaggio" -> "Storico" -> "Sondaggio" il pill selezionato a volte
-            // restava con lo sfondo di default anche se `selectedIndex` era di nuovo giusto: il
-            // resto della UI (che dipende dallo stesso stato) si aggiornava correttamente, quindi
-            // il problema era isolato al layer di disegno di questo pill, non allo stato.
-            androidx.compose.runtime.key(index, isSelected) {
+        val segmentWidth = maxWidth / labels.size
+        val indicatorOffset by animateDpAsState(
+            targetValue = segmentWidth * selectedIndex,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioNoBouncy,
+                stiffness = Spring.StiffnessMediumLow
+            ),
+            label = "segmentedIndicatorOffset"
+        )
+
+        if (rowHeightPx > 0) {
+            val rowHeight = with(density) { rowHeightPx.toDp() }
+            Box(
+                modifier = Modifier
+                    .offset(x = indicatorOffset)
+                    .width(segmentWidth)
+                    .height(rowHeight)
+                    .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                    .background(AppTheme.PrimaryGradient)
+            )
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .onSizeChanged { rowHeightPx = it.height }
+        ) {
+            labels.forEachIndexed { index, label ->
+                val isSelected = index == selectedIndex
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                        .then(
-                            if (isSelected) Modifier.background(AppTheme.PrimaryGradient)
-                            else Modifier
-                        )
-                        .ailaPressable(pressedScale = 0.94f) { onSelect(index) }
+                        .clickable(
+                            interactionSource = interactionSources[index],
+                            indication = null
+                        ) { onSelect(index) }
                         .padding(vertical = 9.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -235,6 +276,89 @@ fun AilaSegmentedTabs(
                         color = if (isSelected) Color.White else AppTheme.TextMuted,
                         maxLines = 1
                     )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Contenitore di chip filtro con l'indicatore condiviso che scivola: stessa idea di
+ * [AilaSegmentedTabs] ma per chip di larghezza diversa (ogni etichetta è lunga a modo suo, es.
+ * "Tutte" / "In analisi" / "Non rilevanti") e, quando serve, dentro una riga che scorre
+ * orizzontalmente (bacheca, circolari, calendario, ricerca). Le chip restano le
+ * [AnimatedFilterChip] di sempre, passate con `drawSelectionBackground = false`: il colore non lo
+ * disegna più la singola chip al proprio posto quando si seleziona, lo fa questo unico riquadro
+ * che scivola dall'una all'altra — la "goccia" già usata per Sondaggio/Storico, generalizzata a
+ * misure diverse e allo scorrimento.
+ *
+ * `content` riceve `chipModifier(index)`: va aggiunto al modifier di ogni chip perché il
+ * riquadro sappia dove e quanto è larga.
+ */
+@Composable
+fun AilaSlidingChipRow(
+    selectedIndex: Int,
+    itemCount: Int,
+    modifier: Modifier = Modifier,
+    scrollable: Boolean = true,
+    content: @Composable (chipModifier: (Int) -> Modifier) -> Unit
+) {
+    var chipBounds by remember(itemCount) { mutableStateOf(List(itemCount) { Rect.Zero }) }
+    val density = LocalDensity.current
+    val scrollState = rememberScrollState()
+
+    val target = chipBounds.getOrNull(selectedIndex)?.takeIf { it != Rect.Zero }
+    val indicatorSpec = spring<Dp>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
+    val animatedLeft by animateDpAsState(
+        targetValue = target?.let { with(density) { it.left.toDp() } } ?: 0.dp,
+        animationSpec = indicatorSpec,
+        label = "chipRowIndicatorX"
+    )
+    val animatedWidth by animateDpAsState(
+        targetValue = target?.let { with(density) { it.width.toDp() } } ?: 0.dp,
+        animationSpec = indicatorSpec,
+        label = "chipRowIndicatorWidth"
+    )
+
+    Box(
+        modifier = modifier
+            // Un'unica barra, come le tab segmentate — non più tante chip separate: prima ogni
+            // chip da inattiva restava una sua piccola card bianca bordata, fluttuante nello
+            // spazio invece che dentro un contenitore comune.
+            .clip(RoundedCornerShape(AppTheme.SmallElementRadius + 3.dp))
+            .background(AppTheme.TintSlate)
+            .padding(4.dp)
+            .then(
+                if (scrollable) Modifier.horizontalScroll(scrollState) else Modifier
+            )
+    ) {
+        if (target != null) {
+            Box(
+                modifier = Modifier
+                    .offset(x = animatedLeft, y = with(density) { target.top.toDp() })
+                    .width(animatedWidth)
+                    .height(with(density) { target.height.toDp() })
+                    .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                    .background(AppTheme.PrimaryGradient)
+            )
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+            content { index ->
+                Modifier.onGloballyPositioned { coordinates ->
+                    val pos = coordinates.positionInParent()
+                    val newRect = Rect(
+                        pos.x,
+                        pos.y,
+                        pos.x + coordinates.size.width,
+                        pos.y + coordinates.size.height
+                    )
+                    if (chipBounds.getOrNull(index) != newRect) {
+                        chipBounds = chipBounds.toMutableList().also { list ->
+                            while (list.size <= index) list.add(Rect.Zero)
+                            list[index] = newRect
+                        }
+                    }
                 }
             }
         }
@@ -365,7 +489,7 @@ fun AilaPrimaryButton(
                 if (enabled) Modifier.background(AppTheme.PrimaryGradient)
                 else Modifier.background(AppTheme.TintSlate)
             )
-            .ailaPressable(enabled = enabled, pressedScale = 0.955f) { onClick() }
+            .ailaGlassPressable(enabled = enabled, tint = Color.White) { onClick() }
             .padding(
                 horizontal = if (compact) AppTheme.Space12 else AppTheme.Space16,
                 vertical = if (compact) 8.dp else 11.dp
@@ -404,7 +528,7 @@ fun AilaSecondaryButton(
             .clip(shape)
             .background(AppTheme.SurfaceWhite)
             .border(1.dp, AppTheme.Hairline, shape)
-            .ailaPressable(pressedScale = 0.955f) { onClick() }
+            .ailaGlassPressable(tint = AppTheme.PrimaryBlue) { onClick() }
             .padding(
                 horizontal = if (compact) AppTheme.Space12 else AppTheme.Space16,
                 vertical = if (compact) 8.dp else 11.dp
@@ -441,7 +565,7 @@ fun AilaDestructiveButton(
         modifier = modifier
             .clip(shape)
             .background(AppTheme.TintRed)
-            .ailaPressable(pressedScale = 0.955f) { onClick() }
+            .ailaGlassPressable(tint = Color.White) { onClick() }
             .padding(
                 horizontal = if (compact) AppTheme.Space12 else AppTheme.Space16,
                 vertical = if (compact) 8.dp else 11.dp
@@ -694,12 +818,15 @@ fun AilaIconAction(
 }
 
 /**
- * Marchio "generato dall'AI": il badge di [AilaAssistantGlyph] (senza il dettaglio dell'avatar,
- * troppo piccolo per restare leggibile a queste dimensioni) che pulsa piano. Sostituisce l'emoji
- * 🤖/✨ e comunica da sola che quel contenuto è il lavoro attivo dell'AI, non di una persona.
+ * Marchio "fatto da AILA Assistant": l'onda di [AilaAssistantMark] in monocromatico, che pulsa
+ * piano, più l'etichetta. Sostituisce l'emoji 🤖/✨ e dice da sola che quel contenuto è lavoro
+ * dell'assistente e non di una persona.
+ *
+ * Monocromatico e non a colori: a 13dp le quattro barre sfumate si impastano contro il tinto del
+ * badge, mentre in tinta unita il segno resta leggibile.
  */
 @Composable
-fun AilaAiBadge(
+fun AilaAssistantBadge(
     text: String,
     modifier: Modifier = Modifier,
     tint: Color = AppTheme.TintViolet,
@@ -725,15 +852,19 @@ fun AilaAiBadge(
             .padding(horizontal = 7.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        AilaAssistantGlyph(
+        AilaAssistantMark(
             size = 13.dp,
             modifier = Modifier.alpha(alpha),
-            brush = SolidColor(ink),
-            badgeColor = ink,
-            showAvatarDetail = false
+            brush = SolidColor(ink)
         )
         Spacer(modifier = Modifier.width(4.dp))
-        Text(text = text, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = ink)
+        Text(
+            text = text,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            color = ink,
+            maxLines = 1
+        )
     }
 }
 
@@ -741,5 +872,83 @@ fun AilaAiBadge(
 @Composable
 fun AilaDot(color: Color, size: Dp = 8.dp, modifier: Modifier = Modifier) {
     Box(modifier = modifier.size(size).clip(CircleShape).background(color))
+}
+
+private val SwitchWidth = 46.dp
+private val SwitchHeight = 26.dp
+private val SwitchThumbSize = 22.dp
+private val SwitchPadding = 2.dp
+
+/**
+ * Interruttore in stile iOS, in tinta col brand invece del verde di sistema: pillola blu quando è
+ * "on", grigia quando è "off", e la goccia bianca che scorre da un lato all'altro.
+ *
+ * Il bordo della goccia che guida il movimento arriva a destinazione più svelto di quello che
+ * segue (due molle con rigidità diverse sui due bordi, non un'unica animazione di posizione):
+ * per questo, mentre scorre, si allunga come un elastico invece di restare un cerchio rigido, e
+ * torna rotonda solo quando si ferma — è la stessa illusione dei toggle di iOS.
+ */
+@Composable
+fun AilaSwitch(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
+    val leftBound = SwitchPadding
+    val rightBound = SwitchWidth - SwitchPadding - SwitchThumbSize
+    val targetLeft = if (checked) rightBound else leftBound
+    val targetRight = targetLeft + SwitchThumbSize
+
+    // Bordo guida: molla rigida e senza rimbalzo, arriva a destinazione svelto. Bordo che segue:
+    // molla molto più morbida e con un rimbalzo pronunciato, quindi resta indietro mentre l'altro
+    // bordo è già arrivato — la goccia si allunga parecchio — e poi supera un poco il traguardo
+    // prima di "ricomprimersi" sulla misura normale. A riposo i due bordi combaciano sempre a
+    // esattamente SwitchThumbSize di distanza.
+    val leadingSpec = spring<Dp>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 300f)
+    val trailingSpec = spring<Dp>(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 35f)
+
+    val leftEdge by animateDpAsState(
+        targetValue = targetLeft,
+        animationSpec = if (checked) trailingSpec else leadingSpec,
+        label = "ailaSwitchLeftEdge"
+    )
+    val rightEdge by animateDpAsState(
+        targetValue = targetRight,
+        animationSpec = if (checked) leadingSpec else trailingSpec,
+        label = "ailaSwitchRightEdge"
+    )
+
+    val trackColor by animateColorAsState(
+        targetValue = when {
+            !enabled -> AppTheme.TintSlate
+            checked -> AppTheme.PrimaryBlue
+            else -> AppTheme.Hairline
+        },
+        animationSpec = tween(180),
+        label = "ailaSwitchTrack"
+    )
+
+    Box(
+        modifier = modifier
+            .size(width = SwitchWidth, height = SwitchHeight)
+            .clip(RoundedCornerShape(50))
+            .background(trackColor)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                enabled = enabled
+            ) { onCheckedChange(!checked) }
+    ) {
+        Box(
+            modifier = Modifier
+                .offset(x = leftEdge, y = SwitchPadding)
+                .width((rightEdge - leftEdge).coerceAtLeast(4.dp))
+                .height(SwitchThumbSize)
+                .shadow(elevation = 1.5.dp, shape = RoundedCornerShape(50), clip = false)
+                .clip(RoundedCornerShape(50))
+                .background(Color.White)
+        )
+    }
 }
 

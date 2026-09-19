@@ -89,68 +89,72 @@ fun AilaGlyph(
 }
 
 /**
- * Marchio "AILA Assistant": lo stesso segno "A" di [AilaGlyph], ma con l'avatar dell'assistente al
- * posto del semplice pallino — un badge pieno con dentro testa e spalle stilizzate. Va nei punti in
- * cui l'AI esegue davvero un lavoro attivo per l'utente (genera un evento, analizza una circolare),
- * per distinguerli a colpo d'occhio dallo sparkle generico usato altrove come semplice indicatore.
+ * I colori del marchio AILA Assistant, nell'ordine in cui si susseguono sulle quattro barre:
+ * viola, blu, blu, verde acqua (#8B5CF6, #3B82F6, #14B8A6 della palette di brand).
  *
- * @param showAvatarDetail testa/spalle dentro il badge. A dimensioni molto piccole (badge, chip)
- *   il dettaglio si perde e sporca il segno invece di aggiungere leggibilità — lì si passa `false`
- *   e resta solo il badge pieno, comunque riconoscibile come marchio AILA.
+ * Non passano da [AppTheme] di proposito: un marchio che cambia colore col tema non e' piu' un
+ * marchio. Dove il fondo non lo permette (badge minuscoli, superfici gia' colorate, header con
+ * sfumatura) si passa un `SolidColor` al parametro `brush`, che e' la versione monocromatica
+ * prevista dalle linee guida del logo.
+ */
+val AilaAssistantBrush: Brush = Brush.linearGradient(
+    listOf(
+        Color(0xFF8B5CF6),
+        Color(0xFF3B82F6),
+        Color(0xFF3B82F6),
+        Color(0xFF14B8A6)
+    )
+)
+
+/** Altezze delle quattro barre in frazione del lato: e' questa sequenza a fare l'onda. */
+private val AssistantBarHeights = floatArrayOf(0.50f, 0.92f, 0.34f, 0.64f)
+
+/**
+ * Marchio "AILA Assistant": l'onda vocale a quattro barre, ridisegnata a vettori dal logo di
+ * brand (il foglio "AILA Assistant — sempre al tuo fianco").
+ *
+ * **Perche' non e' piu' la "A" con l'avatar.** L'assistente ha un marchio suo, distinto dal segno
+ * dell'app: quattro barre arrotondate di altezza diversa, un'onda vocale stilizzata che dice
+ * "ti ascolta e ti risponde" invece di ripetere il logo dell'app con un pallino sopra. Serve
+ * proprio a distinguere a colpo d'occhio "questo l'ha fatto AILA Assistant" da "questa e' AILA".
+ *
+ * Come [AilaGlyph] e' geometria e non un'immagine: nitido a ogni misura, fondo trasparente, e
+ * senza `drawRoundRect`/`drawArc` — che su Android in KMP crashano con ClassNotFoundException
+ * SkiaBackedPath. Ogni barra e' una linea con i capi arrotondati, che da' esattamente la stessa
+ * pillola del logo originale.
+ *
+ * @param brush il riempimento delle barre. Il default e' [AilaAssistantBrush] (la variante a
+ *   colori); su fondi colorati si passa `SolidColor(...)` per la monocromatica.
  */
 @Composable
-fun AilaAssistantGlyph(
+fun AilaAssistantMark(
     size: Dp = 24.dp,
     modifier: Modifier = Modifier,
-    brush: Brush = Brush.linearGradient(
-        listOf(Color(0xFF6FA8FF), Color(0xFFA78BFA))
-    ),
-    badgeColor: Color = Color(0xFF4361FF),
-    avatarColor: Color = Color.White,
-    showAvatarDetail: Boolean = true
+    brush: Brush = AilaAssistantBrush
 ) {
     Canvas(modifier = modifier.size(size)) {
         val w = this.size.width
         val h = this.size.height
-        val stroke = w * 0.155f
+        val barWidth = w * 0.15f
+        val gap = w * 0.093f
+        val bars = AssistantBarHeights.size
+        // Il gruppo di barre sta al centro del riquadro: quello che resta diventa margine ai lati,
+        // cosi' il marchio resta centrato qualunque sia la misura richiesta.
+        val firstCenter = (w - (bars * barWidth + (bars - 1) * gap)) / 2f + barWidth / 2f
+        val cy = h * 0.5f
 
-        val arch = Path().apply {
-            moveTo(w * 0.205f, h * 0.855f)
-            lineTo(w * 0.415f, h * 0.255f)
-            quadraticBezierTo(w * 0.5f, h * 0.055f, w * 0.585f, h * 0.255f)
-            lineTo(w * 0.795f, h * 0.855f)
-        }
-        drawPath(
-            path = arch,
-            brush = brush,
-            style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round)
-        )
-
-        // Badge dell'assistente, più grande del pallino di AilaGlyph: c'è spazio per l'avatar.
-        drawPath(logoCirclePath(w * 0.5f, h * 0.635f, w * 0.155f), color = badgeColor)
-
-        if (showAvatarDetail) {
-            // Testa: cerchio pieno.
-            drawPath(logoCirclePath(w * 0.5f, h * 0.585f, w * 0.045f), color = avatarColor)
-
-            // Spalle: rettangolo a cima arrotondata, stesso schema delle forme squadrate di
-            // AppIcons (es. Bus) — niente drawRoundRect, che su Android in KMP crasha.
-            val shoulders = Path().apply {
-                val left = w * 0.425f
-                val right = w * 0.575f
-                val top = h * 0.635f
-                val bottom = h * 0.72f
-                val r = w * 0.04f
-                moveTo(left + r, top)
-                lineTo(right - r, top)
-                quadraticBezierTo(right, top, right, top + r)
-                lineTo(right, bottom)
-                lineTo(left, bottom)
-                lineTo(left, top + r)
-                quadraticBezierTo(left, top, left + r, top)
-                close()
-            }
-            drawPath(shoulders, color = avatarColor)
+        AssistantBarHeights.forEachIndexed { index, heightFactor ->
+            val cx = firstCenter + index * (barWidth + gap)
+            // La linea e' piu' corta della barra di mezzo spessore per capo: con StrokeCap.Round
+            // sono i capi tondi a completare l'altezza voluta.
+            val half = (h * heightFactor - barWidth) / 2f
+            drawLine(
+                brush = brush,
+                start = Offset(cx, cy - half),
+                end = Offset(cx, cy + half),
+                strokeWidth = barWidth,
+                cap = StrokeCap.Round
+            )
         }
     }
 }

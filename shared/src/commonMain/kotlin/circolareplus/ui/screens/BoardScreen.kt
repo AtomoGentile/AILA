@@ -72,31 +72,25 @@ fun BoardScreen(
 
         Spacer(modifier = Modifier.height(AppTheme.Space12))
 
-        // Colonne / Filtri per Stato con transizione animata
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
-        ) {
-            circolareplus.design.AnimatedFilterChip(
-                label = "Tutte",
-                isSelected = selectedStatusFilter == null,
-                onClick = { selectedStatusFilter = null }
-            )
-            circolareplus.design.AnimatedFilterChip(
-                label = "Nuove",
-                isSelected = selectedStatusFilter == ProposalStatus.NUOVA,
-                onClick = { selectedStatusFilter = ProposalStatus.NUOVA }
-            )
-            circolareplus.design.AnimatedFilterChip(
-                label = "In analisi",
-                isSelected = selectedStatusFilter == ProposalStatus.IN_ANALISI,
-                onClick = { selectedStatusFilter = ProposalStatus.IN_ANALISI }
-            )
-            circolareplus.design.AnimatedFilterChip(
-                label = "Chiuse",
-                isSelected = selectedStatusFilter == ProposalStatus.CHIUSA,
-                onClick = { selectedStatusFilter = ProposalStatus.CHIUSA }
-            )
+        // Colonne / Filtri per Stato: stesso pill scorrevole di Sondaggio/Storico, generalizzato a
+        // chip di larghezza diversa (vedi AilaSlidingChipRow).
+        val statusFilterOptions = remember { listOf<ProposalStatus?>(null, ProposalStatus.NUOVA, ProposalStatus.IN_ANALISI, ProposalStatus.CHIUSA) }
+        val statusFilterLabels = remember { listOf("Tutte", "Nuove", "In analisi", "Chiuse") }
+        circolareplus.design.AilaSlidingChipRow(
+            selectedIndex = statusFilterOptions.indexOf(selectedStatusFilter),
+            itemCount = statusFilterOptions.size,
+            scrollable = false,
+            modifier = Modifier.fillMaxWidth()
+        ) { chipModifier ->
+            statusFilterOptions.forEachIndexed { index, status ->
+                circolareplus.design.AnimatedFilterChip(
+                    label = statusFilterLabels[index],
+                    isSelected = selectedStatusFilter == status,
+                    onClick = { selectedStatusFilter = status },
+                    drawSelectionBackground = false,
+                    modifier = chipModifier(index)
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(AppTheme.Space16))

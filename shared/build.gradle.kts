@@ -65,6 +65,9 @@ kotlin {
                 // renderlo visibile a :androidApp (stesso discorso già fatto per Firebase
                 // Messaging), ma qui in :shared serve comunque per compilare questo file.
                 implementation(libs.androidx.activity.compose)
+                // FileProvider: condivisione via share sheet dei file generati in-app (PDF della
+                // Mappa Posti), vedi SeatMapPdfExporter.android.kt.
+                implementation(libs.androidx.core.ktx)
                 // Motore HTTP Ktor per Android
                 implementation(libs.ktor.client.okhttp)
                 // Estrazione testo dai PDF delle circolari (classificazione AI client-side)

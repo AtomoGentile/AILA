@@ -14,10 +14,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.SolidColor
+import circolareplus.design.AilaAssistantMark
 import circolareplus.design.AilaBackBar
 import circolareplus.design.AilaCard
 import circolareplus.design.AilaEmptyState
@@ -26,6 +29,7 @@ import circolareplus.design.AilaSectionTitle
 import circolareplus.design.ailaFieldColors
 import circolareplus.design.AnimatedFilterChip
 import circolareplus.design.ailaAppear
+import circolareplus.design.ailaGlassPressable
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
 import circolareplus.domain.model.CalendarEvent
@@ -64,6 +68,7 @@ fun SearchScreen(
     recentSearches: List<String>,
     onBackClick: () -> Unit,
     onSubmitQuery: (String) -> Unit = {},
+    onOpenAssistant: (String) -> Unit = {},
     onOpenCircular: (Circular) -> Unit = {},
     onOpenCalendar: () -> Unit = {},
     onOpenBoard: () -> Unit = {}
@@ -164,20 +169,25 @@ fun SearchScreen(
 
             Spacer(modifier = Modifier.height(AppTheme.Space12))
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
-            ) {
-                SearchFilter.entries.forEach { f ->
+            circolareplus.design.AilaSlidingChipRow(
+                selectedIndex = SearchFilter.entries.indexOf(filter),
+                itemCount = SearchFilter.entries.size,
+                modifier = Modifier.fillMaxWidth()
+            ) { chipModifier ->
+                SearchFilter.entries.forEachIndexed { index, f ->
                     AnimatedFilterChip(
                         label = f.label,
                         isSelected = filter == f,
-                        onClick = { filter = f }
+                        onClick = { filter = f },
+                        drawSelectionBackground = false,
+                        modifier = chipModifier(index)
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(AppTheme.Space12))
+
+            AskAilaButton(query = trimmed, onClick = { onOpenAssistant(trimmed) })
 
             Spacer(modifier = Modifier.height(AppTheme.Space16))
         }
@@ -305,5 +315,66 @@ private fun SearchFilter.Icon() {
             AppIcons.ChatBubble(modifier = Modifier.size(20.dp), color = AppTheme.TintVioletInk)
         SearchFilter.ALL ->
             AppIcons.Search(modifier = Modifier.size(20.dp), color = AppTheme.TintSlateInk)
+    }
+}
+
+/**
+ * Il pulsante che porta all'assistente, sotto i filtri della ricerca.
+ *
+ * Sta qui e non fra i risultati di proposito. La ricerca normale confronta parole: trova la
+ * circolare che ha "gita" nel titolo, non risponde a "quanto costa la gita e entro quando devo
+ * pagare". Le due cose convivono nella stessa schermata perche' la domanda nasce quasi sempre da
+ * una ricerca che non ha dato quello che serviva — e in quel momento il pulsante e' gia' li',
+ * con dentro la frase appena digitata, invece di richiedere di riscriverla da un'altra parte.
+ *
+ * Il gradiente e' lo stesso dei pulsanti primari: in una schermata fatta di righe bianche questo
+ * e' l'unico elemento che deve saltare all'occhio, perche' e' l'unico che fa una cosa diversa.
+ */
+@Composable
+private fun AskAilaButton(query: String, onClick: () -> Unit) {
+    val hasQuery = query.isNotEmpty()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(AppTheme.CardCornerRadius))
+            .background(AppTheme.PrimaryGradient)
+            .ailaGlassPressable { onClick() }
+            .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                .background(AppTheme.OnHeroSurface),
+            contentAlignment = Alignment.Center
+        ) {
+            AilaAssistantMark(
+                size = 22.dp,
+                brush = SolidColor(AppTheme.OnHeroPrimary)
+            )
+        }
+        Spacer(modifier = Modifier.width(AppTheme.Space12))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = if (hasQuery) "Chiedi ad AILA Assistant: «$query»" else "Chiedi ad AILA Assistant",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = AppTheme.OnHeroPrimary,
+                maxLines = 1
+            )
+            Text(
+                text = if (hasQuery) {
+                    "Risposta di AILA Assistant, cercando in tutta l'app"
+                } else {
+                    "Circolari, calendario, bacheca, sondaggi, mappa posti"
+                },
+                fontSize = 11.sp,
+                color = AppTheme.OnHeroSecondary,
+                maxLines = 1
+            )
+        }
+        Spacer(modifier = Modifier.width(AppTheme.Space8))
+        AppIcons.ChevronRight(modifier = Modifier.size(17.dp), color = AppTheme.OnHeroPrimary)
     }
 }

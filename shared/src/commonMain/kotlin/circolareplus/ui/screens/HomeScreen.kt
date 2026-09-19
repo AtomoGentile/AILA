@@ -3,6 +3,7 @@ package circolareplus.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,7 +25,8 @@ import circolareplus.design.AilaIconTile
 import circolareplus.design.AilaListRow
 import circolareplus.design.AilaSectionTitle
 import circolareplus.design.ailaAppear
-import circolareplus.design.ailaPressable
+import circolareplus.design.ailaGlassOverlay
+import circolareplus.design.ailaGlassPressable
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
 import circolareplus.util.today
@@ -370,7 +372,7 @@ private fun HeroIconButton(onClick: () -> Unit, icon: @Composable () -> Unit) {
             .clip(shape)
             .background(heroTileFill)
             .border(1.dp, AppTheme.OnHeroBorder, shape)
-            .clickable { onClick() },
+            .ailaGlassPressable(tint = AppTheme.PrimaryBlue) { onClick() },
         contentAlignment = Alignment.Center
     ) {
         icon()
@@ -386,8 +388,12 @@ private fun HomeQuickIcon(
     icon: @Composable () -> Unit
 ) {
     val shape = RoundedCornerShape(16.dp)
+    val interactionSource = remember { MutableInteractionSource() }
     Column(
-        modifier = modifier.ailaPressable(pressedScale = 0.94f) { onClick() },
+        modifier = modifier.clickable(
+            interactionSource = interactionSource,
+            indication = null
+        ) { onClick() },
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
@@ -396,7 +402,8 @@ private fun HomeQuickIcon(
                 .height(56.dp)
                 .clip(shape)
                 .background(heroTileFill)
-                .border(1.dp, AppTheme.OnHeroBorder, shape),
+                .border(1.dp, AppTheme.OnHeroBorder, shape)
+                .ailaGlassOverlay(interactionSource, tint = AppTheme.PrimaryBlue),
             contentAlignment = Alignment.Center
         ) {
             icon()

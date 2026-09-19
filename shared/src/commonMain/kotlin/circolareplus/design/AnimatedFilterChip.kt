@@ -47,6 +47,12 @@ fun AnimatedFilterChip(
     activeTextColor: Color = Color.White,
     inactiveTextColor: Color = AppTheme.TextMuted,
     /**
+     * Quando la chip vive dentro un [AilaSlidingChipRow], il colore di selezione lo disegna il
+     * riquadro condiviso che scivola da una chip all'altra: qui va messo a `false` perché la chip
+     * non disegni anche il proprio sfondo pieno, restando solo testo/icona che cambiano colore.
+     */
+    drawSelectionBackground: Boolean = true,
+    /**
      * Icona facoltativa a sinistra dell'etichetta. Riceve il colore corrente del testo, così
      * segue l'animazione della chip. Serve a togliere le emoji dalle etichette (erano "📝
      * Verifiche", "🟢 Ti riguarda"): le emoji le disegna il sistema, cambiano tra Android e iOS
@@ -57,16 +63,26 @@ fun AnimatedFilterChip(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
-    // Animazione colore di sfondo
+    // Animazione colore di sfondo. Se il colore di selezione lo disegna il riquadro condiviso
+    // (dentro un AilaSlidingChipRow), la chip da inattiva resta trasparente invece che una card
+    // bianca a sé — altrimenti sembravano tante schede separate invece di un'unica barra.
     val backgroundColor by animateColorAsState(
-        targetValue = if (isSelected) activeBackgroundColor else inactiveBackgroundColor,
+        targetValue = when {
+            isSelected && drawSelectionBackground -> activeBackgroundColor
+            !drawSelectionBackground -> Color.Transparent
+            else -> inactiveBackgroundColor
+        },
         animationSpec = tween(durationMillis = 220),
         label = "chipBgColor"
     )
 
     // Animazione colore del bordo
     val borderColor by animateColorAsState(
-        targetValue = if (isSelected) activeBackgroundColor else AppTheme.Hairline,
+        targetValue = when {
+            isSelected && drawSelectionBackground -> activeBackgroundColor
+            !drawSelectionBackground -> Color.Transparent
+            else -> AppTheme.Hairline
+        },
         animationSpec = tween(durationMillis = 220),
         label = "chipBorderColor"
     )
@@ -99,7 +115,7 @@ fun AnimatedFilterChip(
             // Selezionata: riempimento sfumato del brand, come le tab segmentate. Non
             // selezionata: colore pieno animato (il gradiente non è animabile allo stesso modo).
             .then(
-                if (isSelected) Modifier.background(AppTheme.PrimaryGradient)
+                if (isSelected && drawSelectionBackground) Modifier.background(AppTheme.PrimaryGradient)
                 else Modifier.background(backgroundColor)
             )
             .border(borderWidth, borderColor, RoundedCornerShape(AppTheme.SmallElementRadius))

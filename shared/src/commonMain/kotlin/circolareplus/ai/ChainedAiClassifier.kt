@@ -87,6 +87,35 @@ class ChainedAiClassifier(
         return if (second.title.isNotBlank()) second else first
     }
 
+    /**
+     * Implementazione di [AiClassifier.generateAnswer]: si prova il primario e, se fallisce, il
+     * secondario — esattamente come per la classificazione, ma con un segnale di fallimento
+     * molto piu' netto, perche' qui il fallimento e' un tipo ([AiTextResult.Failure]) e non un
+     * flag su un risultato plausibile.
+     *
+     * A differenza della classificazione l'escalation non e' disattivabile: una domanda
+     * dell'assistente la fa sempre l'utente di persona, una alla volta, quindi non esiste il
+     * caso del ciclo in sottofondo che scarica decine di generazioni sul motore on-device.
+     *
+     * Se falliscono entrambi si riportano tutti e due i motivi: quasi sempre sono diversi
+     * (quota finita da una parte, modello non scaricato dall'altra) e sapere quale dei due
+     * sistemare e' l'unica informazione utile.
+     */
+    override suspend fun generateAnswer(prompt: AiPromptBuilder): AiTextResult {
+        val first = primary.generateAnswer(prompt)
+        if (first is AiTextResult.Success) return first
+
+        // Lo stesso builder, non lo stesso prompt: ognuno dei due se lo fa costruire della
+        // misura che regge. E' quello che rende la riserva una riserva vera anche quando il
+        // primario e' il cloud con il suo contesto largo.
+        val second = secondary.generateAnswer(prompt)
+        if (second is AiTextResult.Success) return second
+
+        val firstReason = (first as AiTextResult.Failure).reason
+        val secondReason = (second as AiTextResult.Failure).reason
+        return AiTextResult.Failure("$firstReason\nRiserva: $secondReason")
+    }
+
     /** Riporta l'esito di entrambi: il pulsante di prova deve dire cosa funziona e cosa no. */
     override suspend fun testConfiguration(): String {
         val primaryResult = primary.testConfiguration()

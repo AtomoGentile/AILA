@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="AILA Assistant">
+  <title>AILA Assistant</title>
+  <defs>
+    <linearGradient id="ailaAssistant" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8B5CF6"/>
+      <stop offset="0.3333" stop-color="#3B82F6"/>
+      <stop offset="0.6667" stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#14B8A6"/>
+    </linearGradient>
+  </defs>
+  <g fill="url(#ailaAssistant)">
+    <rect x="31.0" y="128.0" width="76.8" height="256.0" rx="38.4"/>
+    <rect x="154.8" y="20.5" width="76.8" height="471.0" rx="38.4"/>
+    <rect x="278.6" y="169.0" width="76.8" height="174.1" rx="38.4"/>
+    <rect x="402.4" y="92.2" width="76.8" height="327.7" rx="38.4"/>
+  </g>
+</svg>

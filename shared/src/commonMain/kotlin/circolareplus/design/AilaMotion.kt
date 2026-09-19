@@ -8,6 +8,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
@@ -19,7 +20,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -145,4 +149,90 @@ fun Modifier.ailaPressable(
             indication = null,
             enabled = enabled
         ) { onClick() }
+}
+
+/**
+ * Feedback al tocco per i pulsanti: niente scala né traslazione (Simone li vuole fermi), solo una
+ * velatura "di vetro" che si accende dentro il pulsante mentre lo si preme — un velo colorato
+ * diffuso più un riflesso più chiaro in alto a sinistra, come un pannello smerigliato illuminato
+ * da un lato. Sparisce un po' più lentamente di quanto non compaia, altrimenti il rilascio sembra
+ * uno scatto.
+ *
+ * `tint` è il colore del vetro: bianco sui pulsanti pieni (gradiente, rosso), un colore del brand
+ * sui pulsanti chiari a contorno — su sfondo bianco un velo bianco non si vedrebbe.
+ */
+@Composable
+fun Modifier.ailaGlassPressable(
+    enabled: Boolean = true,
+    tint: Color = Color.White,
+    onClick: () -> Unit
+): Modifier {
+    val interactionSource = remember { MutableInteractionSource() }
+    return this
+        .clickable(
+            interactionSource = interactionSource,
+            indication = null,
+            enabled = enabled
+        ) { onClick() }
+        .ailaGlassOverlay(interactionSource, enabled = enabled, tint = tint)
+}
+
+/**
+ * Solo la velatura di vetro di [ailaGlassPressable], senza gestire il tocco: serve per i casi in
+ * cui l'area toccabile (es. tutta la colonna icona+etichetta di una quick action) è più grande
+ * del riquadro che deve effettivamente illuminarsi — si passa lo stesso `interactionSource` usato
+ * dal `clickable`/`ailaGlassPressable` esterno, così il vetro reagisce alla stessa pressione ma
+ * resta ritagliato sul riquadro giusto.
+ */
+@Composable
+fun Modifier.ailaGlassOverlay(
+    interactionSource: MutableInteractionSource,
+    enabled: Boolean = true,
+    tint: Color = Color.White
+): Modifier {
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    // Punto del tocco: il colore parte da lì, non dal centro — così sembra davvero "arrivare"
+    // da dove hai messo il dito invece di comparire uniforme su tutto il pulsante.
+    var pressPosition by remember { mutableStateOf(Offset.Zero) }
+    LaunchedEffect(interactionSource) {
+        interactionSource.interactions.collect { interaction ->
+            if (interaction is PressInteraction.Press) {
+                pressPosition = interaction.pressPosition
+            }
+        }
+    }
+
+    // Il raggio cresce finché resta premuto (il colore "riempie" il pulsante) e si ritira un po'
+    // più lentamente al rilascio, invece di un velo fisso che compare e basta.
+    val fillProgress by animateFloatAsState(
+        targetValue = if (isPressed && enabled) 1f else 0f,
+        animationSpec = tween(durationMillis = if (isPressed) 260 else 320),
+        label = "ailaGlassFill"
+    )
+
+    return this.drawWithContent {
+        drawContent()
+        if (fillProgress > 0f) {
+            // Raggio che a progress=1 copre l'angolo più lontano dal punto di tocco, quindi il
+            // pulsante risulta interamente colorato quando il riempimento è completo.
+            val dx = maxOf(pressPosition.x, size.width - pressPosition.x)
+            val dy = maxOf(pressPosition.y, size.height - pressPosition.y)
+            val maxRadius = kotlin.math.sqrt(dx * dx + dy * dy)
+            drawCircle(
+                color = tint.copy(alpha = 0.4f * fillProgress),
+                radius = (maxRadius * fillProgress).coerceAtLeast(1f),
+                center = pressPosition
+            )
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(tint.copy(alpha = 0.55f * fillProgress), Color.Transparent),
+                    center = pressPosition,
+                    radius = (maxRadius * fillProgress).coerceAtLeast(1f)
+                ),
+                radius = (maxRadius * fillProgress).coerceAtLeast(1f),
+                center = pressPosition
+            )
+        }
+    }
 }

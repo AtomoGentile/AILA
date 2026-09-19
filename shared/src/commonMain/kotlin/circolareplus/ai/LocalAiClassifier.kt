@@ -122,6 +122,81 @@ class LocalAiClassifier(
         }
     }
 
+    /**
+     * Implementazione di [AiClassifier.generateAnswer].
+     *
+     * Il prompt viene costruito sulla misura di **questo** modello
+     * ([LocalAiModel.maxPromptChars]) e non su quella del cloud: e' il punto di tutta
+     * l'interfaccia [AiPromptBuilder]: prima arrivava qui il prompt dimensionato per Gemini e la
+     * generazione moriva sul nascere con "Input token ids are too long".
+     *
+     * La stima in caratteri resta una stima, pero'. Se il motore la respinge lo stesso, invece
+     * di arrendersi si ricostruisce il prompt con meta' dello spazio e si riprova una volta
+     * sola: e' il caso di una domanda che casca su un contesto fitto di date e numeri, dove i
+     * token per carattere saltano fuori molto piu' alti della media. Un tentativo, non un ciclo:
+     * ogni giro e' un'altra generazione su CPU, e a quel punto tanto vale dire che non ce l'ha
+     * fatta.
+     */
+    override suspend fun generateAnswer(prompt: AiPromptBuilder): AiTextResult {
+        val unavailable = onDeviceAiUnavailableReason()
+        if (unavailable != null) return AiTextResult.Failure(unavailable)
+        val path = modelPath
+        if (model == null || path == null) {
+            return AiTextResult.Failure(
+                "Nessun modello di AI locale installato: scaricalo dalle Impostazioni."
+            )
+        }
+
+        val firstAttempt = runGeneration(prompt, model, path, model.maxPromptChars)
+        if (firstAttempt is AiTextResult.Success) return firstAttempt
+
+        val reason = (firstAttempt as AiTextResult.Failure).reason
+        if (!isPromptTooLong(reason)) return firstAttempt
+
+        return runGeneration(prompt, model, path, model.maxPromptChars / 2)
+    }
+
+    /** Una singola generazione con un prompt costruito su [maxPromptChars]. */
+    private suspend fun runGeneration(
+        prompt: AiPromptBuilder,
+        model: LocalAiModel,
+        modelPath: String,
+        maxPromptChars: Int
+    ): AiTextResult {
+        val built = prompt.build(maxPromptChars)
+        return try {
+            val raw = llm.generate(
+                modelPath = modelPath,
+                preferGpu = model.preferGpu,
+                maxOutputTokens = model.maxOutputTokens,
+                timeoutMillis = GENERATION_TIMEOUT_MILLIS,
+                stopWhen = { _ -> false },
+                systemPrompt = built.systemPrompt,
+                userPrompt = built.userPrompt
+            )
+            if (raw.isBlank()) {
+                AiTextResult.Failure("${model.displayName} non ha prodotto nessuna risposta.")
+            } else {
+                AiTextResult.Success(raw, "AI locale (${model.displayName})")
+            }
+        } catch (e: Exception) {
+            AiTextResult.Failure(
+                "${model.displayName} non e' riuscito a rispondere: " +
+                    HeuristicClassification.shortenReason(
+                        "${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}"
+                    )
+            )
+        }
+    }
+
+    /** Riconosce il fallimento "prompt troppo lungo" del motore nativo dal testo dell'errore. */
+    private fun isPromptTooLong(reason: String): Boolean {
+        val lower = reason.lowercase()
+        return lower.contains("token ids are too long") ||
+            lower.contains("maximum number of tokens") ||
+            lower.contains("exceeding")
+    }
+
     override suspend fun testConfiguration(): String {
         val unavailable = onDeviceAiUnavailableReason()
         if (unavailable != null) return unavailable

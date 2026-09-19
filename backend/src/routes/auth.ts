@@ -141,9 +141,11 @@ auth.post('/login', async (c) => {
 
   const user = await c.env.DB.prepare(
     `SELECT u.id, u.first_name, u.last_name, u.username, u.password_hash, u.role,
-            u.class_id, cl.label AS class_label
+            u.class_id, cl.label AS class_label,
+            sp.height_cm, sp.priority_pass, sp.notification_board_enabled
      FROM users u
      LEFT JOIN classes cl ON cl.id = u.class_id
+     LEFT JOIN student_profiles sp ON sp.user_id = u.id
      WHERE u.username = ?`
   ).bind(username.toLowerCase()).first<{
     id: string;
@@ -154,6 +156,9 @@ auth.post('/login', async (c) => {
     role: string;
     class_id: string | null;
     class_label: string | null;
+    height_cm: number | null;
+    priority_pass: number | null;
+    notification_board_enabled: number | null;
   }>();
 
   if (!user) {
@@ -186,6 +191,9 @@ auth.post('/login', async (c) => {
       role: user.role,
       classId,
       classLabel: user.class_label,
+      heightCm: user.height_cm,
+      priorityPass: Boolean(user.priority_pass),
+      notificationBoardEnabled: Boolean(user.notification_board_enabled ?? 1),
     },
   });
 });

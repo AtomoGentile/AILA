@@ -91,6 +91,17 @@ data class LocalAiModel(
      * riassunto piu' lungo restando ben sotto un timeout.
      */
     val maxOutputTokens: Int,
+    /**
+     * Tetto ai token che il modello accetta **in ingresso**.
+     *
+     * Il runtime non lo dichiara e non c'e' modo di chiederglielo prima di provare: si scopre
+     * sbattendoci contro, con `Input token ids are too long. Exceeding the maximum number of
+     * tokens allowed: 4471 >= 4096`. 4096 e' il valore con cui sono compilati i `.litertlm` del
+     * catalogo, ed e' il default proprio perche' e' quello che si e' visto sul campo: meglio un
+     * numero prudente valido per tutti che uno ottimistico per modello che fa fallire la
+     * generazione invece di accorciare il prompt.
+     */
+    val maxInputTokens: Int = 4_096,
     val description: String
 ) {
     /** "2,0 GB" / "963 MB" — per le etichette dei pulsanti di download. */
@@ -114,6 +125,21 @@ data class LocalAiModel(
      */
     fun fitsComfortablyIn(totalRamMb: Int): Boolean =
         totalRamMb <= 0 || totalRamMb >= recommendedRamMb
+
+    /**
+     * Quanti caratteri di prompt (istruzioni + richiesta) stanno in [maxInputTokens].
+     *
+     * Il rapporto e' 2 caratteri per token, molto piu' prudente dei 3,5-4 che si citano di
+     * solito per l'italiano. Due motivi. Il contenuto: il contesto dell'assistente e' fatto in
+     * buona parte di date, numeri di circolare e identificativi, e su quella roba i tokenizer
+     * vanno malissimo — "2026-09-22" da solo sono dieci caratteri e sette token. E l'asimmetria
+     * del costo dell'errore: stare stretti costa qualche circolare in meno nel contesto,
+     * sforare costa una generazione intera buttata (mezzo minuto di CPU) prima di accorgersene.
+     * Il ritentativo a meta' budget in [circolareplus.ai.LocalAiClassifier] resta come rete,
+     * non come strada normale.
+     */
+    val maxPromptChars: Int
+        get() = maxInputTokens * 2
 }
 
 /**

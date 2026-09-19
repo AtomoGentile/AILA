@@ -242,7 +242,7 @@ export async function syncSpaggiariCirculars(env: Env): Promise<void> {
       env,
       'Nuova Circolare',
       `Circolare n. ${circ.number}: ${circ.title}`,
-      { circular_number: String(circ.number) }
+      { action: 'new_circular', circular_number: String(circ.number) }
     );
 
     console.log(`[Spaggiari] Circolare ${circ.number} aggiunta e notificata`);

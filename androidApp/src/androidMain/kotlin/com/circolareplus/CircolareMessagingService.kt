@@ -30,11 +30,12 @@ class CircolareMessagingService : FirebaseMessagingService() {
 
         val title = message.notification?.title ?: message.data["title"] ?: "AILA"
         val body = message.notification?.body ?: message.data["body"] ?: ""
+        val category = circolareplus.domain.model.NotificationCategoryMapper.categoryFrom(message.data)
 
         // Storico locale: letto dalla campanella nell'app (si autoelimina dopo qualche giorno).
-        AppContainer.settings.addNotification(title, body)
+        AppContainer.settings.addNotification(title, body, category)
 
-        showSystemNotification(title, body)
+        showSystemNotification(title, body, category)
     }
 
     override fun onNewToken(token: String) {
@@ -44,7 +45,7 @@ class CircolareMessagingService : FirebaseMessagingService() {
         // qui non serve altro, un token rinnovato verrà ripreso al prossimo avvio.
     }
 
-    private fun showSystemNotification(title: String, body: String) {
+    private fun showSystemNotification(title: String, body: String, category: String) {
         val manager = getSystemService(NotificationManager::class.java) ?: return
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -58,22 +59,29 @@ class CircolareMessagingService : FirebaseMessagingService() {
             manager.createNotificationChannel(channel)
         }
 
-        val openAppIntent = packageManager.getLaunchIntentForPackage(packageName)
-        val pendingIntent = openAppIntent?.let {
-            PendingIntent.getActivity(
-                this,
-                0,
-                it,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
+        // Intent esplicito verso MainActivity (non più getLaunchIntentForPackage): serve a
+        // poter allegare la categoria della notifica come extra, così MainActivity può
+        // impostare PendingDeepLink e far navigare l'utente alla schermata giusta, esattamente
+        // come già fa il tocco sulla campanella in-app.
+        val openAppIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            if (category.isNotBlank()) {
+                putExtra("notification_category", category)
+            }
         }
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            openAppIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(body)
             .setAutoCancel(true)
-            .apply { if (pendingIntent != null) setContentIntent(pendingIntent) }
+            .setContentIntent(pendingIntent)
             .build()
 
         manager.notify(currentTimeMillisAsNotificationId(), notification)
