@@ -51,10 +51,17 @@ function parseServiceAccount(env: Env): ServiceAccount | null {
   if (!env.FCM_SERVICE_ACCOUNT_KEY) return null;
   try {
     const parsed = JSON.parse(env.FCM_SERVICE_ACCOUNT_KEY) as ServiceAccount;
-    if (!parsed.client_email || !parsed.private_key) return null;
+    if (!parsed.client_email || !parsed.private_key) {
+      console.error(
+        `[FCM] FCM_SERVICE_ACCOUNT_KEY è un JSON valido ma incompleto (client_email presente: ${!!parsed.client_email}, private_key presente: ${!!parsed.private_key}) — assicurati che sia il file JSON completo scaricato da Firebase Console → Account di servizio`
+      );
+      return null;
+    }
     return parsed;
-  } catch {
-    console.error('[FCM] FCM_SERVICE_ACCOUNT_KEY non è un JSON valido');
+  } catch (e) {
+    console.error(
+      `[FCM] FCM_SERVICE_ACCOUNT_KEY non è un JSON valido (lunghezza: ${env.FCM_SERVICE_ACCOUNT_KEY.length}): ${e instanceof Error ? e.message : e}`
+    );
     return null;
   }
 }
@@ -160,7 +167,11 @@ async function sendV1(
 async function resolveCredentials(env: Env): Promise<{ accessToken: string; projectId: string } | null> {
   const sa = parseServiceAccount(env);
   if (!sa) {
-    console.log('[FCM] FCM_SERVICE_ACCOUNT_KEY non configurata: notifica saltata (Firebase non ancora impostato)');
+    if (!env.FCM_SERVICE_ACCOUNT_KEY) {
+      console.log('[FCM] FCM_SERVICE_ACCOUNT_KEY non configurata: notifica saltata (Firebase non ancora impostato)');
+    } else {
+      console.log('[FCM] FCM_SERVICE_ACCOUNT_KEY presente ma non valida: notifica saltata (vedi errore sopra)');
+    }
     return null;
   }
 
@@ -181,8 +192,13 @@ async function resolveCredentials(env: Env): Promise<{ accessToken: string; proj
 // ---------------------------------------------------------------------------
 
 /**
- * Notify the entire class via FCM topic "class".
- * Falls back to per-token delivery if the topic send fails.
+ * Notify the entire class (or, without a classId, every registered device).
+ *
+ * Nota: si inviava un unico messaggio al topic FCM "class", ma nessun client si iscrive mai a
+ * quel topic (né Android né iOS chiamano subscribeToTopic da nessuna parte) — quindi il topic
+ * non ha mai avuto iscritti. FCM risponde comunque "ok" a un invio a un topic senza iscritti,
+ * quindi l'errore passava inosservato: le circolari (uniche chiamanti senza classId) non
+ * generavano mai una notifica push reale. Si manda direttamente token per token.
  */
 export async function notifyClass(
   env: Env,
@@ -201,9 +217,6 @@ export async function notifyClass(
   if (!creds) return;
 
   if (!classId) {
-    const topicOk = await sendV1(env, creds.accessToken, creds.projectId, { topic: 'class' }, message);
-    if (topicOk) return;
-
     const all = await env.DB.prepare('SELECT token FROM fcm_tokens').all<{ token: string }>();
     await Promise.allSettled(
       all.results.map((row) => sendV1(env, creds.accessToken, creds.projectId, { token: row.token }, message))
