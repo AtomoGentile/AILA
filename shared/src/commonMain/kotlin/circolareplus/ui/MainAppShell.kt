@@ -531,7 +531,20 @@ fun MainAppShell(
     // una decina di secondi fra chiamata al modello ed eventuale lettura di un PDF, e chi torna
     // indietro un attimo per controllare una circolare non deve perderla ne' doverla rifare.
     var isInAssistantScreen by rememberSaveable { mutableStateOf(false) }
-    val assistantMessages = remember { mutableStateListOf<AssistantMessage>() }
+    // La conversazione in corso ha un id suo, cosi' ogni salvataggio aggiorna la stessa voce
+    // dello storico invece di aggiungerne una a ogni domanda.
+    var assistantConversationId by rememberSaveable { mutableStateOf("c${currentTimeMillis()}") }
+    val assistantMessages = remember {
+        mutableStateListOf<AssistantMessage>().also { list ->
+            // Quando il sistema uccide il processo, l'id della conversazione torna (e'
+            // `rememberSaveable`) ma i messaggi no: si ripescano dall'archivio locale. Senza
+            // questo, la prima domanda dopo il ripristino salverebbe la conversazione con quel
+            // vecchio id tenendo solo se stessa, cancellando il resto del filo.
+            AppContainer.settings.listAssistantConversations()
+                .firstOrNull { it.id == assistantConversationId }
+                ?.let { list.addAll(it.messages) }
+        }
+    }
     var isAssistantThinking by remember { mutableStateOf(false) }
     // I dati che non sono gia' in memoria (sondaggi, mappa, storico, valutazioni) si caricano
     // una volta sola per conversazione: sono le stesse rotte che le altre schermate chiamano
@@ -539,9 +552,6 @@ fun MainAppShell(
     // durante una chat.
     var assistantDynamic by remember { mutableStateOf<AssistantDynamicKnowledge?>(null) }
     var assistantMessageCounter by remember { mutableStateOf(0) }
-    // La conversazione in corso ha un id suo, cosi' ogni salvataggio aggiorna la stessa voce
-    // dello storico invece di aggiungerne una a ogni domanda.
-    var assistantConversationId by rememberSaveable { mutableStateOf("c${currentTimeMillis()}") }
     var assistantConversations by remember {
         mutableStateOf(AppContainer.settings.listAssistantConversations())
     }
