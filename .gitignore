@@ -55,6 +55,7 @@ shared/build/
 google-services.json
 GoogleService-Info.plist
 firebase.json
+*firebase-adminsdk*.json
 
 # === Node & Package Managers ===
 node_modules/
