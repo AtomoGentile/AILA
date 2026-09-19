@@ -1,6 +1,6 @@
-# Circolare+ — Guida Operativa di Sviluppo e Deployment
+# AILA — Guida Operativa di Sviluppo e Deployment
 
-Questo repository contiene l'implementazione completa dell'ecosistema **Circolare+** per la gestione della classe scolastica (Target: Android, iOS, iPadOS e Cloudflare Serverless).
+Questo repository contiene l'implementazione completa dell'ecosistema **AILA** per la gestione della classe scolastica (Target: Android, iOS, iPadOS e Cloudflare Serverless).
 
 ---
 
