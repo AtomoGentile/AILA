@@ -39,7 +39,7 @@ val apiJson: Json = Json {
 }
 
 /**
- * Wrapper condiviso KMP attorno a Ktor per parlare con il Worker Cloudflare di Circolare+.
+ * Wrapper condiviso KMP attorno a Ktor per parlare con il Worker Cloudflare di AILA.
  * Aggiunge automaticamente l'header Authorization con il token JWT salvato localmente
  * (impostato da [circolareplus.data.repository.AuthRepository] dopo login/registrazione).
  */

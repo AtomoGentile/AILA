@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * Icone vettoriali personalizzate per Circolare+, fedeli al concept grafico:
+ * Icone vettoriali personalizzate per AILA, fedeli al concept grafico:
  * linee minimali, outline raffinato e proporzioni esatte.
  */
 object AppIcons {

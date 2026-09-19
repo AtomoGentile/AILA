@@ -1,4 +1,4 @@
-# iOS App Project (Circolare+)
+# iOS App Project (AILA)
 
 Questo progetto Xcode è **generato da `project.yml`** tramite [XcodeGen](https://github.com/yonaskolb/XcodeGen).
 

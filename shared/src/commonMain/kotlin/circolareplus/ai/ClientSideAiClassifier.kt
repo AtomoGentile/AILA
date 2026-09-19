@@ -54,7 +54,7 @@ private data class GeminiRequest(
  * Usa l'API Key personale dell'utente (Google AI Studio — https://aistudio.google.com/apikey),
  * scelta perché offre un piano gratuito senza carta di credito richiesta, a differenza di
  * OpenAI/Anthropic. La chiamata parte DAL DISPOSITIVO dello studente con la SUA chiave: nessun
- * testo della circolare o riassunto passa mai dal server di Circolare+ (privacy by design,
+ * testo della circolare o riassunto passa mai dal server di AILA (privacy by design,
  * vedi Specifica Tecnica Master v3.0 sez. 7 e Riepilogo Moduli v1.2 sez. 1.3).
  *
  * Se la chiave non è impostata, o la chiamata fallisce (rete assente, quota esaurita, chiave

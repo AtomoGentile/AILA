@@ -1,9 +1,9 @@
 // =============================================================================
-// CIRCOLARE+ — Firebase Cloud Messaging Service (HTTP v1 API)
+// AILA — Firebase Cloud Messaging Service (HTTP v1 API)
 //
 // Google ha dismesso la "Legacy HTTP API" di FCM (endpoint fcm.googleapis.com/fcm/send,
 // autenticata con una singola "server key") il 20 giugno 2024. Qualsiasi progetto Firebase
-// creato dopo quella data — incluso quello che Simone creerà per Circolare+ — può inviare
+// creato dopo quella data — incluso quello che Simone creerà per AILA — può inviare
 // notifiche SOLO tramite la nuova HTTP v1 API, autenticata con un Service Account (OAuth2),
 // non più con una stringa segreta statica. Questo file implementa quel flusso da zero con
 // WebCrypto nativo (nessuna dipendenza esterna, come per auth.ts).
