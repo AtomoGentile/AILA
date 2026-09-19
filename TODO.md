@@ -3,6 +3,44 @@
 Elenco vivo dei problemi aperti e del lavoro ancora mancante, aggiornato mano a mano.
 Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esistente.
 
+## 20/9: l'assistente si chiama AILA Assistant, ha il suo logo e ricorda le conversazioni
+
+**Nome.** L'assistente si chiamava "AILA AI" nel parlato e "Chiedi ad AILA" a schermo. Il nome
+giusto e' **AILA Assistant**, ed e' ora quello in tutti i testi visibili: titolo della chat e del
+benvenuto, card nella Ricerca, foglio "Nuovo evento", badge sulle circolari e sugli eventi,
+onboarding, sezione della chiave in Impostazioni. Anche i system prompt si presentano con quel
+nome, cosi' se gli si chiede "chi sei" non risponde piu' con qualcosa di diverso da quello che
+c'e' scritto sopra la chat. `AilaAiBadge` e' diventato `AilaAssistantBadge`.
+
+Restano "AI locale", "Google AI" e "chiave AI": quelli nominano il motore, non l'assistente.
+
+**Logo.** L'assistente ha un marchio suo, distinto dalla "A" dell'app: l'onda vocale a quattro
+barre del foglio di brand. E' ridisegnata a vettori in `AilaAssistantMark` (`AilaLogo.kt`) con la
+stessa logica di `AilaGlyph` — geometria e non immagine, quindi nitida a ogni misura e con il
+fondo trasparente. Ogni barra e' una linea con `StrokeCap.Round`, che da' la pillola del logo
+senza passare da `drawRoundRect` (che su Android in KMP crasha). Variante a colori di default
+(`AilaAssistantBrush`: #8B5CF6 → #3B82F6 → #14B8A6) e monocromatica passando un `SolidColor`, come
+previsto dalle linee guida. La vecchia "A con avatar" (`AilaAssistantGlyph`) e' stata rimossa: con
+due marchi identici non si capiva a colpo d'occhio cosa fosse lavoro dell'assistente. In
+`design/logo/` ci sono gli SVG (colore e mono) per gli export fuori dall'app, che Compose
+Multiplatform non sa caricare.
+
+**Cronologia.** Prima la conversazione stava solo in `remember`: chiusa l'app, spariva. Ora ogni
+messaggio archivia la conversazione in corso, e la barra della chat ha "Storico" accanto a "Nuova
+chat" — un foglio con titolo (la prima domanda), quando, quanti messaggi e il cestino.
+
+Salvata **sul dispositivo**, non su D1, e non per i costi: il piano free di Cloudflare sarebbe
+vuoto con 25 persone. Il punto e' che una trascrizione della chat contiene le analisi personali
+delle circolari, le scadenze di chi ha chiesto e i dati della mappa posti, cioe' esattamente
+quello che il README promette non esca dal telefono. Conseguenze accettate, scritte qui perche'
+non siano una sorpresa: non c'e' sincronizzazione fra dispositivi, la cronologia si perde a
+reinstallazione e il logout la cancella (`LocalSettingsManager.clear()` svuota tutto).
+
+Tetti: 20 conversazioni da 40 messaggi. Sotto c'e' SharedPreferences / NSUserDefaults, che
+vengono caricati interi in memoria all'avvio — non e' il posto dove far crescere trascrizioni
+senza limite. Se in futuro serve il multi-dispositivo si aggiunge una sync opzionale sopra al
+locale, senza buttare niente.
+
 ## 8/9 (quarta parte): aggiornata la build e sostituito il motore con LiteRT-LM
 
 **Perche'.** MediaPipe `tasks-genai` legge solo modelli con tokenizer SentencePiece — in pratica la
