@@ -41,19 +41,22 @@ class SeatMapRepository(private val api: ApiClient? = null) {
         return response.seatMap?.let { apiJson.decodeFromJsonElement<List<DeskAssignment>>(it.layout) }
     }
 
-    /** Storico regressivo (max 4 mappe) usato da [SeatMapOptimizer.calculateMemoryPenalty]. */
+    /** Storico regressivo (max 4 mappe) usato da [SeatMapOptimizer.calculateMemoryPenalty]. Un
+     * banco da trio genera tutte e tre le coppie possibili (A-B, A-C, B-C): sono tre fatti
+     * storici distinti ("erano insieme"), coerenti con come SeatMapOptimizer li ricontrolla uno
+     * per uno per i banchi futuri — vedi il commento su SeatMapOptimizer.pairRepeatPenalty. */
     suspend fun getHistoryForOptimizer(): List<SeatMapHistoryRecord> {
         val response: SeatMapHistoryResponseDto = requireApi().get("/api/seat-map/history")
         return response.history.mapNotNull { entry ->
             val mapIndex = entry.mapIndex ?: return@mapNotNull null
             val assignments = apiJson.decodeFromJsonElement<List<DeskAssignment>>(entry.layout)
-            val pairs = assignments.mapNotNull { a ->
-                if (a.studentAId != null && a.studentBId != null) a.studentAId to a.studentBId else null
+            val pairs = assignments.flatMap { a ->
+                val occupants = listOfNotNull(a.studentAId, a.studentBId, a.studentCId)
+                occupants.indices.flatMap { i -> ((i + 1) until occupants.size).map { j -> occupants[i] to occupants[j] } }
             }.toSet()
             val deskPositions = buildMap {
                 assignments.forEach { a ->
-                    a.studentAId?.let { put(it, a.row to a.column) }
-                    a.studentBId?.let { put(it, a.row to a.column) }
+                    listOfNotNull(a.studentAId, a.studentBId, a.studentCId).forEach { put(it, a.row to a.column) }
                 }
             }
             SeatMapHistoryRecord(mapIndex = mapIndex, pairs = pairs, deskAssignments = deskPositions)
@@ -81,7 +84,9 @@ class SeatMapRepository(private val api: ApiClient? = null) {
         ratings: Map<String, RepresentativeRating>,
         socialPreferences: Map<Pair<String, String>, SocialPreferenceScore>,
         history: List<SeatMapHistoryRecord>,
-        weights: OptimizerWeights = OptimizerWeights()
+        weights: OptimizerWeights = OptimizerWeights(),
+        // 2 = banchi da coppia, 3 = banchi da trio (stesso algoritmo, vedi SeatMapOptimizer.optimize).
+        seatsPerDesk: Int = SeatMapOptimizer.SEATS_PER_DESK_PAIR
     ): List<SeatMapProposal> {
         val isSmallClass = students.size < 22
         val baseSeed = kotlin.random.Random.nextLong()
@@ -97,7 +102,8 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                 history = history,
                 weights = weights,
                 isSmallClass = isSmallClass,
-                seed = seed
+                seed = seed,
+                seatsPerDesk = seatsPerDesk
             )
             val breakdown = SeatMapOptimizer.scoreLayout(
                 assignments = assignments,

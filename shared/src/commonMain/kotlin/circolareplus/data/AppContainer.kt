@@ -1,6 +1,8 @@
 package circolareplus.data
 
 import circolareplus.ai.AiClassifier
+import circolareplus.ai.assistant.AilaAssistant
+import circolareplus.ai.assistant.AssistantKnowledgeLoader
 import circolareplus.ai.AiProvider
 import circolareplus.ai.ChainedAiClassifier
 import circolareplus.ai.ClientSideAiClassifier
@@ -60,6 +62,33 @@ object AppContainer {
      * una circolare e l'altra invece di essere ricostruito a ogni classificazione.
      */
     val localLlm: LocalLlm by lazy { LocalLlm() }
+
+    /**
+     * Raccoglie per l'assistente globale i dati che non stanno gia' in memoria nella schermata
+     * principale (sondaggi, mappa posti, storico, valutazioni), filtrati per ruolo.
+     */
+    val assistantKnowledgeLoader: AssistantKnowledgeLoader by lazy {
+        AssistantKnowledgeLoader(
+            pollsRepository = pollsRepository,
+            seatMapRepository = seatMapRepository,
+            ratingsRepository = ratingsRepository,
+            preferencesRepository = preferencesRepository
+        )
+    }
+
+    /**
+     * L'assistente conversazionale (il pulsante AI della Ricerca).
+     *
+     * Costruito nuovo a ogni chat, e con una *factory* di classificatori invece che con un
+     * classificatore gia' pronto, per lo stesso motivo per cui [newAiClassifier] non e' lazy:
+     * provider, chiave e modello locale vanno riletti dalle impostazioni a ogni domanda, cosi'
+     * cambiarli durante una conversazione ha effetto dal messaggio successivo.
+     */
+    fun newAssistant(): AilaAssistant = AilaAssistant(
+        classifierFactory = { newAiClassifier() },
+        circularsRepository = circularsRepository,
+        pdfTextExtractor = pdfTextExtractor
+    )
 
     /**
      * Il modello di AI locale scelto dall'utente, oppure il consigliato per la RAM del telefono

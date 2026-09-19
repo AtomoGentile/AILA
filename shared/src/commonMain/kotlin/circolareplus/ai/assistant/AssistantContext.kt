@@ -1,0 +1,604 @@
+package circolareplus.ai.assistant
+
+import circolareplus.domain.model.Circular
+import circolareplus.domain.model.CircularRelevanceBadge
+import circolareplus.domain.model.UserRole
+import circolareplus.util.weekdayName
+
+/**
+ * Costruisce il blocco di CONTESTO che viene messo davanti alla domanda dell'utente.
+ *
+ * Il principio e' uno solo: **il modello puo' rispondere soltanto con quello che sta qui dentro**.
+ * Non ha accesso a niente altro, non naviga, non chiama il server. Quindi questo file decide, di
+ * fatto, a cosa l'assistente sa rispondere.
+ *
+ * Il compromesso di base: **l'indice di tutto, il dettaglio di quello che c'entra**. L'elenco
+ * numero + titolo + data di *tutte* le circolari costa una sessantina di caratteri l'una e serve
+ * al modello per sapere cosa esiste (e per dire "non c'e' nessuna circolare su questo" con
+ * cognizione di causa invece che per assenza di dati); il riassunto AI completo lo ricevono solo
+ * le circolari che hanno a che fare con la domanda.
+ *
+ * Quel compromesso pero' non e' fisso: dipende da **quanto spazio ha il motore che legge**. Fra
+ * Gemini e un modello da 4 miliardi di parametri sul telefono ci sono due ordini di grandezza di
+ * finestra di contesto, e un contesto unico o spreca la prima o fa fallire il secondo (vedi
+ * [circolareplus.ai.AiPromptBuilder]). Per questo [render] prende un tetto in caratteri e da li'
+ * ricava tutto il resto: quante circolari dettagliare, se l'indice completo ci sta, se lo storico
+ * delle mappe vale il suo costo.
+ */
+internal object AssistantContext {
+
+    /**
+     * Sotto questa soglia il contesto passa in "modalita' stretta": niente indice completo delle
+     * circolari, niente storico mappe, niente eventi passati. E' tarata sul caso reale che la
+     * rende necessaria — un modello on-device da 4096 token in ingresso, cioe' circa novemila
+     * caratteri fra istruzioni e richiesta.
+     */
+    private const val TIGHT_BUDGET_THRESHOLD = 14_000
+
+    /**
+     * Le misure di ogni sezione, ricavate dallo spazio disponibile.
+     *
+     * Sono scelte esplicite e non una troncatura finale perche' tagliare in fondo significa
+     * tagliare *sempre le stesse sezioni* — quelle che stanno in coda — indipendentemente da
+     * quanto servano. Meglio decidere in anticipo cosa sacrificare: in modalita' stretta sparisce
+     * quello che serve di rado (lo storico delle mappe, le valutazioni, il passato del
+     * calendario) e resta intero quello che serve quasi sempre (le scadenze in arrivo e le
+     * circolari attinenti).
+     */
+    private class Budget(val maxChars: Int) {
+        val tight = maxChars < TIGHT_BUDGET_THRESHOLD
+
+        val detailedCirculars = if (tight) 3 else 12
+        val indexEntries = if (tight) 15 else 200
+        val summaryChars = if (tight) 450 else 1_400
+        val futureEvents = if (tight) 15 else 60
+        val pastEvents = if (tight) 0 else 40
+        val proposals = if (tight) 5 else 25
+        val proposalDescriptionChars = if (tight) 140 else 400
+        val includeSeatMapHistory = !tight
+        val includeRatings = !tight
+        val includePolls = true
+        val deepTextChars = if (tight) 2_500 else 9_000
+        val classmatesInHeader = !tight
+    }
+
+    /**
+     * Il contesto completo per una domanda, entro [maxChars] caratteri.
+     *
+     * [deepTexts] contiene il testo estratto dai PDF delle circolari che il modello ha chiesto
+     * esplicitamente di leggere al giro precedente (vedi [AilaAssistant]): e' vuoto alla prima
+     * chiamata, perche' scaricare PDF "per sicurezza" a ogni domanda vorrebbe dire megabyte di
+     * traffico per una domanda sul calendario.
+     */
+    fun render(
+        knowledge: AssistantKnowledge,
+        question: String,
+        deepTexts: Map<Int, String> = emptyMap(),
+        maxChars: Int = 28_000
+    ): String {
+        val budget = Budget(maxChars)
+        val terms = tokenize(question)
+        val explicitNumbers = circularNumbersIn(question)
+        val builder = StringBuilder()
+
+        builder.appendSection("OGGI") {
+            appendLine("${knowledge.todayIso} (${weekdayName(knowledge.todayIso)})")
+        }
+
+        builder.appendSection("CHI TI STA FACENDO LA DOMANDA") {
+            val user = knowledge.user
+            if (user == null) {
+                appendLine("Utente non identificato.")
+            } else {
+                appendLine("Nome: ${user.firstName} ${user.lastName}")
+                appendLine(
+                    "Ruolo: " + when (user.role) {
+                        UserRole.REPRESENTATIVE -> "Rappresentante di classe"
+                        UserRole.STUDENT -> "Studente"
+                        UserRole.SECURITY_GUARD -> "Personale di vigilanza"
+                    }
+                )
+            }
+            knowledge.profile?.let { profile ->
+                if (profile.className.isNotBlank()) appendLine("Classe: ${profile.className}")
+                if (profile.academicYear.isNotBlank()) appendLine("Anno scolastico: ${profile.academicYear}")
+                appendLine("Priority Pass: ${if (profile.priorityPass) "si" else "no"}")
+            }
+            if (budget.classmatesInHeader && knowledge.classmates.isNotEmpty()) {
+                appendLine(
+                    "Compagni di classe (${knowledge.classmates.size}): " +
+                        knowledge.classmates.joinToString(", ") { "${it.firstName} ${it.lastName}" }
+                )
+            }
+        }
+
+        renderCirculars(builder, knowledge, terms, explicitNumbers, deepTexts, budget)
+        renderCalendar(builder, knowledge, terms, budget)
+        renderBoard(builder, knowledge, terms, budget)
+        if (budget.includePolls) renderPolls(builder, knowledge)
+        renderSeatMap(builder, knowledge, budget)
+        renderClassData(builder, knowledge, budget)
+
+        if (knowledge.dynamic.unavailable.isNotEmpty()) {
+            builder.appendSection("SEZIONI CHE NON SI SONO CARICATE") {
+                appendLine(
+                    "Su questi argomenti NON hai i dati: non dire che non esistono, di' che non " +
+                        "sei riuscito a leggerli."
+                )
+                knowledge.dynamic.unavailable.forEach { appendLine("- $it") }
+            }
+        }
+
+        val text = builder.toString()
+        return if (text.length <= maxChars) {
+            text
+        } else {
+            // Rete di sicurezza, non il meccanismo principale: con le misure di [Budget] si
+            // arriva qui di rado. Il taglio e' dichiarato invece che silenzioso, perche' un
+            // modello che sa di avere un contesto troncato lo dice ("negli ultimi mesi non trovo
+            // nulla") invece di affermare che una cosa non esiste perche' e' finita oltre il
+            // taglio.
+            val notice = "\n\n[CONTESTO TRONCATO: oltre questo punto i dati non ti sono stati " +
+                "passati. Se la risposta dipendesse da li', dillo.]"
+            text.take((maxChars - notice.length).coerceAtLeast(0)) + notice
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Circolari
+    // -----------------------------------------------------------------------
+
+    private fun renderCirculars(
+        builder: StringBuilder,
+        knowledge: AssistantKnowledge,
+        terms: List<String>,
+        explicitNumbers: Set<Int>,
+        deepTexts: Map<Int, String>,
+        budget: Budget
+    ) {
+        if (knowledge.circulars.isEmpty()) {
+            builder.appendSection("CIRCOLARI") { appendLine("Nessuna circolare scaricata.") }
+            return
+        }
+
+        val indexed = knowledge.circulars.take(budget.indexEntries)
+        val title = if (indexed.size < knowledge.circulars.size) {
+            "INDICE DELLE ULTIME ${indexed.size} CIRCOLARI (di ${knowledge.circulars.size} in tutto)"
+        } else {
+            "INDICE DI TUTTE LE CIRCOLARI (${indexed.size})"
+        }
+        builder.appendSection(title) {
+            appendLine("Formato: numero | data di pubblicazione | titolo")
+            indexed.forEach { appendLine("${it.number} | ${it.publishDate} | ${it.title}") }
+        }
+
+        val ranked = knowledge.circulars
+            .sortedByDescending { circular -> scoreCircular(circular, knowledge, terms, explicitNumbers) }
+        val detailed = ranked.take(budget.detailedCirculars)
+
+        builder.appendSection("CIRCOLARI PIU' ATTINENTI ALLA DOMANDA") {
+            appendLine(
+                "Solo di queste hai il riassunto. Se la domanda riguarda una circolare " +
+                    "dell'indice che qui non compare, chiedine il testo con needsCircularText."
+            )
+            detailed.forEach { circular ->
+                appendLine("")
+                appendLine("--- Circolare n. ${circular.number} (${circular.publishDate}) ---")
+                appendLine("Titolo: ${circular.title}")
+                val analysis = knowledge.classifications[circular.number]
+                if (analysis == null) {
+                    appendLine("Analisi AI: non ancora prodotta per questa circolare.")
+                } else {
+                    appendLine(
+                        "Pertinenza per te: " + when (analysis.badge) {
+                            CircularRelevanceBadge.RELEVANT -> "ti riguarda"
+                            CircularRelevanceBadge.POTENTIAL -> "potrebbe interessarti"
+                            CircularRelevanceBadge.NOT_RELEVANT -> "non sembra riguardarti"
+                        }
+                    )
+                    // Un riassunto di ripiego e' testo scritto da un'euristica a parole chiave,
+                    // non dal documento: se il modello lo trattasse come contenuto della
+                    // circolare ne ricaverebbe affermazioni che il PDF non contiene.
+                    if (analysis.isFallback) {
+                        appendLine(
+                            "ATTENZIONE: questo NON e' un riassunto del documento, e' un " +
+                                "messaggio di errore dell'analisi. Non ricavarne contenuti."
+                        )
+                    }
+                    appendLine("Riassunto: ${analysis.personalSummary.take(budget.summaryChars)}")
+                    if (analysis.detectedDeadlines.isNotEmpty()) {
+                        appendLine("Scadenze rilevate:")
+                        analysis.detectedDeadlines.forEach { deadline ->
+                            appendLine(
+                                "  - ${deadline.title} | ${deadline.dueDate}" +
+                                    (deadline.time?.let { " $it" } ?: "") +
+                                    " | ${deadline.category}"
+                            )
+                        }
+                    }
+                }
+                if (circular.attachments.isNotEmpty()) {
+                    appendLine("Allegati: ${circular.attachments.joinToString(", ") { it.label }}")
+                }
+            }
+        }
+
+        if (deepTexts.isNotEmpty()) {
+            builder.appendSection("TESTO INTEGRALE DELLE CIRCOLARI CHE HAI CHIESTO") {
+                deepTexts.forEach { (number, text) ->
+                    val circularTitle = knowledge.circulars.firstOrNull { it.number == number }?.title ?: ""
+                    appendLine("")
+                    appendLine("--- Testo della circolare n. $number: $circularTitle ---")
+                    appendLine(text.take(budget.deepTextChars))
+                }
+            }
+        }
+    }
+
+    /**
+     * Quanto una circolare c'entra con la domanda.
+     *
+     * Il numero citato esplicitamente vince su tutto: "cosa dice la 214" deve portare la 214 in
+     * cima anche se il suo titolo non contiene nessuna delle parole della domanda. Sotto, le
+     * parole pesano di piu' nel titolo che nel riassunto, perche' il titolo e' scritto dalla
+     * scuola e il riassunto da un modello. A parita' di punteggio vince la piu' recente: e'
+     * quasi sempre quella di cui si sta parlando.
+     */
+    private fun scoreCircular(
+        circular: Circular,
+        knowledge: AssistantKnowledge,
+        terms: List<String>,
+        explicitNumbers: Set<Int>
+    ): Double {
+        var score = 0.0
+        if (circular.number in explicitNumbers) score += 1_000.0
+
+        val title = normalize(circular.title)
+        val summary = normalize(knowledge.classifications[circular.number]?.personalSummary ?: "")
+        terms.forEach { term ->
+            if (title.contains(term)) score += 6.0
+            if (summary.contains(term)) score += 2.5
+        }
+        // Spareggio sulla recenza, sempre minore del peso di una singola parola trovata.
+        score += circular.number.toDouble() / 100_000.0
+        return score
+    }
+
+    // -----------------------------------------------------------------------
+    // Calendario
+    // -----------------------------------------------------------------------
+
+    private fun renderCalendar(
+        builder: StringBuilder,
+        knowledge: AssistantKnowledge,
+        terms: List<String>,
+        budget: Budget
+    ) {
+        if (knowledge.calendarEvents.isEmpty()) {
+            builder.appendSection("CALENDARIO") { appendLine("Nessun evento in calendario.") }
+            return
+        }
+
+        val (future, past) = knowledge.calendarEvents
+            .sortedBy { it.date }
+            .partition { it.date >= knowledge.todayIso }
+
+        builder.appendSection("CALENDARIO — EVENTI DA OGGI IN POI") {
+            appendLine("Formato: data | ora | categoria | titolo | destinatari | note")
+            if (future.isEmpty()) appendLine("Nessun evento futuro.")
+            future.take(budget.futureEvents).forEach { appendLine(formatEvent(it, knowledge)) }
+        }
+
+        if (budget.pastEvents == 0) return
+
+        // Il passato serve alle domande del tipo "quando abbiamo fatto la gita?", ma tenerlo
+        // tutto costerebbe quanto il futuro senza servire quasi mai: si tengono gli ultimi
+        // quindici e quelli che contengono una parola della domanda.
+        val relevantPast = (past.takeLast(15) + past.filter { event ->
+            val title = normalize(event.title)
+            terms.any { title.contains(it) }
+        }).distinctBy { it.id }.sortedBy { it.date }
+
+        if (relevantPast.isNotEmpty()) {
+            builder.appendSection("CALENDARIO — EVENTI GIA' PASSATI (parziale)") {
+                relevantPast.take(budget.pastEvents).forEach { appendLine(formatEvent(it, knowledge)) }
+            }
+        }
+    }
+
+    private fun formatEvent(
+        event: circolareplus.domain.model.CalendarEvent,
+        knowledge: AssistantKnowledge
+    ): String {
+        val visible = event.visibleToUserIds
+        val recipients = when {
+            event.isForAll -> "tutta la classe"
+            visible.isNullOrEmpty() -> "tutta la classe"
+            else -> visible
+                .mapNotNull { knowledge.nameOf(it) }
+                .ifEmpty { listOf("alcuni studenti") }
+                .joinToString("/")
+        }
+        return buildString {
+            append(event.date)
+            append(" | ").append(event.time ?: "-")
+            append(" | ").append(event.category.name)
+            append(" | ").append(event.title)
+            append(" | ").append(recipients)
+            if (event.isAiGenerated) append(" | creato dall'AI da una circolare")
+            event.notes?.takeIf { it.isNotBlank() }?.let { append(" | note: ").append(it.take(200)) }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Bacheca
+    // -----------------------------------------------------------------------
+
+    private fun renderBoard(
+        builder: StringBuilder,
+        knowledge: AssistantKnowledge,
+        terms: List<String>,
+        budget: Budget
+    ) {
+        if (knowledge.proposals.isEmpty()) {
+            builder.appendSection("BACHECA") { appendLine("Nessuna proposta in bacheca.") }
+            return
+        }
+
+        val ranked = knowledge.proposals.sortedByDescending { proposal ->
+            val haystack = normalize(proposal.title + " " + proposal.description)
+            terms.count { haystack.contains(it) } * 10.0 + (proposal.upvotes - proposal.downvotes)
+        }
+
+        builder.appendSection("BACHECA — PROPOSTE DELLA CLASSE (${knowledge.proposals.size})") {
+            ranked.take(budget.proposals).forEach { proposal ->
+                appendLine("")
+                appendLine(
+                    "[${proposal.status.name}] ${proposal.title} — di ${proposal.authorName}" +
+                        " — ${proposal.upvotes} a favore / ${proposal.downvotes} contrari" +
+                        " — ${proposal.commentsCount} commenti — ${proposal.createdAt}" +
+                        (if (proposal.isEdited) " — modificata dopo la pubblicazione" else "")
+                )
+                appendLine("Categoria: ${proposal.category}")
+                appendLine(proposal.description.take(budget.proposalDescriptionChars))
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Sondaggi
+    // -----------------------------------------------------------------------
+
+    private fun renderPolls(builder: StringBuilder, knowledge: AssistantKnowledge) {
+        val dynamic = knowledge.dynamic
+        if (dynamic.polls.isEmpty() && dynamic.currentPoll == null) {
+            builder.appendSection("SONDAGGI") { appendLine("Nessun sondaggio.") }
+            return
+        }
+
+        builder.appendSection("SONDAGGI (verifiche e interrogazioni programmate)") {
+            dynamic.polls.take(15).forEach { poll ->
+                appendLine(
+                    "${poll.subject} | creato ${poll.createdAt} | " +
+                        (if (poll.isPublished) "pubblicato" else "bozza") + " | " +
+                        "${poll.submittedCount}/${poll.totalStudents} hanno votato | " +
+                        (if (poll.isCalculated) "assegnazioni calcolate" else "assegnazioni non ancora calcolate")
+                )
+            }
+
+            dynamic.currentPoll?.let { poll ->
+                appendLine("")
+                appendLine("--- Sondaggio attivo: ${poll.subject} ---")
+                appendLine("Il tuo bonus sacrificio: ${poll.mySacrificeBonus}")
+                appendLine("Formato slot: data | posti | i tuoi voti | preferenze della classe")
+                poll.slots.forEach { slot ->
+                    appendLine(
+                        "${slot.slotDate} | ${slot.capacity} posti | " +
+                            "tuo voto: ${slot.myVote?.toString() ?: "non votato"} | " +
+                            "verde ${slot.counts.green}, giallo ${slot.counts.yellow}, " +
+                            "rosso chiaro ${slot.counts.redLight}, rosso scuro ${slot.counts.redDark}" +
+                            (if (slot.teacherMandatory) " | data imposta dal docente" else "")
+                    )
+                }
+            }
+
+            if (dynamic.pollAssignments.isNotEmpty()) {
+                appendLine("")
+                appendLine("--- Assegnazioni calcolate ---")
+                dynamic.pollAssignments.forEach { assignment ->
+                    val name = assignment.studentName
+                        ?: knowledge.nameOf(assignment.studentId)
+                        ?: "studente"
+                    appendLine("${assignment.slotDate ?: "data ignota"} | $name")
+                }
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Mappa posti
+    // -----------------------------------------------------------------------
+
+    private fun renderSeatMap(builder: StringBuilder, knowledge: AssistantKnowledge, budget: Budget) {
+        val dynamic = knowledge.dynamic
+        if (dynamic.seatMap.isEmpty()) {
+            builder.appendSection("MAPPA POSTI") { appendLine("Nessuna mappa posti pubblicata.") }
+        } else {
+            builder.appendSection("MAPPA POSTI ATTUALMENTE PUBBLICATA") {
+                appendLine("Fila 1 = la piu' vicina alla cattedra. Banco 1 = il piu' a sinistra.")
+                dynamic.seatMap
+                    .sortedWith(compareBy({ it.row }, { it.column }))
+                    .forEach { desk ->
+                        val a = knowledge.nameOf(desk.studentAId) ?: "posto libero"
+                        val b = knowledge.nameOf(desk.studentBId) ?: "posto libero"
+                        appendLine("Fila ${desk.row + 1}, banco ${desk.column + 1}: $a / $b")
+                    }
+                val myId = knowledge.user?.id
+                if (myId != null) {
+                    val mine = dynamic.seatMap.firstOrNull { it.studentAId == myId || it.studentBId == myId }
+                    if (mine == null) {
+                        appendLine("Tu non risulti assegnato a nessun banco in questa mappa.")
+                    } else {
+                        val deskMateId = if (mine.studentAId == myId) mine.studentBId else mine.studentAId
+                        appendLine(
+                            "Il tuo posto: fila ${mine.row + 1}, banco ${mine.column + 1}, " +
+                                "compagno di banco: ${knowledge.nameOf(deskMateId) ?: "nessuno"}"
+                        )
+                    }
+                }
+            }
+        }
+
+        if (budget.includeSeatMapHistory && dynamic.seatMapHistory.isNotEmpty()) {
+            builder.appendSection("STORICO MAPPE POSTI (visibile solo al Rappresentante)") {
+                appendLine("N-1 e' la mappa precedente a quella attuale, N-4 la piu' vecchia tenuta.")
+                dynamic.seatMapHistory.sortedBy { it.mapIndex }.forEach { record ->
+                    appendLine("")
+                    appendLine("--- Mappa N-${record.mapIndex} ---")
+                    record.deskAssignments.entries
+                        .sortedWith(compareBy({ it.value.first }, { it.value.second }))
+                        .forEach { (studentId, position) ->
+                            val name = knowledge.nameOf(studentId) ?: "studente non piu' in elenco"
+                            appendLine("Fila ${position.first + 1}, banco ${position.second + 1}: $name")
+                        }
+                    if (record.pairs.isNotEmpty()) {
+                        appendLine(
+                            "Coppie di banco: " + record.pairs.joinToString("; ") { pair ->
+                                val first = knowledge.nameOf(pair.first) ?: "?"
+                                val second = knowledge.nameOf(pair.second) ?: "?"
+                                "$first + $second"
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Dati di classe (valutazioni, preferenze proprie)
+    // -----------------------------------------------------------------------
+
+    private fun renderClassData(builder: StringBuilder, knowledge: AssistantKnowledge, budget: Budget) {
+        val dynamic = knowledge.dynamic
+
+        if (budget.includeRatings && dynamic.ratings.isNotEmpty()) {
+            builder.appendSection("VALUTAZIONI DELLA CLASSE (visibili solo al Rappresentante)") {
+                appendLine(
+                    "Didattica: 1 = in difficolta', 5 = eccellente. Chiasso: 1 = silenzioso, " +
+                        "5 = molto chiassoso. Servono all'ottimizzatore della mappa posti."
+                )
+                dynamic.ratings.forEach { rating ->
+                    appendLine(
+                        "${rating.firstName} ${rating.lastName} | " +
+                            "didattica ${rating.didactic?.toString() ?: "non valutata"} | " +
+                            "chiasso ${rating.behavior?.toString() ?: "non valutato"} | " +
+                            "Priority Pass ${if (rating.priorityPass) "si" else "no"}" +
+                            (rating.heightCm?.let { " | altezza $it cm" } ?: "")
+                    )
+                }
+            }
+        }
+
+        builder.appendSection("PREFERENZE SOCIALI") {
+            appendLine(
+                "Finestra di voto: " + when (dynamic.preferencesOpen) {
+                    true -> "aperta, si puo' votare"
+                    false -> "chiusa"
+                    null -> "stato sconosciuto"
+                }
+            )
+            appendLine(
+                "Le preferenze degli ALTRI studenti non ti sono state passate e non ti saranno " +
+                    "mai passate: nessuno in questa app puo' vedere chi ha votato cosa su chi. " +
+                    "Se te le chiedono, spiega che non sono consultabili da nessuno."
+            )
+            if (dynamic.myPreferences.isEmpty()) {
+                appendLine("Non hai espresso nessuna preferenza.")
+            } else {
+                appendLine("Le TUE preferenze (solo tue, visibili solo a te):")
+                dynamic.myPreferences.forEach { vote ->
+                    val meaning = when (vote.score) {
+                        2 -> "affinita' forte"
+                        1 -> "gradimento"
+                        -1 -> "preferirei di no"
+                        -2 -> "rifiuto assoluto"
+                        else -> "indifferente"
+                    }
+                    appendLine("- ${vote.toName}: ${vote.score} ($meaning)")
+                }
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Utilita' di testo
+    // -----------------------------------------------------------------------
+
+    private inline fun StringBuilder.appendSection(title: String, body: StringBuilder.() -> Unit) {
+        append("\n=== ").append(title).append(" ===\n")
+        body()
+    }
+
+    /**
+     * Parole della domanda utili a cercare: minuscole, senza accenti e senza le parole troppo
+     * comuni, che altrimenti farebbero risultare "attinente" qualunque cosa.
+     */
+    internal fun tokenize(text: String): List<String> =
+        normalize(text)
+            .split(' ')
+            .map { it.trim() }
+            .filter { it.length >= 3 && it !in STOPWORDS }
+            .distinct()
+
+    /** Minuscole, accenti tolti, tutto cio' che non e' lettera o cifra diventa spazio. */
+    internal fun normalize(text: String): String = buildString {
+        text.lowercase().forEach { char ->
+            val replacement = when (char) {
+                'à', 'á', 'â', 'ä' -> 'a'
+                'è', 'é', 'ê', 'ë' -> 'e'
+                'ì', 'í', 'î', 'ï' -> 'i'
+                'ò', 'ó', 'ô', 'ö' -> 'o'
+                'ù', 'ú', 'û', 'ü' -> 'u'
+                else -> char
+            }
+            append(if (replacement.isLetterOrDigit()) replacement else ' ')
+        }
+    }
+
+    /**
+     * Numeri di circolare citati nella domanda.
+     *
+     * Solo quelli introdotti da "circolare"/"circ."/"n." o da un cancelletto: un numero isolato
+     * ("quanti giorni di gita a maggio 2026?") non e' un riferimento a una circolare, e trattarlo
+     * come tale porterebbe in cima alla ricerca una circolare a caso.
+     */
+    internal fun circularNumbersIn(question: String): Set<Int> {
+        val normalized = normalize(question)
+        val words = normalized.split(' ').filter { it.isNotBlank() }
+        val result = mutableSetOf<Int>()
+        words.forEachIndexed { index, word ->
+            val isMarker = word == "circolare" || word == "circolari" || word == "circ" ||
+                word == "n" || word == "num" || word == "numero"
+            if (isMarker) {
+                words.getOrNull(index + 1)?.toIntOrNull()?.let { result += it }
+                words.getOrNull(index + 2)?.toIntOrNull()?.let { result += it }
+            }
+        }
+        // "#214" — normalize() ha gia' trasformato il cancelletto in spazio, quindi si guarda il
+        // testo originale.
+        Regex("#\\s*(\\d{1,5})").findAll(question).forEach { match ->
+            match.groupValues[1].toIntOrNull()?.let { result += it }
+        }
+        return result
+    }
+
+    private val STOPWORDS = setOf(
+        "che", "cosa", "come", "quando", "dove", "chi", "per", "con", "del", "della", "dei",
+        "delle", "dal", "dalla", "nel", "nella", "una", "uno", "gli", "sono", "essere", "hai",
+        "sai", "dimmi", "mio", "mia", "miei", "mie", "sul", "sulla", "questo", "questa", "quale",
+        "quali", "piu", "meno", "tutti", "tutte", "tutto", "non", "anche", "ancora", "solo",
+        "ciao", "grazie", "puoi", "devo", "posso", "fare", "quanto", "quanti", "quante", "ho",
+        "mi", "ti", "si", "la", "le", "lo", "il", "un", "di", "da", "in", "su", "tra", "fra"
+    )
+}

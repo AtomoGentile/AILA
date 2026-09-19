@@ -19,7 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import circolareplus.design.AilaEmptyState
-import circolareplus.design.AilaAiBadge
+import circolareplus.design.AilaAssistantBadge
 import circolareplus.design.AilaDot
 import circolareplus.design.AilaCard
 import circolareplus.design.ailaFieldColors
@@ -73,36 +73,44 @@ fun CircularsScreen(
 
         Spacer(modifier = Modifier.height(AppTheme.Space12))
 
-        // Filtri per Badge con animazione fluida. Mancava il filtro "Non rilevanti", presente nel
-        // design di riferimento accanto agli altri due.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
-        ) {
+        // Filtri per Badge: pill scorrevole condiviso (AilaSlidingChipRow) invece del cross-fade di
+        // colore su ogni singola chip.
+        val relevanceFilterOptions = remember { listOf<CircularRelevanceBadge?>(null, CircularRelevanceBadge.RELEVANT, CircularRelevanceBadge.POTENTIAL, CircularRelevanceBadge.NOT_RELEVANT) }
+        circolareplus.design.AilaSlidingChipRow(
+            selectedIndex = relevanceFilterOptions.indexOf(selectedFilter),
+            itemCount = relevanceFilterOptions.size,
+            modifier = Modifier.fillMaxWidth()
+        ) { chipModifier ->
             circolareplus.design.AnimatedFilterChip(
                 label = "Tutte",
                 isSelected = selectedFilter == null,
-                onClick = { selectedFilter = null }
+                onClick = { selectedFilter = null },
+                drawSelectionBackground = false,
+                modifier = chipModifier(0)
             )
             circolareplus.design.AnimatedFilterChip(
                 label = "Ti riguarda",
                 isSelected = selectedFilter == CircularRelevanceBadge.RELEVANT,
                 onClick = { selectedFilter = CircularRelevanceBadge.RELEVANT },
-                icon = { AilaDot(color = AppTheme.BadgeRelevantGreen, size = 8.dp) }
+                icon = { AilaDot(color = AppTheme.BadgeRelevantGreen, size = 8.dp) },
+                drawSelectionBackground = false,
+                modifier = chipModifier(1)
             )
             circolareplus.design.AnimatedFilterChip(
                 label = "Potenziale",
                 isSelected = selectedFilter == CircularRelevanceBadge.POTENTIAL,
                 onClick = { selectedFilter = CircularRelevanceBadge.POTENTIAL },
-                icon = { AilaDot(color = AppTheme.BadgePotentialYellow, size = 8.dp) }
+                icon = { AilaDot(color = AppTheme.BadgePotentialYellow, size = 8.dp) },
+                drawSelectionBackground = false,
+                modifier = chipModifier(2)
             )
             circolareplus.design.AnimatedFilterChip(
                 label = "Non rilevanti",
                 isSelected = selectedFilter == CircularRelevanceBadge.NOT_RELEVANT,
                 onClick = { selectedFilter = CircularRelevanceBadge.NOT_RELEVANT },
-                icon = { AilaDot(color = AppTheme.BadgeNotRelevantGray, size = 8.dp) }
+                icon = { AilaDot(color = AppTheme.BadgeNotRelevantGray, size = 8.dp) },
+                drawSelectionBackground = false,
+                modifier = chipModifier(3)
             )
         }
 
@@ -202,7 +210,7 @@ fun CircularListItem(
                 Spacer(modifier = Modifier.height(AppTheme.Space8))
                 AilaCard(containerColor = AppTheme.TintSlate) {
                     Column(modifier = Modifier.padding(AppTheme.Space12)) {
-                        AilaAiBadge(text = "Analisi AI")
+                        AilaAssistantBadge(text = "Analisi AILA Assistant")
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = classification.personalSummary,

@@ -2,6 +2,7 @@ import UIKit
 import UserNotifications
 import FirebaseCore
 import FirebaseMessaging
+import shared
 
 /**
  * AppDelegate per la registrazione delle notifiche remote (APNs) su iOS, e per l'avvio di
@@ -35,6 +36,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Configura Firebase solo se GoogleService-Info.plist è nel bundle (vedi doc classe).
         if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
             FirebaseApp.configure()
+        }
+
+        // Avvio a freddo: l'app era completamente chiusa ed è stata aperta tappando una
+        // notifica push. In questo caso userNotificationCenter(_:didReceive:) non viene mai
+        // chiamato per questa notifica, quindi il deep link va estratto qui da launchOptions.
+        if let remoteNotification = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
+            let category = categoryFromUserInfo(remoteNotification)
+            if !category.isEmpty {
+                PendingDeepLink.shared.category = category
+            }
         }
 
         // Richiedi il permesso di notifica (mostra il dialog all'utente la prima volta)
@@ -102,33 +113,65 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     /**
+     * Converte lo `userInfo` di una notifica (il payload `data` di FCM/APNs, con valori a volte
+     * tipizzati come `AnyObject`/`NSString`) in un `[String: String]`, poi lo passa a
+     * [NotificationCategoryMapper] (Kotlin condiviso, vedi
+     * shared/.../domain/model/NotificationCategoryMapper.kt) per ottenere la categoria di
+     * destinazione ("circulars", "board", "seatmap", "seatmap_preferences", "polls", oppure ""
+     * se non riconosciuta). Non deve mai crashare: valori non convertibili vengono ignorati.
+     */
+    private func categoryFromUserInfo(_ userInfo: [AnyHashable: Any]) -> String {
+        var data: [String: String] = [:]
+        for (key, value) in userInfo {
+            guard let stringKey = key as? String else { continue }
+            data[stringKey] = "\(value)"
+        }
+        return NotificationCategoryMapper.shared.categoryFrom(data: data)
+    }
+
+    /**
      * Callback: è arrivata una notifica push mentre l'app è in foreground (aperta).
      *
-     * Per ora non fare nulla: iOS mostra comunque la notifica di sistema. In futuro,
-     * se volessi gestire la notifica all'interno dell'app (navigare a una schermata specifica,
-     * aggiornare dati, ecc.) lo faresti qui.
+     * iOS non mostrerebbe la notifica di sistema in questo caso, quindi ci pensiamo noi a
+     * registrarla nello storico locale (la campanella in-app, vedi NotificationsScreen) così
+     * l'utente la ritrova anche se non tocca il banner. Non tocchiamo PendingDeepLink qui: questo
+     * callback scatta quando la notifica arriva soltanto, non quando l'utente la tocca — la
+     * navigazione forzata avviene solo in didReceive, sotto.
      */
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        // Per ora mostra la notifica normalmente
+        let content = notification.request.content
+        let category = categoryFromUserInfo(content.userInfo)
+        AppContainer.shared.settings.addNotification(title: content.title, body: content.body, category: category)
+
+        // Mostra comunque la notifica di sistema
         completionHandler([.banner, .sound, .badge])
     }
 
     /**
-     * Callback: l'utente ha tappato su una notifica push.
+     * Callback: l'utente ha tappato su una notifica push (app in background, non chiusa a
+     * freddo — quel caso è gestito in didFinishLaunchingWithOptions via launchOptions).
      *
-     * Qui potremmo navigare a una schermata specifica in base al contenuto della notifica,
-     * o eseguire altre azioni. Per ora non fare nulla (il tap chiude il drawer di notifica).
+     * Registriamo la notifica nello storico locale (può capitare che sia già stata loggata da
+     * willPresent se era arrivata ad app aperta: doppione minore e accettato, non serve dedup) e
+     * impostiamo PendingDeepLink perché MainAppShell navighi alla schermata giusta.
      */
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        // TODO: parsing della notifica e navigazione in-app se necessario
+        let content = response.notification.request.content
+        let category = categoryFromUserInfo(content.userInfo)
+        AppContainer.shared.settings.addNotification(title: content.title, body: content.body, category: category)
+
+        if !category.isEmpty {
+            PendingDeepLink.shared.category = category
+        }
+
         completionHandler()
     }
 }

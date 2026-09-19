@@ -6,7 +6,7 @@
 
 import { Hono } from 'hono';
 import type { Env, JWTPayload } from '../types';
-import { authMiddleware, requireRole, resolveClassId } from '../auth';
+import { authMiddleware, requireRole, resolveClassId, ensureClassRow } from '../auth';
 import { notifyClass } from '../services/fcm';
 
 const preferences = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();
@@ -20,6 +20,9 @@ preferences.get('/config', async (c) => {
   // Era letto da app_config con la costante 'DEFAULT_CLASS': una sola finestra preferenze per
   // tutta l'app, quindi il Rappresentante di una classe la apriva anche a tutte le altre.
   const classId = await resolveClassId(c);
+  // Autoripara un classId "orfano" (utenti con class_id valorizzato ma nessuna riga `classes`
+  // corrispondente): vedi il commento su ensureClassRow per perché serve e cosa causava.
+  await ensureClassRow(c.env, classId);
   const config = await c.env.DB.prepare(
     'SELECT preferences_open, label, created_at FROM classes WHERE id = ?'
   ).bind(classId).first<{ preferences_open: number; label: string; created_at: string }>();
@@ -39,6 +42,10 @@ preferences.post('/config', requireRole('REPRESENTATIVE'), async (c) => {
   const { open } = await c.req.json<{ open: boolean }>();
 
   const classId = await resolveClassId(c);
+  // Stessa autoriparazione di GET /config: senza, l'UPDATE sotto colpirebbe zero righe per un
+  // classId "orfano" e la finestra preferenze resterebbe "chiusa" per sempre, qualunque cosa si
+  // clicchi — nessun errore visibile, perché un UPDATE senza righe corrispondenti "riesce" comunque.
+  await ensureClassRow(c.env, classId);
 
   await c.env.DB.prepare(
     'UPDATE classes SET preferences_open = ? WHERE id = ?'

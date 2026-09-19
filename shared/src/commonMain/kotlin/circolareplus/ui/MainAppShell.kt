@@ -43,6 +43,12 @@ import circolareplus.domain.model.CalendarEventCategory
 import circolareplus.domain.model.Circular
 import circolareplus.domain.model.CircularAiClassification
 import circolareplus.ai.ATTACHMENT_TEXT_MARKER
+import circolareplus.ai.assistant.AssistantAuthor
+import circolareplus.ai.assistant.AssistantConversation
+import circolareplus.ai.assistant.AssistantDynamicKnowledge
+import circolareplus.ai.assistant.AssistantKnowledge
+import circolareplus.ai.assistant.AssistantMessage
+import circolareplus.ai.assistant.AssistantSourceKind
 import circolareplus.ai.EventDraft
 import circolareplus.ai.HeuristicClassification
 import circolareplus.domain.model.Proposal
@@ -219,7 +225,7 @@ fun MainAppShell(
                 title = circular.title,
                 text = "",
                 failureReason = "impossibile analizzare il PDF: ${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}",
-                notConfiguredMessage = "Analisi AI non disponibile."
+                notConfiguredMessage = "Analisi di AILA Assistant non disponibile."
             )
         } finally {
             inFlightClassification -= circular.number
@@ -519,6 +525,26 @@ fun MainAppShell(
 
     // --- Stato Ricerca globale --------------------------------------------------------------
     var isInSearchScreen by rememberSaveable { mutableStateOf(false) }
+
+    // --- Stato AILA Assistant (il pulsante dell'assistente nella Ricerca) --------------------
+    // La conversazione vive qui e non dentro la schermata di proposito: una risposta puo' durare
+    // una decina di secondi fra chiamata al modello ed eventuale lettura di un PDF, e chi torna
+    // indietro un attimo per controllare una circolare non deve perderla ne' doverla rifare.
+    var isInAssistantScreen by rememberSaveable { mutableStateOf(false) }
+    val assistantMessages = remember { mutableStateListOf<AssistantMessage>() }
+    var isAssistantThinking by remember { mutableStateOf(false) }
+    // I dati che non sono gia' in memoria (sondaggi, mappa, storico, valutazioni) si caricano
+    // una volta sola per conversazione: sono le stesse rotte che le altre schermate chiamano
+    // quando le apri, e rifarle a ogni domanda sarebbe traffico per dati che non cambiano
+    // durante una chat.
+    var assistantDynamic by remember { mutableStateOf<AssistantDynamicKnowledge?>(null) }
+    var assistantMessageCounter by remember { mutableStateOf(0) }
+    // La conversazione in corso ha un id suo, cosi' ogni salvataggio aggiorna la stessa voce
+    // dello storico invece di aggiungerne una a ogni domanda.
+    var assistantConversationId by rememberSaveable { mutableStateOf("c${currentTimeMillis()}") }
+    var assistantConversations by remember {
+        mutableStateOf(AppContainer.settings.listAssistantConversations())
+    }
     var recentSearches by remember { mutableStateOf(AppContainer.settings.recentSearches) }
 
     // --- Stato Mappa Posti & Preferenze Sociali --------------------------------------------
@@ -534,6 +560,7 @@ fun MainAppShell(
     var proposalOptions by remember { mutableStateOf<List<SeatMapProposal>>(emptyList()) }
     var isGeneratingProposals by remember { mutableStateOf(false) }
     var seatMapActionError by remember { mutableStateOf<String?>(null) }
+    var isExportingSeatMapPdf by remember { mutableStateOf(false) }
     // Disposizione in editing manuale (dopo aver scelto una delle 3 proposte) e copia originale
     // per il pulsante "Ripristina Proposta Algoritmo"; null quando l'editor non è aperto.
     var editingSeatMapProposal by remember { mutableStateOf<List<DeskAssignment>?>(null) }
@@ -569,9 +596,172 @@ fun MainAppShell(
     // Sondaggi per cui questo studente ha già premuto "Invia le mie scelte" (solo locale, vedi
     // LocalSettingsManager.isPollSubmitted).
     var submittedPollIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    // Stato del pulsante "Aggiungi tutte le date al calendario" nello Storico sondaggi.
+    var isAddingPollToCalendar by remember { mutableStateOf(false) }
+    var pollCalendarMessage by remember { mutableStateOf<String?>(null) }
+    var pollCalendarMessageIsError by remember { mutableStateOf(false) }
+
+    /**
+     * Manda una domanda all'assistente globale e appende la risposta alla conversazione.
+     *
+     * Tutto il lavoro sta qui e non nella schermata: la schermata mostra i messaggi e basta,
+     * cosi' uscire dalla chat non annulla la domanda in corso (vedi il commento sullo stato).
+     *
+     * La conoscenza passata all'assistente e' fatta di due pezzi: quella gia' in memoria in
+     * questa schermata (circolari con le loro analisi, calendario, bacheca, compagni), che e' la
+     * stessa che l'utente vede a video, e quella caricata a parte la prima volta
+     * ([AppContainer.assistantKnowledgeLoader], filtrata per ruolo).
+     */
+    /**
+     * Archivia la conversazione in corso sul dispositivo (mai sul server: vedi
+     * [circolareplus.data.local.LocalSettingsManager.listAssistantConversations]).
+     *
+     * Si chiama a ogni messaggio, non all'uscita dalla schermata: l'app puo' essere chiusa dal
+     * sistema mentre il modello sta ancora rispondendo, e la conversazione che si perderebbe e'
+     * proprio quella che serviva.
+     */
+    fun saveAssistantConversation() {
+        val messages = assistantMessages.toList()
+        // Niente domande dell'utente = nessuna conversazione da ricordare (es. si e' aperta la
+        // chat, si e' letto il benvenuto e si e' usciti).
+        if (messages.none { it.author == AssistantAuthor.USER }) return
+        val now = currentTimeMillis()
+        val existing = assistantConversations.firstOrNull { it.id == assistantConversationId }
+        AppContainer.settings.saveAssistantConversation(
+            AssistantConversation(
+                id = assistantConversationId,
+                title = existing?.title ?: AssistantConversation.titleFrom(messages),
+                createdAtMillis = existing?.createdAtMillis ?: now,
+                updatedAtMillis = now,
+                messages = messages
+            )
+        )
+        assistantConversations = AppContainer.settings.listAssistantConversations()
+    }
+
+    fun askAssistant(question: String) {
+        val trimmed = question.trim()
+        if (trimmed.isEmpty() || isAssistantThinking) return
+
+        assistantMessageCounter++
+        assistantMessages += AssistantMessage(
+            id = "q${currentTimeMillis()}-$assistantMessageCounter",
+            author = AssistantAuthor.USER,
+            text = trimmed
+        )
+        // La cronologia che vede il modello non deve contenere la domanda appena fatta: quella
+        // gli arriva a parte, come domanda corrente.
+        val history = assistantMessages.dropLast(1).toList()
+        isAssistantThinking = true
+        saveAssistantConversation()
+
+        coroutineScope.launch {
+            try {
+                val dynamic = assistantDynamic
+                    ?: AppContainer.assistantKnowledgeLoader
+                        .load(currentUser?.role ?: UserRole.STUDENT)
+                        .also { assistantDynamic = it }
+
+                val reply = AppContainer.newAssistant().ask(
+                    question = trimmed,
+                    history = history,
+                    knowledge = AssistantKnowledge(
+                        todayIso = circolareplus.util.today().toIso(),
+                        user = currentUser,
+                        profile = currentProfile,
+                        classmates = classmates,
+                        circulars = circulars,
+                        classifications = classifications.toMap(),
+                        calendarEvents = calendarEvents,
+                        proposals = proposals,
+                        dynamic = dynamic
+                    )
+                )
+
+                assistantMessageCounter++
+                assistantMessages += AssistantMessage(
+                    id = "a${currentTimeMillis()}-$assistantMessageCounter",
+                    author = AssistantAuthor.ASSISTANT,
+                    text = reply.text,
+                    sources = reply.sources,
+                    isError = reply.isError,
+                    modelLabel = reply.modelLabel
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                assistantMessageCounter++
+                assistantMessages += AssistantMessage(
+                    id = "e${currentTimeMillis()}-$assistantMessageCounter",
+                    author = AssistantAuthor.ASSISTANT,
+                    text = "${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}",
+                    isError = true
+                )
+            } finally {
+                isAssistantThinking = false
+                // Nel `finally` perche' vale per tutti e tre gli esiti: risposta, errore
+                // riportato dall'assistente ed eccezione inattesa.
+                saveAssistantConversation()
+            }
+        }
+    }
 
     fun reloadCalendar() { calendarRefreshTrigger++ }
     fun reloadProposals() { proposalsRefreshTrigger++ }
+
+    // Destinazione comune per una notifica (categoria di NotificationKind, o
+    // NOTIFICATION_CATEGORY_SEATMAP_PREFERENCES): usata sia dal tocco sulla campanella in-app
+    // sia — tramite PendingDeepLink più sotto — dal tocco su una notifica di sistema (push),
+    // così le due strade portano esattamente nello stesso posto invece di duplicare la logica.
+    fun navigateForNotificationCategory(category: String) {
+        isInNotificationsScreen = false
+        isInSearchScreen = false
+        isInSettingsScreen = false
+        isInClassRosterScreen = false
+        when (category) {
+            NotificationKind.CIRCULARS.key -> {
+                classSection = ClassSection.CIRCULARS
+                selectedTab = MainTab.CLASS
+            }
+            NotificationKind.BOARD.key -> {
+                classSection = ClassSection.BOARD
+                selectedTab = MainTab.CLASS
+            }
+            NOTIFICATION_CATEGORY_SEATMAP_PREFERENCES -> {
+                selectedTab = MainTab.SEATMAP
+                seatMapMode = "VOTE_PREFERENCES"
+            }
+            NotificationKind.SEATMAP.key -> {
+                selectedTab = MainTab.SEATMAP
+                seatMapMode = "MAP"
+            }
+            NotificationKind.POLLS.key -> {
+                isInPollsScreen = true
+            }
+            NotificationKind.CALENDAR.key -> {
+                selectedTab = MainTab.CALENDAR
+            }
+            // Categoria sconosciuta/vuota (es. push generica senza tipo): nessuna destinazione
+            // certa, si resta dove si è.
+            else -> {}
+        }
+    }
+
+    // Notifica di sistema toccata (push, non campanella in-app): PendingDeepLink viene scritta
+    // dal codice nativo di piattaforma (Android: MainActivity; iOS: AppDelegate) sia all'avvio a
+    // freddo sia ad app già in esecuzione in background. snapshotFlow, non un semplice
+    // LaunchedEffect(valore), perché deve reagire anche quando il valore cambia mentre questa
+    // composable è già attiva (app riportata in primo piano dal tocco), non solo alla prima
+    // composizione.
+    LaunchedEffect(Unit) {
+        androidx.compose.runtime.snapshotFlow { circolareplus.ui.PendingDeepLink.category }
+            .collect { category ->
+                if (category != null) {
+                    navigateForNotificationCategory(category)
+                    circolareplus.ui.PendingDeepLink.category = null
+                }
+            }
+    }
 
     LaunchedEffect(selectedTab, calendarRefreshTrigger) {
         // Carica il calendario solo se:
@@ -1126,46 +1316,77 @@ fun MainAppShell(
 
     Scaffold(
         bottomBar = {
-            if (!isInPollsScreen && !isInClassRosterScreen && !isInNotificationsScreen && !isInSearchScreen && !isInSettingsScreen && editingSeatMapProposal == null) {
+            if (!isInPollsScreen && !isInClassRosterScreen && !isInNotificationsScreen && !isInSearchScreen && !isInAssistantScreen && !isInSettingsScreen && editingSeatMapProposal == null) {
                 NavigationBar(
                     containerColor = AppTheme.SurfaceWhite,
                     tonalElevation = AppTheme.Space8
                 ) {
-                    MainTab.entries.forEach { tab ->
-                        val isSelected = selectedTab == tab
-                        val iconColor = if (isSelected) AppTheme.PrimaryBlue else AppTheme.TextFaint
-
-                        NavigationBarItem(
-                            selected = isSelected,
-                            onClick = { selectedTab = tab },
-                            icon = {
-                                when (tab) {
-                                    MainTab.HOME -> AppIcons.Home(modifier = Modifier.size(24.dp), color = iconColor)
-                                    MainTab.CALENDAR -> AppIcons.Calendar(modifier = Modifier.size(24.dp), color = iconColor)
-                                    MainTab.CLASS -> AppIcons.Document(modifier = Modifier.size(24.dp), color = iconColor)
-                                    MainTab.SEATMAP -> AppIcons.Chair(modifier = Modifier.size(24.dp), color = iconColor)
-                                    MainTab.MORE -> AppIcons.Profile(modifier = Modifier.size(24.dp), color = iconColor)
-                                }
-                            },
-                            label = {
-                                // maxLines/softWrap espliciti: "Mappa posti" andava a capo su due
-                                // righe e sballava l'altezza della barra rispetto alle altre voci.
-                                Text(
-                                    text = tab.title,
-                                    fontSize = 10.sp,
-                                    fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Normal,
-                                    maxLines = 1,
-                                    softWrap = false
-                                )
-                            },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = AppTheme.PrimaryBlue,
-                                unselectedIconColor = AppTheme.TextFaint,
-                                selectedTextColor = AppTheme.PrimaryBlue,
-                                unselectedTextColor = AppTheme.TextFaint,
-                                indicatorColor = AppTheme.TintBlue
-                            )
+                    // Stesso aspetto di sempre (stesse icone/etichette, stessa altezza), ma non
+                    // sono più NavigationBarItem: quelli portano il proprio ripple grigio di
+                    // Material e la propria animazione dell'indicatore, che scattava PRIMA e
+                    // indipendentemente dalla nostra pillola condivisa — risultato: un lampo grigio
+                    // al tocco, poi un vuoto, e solo dopo la pillola iniziava a scivolare. Con una
+                    // colonna scritta a mano e `indication = null` il tocco muove la pillola subito,
+                    // senza il doppio effetto.
+                    BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(80.dp)) {
+                        val tabs = MainTab.entries
+                        val segmentWidth = maxWidth / tabs.size
+                        val selectedTabIndex = tabs.indexOf(selectedTab).coerceAtLeast(0)
+                        val indicatorOffset by androidx.compose.animation.core.animateDpAsState(
+                            targetValue = segmentWidth * selectedTabIndex,
+                            animationSpec = androidx.compose.animation.core.spring(
+                                dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
+                                stiffness = androidx.compose.animation.core.Spring.StiffnessMedium
+                            ),
+                            label = "bottomNavIndicatorX"
                         )
+                        val pillWidth = 64.dp
+                        Box(
+                            modifier = Modifier
+                                .offset(x = indicatorOffset + (segmentWidth - pillWidth) / 2, y = 12.dp)
+                                .width(pillWidth)
+                                .height(32.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(AppTheme.TintBlue)
+                        )
+
+                        Row(modifier = Modifier.fillMaxSize()) {
+                            tabs.forEach { tab ->
+                                val isSelected = selectedTab == tab
+                                val iconColor = if (isSelected) AppTheme.PrimaryBlue else AppTheme.TextFaint
+
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .clickable(
+                                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                            indication = null
+                                        ) { selectedTab = tab },
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    when (tab) {
+                                        MainTab.HOME -> AppIcons.Home(modifier = Modifier.size(24.dp), color = iconColor)
+                                        MainTab.CALENDAR -> AppIcons.Calendar(modifier = Modifier.size(24.dp), color = iconColor)
+                                        MainTab.CLASS -> AppIcons.Document(modifier = Modifier.size(24.dp), color = iconColor)
+                                        MainTab.SEATMAP -> AppIcons.Chair(modifier = Modifier.size(24.dp), color = iconColor)
+                                        MainTab.MORE -> AppIcons.Profile(modifier = Modifier.size(24.dp), color = iconColor)
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    // maxLines/softWrap espliciti: "Mappa posti" andava a capo su due
+                                    // righe e sballava l'altezza della barra rispetto alle altre voci.
+                                    Text(
+                                        text = tab.title,
+                                        fontSize = 10.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = iconColor,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1329,6 +1550,8 @@ fun MainAppShell(
                                 assignments = pollAssignments,
                                 onToggleResults = { pollId ->
                                     expandedResultsPollId = if (expandedResultsPollId == pollId) null else pollId
+                                    pollCalendarMessage = null
+                                    pollCalendarMessageIsError = false
                                 },
                                 onDelete = { pollId ->
                                     coroutineScope.launch {
@@ -1338,6 +1561,68 @@ fun MainAppShell(
                                             pollsRefreshTrigger++
                                         } catch (e: Exception) {
                                             pollResultsError = "Impossibile eliminare: ${e.message}"
+                                        }
+                                    }
+                                },
+                                isAddingToCalendar = isAddingPollToCalendar,
+                                calendarAddMessage = pollCalendarMessage,
+                                calendarAddIsError = pollCalendarMessageIsError,
+                                onAddToCalendar = { poll, assignmentsToAdd ->
+                                    coroutineScope.launch {
+                                        isAddingPollToCalendar = true
+                                        pollCalendarMessage = null
+                                        pollCalendarMessageIsError = false
+                                        try {
+                                            // Un evento per data (non per studente): la stessa data
+                                            // interrogazione riguarda più studenti insieme, ed è
+                                            // anche l'unico modo per non far scattare subito il
+                                            // controllo doppioni del server (stessa categoria+
+                                            // periodo per la classe, vedi CalendarRepository.createEvent).
+                                            val byDate = assignmentsToAdd
+                                                .filter { it.slotDate != null }
+                                                .groupBy { it.slotDate!! }
+                                                .toSortedMap()
+
+                                            var added = 0
+                                            var skipped = 0
+                                            var failed = 0
+                                            byDate.forEach { (date, group) ->
+                                                val studentNames = group.map { it.studentName ?: it.studentId }
+                                                val studentIds = group.map { it.studentId }.distinct()
+                                                try {
+                                                    val response = AppContainer.calendarRepository.createEvent(
+                                                        title = "Interrogazione di ${poll.subject}",
+                                                        eventDate = date,
+                                                        startTime = null,
+                                                        category = CalendarEventCategory.INTERROGAZIONE,
+                                                        isForAll = false,
+                                                        isAiGenerated = true,
+                                                        visibleToUserIds = studentIds,
+                                                        notes = "Studenti: ${studentNames.joinToString(", ")}"
+                                                    )
+                                                    if (response.warning != null) skipped++ else added++
+                                                } catch (e: Exception) {
+                                                    failed++
+                                                }
+                                            }
+
+                                            if (added > 0) reloadCalendar()
+
+                                            pollCalendarMessageIsError = added == 0
+                                            pollCalendarMessage = buildString {
+                                                if (added > 0) append("$added dat${if (added == 1) "a aggiunta" else "e aggiunte"} al calendario.")
+                                                if (skipped > 0) {
+                                                    if (isNotEmpty()) append(" ")
+                                                    append("$skipped già presenti nel periodo.")
+                                                }
+                                                if (failed > 0) {
+                                                    if (isNotEmpty()) append(" ")
+                                                    append("$failed non riuscite.")
+                                                }
+                                                if (isEmpty()) append("Nessuna data da aggiungere.")
+                                            }
+                                        } finally {
+                                            isAddingPollToCalendar = false
                                         }
                                     }
                                 }
@@ -1436,6 +1721,18 @@ fun MainAppShell(
                                                         submittedCount = result.submittedCount,
                                                         totalStudents = result.totalStudents
                                                     )
+                                                    // Se questo era l'ultimo invio mancante, il server ha già
+                                                    // chiuso il sondaggio e calcolato le assegnazioni (vedi
+                                                    // POST /:id/submit in polls.ts), ma qui lo si saprebbe solo
+                                                    // ricaricando: senza questo refresh `allPolls`/`currentPoll`
+                                                    // restavano quelli di prima, isCalculated risultava ancora
+                                                    // falso lato client e il sondaggio restava "aperto" finché
+                                                    // qualcuno non premeva "Calcola risultati" (che invece
+                                                    // aggiorna pollsRefreshTrigger) o non si usciva e rientrava
+                                                    // dalla schermata.
+                                                    if (result.totalStudents > 0 && result.submittedCount >= result.totalStudents) {
+                                                        pollsRefreshTrigger++
+                                                    }
                                                 } catch (e: Exception) {
                                                     pollError = "Invio non riuscito: ${e.message}"
                                                 } finally {
@@ -1567,6 +1864,64 @@ fun MainAppShell(
                         }
                     }
                 }
+                isInAssistantScreen -> {
+                    circolareplus.platform.PlatformBackHandler { isInAssistantScreen = false }
+                    AssistantChatScreen(
+                        messages = assistantMessages,
+                        isThinking = isAssistantThinking,
+                        conversations = assistantConversations,
+                        onSend = { question -> askAssistant(question) },
+                        onBackClick = { isInAssistantScreen = false },
+                        onClearChat = {
+                            // "Nuova chat" archivia, non cancella: quella di prima e' gia' nello
+                            // storico, qui basta ripartire con un id nuovo.
+                            assistantMessages.clear()
+                            assistantConversationId = "c${currentTimeMillis()}"
+                            // I dati raccolti restano: sono gli stessi di un minuto fa e
+                            // ricaricarli vorrebbe dire far aspettare la prima domanda della
+                            // chat nuova per niente.
+                        },
+                        onOpenConversation = { conversation ->
+                            if (!isAssistantThinking) {
+                                assistantMessages.clear()
+                                assistantMessages.addAll(conversation.messages)
+                                assistantConversationId = conversation.id
+                            }
+                        },
+                        onDeleteConversation = { id ->
+                            AppContainer.settings.deleteAssistantConversation(id)
+                            assistantConversations = AppContainer.settings.listAssistantConversations()
+                            // Se era quella aperta, la chat torna vuota: lasciarla a schermo
+                            // significherebbe che il primo messaggio nuovo la fa riapparire
+                            // nello storico appena cancellata.
+                            if (id == assistantConversationId) {
+                                assistantMessages.clear()
+                                assistantConversationId = "c${currentTimeMillis()}"
+                            }
+                        },
+                        onOpenSource = { source ->
+                            isInAssistantScreen = false
+                            isInSearchScreen = false
+                            when (source.kind) {
+                                AssistantSourceKind.CIRCULAR -> {
+                                    val number = source.circularNumber
+                                    val circular = circulars.firstOrNull { it.number == number }
+                                    if (circular != null) selectedCircularForDetail = circular
+                                    classSection = ClassSection.CIRCULARS
+                                    selectedTab = MainTab.CLASS
+                                }
+                                AssistantSourceKind.CALENDAR -> selectedTab = MainTab.CALENDAR
+                                AssistantSourceKind.BOARD -> {
+                                    classSection = ClassSection.BOARD
+                                    selectedTab = MainTab.CLASS
+                                }
+                                AssistantSourceKind.POLL -> isInPollsScreen = true
+                                AssistantSourceKind.SEAT_MAP -> selectedTab = MainTab.SEATMAP
+                                AssistantSourceKind.CLASS -> isInClassRosterScreen = true
+                            }
+                        }
+                    )
+                }
                 isInSearchScreen -> {
                     circolareplus.platform.PlatformBackHandler { isInSearchScreen = false }
                     SearchScreen(
@@ -1578,6 +1933,13 @@ fun MainAppShell(
                         onSubmitQuery = { query ->
                             AppContainer.settings.rememberSearch(query)
                             recentSearches = AppContainer.settings.recentSearches
+                        },
+                        onOpenAssistant = { question ->
+                            isInAssistantScreen = true
+                            // La domanda parte da sola: chi ha gia' scritto "gita a Milano" e ha
+                            // premuto il pulsante AI la sua domanda l'ha gia' fatta, farla
+                            // riscrivere in chat sarebbe un passaggio in piu' e basta.
+                            if (question.isNotBlank()) askAssistant(question)
                         },
                         onOpenCircular = { circular ->
                             isInSearchScreen = false
@@ -1602,41 +1964,7 @@ fun MainAppShell(
                         ScreenBackBar(title = "Notifiche", onBackClick = { isInNotificationsScreen = false })
                         NotificationsScreen(
                             notifications = notificationLog,
-                            onNotificationClick = { entry ->
-                                when (entry.category) {
-                                    NotificationKind.CIRCULARS.key -> {
-                                        classSection = ClassSection.CIRCULARS
-                                        selectedTab = MainTab.CLASS
-                                        isInNotificationsScreen = false
-                                    }
-                                    NotificationKind.BOARD.key -> {
-                                        classSection = ClassSection.BOARD
-                                        selectedTab = MainTab.CLASS
-                                        isInNotificationsScreen = false
-                                    }
-                                    NOTIFICATION_CATEGORY_SEATMAP_PREFERENCES -> {
-                                        selectedTab = MainTab.SEATMAP
-                                        seatMapMode = "VOTE_PREFERENCES"
-                                        isInNotificationsScreen = false
-                                    }
-                                    NotificationKind.SEATMAP.key -> {
-                                        selectedTab = MainTab.SEATMAP
-                                        seatMapMode = "MAP"
-                                        isInNotificationsScreen = false
-                                    }
-                                    NotificationKind.POLLS.key -> {
-                                        isInNotificationsScreen = false
-                                        isInPollsScreen = true
-                                    }
-                                    NotificationKind.CALENDAR.key -> {
-                                        selectedTab = MainTab.CALENDAR
-                                        isInNotificationsScreen = false
-                                    }
-                                    // Categoria sconosciuta (es. push generica senza tipo): niente
-                                    // destinazione certa, NotificationsScreen mostra il dettaglio.
-                                    else -> {}
-                                }
-                            }
+                            onNotificationClick = { entry -> navigateForNotificationCategory(entry.category) }
                         )
                     }
                 }
@@ -1688,11 +2016,11 @@ fun MainAppShell(
                             totalScore = editorBreakdown.total,
                             satisfactionPercentage = editorSatisfactionPct,
                             isPublishing = isGeneratingProposals,
-                            onSwapSeats = { deskIndex1, isSeatA1, deskIndex2, isSeatA2 ->
+                            onSwapSeats = { deskIndex1, seatIndex1, deskIndex2, seatIndex2 ->
                                 editingSeatMapProposal = SeatMapOptimizer.swapSeats(
                                     currentAssignments,
-                                    SeatMapOptimizer.SeatRef(deskIndex1, isSeatA1),
-                                    SeatMapOptimizer.SeatRef(deskIndex2, isSeatA2)
+                                    SeatMapOptimizer.SeatRef(deskIndex1, seatIndex1),
+                                    SeatMapOptimizer.SeatRef(deskIndex2, seatIndex2)
                                 )
                             },
                             onRestore = { editingSeatMapProposal = originalSeatMapProposal },
@@ -1835,6 +2163,22 @@ fun MainAppShell(
                                                 assignments = seatMapAssignments,
                                                 studentsMap = memoizedStudentsMap,
                                                 isPreferencesOpen = isPreferencesOpen,
+                                                isExportingPdf = isExportingSeatMapPdf,
+                                                onExportPdf = {
+                                                    coroutineScope.launch {
+                                                        isExportingSeatMapPdf = true
+                                                        try {
+                                                            circolareplus.platform.exportSeatMapPdf(
+                                                                assignments = seatMapAssignments,
+                                                                studentsMap = memoizedStudentsMap
+                                                            )
+                                                        } catch (e: Exception) {
+                                                            seatMapActionError = "Impossibile generare il PDF: ${e.message}"
+                                                        } finally {
+                                                            isExportingSeatMapPdf = false
+                                                        }
+                                                    }
+                                                },
                                                 onTogglePreferencesWindow = { open ->
                                                     coroutineScope.launch {
                                                         try {
@@ -1844,7 +2188,7 @@ fun MainAppShell(
                                                         }
                                                     }
                                                 },
-                                                onGenerateProposals = { weights ->
+                                                onGenerateProposals = { weights, seatsPerDesk ->
                                                     coroutineScope.launch {
                                                         isGeneratingProposals = true
                                                         try {
@@ -1886,7 +2230,8 @@ fun MainAppShell(
                                                                     ratings = ratingsMap,
                                                                     socialPreferences = socialMap,
                                                                     history = history,
-                                                                    weights = weights
+                                                                    weights = weights,
+                                                                    seatsPerDesk = seatsPerDesk
                                                                 )
                                                             }
                                                         } catch (e: Exception) {
@@ -2228,10 +2573,10 @@ private fun eventCategoryIcon(category: CalendarEventCategory, modifier: Modifie
     }
 }
 
-/** Passi del foglio di creazione evento: menu di scelta, assistente AILA, compilazione manuale. */
+/** Passi del foglio di creazione evento: menu di scelta, AILA Assistant, compilazione manuale. */
 private enum class EventCreationStep { MENU, ASSISTANT, MANUAL }
 
-/** Bozza estratta dal testo libero scritto nell'assistente AILA. */
+/** Bozza estratta dal testo libero scritto in AILA Assistant. */
 private data class AiEventDraft(
     val title: String,
     val subject: String,
@@ -2264,7 +2609,7 @@ private fun civilToEpochMillis(year: Int, month: Int, day: Int): Long {
 }
 
 /**
- * Interpretazione euristica del testo libero scritto nell'assistente AILA: niente chiamata di
+ * Interpretazione euristica del testo libero scritto in AILA Assistant: niente chiamata di
  * rete, solo pattern matching su parole chiave italiane (tipologia, materia, giorno, ora). Non è
  * un vero modello linguistico, ma basta a mostrare all'utente un evento già compilato da
  * rifinire prima di salvarlo, come nel mockup di riferimento.
@@ -2353,7 +2698,7 @@ private fun parseAiEventPrompt(raw: String): AiEventDraft {
 
 /**
  * Foglio di creazione evento in stile Material 3: al posto del vecchio `AlertDialog` con tutti i
- * campi già in vista, si apre su un menu con due scelte rapide ("Chiedi ad AILA" per compilazione
+ * campi già in vista, si apre su un menu con due scelte rapide ("AILA Assistant" per compilazione
  * assistita, "Crea manualmente" per i campi classici), che è il pattern del mockup di riferimento.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -2520,7 +2865,7 @@ private fun AddCalendarEventDialog(
                 Text(
                     text = when (step) {
                         EventCreationStep.MENU -> "Nuovo evento"
-                        EventCreationStep.ASSISTANT -> "Chiedi ad AILA"
+                        EventCreationStep.ASSISTANT -> "AILA Assistant"
                         EventCreationStep.MANUAL -> "Dettagli evento"
                     },
                     fontSize = 19.sp,
@@ -2550,15 +2895,13 @@ private fun AddCalendarEventDialog(
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
                         EventCreationOptionCard(
-                            title = "Chiedi ad AILA",
-                            subtitle = "Lascia che l'AI inserisca l'evento per te",
+                            title = "AILA Assistant",
+                            subtitle = "Descrivi l'evento, l'AI lo inserisce per te",
                             highlighted = true,
                             icon = { color ->
-                                circolareplus.design.AilaAssistantGlyph(
+                                circolareplus.design.AilaAssistantMark(
                                     size = 20.dp,
-                                    brush = androidx.compose.ui.graphics.SolidColor(color),
-                                    badgeColor = color,
-                                    avatarColor = AppTheme.PrimaryBlue
+                                    brush = androidx.compose.ui.graphics.SolidColor(color)
                                 )
                             },
                             modifier = Modifier.weight(1f),
@@ -2577,7 +2920,7 @@ private fun AddCalendarEventDialog(
 
                 EventCreationStep.ASSISTANT -> {
                     Text(
-                        text = "Descrivi cosa vuoi inserire e l'AI compila tutto per te.",
+                        text = "Descrivi cosa vuoi inserire e AILA Assistant compila tutto per te.",
                         fontSize = 13.sp,
                         color = AppTheme.TextMuted,
                         modifier = Modifier.padding(bottom = AppTheme.Space12)
@@ -2661,8 +3004,8 @@ private fun AddCalendarEventDialog(
 
                 EventCreationStep.MANUAL -> {
                     if (aiFilled) {
-                        circolareplus.design.AilaAiBadge(
-                            text = "Generato da AILA",
+                        circolareplus.design.AilaAssistantBadge(
+                            text = "Generato da AILA Assistant",
                             modifier = Modifier.padding(bottom = AppTheme.Space12)
                         )
                     }
@@ -2933,8 +3276,8 @@ private fun EventDetailDialog(
             }
 
             if (event.isAiGenerated) {
-                circolareplus.design.AilaAiBadge(
-                    text = "Inserito dall'AI",
+                circolareplus.design.AilaAssistantBadge(
+                    text = "Inserito da AILA Assistant",
                     modifier = Modifier.padding(bottom = AppTheme.Space16)
                 )
             }
@@ -3018,7 +3361,7 @@ private fun eventCategoryInk(category: CalendarEventCategory): Color = when (cat
 }
 
 /**
- * Card di scelta rapida del foglio "Nuovo evento": "Chiedi ad AILA" (riempimento sfumato) e
+ * Card di scelta rapida del foglio "Nuovo evento": "AILA Assistant" (riempimento sfumato) e
  * "Crea manualmente" (contorno), affiancate come nel mockup di riferimento.
  */
 @Composable
@@ -3276,10 +3619,9 @@ private fun PollSlotDraftRow(
             }
         }
         Spacer(modifier = Modifier.width(AppTheme.Space8))
-        Checkbox(
+        circolareplus.design.AilaSwitch(
             checked = slot.teacherMandatory,
-            onCheckedChange = onMandatoryChange,
-            colors = CheckboxDefaults.colors(checkedColor = AppTheme.PrimaryBlue)
+            onCheckedChange = onMandatoryChange
         )
         Box(
             modifier = Modifier
@@ -3340,14 +3682,16 @@ private fun AddProposalDialog(
             Spacer(modifier = Modifier.height(AppTheme.Space12))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.clickable { isAnonymous = !isAnonymous }
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isAnonymous = !isAnonymous }
             ) {
-                Checkbox(
-                    checked = isAnonymous,
-                    onCheckedChange = { isAnonymous = it },
-                    colors = CheckboxDefaults.colors(checkedColor = AppTheme.PrimaryBlue)
-                )
                 Text("Pubblica in forma anonima", fontSize = 13.sp, color = AppTheme.TextDark)
+                circolareplus.design.AilaSwitch(
+                    checked = isAnonymous,
+                    onCheckedChange = { isAnonymous = it }
+                )
             }
 
             Spacer(modifier = Modifier.height(AppTheme.Space24))

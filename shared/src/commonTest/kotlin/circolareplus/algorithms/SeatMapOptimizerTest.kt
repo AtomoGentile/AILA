@@ -112,6 +112,68 @@ class SeatMapOptimizerTest {
     }
 
     @Test
+    fun testBanchiDaTrioProduconoTreOccupantiPerBanco() {
+        val students = (1..12).map { User(id = "s$it", firstName = "S", lastName = "$it", username = "s$it") }
+
+        val assignments = SeatMapOptimizer.optimize(
+            students = students,
+            profiles = emptyMap(),
+            ratings = emptyMap(),
+            socialPreferences = emptyMap(),
+            history = emptyList(),
+            weights = OptimizerWeights(),
+            isSmallClass = false,
+            seed = 1L,
+            maxIterations = 100,
+            maxNoImprovement = 50,
+            seatsPerDesk = SeatMapOptimizer.SEATS_PER_DESK_TRIO
+        )
+
+        // 12 studenti / 3 per banco = 4 banchi, tutti pieni (nessun vincolo -2/-2 da rispettare qui).
+        assertEquals(4, assignments.size)
+        assertTrue(assignments.all { it.studentAId != null && it.studentBId != null && it.studentCId != null })
+
+        // Nessuno studente deve comparire due volte nella disposizione.
+        val allIds = assignments.flatMap { listOfNotNull(it.studentAId, it.studentBId, it.studentCId) }
+        assertEquals(students.size, allIds.toSet().size)
+    }
+
+    @Test
+    fun testBanchiDaTrioRispettanoIlVincoloHardCoppiaVietata() {
+        val students = (1..12).map { User(id = "s$it", firstName = "S", lastName = "$it", username = "s$it") }
+        // s1 rifiuta in modo assoluto sia s2 sia s3: nessuno dei due può mai finire al suo banco,
+        // nemmeno come "terzo" di un trio altrimenti compatibile.
+        val socialPreferences = mapOf(
+            ("s1" to "s2") to SocialPreferenceScore.STRONG_REJECTION,
+            ("s2" to "s1") to SocialPreferenceScore.STRONG_REJECTION,
+            ("s1" to "s3") to SocialPreferenceScore.STRONG_REJECTION,
+            ("s3" to "s1") to SocialPreferenceScore.STRONG_REJECTION
+        )
+
+        repeat(30) { i ->
+            val assignments = SeatMapOptimizer.optimize(
+                students = students,
+                profiles = emptyMap(),
+                ratings = emptyMap(),
+                socialPreferences = socialPreferences,
+                history = emptyList(),
+                weights = OptimizerWeights(),
+                isSmallClass = false,
+                seed = i.toLong(),
+                maxIterations = 200,
+                maxNoImprovement = 100,
+                seatsPerDesk = SeatMapOptimizer.SEATS_PER_DESK_TRIO
+            )
+
+            val violatingDesk = assignments.firstOrNull { desk ->
+                val ids = setOfNotNull(desk.studentAId, desk.studentBId, desk.studentCId)
+                ids.contains("s1") && (ids.contains("s2") || ids.contains("s3"))
+            }
+            assertTrue(violatingDesk == null, "s1 non deve mai condividere un banco da trio con s2 o s3 (seed=$i)")
+        }
+    }
+
+    @Test
     fun testConsecutiveTutoringCount() {
         val ratings = mapOf(
             "tutor" to RepresentativeRating("tutor", didactic = 5, behavior = 2),

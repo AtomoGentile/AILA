@@ -19,7 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import circolareplus.design.AilaAiBadge
+import circolareplus.design.AilaAssistantBadge
 import circolareplus.design.AilaCard
 import circolareplus.design.AilaDot
 import circolareplus.design.AilaEmptyState
@@ -97,7 +97,7 @@ fun CalendarScreen(
         AilaScreenHeader(
             title = "Calendario",
             subtitle = "Scadenze, verifiche e pagamenti della classe",
-            // Niente più tasto AI separato in header: "Chiedi ad AILA" è già la prima scelta
+            // Niente più tasto AI separato in header: "AILA Assistant" è già la prima scelta
             // dentro il foglio che si apre da "Aggiungi", un tasto in più qui era ridondante.
             action = {
                 AilaPrimaryButton(text = "Aggiungi", onClick = onAddEventClick)
@@ -161,39 +161,45 @@ fun CalendarScreen(
 
             Spacer(modifier = Modifier.height(AppTheme.Space20))
 
-            // Filtri categoria: senza emoji, con l'icona della categoria. Riga scorrevole invece di
-            // fillMaxWidth fisso: con 4 chip il contenuto non ci stava su schermi stretti e Compose
-            // comprimeva l'ultima ("Avvisi") in una manciata di pixel, facendo andare il testo a
-            // capo lettera per lettera invece di uscire semplicemente dallo schermo.
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .ailaAppear(1),
-                horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
-            ) {
+            // Filtri categoria: senza emoji, con l'icona della categoria. Pill scorrevole condiviso
+            // (AilaSlidingChipRow) invece del cross-fade di colore su ogni singola chip; scorrevole
+            // perché con 4 chip il contenuto non ci sta su schermi stretti.
+            val categoryFilterOptions = remember { listOf<CalendarEventCategory?>(null, CalendarEventCategory.VERIFICA, CalendarEventCategory.PAGAMENTO, CalendarEventCategory.AVVISO) }
+            circolareplus.design.AilaSlidingChipRow(
+                selectedIndex = categoryFilterOptions.indexOf(selectedCategoryFilter),
+                itemCount = categoryFilterOptions.size,
+                modifier = Modifier.fillMaxWidth().ailaAppear(1)
+            ) { chipModifier ->
                 AnimatedFilterChip(
                     label = "Tutte",
                     isSelected = selectedCategoryFilter == null,
-                    onClick = { selectedCategoryFilter = null }
+                    onClick = { selectedCategoryFilter = null },
+                    drawSelectionBackground = false,
+                    modifier = chipModifier(0)
                 )
                 AnimatedFilterChip(
                     label = "Verifiche",
                     isSelected = selectedCategoryFilter == CalendarEventCategory.VERIFICA,
                     onClick = { selectedCategoryFilter = CalendarEventCategory.VERIFICA },
-                    icon = { tint -> AppIcons.Pencil(modifier = Modifier.size(14.dp), color = tint) }
+                    icon = { tint -> AppIcons.Pencil(modifier = Modifier.size(14.dp), color = tint) },
+                    drawSelectionBackground = false,
+                    modifier = chipModifier(1)
                 )
                 AnimatedFilterChip(
                     label = "Pagamenti",
                     isSelected = selectedCategoryFilter == CalendarEventCategory.PAGAMENTO,
                     onClick = { selectedCategoryFilter = CalendarEventCategory.PAGAMENTO },
-                    icon = { tint -> AppIcons.Card(modifier = Modifier.size(14.dp), color = tint) }
+                    icon = { tint -> AppIcons.Card(modifier = Modifier.size(14.dp), color = tint) },
+                    drawSelectionBackground = false,
+                    modifier = chipModifier(2)
                 )
                 AnimatedFilterChip(
                     label = "Avvisi",
                     isSelected = selectedCategoryFilter == CalendarEventCategory.AVVISO,
                     onClick = { selectedCategoryFilter = CalendarEventCategory.AVVISO },
-                    icon = { tint -> AppIcons.Bell(modifier = Modifier.size(14.dp), color = tint) }
+                    icon = { tint -> AppIcons.Bell(modifier = Modifier.size(14.dp), color = tint) },
+                    drawSelectionBackground = false,
+                    modifier = chipModifier(3)
                 )
             }
 
@@ -426,7 +432,7 @@ fun CalendarEventCard(
                 )
                 if (event.isAiGenerated) {
                     Spacer(modifier = Modifier.height(6.dp))
-                    AilaAiBadge(text = "Inserito dall'AI")
+                    AilaAssistantBadge(text = "Inserito da AILA Assistant")
                 }
             }
 

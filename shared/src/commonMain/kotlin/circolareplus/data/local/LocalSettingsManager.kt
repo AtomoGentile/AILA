@@ -1,5 +1,6 @@
 package circolareplus.data.local
 
+import circolareplus.ai.assistant.AssistantConversation
 import circolareplus.domain.model.NotificationLogEntry
 import circolareplus.platform.currentTimeMillis
 import com.russhwolf.settings.Settings
@@ -36,6 +37,18 @@ class LocalSettingsManager(
         private const val KEY_LAST_SEEN_SEATMAP = "last_seen_seatmap_signature"
         private const val KEY_LAST_SEEN_PREFERENCES_OPEN = "last_seen_preferences_open"
         private const val KEY_LAST_SEEN_POLL_ID = "last_seen_poll_id"
+        private const val KEY_ASSISTANT_HISTORY = "assistant_history_json"
+        /**
+         * Quante conversazioni di AILA Assistant tenere, e quanti messaggi per conversazione.
+         *
+         * Ci sono dei tetti perche' sotto c'e' SharedPreferences (Android) / NSUserDefaults
+         * (iOS): vengono caricati interi in memoria all'avvio, quindi non sono il posto dove far
+         * crescere senza limite delle trascrizioni. Venti conversazioni da quaranta messaggi
+         * sono qualche centinaio di KB nel caso peggiore, e coprono largamente il "ma cosa mi
+         * aveva detto l'altra volta?" che e' il motivo per cui la cronologia esiste.
+         */
+        private const val MAX_ASSISTANT_CONVERSATIONS = 20
+        private const val MAX_ASSISTANT_MESSAGES = 40
         /** Quante ricerche recenti tenere: quante ne mostra la schermata di ricerca. */
         private const val MAX_RECENT_SEARCHES = 5
 
@@ -236,6 +249,61 @@ class LocalSettingsManager(
 
     fun clearNotifications() {
         settings.remove(KEY_NOTIFICATION_LOG)
+    }
+
+    /**
+     * Le conversazioni archiviate di AILA Assistant, la piu' recente prima.
+     *
+     * Stanno sul dispositivo e non sul server di proposito: una trascrizione della chat contiene
+     * le analisi personali delle circolari, le scadenze di chi ha chiesto e i dati della mappa
+     * posti, cioe' esattamente quello che l'app promette di non far uscire dal telefono (vedi
+     * README, "Privacy & AI"). Il prezzo accettato e' che la cronologia non si sincronizza fra
+     * dispositivi e si perde a reinstallazione — e che il logout la cancella, perche'
+     * [clear] svuota le impostazioni.
+     */
+    fun listAssistantConversations(): List<AssistantConversation> =
+        readAssistantConversations().sortedByDescending { it.updatedAtMillis }
+
+    /**
+     * Salva una conversazione, o aggiorna quella con lo stesso `id` se c'e' gia'.
+     *
+     * Si chiama a ogni messaggio e non all'uscita dalla schermata: l'app puo' essere chiusa dal
+     * sistema mentre il modello sta ancora rispondendo, e una cronologia che perde proprio
+     * l'ultima conversazione e' quella che serve meno.
+     */
+    fun saveAssistantConversation(conversation: AssistantConversation) {
+        if (conversation.messages.isEmpty()) return
+        val trimmed = conversation.copy(
+            messages = conversation.messages.takeLast(MAX_ASSISTANT_MESSAGES)
+        )
+        val others = readAssistantConversations().filter { it.id != trimmed.id }
+        val updated = (listOf(trimmed) + others)
+            .sortedByDescending { it.updatedAtMillis }
+            .take(MAX_ASSISTANT_CONVERSATIONS)
+        writeAssistantConversations(updated)
+    }
+
+    fun deleteAssistantConversation(id: String) {
+        writeAssistantConversations(readAssistantConversations().filter { it.id != id })
+    }
+
+    fun clearAssistantHistory() {
+        settings.remove(KEY_ASSISTANT_HISTORY)
+    }
+
+    private fun readAssistantConversations(): List<AssistantConversation> {
+        val raw = settings.getStringOrNull(KEY_ASSISTANT_HISTORY) ?: return emptyList()
+        // Stesso criterio del log notifiche: se il JSON e' di un formato vecchio o corrotto si
+        // riparte da vuoto, invece di far crashare l'apertura della chat per una cronologia.
+        return try {
+            json.decodeFromString<List<AssistantConversation>>(raw)
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun writeAssistantConversations(conversations: List<AssistantConversation>) {
+        settings.putString(KEY_ASSISTANT_HISTORY, json.encodeToString(conversations))
     }
 
     private fun readNotifications(now: Long): List<NotificationLogEntry> {

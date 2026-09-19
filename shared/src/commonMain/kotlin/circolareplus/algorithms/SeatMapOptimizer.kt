@@ -18,7 +18,11 @@ data class DeskAssignment(
     val row: Int,        // 0-indexed da davanti a dietro (0 = prima fila)
     val column: Int,     // 0-indexed da sinistra a destra
     val studentAId: String?,
-    val studentBId: String?
+    val studentBId: String?,
+    // Terzo posto per i "banchi da trio" (SeatMapOptimizer.optimize(..., seatsPerDesk = 3)).
+    // Default null: i banchi da coppia esistenti (storico, mappe già pubblicate) restano
+    // validi senza bisogno di migrazione, sia lato client sia nel JSON già salvato sul server.
+    val studentCId: String? = null
 )
 
 data class SeatMapProposal(
@@ -195,43 +199,72 @@ object SeatMapOptimizer {
         history: List<SeatMapHistoryRecord>,
         isSmallClass: Boolean = false
     ): Int {
-        var totalPenalty = 0
-        val pairAB = studentAId to studentBId
-        val pairBA = studentBId to studentAId
-        val deskPos = deskRow to deskCol
-
-        for (record in history) {
-            val isPair = record.pairs.contains(pairAB) || record.pairs.contains(pairBA)
-            val posA = record.deskAssignments[studentAId]
-            val posB = record.deskAssignments[studentBId]
-
-            val sameDeskA = posA == deskPos
-            val sameDeskB = posB == deskPos
-
-            val (pairPen, deskPen) = when (record.mapIndex) {
-                1 -> 300 to 150 // N-1
-                2 -> 200 to 100 // N-2
-                3 -> 100 to 50  // N-3
-                4 -> 50 to 25   // N-4
-                else -> 0 to 0
-            }
-
-            if (isPair) totalPenalty += pairPen
-            if (sameDeskA) totalPenalty += deskPen
-            if (sameDeskB) totalPenalty += deskPen
-
-            // Stessa fila N-1
-            if (record.mapIndex == 1) {
-                if (posA?.first == deskRow) totalPenalty += if (deskRow == 0) 60 else 30
-                if (posB?.first == deskRow) totalPenalty += if (deskRow == 0) 60 else 30
-            }
-        }
+        var totalPenalty = pairRepeatPenalty(studentAId, studentBId, history) +
+            occupantDeskHistoryPenalty(studentAId, deskRow, deskCol, history) +
+            occupantDeskHistoryPenalty(studentBId, deskRow, deskCol, history)
 
         if (isSmallClass) {
             totalPenalty = (totalPenalty * 0.5).toInt()
         }
 
         return totalPenalty
+    }
+
+    /**
+     * Componente "erano una coppia" della penalità memoria: [studentAId] e [studentBId] sedevano
+     * insieme (stesso banco) in una delle ultime 4 mappe. Fattorizzata fuori da
+     * [calculateMemoryPenalty] perché nei banchi da trio va sommata una volta per OGNI coppia
+     * possibile del banco (A-B, A-C, B-C: tre fatti storici distinti, nessun doppio conteggio),
+     * mentre [occupantDeskHistoryPenalty] — l'altra componente, legata al singolo studente e non
+     * alla coppia — va sommata una volta sola per studente, non per coppia in cui compare.
+     */
+    private fun pairRepeatPenalty(studentAId: String, studentBId: String, history: List<SeatMapHistoryRecord>): Int {
+        val pairAB = studentAId to studentBId
+        val pairBA = studentBId to studentAId
+        var total = 0
+        for (record in history) {
+            if (record.pairs.contains(pairAB) || record.pairs.contains(pairBA)) {
+                total += when (record.mapIndex) {
+                    1 -> 300 // N-1
+                    2 -> 200 // N-2
+                    3 -> 100 // N-3
+                    4 -> 50  // N-4
+                    else -> 0
+                }
+            }
+        }
+        return total
+    }
+
+    /**
+     * Componente "ero già a QUESTO banco fisico" della penalità memoria (più il bonus negativo di
+     * "stessa fila" per N-1): dipende solo da [studentId] e dalla posizione del banco, non da chi
+     * gli siede accanto. Vedi il commento su [pairRepeatPenalty] per il perché della separazione.
+     */
+    private fun occupantDeskHistoryPenalty(
+        studentId: String,
+        deskRow: Int,
+        deskCol: Int,
+        history: List<SeatMapHistoryRecord>
+    ): Int {
+        val deskPos = deskRow to deskCol
+        var total = 0
+        for (record in history) {
+            val pos = record.deskAssignments[studentId]
+            if (pos == deskPos) {
+                total += when (record.mapIndex) {
+                    1 -> 150 // N-1
+                    2 -> 100 // N-2
+                    3 -> 50  // N-3
+                    4 -> 25  // N-4
+                    else -> 0
+                }
+            }
+            if (record.mapIndex == 1 && pos?.first == deskRow) {
+                total += if (deskRow == 0) 60 else 30
+            }
+        }
+        return total
     }
 
     /**
@@ -249,6 +282,20 @@ object SeatMapOptimizer {
             // Penalità severa se ha il priority pass ma è oltre la terza fila
             if (profileA?.priorityPass == true) bonus -= 1000
             if (profileB?.priorityPass == true) bonus -= 1000
+        }
+        return bonus
+    }
+
+    /**
+     * Generalizza [calculatePriorityBonus] a un numero qualunque di occupanti del banco (coppia
+     * o trio): stessa logica per ciascuno, un bonus/malus indipendente per persona invece che
+     * incastrato in una firma a due parametri fissi.
+     */
+    private fun calculatePriorityBonusForOccupants(profiles: List<StudentProfile?>, row: Int): Int {
+        var bonus = 0
+        for (profile in profiles) {
+            if (profile?.priorityPass != true) continue
+            bonus += if (row <= MAX_PRIORITY_ROW) 1000 else -1000
         }
         return bonus
     }
@@ -281,10 +328,26 @@ object SeatMapOptimizer {
     private fun hasForbiddenPairAtDesk(
         desk: DeskAssignment,
         socialPreferences: Map<Pair<String, String>, SocialPreferenceScore>
-    ): Boolean {
-        val a = desk.studentAId
-        val b = desk.studentBId
-        return a != null && b != null && isForbiddenPair(a, b, socialPreferences)
+    ): Boolean = deskPairIds(desk).any { (a, b) -> isForbiddenPair(a, b, socialPreferences) }
+
+    /** Occupanti effettivi di un banco (2 per una coppia, fino a 3 per un trio), posti vuoti esclusi. */
+    private fun deskOccupantIds(desk: DeskAssignment): List<String> =
+        listOfNotNull(desk.studentAId, desk.studentBId, desk.studentCId)
+
+    /** Tutte le coppie possibili fra gli occupanti di un banco: una sola (A,B) per una coppia,
+     * tre — (A,B), (A,C), (B,C) — per un trio. Ogni funzione di punteggio "a coppia" esistente
+     * (sociale, didattica, disciplina, burnout, ripetizione storica) viene sommata su ognuna: è
+     * così che l'algoritmo resta lo stesso, solo applicato a più coppie per banco. */
+    private fun deskPairIds(desk: DeskAssignment): List<Pair<String, String>> {
+        val ids = deskOccupantIds(desk)
+        if (ids.size < 2) return emptyList()
+        val pairs = mutableListOf<Pair<String, String>>()
+        for (i in ids.indices) {
+            for (j in (i + 1) until ids.size) {
+                pairs.add(ids[i] to ids[j])
+            }
+        }
+        return pairs
     }
 
     /**
@@ -314,18 +377,12 @@ object SeatMapOptimizer {
     }
 
     private fun deskAvgBehavior(desk: DeskAssignment, ratings: Map<String, RepresentativeRating>): Int? {
-        val values = listOfNotNull(
-            desk.studentAId?.let { ratings[it]?.behavior },
-            desk.studentBId?.let { ratings[it]?.behavior }
-        )
+        val values = deskOccupantIds(desk).mapNotNull { ratings[it]?.behavior }
         return if (values.isEmpty()) null else values.sum() / values.size
     }
 
     private fun deskAvgHeight(desk: DeskAssignment, profiles: Map<String, StudentProfile>): Int? {
-        val values = listOfNotNull(
-            desk.studentAId?.let { profiles[it]?.heightCm },
-            desk.studentBId?.let { profiles[it]?.heightCm }
-        )
+        val values = deskOccupantIds(desk).mapNotNull { profiles[it]?.heightCm }
         return if (values.isEmpty()) null else values.sum() / values.size
     }
 
@@ -369,10 +426,10 @@ object SeatMapOptimizer {
         val byPosition = assignments.associateBy { it.row to it.column }
 
         for (desk in assignments) {
-            val a = desk.studentAId
-            val b = desk.studentBId
-
-            if (a != null && b != null) {
+            val occupantIds = deskOccupantIds(desk)
+            // Ogni coppia possibile del banco (una sola per una coppia, tre per un trio) prende
+            // esattamente lo stesso trattamento di prima: stesse funzioni pairwise, sommate.
+            for ((a, b) in deskPairIds(desk)) {
                 val prefAtoB = socialPreferences[a to b] ?: SocialPreferenceScore.NEUTRAL
                 val prefBtoA = socialPreferences[b to a] ?: SocialPreferenceScore.NEUTRAL
                 social += calculateSocialScore(prefAtoB, prefBtoA)
@@ -390,13 +447,17 @@ object SeatMapOptimizer {
                         burnout += calculateTutorBurnoutPenalty(b, a, ratings, computeConsecutiveTutoringCount(b, ratings, history))
                     }
                 }
-
-                memory += calculateMemoryPenalty(a, b, desk.row, desk.column, history, isSmallClass)
             }
 
-            val profA = profiles[a]
-            val profB = profiles[b]
-            priority += calculatePriorityBonus(profA, profB, desk.row)
+            // Penalità memoria: componente "erano insieme" per coppia + componente "già a questo
+            // banco" per singolo occupante (vedi i commenti su pairRepeatPenalty/
+            // occupantDeskHistoryPenalty per il perché sono tenute separate).
+            var deskMemory = deskPairIds(desk).sumOf { (a, b) -> pairRepeatPenalty(a, b, history) } +
+                occupantIds.sumOf { occupantDeskHistoryPenalty(it, desk.row, desk.column, history) }
+            if (isSmallClass) deskMemory = (deskMemory * 0.5).toInt()
+            memory += deskMemory
+
+            priority += calculatePriorityBonusForOccupants(occupantIds.map { profiles[it] }, desk.row)
 
             // Confronto col banco immediatamente davanti nella stessa colonna (chiasso/altezza a scalare).
             val deskFront = byPosition[desk.row - 1 to desk.column]
@@ -435,26 +496,53 @@ object SeatMapOptimizer {
         )
     }
 
-    /** Riferimento a un singolo posto (metà banco): usato dalla ricerca locale e dall'editor manuale. */
-    data class SeatRef(val deskIndex: Int, val isSeatA: Boolean) {
+    /** Numero di posti per banco supportati dall'algoritmo: coppia (default, storico) o trio. */
+    const val SEATS_PER_DESK_PAIR = 2
+    const val SEATS_PER_DESK_TRIO = 3
+
+    /**
+     * Riferimento a un singolo posto di un banco: usato dalla ricerca locale e dall'editor
+     * manuale. `seatIndex` 0/1/2 corrisponde a studentAId/studentBId/studentCId — prima era un
+     * `isSeatA: Boolean` che copriva solo i banchi da coppia, generalizzato a un indice per
+     * supportare anche il terzo posto dei banchi da trio.
+     */
+    data class SeatRef(val deskIndex: Int, val seatIndex: Int) {
         fun studentId(assignments: List<DeskAssignment>): String? {
             val desk = assignments[deskIndex]
-            return if (isSeatA) desk.studentAId else desk.studentBId
+            return when (seatIndex) {
+                0 -> desk.studentAId
+                1 -> desk.studentBId
+                else -> desk.studentCId
+            }
         }
     }
 
-    private fun allSeats(assignments: List<DeskAssignment>): List<SeatRef> =
-        assignments.indices.flatMap { listOf(SeatRef(it, true), SeatRef(it, false)) }
+    private fun withSeat(desk: DeskAssignment, seatIndex: Int, studentId: String?): DeskAssignment =
+        when (seatIndex) {
+            0 -> desk.copy(studentAId = studentId)
+            1 -> desk.copy(studentBId = studentId)
+            else -> desk.copy(studentCId = studentId)
+        }
 
-    /** Scambia gli occupanti di due posti (anche di banchi diversi). Usata sia dalla ricerca
-     * locale sia dall'editor manuale (swap-by-tap) per applicare uno scambio scelto dall'utente. */
+    /** Tutti i posti esistenti (occupati o vuoti) della disposizione, [seatsPerDesk] per banco:
+     * 2 per i banchi da coppia, 3 per i banchi da trio. Usata dalla ricerca locale per scegliere
+     * a caso due posti da scambiare — mai il terzo posto quando si genera in modalità coppia,
+     * altrimenti l'ottimizzatore "inventerebbe" trii anche quando non richiesto. */
+    private fun allSeats(assignments: List<DeskAssignment>, seatsPerDesk: Int): List<SeatRef> =
+        assignments.indices.flatMap { deskIndex -> (0 until seatsPerDesk).map { SeatRef(deskIndex, it) } }
+
+    /** Scambia gli occupanti di due posti (anche di banchi diversi, anche il terzo posto di un
+     * trio). Usata sia dalla ricerca locale sia dall'editor manuale (swap-by-tap) per applicare
+     * uno scambio scelto dall'utente. */
     fun swapSeats(assignments: List<DeskAssignment>, seat1: SeatRef, seat2: SeatRef): List<DeskAssignment> {
         if (seat1 == seat2) return assignments
 
         if (seat1.deskIndex == seat2.deskIndex) {
-            // Stesso banco: scambiare i due posti equivale semplicemente a invertire A e B.
+            // Stesso banco: scambiare due posti equivale a invertirli fra loro.
             val desk = assignments[seat1.deskIndex]
-            val swappedDesk = desk.copy(studentAId = desk.studentBId, studentBId = desk.studentAId)
+            val student1 = seat1.studentId(assignments)
+            val student2 = seat2.studentId(assignments)
+            val swappedDesk = withSeat(withSeat(desk, seat1.seatIndex, student2), seat2.seatIndex, student1)
             return assignments.toMutableList().also { it[seat1.deskIndex] = swappedDesk }
         }
 
@@ -462,48 +550,56 @@ object SeatMapOptimizer {
         val student2 = seat2.studentId(assignments)
         return assignments.mapIndexed { index, desk ->
             when (index) {
-                seat1.deskIndex -> if (seat1.isSeatA) desk.copy(studentAId = student2) else desk.copy(studentBId = student2)
-                seat2.deskIndex -> if (seat2.isSeatA) desk.copy(studentAId = student1) else desk.copy(studentBId = student1)
+                seat1.deskIndex -> withSeat(desk, seat1.seatIndex, student2)
+                seat2.deskIndex -> withSeat(desk, seat2.seatIndex, student1)
                 else -> desk
             }
         }
     }
 
     /**
-     * Costruisce la disposizione iniziale: shuffle deterministico (seed) + accoppiamento sequenziale
-     * con "repair pass" che salta i candidati che formerebbero una coppia vietata (-2/-2), cercando
-     * il primo compagno compatibile più avanti in coda. Se nessun compagno è compatibile, lo studente
-     * viene messo da solo in un banco: meglio un posto scoperto che violare il Divieto Assoluto.
+     * Costruisce la disposizione iniziale: shuffle deterministico (seed) + raggruppamento
+     * sequenziale a gruppi di [groupSize] (2 per i banchi da coppia, 3 per i banchi da trio) con
+     * "repair pass" che salta i candidati che formerebbero una coppia vietata (-2/-2) con
+     * QUALUNQUE membro già scelto per il gruppo, cercando il primo compagno compatibile più avanti
+     * in coda. Se non ne restano abbastanza per completare il gruppo, questo resta più piccolo del
+     * previsto (fino a un solo occupante): meglio un banco sotto-occupato che violare il Divieto
+     * Assoluto.
      */
     private fun buildInitialLayout(
         students: List<User>,
         socialPreferences: Map<Pair<String, String>, SocialPreferenceScore>,
-        random: Random
+        random: Random,
+        groupSize: Int
     ): List<DeskAssignment> {
         val queue = students.shuffled(random).toMutableList()
-        val pairs = mutableListOf<Pair<User, User?>>()
+        val groups = mutableListOf<List<User>>()
 
         while (queue.isNotEmpty()) {
-            val a = queue.removeAt(0)
-            if (queue.isEmpty()) {
-                pairs.add(a to null)
-                break
+            val group = mutableListOf(queue.removeAt(0))
+
+            while (group.size < groupSize && queue.isNotEmpty()) {
+                var candidateIndex = 0
+                while (candidateIndex < queue.size &&
+                    group.any { member -> isForbiddenPair(member.id, queue[candidateIndex].id, socialPreferences) }
+                ) {
+                    candidateIndex++
+                }
+                if (candidateIndex >= queue.size) break // Nessun compagno compatibile rimasto in coda.
+                group.add(queue.removeAt(candidateIndex))
             }
-            var partnerIndex = 0
-            while (partnerIndex < queue.size && isForbiddenPair(a.id, queue[partnerIndex].id, socialPreferences)) {
-                partnerIndex++
-            }
-            if (partnerIndex < queue.size) {
-                val b = queue.removeAt(partnerIndex)
-                pairs.add(a to b)
-            } else {
-                pairs.add(a to null)
-            }
+            groups.add(group)
         }
 
         val maxCols = DEFAULT_DESKS_PER_ROW
-        return pairs.mapIndexed { index, (a, b) ->
-            DeskAssignment(row = index / maxCols, column = index % maxCols, studentAId = a.id, studentBId = b?.id)
+        return groups.mapIndexed { index, group ->
+            DeskAssignment(
+                row = index / maxCols,
+                column = index % maxCols,
+                studentAId = group.getOrNull(0)?.id,
+                studentBId = group.getOrNull(1)?.id,
+                studentCId = group.getOrNull(2)?.id
+            )
         }
     }
 
@@ -525,15 +621,22 @@ object SeatMapOptimizer {
         isSmallClass: Boolean,
         seed: Long,
         maxIterations: Int = DEFAULT_MAX_ITERATIONS,
-        maxNoImprovement: Int = DEFAULT_MAX_NO_IMPROVEMENT
+        maxNoImprovement: Int = DEFAULT_MAX_NO_IMPROVEMENT,
+        // 2 = banchi da coppia (default, storico), 3 = banchi da trio. Stesso identico algoritmo
+        // (stesse funzioni di punteggio, stesso hill-climbing): cambia solo quante persone per
+        // banco costruisce buildInitialLayout e quanti posti esplora la ricerca locale.
+        seatsPerDesk: Int = SEATS_PER_DESK_PAIR
     ): List<DeskAssignment> {
+        require(seatsPerDesk == SEATS_PER_DESK_PAIR || seatsPerDesk == SEATS_PER_DESK_TRIO) {
+            "seatsPerDesk deve essere $SEATS_PER_DESK_PAIR (coppia) o $SEATS_PER_DESK_TRIO (trio), ricevuto $seatsPerDesk"
+        }
         if (students.isEmpty()) return emptyList()
 
         val random = Random(seed)
         fun score(layout: List<DeskAssignment>) =
             scoreLayout(layout, profiles, ratings, socialPreferences, history, weights, isSmallClass).total
 
-        var current = buildInitialLayout(students, socialPreferences, random)
+        var current = buildInitialLayout(students, socialPreferences, random, seatsPerDesk)
         var currentScore = score(current)
         var best = current
         var bestScore = currentScore
@@ -543,7 +646,7 @@ object SeatMapOptimizer {
         while (iteration < maxIterations && noImprovement < maxNoImprovement) {
             iteration++
 
-            val seats = allSeats(current)
+            val seats = allSeats(current, seatsPerDesk)
             if (seats.size < 2) break
 
             val seat1 = seats.random(random)

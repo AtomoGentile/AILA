@@ -133,6 +133,16 @@ class ClientSideAiClassifier(
         private const val MAX_PDF_CHARS = 24_000
 
         /**
+         * Quanto puo' essere lungo, in caratteri, un prompt dell'assistente verso Gemini.
+         *
+         * La finestra del modello e' molto piu' grande: il limite qui non e' tecnico ma di
+         * quota. Sul piano gratuito la quota e' al minuto, e una chat e' fatta di domande
+         * una dietro l'altra — con un contesto da centomila caratteri bastano due o tre
+         * domande per esaurirla e ritrovarsi con i 429 al posto delle risposte.
+         */
+        private const val MAX_PROMPT_CHARS = 30_000
+
+        /**
          * Modello che ha funzionato in questa sessione: una volta trovato, le circolari successive
          * lo usano subito senza rifare tutta la scaletta. Sta nel companion perché
          * `AppContainer.newAiClassifier()` costruisce una nuova istanza a ogni classificazione.
@@ -189,7 +199,7 @@ class ClientSideAiClassifier(
     ): GeminiCallResult {
         val truncatedText = truncatePdfTextForAi(pdfText, MAX_PDF_CHARS)
         val prompt = """
-            Sei un assistente AI scolastico per l'app "AILA".
+            Sei AILA Assistant, l'assistente scolastico dell'app "AILA".
             Analizza il seguente testo estratto da una circolare scolastica ufficiale per determinare se e quanto riguarda il seguente studente: "$studentContext".
 
             CIRCOLARE N. $circularNumber: $circularTitle
@@ -288,6 +298,77 @@ class ClientSideAiClassifier(
         } catch (e: Exception) {
             EventDraft("", "", "ALTRO", null, null, null)
         }
+    }
+
+    /**
+     * Implementazione di [AiClassifier.generateAnswer]: una generateContent secca, con la stessa
+     * scaletta di modelli usata dalla classificazione.
+     *
+     * Qui non c'e' nessun ripiego: se Google rifiuta la chiave, la quota e' finita o la rete non
+     * c'e', torna [AiTextResult.Failure] con la risposta letterale del server. L'assistente
+     * mostra quel motivo in chat invece di una frase generica — e' l'unico modo per capire da
+     * fuori perche' una domanda non ha ottenuto risposta.
+     */
+    override suspend fun generateAnswer(prompt: AiPromptBuilder): AiTextResult {
+        if (userApiKey.isBlank()) {
+            return AiTextResult.Failure(
+                "Nessuna chiave Google AI Studio configurata: aprila dalle Impostazioni, " +
+                    "oppure scarica un modello per l'AI locale."
+            )
+        }
+
+        val built = prompt.build(MAX_PROMPT_CHARS)
+        val text = built.systemPrompt + "\n\n" + built.userPrompt
+        val candidates = buildList {
+            resolvedModel?.let { add(it) }
+            add(model)
+            addAll(MODEL_LADDER)
+        }.distinct()
+
+        var lastFailure = "nessun modello disponibile"
+        for (candidate in candidates) {
+            val response = try {
+                postGenerate(candidate, text)
+            } catch (e: Exception) {
+                return AiTextResult.Failure(
+                    "non sono riuscito a raggiungere Google: ${e::class.simpleName}: " +
+                        "${e.message ?: "nessun dettaglio"}"
+                )
+            }
+            if (response.status.isSuccess()) {
+                resolvedModel = candidate
+                val answer = extractGeneratedText(response.bodyAsText())
+                    ?: return AiTextResult.Failure("Google ha risposto senza contenuto utilizzabile.")
+                return AiTextResult.Success(answer, "Google Gemini ($candidate)")
+            }
+            val body = try { response.bodyAsText() } catch (e: Exception) { "" }
+            lastFailure = "HTTP ${response.status.value} con il modello $candidate: ${body.take(200)}"
+            if (!isModelUnavailable(response.status.value, body)) return AiTextResult.Failure(lastFailure)
+            // Un modello che ha appena risposto 503 non va piu' tenuto come "risolto": la
+            // prossima domanda deve ripartire dalla scaletta invece di ributtarsi sullo stesso.
+            if (resolvedModel == candidate) resolvedModel = null
+        }
+
+        val discovered = discoverUsableModel()
+        if (discovered != null) {
+            val response = postGenerate(discovered, text)
+            if (response.status.isSuccess()) {
+                resolvedModel = discovered
+                val answer = extractGeneratedText(response.bodyAsText())
+                if (answer != null) return AiTextResult.Success(answer, "Google Gemini ($discovered)")
+            }
+        }
+        return AiTextResult.Failure(lastFailure)
+    }
+
+    /** Il testo del primo candidato di una risposta generateContent, o `null` se non c'e'. */
+    private fun extractGeneratedText(raw: String): String? = try {
+        json.parseToJsonElement(raw).jsonObject["candidates"]?.jsonArray?.getOrNull(0)
+            ?.jsonObject?.get("content")?.jsonObject
+            ?.get("parts")?.jsonArray?.getOrNull(0)
+            ?.jsonObject?.get("text")?.jsonPrimitive?.content
+    } catch (e: Exception) {
+        null
     }
 
     /**
@@ -390,14 +471,28 @@ class ClientSideAiClassifier(
         }
     }
 
-    /** Distingue "questo modello non esiste più" da "la chiave è sbagliata / quota finita". */
+    /**
+     * `true` quando vale la pena provare il modello successivo della scaletta, `false` quando
+     * cambiare modello non cambierebbe niente (chiave sbagliata, quota finita, rete assente).
+     *
+     * Copre due casi diversi che portano alla stessa decisione. Il primo e' il modello ritirato,
+     * che risponde 404. Il secondo e' il **sovraccarico temporaneo**: Google risponde 503
+     * `UNAVAILABLE` — "This model is currently experiencing high demand" — e prima di questa
+     * modifica l'app si fermava li', perche' 503 non e' 404. Ma un sovraccarico riguarda *quel*
+     * modello, non la chiave: `gemini-flash-lite-latest` gira su una capacita' diversa e
+     * risponde mentre `gemini-flash-latest` e' pieno. Fermarsi al primo 503 significava dire
+     * "non sono riuscito a rispondere" avendo in tasca quattro alternative non provate.
+     */
     private fun isModelUnavailable(statusCode: Int, body: String): Boolean {
-        if (statusCode == 404) return true
+        if (statusCode == 404 || statusCode == 503) return true
         val lower = body.lowercase()
         return lower.contains("not found") ||
             lower.contains("is not supported") ||
             lower.contains("does not exist") ||
-            lower.contains("has been deprecated")
+            lower.contains("has been deprecated") ||
+            lower.contains("unavailable") ||
+            lower.contains("overloaded") ||
+            lower.contains("high demand")
     }
 
     /** Estrae badge, riassunto e scadenze dalla risposta di Gemini. */

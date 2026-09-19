@@ -26,6 +26,21 @@ interface AiClassifier {
     suspend fun parseEventPrompt(userPrompt: String): EventDraft
 
     /**
+     * Genera testo libero a partire da un prompt che sa adattarsi allo spazio disponibile.
+     *
+     * A differenza degli altri due metodi non ha nessuna riserva euristica: serve
+     * all'assistente conversazionale (vedi `circolareplus.ai.assistant.AilaAssistant`), dove una
+     * risposta inventata quando il modello non è raggiungibile sarebbe peggio di nessuna
+     * risposta. Per questo torna [AiTextResult], che distingue esplicitamente riuscita e
+     * fallimento con il motivo.
+     *
+     * Prende un [AiPromptBuilder] e non due stringhe gia' pronte perche' i due provider hanno
+     * finestre di contesto che differiscono di due ordini di grandezza: vedi il commento su
+     * [AiPromptBuilder] per il motivo per cui un prompt unico rendeva inutile la riserva locale.
+     */
+    suspend fun generateAnswer(prompt: AiPromptBuilder): AiTextResult
+
+    /**
      * Testa la configurazione (API key, autenticazione, ecc.) e ritorna un messaggio
      * leggibile su come è andata. Usato dal pulsante "Prova la chiave" nelle Impostazioni.
      */

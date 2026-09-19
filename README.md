@@ -29,6 +29,7 @@ Target: **Android**, **iOS** / **iPadOS**, backend **Cloudflare Serverless**.
 | Modulo | Descrizione |
 |---|---|
 | **Circolari** | Il backend controlla il portale Spaggiari della scuola ogni 10-15 minuti, mette in cache i PDF nuovi e notifica la classe. Ogni dispositivo scarica il PDF e lo classifica **in locale** (vedi [Privacy & AI](#privacy--ai)) in una delle categorie *Ti riguarda / Potenziale interesse / Non ti riguarda*, con estrazione automatica di eventuali scadenze. |
+| **AILA Assistant** | L'assistente dell'app: una domanda in italiano e una risposta costruita solo sui dati che AILA ha già (circolari e loro analisi, calendario, bacheca, sondaggi, mappa posti), con i riferimenti cliccabili delle fonti. Gira con la stessa chiave AI personale della classificazione (vedi [Privacy & AI](#privacy--ai)). |
 | **Calendario** | Eventi scolastici, anche generati automaticamente dalle scadenze estratte dalle circolari. |
 | **Bacheca proposte** | Proposte della classe con voti, commenti e possibilità di pubblicare in forma anonima (con quorum di governance per lo sblocco identità in caso di abuso: 2 Rappresentanti + 1 Guardia di Sicurezza). |
 | **Sondaggi interrogazioni** | Prenotazione delle date d'interrogazione con un sistema a budget di voti (verde/giallo/rosso chiaro/rosso scuro) e "bonus sacrificio" per chi rinuncia più spesso alla data preferita, per prevenire il gaming del sistema. |

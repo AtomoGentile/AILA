@@ -171,6 +171,37 @@ export async function resolveClassId(
 }
 
 /**
+ * Garantisce che esista una riga `classes` per [classId], creandola se manca.
+ *
+ * La registrazione (`POST /api/auth/register`) fa già `INSERT OR IGNORE INTO classes` per la
+ * classe scelta, quindi in teoria questa riga esiste sempre — ma un account può restare "orfano"
+ * (class_id valorizzato sugli utenti, nessuna riga `classes` corrispondente) se si è registrato
+ * prima che quell'INSERT esistesse, o per qualunque altra causa non prevista. Quando succede,
+ * ogni `UPDATE classes SET ... WHERE id = ?` colpisce silenziosamente ZERO righe (nessun errore:
+ * un UPDATE senza righe corrispondenti "riesce" comunque) e ogni lettura torna vuota — è esattamente
+ * il bug per cui aprire la votazione preferenze restava sempre "chiusa" per una classe del genere.
+ * Chiamata da preferences.ts prima di leggere/scrivere `classes`, così l'anomalia si autoripara al
+ * primo utilizzo invece di richiedere un intervento manuale sul database ogni volta che si ripresenta.
+ *
+ * L'etichetta si ricava invertendo [classIdFromLabel] (es. "CLASS_4_CSA" -> "4 CSA"): non c'è
+ * altro posto dove sia salvata l'etichetta leggibile di un classId "orfano". Non c'è un caso
+ * speciale per 'DEFAULT_CLASS': storicamente esisteva sempre grazie al seed della migration, ma
+ * quel seed collideva con `label UNIQUE` non appena una classe "4 CSA" si registrava anche con il
+ * nuovo classId — le due righe non potevano coesistere, ed è esattamente la causa di questo bug
+ * (vedi la migrazione dati che ha accorpato 'DEFAULT_CLASS' dentro 'CLASS_4_CSA'). Con IGNORE,
+ * se `label` collide di nuovo con una riga già esistente per un altro classId, l'INSERT viene
+ * scartato invece di lanciare — non silenzioso e basta: chi chiama farebbe comunque una query a
+ * vuoto subito dopo, quindi il sintomo (mai davvero "aperta") ricomparirebbe visibilmente in fretta
+ * invece di restare nascosto per mesi.
+ */
+export async function ensureClassRow(env: Env, classId: string): Promise<void> {
+  const label = classId.startsWith('CLASS_')
+    ? classId.slice('CLASS_'.length).replace(/_/g, ' ')
+    : classId;
+  await env.DB.prepare('INSERT OR IGNORE INTO classes (id, label) VALUES (?, ?)').bind(classId, label).run();
+}
+
+/**
  * Etichetta di una classe pulita e confrontabile: "  4^csa " e "4 CSA" devono essere la stessa
  * classe, altrimenti l'elenco si riempie di doppioni che nessuno può unire.
  * Restituisce null se l'etichetta non ha la forma "<anno 1-5> <sezione>".

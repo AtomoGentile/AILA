@@ -85,7 +85,7 @@ private val onboardingPages = listOf(
     OnboardingPage(
         iconKind = OnboardingIcon.SPARKLE,
         title = "La tua classe,\npiù intelligente.",
-        body = "L'AI legge le circolari al posto tuo e ti dice in una riga se ti riguardano.",
+        body = "AILA Assistant legge le circolari al posto tuo e ti dice in una riga se ti riguardano.",
         accent = Color(0xFF06B6D4),
         gradient = listOf(Color(0xFF071A33), Color(0xFF0E4C6E), Color(0xFF2F7FB8))
     )

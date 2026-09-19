@@ -17,7 +17,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import circolareplus.design.AilaAiBadge
+import circolareplus.design.AilaAssistantBadge
 import circolareplus.design.AilaBackBar
 import circolareplus.design.AilaCard
 import circolareplus.design.AilaDot
@@ -206,7 +206,7 @@ fun CircularDetailScreen(
                 )
             }
 
-            // --- Analisi AI ---------------------------------------------------------------
+            // --- Analisi di AILA Assistant ---------------------------------------------------------------
             item {
                 AilaCard(containerColor = AppTheme.TintSlate, modifier = Modifier.ailaAppear(2)) {
                     Column(modifier = Modifier.padding(AppTheme.Space16)) {
@@ -215,7 +215,7 @@ fun CircularDetailScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            AilaAiBadge(text = "Analisi personale AI")
+                            AilaAssistantBadge(text = "Analisi AILA Assistant")
                             // Rianalizza: senza questo, una circolare già classificata restava
                             // con il risultato vecchio per sempre — impossibile riprovare dopo
                             // aver messo la chiave AI o corretto il prompt.

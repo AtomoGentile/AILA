@@ -15,9 +15,10 @@ struct iOSApp: App {
 
     init() {
         // Inietta i bridge nativi prima di creare la UI.
-        // I due holder sono esportati da Kotlin/Native come singleton (pattern standard: .shared).
+        // Gli holder sono esportati da Kotlin/Native come singleton (pattern standard: .shared).
         AppleIntelligenceBridgeHolder.shared.bridge = AppleIntelligenceEngine()
         PushTokenBridgeHolder.shared.bridge = FirebasePushTokenBridge()
+        SeatMapPdfShareBridgeHolder.shared.bridge = SeatMapPdfShareBridgeImpl()
     }
 
     var body: some Scene {

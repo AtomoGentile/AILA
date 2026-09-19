@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import circolareplus.data.remote.dto.RatingEntryDto
 import circolareplus.design.AilaCard
+import circolareplus.design.AilaSwitch
 import circolareplus.design.AppTheme
 
 /**
@@ -134,7 +135,7 @@ private fun ClassRosterRow(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(text = "Priority Pass (prime 3 file)", fontSize = 14.sp, color = AppTheme.TextMuted)
-                Switch(
+                AilaSwitch(
                     checked = entry.priorityPass,
                     onCheckedChange = onPriorityPassChange
                 )

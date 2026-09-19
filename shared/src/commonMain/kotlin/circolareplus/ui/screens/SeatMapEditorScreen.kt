@@ -24,8 +24,9 @@ import circolareplus.design.AppTheme
 import circolareplus.domain.model.SocialPreferenceScore
 import circolareplus.domain.model.User
 
-/** Riferimento a un posto (metà banco) selezionato nell'editor: indice del banco + slot A/B. */
-private data class EditableSeatRef(val deskIndex: Int, val isSeatA: Boolean)
+/** Riferimento a un posto selezionato nell'editor: indice del banco + indice del posto (0=A,
+ * 1=B, 2=C — quest'ultimo solo per i banchi da trio). */
+private data class EditableSeatRef(val deskIndex: Int, val seatIndex: Int)
 
 /**
  * Editor manuale della disposizione scelta dal Rappresentante: tap-to-swap (si seleziona un posto,
@@ -40,11 +41,14 @@ fun SeatMapEditorScreen(
     totalScore: Double,
     satisfactionPercentage: Double,
     isPublishing: Boolean,
-    onSwapSeats: (deskIndex1: Int, isSeatA1: Boolean, deskIndex2: Int, isSeatA2: Boolean) -> Unit,
+    onSwapSeats: (deskIndex1: Int, seatIndex1: Int, deskIndex2: Int, seatIndex2: Int) -> Unit,
     onRestore: () -> Unit,
     onPublish: () -> Unit
 ) {
     var selectedSeat by remember { mutableStateOf<EditableSeatRef?>(null) }
+    // Come in SeatMapScreen: si disegnano tre posti per banco solo se la disposizione in editing
+    // li usa davvero, così un banco da coppia resta a due righe.
+    val hasTrioDesks = remember(assignments) { assignments.any { it.studentCId != null } }
 
     // Uno scambio può cambiare la composizione dei banchi: se la selezione punta a un indice
     // ormai fuori range, la si azzera invece di lasciarla puntare a un posto inesistente.
@@ -116,8 +120,15 @@ fun SeatMapEditorScreen(
                 val desk = assignments[deskIndex]
                 val sA = desk.studentAId?.let { studentsMap[it] }
                 val sB = desk.studentBId?.let { studentsMap[it] }
-                val isForbidden = desk.studentAId != null && desk.studentBId != null &&
-                    SeatMapOptimizer.isForbiddenPair(desk.studentAId, desk.studentBId, socialPreferences)
+                val sC = desk.studentCId?.let { studentsMap[it] }
+                // Qualunque coppia vietata (-2/-2) all'interno del banco lo segnala, non solo A-B:
+                // un trio ha fino a tre coppie possibili (A-B, A-C, B-C).
+                val occupantIds = listOfNotNull(desk.studentAId, desk.studentBId, desk.studentCId)
+                val isForbidden = occupantIds.indices.any { i ->
+                    ((i + 1) until occupantIds.size).any { j ->
+                        SeatMapOptimizer.isForbiddenPair(occupantIds[i], occupantIds[j], socialPreferences)
+                    }
+                }
 
                 Card(
                     shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
@@ -150,10 +161,10 @@ fun SeatMapEditorScreen(
                         Spacer(modifier = Modifier.height(4.dp))
                         SeatSlotLabel(
                             name = sA?.firstName,
-                            isSelected = selectedSeat == EditableSeatRef(deskIndex, true),
+                            isSelected = selectedSeat == EditableSeatRef(deskIndex, 0),
                             onClick = {
                                 selectedSeat = handleSeatTap(
-                                    tapped = EditableSeatRef(deskIndex, true),
+                                    tapped = EditableSeatRef(deskIndex, 0),
                                     current = selectedSeat,
                                     onSwap = onSwapSeats
                                 )
@@ -162,15 +173,29 @@ fun SeatMapEditorScreen(
                         HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), color = AppTheme.Hairline)
                         SeatSlotLabel(
                             name = sB?.firstName,
-                            isSelected = selectedSeat == EditableSeatRef(deskIndex, false),
+                            isSelected = selectedSeat == EditableSeatRef(deskIndex, 1),
                             onClick = {
                                 selectedSeat = handleSeatTap(
-                                    tapped = EditableSeatRef(deskIndex, false),
+                                    tapped = EditableSeatRef(deskIndex, 1),
                                     current = selectedSeat,
                                     onSwap = onSwapSeats
                                 )
                             }
                         )
+                        if (hasTrioDesks) {
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), color = AppTheme.Hairline)
+                            SeatSlotLabel(
+                                name = sC?.firstName,
+                                isSelected = selectedSeat == EditableSeatRef(deskIndex, 2),
+                                onClick = {
+                                    selectedSeat = handleSeatTap(
+                                        tapped = EditableSeatRef(deskIndex, 2),
+                                        current = selectedSeat,
+                                        onSwap = onSwapSeats
+                                    )
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -186,13 +211,13 @@ fun SeatMapEditorScreen(
 private fun handleSeatTap(
     tapped: EditableSeatRef,
     current: EditableSeatRef?,
-    onSwap: (Int, Boolean, Int, Boolean) -> Unit
+    onSwap: (Int, Int, Int, Int) -> Unit
 ): EditableSeatRef? {
     return when {
         current == null -> tapped
         current == tapped -> null
         else -> {
-            onSwap(current.deskIndex, current.isSeatA, tapped.deskIndex, tapped.isSeatA)
+            onSwap(current.deskIndex, current.seatIndex, tapped.deskIndex, tapped.seatIndex)
             null
         }
     }

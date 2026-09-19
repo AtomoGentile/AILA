@@ -1177,7 +1177,8 @@ scudo, lampadina, lucchetto, cursori, scintilla, spunta, avviso, fulmine, più, 
 sostituite ovunque. Due nuovi componenti animati al loro posto:
 - `AilaIconAction`: voto/commento con icona, rimpicciolisce alla pressione e rimbalza quando il
   contatore cambia — così il tocco si vede prima ancora della risposta del server;
-- `AilaAiBadge`: marchio "generato dall'AI" con la scintilla che pulsa piano.
+- `AilaAssistantBadge` (all'epoca `AilaAiBadge`): marchio "fatto da AILA Assistant" che pulsa
+  piano — oggi mostra l'onda a quattro barre del logo dell'assistente invece della scintilla.
 
 **Funzioni rotte, trovate leggendo il codice:**
 1. **Mappa posti — i cursori.** C'era **un solo slider per tre pesi**: quello sociale. Disciplina e

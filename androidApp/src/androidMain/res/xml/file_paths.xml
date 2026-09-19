@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Percorsi esposti dal FileProvider per la condivisione di file generati in-app (es. il PDF
+     della Mappa Posti, vedi circolareplus.platform.SeatMapPdfExporter.android.kt): solo la
+     sottocartella "exports" della cache, non l'intera cache dell'app.
+-->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <cache-path name="exports" path="exports/" />
+</paths>

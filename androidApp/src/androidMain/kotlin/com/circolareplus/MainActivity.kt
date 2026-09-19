@@ -1,6 +1,7 @@
 package com.circolareplus
 
 import android.Manifest
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -12,6 +13,7 @@ import circolareplus.data.AppContainer
 import circolareplus.platform.AndroidAppContext
 import circolareplus.design.AilaTheme
 import circolareplus.design.AppTheme
+import circolareplus.ui.PendingDeepLink
 import circolareplus.ui.screens.MainAppShell
 
 class MainActivity : ComponentActivity() {
@@ -46,6 +48,10 @@ class MainActivity : ComponentActivity() {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
 
+        // Avvio a freddo dal tocco su una notifica di sistema (vedi CircolareMessagingService):
+        // l'extra viene letto qui e MainAppShell, non appena parte, ci naviga sopra da sé.
+        applyPendingDeepLinkFrom(intent)
+
         setContent {
             // AilaTheme avvolge tutto (login e caricamento compresi): senza, i componenti
             // standard di Material — interruttori, slider, campi di testo, dialoghi — restavano
@@ -55,6 +61,23 @@ class MainActivity : ComponentActivity() {
                 // della sessione reale da un token salvato localmente, altrimenti mostra il login.
                 MainAppShell()
             }
+        }
+    }
+
+    // MainActivity è "singleTask" (vedi AndroidManifest.xml): se l'app è già in background e
+    // l'utente tocca una notifica di sistema, l'istanza esistente viene riportata in primo piano
+    // tramite onNewIntent invece di passare di nuovo per onCreate — senza questo override, la
+    // categoria della notifica andrebbe persa in quel caso.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        applyPendingDeepLinkFrom(intent)
+    }
+
+    private fun applyPendingDeepLinkFrom(intent: Intent) {
+        val category = intent.getStringExtra("notification_category")
+        if (!category.isNullOrBlank()) {
+            PendingDeepLink.category = category
         }
     }
 }
