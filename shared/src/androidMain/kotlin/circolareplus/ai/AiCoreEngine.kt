@@ -31,6 +31,13 @@ import java.util.concurrent.Executors
  * **AICore è stateless**: a differenza di Apple Intelligence (che mantiene una sessione con
  * storico lato Swift) non c'è conversazione — [generate] concatena system+user prompt a ogni
  * chiamata, esattamente come indicato nel piano di partenza.
+ *
+ * **Risposta vuota su un prompt che chiede JSON puro** (segnalato in campo: `response.text` torna
+ * `""`, non `null`, quindi nessuna eccezione — il fallimento emergeva solo piu' avanti, in
+ * [LocalAiClassifier], come "non ha risposto in JSON" senza alcun dettaglio dopo i due punti).
+ * [generate] ora ritenta una volta con un promemoria piu' esplicito prima di arrendersi: non e'
+ * mai stato verificato su un dispositivo reale se questo basti (nessun dispositivo Android con
+ * AICore disponibile qui), ma non ha effetti collaterali quando la causa e' un'altra.
  */
 internal object AiCoreEngine {
 
@@ -117,6 +124,35 @@ internal object AiCoreEngine {
      */
     suspend fun generate(systemPrompt: String, userPrompt: String, timeoutMillis: Long): String {
         val activeModel = model ?: throw IllegalStateException(unavailableReason())
+
+        val firstAttempt = generateOnce(activeModel, systemPrompt, userPrompt, timeoutMillis)
+        if (firstAttempt.isNotBlank()) return firstAttempt
+
+        // Il sintomo segnalato non e' un'eccezione ne' un JSON scritto male: e' `response.text`
+        // vuoto ("" non null), che generateOnce restituisce senza errori — arrivava cosi'
+        // com'e' fino a CircularClassificationPrompt.extractJsonObject, che ovviamente non trova
+        // nessuna '{' e fallisce con un messaggio senza alcun dettaglio ("non ha risposto in
+        // JSON: ", niente dopo i due punti). Prima di arrendersi si ritenta una volta sola con un
+        // promemoria piu' esplicito: un secondo giro che non cambia nulla quando la risposta vuota
+        // ha un'altra causa (filtro di sicurezza, modello non ancora pronto) non costa quasi
+        // niente in piu' di un errore comunque gia' scritto, e recupera i casi in cui basta
+        // insistere sul formato perche' il modello risponda.
+        val reinforcedPrompt = "$userPrompt\n\nRispondi SOLO con l'oggetto JSON richiesto qui sopra: non lasciare la risposta vuota."
+        val secondAttempt = generateOnce(activeModel, systemPrompt, reinforcedPrompt, timeoutMillis)
+        if (secondAttempt.isNotBlank()) return secondAttempt
+
+        throw IllegalStateException(
+            "AICore ha risposto con testo vuoto per due volte: possibile filtro di sicurezza o " +
+                "un prompt che il modello di sistema non riesce a completare."
+        )
+    }
+
+    private suspend fun generateOnce(
+        activeModel: GenerativeModel,
+        systemPrompt: String,
+        userPrompt: String,
+        timeoutMillis: Long
+    ): String {
         val prompt = "$systemPrompt\n\n$userPrompt"
         val response = withTimeoutOrNull(timeoutMillis) {
             try {
