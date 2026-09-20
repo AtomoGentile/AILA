@@ -3,6 +3,37 @@
 Elenco vivo dei problemi aperti e del lavoro ancora mancante, aggiornato mano a mano.
 Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esistente.
 
+## 20/9 (quarta parte): valutato e scartato un modello più leggero per fascia MID con CPU debole
+
+Richiesta: un modello più leggero di Gemma 4 E2B per telefoni con RAM adeguata (~6 GB) ma
+processore debole, dove E2B "diventa un problema" di lentezza — senza però aggiungere nulla che
+"non ne valga la pena". Verificate due strade, nessuna delle due aggiunta al catalogo:
+
+- **Gemma3-1B-IT** (`litert-community/Gemma3-1B-IT`): esiste in formato `.litertlm` (es.
+  `Gemma3-1B-IT_multi-prefill-seq_q4_ekv4096.litertlm`), ma è **gated** — richiede di accettare la
+  licenza Gemma da loggati su Hugging Face. Stesso muro già incontrato con Gemma 3/Llama 3.2 (vedi
+  sopra nel file): l'app scarica con un GET anonimo, senza login né token; aggiungere
+  l'autenticazione HF per un solo modello non ne varrebbe la pena. Inoltre Gemma 4 E2B ha
+  sostituito la generazione Gemma 3 anche in qualità (contesto più ampio, punteggi migliori), quindi
+  non sarebbe nemmeno un guadagno se fosse scaricabile.
+- **SmolLM-135M-Instruct** (`litert-community/SmolLM-135M-Instruct`): ungated (Apache-2.0),
+  formato `.litertlm` confermato — tecnicamente scaricabile senza account. Scartato comunque: 135M
+  parametri è un ordine di grandezza sotto TinyLlama (1,1B), già escluso a suo tempo per essere
+  troppo debole in italiano e senza tool calling affidabile. Un modello 8 volte più piccolo
+  produrrebbe quasi certamente riassunti scadenti e JSON per gli eventi calendario inaffidabile:
+  veloce ma inutile, l'opposto delle "prestazioni discrete" richieste.
+- **Il file di Gemma 4 E2B già usato è già la quantizzazione più leggera disponibile**: il
+  `.litertlm` di `litert-community/gemma-4-E2B-it-litert-lm` usa già lo schema misto 2/4/8-bit di
+  Google per mobile. Esistono varianti aggiuntive nello stesso repo, ma sono bundle compilati per
+  NPU di chip specifici (Qualcomm, Tensor, Intel) — inutili o non caricabili su un telefono con un
+  chip diverso da quello per cui sono stati compilati, non un modo per rendere E2B più leggero in
+  generale.
+
+**Conclusione**: per questo scenario specifico non esiste un'opzione locale scaricabile
+liberamente che sia sia abbastanza leggera sia abbastanza affidabile. Resta valida l'intuizione
+iniziale: su quei telefoni conviene lasciare Google AI Studio come provider, non forzare un
+modello locale scadente. Nessuna modifica al codice in questo passaggio.
+
 ## 20/9 (terza parte): risolti con ricerca web i dubbi lasciati aperti nella seconda parte
 
 Su richiesta esplicita ("naviga sul web e risolvi i tuoi dubbi"), ho usato la ricerca web (che
