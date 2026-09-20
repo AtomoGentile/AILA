@@ -91,11 +91,24 @@ actual class LocalModelStore actual constructor() {
 
     actual fun isInstalled(model: LocalAiModel): Boolean {
         if (isSystemTier(model)) return AiCoreEngine.isAvailable()
+        // Prima si confrontava la dimensione del file con il 95% di `approxSizeBytes` per
+        // scartare un file troncato da un'installazione andata male. Ma `approxSizeBytes` è una
+        // stima scritta a mano nel catalogo (per Phi-4 mini esplicitamente segnata "da
+        // confermare"): quando la stima è più alta della dimensione reale del file, un download
+        // completato con successo non supera comunque quella soglia — il bug osservato con Phi:
+        // il download finiva, il file veniva rinominato con il nome definitivo, e un istante
+        // dopo `isInstalled` tornava `false`, il tasto "Scarica" ricompariva nelle Impostazioni e
+        // il resto dell'app segnalava "nessun modello locale disponibile" pur avendo appena
+        // scaricato tutto.
+        //
+        // Il controllo sulla dimensione non serve comunque a quello per cui era nato: in
+        // `downloadRaw` il rename da `.part` al nome definitivo avviene SOLO quando lo stream ha
+        // raggiunto la fine naturalmente (`input.read` restituisce -1), mai a metà. Un file con
+        // il nome definitivo è quindi completo per costruzione — la sola eccezione sarebbe una
+        // manomissione manuale della cartella, fuori dai casi che questo controllo può comunque
+        // coprire. Basta che il file esista e non sia vuoto.
         val file = modelFile(model)
-        // Solo l'esistenza non basta: un file troncato da un'installazione andata male
-        // manderebbe il motore in errore. Si accetta una tolleranza del 5% perché la dimensione
-        // nel catalogo è approssimata a mano.
-        return file.isFile && file.length() >= (model.approxSizeBytes * 95L / 100L)
+        return file.isFile && file.length() > 0L
     }
 
     actual fun installedPath(model: LocalAiModel): String? {
