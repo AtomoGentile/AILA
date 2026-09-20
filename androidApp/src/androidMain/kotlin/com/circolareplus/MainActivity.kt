@@ -13,6 +13,7 @@ import circolareplus.data.AppContainer
 import circolareplus.platform.AndroidAppContext
 import circolareplus.design.AilaTheme
 import circolareplus.design.AppTheme
+import circolareplus.domain.model.NotificationCategoryMapper
 import circolareplus.ui.PendingDeepLink
 import circolareplus.ui.screens.MainAppShell
 
@@ -75,8 +76,19 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun applyPendingDeepLinkFrom(intent: Intent) {
-        val category = intent.getStringExtra("notification_category")
-        if (!category.isNullOrBlank()) {
+        val explicit = intent.getStringExtra("notification_category")
+        val category = if (!explicit.isNullOrBlank()) {
+            explicit
+        } else {
+            // Notifica mostrata da FCM stesso (app in background: onMessageReceived non parte):
+            // l'extra "notification_category" non c'e', ma i campi "data" del push sono extra
+            // dell'intent e il mapper ricava da lì la stessa categoria.
+            val extras = intent.extras
+            @Suppress("DEPRECATION")
+            val data = extras?.keySet()?.associateWith { extras.get(it)?.toString().orEmpty() }.orEmpty()
+            NotificationCategoryMapper.categoryFrom(data)
+        }
+        if (category.isNotBlank()) {
             PendingDeepLink.category = category
         }
     }

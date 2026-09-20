@@ -22,7 +22,12 @@ import com.google.firebase.messaging.RemoteMessage
 class CircolareMessagingService : FirebaseMessagingService() {
 
     companion object {
-        private const val CHANNEL_ID = "circolare_plus_default"
+        // Importanza HIGH: solo cosi' Android mostra il banner a comparsa (heads-up) anche ad app
+        // aperta. Con DEFAULT la notifica finiva soltanto come icona nella barra di stato e
+        // sembrava "non arrivata". L'importanza di un canale gia' creato non si puo' cambiare da
+        // codice, quindi serve un ID nuovo; il vecchio si elimina sotto.
+        private const val CHANNEL_ID = "aila_notifications"
+        private const val OLD_CHANNEL_ID = "circolare_plus_default"
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
@@ -52,11 +57,12 @@ class CircolareMessagingService : FirebaseMessagingService() {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "AILA",
-                NotificationManager.IMPORTANCE_DEFAULT
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Circolari, bacheca, sondaggi e mappa posti"
             }
             manager.createNotificationChannel(channel)
+            manager.deleteNotificationChannel(OLD_CHANNEL_ID)
         }
 
         // Intent esplicito verso MainActivity (non più getLaunchIntentForPackage): serve a
@@ -81,6 +87,7 @@ class CircolareMessagingService : FirebaseMessagingService() {
             .setContentTitle(title)
             .setContentText(body)
             .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
             .build()
 

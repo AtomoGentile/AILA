@@ -25,6 +25,7 @@ import circolareplus.design.AppTheme
 import circolareplus.domain.model.StudentProfile
 import circolareplus.domain.model.User
 import circolareplus.domain.model.UserRole
+import kotlinx.coroutines.launch
 
 /**
  * Scheda "Altro": profilo e impostazioni. Riscritta col linguaggio del mockup — card d'identità
@@ -41,8 +42,14 @@ fun ProfileScreen(
     userAiApiKey: String = "",
     onOpenSettings: () -> Unit = {},
     onManageClassRoster: () -> Unit = {},
-    onLogoutClick: () -> Unit = {}
+    onLogoutClick: () -> Unit = {},
+    /**
+     * Elimina l'account dopo la conferma con password. Restituisce il messaggio d'errore da
+     * mostrare nella finestra, oppure `null` se l'account e' stato eliminato.
+     */
+    onDeleteAccount: suspend (password: String) -> String? = { null }
 ) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
     val isRepresentative = user.role == UserRole.REPRESENTATIVE
     val subtitle = buildString {
         if (profile.className.isNotBlank()) {
@@ -217,9 +224,112 @@ fun ProfileScreen(
                         AppIcons.ChevronRight(modifier = Modifier.size(20.dp), color = AppTheme.TintRedInk)
                     }
                 )
+                HorizontalDivider(color = AppTheme.Hairline, modifier = Modifier.padding(start = 72.dp))
+                AilaListRow(
+                    title = "Elimina account",
+                    subtitle = "Cancella definitivamente il tuo account e i tuoi dati",
+                    tint = AppTheme.TintRed,
+                    onClick = { showDeleteDialog = true },
+                    icon = {
+                        AppIcons.Trash(modifier = Modifier.size(20.dp), color = AppTheme.TintRedInk)
+                    }
+                )
             }
         }
     }
+
+    if (showDeleteDialog) {
+        DeleteAccountDialog(
+            onDismiss = { showDeleteDialog = false },
+            onConfirm = onDeleteAccount
+        )
+    }
+}
+
+/**
+ * Conferma dell'eliminazione account: spiega cosa si perde e chiede la password, cosi' un tocco
+ * sbagliato — o un telefono lasciato sbloccato — non basta a cancellare tutto.
+ */
+@Composable
+private fun DeleteAccountDialog(
+    onDismiss: () -> Unit,
+    onConfirm: suspend (String) -> String?
+) {
+    var password by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var isDeleting by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { if (!isDeleting) onDismiss() },
+        containerColor = AppTheme.SurfaceWhite,
+        shape = RoundedCornerShape(AppTheme.CardCornerRadius),
+        title = {
+            Text(
+                text = "Eliminare l'account?",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = AppTheme.TextDark
+            )
+        },
+        text = {
+            Column {
+                Text(
+                    text = "L'operazione è definitiva: profilo, voti, preferenze, proposte e commenti " +
+                        "vengono cancellati e non si possono recuperare. Per confermare, inserisci la password.",
+                    fontSize = 13.sp,
+                    color = AppTheme.TextMuted,
+                    lineHeight = 18.sp
+                )
+                Spacer(modifier = Modifier.height(AppTheme.Space12))
+                androidx.compose.material3.OutlinedTextField(
+                    value = password,
+                    onValueChange = {
+                        password = it
+                        error = null
+                    },
+                    placeholder = { Text("Password", fontSize = 13.sp) },
+                    singleLine = true,
+                    enabled = !isDeleting,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
+                    colors = circolareplus.design.ailaFieldColors(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (error != null) {
+                    Spacer(modifier = Modifier.height(AppTheme.Space8))
+                    Text(text = error!!, fontSize = 12.sp, color = AppTheme.TintRedInk, lineHeight = 17.sp)
+                }
+            }
+        },
+        confirmButton = {
+            circolareplus.design.AilaDestructiveButton(
+                text = if (isDeleting) "Elimino…" else "Elimina",
+                compact = true,
+                onClick = {
+                    if (isDeleting) return@AilaDestructiveButton
+                    if (password.isBlank()) {
+                        error = "Inserisci la password per confermare."
+                        return@AilaDestructiveButton
+                    }
+                    isDeleting = true
+                    scope.launch {
+                        // Se va a buon fine la schermata sparisce (l'utente non e' piu' loggato):
+                        // non serve chiudere la finestra a mano.
+                        error = onConfirm(password)
+                        isDeleting = false
+                    }
+                }
+            )
+        },
+        dismissButton = {
+            circolareplus.design.AilaSecondaryButton(
+                text = "Annulla",
+                compact = true,
+                onClick = { if (!isDeleting) onDismiss() }
+            )
+        }
+    )
 }
 
 /** Riquadro con un dato del profilo dentro la card d'identità a gradiente. */

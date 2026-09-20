@@ -447,6 +447,22 @@ object AppIcons {
         }
     }
 
+    /** Occhio: "guarda senza scegliere" (anteprima, mostra/nascondi). */
+    @Composable
+    fun Eye(modifier: Modifier = Modifier.size(24.dp), color: Color = Color(0xFF1E293B)) {
+        Canvas(modifier = modifier) {
+            val w = size.width; val h = size.height; val stroke = w * 0.08f
+            val outline = Path().apply {
+                moveTo(w * 0.08f, h * 0.5f)
+                quadraticBezierTo(w * 0.5f, h * 0.06f, w * 0.92f, h * 0.5f)
+                quadraticBezierTo(w * 0.5f, h * 0.94f, w * 0.08f, h * 0.5f)
+                close()
+            }
+            drawPath(outline, color, style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawCircle(color, radius = w * 0.13f, center = Offset(w * 0.5f, h * 0.5f))
+        }
+    }
+
     @Composable
     fun Crown(modifier: Modifier = Modifier.size(24.dp), color: Color = Color(0xFF1E293B)) {
         Canvas(modifier = modifier) {

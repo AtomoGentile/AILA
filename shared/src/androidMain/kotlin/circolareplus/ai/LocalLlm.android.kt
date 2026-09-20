@@ -7,6 +7,7 @@ import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.SamplerConfig
+import com.google.ai.edge.litertlm.ThinkingConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.sync.Mutex
@@ -77,7 +78,8 @@ actual class LocalLlm actual constructor() {
         systemPrompt: String,
         userPrompt: String,
         timeoutMillis: Long,
-        stopWhen: (String) -> Boolean
+        stopWhen: (String) -> Boolean,
+        enableThinking: Boolean
     ): String {
         // Tier 1: AICore (Gemini Nano di sistema) invece di LiteRT-LM. Non condivide né il
         // motore né il mutex sotto: è un servizio di sistema separato, non il modello caricato
@@ -95,7 +97,8 @@ actual class LocalLlm actual constructor() {
             )
         }
         return generateWithLiteRtLm(
-            modelPath, preferGpu, maxOutputTokens, systemPrompt, userPrompt, timeoutMillis, stopWhen
+            modelPath, preferGpu, maxOutputTokens, systemPrompt, userPrompt, timeoutMillis, stopWhen,
+            enableThinking
         )
     }
 
@@ -106,20 +109,34 @@ actual class LocalLlm actual constructor() {
         systemPrompt: String,
         userPrompt: String,
         timeoutMillis: Long,
-        stopWhen: (String) -> Boolean
+        stopWhen: (String) -> Boolean,
+        enableThinking: Boolean
     ): String = withContext(Dispatchers.Default) {
         mutex.withLock {
             val activeEngine = ensureEngine(modelPath, preferGpu)
 
+            // Qwen3.5 ragiona "ad alta voce" in un blocco <think> prima di rispondere, di default:
+            // con un tetto di 900 token il ragionamento si mangia da solo quasi tutto il budget, ed
+            // e' la causa dell'attesa infinita sui Qwen. Gemma 4 invece ha il ragionamento spento
+            // di default (lo accende il token `<|think|>` nel system prompt, aggiunto da
+            // LocalAiClassifier). Qui serve un JSON o una risposta breve, non una dimostrazione:
+            // si spegne, e solo l'assistente lo puo' riaccendere, su scelta dell'utente.
             val conversationConfig = ConversationConfig(
                 systemInstruction = Contents.of(systemPrompt),
                 // Temperatura bassissima e topK stretto: qui non si vuole creatività, si vuole
                 // che il modello produca lo stesso JSON ben formato tutte le volte.
-                samplerConfig = SamplerConfig(topK = 20, topP = 0.9, temperature = 0.1),
+                // Con il ragionamento acceso la temperatura bassissima fa entrare i modelli in
+                // ripetizioni infinite dentro <think>: si usa quella consigliata per il thinking.
+                samplerConfig = if (enableThinking) {
+                    SamplerConfig(topK = 20, topP = 0.95, temperature = 0.6)
+                } else {
+                    SamplerConfig(topK = 20, topP = 0.9, temperature = 0.1)
+                },
                 // Rete di sicurezza oltre a stopWhen: se il modello sbaglia il formato e non
                 // produce mai un JSON completo, senza questo continuerebbe a scrivere fino a
                 // riempire il contesto.
-                maxOutputToken = maxOutputTokens
+                maxOutputToken = maxOutputTokens,
+                thinkingConfig = ThinkingConfig(enableThinking = enableThinking)
             )
 
             activeEngine.createConversation(conversationConfig).use { conversation ->

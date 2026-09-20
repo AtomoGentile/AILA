@@ -26,6 +26,13 @@ CREATE TABLE IF NOT EXISTS classes (
     label TEXT UNIQUE NOT NULL,           -- come la scrive uno studente: "4 CSA"
     academic_year TEXT NOT NULL DEFAULT '2026/2027',
     preferences_open BOOLEAN NOT NULL DEFAULT 0,
+    -- La Guardia di Sicurezza della classe: terza firma per svelare un autore anonimo. La sceglie
+    -- il Rappresentante nella Scheda Classe. Resta uno studente a tutti gli effetti (sondaggi,
+    -- preferenze, valutazioni): per questo è una designazione sulla classe e non un ruolo.
+    -- Senza REFERENCES: `classes` viene creata prima di `users`, e con le chiavi esterne attive
+    -- (come su D1) un riferimento in avanti fa fallire perfino l'INSERT della classe iniziale.
+    -- Alla cancellazione di un utente la pulisce users.ts.
+    security_guard_id TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -158,6 +165,10 @@ CREATE TABLE IF NOT EXISTS proposals (
     category TEXT NOT NULL DEFAULT 'GENERALE',
     status TEXT NOT NULL CHECK(status IN ('NUOVA', 'IN_ANALISI', 'CHIUSA')) DEFAULT 'NUOVA',
     modified_by_rep BOOLEAN NOT NULL DEFAULT 0,
+    -- Esito di una proposta chiusa (status = 'CHIUSA'). NULL finché è nuova o in analisi, e per
+    -- le proposte chiuse prima che l'esito esistesse. Colonna a parte perché il CHECK su
+    -- `status` non si può alterare in SQLite senza ricreare la tabella.
+    outcome TEXT CHECK(outcome IN ('ACCETTATA', 'RIFIUTATA')),
     -- Valorizzata a ogni modifica del testo, da chiunque provenga: serve alla dicitura
     -- "Modificato" in bacheca. modified_by_rep resta separata perché distingue il caso in cui a
     -- modificare sia stato il Rappresentante e non l'autore.
@@ -182,6 +193,7 @@ CREATE TABLE IF NOT EXISTS proposal_comments (
     proposal_id TEXT NOT NULL REFERENCES proposals(id) ON DELETE CASCADE,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
+    is_anonymous BOOLEAN NOT NULL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -194,6 +206,32 @@ CREATE TABLE IF NOT EXISTS anonymity_unlock_audits (
     security_guard_id TEXT NOT NULL REFERENCES users(id),
     reason TEXT NOT NULL,
     unlocked_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Richieste di svelamento dell'autore (di una proposta o di un commento anonimi).
+-- Quorum: 2 Rappresentanti + 1 Guardia di Sicurezza, ognuno con la propria approvazione.
+CREATE TABLE IF NOT EXISTS anonymity_unlock_requests (
+    id TEXT PRIMARY KEY,
+    class_id TEXT NOT NULL REFERENCES classes(id),
+    proposal_id TEXT NOT NULL REFERENCES proposals(id) ON DELETE CASCADE,
+    -- NULL = si chiede l'autore della proposta; valorizzato = si chiede l'autore del commento.
+    comment_id TEXT REFERENCES proposal_comments(id) ON DELETE CASCADE,
+    requested_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reason TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('PENDING', 'APPROVED', 'REJECTED')) DEFAULT 'PENDING',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    resolved_at DATETIME
+);
+
+CREATE INDEX IF NOT EXISTS idx_unlock_requests_class ON anonymity_unlock_requests(class_id, status);
+CREATE INDEX IF NOT EXISTS idx_unlock_requests_proposal ON anonymity_unlock_requests(proposal_id);
+
+CREATE TABLE IF NOT EXISTS anonymity_unlock_approvals (
+    request_id TEXT NOT NULL REFERENCES anonymity_unlock_requests(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role TEXT NOT NULL CHECK(role IN ('REPRESENTATIVE', 'SECURITY_GUARD')),
+    approved_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id, user_id)
 );
 
 -- 9. SONDAGGI INTERROGAZIONI & SLOT DATE

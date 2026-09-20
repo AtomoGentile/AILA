@@ -22,10 +22,12 @@ ratings.use('*', authMiddleware());
 // ---------------------------------------------------------------------------
 ratings.get('/', requireRole('REPRESENTATIVE'), async (c) => {
   const rows = await c.env.DB.prepare(
-    `SELECT u.id, u.first_name, u.last_name,
+    `SELECT u.id, u.first_name, u.last_name, u.role,
+            (cl.security_guard_id = u.id) AS is_guard,
             rr.didactic, rr.behavior, rr.updated_at,
             sp.priority_pass, sp.height_cm
      FROM users u
+     LEFT JOIN classes cl ON cl.id = u.class_id
      LEFT JOIN representative_ratings rr ON rr.student_id = u.id
      LEFT JOIN student_profiles sp ON sp.user_id = u.id
      WHERE u.role IN ('STUDENT', 'REPRESENTATIVE') AND u.class_id = ?
@@ -34,6 +36,8 @@ ratings.get('/', requireRole('REPRESENTATIVE'), async (c) => {
     id: string;
     first_name: string;
     last_name: string;
+    role: string;
+    is_guard: number | null;
     didactic: number | null;
     behavior: number | null;
     updated_at: string | null;
@@ -46,6 +50,10 @@ ratings.get('/', requireRole('REPRESENTATIVE'), async (c) => {
       studentId: r.id,
       firstName: r.first_name,
       lastName: r.last_name,
+      role: r.role,
+      // Guardia di Sicurezza della classe (terza firma per lo svelamento): la nomina il
+      // Rappresentante da questa stessa schermata.
+      isSecurityGuard: Boolean(r.is_guard),
       heightCm: r.height_cm,
       didactic: r.didactic,
       behavior: r.behavior,

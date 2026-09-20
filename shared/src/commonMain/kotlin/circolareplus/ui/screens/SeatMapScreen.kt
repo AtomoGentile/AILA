@@ -36,6 +36,8 @@ fun SeatMapScreen(
     assignments: List<DeskAssignment>,
     studentsMap: Map<String, User>,
     isPreferencesOpen: Boolean,
+    /** Quanti hanno votato le preferenze; null finche' non e' stato caricato. */
+    preferencesProgress: circolareplus.data.remote.dto.PreferencesProgressDto? = null,
     onTogglePreferencesWindow: (Boolean) -> Unit = {},
     onGenerateProposals: (OptimizerWeights, seatsPerDesk: Int) -> Unit = { _, _ -> },
     isExportingPdf: Boolean = false,
@@ -63,7 +65,7 @@ fun SeatMapScreen(
     ) {
         // Intestazione chiara comune (design AILA), con l'azione rapida a destra.
         AilaScreenHeader(
-            title = "Mappa Posti Aula",
+            title = "Mappa Posti",
             subtitle = "Layout 2D orientato rispetto alla Cattedra",
             action = {
                 Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
@@ -149,6 +151,11 @@ fun SeatMapScreen(
                             onClick = { onTogglePreferencesWindow(!isPreferencesOpen) },
                             compact = true
                         )
+                    }
+
+                    if (preferencesProgress != null && preferencesProgress.totalStudents > 0) {
+                        Spacer(modifier = Modifier.height(AppTheme.Space8))
+                        PreferencesProgressBlock(progress = preferencesProgress)
                     }
 
                     Spacer(modifier = Modifier.height(AppTheme.Space12))
@@ -260,71 +267,83 @@ fun SeatMapScreen(
         }
 
             items(assignments) { desk ->
-                val sA = desk.studentAId?.let { studentsMap[it] }
-                val sB = desk.studentBId?.let { studentsMap[it] }
-                val sC = desk.studentCId?.let { studentsMap[it] }
-
-                val isMeAtDesk = desk.studentAId == focusedStudentId ||
-                    desk.studentBId == focusedStudentId ||
-                    desk.studentCId == focusedStudentId
-
-                Card(
-                    shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isMeAtDesk) AppTheme.TintAmber else AppTheme.SurfaceWhite
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = AppTheme.CardElevation),
-                    modifier = Modifier
-                        .border(
-                            width = if (isMeAtDesk) 2.dp else 1.dp,
-                            color = if (isMeAtDesk) AppTheme.TintAmberInk else AppTheme.Hairline,
-                            shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp)
-                        )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "Banco F${desk.row + 1}C${desk.column + 1}",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = AppTheme.TextMuted
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = sA?.firstName ?: "Vuoto",
-                            fontSize = 12.sp,
-                            fontWeight = if (desk.studentAId == focusedStudentId) FontWeight.Bold else FontWeight.Normal,
-                            color = AppTheme.TextDark
-                        )
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 2.dp),
-                            color = AppTheme.Hairline
-                        )
-                        Text(
-                            text = sB?.firstName ?: "Vuoto",
-                            fontSize = 12.sp,
-                            fontWeight = if (desk.studentBId == focusedStudentId) FontWeight.Bold else FontWeight.Normal,
-                            color = AppTheme.TextDark
-                        )
-                        // Terzo posto (banchi da trio): mostrato solo se la disposizione
-                        // corrente li usa, così i banchi da coppia restano a due righe come sempre.
-                        if (hasTrioDesks) {
-                            HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 2.dp),
-                                color = AppTheme.Hairline
-                            )
-                            Text(
-                                text = sC?.firstName ?: "Vuoto",
-                                fontSize = 12.sp,
-                                fontWeight = if (desk.studentCId == focusedStudentId) FontWeight.Bold else FontWeight.Normal,
-                                color = AppTheme.TextDark
-                            )
-                        }
-                    }
-                }
+                SeatMapDeskCard(
+                    desk = desk,
+                    studentsMap = studentsMap,
+                    showThirdSeat = hasTrioDesks,
+                    focusedStudentId = focusedStudentId
+                )
             }
+        }
+    }
+}
+
+/**
+ * Chi ha gia' votato le preferenze e chi no, per il Rappresentante: una barra con il conteggio e,
+ * finche' manca qualcuno, i nomi da sollecitare. Quando hanno votato tutti lo dice, e' il
+ * momento di calcolare le proposte.
+ */
+@Composable
+private fun PreferencesProgressBlock(progress: circolareplus.data.remote.dto.PreferencesProgressDto) {
+    val total = progress.totalStudents
+    val voted = progress.votedCount.coerceIn(0, total)
+    val fraction = if (total == 0) 0f else voted.toFloat() / total
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+            .background(if (progress.allVoted) AppTheme.TintGreen else AppTheme.SurfaceWhite)
+            .border(
+                1.dp,
+                if (progress.allVoted) AppTheme.PollGreen else AppTheme.Hairline,
+                RoundedCornerShape(AppTheme.SmallElementRadius)
+            )
+            .padding(AppTheme.Space12)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (progress.allVoted) "Hanno votato tutti" else "Hanno votato $voted su $total",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (progress.allVoted) AppTheme.TintGreenInk else AppTheme.TextDark
+            )
+            Text(
+                text = if (progress.allVoted) "$voted/$total" else "mancano ${total - voted}",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (progress.allVoted) AppTheme.TintGreenInk else AppTheme.TextMuted
+            )
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(RoundedCornerShape(50))
+                .background(AppTheme.TintSlate)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(fraction)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(50))
+                    .background(if (progress.allVoted) AppTheme.PollGreen else AppTheme.PrimaryBlue)
+            )
+        }
+        if (!progress.allVoted && progress.pending.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "Non hanno ancora votato: " +
+                    progress.pending.joinToString(", ") { "${it.firstName} ${it.lastName.take(1)}." },
+                fontSize = 11.sp,
+                color = AppTheme.TextMuted,
+                lineHeight = 15.sp
+            )
         }
     }
 }

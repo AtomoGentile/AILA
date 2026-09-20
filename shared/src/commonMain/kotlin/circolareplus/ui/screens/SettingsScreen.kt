@@ -270,7 +270,18 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.weight(1f))
                             AilaPrimaryButton(
                                 text = "Salva",
-                                onClick = { onSaveApiKey(apiKeyInput.trim()) }
+                                onClick = {
+                                    val trimmed = apiKeyInput.trim()
+                                    onSaveApiKey(trimmed)
+                                    apiKeyInput = trimmed
+                                    // Prima il tasto non dava alcun segno: la chiave veniva salvata
+                                    // ma sembrava che non fosse successo niente.
+                                    apiKeyStatus = if (trimmed.isEmpty()) {
+                                        "Chiave rimossa da questo dispositivo."
+                                    } else {
+                                        "Chiave salvata. Usa \"Prova la chiave\" per verificare che funzioni."
+                                    }
+                                }
                             )
                         }
                     }

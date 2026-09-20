@@ -32,6 +32,11 @@ actual object LocalAiCatalog {
         preferGpu = false,
         supportsActions = true,
         maxOutputTokens = 900,
+        // La finestra di Apple e' di 4096 token in TOTALE: istruzioni + richiesta + risposta.
+        // Con il default (4096 solo in ingresso) piu' i 900 in uscita si sforava. 4096 - 900 di
+        // risposta, meno un margine, fa 2800: il prompt dell'assistente si restringe di
+        // conseguenza tramite AiPromptBuilder (maxPromptChars = maxInputTokens * 2).
+        maxInputTokens = 2_800,
         description = "Il modello di sistema di Apple Intelligence. Nessun download: gira già " +
             "sul telefono se il dispositivo lo supporta (iPhone 15 Pro o successivo, iOS 26+)."
     )

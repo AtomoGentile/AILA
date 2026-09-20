@@ -5,6 +5,7 @@ import circolareplus.data.remote.dto.ClassConfigDto
 import circolareplus.data.remote.dto.MyPreferencesResponseDto
 import circolareplus.data.remote.dto.PreferenceMatrixResponseDto
 import circolareplus.data.remote.dto.PreferencesConfigDto
+import circolareplus.data.remote.dto.PreferencesProgressDto
 import circolareplus.data.remote.dto.SetPreferencesConfigRequestDto
 import circolareplus.data.remote.dto.SuccessDto
 import circolareplus.data.remote.dto.VoteSocialPreferenceRequestDto
@@ -48,6 +49,9 @@ class PreferencesRepository(private val api: ApiClient) {
             VoteSocialPreferenceRequestDto(toStudentId, score.value)
         )
     }
+
+    /** Quanti compagni hanno gia' votato e quanti mancano (i nomi solo al Rappresentante). */
+    suspend fun progress(): PreferencesProgressDto = api.get("/api/preferences/progress")
 
     suspend fun myVotes(): MyPreferencesResponseDto = api.get("/api/preferences/my")
 

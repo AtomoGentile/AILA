@@ -217,7 +217,7 @@ export async function notifyClass(
   if (!creds) return;
 
   if (!classId) {
-    const all = await env.DB.prepare('SELECT token FROM fcm_tokens').all<{ token: string }>();
+    const all = await env.DB.prepare('SELECT DISTINCT token FROM fcm_tokens').all<{ token: string }>();
     await Promise.allSettled(
       all.results.map((row) => sendV1(env, creds.accessToken, creds.projectId, { token: row.token }, message))
     );
@@ -228,7 +228,9 @@ export async function notifyClass(
   // gli iscritti delle altre classi. Si mandano i messaggi ai token di quella classe soltanto.
   const tokens = await env.DB
     .prepare(
-      `SELECT t.token FROM fcm_tokens t
+      // DISTINCT: lo stesso telefono può comparire sotto più account (vedi routes/fcm.ts), e
+      // senza raggruppare per token la stessa notifica partiva una volta per account.
+      `SELECT DISTINCT t.token FROM fcm_tokens t
        JOIN users u ON u.id = t.user_id
        WHERE u.class_id = ?`
     )
@@ -247,7 +249,7 @@ export async function notifyUser(env: Env, userId: string, title: string, body: 
   const creds = await resolveCredentials(env);
   if (!creds) return;
 
-  const tokens = await env.DB.prepare('SELECT token FROM fcm_tokens WHERE user_id = ?')
+  const tokens = await env.DB.prepare('SELECT DISTINCT token FROM fcm_tokens WHERE user_id = ?')
     .bind(userId)
     .all<{ token: string }>();
 

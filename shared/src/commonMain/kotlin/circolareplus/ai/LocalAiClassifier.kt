@@ -14,7 +14,13 @@ import circolareplus.domain.model.CircularAiClassification
 class LocalAiClassifier(
     private val model: LocalAiModel?,
     private val modelPath: String?,
-    private val llm: LocalLlm
+    private val llm: LocalLlm,
+    /**
+     * Ragionamento (`<think>`) per le risposte dell'assistente. Vale solo per [generateAnswer]:
+     * classificazione delle circolari e bozza degli eventi restano sempre a ragionamento spento,
+     * perche' li' serve un JSON e basta e il tempo e' gia' tanto.
+     */
+    private val enableThinking: Boolean = false
 ) : AiClassifier {
 
     private companion object {
@@ -30,6 +36,14 @@ class LocalAiClassifier(
 
         /** Lo stesso, molto piu' corto, per la prova dalle Impostazioni. */
         const val TEST_TIMEOUT_MILLIS = 45_000L
+
+        /**
+         * Con il ragionamento acceso il modello scrive prima molti token di pensiero e poi la
+         * risposta: il tetto ai token e il timeout si allargano di conseguenza, altrimenti il
+         * pensiero si mangerebbe tutto il budget e non resterebbe niente per la risposta.
+         */
+        const val THINKING_TOKEN_MULTIPLIER = 3
+        const val THINKING_TIMEOUT_MILLIS = 300_000L
     }
 
     override suspend fun classifyCircularText(
@@ -168,10 +182,25 @@ class LocalAiClassifier(
             val raw = llm.generate(
                 modelPath = modelPath,
                 preferGpu = model.preferGpu,
-                maxOutputTokens = model.maxOutputTokens,
-                timeoutMillis = GENERATION_TIMEOUT_MILLIS,
-                stopWhen = { _ -> false },
-                systemPrompt = built.systemPrompt,
+                maxOutputTokens = if (enableThinking) {
+                    model.maxOutputTokens * THINKING_TOKEN_MULTIPLIER
+                } else {
+                    model.maxOutputTokens
+                },
+                timeoutMillis = if (enableThinking) THINKING_TIMEOUT_MILLIS else GENERATION_TIMEOUT_MILLIS,
+                enableThinking = enableThinking,
+                // Appena la risposta JSON e' completa si smette: il resto sarebbe scartato.
+                stopWhen = { partial ->
+                    circolareplus.ai.assistant.AssistantPrompt.isCompleteAnswer(partial)
+                },
+                // Gemma 4 ragiona solo se il system prompt comincia con `<|think|>`: e' il suo
+                // interruttore, oltre al flag passato al motore. Senza il token, con
+                // l'interruttore acceso, Gemma continuerebbe a rispondere subito.
+                systemPrompt = if (enableThinking && model.id.startsWith("gemma")) {
+                    "<|think|>\n" + built.systemPrompt
+                } else {
+                    built.systemPrompt
+                },
                 userPrompt = built.userPrompt
             )
             if (raw.isBlank()) {

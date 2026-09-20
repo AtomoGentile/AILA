@@ -104,6 +104,17 @@ enum class ProposalStatus {
     CHIUSA
 }
 
+/**
+ * Esito di una proposta chiusa. Lo stato resta `CHIUSA` e l'esito è a parte: il server non può
+ * cambiare i valori ammessi di `status` senza ricreare la tabella. Le proposte chiuse prima che
+ * l'esito esistesse hanno `outcome = null` e si leggono semplicemente come "chiuse".
+ */
+@Serializable
+enum class ProposalOutcome {
+    ACCETTATA,
+    RIFIUTATA
+}
+
 @Serializable
 data class Proposal(
     val id: String,
@@ -114,8 +125,11 @@ data class Proposal(
     val description: String,
     val category: String,
     val status: ProposalStatus = ProposalStatus.NUOVA,
+    val outcome: ProposalOutcome? = null,
     val upvotes: Int = 0,
     val downvotes: Int = 0,
+    /** Il voto di chi guarda: 1, -1 oppure 0 se non ha votato. Prima non arrivava all'app. */
+    val myVote: Int = 0,
     val commentsCount: Int = 0,
     /**
      * La proposta è stata modificata dopo la pubblicazione, da chiunque: l'autore che si
@@ -124,6 +138,10 @@ data class Proposal(
      * quello che conta è che il testo non è più quello di partenza.
      */
     val isEdited: Boolean = false,
+    /** L'autore è visibile solo perché tre firmatari hanno approvato lo svelamento. */
+    val identityRevealed: Boolean = false,
+    /** Stato dell'ultima richiesta di svelamento (PENDING/APPROVED/REJECTED), solo per chi la gestisce. */
+    val unlockRequestStatus: String? = null,
     val createdAt: String
 )
 
@@ -133,5 +151,37 @@ data class ProposalComment(
     val proposalId: String,
     val authorName: String,
     val content: String,
+    val createdAt: String,
+    val isAnonymous: Boolean = false,
+    /** Il commento è di chi guarda (l'unico, con i firmatari, a poter vedere un autore anonimo). */
+    val isMine: Boolean = false,
+    val identityRevealed: Boolean = false,
+    val unlockRequestStatus: String? = null
+)
+
+/**
+ * Le richieste di svelamento in attesa e se chi guarda può firmarle (è Rappresentante o è la
+ * Guardia di Sicurezza scelta per la classe). La Guardia non ha un ruolo suo nell'utente: resta
+ * uno studente, quindi è il server a dire se lo è.
+ */
+data class UnlockRequestsState(val canSign: Boolean, val requests: List<UnlockRequest>)
+
+/** Richiesta di svelamento in attesa di firme, come la vedono Rappresentanti e Guardia. */
+@Serializable
+data class UnlockRequest(
+    val id: String,
+    val proposalId: String,
+    val proposalTitle: String,
+    /** null = si chiede l'autore della proposta; valorizzato = quello di un commento. */
+    val commentId: String? = null,
+    val commentExcerpt: String? = null,
+    val reason: String,
+    val requestedByName: String,
+    val representativeApprovals: Int,
+    val guardApprovals: Int,
+    val representativesNeeded: Int,
+    val guardsNeeded: Int,
+    val approvedByMe: Boolean,
+    val approverNames: List<String> = emptyList(),
     val createdAt: String
 )

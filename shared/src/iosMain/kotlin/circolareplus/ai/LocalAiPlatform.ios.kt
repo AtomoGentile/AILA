@@ -114,6 +114,11 @@ actual class LocalModelStore actual constructor() {
  */
 actual class LocalLlm actual constructor() {
 
+    private companion object {
+        /** Come su Android (LocalLlm.android.kt) con il ragionamento spento. */
+        const val JSON_TEMPERATURE = 0.1
+    }
+
     @Volatile
     private var lastEngineLabel: String = "Apple Intelligence (Neural Engine)"
 
@@ -132,13 +137,24 @@ actual class LocalLlm actual constructor() {
         systemPrompt: String,
         userPrompt: String,
         timeoutMillis: Long,
-        stopWhen: (String) -> Boolean
+        stopWhen: (String) -> Boolean,
+        enableThinking: Boolean
     ): String {
+        // enableThinking è ignorato: né il modello Apple né MLX hanno (per ora) un blocco di
+        // ragionamento da accendere. Stesso tetto ai token e stessa temperatura bassa di Android:
+        // per produrre JSON serve la stessa risposta ogni volta, non creatività.
         if (modelPath == "apple-intelligence") {
             lastEngineLabel = "Apple Intelligence (Neural Engine)"
             val bridge = AppleIntelligenceBridgeHolder.bridge
                 ?: throw IllegalStateException("Apple Intelligence non disponibile.")
-            return bridge.generate(systemPrompt, userPrompt, timeoutMillis, stopWhen)
+            return bridge.generate(
+                systemPrompt = systemPrompt,
+                userPrompt = userPrompt,
+                timeoutMillis = timeoutMillis,
+                maxOutputTokens = maxOutputTokens,
+                temperature = JSON_TEMPERATURE,
+                stopWhen = stopWhen
+            )
         }
 
         // Tier 2: modello MLX. maxOutputTokens/preferGpu: preferGpu è ignorato (MLX su iOS usa

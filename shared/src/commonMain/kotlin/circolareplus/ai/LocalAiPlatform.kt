@@ -117,7 +117,9 @@ expect class LocalLlm() {
         systemPrompt: String,
         userPrompt: String,
         timeoutMillis: Long,
-        stopWhen: (String) -> Boolean
+        stopWhen: (String) -> Boolean,
+        /** Lascia ragionare il modello (blocco `<think>`) prima della risposta. Solo motori che lo supportano. */
+        enableThinking: Boolean = false
     ): String
 
     /**
