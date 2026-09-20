@@ -23,15 +23,18 @@ ambiente, non del codice. Verificato solo a mano, rileggendo ogni file modificat
 primo appena si riprende in mano il progetto**: lanciare quel test, è la parte più a rischio zero
 di tutto questo giro.
 
-**Fatto ma con dati non verificati.** Le tre voci Qwen3.5 del catalogo Android sono state
-sostituite con tre voci Phi (segnalato lento sul campo il primo). **Attenzione**: questo ambiente
-di sviluppo non ha accesso di rete a huggingface.co (stesso blocco già incontrato per altre
-verifiche), quindi repo id, nomi file e dimensioni delle voci Phi **non sono stati controllati**
-come lo è ogni altra voce di questo catalogo — sono marcati `TODO_VERIFY` nel codice
-(`LocalAiModels.android.kt`). Da fare prima che qualcuno provi a scaricarli davvero: aprire ogni
-URL in un browser, controllare `gated: false`, correggere le dimensioni byte-esatte. Nota anche
-che Phi non ha una taglia paragonabile a Qwen3.5 0.8B (~1GB): la fascia bassa perde un'opzione
-davvero leggera, da valutare se è un problema una volta provato su un telefono modesto.
+**Fatto ma con dati da ricontrollare.** Le tre voci Qwen3.5 del catalogo Android sono state
+sostituite con tre voci Phi (segnalato lento sul campo il primo), e le due voci MLX su iOS
+puntano a repo `mlx-community`. **Attenzione**: questo ambiente di sviluppo non ha accesso di rete
+a huggingface.co (stesso blocco già incontrato per altre verifiche), quindi i repo id, i nomi file
+e le dimensioni di queste cinque voci (`LocalAiModels.android.kt`/`LocalAiModels.ios.kt`) sono
+stati scelti per convenzione (stesso schema di naming già usato da Gemma/Qwen per Android, da
+`mlx-community` per iOS) e non con una richiesta HTTP reale come lo è ogni altra voce di questo
+catalogo. Da fare alla prima occasione con rete vera, prima che qualcuno le scarichi sul serio:
+aprire ogni URL/repo in un browser, controllare `gated: false`, correggere le dimensioni
+byte-esatte se servisse. Nota anche che Phi non ha una taglia paragonabile a Qwen3.5 0.8B (~1GB):
+la fascia bassa Android perde un'opzione davvero leggera, da valutare se è un problema una volta
+provato su un telefono modesto.
 
 **Scheletri, non integrazioni funzionanti: AICore (Android) e MLX Swift (iOS).** Entrambi
 richiesti esplicitamente, ma nessuno dei due è collegato per davvero in questa build, e per un
