@@ -14,12 +14,11 @@ package circolareplus.ai
  * dell'intero repo (safetensors + config), non un singolo file `.litertlm`/`.gguf`. Vedi
  * `MLXLocalBridge.kt` per come viene consumato questo campo.
  *
- * **ATTENZIONE — repo MLX da ricontrollare al primo download reale.** Come per Phi su Android
- * (vedi `LocalAiModels.android.kt`), questo ambiente non ha accesso di rete a huggingface.co: i
- * repo id sotto sono quelli più plausibili per l'org `mlx-community` (stessa convenzione di
- * naming già in uso lì), non una verifica con una richiesta HTTP reale. **L'intera integrazione
- * MLX resta comunque non compilabile/testabile da qui** — serve un Mac con Xcode (vedi
- * `MLXLocalEngine.swift`).
+ * **Repo MLX confermati esistenti** con una ricerca web il 20/9/2026 (non un accesso diretto a
+ * huggingface.co, bloccato da questo ambiente): sia `mlx-community/Phi-3.5-mini-instruct-4bit`
+ * sia `mlx-community/gemma-2-2b-it-4bit` sono repo reali. Le dimensioni restano una stima (la
+ * ricerca non ha restituito il peso esatto). **L'integrazione resta comunque non compilabile/
+ * testabile da qui** — serve un Mac con Xcode (vedi `MLXLocalEngine.swift`).
  */
 actual object LocalAiCatalog {
     val APPLE_INTELLIGENCE = LocalAiModel(
@@ -42,14 +41,14 @@ actual object LocalAiCatalog {
         displayName = "Phi-3.5 mini (MLX)",
         fileName = "phi-3.5-mini-mlx",
         downloadUrl = "mlx-community/Phi-3.5-mini-instruct-4bit",
-        approxSizeBytes = 2_200_000_000, // stima non verificata
+        approxSizeBytes = 2_200_000_000, // stima
         tier = DeviceTier.MID,
-        recommendedRamMb = 4_500, // stima non verificata
+        recommendedRamMb = 4_500, // stima
         preferGpu = false, // MLX su iOS usa sempre la GPU via Metal, non c'è un ripiego CPU da scegliere
         supportsActions = true,
         maxOutputTokens = 900,
         description = "Per iPhone senza Apple Intelligence (11-14, 15 base): scaricato una volta, " +
-            "gira via MLX Swift. Integrazione non ancora attiva in questa build."
+            "gira via MLX Swift. Scritta ma mai compilata in questa build (serve un Mac)."
     )
 
     val GEMMA_2B_MLX = LocalAiModel(
@@ -57,14 +56,14 @@ actual object LocalAiCatalog {
         displayName = "Gemma 2B (MLX)",
         fileName = "gemma-2b-mlx",
         downloadUrl = "mlx-community/gemma-2-2b-it-4bit",
-        approxSizeBytes = 1_600_000_000, // stima non verificata
+        approxSizeBytes = 1_600_000_000, // stima
         tier = DeviceTier.LOW,
-        recommendedRamMb = 3_600, // stima non verificata
+        recommendedRamMb = 3_600, // stima
         preferGpu = false,
         supportsActions = true,
         maxOutputTokens = 900,
         description = "Alternativa più leggera a Phi-3.5 mini per gli iPhone più datati fra quelli " +
-            "senza Apple Intelligence. Integrazione non ancora attiva in questa build."
+            "senza Apple Intelligence. Scritta ma mai compilata in questa build (serve un Mac)."
     )
 
     actual val all: List<LocalAiModel> = listOf(APPLE_INTELLIGENCE, PHI_35_MINI_MLX, GEMMA_2B_MLX)

@@ -12,13 +12,15 @@ packages:
   Firebase:
     url: https://github.com/firebase/firebase-ios-sdk
     from: "11.0.0"
-  # MLX Swift (Tier 2 AI locale, iPhone senza Apple Intelligence): NON ancora attivo. Questo
-  # ambiente di sviluppo non ha un Mac per verificare che l'URL/i prodotti sotto siano corretti
-  # (il repo ha rinominato/spostato i suoi target più volte). Da scommentare, verificare e
-  # collegare in MLXLocalEngine.swift (vedi i commenti in quel file) su una macchina con Xcode.
-  # MLXSwiftExamples:
-  #   url: https://github.com/ml-explore/mlx-swift-examples
-  #   from: "TODO_VERIFY"
+  # MLX Swift (Tier 2 AI locale, iPhone senza Apple Intelligence). Le librerie riusabili
+  # (MLXLLM/MLXLMCommon) sono state spostate da mlx-swift-examples a questo repo dedicato
+  # (confermato con una ricerca web il 20/9/2026; i vecchi URL di mlx-swift-examples restano
+  # validi ma puntano qui). `branch: main` invece di un numero di versione perché questo
+  # ambiente non ha un Mac per verificare quale tag sia compatibile con Xcode/iOS 26 al momento
+  # della build — la prima build reale dovrebbe passare a un tag fisso una volta verificato.
+  MLXSwiftLM:
+    url: https://github.com/ml-explore/mlx-swift-lm
+    branch: main
 
 targets:
   iosApp:
@@ -48,12 +50,10 @@ targets:
         product: FirebaseMessaging
       - package: Firebase
         product: FirebaseCore
-      # Da scommentare insieme al pacchetto MLXSwiftExamples sopra (prodotti da verificare: nel
-      # repo si sono chiamati MLXLLM/MLXLMCommon, ma vanno confermati al momento della build).
-      # - package: MLXSwiftExamples
-      #   product: MLXLLM
-      # - package: MLXSwiftExamples
-      #   product: MLXLMCommon
+      - package: MLXSwiftLM
+        product: MLXLLM
+      - package: MLXSwiftLM
+        product: MLXLMCommon
     preBuildScripts:
       - name: Embed and Sign Apple Framework
         script: |

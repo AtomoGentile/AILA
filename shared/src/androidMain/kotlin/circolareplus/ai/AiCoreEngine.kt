@@ -1,66 +1,130 @@
 package circolareplus.ai
 
 import circolareplus.platform.AndroidAppContext
+import com.google.ai.edge.aicore.DownloadCallback
+import com.google.ai.edge.aicore.DownloadConfig
+import com.google.ai.edge.aicore.GenerationConfig
+import com.google.ai.edge.aicore.GenerativeAIException
+import com.google.ai.edge.aicore.GenerativeModel
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.Executors
 
 /**
  * Tier 1 Android: Gemini Nano di sistema via **AICore** (`com.google.ai.edge.aicore`).
  *
- * **Stato: scheletro non collegato all'SDK reale.** Questo ambiente di sviluppo non ha accesso
- * di rete verso Maven — non è stato possibile risolvere le coordinate/versione reali della
- * dipendenza né verificare la forma esatta dell'API (AICore è un SDK in developer preview, con
- * una storia di requisiti stretti: durante la preview iniziale era limitato a pochi dispositivi
- * Pixel con l'app di sistema "AICore" installata da Play Store, non a "tutti i flagship Android"
- * come genericamente indicato nel piano di partenza). Aggiungere una dipendenza Gradle con
- * coordinate indovinate avrebbe rotto la build per l'intero modulo — un rischio inaccettabile per
- * una funzionalità che poi risulta comunque non disponibile sulla stragrande maggioranza dei
- * telefoni. Questa classe espone quindi la stessa forma che avrà l'integrazione vera, ma
- * `isAvailable()` ritorna sempre `false`: la catena (vedi [LocalLlm.generate]) ricade sempre e
- * comunque sul modello LiteRT-LM già scaricato (Tier 2), senza nessun nuovo punto di rottura.
+ * Scritta contro l'API reale documentata su
+ * developer.android.com/ai/reference/com/google/ai/edge/aicore (classi/metodi verificati con una
+ * ricerca web il 20/9/2026: `GenerativeModel`, `GenerationConfig.Builder`,
+ * `DownloadConfig(DownloadCallback)`, `DownloadCallback` con `onDownloadStarted/Progress/
+ * Completed/Failed/DidNotStart/Pending`, `GenerateContentResponse.getText()`). **Non è mai stata
+ * compilata né eseguita**: questo ambiente non ha un dispositivo Android con AICore, e la
+ * dipendenza Gradle è stata attivata solo ora (coordinate confermate su mvnrepository.com, non
+ * più una supposizione) — la prima verifica reale resta `:androidApp:assembleDebug` su una
+ * macchina vera.
  *
- * **Per completare l'integrazione vera** (da fare su una macchina con accesso a Maven e un
- * dispositivo Pixel/Android compatibile per il test):
- * 1. Aggiungere `com.google.ai.edge.aicore:aicore:<versione verificata>` in
- *    `gradle/libs.versions.toml` (voce `aicore` in `[versions]`/`[libraries]`, commentata più
- *    sotto) e come `api(libs.aicore.android)` in `shared/build.gradle.kts` (source set
- *    `androidMain`, stesso motivo di `litertlm-android`: `:androidApp` deve vedere le classi a
- *    runtime).
- * 2. In [isAvailable], sostituire lo stub con la verifica reale dello stato del servizio
- *    (`GenerativeModel`/`AICore`, stato `STATUS_AVAILABLE` secondo la documentazione ufficiale al
- *    momento della build — l'API pubblica di AICore è cambiata più volte durante la preview).
- * 3. In [generate], costruire il modello e generare davvero, mantenendo lo stesso contratto
- *    (system+user prompt concatenati: AICore è **stateless**, nessuna sessione con storico, a
- *    differenza di Apple Intelligence che invece la mantiene lato Swift).
+ * **Non esiste un metodo di stato** ("è disponibile?") separato in `GenerativeModel`: la
+ * disponibilità si scopre chiamando [prepareInferenceEngine], che scarica il modello di sistema
+ * se serve (da cui il collegamento con [LocalModelStore.download] — "scaricare" AICore è
+ * letteralmente prepararlo la prima volta, non un file gestito da questa app).
+ *
+ * **AICore è stateless**: a differenza di Apple Intelligence (che mantiene una sessione con
+ * storico lato Swift) non c'è conversazione — [generate] concatena system+user prompt a ogni
+ * chiamata, esattamente come indicato nel piano di partenza.
  */
 internal object AiCoreEngine {
 
+    @Volatile
+    private var model: GenerativeModel? = null
+
+    @Volatile
+    private var lastFailureReason: String? = null
+
+    // Richiesti (non-null) da GenerationConfig.Builder. Un solo thread per i callback di
+    // download (eventi rari e in ordine), un pool piccolo per il lavoro dell'engine.
+    private val callbackExecutor = Executors.newSingleThreadExecutor()
+    private val workerExecutor = Executors.newFixedThreadPool(2)
+
+    fun isAvailable(): Boolean = model != null
+
+    fun unavailableReason(): String =
+        lastFailureReason ?: "AICore non ancora preparato: scaricalo dalle Impostazioni."
+
     /**
-     * `true` se il servizio di sistema AICore è installato, attivo e pronto a generare su questo
-     * dispositivo. Sempre `false` finché il punto 2 sopra non è implementato.
+     * Prepara il motore AICore, scaricando il modello di sistema se necessario. Chiamata da
+     * [LocalModelStore.download] quando l'utente tocca "Scarica" sulla voce AICore delle
+     * Impostazioni — con AICore quel tasto non scarica un file nostro, avvia proprio questa
+     * preparazione.
      */
-    fun isAvailable(): Boolean {
-        if (AndroidAppContext.getOrNull() == null) return false
-        // TODO(AICORE): sostituire con la verifica reale (vedi commento di classe).
-        return false
+    suspend fun prepare(maxOutputTokens: Int, onProgress: (downloaded: Long, total: Long) -> Unit): Boolean {
+        model?.let { return true }
+        val context = AndroidAppContext.getOrNull() ?: run {
+            lastFailureReason = "AI locale non ancora inizializzata."
+            return false
+        }
+
+        val outcome = CompletableDeferred<Boolean>()
+        val callback = object : DownloadCallback {
+            override fun onDownloadStarted(bytesToDownload: Long) {
+                onProgress(0L, bytesToDownload)
+            }
+
+            override fun onDownloadProgress(totalBytesDownloaded: Long) {
+                // Il totale non è noto ad ogni progress: -1 segnala "totale sconosciuto in
+                // questo aggiornamento", chi osserva onProgress tiene l'ultimo totale valido.
+                onProgress(totalBytesDownloaded, -1L)
+            }
+
+            override fun onDownloadCompleted() {
+                onProgress(1L, 1L)
+            }
+
+            override fun onDownloadFailed(failureStatus: String, e: GenerativeAIException) {
+                lastFailureReason = "$failureStatus: ${e.message ?: e::class.simpleName}"
+                outcome.complete(false)
+            }
+
+            override fun onDownloadDidNotStart(e: GenerativeAIException) {
+                lastFailureReason = e.message ?: (e::class.simpleName ?: "download non avviato")
+                outcome.complete(false)
+            }
+        }
+
+        return try {
+            val generationConfig = GenerationConfig.Builder()
+                .setContext(context)
+                .setMaxOutputTokens(maxOutputTokens)
+                .setCallbackExecutor(callbackExecutor)
+                .setWorkerExecutor(workerExecutor)
+                .build()
+            val candidate = GenerativeModel(generationConfig, DownloadConfig(callback))
+            candidate.prepareInferenceEngine()
+            model = candidate
+            if (!outcome.isCompleted) outcome.complete(true)
+            outcome.await()
+        } catch (e: GenerativeAIException) {
+            lastFailureReason = "${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}"
+            false
+        } catch (e: Exception) {
+            lastFailureReason = "${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}"
+            false
+        }
     }
 
-    /** Motivo leggibile per cui AICore non è disponibile, mostrato nelle Impostazioni. */
-    fun unavailableReason(): String =
-        "AICore non è ancora collegato in questa build: integrazione da completare " +
-            "(vedi commento in AiCoreEngine.kt). L'AI locale usa il modello scaricabile."
-
     /**
-     * Genera una risposta con Gemini Nano via AICore.
-     *
-     * @throws IllegalStateException finché il punto 3 sopra non è implementato — [LocalLlm]
-     * intercetta l'eccezione e ricade sul modello LiteRT-LM, esattamente come già fa oggi per un
-     * fallimento della GPU.
+     * @throws IllegalStateException se AICore non è ancora stato preparato — [LocalLlm]
+     * intercetta e ricade sul modello LiteRT-LM, esattamente come già fa per un fallimento GPU.
      */
-    suspend fun generate(
-        systemPrompt: String,
-        userPrompt: String,
-        maxOutputTokens: Int,
-        timeoutMillis: Long
-    ): String {
-        throw IllegalStateException(unavailableReason())
+    suspend fun generate(systemPrompt: String, userPrompt: String, timeoutMillis: Long): String {
+        val activeModel = model ?: throw IllegalStateException(unavailableReason())
+        val prompt = "$systemPrompt\n\n$userPrompt"
+        val response = withTimeoutOrNull(timeoutMillis) {
+            try {
+                activeModel.generateContent(prompt)
+            } catch (e: GenerativeAIException) {
+                throw IllegalStateException("${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}", e)
+            }
+        } ?: throw IllegalStateException("AICore non ha risposto entro ${timeoutMillis / 1000} secondi.")
+        return response.text ?: throw IllegalStateException("AICore non ha prodotto testo.")
     }
 }

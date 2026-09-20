@@ -166,13 +166,12 @@ actual class LocalModelStore actual constructor() {
         model: LocalAiModel,
         onProgress: (downloadedBytes: Long, totalBytes: Long) -> Unit
     ): ModelDownloadState {
-        // Le voci "di sistema" (AICore) non hanno un file da scaricare: "scaricare" significa
-        // solo verificare se il servizio è disponibile, esattamente come su iOS per Apple
-        // Intelligence. Senza questo salto, il pulsante "Scarica" delle Impostazioni finirebbe
-        // per aprire una connessione HTTP verso downloadUrl = "" tramite WorkManager.
+        // Le voci "di sistema" (AICore) non hanno un file nostro da scaricare: il tasto
+        // "Scarica" delle Impostazioni avvia direttamente la preparazione del motore AICore
+        // (che scarica il modello di sistema se serve). Senza questo salto finirebbe per aprire
+        // una connessione HTTP verso downloadUrl = "" tramite WorkManager.
         if (isSystemTier(model)) {
-            onProgress(1, 1)
-            return if (isInstalled(model)) {
+            return if (AiCoreEngine.prepare(maxOutputTokens = model.maxOutputTokens, onProgress = onProgress)) {
                 ModelDownloadState.Installed(model.fileName)
             } else {
                 ModelDownloadState.Failed(AiCoreEngine.unavailableReason())

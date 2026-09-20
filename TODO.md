@@ -3,6 +3,60 @@
 Elenco vivo dei problemi aperti e del lavoro ancora mancante, aggiornato mano a mano.
 Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esistente.
 
+## 20/9 (terza parte): risolti con ricerca web i dubbi lasciati aperti nella seconda parte
+
+Su richiesta esplicita ("naviga sul web e risolvi i tuoi dubbi"), ho usato la ricerca web (che
+funziona in questa sessione — è un servizio lato Anthropic, non passa dal proxy di rete locale
+che blocca `huggingface.co`/`dl.google.com`/Maven) per sostituire supposizioni con fatti verificati
+sulle due parti rimaste inerti. **Resta vero che Gradle non gira in questo ambiente** (il proxy
+locale blocca comunque `dl.google.com`): niente di questo è stato compilato.
+
+- **Catalogo Phi ridotto e corretto.** Trovato un solo Phi reale in formato LiteRT-LM:
+  `litert-community/Phi-4-mini-instruct`, file
+  `Phi-4-mini-instruct_multi-prefill-seq_q8_ekv4096.litertlm` (nome confermato da un URL indicizzato).
+  Non esiste una variante int4/più leggera nel repo ufficiale (solo conversioni comunitarie non
+  ospitate lì): **tolte le tre voci Phi inventate**, ne resta una sola (fascia HIGH), e le fasce
+  LOW/MID sono tornate a Gemma 4 come prima dell'introduzione di Phi. `approxSizeBytes` resta una
+  stima (la ricerca non riporta il peso esatto in byte).
+- **Repo MLX confermati.** `mlx-community/Phi-3.5-mini-instruct-4bit` e
+  `mlx-community/gemma-2-2b-it-4bit` esistono davvero (pagine Hugging Face trovate). Le dimensioni
+  restano stime.
+- **AICore: API reale trovata e ricollegata.** `com.google.ai.edge.aicore:aicore` esiste su Maven
+  (confermato su mvnrepository.com), versioni pubblicate `0.0.1-exp01`/`0.0.1-exp02` — **dipendenza
+  ora attiva** in `gradle/libs.versions.toml`/`shared/build.gradle.kts` (prima commentata per
+  prudenza). Trovata su developer.android.com la superficie reale della classe (`GenerativeModel`,
+  `GenerationConfig.Builder`, `DownloadConfig(DownloadCallback)`, i sei metodi di
+  `DownloadCallback`, `GenerateContentResponse.getText()`): **non esiste un metodo di stato
+  separato**, la disponibilità si scopre chiamando `prepareInferenceEngine()`, che scarica il
+  modello di sistema se serve. `AiCoreEngine.kt` è stato riscritto per usare questa API vera:
+  `prepare()` fa da "download" reale (chiamato dal tasto Scarica delle Impostazioni),
+  `generate()` chiama `generateContent()` sul modello preparato. **Anche i dispositivi supportati
+  erano descritti in modo troppo pessimista nella parte precedente**: non solo "pochi Pixel" ma
+  Pixel 8/8 Pro/8a/9\*, Samsung Galaxy S24\*/Z Fold 6/Z Flip 6, e altri flagship Android 14+ con
+  NPU dedicata (fonte: Android Developers Blog, aprile 2026) — su dispositivi non abilitati gira
+  comunque su CPU, non rappresentativo delle prestazioni finali.
+- **MLX Swift: API reale trovata e ricollegata.** Le librerie riusabili di `mlx-swift-examples`
+  sono confluite in un repo dedicato, `ml-explore/mlx-swift-lm` (i vecchi URL restano validi ma
+  puntano lì) — **pacchetto SPM ora attivo** in `iosApp/project.yml` (`branch: main`, da fissare a
+  un tag una volta verificato su Xcode quale sia compatibile). Pattern reale trovato nei sorgenti:
+  `LLMModelFactory.shared.loadContainer(configuration:progressHandler:)`,
+  `ModelConfiguration(id:)` per un repo HuggingFace arbitrario, `ChatSession(container,
+  instructions:generateParameters:)` con `respond(to:) async throws -> String`.
+  `MLXLocalEngine.swift` è stato riscritto su questa base, con timeout esplicito (stesso pattern a
+  task-race di `AppleIntelligenceEngine.swift`). **Due lacune rimaste, dichiarate nel file**:
+  `respond(to:)` non è in streaming (niente `stopWhen` anticipato come per LiteRT-LM/Apple
+  Intelligence — esiste probabilmente una variante streaming ma non ne ho confermato la firma), e
+  la cancellazione/il calcolo dello spazio occupato dai modelli MLX non sono implementati (la
+  cache è gestita da `MLXLMCommon` via Hugging Face, non da un percorso file nostro come su
+  Android).
+
+**Resta comunque vero, e non cambia con la ricerca web**: nessuna riga di questo lavoro è stata
+compilata né eseguita. La prima verifica reale per Android resta
+`./gradlew :androidApp:assembleDebug` su una macchina con accesso a Maven; per iOS,
+`xcodegen generate` seguito da una build in Xcode su un Mac — che né io né (per ora) tu abbiamo a
+disposizione. Se qualcosa non compila al primo colpo, è il segnale più prezioso di questo giro:
+dice esattamente quale delle superfici API ricostruite qui sopra non era esatta.
+
 ## 20/9 (seconda parte): instradamento per testo lungo, Phi al posto di Qwen, scheletri AICore/MLX
 
 **Fonte.** Un piano architetturale "engine AI multi-tier" generato da Gemini (link condiviso),
