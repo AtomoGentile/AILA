@@ -33,7 +33,8 @@ fun ClassRosterScreen(
     currentUserId: String = "",
     onDidacticChange: (studentId: String, value: Int) -> Unit,
     onBehaviorChange: (studentId: String, value: Int) -> Unit,
-    onPriorityPassChange: (studentId: String, enabled: Boolean) -> Unit
+    onPriorityPassChange: (studentId: String, enabled: Boolean) -> Unit,
+    onSecurityGuardChange: (studentId: String, enabled: Boolean) -> Unit = { _, _ -> }
 ) {
     Column(
         modifier = Modifier
@@ -46,6 +47,19 @@ fun ClassRosterScreen(
                     "quando generi le proposte di Mappa Posti.",
                 fontSize = 12.sp,
                 color = AppTheme.TextMuted
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            // La Guardia la sceglie il Rappresentante: è la terza firma, con i due Rappresentanti,
+            // per svelare l'autore di una proposta o di un commento anonimi.
+            Text(
+                text = if (entries.any { it.isSecurityGuard })
+                    "Guardia di Sicurezza: ${entries.first { it.isSecurityGuard }.let { "${it.firstName} ${it.lastName}" }}."
+                else
+                    "Scegli la Guardia di Sicurezza di un compagno: senza di lei nessuno può chiedere " +
+                        "di svelare un autore anonimo.",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = AppTheme.PrimaryBlue
             )
         }
 
@@ -68,7 +82,8 @@ fun ClassRosterScreen(
                         isSelf = entry.studentId == currentUserId,
                         onDidacticChange = { onDidacticChange(entry.studentId, it) },
                         onBehaviorChange = { onBehaviorChange(entry.studentId, it) },
-                        onPriorityPassChange = { onPriorityPassChange(entry.studentId, it) }
+                        onPriorityPassChange = { onPriorityPassChange(entry.studentId, it) },
+                        onSecurityGuardChange = { onSecurityGuardChange(entry.studentId, it) }
                     )
                     Spacer(modifier = Modifier.height(AppTheme.Space12))
                 }
@@ -83,7 +98,8 @@ private fun ClassRosterRow(
     isSelf: Boolean = false,
     onDidacticChange: (Int) -> Unit,
     onBehaviorChange: (Int) -> Unit,
-    onPriorityPassChange: (Boolean) -> Unit
+    onPriorityPassChange: (Boolean) -> Unit,
+    onSecurityGuardChange: (Boolean) -> Unit
 ) {
     AilaCard {
         Column(modifier = Modifier.padding(AppTheme.Space16)) {
@@ -139,6 +155,28 @@ private fun ClassRosterRow(
                     checked = entry.priorityPass,
                     onCheckedChange = onPriorityPassChange
                 )
+            }
+
+            // I Rappresentanti non possono essere anche la Guardia: le tre firme sono di tre
+            // persone diverse.
+            if (entry.role != "REPRESENTATIVE") {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Guardia di Sicurezza (3ª firma)",
+                        fontSize = 14.sp,
+                        color = AppTheme.TextMuted,
+                        modifier = Modifier.weight(1f)
+                    )
+                    AilaSwitch(
+                        checked = entry.isSecurityGuard,
+                        onCheckedChange = onSecurityGuardChange
+                    )
+                }
             }
         }
     }

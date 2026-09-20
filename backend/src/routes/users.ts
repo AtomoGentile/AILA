@@ -4,7 +4,7 @@
 
 import { Hono } from 'hono';
 import type { Env, JWTPayload } from '../types';
-import { authMiddleware, requireRole, resolveClassId } from '../auth';
+import { authMiddleware, requireRole, resolveClassId, verifyPassword } from '../auth';
 
 const users = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();
 
@@ -67,6 +67,51 @@ users.put('/me/notifications', async (c) => {
   ).bind(boardEnabled ? 1 : 0, payload.sub).run();
 
   return c.json({ success: true, notificationBoardEnabled: boardEnabled });
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/users/me — Elimina il proprio account
+//
+// Richiede la password nel corpo: un token rubato o un telefono lasciato sbloccato non devono
+// bastare a cancellare un account. Profilo, valutazioni, preferenze, voti, proposte, commenti,
+// token push e invii/voti dei sondaggi partono a cascata (ON DELETE CASCADE); gli eventi di
+// calendario e le analisi AI restano, con l'autore azzerato (ON DELETE SET NULL). Le uniche
+// righe senza cascata sono i registri di sblocco dell'anonimato: si cancellano a mano prima,
+// altrimenti il vincolo di chiave esterna bloccherebbe l'eliminazione.
+// ---------------------------------------------------------------------------
+users.delete('/me', async (c) => {
+  const payload = c.get('jwtPayload');
+
+  let password = '';
+  try {
+    const body = await c.req.json<{ password?: string }>();
+    password = body.password ?? '';
+  } catch {
+    // corpo assente o non JSON: password vuota, respinta sotto
+  }
+  if (!password) return c.json({ error: 'Password richiesta' }, 400);
+
+  const user = await c.env.DB.prepare('SELECT password_hash FROM users WHERE id = ?')
+    .bind(payload.sub)
+    .first<{ password_hash: string }>();
+  if (!user) return c.json({ error: 'Utente non trovato' }, 404);
+
+  const [storedHash, salt] = user.password_hash.split(':');
+  if (!(await verifyPassword(password, storedHash, salt))) {
+    return c.json({ error: 'Password non corretta' }, 403);
+  }
+
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      'DELETE FROM anonymity_unlock_audits WHERE rep_1_id = ?1 OR rep_2_id = ?1 OR security_guard_id = ?1'
+    ).bind(payload.sub),
+    // Se era la Guardia di Sicurezza della classe, la classe resta senza (lo sceglie di nuovo il
+    // Rappresentante): l'id non punta a una riga vera, quindi non c'è una FK a farlo da sé.
+    c.env.DB.prepare('UPDATE classes SET security_guard_id = NULL WHERE security_guard_id = ?').bind(payload.sub),
+    c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(payload.sub),
+  ]);
+
+  return c.json({ success: true });
 });
 
 // ---------------------------------------------------------------------------

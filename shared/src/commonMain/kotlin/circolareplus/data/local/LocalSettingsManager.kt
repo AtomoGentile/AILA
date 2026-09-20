@@ -20,6 +20,7 @@ class LocalSettingsManager(
         private const val KEY_USER_AI_API_KEY = "user_ai_api_key"
         private const val KEY_AI_PROVIDER = "ai_provider"
         private const val KEY_LOCAL_AI_MODEL = "local_ai_model_id"
+        private const val KEY_ASSISTANT_THINKING = "assistant_thinking_enabled"
         private const val KEY_BOARD_NOTIFICATIONS_ENABLED = "board_notifications_enabled"
         private const val KEY_SYSTEM_NOTIFICATIONS_ENABLED = "system_notifications_enabled"
         private const val KEY_AUTH_TOKEN = "auth_token"
@@ -91,6 +92,15 @@ class LocalSettingsManager(
     var localAiModelId: String
         get() = settings.getString(KEY_LOCAL_AI_MODEL, "")
         set(value) = settings.putString(KEY_LOCAL_AI_MODEL, value)
+
+    /**
+     * Se l'assistente, quando gira sul modello locale, puo' "ragionare" prima di rispondere
+     * (modalita' thinking di Qwen/Gemma). Spento di default: le risposte sono molto piu' rapide;
+     * acceso sono piu' ponderate ma su un telefono possono voler dire minuti.
+     */
+    var assistantThinkingEnabled: Boolean
+        get() = settings.getBoolean(KEY_ASSISTANT_THINKING, false)
+        set(value) = settings.putBoolean(KEY_ASSISTANT_THINKING, value)
 
     var isBoardNotificationEnabled: Boolean
         get() = settings.getBoolean(KEY_BOARD_NOTIFICATIONS_ENABLED, true)

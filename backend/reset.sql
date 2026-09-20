@@ -11,6 +11,8 @@ DROP TABLE IF EXISTS student_sacrifice_bonus;
 DROP TABLE IF EXISTS interrogation_votes;
 DROP TABLE IF EXISTS interrogation_slots;
 DROP TABLE IF EXISTS interrogation_grids;
+DROP TABLE IF EXISTS anonymity_unlock_approvals;
+DROP TABLE IF EXISTS anonymity_unlock_requests;
 DROP TABLE IF EXISTS anonymity_unlock_audits;
 DROP TABLE IF EXISTS proposal_comments;
 DROP TABLE IF EXISTS proposal_votes;

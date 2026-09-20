@@ -86,7 +86,7 @@ object AppContainer {
      * cambiarli durante una conversazione ha effetto dal messaggio successivo.
      */
     fun newAssistant(): AilaAssistant = AilaAssistant(
-        classifierFactory = { newAiClassifier() },
+        classifierFactory = { newAiClassifier(localThinking = settings.assistantThinkingEnabled) },
         circularsRepository = circularsRepository,
         pdfTextExtractor = pdfTextExtractor
     )
@@ -132,14 +132,20 @@ object AppContainer {
      * cloud solo per questa chiamata — vedi [shouldPreferCloudForLength] — invece di lasciar
      * troncare silenziosamente una circolare che il cloud potrebbe leggere per intero.
      */
-    fun newAiClassifier(allowLocalFallback: Boolean = true, pdfTextLength: Int? = null): AiClassifier {
+    fun newAiClassifier(
+        allowLocalFallback: Boolean = true,
+        pdfTextLength: Int? = null,
+        /** Ragionamento del modello locale: lo passa solo l'assistente, vedi [LocalAiClassifier]. */
+        localThinking: Boolean = false
+    ): AiClassifier {
         val cloud = ClientSideAiClassifier(userApiKey = settings.userAiApiKey)
 
         val model = selectedLocalModel()
         val local = LocalAiClassifier(
             model = model,
             modelPath = localModelStore.installedPath(model),
-            llm = localLlm
+            llm = localLlm,
+            enableThinking = localThinking
         )
 
         return when (AiProvider.fromId(settings.aiProvider)) {

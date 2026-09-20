@@ -54,7 +54,7 @@ class AppleIntelligenceEngine: AppleIntelligenceBridge {
      * Genera una risposta in streaming fermandosi appena stopWhen ritorna true.
      *
      * Crea una sessione di linguaggio con systemPrompt come istruzioni, poi chiama
-     * session.streamResponse(to: userPrompt) e itera lo stream. Ad ogni chunk accumulato,
+     * session.streamResponse(to: userPrompt, options: options) e itera lo stream. Ad ogni chunk accumulato,
      * chiama la closure Kotlin stopWhen(testoAccumulato): se ritorna true, interrompe.
      *
      * Racchiude tutto in un timeout: se scade prima che stopWhen diventi true o la
@@ -71,6 +71,8 @@ class AppleIntelligenceEngine: AppleIntelligenceBridge {
         systemPrompt: String,
         userPrompt: String,
         timeoutMillis: Int64,
+        maxOutputTokens: Int32,
+        temperature: Double,
         stopWhen: @escaping (String) -> KotlinBoolean
     ) async throws -> String {
         // Timeout in secondi
@@ -78,6 +80,13 @@ class AppleIntelligenceEngine: AppleIntelligenceBridge {
 
         // Crea la sessione con systemPrompt come istruzioni
         let session = LanguageModelSession(instructions: systemPrompt)
+
+        // Temperatura bassa e tetto ai token, come sul motore Android: senza, il modello
+        // campiona con i parametri di default (creativi) e non ha un limite di lunghezza.
+        let options = GenerationOptions(
+            temperature: temperature,
+            maximumResponseTokens: Int(maxOutputTokens)
+        )
 
         // Accumula il testo generato
         var accumulatedText = ""
@@ -90,7 +99,7 @@ class AppleIntelligenceEngine: AppleIntelligenceBridge {
                     // Genera in streaming: ogni elemento e' uno snapshot con il testo
                     // CUMULATIVO prodotto finora (non un delta), quindi si sostituisce
                     // accumulatedText invece di concatenarla.
-                    for try await partial in session.streamResponse(to: userPrompt) {
+                    for try await partial in session.streamResponse(to: userPrompt, options: options) {
                         accumulatedText = partial.content
 
                         // Chiama Kotlin per decidere se fermarsi
@@ -104,7 +113,7 @@ class AppleIntelligenceEngine: AppleIntelligenceBridge {
                     throw NSError(
                         domain: "AppleIntelligenceEngine",
                         code: -1,
-                        userInfo: [NSLocalizedDescriptionKey: "Generazione fallita: \(error.localizedDescription)"]
+                        userInfo: [NSLocalizedDescriptionKey: AppleIntelligenceEngine.describe(error)]
                     )
                 }
             }
@@ -131,5 +140,29 @@ class AppleIntelligenceEngine: AppleIntelligenceBridge {
                 userInfo: [NSLocalizedDescriptionKey: "Errore sconosciuto nella generazione"]
             )
         }
+    }
+
+    /**
+     * Messaggio leggibile per un errore di FoundationModels.
+     *
+     * Il caso "prompt troppo lungo" usa di proposito le parole "Exceeding the maximum number of
+     * tokens allowed": e' la frase che LocalAiClassifier.isPromptTooLong (Kotlin) cerca per
+     * ritentare con un prompt piu' corto. L'errore di Apple ("Exceeded model context window
+     * size") non la contiene, quindi senza questa traduzione il ritentativo non scatterebbe mai.
+     */
+    static func describe(_ error: Error) -> String {
+        if let generationError = error as? LanguageModelSession.GenerationError {
+            switch generationError {
+            case .exceededContextWindowSize:
+                return "Exceeding the maximum number of tokens allowed: il prompt supera la finestra di contesto di Apple Intelligence."
+            case .guardrailViolation:
+                return "Apple Intelligence ha rifiutato la richiesta con i suoi filtri di sicurezza."
+            case .unsupportedLanguageOrLocale:
+                return "Apple Intelligence non supporta la lingua del dispositivo."
+            default:
+                break
+            }
+        }
+        return "Generazione fallita: \(error.localizedDescription)"
     }
 }

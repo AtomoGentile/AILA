@@ -29,6 +29,9 @@ import circolareplus.design.ailaGlassOverlay
 import circolareplus.design.ailaGlassPressable
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
+import circolareplus.util.nowMinutesOfDay
+import circolareplus.util.parseIsoDate
+import circolareplus.util.parseTimeToMinutes
 import circolareplus.util.today
 import circolareplus.domain.model.CalendarEvent
 import circolareplus.domain.model.Circular
@@ -61,13 +64,12 @@ fun HomeScreen(
 
     // Circolare più recente (numero più alto): mostrata in evidenza, se ce n'è almeno una.
     val latestCircular = circulars.maxByOrNull { it.number }
-    // Prime 3 scadenze **future**. Prima si prendevano le prime tre della lista e basta, così
-    // in "Prossimi eventi" comparivano anche verifiche già passate: il backend le restituisce
-    // tutte, ordinate per data, comprese quelle vecchie.
-    val todayIso = remember { today().toIso() }
-    val nextEvents = remember(calendarEvents, todayIso) {
-        calendarEvents.filter { it.date >= todayIso }.take(3)
-    }
+    // Prime 3 scadenze **future**. Prima si prendevano le prime tre della lista e basta, poi si
+    // confrontavano le date come stringhe: un "2026-9-5" scritto senza zeri (arriva dagli eventi
+    // generati dall'AI) risultava "maggiore" di "2026-09-20" e una verifica di settembre restava
+    // per mesi fra i prossimi eventi. Ora la data si legge davvero, e un evento di oggi la cui ora
+    // e' gia' passata non e' piu' "prossimo".
+    val nextEvents = remember(calendarEvents) { upcomingEvents(calendarEvents, limit = 3) }
 
     // Circolare più recente in evidenza. Tipo esplicito sulla callback: un lambda scritto dentro
     // un "if" come argomento nullable è ambiguo da leggere e da inferire.
@@ -418,4 +420,34 @@ private fun HomeQuickIcon(
             softWrap = false
         )
     }
+}
+
+/**
+ * Gli eventi che non sono ancora iniziati, dal piu' vicino, al massimo [limit].
+ *
+ * Un evento senza data leggibile si scarta: meglio non mostrarlo che metterlo fra i prossimi a
+ * caso. Uno di oggi senza ora resta finche' dura la giornata, uno con ora sparisce quando l'ora
+ * e' passata.
+ */
+internal fun upcomingEvents(events: List<CalendarEvent>, limit: Int): List<CalendarEvent> {
+    val todayDate = today()
+    val todayKey = todayDate.year * 10_000 + todayDate.month * 100 + todayDate.day
+    val nowMinutes = nowMinutesOfDay()
+
+    return events
+        .mapNotNull { event ->
+            val date = parseIsoDate(event.date.take(10).trim()) ?: return@mapNotNull null
+            val dayKey = date.year * 10_000 + date.month * 100 + date.day
+            val minutes = event.time?.let { parseTimeToMinutes(it) }
+            val isUpcoming = when {
+                dayKey > todayKey -> true
+                dayKey < todayKey -> false
+                minutes == null -> true
+                else -> minutes >= nowMinutes
+            }
+            if (isUpcoming) Triple(event, dayKey, minutes ?: -1) else null
+        }
+        .sortedWith(compareBy({ it.second }, { it.third }))
+        .take(limit)
+        .map { it.first }
 }

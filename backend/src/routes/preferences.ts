@@ -7,11 +7,60 @@
 import { Hono } from 'hono';
 import type { Env, JWTPayload } from '../types';
 import { authMiddleware, requireRole, resolveClassId, ensureClassRow } from '../auth';
-import { notifyClass } from '../services/fcm';
+import { notifyClass, notifyUser } from '../services/fcm';
 
 const preferences = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();
 
 preferences.use('*', authMiddleware());
+
+// ---------------------------------------------------------------------------
+// Avanzamento della raccolta: quanti compagni hanno espresso almeno una preferenza.
+//
+// "Ha votato" = ha almeno una riga in social_preferences (anche un voto neutro): non esiste un
+// "invio" separato come nei sondaggi, il voto si salva a ogni tocco. Guardie di sicurezza e altri
+// ruoli non votano e non entrano nel conteggio.
+// ---------------------------------------------------------------------------
+async function preferencesProgress(env: Env, classId: string): Promise<{
+  totalStudents: number;
+  votedCount: number;
+  pending: Array<{ id: string; firstName: string; lastName: string }>;
+}> {
+  const rows = await env.DB.prepare(
+    `SELECT u.id, u.first_name, u.last_name,
+            EXISTS (SELECT 1 FROM social_preferences sp WHERE sp.from_student_id = u.id) AS has_voted
+     FROM users u
+     WHERE u.class_id = ? AND u.role IN ('STUDENT', 'REPRESENTATIVE')
+     ORDER BY u.last_name, u.first_name`
+  ).bind(classId).all<{ id: string; first_name: string; last_name: string; has_voted: number }>();
+
+  const pending = rows.results
+    .filter((r) => !r.has_voted)
+    .map((r) => ({ id: r.id, firstName: r.first_name, lastName: r.last_name }));
+
+  return {
+    totalStudents: rows.results.length,
+    votedCount: rows.results.length - pending.length,
+    pending,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/preferences/progress — Quanti hanno già votato e quanti no
+// I nomi di chi manca li vede solo il Rappresentante, che è chi può sollecitarli.
+// ---------------------------------------------------------------------------
+preferences.get('/progress', async (c) => {
+  const payload = c.get('jwtPayload');
+  const classId = await resolveClassId(c);
+  const progress = await preferencesProgress(c.env, classId);
+
+  return c.json({
+    totalStudents: progress.totalStudents,
+    votedCount: progress.votedCount,
+    pendingCount: progress.totalStudents - progress.votedCount,
+    allVoted: progress.totalStudents > 0 && progress.votedCount >= progress.totalStudents,
+    pending: payload.role === 'REPRESENTATIVE' ? progress.pending : [],
+  });
+});
 
 // ---------------------------------------------------------------------------
 // GET /api/config/preferences — Stato raccolta
@@ -128,12 +177,40 @@ preferences.post('/vote', async (c) => {
     }
   }
 
+  // Serve a capire se questo e' il PRIMO voto dello studente: solo allora puo' essere quello che
+  // completa la classe. Ricontare a ogni voto notificherebbe il Rappresentante decine di volte.
+  const priorVote = await c.env.DB.prepare(
+    'SELECT 1 AS present FROM social_preferences WHERE from_student_id = ? LIMIT 1'
+  ).bind(payload.sub).first<{ present: number }>();
+
   // Upsert
   await c.env.DB.prepare(
     `INSERT INTO social_preferences (from_student_id, to_student_id, score, updated_at)
      VALUES (?, ?, ?, CURRENT_TIMESTAMP)
      ON CONFLICT(from_student_id, to_student_id) DO UPDATE SET score = excluded.score, updated_at = excluded.updated_at`
   ).bind(payload.sub, toStudentId, score).run();
+
+  if (!priorVote) {
+    const progress = await preferencesProgress(c.env, classId);
+    if (progress.totalStudents > 0 && progress.votedCount >= progress.totalStudents) {
+      // Tutti hanno votato: si avvisano i Rappresentanti della classe, che sono quelli che
+      // possono generare la disposizione.
+      const reps = await c.env.DB.prepare(
+        "SELECT id FROM users WHERE class_id = ? AND role = 'REPRESENTATIVE'"
+      ).bind(classId).all<{ id: string }>();
+      await Promise.allSettled(
+        reps.results.map((rep) =>
+          notifyUser(
+            c.env,
+            rep.id,
+            'Mappa Posti — Hanno votato tutti',
+            `Tutta la classe (${progress.votedCount}/${progress.totalStudents}) ha espresso le preferenze: puoi generare la disposizione.`,
+            { action: 'preferences_complete' }
+          )
+        )
+      );
+    }
+  }
 
   return c.json({ success: true });
 });

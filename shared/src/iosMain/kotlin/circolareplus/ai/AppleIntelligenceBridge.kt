@@ -29,6 +29,10 @@ interface AppleIntelligenceBridge {
      * @param systemPrompt Istruzioni di sistema per il modello
      * @param userPrompt Prompt dell'utente
      * @param timeoutMillis Timeout massimo in millisecondi
+     * @param maxOutputTokens Tetto ai token della risposta (`maximumResponseTokens` di Apple):
+     *   senza, il modello puo' continuare fino a riempire la finestra di contesto.
+     * @param temperature Temperatura di campionamento. Bassa (0.1) per produrre sempre lo stesso
+     *   JSON ben formato, come sul motore Android.
      * @param stopWhen Lambda che decide quando interrompere la generazione basandosi sul testo accumulato
      * @return Stringa generata dal modello
      * @throws Exception Se la generazione fallisce o scade il timeout
@@ -37,6 +41,8 @@ interface AppleIntelligenceBridge {
         systemPrompt: String,
         userPrompt: String,
         timeoutMillis: Long,
+        maxOutputTokens: Int,
+        temperature: Double,
         stopWhen: (String) -> Boolean
     ): String
 }

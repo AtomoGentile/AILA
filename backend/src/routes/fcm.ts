@@ -23,12 +23,19 @@ fcmRoutes.post('/token', async (c) => {
     return c.json({ error: "platform deve essere 'android' o 'ios'" }, 400);
   }
 
-  // Upsert: one token per user per platform
-  await c.env.DB.prepare(
-    `INSERT INTO fcm_tokens (user_id, token, platform, updated_at)
-     VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-     ON CONFLICT(user_id, platform) DO UPDATE SET token = excluded.token, updated_at = excluded.updated_at`
-  ).bind(payload.sub, token, platform).run();
+  // Un token FCM identifica un dispositivo, non un utente: se sullo stesso telefono si entra con
+  // due account (Rappresentante e studente, com'è normale provando l'app) il token finiva
+  // registrato per entrambi e ogni notifica di classe arrivava due volte. Chi accede per ultimo
+  // ne diventa l'unico proprietario.
+  await c.env.DB.batch([
+    c.env.DB.prepare('DELETE FROM fcm_tokens WHERE token = ? AND user_id != ?').bind(token, payload.sub),
+    // Upsert: one token per user per platform
+    c.env.DB.prepare(
+      `INSERT INTO fcm_tokens (user_id, token, platform, updated_at)
+       VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(user_id, platform) DO UPDATE SET token = excluded.token, updated_at = excluded.updated_at`
+    ).bind(payload.sub, token, platform),
+  ]);
 
   return c.json({ success: true });
 });

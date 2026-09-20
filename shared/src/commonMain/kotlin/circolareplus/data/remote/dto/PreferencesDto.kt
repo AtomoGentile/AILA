@@ -31,3 +31,19 @@ data class PreferenceMatrixEntryDto(val from: String, val to: String, val score:
 
 @Serializable
 data class PreferenceMatrixResponseDto(val matrix: List<PreferenceMatrixEntryDto>)
+
+@Serializable
+data class PendingVoterDto(val id: String, val firstName: String, val lastName: String)
+
+/**
+ * Avanzamento della raccolta preferenze: quanti compagni hanno votato e quanti no. L'elenco
+ * `pending` lo riceve solo il Rappresentante (per gli altri e' vuoto).
+ */
+@Serializable
+data class PreferencesProgressDto(
+    val totalStudents: Int = 0,
+    val votedCount: Int = 0,
+    val pendingCount: Int = 0,
+    val allVoted: Boolean = false,
+    val pending: List<PendingVoterDto> = emptyList()
+)

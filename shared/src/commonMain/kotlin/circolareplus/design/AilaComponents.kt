@@ -478,12 +478,16 @@ fun AilaPrimaryButton(
     enabled: Boolean = true,
     fillMaxWidth: Boolean = false,
     compact: Boolean = false,
+    // Versione "da pollice": altezza minima 48dp e testo 15sp, per i punti in cui il pulsante è
+    // l'azione principale di una finestra e non deve mancare il tocco.
+    large: Boolean = false,
     icon: (@Composable (Color) -> Unit)? = null
 ) {
     val shape = RoundedCornerShape(AppTheme.ButtonCornerRadius)
     Box(
         modifier = modifier
             .then(if (fillMaxWidth) Modifier.fillMaxWidth() else Modifier)
+            .then(if (large) Modifier.heightIn(min = 48.dp) else Modifier)
             .clip(shape)
             .then(
                 if (enabled) Modifier.background(AppTheme.PrimaryGradient)
@@ -491,7 +495,7 @@ fun AilaPrimaryButton(
             )
             .ailaGlassPressable(enabled = enabled, tint = Color.White) { onClick() }
             .padding(
-                horizontal = if (compact) AppTheme.Space12 else AppTheme.Space16,
+                horizontal = if (large) AppTheme.Space20 else if (compact) AppTheme.Space12 else AppTheme.Space16,
                 vertical = if (compact) 8.dp else 11.dp
             ),
         contentAlignment = Alignment.Center
@@ -504,7 +508,7 @@ fun AilaPrimaryButton(
             }
             Text(
                 text = text,
-                fontSize = if (compact) 12.sp else 13.sp,
+                fontSize = if (large) 15.sp else if (compact) 12.sp else 13.sp,
                 fontWeight = FontWeight.Bold,
                 color = contentColor,
                 maxLines = 1
@@ -520,17 +524,19 @@ fun AilaSecondaryButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
+    large: Boolean = false,
     icon: (@Composable (Color) -> Unit)? = null
 ) {
     val shape = RoundedCornerShape(AppTheme.ButtonCornerRadius)
     Box(
         modifier = modifier
+            .then(if (large) Modifier.heightIn(min = 48.dp) else Modifier)
             .clip(shape)
             .background(AppTheme.SurfaceWhite)
             .border(1.dp, AppTheme.Hairline, shape)
             .ailaGlassPressable(tint = AppTheme.PrimaryBlue) { onClick() }
             .padding(
-                horizontal = if (compact) AppTheme.Space12 else AppTheme.Space16,
+                horizontal = if (large) AppTheme.Space20 else if (compact) AppTheme.Space12 else AppTheme.Space16,
                 vertical = if (compact) 8.dp else 11.dp
             ),
         contentAlignment = Alignment.Center
@@ -542,7 +548,7 @@ fun AilaSecondaryButton(
             }
             Text(
                 text = text,
-                fontSize = if (compact) 12.sp else 13.sp,
+                fontSize = if (large) 15.sp else if (compact) 12.sp else 13.sp,
                 fontWeight = FontWeight.Bold,
                 color = AppTheme.TextDark,
                 maxLines = 1
@@ -558,23 +564,25 @@ fun AilaDestructiveButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    compact: Boolean = false
+    compact: Boolean = false,
+    large: Boolean = false
 ) {
     val shape = RoundedCornerShape(AppTheme.ButtonCornerRadius)
     Box(
         modifier = modifier
+            .then(if (large) Modifier.heightIn(min = 48.dp) else Modifier)
             .clip(shape)
             .background(AppTheme.TintRed)
             .ailaGlassPressable(tint = Color.White) { onClick() }
             .padding(
-                horizontal = if (compact) AppTheme.Space12 else AppTheme.Space16,
+                horizontal = if (large) AppTheme.Space20 else if (compact) AppTheme.Space12 else AppTheme.Space16,
                 vertical = if (compact) 8.dp else 11.dp
             ),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = text,
-            fontSize = if (compact) 12.sp else 13.sp,
+            fontSize = if (large) 15.sp else if (compact) 12.sp else 13.sp,
             fontWeight = FontWeight.Bold,
             color = AppTheme.TintRedInk,
             maxLines = 1
@@ -597,25 +605,29 @@ fun AilaConfirmDialog(
     dismissLabel: String = "Annulla",
     isDestructive: Boolean = true
 ) {
+    // Larga quasi quanto lo schermo e con testo e pulsanti "da pollice": la versione precedente
+    // (280dp, titolo 17sp, pulsanti da 12sp) sembrava un'etichetta e i pulsanti si mancavano.
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space20),
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
         containerColor = AppTheme.SurfaceWhite,
         shape = RoundedCornerShape(AppTheme.CardCornerRadius),
         title = {
-            Text(text = title, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = AppTheme.TextDark)
+            Text(text = title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = AppTheme.TextDark)
         },
         text = {
-            Text(text = message, fontSize = 13.sp, color = AppTheme.TextMuted, lineHeight = 18.sp)
+            Text(text = message, fontSize = 15.sp, color = AppTheme.TextMuted, lineHeight = 22.sp)
         },
         confirmButton = {
             if (isDestructive) {
-                AilaDestructiveButton(text = confirmLabel, onClick = onConfirm, compact = true)
+                AilaDestructiveButton(text = confirmLabel, onClick = onConfirm, large = true)
             } else {
-                AilaPrimaryButton(text = confirmLabel, onClick = onConfirm, compact = true)
+                AilaPrimaryButton(text = confirmLabel, onClick = onConfirm, large = true)
             }
         },
         dismissButton = {
-            AilaSecondaryButton(text = dismissLabel, onClick = onDismiss, compact = true)
+            AilaSecondaryButton(text = dismissLabel, onClick = onDismiss, large = true)
         }
     )
 }
@@ -772,6 +784,8 @@ fun AilaIconAction(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     selected: Boolean = false,
+    // Spenta: resta visibile con il suo numero ma non risponde al tocco (es. voti su una proposta chiusa).
+    enabled: Boolean = true,
     icon: @Composable (Color) -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -800,19 +814,25 @@ fun AilaIconAction(
         label = "iconActionBg"
     )
 
+    // Almeno 44dp di altezza e 48 di larghezza: con il padding di prima (7dp) la pillola era alta
+    // poco più di 30dp e sulle proposte si sbagliava spesso pulsante.
     Row(
         modifier = modifier
             .scale(scale)
+            .alpha(if (enabled) 1f else 0.55f)
+            .heightIn(min = 44.dp)
+            .widthIn(min = 56.dp)
             .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
             .background(background)
-            .clickable(interactionSource = interactionSource, indication = null) { onClick() }
-            .padding(horizontal = 11.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .clickable(enabled = enabled, interactionSource = interactionSource, indication = null) { onClick() }
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
     ) {
         icon(ink)
         if (label.isNotEmpty()) {
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(text = label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ink)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(text = label, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = ink)
         }
     }
 }

@@ -102,7 +102,7 @@ private fun drawHeader(canvas: Canvas): Float {
     }
 
     var y = MARGIN + 6f
-    canvas.drawText("Mappa Posti Aula", MARGIN, y + 15f, titlePaint)
+    canvas.drawText("Mappa Posti", MARGIN, y + 15f, titlePaint)
     y += 24f
     canvas.drawText("Generata il ${currentDateLabel()}", MARGIN, y, subtitlePaint)
     y += 14f

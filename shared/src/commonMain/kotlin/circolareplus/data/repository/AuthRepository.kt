@@ -8,6 +8,8 @@ import circolareplus.data.remote.dto.LoginRequestDto
 import circolareplus.data.remote.dto.AuthResponseDto
 import circolareplus.data.remote.dto.ClassesListResponseDto
 import circolareplus.data.remote.dto.ClassOptionDto
+import circolareplus.data.remote.dto.DeleteAccountRequestDto
+import circolareplus.data.remote.dto.SuccessDto
 import circolareplus.data.remote.dto.RegisterWithClassRequestDto
 import circolareplus.data.remote.dto.ToggleBoardNotificationsRequestDto
 import circolareplus.data.remote.dto.ToggleBoardNotificationsResponseDto
@@ -173,6 +175,22 @@ class AuthRepository(
             ToggleBoardNotificationsRequestDto(enabled)
         )
         return response.notificationBoardEnabled
+    }
+
+    /**
+     * Elimina definitivamente l'account sul server, dopo aver verificato la [password].
+     *
+     * Solo a eliminazione riuscita si chiude la sessione locale e si cancella la cronologia
+     * dell'assistente (che sta sul telefono ma e' fatta di dati dell'account): se il server
+     * rifiuta — password sbagliata, rete assente — l'utente resta dov'e' e riprova.
+     */
+    suspend fun deleteAccount(password: String) {
+        api.deleteWithBody<DeleteAccountRequestDto, SuccessDto>(
+            "/api/users/me",
+            DeleteAccountRequestDto(password)
+        )
+        settings.clearAssistantHistory()
+        logout()
     }
 
     fun logout() {

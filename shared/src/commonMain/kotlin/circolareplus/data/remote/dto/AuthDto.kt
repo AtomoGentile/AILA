@@ -48,4 +48,7 @@ data class ToggleBoardNotificationsRequestDto(val boardEnabled: Boolean)
 data class ToggleBoardNotificationsResponseDto(val success: Boolean, val notificationBoardEnabled: Boolean)
 
 @Serializable
+data class DeleteAccountRequestDto(val password: String)
+
+@Serializable
 data class UsersListResponseDto(val users: List<UserDto>)

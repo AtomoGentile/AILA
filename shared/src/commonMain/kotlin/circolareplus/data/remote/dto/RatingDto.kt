@@ -7,6 +7,8 @@ data class RatingEntryDto(
     val studentId: String,
     val firstName: String,
     val lastName: String,
+    val role: String = "STUDENT",
+    val isSecurityGuard: Boolean = false,
     val heightCm: Int? = null,
     val didactic: Int? = null,
     val behavior: Int? = null,

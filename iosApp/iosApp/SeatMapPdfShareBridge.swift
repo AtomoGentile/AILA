@@ -124,7 +124,7 @@ class SeatMapPdfShareBridgeImpl: SeatMapPdfShareBridge {
         ]
 
         var y = margin + 6
-        ("Mappa Posti Aula" as NSString).draw(at: CGPoint(x: margin, y: y), withAttributes: titleAttributes)
+        ("Mappa Posti" as NSString).draw(at: CGPoint(x: margin, y: y), withAttributes: titleAttributes)
         y += 26
         ("Generata il \(dateLabel)" as NSString).draw(at: CGPoint(x: margin, y: y), withAttributes: subtitleAttributes)
         y += 16

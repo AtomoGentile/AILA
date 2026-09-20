@@ -65,7 +65,10 @@ fun AssistantChatScreen(
     onClearChat: () -> Unit,
     onOpenConversation: (AssistantConversation) -> Unit,
     onDeleteConversation: (String) -> Unit,
-    onOpenSource: (AssistantSource) -> Unit
+    onOpenSource: (AssistantSource) -> Unit,
+    /** Ragionamento del modello locale (modalita' thinking): piu' ponderato ma molto piu' lento. */
+    thinkingEnabled: Boolean = false,
+    onThinkingChange: (Boolean) -> Unit = {}
 ) {
     var draft by remember { mutableStateOf("") }
     var isHistoryOpen by remember { mutableStateOf(false) }
@@ -135,12 +138,40 @@ fun AssistantChatScreen(
                 .background(AppTheme.SurfaceWhite)
                 .padding(AppTheme.Space12)
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = AppTheme.Space8),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Modalità ragionamento",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AppTheme.TextDark
+                    )
+                    Text(
+                        text = if (thinkingEnabled) {
+                            "Attiva: risposte più ponderate, ma più lente. Vale per l'AI sul telefono."
+                        } else {
+                            "Spenta: risposte rapide. Vale per l'AI sul telefono."
+                        },
+                        fontSize = 10.sp,
+                        color = AppTheme.TextMuted,
+                        lineHeight = 14.sp
+                    )
+                }
+                circolareplus.design.AilaSwitch(
+                    checked = thinkingEnabled,
+                    onCheckedChange = onThinkingChange
+                )
+            }
+
             Row(verticalAlignment = Alignment.Bottom) {
                 OutlinedTextField(
                     value = draft,
                     onValueChange = { draft = it },
                     modifier = Modifier.weight(1f),
-                    placeholder = { Text("Chiedi qualcosa sulla scuola…", fontSize = 14.sp) },
+                    placeholder = { Text("Chiedi qualsiasi cosa…", fontSize = 14.sp) },
                     maxLines = 4,
                     shape = RoundedCornerShape(AppTheme.CardCornerRadius),
                     colors = ailaFieldColors()
@@ -176,8 +207,8 @@ fun AssistantChatScreen(
 
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "Risponde solo con i dati dentro AILA. Può sbagliare: per le cose importanti " +
-                    "apri la circolare.",
+                text = "Usa i dati di AILA per la scuola e le sue conoscenze per il resto. Può " +
+                    "sbagliare: per le cose importanti apri la circolare.",
                 fontSize = 10.sp,
                 color = AppTheme.TextFaint
             )
@@ -187,9 +218,7 @@ fun AssistantChatScreen(
     if (isHistoryOpen) {
         AssistantHistorySheet(
             conversations = conversations,
-            // Riaprire una conversazione mentre il modello sta rispondendo scambierebbe i
-            // messaggi sotto la risposta in arrivo, che finirebbe nel filo sbagliato.
-            canOpen = !isThinking,
+            canOpen = true,
             onPick = { conversation ->
                 isHistoryOpen = false
                 onOpenConversation(conversation)

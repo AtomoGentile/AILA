@@ -1,6 +1,7 @@
 package circolareplus.util
 
 import circolareplus.platform.currentTimeMillis
+import circolareplus.platform.localUtcOffsetMillis
 
 /**
  * Aritmetica delle date, senza dipendenze esterne e identica su Android e iOS.
@@ -48,8 +49,27 @@ fun civilFromEpochMillis(millis: Long): CivilDate {
     return CivilDate(year.toInt(), m.toInt(), d.toInt())
 }
 
-/** La data di oggi secondo l'orologio del dispositivo. */
-fun today(): CivilDate = civilFromEpochMillis(currentTimeMillis())
+/** L'istante corrente spostato sul fuso locale: la parte "data" e' quella di oggi per l'utente. */
+private fun localNowMillis(): Long {
+    val now = currentTimeMillis()
+    return now + localUtcOffsetMillis(now)
+}
+
+/** La data di oggi secondo l'orologio e il fuso orario del dispositivo. */
+fun today(): CivilDate = civilFromEpochMillis(localNowMillis())
+
+/** Minuti trascorsi dalla mezzanotte locale (0..1439). */
+fun nowMinutesOfDay(): Int = ((localNowMillis() % 86_400_000L) / 60_000L).toInt()
+
+/** "HH:MM" (anche con secondi) in minuti dalla mezzanotte; null se il formato non e' quello atteso. */
+fun parseTimeToMinutes(time: String): Int? {
+    val parts = time.trim().split(":")
+    if (parts.size < 2) return null
+    val hours = parts[0].toIntOrNull() ?: return null
+    val minutes = parts[1].take(2).toIntOrNull() ?: return null
+    if (hours !in 0..23 || minutes !in 0..59) return null
+    return hours * 60 + minutes
+}
 
 /** Da "AAAA-MM-GG" a data civile; null se il formato non è quello atteso. */
 fun parseIsoDate(iso: String): CivilDate? {

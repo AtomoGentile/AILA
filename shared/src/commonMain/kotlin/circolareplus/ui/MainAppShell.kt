@@ -54,6 +54,7 @@ import circolareplus.ai.HeuristicClassification
 import circolareplus.domain.model.Proposal
 import circolareplus.domain.model.SocialPreferenceScore
 import circolareplus.domain.model.StudentProfile
+import circolareplus.domain.model.UnlockRequest
 import circolareplus.domain.model.User
 import circolareplus.domain.model.UserRole
 import circolareplus.platform.currentTimeMillis
@@ -295,10 +296,20 @@ fun MainAppShell(
                     // Segnalibro non più nell'elenco (proposta cancellata): si notifica solo la
                     // più recente, invece di rovesciare in campanella tutta la bacheca.
                     val fresh = if (markerIndex >= 0) ordered.take(markerIndex) else ordered.take(1)
-                    fresh.reversed().forEach {
+                    // A app aperta il push FCM scrive già la sua voce nella campanella (vedi
+                    // CircolareMessagingService, dove il corpo è il solo titolo): senza questo
+                    // controllo la stessa proposta compariva due volte, una per il push e una per
+                    // questo confronto.
+                    // Solo le voci recenti: un titolo uguale a quello di una proposta di settimane
+                    // fa non deve far tacere una proposta nuova.
+                    val recentCutoff = currentTimeMillis() - 10 * 60_000L
+                    val alreadyLogged = settings.listNotifications()
+                        .filter { it.category == NotificationKind.BOARD.key && it.receivedAtMillis >= recentCutoff }
+                    fresh.reversed().forEach { proposal ->
+                        if (alreadyLogged.any { it.body.trim() == proposal.title.trim() }) return@forEach
                         settings.addNotification(
                             "Nuova proposta in bacheca",
-                            "${it.title} — ${if (it.isAnonymous) "Anonimo" else it.authorName}",
+                            "${proposal.title} — ${if (proposal.isAnonymous) "Anonimo" else proposal.authorName}",
                             NotificationKind.BOARD.key
                         )
                     }
@@ -421,11 +432,42 @@ fun MainAppShell(
     // Primo avvio in assoluto: le 3 schermate di presentazione del mockup, prima del login.
     // Chi ha già una sessione salvata non le vede (non passa di qui: currentUser è valorizzato).
     if (currentUser == null && !hasSeenOnboarding) {
+        // L'ultimo passo dell'onboarding fa scegliere l'AI. Scrive nelle stesse impostazioni che
+        // poi mostra la schermata Impostazioni (chiave, provider, modello): niente stato suo.
+        // `remember` perché l'oggetto legge la RAM del telefono e ordina il catalogo modelli.
+        val aiSetup = remember {
+            val ramMb = circolareplus.ai.totalDeviceRamMb()
+            OnboardingAiSetup(
+                unavailableReason = circolareplus.ai.onDeviceAiUnavailableReason(),
+                deviceRamMb = ramMb,
+                localModels = circolareplus.ai.LocalAiCatalog.selectableFor(ramMb),
+                isModelInstalled = { model -> AppContainer.localModelStore.isInstalled(model) },
+                testApiKey = { key ->
+                    // Come in Impostazioni: si prova la chiave digitata, non quella salvata.
+                    circolareplus.ai.ClientSideAiClassifier(userApiKey = key).testKey()
+                },
+                saveApiKey = { key ->
+                    AppContainer.settings.userAiApiKey = key
+                    AppContainer.settings.aiProvider = circolareplus.ai.AiProvider.GOOGLE_AI_STUDIO.id
+                },
+                downloadModel = { model, onProgress ->
+                    AppContainer.localModelStore.download(model, onProgress)
+                },
+                activateModel = { model ->
+                    AppContainer.settings.localAiModelId = model.id
+                    AppContainer.settings.aiProvider = circolareplus.ai.AiProvider.ON_DEVICE.id
+                    // Il motore tiene in memoria l'ultimo modello caricato: si scarica per
+                    // essere certi che la prima analisi usi quello appena scelto.
+                    AppContainer.localLlm.unload()
+                }
+            )
+        }
         OnboardingScreen(
             onFinish = {
                 AppContainer.settings.hasSeenOnboarding = true
                 hasSeenOnboarding = true
-            }
+            },
+            aiSetup = aiSetup
         )
         return
     }
@@ -462,6 +504,11 @@ fun MainAppShell(
     val user = currentUser!!
     val profile = currentProfile!!
     val isRepresentative = user.role == UserRole.REPRESENTATIVE
+    // Chi firma lo svelamento di un autore anonimo: 2 Rappresentanti + 1 Guardia di Sicurezza. La
+    // Guardia resta uno studente (la sceglie il Rappresentante dalla Scheda Classe), quindi non si
+    // riconosce dal ruolo ma da quello che risponde il server (vedi il caricamento della bacheca).
+    var isSecurityGuard by remember { mutableStateOf(false) }
+    val canModerateIdentity = isRepresentative || isSecurityGuard
     val coroutineScope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
 
@@ -522,6 +569,8 @@ fun MainAppShell(
     var proposalsError by remember { mutableStateOf<String?>(null) }
     var proposalsRefreshTrigger by remember { mutableStateOf(0) }
     var showAddProposalDialog by remember { mutableStateOf(false) }
+    // Richieste di svelamento in attesa di firme: le carica solo chi le può firmare.
+    var unlockRequests by remember { mutableStateOf<List<UnlockRequest>>(emptyList()) }
 
     // --- Stato tab "Classe" (Circolari + Bacheca unite in un'unica tab, con selettore interno) --
     var classSection by rememberSaveable { mutableStateOf(ClassSection.CIRCULARS) }
@@ -548,13 +597,20 @@ fun MainAppShell(
                 ?.let { list.addAll(it.messages) }
         }
     }
-    var isAssistantThinking by remember { mutableStateOf(false) }
+    // Le conversazioni con una risposta in arrivo, per id. Non e' un booleano unico: chi apre una
+    // "Nuova chat" mentre il modello sta ancora rispondendo deve vedere una chat pulita e libera,
+    // mentre la risposta atterra nella conversazione da cui e' partita la domanda.
+    val pendingAssistantConversations = remember { mutableStateListOf<String>() }
+    val isAssistantThinking = assistantConversationId in pendingAssistantConversations
     // I dati che non sono gia' in memoria (sondaggi, mappa, storico, valutazioni) si caricano
     // una volta sola per conversazione: sono le stesse rotte che le altre schermate chiamano
     // quando le apri, e rifarle a ogni domanda sarebbe traffico per dati che non cambiano
     // durante una chat.
     var assistantDynamic by remember { mutableStateOf<AssistantDynamicKnowledge?>(null) }
     var assistantMessageCounter by remember { mutableStateOf(0) }
+    // Ragionamento del modello locale: la scelta e' salvata nelle impostazioni, qui se ne tiene
+    // una copia perche' l'interruttore deve muoversi al tocco.
+    var assistantThinking by remember { mutableStateOf(AppContainer.settings.assistantThinkingEnabled) }
     var assistantConversations by remember {
         mutableStateOf(AppContainer.settings.listAssistantConversations())
     }
@@ -568,6 +624,10 @@ fun MainAppShell(
     var seatMapError by remember { mutableStateOf<String?>(null) }
     var seatMapRefreshTrigger by remember { mutableStateOf(0) }
     var isPreferencesOpen by remember { mutableStateOf(false) }
+    // Quanti compagni hanno gia' votato le preferenze (null = non ancora caricato).
+    var preferencesProgress by remember {
+        mutableStateOf<circolareplus.data.remote.dto.PreferencesProgressDto?>(null)
+    }
     var seatMapMode by rememberSaveable { mutableStateOf("MAP") } // "MAP" | "VOTE_PREFERENCES"
     val socialVotes = remember { mutableStateMapOf<String, SocialPreferenceScore>() }
     var proposalOptions by remember { mutableStateOf<List<SeatMapProposal>>(emptyList()) }
@@ -652,9 +712,37 @@ fun MainAppShell(
         assistantConversations = AppContainer.settings.listAssistantConversations()
     }
 
+    /**
+     * Aggiunge [message] alla conversazione [conversationId], che puo' non essere piu' quella
+     * aperta: se l'utente ha iniziato una nuova chat mentre il modello rispondeva, la risposta
+     * va comunque nel filo da cui e' partita la domanda, aggiornandone la copia archiviata.
+     */
+    fun appendAssistantMessage(conversationId: String, message: AssistantMessage) {
+        if (conversationId == assistantConversationId) {
+            assistantMessages += message
+            saveAssistantConversation()
+            return
+        }
+        val stored = AppContainer.settings.listAssistantConversations()
+            .firstOrNull { it.id == conversationId }
+            // Cancellata nel frattempo dallo storico: la risposta non ha piu' dove andare.
+            ?: return
+        AppContainer.settings.saveAssistantConversation(
+            stored.copy(
+                updatedAtMillis = currentTimeMillis(),
+                messages = stored.messages + message
+            )
+        )
+        assistantConversations = AppContainer.settings.listAssistantConversations()
+    }
+
     fun askAssistant(question: String) {
         val trimmed = question.trim()
-        if (trimmed.isEmpty() || isAssistantThinking) return
+        if (trimmed.isEmpty() || assistantConversationId in pendingAssistantConversations) return
+
+        // La conversazione a cui appartiene questa domanda, fissata adesso: quando la risposta
+        // arriva `assistantConversationId` potrebbe essere cambiato.
+        val conversationId = assistantConversationId
 
         assistantMessageCounter++
         assistantMessages += AssistantMessage(
@@ -665,7 +753,7 @@ fun MainAppShell(
         // La cronologia che vede il modello non deve contenere la domanda appena fatta: quella
         // gli arriva a parte, come domanda corrente.
         val history = assistantMessages.dropLast(1).toList()
-        isAssistantThinking = true
+        pendingAssistantConversations += conversationId
         saveAssistantConversation()
 
         coroutineScope.launch {
@@ -692,29 +780,34 @@ fun MainAppShell(
                 )
 
                 assistantMessageCounter++
-                assistantMessages += AssistantMessage(
-                    id = "a${currentTimeMillis()}-$assistantMessageCounter",
-                    author = AssistantAuthor.ASSISTANT,
-                    text = reply.text,
-                    sources = reply.sources,
-                    isError = reply.isError,
-                    modelLabel = reply.modelLabel
+                appendAssistantMessage(
+                    conversationId,
+                    AssistantMessage(
+                        id = "a${currentTimeMillis()}-$assistantMessageCounter",
+                        author = AssistantAuthor.ASSISTANT,
+                        text = reply.text,
+                        sources = reply.sources,
+                        isError = reply.isError,
+                        modelLabel = reply.modelLabel
+                    )
                 )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 assistantMessageCounter++
-                assistantMessages += AssistantMessage(
-                    id = "e${currentTimeMillis()}-$assistantMessageCounter",
-                    author = AssistantAuthor.ASSISTANT,
-                    text = "${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}",
-                    isError = true
+                appendAssistantMessage(
+                    conversationId,
+                    AssistantMessage(
+                        id = "e${currentTimeMillis()}-$assistantMessageCounter",
+                        author = AssistantAuthor.ASSISTANT,
+                        text = "${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}",
+                        isError = true
+                    )
                 )
             } finally {
-                isAssistantThinking = false
                 // Nel `finally` perche' vale per tutti e tre gli esiti: risposta, errore
                 // riportato dall'assistente ed eccezione inattesa.
-                saveAssistantConversation()
+                pendingAssistantConversations -= conversationId
             }
         }
     }
@@ -838,6 +931,15 @@ fun MainAppShell(
             try {
                 proposals = AppContainer.proposalsRepository.listProposals()
                 noteNovelties(freshProposals = proposals)
+                // Un errore qui non deve far sparire la bacheca: le richieste sono un di più. Lo
+                // chiedono tutti, perché è la risposta a dire se si è la Guardia della classe.
+                try {
+                    val state = AppContainer.proposalsRepository.listUnlockRequests()
+                    isSecurityGuard = state.canSign && !isRepresentative
+                    unlockRequests = state.requests
+                } catch (e: Exception) {
+                    unlockRequests = emptyList()
+                }
             } catch (e: Exception) {
                 proposalsError = "Impossibile caricare la bacheca. Controlla la connessione."
             } finally {
@@ -874,6 +976,25 @@ fun MainAppShell(
             } finally {
                 isSeatMapLoading = false
             }
+        }
+    }
+
+    // Avanzamento della votazione: finche' la finestra e' aperta e si e' sulla Mappa Posti si
+    // rilegge ogni 20 secondi, cosi' il Rappresentante vede salire il conteggio senza dover
+    // uscire e rientrare. Fuori dalla tab (o a finestra chiusa) il ciclo si ferma da solo.
+    LaunchedEffect(selectedTab, isPreferencesOpen, seatMapMode) {
+        if (selectedTab != MainTab.SEATMAP) return@LaunchedEffect
+        if (!isPreferencesOpen && !isRepresentative) return@LaunchedEffect
+        while (true) {
+            try {
+                preferencesProgress = AppContainer.preferencesRepository.progress()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Informazione accessoria: se non arriva, la mappa funziona lo stesso.
+            }
+            if (!isPreferencesOpen) break
+            kotlinx.coroutines.delay(20_000L)
         }
     }
 
@@ -1213,21 +1334,6 @@ fun MainAppShell(
         )
     }
 
-    if (proposalOptions.isNotEmpty()) {
-        SeatMapProposalsDialog(
-            proposals = proposalOptions,
-            isPublishing = isGeneratingProposals,
-            onDismiss = { proposalOptions = emptyList() },
-            // Scegliere una proposta non la pubblica più direttamente: apre l'editor manuale
-            // (swap-by-tap con ricalcolo live) da cui il Rappresentante pubblica quando è pronto.
-            onSelect = { chosen ->
-                originalSeatMapProposal = chosen.assignments
-                editingSeatMapProposal = chosen.assignments
-                proposalOptions = emptyList()
-            }
-        )
-    }
-
     if (seatMapActionError != null) {
         AlertDialog(
             onDismissRequest = { seatMapActionError = null },
@@ -1329,7 +1435,7 @@ fun MainAppShell(
 
     Scaffold(
         bottomBar = {
-            if (!isInPollsScreen && !isInClassRosterScreen && !isInNotificationsScreen && !isInSearchScreen && !isInAssistantScreen && !isInSettingsScreen && editingSeatMapProposal == null) {
+            if (!isInPollsScreen && !isInClassRosterScreen && !isInNotificationsScreen && !isInSearchScreen && !isInAssistantScreen && !isInSettingsScreen && editingSeatMapProposal == null && proposalOptions.isEmpty()) {
                 NavigationBar(
                     containerColor = AppTheme.SurfaceWhite,
                     tonalElevation = AppTheme.Space8
@@ -1859,6 +1965,24 @@ fun MainAppShell(
                                         }
                                     }
                                 },
+                                onSecurityGuardChange = { studentId, enabled ->
+                                    val previous = classRosterEntries
+                                    // Una sola Guardia per classe: sceglierne una toglie la precedente.
+                                    classRosterEntries = classRosterEntries.map {
+                                        it.copy(
+                                            isSecurityGuard = if (it.studentId == studentId) enabled
+                                            else if (enabled) false else it.isSecurityGuard
+                                        )
+                                    }
+                                    coroutineScope.launch {
+                                        try {
+                                            AppContainer.proposalsRepository.setSecurityGuard(if (enabled) studentId else null)
+                                        } catch (e: Exception) {
+                                            classRosterEntries = previous
+                                            classRosterActionError = "Guardia non salvata: ${e.message}"
+                                        }
+                                    }
+                                },
                                 onPriorityPassChange = { studentId, enabled ->
                                     val previous = classRosterEntries
                                     classRosterEntries = classRosterEntries.map {
@@ -1884,6 +2008,11 @@ fun MainAppShell(
                         isThinking = isAssistantThinking,
                         conversations = assistantConversations,
                         onSend = { question -> askAssistant(question) },
+                        thinkingEnabled = assistantThinking,
+                        onThinkingChange = { enabled ->
+                            AppContainer.settings.assistantThinkingEnabled = enabled
+                            assistantThinking = enabled
+                        },
                         onBackClick = { isInAssistantScreen = false },
                         onClearChat = {
                             // "Nuova chat" archivia, non cancella: quella di prima e' gia' nello
@@ -1895,11 +2024,11 @@ fun MainAppShell(
                             // chat nuova per niente.
                         },
                         onOpenConversation = { conversation ->
-                            if (!isAssistantThinking) {
-                                assistantMessages.clear()
-                                assistantMessages.addAll(conversation.messages)
-                                assistantConversationId = conversation.id
-                            }
+                            // Si puo' aprire anche con una risposta in arrivo: la risposta e'
+                            // instradata per id, non per "chat attualmente a schermo".
+                            assistantMessages.clear()
+                            assistantMessages.addAll(conversation.messages)
+                            assistantConversationId = conversation.id
                         },
                         onDeleteConversation = { id ->
                             AppContainer.settings.deleteAssistantConversation(id)
@@ -1978,6 +2107,33 @@ fun MainAppShell(
                         NotificationsScreen(
                             notifications = notificationLog,
                             onNotificationClick = { entry -> navigateForNotificationCategory(entry.category) }
+                        )
+                    }
+                }
+                proposalOptions.isNotEmpty() && editingSeatMapProposal == null -> {
+                    // Le tre proposte restano tutte disponibili finche' non se ne sceglie una:
+                    // l'anteprima con l'occhio non ne scarta nessuna. Il back le abbandona.
+                    circolareplus.platform.PlatformBackHandler { proposalOptions = emptyList() }
+                    val proposalsStudentsMap = remember(classmates, user) {
+                        classmates.associateBy { it.id } + (user.id to user)
+                    }
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        ScreenBackBar(
+                            title = "Proposte di disposizione",
+                            onBackClick = { proposalOptions = emptyList() }
+                        )
+                        SeatMapProposalsScreen(
+                            proposals = proposalOptions,
+                            studentsMap = proposalsStudentsMap,
+                            isBusy = isGeneratingProposals,
+                            // Scegliere una proposta non la pubblica direttamente: apre l'editor
+                            // manuale (swap-by-tap con ricalcolo live) da cui il Rappresentante
+                            // pubblica quando e' pronto.
+                            onSelect = { chosen ->
+                                originalSeatMapProposal = chosen.assignments
+                                editingSeatMapProposal = chosen.assignments
+                                proposalOptions = emptyList()
+                            }
                         )
                     }
                 }
@@ -2176,6 +2332,7 @@ fun MainAppShell(
                                                 assignments = seatMapAssignments,
                                                 studentsMap = memoizedStudentsMap,
                                                 isPreferencesOpen = isPreferencesOpen,
+                                                preferencesProgress = preferencesProgress,
                                                 isExportingPdf = isExportingSeatMapPdf,
                                                 onExportPdf = {
                                                     coroutineScope.launch {
@@ -2325,8 +2482,11 @@ fun MainAppShell(
                                         }
                                     }
                                     ClassSection.BOARD -> {
+                                        // Lo spinner a tutto schermo solo al primo caricamento: prima ogni
+                                        // ricarica (dopo un commento, un cambio di stato) smontava la
+                                        // bacheca, e con lei i commenti aperti e il voto appena dato.
                                         LoadableContent(
-                                            isLoading = isProposalsLoading,
+                                            isLoading = isProposalsLoading && proposals.isEmpty(),
                                             error = proposalsError,
                                             onRetry = { reloadProposals() }
                                         ) {
@@ -2334,6 +2494,8 @@ fun MainAppShell(
                                                 proposals = proposals,
                                                 currentUserId = user.id,
                                                 isRepresentative = isRepresentative,
+                                                canModerateIdentity = canModerateIdentity,
+                                                unlockRequests = unlockRequests,
                                                 onVote = { proposalId, voteType ->
                                                     coroutineScope.launch {
                                                         try {
@@ -2343,10 +2505,10 @@ fun MainAppShell(
                                                         }
                                                     }
                                                 },
-                                                onChangeStatus = { proposalId, status ->
+                                                onChangeStatus = { proposalId, status, outcome ->
                                                     coroutineScope.launch {
                                                         try {
-                                                            AppContainer.proposalsRepository.changeStatus(proposalId, status)
+                                                            AppContainer.proposalsRepository.changeStatus(proposalId, status, outcome)
                                                             reloadProposals()
                                                         } catch (e: Exception) {
                                                             proposalsError = "Impossibile cambiare stato: ${e.message}"
@@ -2371,9 +2533,35 @@ fun MainAppShell(
                                                 onLoadComments = { proposalId ->
                                                     AppContainer.proposalsRepository.listComments(proposalId)
                                                 },
-                                                onAddComment = { proposalId, content ->
-                                                    AppContainer.proposalsRepository.addComment(proposalId, content)
+                                                onAddComment = { proposalId, content, isAnonymous ->
+                                                    AppContainer.proposalsRepository.addComment(proposalId, content, isAnonymous)
                                                     reloadProposals()
+                                                },
+                                                onRequestUnlock = { proposalId, commentId, reason ->
+                                                    // Niente try/catch: la finestra mostra l'errore e
+                                                    // lascia riprovare senza perdere il testo del motivo.
+                                                    AppContainer.proposalsRepository.requestUnlock(proposalId, reason, commentId)
+                                                    reloadProposals()
+                                                },
+                                                onApproveUnlock = { requestId ->
+                                                    coroutineScope.launch {
+                                                        try {
+                                                            AppContainer.proposalsRepository.approveUnlock(requestId)
+                                                            reloadProposals()
+                                                        } catch (e: Exception) {
+                                                            proposalsError = "Approvazione non riuscita: ${e.message}"
+                                                        }
+                                                    }
+                                                },
+                                                onRejectUnlock = { requestId ->
+                                                    coroutineScope.launch {
+                                                        try {
+                                                            AppContainer.proposalsRepository.rejectUnlock(requestId)
+                                                            reloadProposals()
+                                                        } catch (e: Exception) {
+                                                            proposalsError = "Operazione non riuscita: ${e.message}"
+                                                        }
+                                                    }
                                                 },
                                                 onDelete = { proposalId ->
                                                     coroutineScope.launch {
@@ -2413,6 +2601,24 @@ fun MainAppShell(
                                     AppContainer.authRepository.logout()
                                     currentUser = null
                                     currentProfile = null
+                                },
+                                onDeleteAccount = { password ->
+                                    try {
+                                        AppContainer.authRepository.deleteAccount(password)
+                                        // Il token push resta valido solo finche' esiste l'utente: il
+                                        // server lo ha gia' cancellato a cascata, qui basta uscire.
+                                        assistantMessages.clear()
+                                        assistantConversations = emptyList()
+                                        currentUser = null
+                                        currentProfile = null
+                                        null
+                                    } catch (e: CancellationException) {
+                                        throw e
+                                    } catch (e: circolareplus.data.remote.ApiException) {
+                                        e.message ?: "Eliminazione non riuscita."
+                                    } catch (e: Exception) {
+                                        "Impossibile eliminare l'account: controlla la connessione e riprova."
+                                    }
                                 }
                             )
                         }
@@ -2463,51 +2669,6 @@ private fun PreferencesOpenBanner(onClick: () -> Unit) {
         }
     }
     Spacer(modifier = Modifier.height(AppTheme.Space8))
-}
-
-@Composable
-private fun SeatMapProposalsDialog(
-    proposals: List<SeatMapProposal>,
-    isPublishing: Boolean,
-    onDismiss: () -> Unit,
-    onSelect: (SeatMapProposal) -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = { if (!isPublishing) onDismiss() },
-        title = { Text("Scegli la disposizione da rivedere e pubblicare") },
-        text = {
-            Column {
-                proposals.forEach { proposal ->
-                    Card(
-                        shape = RoundedCornerShape(AppTheme.SmallElementRadius),
-                        colors = CardDefaults.cardColors(containerColor = AppTheme.SurfaceWhite),
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(AppTheme.Space12),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(text = proposal.id, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                Text(
-                                    text = "Soddisfazione stimata: ${proposal.satisfactionPercentage.toInt()}%",
-                                    fontSize = 12.sp,
-                                    color = AppTheme.TextMuted
-                                )
-                            }
-                            TextButton(enabled = !isPublishing, onClick = { onSelect(proposal) }) {
-                                Text("Scegli")
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(enabled = !isPublishing, onClick = onDismiss) { Text("Chiudi") }
-        }
-    )
 }
 
 /**
