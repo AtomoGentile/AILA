@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import circolareplus.algorithms.SeatMapOptimizer
 import circolareplus.algorithms.SeatMapProposal
 import circolareplus.design.AilaCard
 import circolareplus.design.AilaPrimaryButton
@@ -40,6 +41,11 @@ fun SeatMapProposalsScreen(
     proposals: List<SeatMapProposal>,
     studentsMap: Map<String, User>,
     onSelect: (SeatMapProposal) -> Unit,
+    // Modalità richiesta dall'utente per QUESTA generazione (coppia o trio): decide l'etichetta e
+    // se disegnare il terzo posto, invece di dedurlo dai soli dati (proposal.assignments.any { it.studentCId != null }),
+    // che darebbe "banchi da due" anche in modalità trio quando nessun banco arriva ad avere un
+    // terzo occupante (classe piccola, coppie vietate che spezzano i trii).
+    seatsPerDesk: Int = SeatMapOptimizer.SEATS_PER_DESK_PAIR,
     isBusy: Boolean = false
 ) {
     // Indice della proposta di cui si sta guardando la mappa; null = nessuna anteprima aperta.
@@ -93,7 +99,7 @@ fun SeatMapProposalsScreen(
 
         if (safePreview != null) {
             val proposal = proposals[safePreview]
-            val hasTrio = proposal.assignments.any { it.studentCId != null }
+            val hasTrio = seatsPerDesk == SeatMapOptimizer.SEATS_PER_DESK_TRIO
 
             fullRow {
                 Column {
