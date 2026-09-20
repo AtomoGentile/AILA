@@ -14,7 +14,7 @@ import shared
  * Android) — quindi qui si controlla la sua presenza invece di assumerla, per restare
  * compilabile ed eseguibile anche in CI, dove non c'è.
  */
-class AppDelegate: UIResponder, UIApplicationDelegate {
+class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
 
     /**
      * Token APNs grezzo (binario) ricevuto da Apple, convertito in stringa esadecimale.
@@ -38,9 +38,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             FirebaseApp.configure()
         }
 
+        // Senza questo, willPresent/didReceive qui sotto non vengono MAI chiamati: iOS non
+        // mostra le notifiche ad app aperta, e il tocco non registra né naviga. Va impostato
+        // qui, prima che finisca il lancio (serve anche perché il tocco che avvia l'app a
+        // freddo arrivi a didReceive), e dopo FirebaseApp.configure(), che si aggancia al
+        // delegate esistente invece di sostituirlo.
+        UNUserNotificationCenter.current().delegate = self
+
         // Avvio a freddo: l'app era completamente chiusa ed è stata aperta tappando una
-        // notifica push. In questo caso userNotificationCenter(_:didReceive:) non viene mai
-        // chiamato per questa notifica, quindi il deep link va estratto qui da launchOptions.
+        // notifica push. Il deep link si imposta anche qui da launchOptions, cosi' e' pronto
+        // prima ancora che MainAppShell venga composta (didReceive puo' arrivare dopo).
         if let remoteNotification = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
             let category = categoryFromUserInfo(remoteNotification)
             if !category.isEmpty {
@@ -152,8 +159,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     /**
-     * Callback: l'utente ha tappato su una notifica push (app in background, non chiusa a
-     * freddo — quel caso è gestito in didFinishLaunchingWithOptions via launchOptions).
+     * Callback: l'utente ha tappato su una notifica push (app in background o avviata a freddo
+     * dal tocco: in quel secondo caso il deep link e' gia' stato impostato anche da
+     * launchOptions in didFinishLaunchingWithOptions).
      *
      * Registriamo la notifica nello storico locale (può capitare che sia già stata loggata da
      * willPresent se era arrivata ad app aperta: doppione minore e accettato, non serve dedup) e
