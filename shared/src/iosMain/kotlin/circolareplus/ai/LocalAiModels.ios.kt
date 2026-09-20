@@ -14,10 +14,12 @@ package circolareplus.ai
  * dell'intero repo (safetensors + config), non un singolo file `.litertlm`/`.gguf`. Vedi
  * `MLXLocalBridge.kt` per come viene consumato questo campo.
  *
- * **ATTENZIONE — voci MLX non verificate.** Come per Phi su Android (vedi
- * `LocalAiModels.android.kt`), questo ambiente non ha accesso di rete a huggingface.co: repo id e
- * dimensioni sono una stima, non una verifica. **L'intera integrazione MLX resta comunque non
- * compilabile/testabile da qui** — serve un Mac con Xcode (vedi `MLXLocalEngine.swift`).
+ * **ATTENZIONE — repo MLX da ricontrollare al primo download reale.** Come per Phi su Android
+ * (vedi `LocalAiModels.android.kt`), questo ambiente non ha accesso di rete a huggingface.co: i
+ * repo id sotto sono quelli più plausibili per l'org `mlx-community` (stessa convenzione di
+ * naming già in uso lì), non una verifica con una richiesta HTTP reale. **L'intera integrazione
+ * MLX resta comunque non compilabile/testabile da qui** — serve un Mac con Xcode (vedi
+ * `MLXLocalEngine.swift`).
  */
 actual object LocalAiCatalog {
     val APPLE_INTELLIGENCE = LocalAiModel(
@@ -39,7 +41,7 @@ actual object LocalAiCatalog {
         id = "phi-3.5-mini-mlx",
         displayName = "Phi-3.5 mini (MLX)",
         fileName = "phi-3.5-mini-mlx",
-        downloadUrl = "TODO_VERIFY-mlx-community/Phi-3.5-mini-instruct-4bit",
+        downloadUrl = "mlx-community/Phi-3.5-mini-instruct-4bit",
         approxSizeBytes = 2_200_000_000, // stima non verificata
         tier = DeviceTier.MID,
         recommendedRamMb = 4_500, // stima non verificata
@@ -54,7 +56,7 @@ actual object LocalAiCatalog {
         id = "gemma-2b-mlx",
         displayName = "Gemma 2B (MLX)",
         fileName = "gemma-2b-mlx",
-        downloadUrl = "TODO_VERIFY-mlx-community/gemma-2-2b-it-4bit",
+        downloadUrl = "mlx-community/gemma-2-2b-it-4bit",
         approxSizeBytes = 1_600_000_000, // stima non verificata
         tier = DeviceTier.LOW,
         recommendedRamMb = 3_600, // stima non verificata

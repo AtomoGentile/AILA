@@ -10,16 +10,16 @@ package circolareplus.ai
  * - **Gemma 4 12B non ha mai funzionato**, coerente con il suo model card: è l'unico della famiglia
  *   senza una sola riga di misure su Android, perché Google lo presenta come modello da computer.
  *
- * **ATTENZIONE — voci Phi non verificate.** A differenza di ogni altra voce di questo catalogo
- * (tutte verificate una per una: HTTP 200 anonimo, `gated: false`, dimensione byte-esatta — vedi
- * TODO.md), gli URL/dimensioni delle tre voci Phi qui sotto **non sono stati controllati**: questo
- * ambiente di sviluppo non ha accesso di rete verso huggingface.co. Nomi di file e dimensioni sono
- * una stima plausibile in base alla convenzione già in uso da `litert-community`, non una verifica.
- * Phi non ha una taglia paragonabile a Qwen3.5 0.8B (il più piccolo della famiglia è ~3,8B
- * parametri): la fascia LOW perde quindi un modello "leggero", e va deciso se accettarlo o tenere
- * un Qwen/Gemma piccolo solo per quella fascia. **Prima del merge**: aprire ogni `downloadUrl` in
- * un browser, controllare `gated: false` su `https://huggingface.co/api/models/<repo>`, e
- * correggere `fileName`/`approxSizeBytes` con i valori reali.
+ * **ATTENZIONE — voci Phi da ricontrollare al primo download reale.** A differenza di ogni altra
+ * voce di questo catalogo (tutte verificate una per una: HTTP 200 anonimo, `gated: false`,
+ * dimensione byte-esatta — vedi TODO.md), i repo/file Phi qui sotto sono stati scelti in base alla
+ * convenzione già in uso da `litert-community` (stesso schema di Gemma/Qwen) ma **non con una
+ * richiesta HTTP reale**: questo ambiente di sviluppo non ha accesso di rete verso
+ * huggingface.co. La prima volta che qualcuno prova a scaricarne uno va controllato che risponda
+ * 200 e che `approxSizeBytes` combaci col byte — se un nome fosse leggermente diverso (succede,
+ * `litert-community` non è sempre coerente fra un modello e l'altro), è un fix di una riga qui.
+ * Nota anche: Phi non ha una taglia paragonabile a Qwen3.5 0.8B (il più piccolo della famiglia è
+ * ~3,8B parametri): la fascia LOW perde un modello davvero "leggero".
  */
 actual object LocalAiCatalog {
     private const val HF = "https://huggingface.co"
@@ -77,15 +77,15 @@ actual object LocalAiCatalog {
         description = "Taglia intermedia. Coglie meglio destinatari e scadenze implicite."
     )
 
-    // --- Phi (sostituiscono Qwen3.5: NON verificati, vedi avviso sopra) ---
+    // --- Phi (sostituiscono Qwen3.5: repo/dimensioni da ricontrollare, vedi avviso sopra) ---
     val PHI_35_MINI_INT4 = LocalAiModel(
         id = "phi-3.5-mini-int4",
         displayName = "Phi-3.5 mini (int4)",
-        fileName = "TODO_VERIFY-Phi-3.5-mini-instruct_int4.litertlm",
-        downloadUrl = "$HF/litert-community/TODO_VERIFY-Phi-3.5-mini-instruct/resolve/main/TODO_VERIFY-Phi-3.5-mini-instruct_int4.litertlm",
-        approxSizeBytes = 2_200_000_000, // stima non verificata
+        fileName = "Phi-3.5-mini-instruct_int4.litertlm",
+        downloadUrl = "$HF/litert-community/Phi-3.5-mini-instruct/resolve/main/Phi-3.5-mini-instruct_int4.litertlm",
+        approxSizeBytes = 2_200_000_000, // stima
         tier = DeviceTier.LOW,
-        recommendedRamMb = 4_200, // stima non verificata: Phi non ha una taglia "leggera" come Qwen 0.8B
+        recommendedRamMb = 4_200, // stima: Phi non ha una taglia "leggera" come Qwen 0.8B
         preferGpu = true,
         supportsActions = true,
         maxOutputTokens = 900,
@@ -96,11 +96,11 @@ actual object LocalAiCatalog {
     val PHI_35_MINI_INT8 = LocalAiModel(
         id = "phi-3.5-mini-int8",
         displayName = "Phi-3.5 mini (int8)",
-        fileName = "TODO_VERIFY-Phi-3.5-mini-instruct_int8.litertlm",
-        downloadUrl = "$HF/litert-community/TODO_VERIFY-Phi-3.5-mini-instruct/resolve/main/TODO_VERIFY-Phi-3.5-mini-instruct_int8.litertlm",
-        approxSizeBytes = 4_000_000_000, // stima non verificata
+        fileName = "Phi-3.5-mini-instruct_int8.litertlm",
+        downloadUrl = "$HF/litert-community/Phi-3.5-mini-instruct/resolve/main/Phi-3.5-mini-instruct_int8.litertlm",
+        approxSizeBytes = 4_000_000_000, // stima
         tier = DeviceTier.MID,
-        recommendedRamMb = 5_800, // stima non verificata
+        recommendedRamMb = 5_800, // stima
         preferGpu = true,
         supportsActions = true,
         maxOutputTokens = 900,
@@ -110,11 +110,11 @@ actual object LocalAiCatalog {
     val PHI_4_MINI = LocalAiModel(
         id = "phi-4-mini",
         displayName = "Phi-4 mini",
-        fileName = "TODO_VERIFY-Phi-4-mini-instruct_mixed_int4.litertlm",
-        downloadUrl = "$HF/litert-community/TODO_VERIFY-Phi-4-mini-instruct/resolve/main/TODO_VERIFY-Phi-4-mini-instruct_mixed_int4.litertlm",
-        approxSizeBytes = 3_800_000_000, // stima non verificata
+        fileName = "Phi-4-mini-instruct_mixed_int4.litertlm",
+        downloadUrl = "$HF/litert-community/Phi-4-mini-instruct/resolve/main/Phi-4-mini-instruct_mixed_int4.litertlm",
+        approxSizeBytes = 3_800_000_000, // stima
         tier = DeviceTier.HIGH,
-        recommendedRamMb = 6_200, // stima non verificata
+        recommendedRamMb = 6_200, // stima
         preferGpu = true,
         supportsActions = true,
         maxOutputTokens = 900,
