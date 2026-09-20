@@ -3,6 +3,71 @@
 Elenco vivo dei problemi aperti e del lavoro ancora mancante, aggiornato mano a mano.
 Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esistente.
 
+## 20/9 (seconda parte): instradamento per testo lungo, Phi al posto di Qwen, scheletri AICore/MLX
+
+**Fonte.** Un piano architetturale "engine AI multi-tier" generato da Gemini (link condiviso),
+pensato in astratto per un'app come questa. Confrontato punto per punto col codice reale prima di
+scrivere qualunque cosa: il piano descriveva un'architettura diversa da quella esistente (vedi
+sotto), non un'estensione di essa.
+
+**Fatto, ma non eseguito.** Le circolari più lunghe di quanto il modello locale selezionato riesca
+a leggere (`LocalAiModel.maxPromptChars`, già esistente e per-modello) ora, se è configurata una
+chiave Google AI Studio, vengono mandate al cloud per prime invece di essere troncate in locale —
+niente soglia nuova a 4.000 token, si riusa quella già calibrata per motore. Nuovo `AiRouting.kt`
+(`shouldPreferCloudForLength`) + `AiRoutingTest.kt` in `commonTest`, cablato in
+`AppContainer.newAiClassifier`/`MainAppShell.classifyCircularIfNeeded`. **Non eseguito nemmeno
+`./gradlew :shared:testDebugUnitTest`**: in questa sessione l'accesso di rete era bloccato anche
+verso `dl.google.com` (Google Maven), quindi Gradle falliva già nel risolvere il plugin Android
+del build root, prima ancora di arrivare a compilare qualunque modulo — un limite di questo
+ambiente, non del codice. Verificato solo a mano, rileggendo ogni file modificato. **Da fare per
+primo appena si riprende in mano il progetto**: lanciare quel test, è la parte più a rischio zero
+di tutto questo giro.
+
+**Fatto ma con dati non verificati.** Le tre voci Qwen3.5 del catalogo Android sono state
+sostituite con tre voci Phi (segnalato lento sul campo il primo). **Attenzione**: questo ambiente
+di sviluppo non ha accesso di rete a huggingface.co (stesso blocco già incontrato per altre
+verifiche), quindi repo id, nomi file e dimensioni delle voci Phi **non sono stati controllati**
+come lo è ogni altra voce di questo catalogo — sono marcati `TODO_VERIFY` nel codice
+(`LocalAiModels.android.kt`). Da fare prima che qualcuno provi a scaricarli davvero: aprire ogni
+URL in un browser, controllare `gated: false`, correggere le dimensioni byte-esatte. Nota anche
+che Phi non ha una taglia paragonabile a Qwen3.5 0.8B (~1GB): la fascia bassa perde un'opzione
+davvero leggera, da valutare se è un problema una volta provato su un telefono modesto.
+
+**Scheletri, non integrazioni funzionanti: AICore (Android) e MLX Swift (iOS).** Entrambi
+richiesti esplicitamente, ma nessuno dei due è collegato per davvero in questa build, e per un
+motivo concreto in entrambi i casi, non per pigrizia:
+
+- **AICore** (`AiCoreEngine.kt`): la dipendenza Gradle (`com.google.ai.edge.aicore`) è commentata
+  in `gradle/libs.versions.toml`/`shared/build.gradle.kts` invece che attiva, perché questo
+  ambiente non ha accesso a Maven per verificarne le coordinate/versione reali — aggiungerla
+  indovinata avrebbe rischiato di rompere la build Android per l'intero modulo. `AiCoreEngine`
+  esiste, ma `isAvailable()` ritorna sempre `false`: la catena ricade sempre sul modello Phi/Gemma
+  già scaricato, nessun nuovo punto di rottura. **Ricorda anche**: AICore durante la preview è
+  stato disponibile su un numero ristretto di dispositivi Pixel, non su "tutti i flagship Android"
+  come genericamente indicato dal piano di partenza — da verificare qual è la situazione reale al
+  momento in cui si riprende questo lavoro.
+- **MLX Swift** (`MLXLocalEngine.swift`, `MLXLocalBridge.kt`): stesso principio dal lato iOS.
+  Senza un Mac non si può eseguire `xcodegen generate`/`xcodebuild`, quindi non è stato possibile
+  verificare la superficie esatta di `mlx-swift-examples` (nomi di classi/metodi, che nel repo
+  sono cambiati più volte) né aggiungere il pacchetto SPM con la certezza che risolva — è lasciato
+  commentato in `iosApp/project.yml`. Il bridge Kotlin/Swift è cablato end-to-end (catalogo, store,
+  `LocalLlm.ios.kt` sceglie il motore giusto), ma ogni chiamata dichiara esplicitamente
+  "non ancora disponibile" finché qualcuno con un Mac non completa i tre passi elencati in cima a
+  `MLXLocalEngine.swift`.
+
+**Da provare, in ordine, quando c'è accesso a dispositivo/rete pieni.**
+1. Verificare i repo Phi su HuggingFace e correggere `LocalAiModels.android.kt`, poi provare che
+   carichino davvero su un telefono (stesso rischio già visto con i Qwen: un formato tokenizer
+   inatteso si scopre solo a runtime).
+2. Confermare le coordinate Maven di AICore e su quali dispositivi è realmente disponibile oggi;
+   solo allora completare `AiCoreEngine.kt` (punti 1-3 nel suo commento di classe).
+3. Su un Mac: aggiungere il pacchetto MLX Swift, confermare i nomi dei target, completare
+   `MLXLocalEngine.swift` (punti 1-4 nel suo commento di classe), verificare i repo
+   `mlx-community` per Phi-3.5-mini/Gemma 2B in `LocalAiModels.ios.kt`.
+4. Una volta che almeno uno fra AICore/MLX funziona davvero, verificare che l'instradamento per
+   testo lungo (primo punto sopra) si comporti bene anche con questi motori nuovi, non solo con
+   Gemma/Phi via LiteRT-LM.
+
 ## 20/9: l'assistente si chiama AILA Assistant, ha il suo logo e ricorda le conversazioni
 
 **Nome.** L'assistente si chiamava "AILA AI" nel parlato e "Chiedi ad AILA" a schermo. Il nome

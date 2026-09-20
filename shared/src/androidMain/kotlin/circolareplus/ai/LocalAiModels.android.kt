@@ -3,18 +3,50 @@ package circolareplus.ai
 /**
  * Catalogo Android: cinque modelli scaricabili.
  *
- * I Qwen sono tornati dopo il passaggio a LiteRT-LM: il runtime precedente (MediaPipe tasks-genai)
- * leggeva solo tokenizzatori SentencePiece, cioè in pratica la sola famiglia Gemma. Con LiteRT-LM
- * quel limite se n'è andato.
- *
- * Le due assenze rimanenti sono definitive, provate sul campo:
+ * **I Qwen sono usciti**, sostituiti da Phi: riportati lenti sul campo rispetto a Gemma 4 a
+ * parità di fascia. Restano le due assenze definitive, provate sul campo:
  * - Le varianti `-gpu` non si avviano: contengono solo pesi preconfezionati per GPU, e l'alternativa
  *   su CPU non trova nulla da caricare.
  * - **Gemma 4 12B non ha mai funzionato**, coerente con il suo model card: è l'unico della famiglia
  *   senza una sola riga di misure su Android, perché Google lo presenta come modello da computer.
+ *
+ * **ATTENZIONE — voci Phi non verificate.** A differenza di ogni altra voce di questo catalogo
+ * (tutte verificate una per una: HTTP 200 anonimo, `gated: false`, dimensione byte-esatta — vedi
+ * TODO.md), gli URL/dimensioni delle tre voci Phi qui sotto **non sono stati controllati**: questo
+ * ambiente di sviluppo non ha accesso di rete verso huggingface.co. Nomi di file e dimensioni sono
+ * una stima plausibile in base alla convenzione già in uso da `litert-community`, non una verifica.
+ * Phi non ha una taglia paragonabile a Qwen3.5 0.8B (il più piccolo della famiglia è ~3,8B
+ * parametri): la fascia LOW perde quindi un modello "leggero", e va deciso se accettarlo o tenere
+ * un Qwen/Gemma piccolo solo per quella fascia. **Prima del merge**: aprire ogni `downloadUrl` in
+ * un browser, controllare `gated: false` su `https://huggingface.co/api/models/<repo>`, e
+ * correggere `fileName`/`approxSizeBytes` con i valori reali.
  */
 actual object LocalAiCatalog {
     private const val HF = "https://huggingface.co"
+
+    /**
+     * Tier 1: Gemini Nano di sistema via AICore. Nessun download (come Apple Intelligence su
+     * iOS): `downloadUrl` vuoto e `approxSizeBytes = 0` sono il segnale che [LocalModelStore]
+     * legge per trattarla come modello "di sistema" invece che come file da scaricare.
+     *
+     * **Non è ancora collegata all'SDK reale** — vedi `AiCoreEngine.kt`. Resta in catalogo (in
+     * fondo alla lista, mai proposta come consigliata) perché la UI Impostazioni la mostri già
+     * pronta il giorno in cui l'integrazione sarà completata, senza dover toccare la schermata.
+     */
+    val AICORE = LocalAiModel(
+        id = "aicore",
+        displayName = "Android AICore (Gemini Nano)",
+        fileName = "aicore",
+        downloadUrl = "",
+        approxSizeBytes = 0L,
+        tier = DeviceTier.HIGH,
+        recommendedRamMb = 0,
+        preferGpu = false,
+        supportsActions = true,
+        maxOutputTokens = 900,
+        description = "Motore di sistema Android. Nessun download, ma non ancora attivo in " +
+            "questa build (integrazione da completare, vedi AiCoreEngine.kt)."
+    )
 
     // --- Gemma 4 ---
     val GEMMA4_E2B = LocalAiModel(
@@ -45,51 +77,52 @@ actual object LocalAiCatalog {
         description = "Taglia intermedia. Coglie meglio destinatari e scadenze implicite."
     )
 
-    // --- Qwen3.5 ---
-    val QWEN35_08B = LocalAiModel(
-        id = "qwen3.5-0.8b",
-        displayName = "Qwen3.5 0.8B",
-        fileName = "Qwen3.5-0.8B_int8.litertlm",
-        downloadUrl = "$HF/litert-community/Qwen3.5-0.8B/resolve/main/Qwen3.5-0.8B_int8.litertlm",
-        approxSizeBytes = 963_000_000,
+    // --- Phi (sostituiscono Qwen3.5: NON verificati, vedi avviso sopra) ---
+    val PHI_35_MINI_INT4 = LocalAiModel(
+        id = "phi-3.5-mini-int4",
+        displayName = "Phi-3.5 mini (int4)",
+        fileName = "TODO_VERIFY-Phi-3.5-mini-instruct_int4.litertlm",
+        downloadUrl = "$HF/litert-community/TODO_VERIFY-Phi-3.5-mini-instruct/resolve/main/TODO_VERIFY-Phi-3.5-mini-instruct_int4.litertlm",
+        approxSizeBytes = 2_200_000_000, // stima non verificata
         tier = DeviceTier.LOW,
-        recommendedRamMb = 3_200,
+        recommendedRamMb = 4_200, // stima non verificata: Phi non ha una taglia "leggera" come Qwen 0.8B
         preferGpu = true,
         supportsActions = true,
         maxOutputTokens = 900,
-        description = "Meno di 1 GB e il download più rapido: il più adatto a un telefono modesto."
+        description = "Quantizzazione più aggressiva di Phi-3.5 mini. Non esiste un Phi paragonabile " +
+            "a Qwen3.5 0.8B per peso: questa è la fascia più leggera disponibile nella famiglia."
     )
 
-    val QWEN35_2B = LocalAiModel(
-        id = "qwen3.5-2b",
-        displayName = "Qwen3.5 2B",
-        fileName = "Qwen3.5-2B_int8.litertlm",
-        downloadUrl = "$HF/litert-community/Qwen3.5-2B/resolve/main/Qwen3.5-2B_int8.litertlm",
-        approxSizeBytes = 2_117_000_000,
+    val PHI_35_MINI_INT8 = LocalAiModel(
+        id = "phi-3.5-mini-int8",
+        displayName = "Phi-3.5 mini (int8)",
+        fileName = "TODO_VERIFY-Phi-3.5-mini-instruct_int8.litertlm",
+        downloadUrl = "$HF/litert-community/TODO_VERIFY-Phi-3.5-mini-instruct/resolve/main/TODO_VERIFY-Phi-3.5-mini-instruct_int8.litertlm",
+        approxSizeBytes = 4_000_000_000, // stima non verificata
         tier = DeviceTier.MID,
-        recommendedRamMb = 5_000,
+        recommendedRamMb = 5_800, // stima non verificata
         preferGpu = true,
         supportsActions = true,
         maxOutputTokens = 900,
-        description = "Fascia media: pesa 1,5 GB meno di Gemma 4 E4B e sa produrre azioni strutturate."
+        description = "Fascia media: stessa famiglia di Phi-3.5 mini con quantizzazione meno aggressiva."
     )
 
-    val QWEN35_4B = LocalAiModel(
-        id = "qwen3.5-4b",
-        displayName = "Qwen3.5 4B",
-        fileName = "Qwen3.5-4B_mixed_int4.litertlm",
-        downloadUrl = "$HF/litert-community/Qwen3.5-4B/resolve/main/Qwen3.5-4B_mixed_int4.litertlm",
-        approxSizeBytes = 2_754_000_000,
+    val PHI_4_MINI = LocalAiModel(
+        id = "phi-4-mini",
+        displayName = "Phi-4 mini",
+        fileName = "TODO_VERIFY-Phi-4-mini-instruct_mixed_int4.litertlm",
+        downloadUrl = "$HF/litert-community/TODO_VERIFY-Phi-4-mini-instruct/resolve/main/TODO_VERIFY-Phi-4-mini-instruct_mixed_int4.litertlm",
+        approxSizeBytes = 3_800_000_000, // stima non verificata
         tier = DeviceTier.HIGH,
-        recommendedRamMb = 6_000,
+        recommendedRamMb = 6_200, // stima non verificata
         preferGpu = true,
         supportsActions = true,
         maxOutputTokens = 900,
-        description = "Il più capace del catalogo: 4 miliardi di parametri in 2,8 GB."
+        description = "Il più capace della famiglia Phi nel catalogo."
     )
 
     actual val all: List<LocalAiModel> = listOf(
-        QWEN35_08B, QWEN35_2B, QWEN35_4B, GEMMA4_E2B, GEMMA4_E4B
+        AICORE, PHI_35_MINI_INT4, PHI_35_MINI_INT8, PHI_4_MINI, GEMMA4_E2B, GEMMA4_E4B
     )
 
     actual fun byId(id: String?): LocalAiModel? = all.firstOrNull { it.id == id }
@@ -97,7 +130,7 @@ actual object LocalAiCatalog {
     actual fun recommendedFor(tier: DeviceTier): LocalAiModel = when (tier) {
         DeviceTier.HIGH -> GEMMA4_E4B
         DeviceTier.MID -> GEMMA4_E2B
-        DeviceTier.LOW, DeviceTier.UNKNOWN -> QWEN35_08B
+        DeviceTier.LOW, DeviceTier.UNKNOWN -> PHI_35_MINI_INT4
     }
 
     actual fun selectableFor(totalRamMb: Int): List<LocalAiModel> {

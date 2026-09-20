@@ -83,7 +83,14 @@ actual class LocalModelStore actual constructor() {
 
     private fun partialFile(model: LocalAiModel) = File(modelsDir(), model.fileName + PARTIAL_SUFFIX)
 
+    /**
+     * `true` per le voci "di sistema" (oggi solo AICore): nessun file da scaricare, il segnale è
+     * `downloadUrl` vuoto. Stesso criterio già usato lato iOS per Apple Intelligence.
+     */
+    private fun isSystemTier(model: LocalAiModel) = model.downloadUrl.isBlank()
+
     actual fun isInstalled(model: LocalAiModel): Boolean {
+        if (isSystemTier(model)) return AiCoreEngine.isAvailable()
         val file = modelFile(model)
         // Solo l'esistenza non basta: un file troncato da un'installazione andata male
         // manderebbe il motore in errore. Si accetta una tolleranza del 5% perché la dimensione
@@ -91,8 +98,10 @@ actual class LocalModelStore actual constructor() {
         return file.isFile && file.length() >= (model.approxSizeBytes * 95L / 100L)
     }
 
-    actual fun installedPath(model: LocalAiModel): String? =
-        if (isInstalled(model)) modelFile(model).absolutePath else null
+    actual fun installedPath(model: LocalAiModel): String? {
+        if (isSystemTier(model)) return if (isInstalled(model)) model.fileName else null
+        return if (isInstalled(model)) modelFile(model).absolutePath else null
+    }
 
     actual fun partialBytes(model: LocalAiModel): Long {
         val partial = partialFile(model)
@@ -156,11 +165,25 @@ actual class LocalModelStore actual constructor() {
     actual suspend fun download(
         model: LocalAiModel,
         onProgress: (downloadedBytes: Long, totalBytes: Long) -> Unit
-    ): ModelDownloadState = circolareplus.work.LocalModelDownloadWorker.downloadViaWorkManager(
-        context = AndroidAppContext.require(),
-        model = model,
-        onProgress = onProgress
-    )
+    ): ModelDownloadState {
+        // Le voci "di sistema" (AICore) non hanno un file da scaricare: "scaricare" significa
+        // solo verificare se il servizio è disponibile, esattamente come su iOS per Apple
+        // Intelligence. Senza questo salto, il pulsante "Scarica" delle Impostazioni finirebbe
+        // per aprire una connessione HTTP verso downloadUrl = "" tramite WorkManager.
+        if (isSystemTier(model)) {
+            onProgress(1, 1)
+            return if (isInstalled(model)) {
+                ModelDownloadState.Installed(model.fileName)
+            } else {
+                ModelDownloadState.Failed(AiCoreEngine.unavailableReason())
+            }
+        }
+        return circolareplus.work.LocalModelDownloadWorker.downloadViaWorkManager(
+            context = AndroidAppContext.require(),
+            model = model,
+            onProgress = onProgress
+        )
+    }
 
     /**
      * Il download vero, byte per byte: eseguito dentro [circolareplus.work.LocalModelDownloadWorker],

@@ -191,7 +191,10 @@ fun MainAppShell(
                 }
             }
 
-            val result = AppContainer.newAiClassifier(allowLocalFallback = allowLocalFallback).classifyCircularText(
+            val result = AppContainer.newAiClassifier(
+                allowLocalFallback = allowLocalFallback,
+                pdfTextLength = pdfText.length
+            ).classifyCircularText(
                 circularNumber = circular.number,
                 circularTitle = circular.title,
                 pdfText = pdfText

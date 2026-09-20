@@ -17,6 +17,10 @@ struct iOSApp: App {
         // Inietta i bridge nativi prima di creare la UI.
         // Gli holder sono esportati da Kotlin/Native come singleton (pattern standard: .shared).
         AppleIntelligenceBridgeHolder.shared.bridge = AppleIntelligenceEngine()
+        // MLX (Tier 2, iPhone senza Apple Intelligence): iniettato comunque, ma MLXLocalEngine
+        // dichiara isDownloaded()/generate() come non disponibili finché l'SDK MLX Swift reale
+        // non è collegato — vedi il commento in cima a MLXLocalEngine.swift.
+        MLXLocalBridgeHolder.shared.bridge = MLXLocalEngine()
         PushTokenBridgeHolder.shared.bridge = FirebasePushTokenBridge()
         SeatMapPdfShareBridgeHolder.shared.bridge = SeatMapPdfShareBridgeImpl()
     }
