@@ -78,6 +78,32 @@ actual class LocalLlm actual constructor() {
         userPrompt: String,
         timeoutMillis: Long,
         stopWhen: (String) -> Boolean
+    ): String {
+        // Tier 1: AICore (Gemini Nano di sistema) invece di LiteRT-LM. Non condivide né il
+        // motore né il mutex sotto: è un servizio di sistema separato, non il modello caricato
+        // in `engine`. `stopWhen`/streaming non si applicano (AICore genera in un colpo solo,
+        // per ora): vedi AiCoreEngine.kt per lo stato reale dell'integrazione.
+        if (modelPath == "aicore") {
+            return AiCoreEngine.generate(
+                systemPrompt = systemPrompt,
+                userPrompt = userPrompt,
+                maxOutputTokens = maxOutputTokens,
+                timeoutMillis = timeoutMillis
+            )
+        }
+        return generateWithLiteRtLm(
+            modelPath, preferGpu, maxOutputTokens, systemPrompt, userPrompt, timeoutMillis, stopWhen
+        )
+    }
+
+    private suspend fun generateWithLiteRtLm(
+        modelPath: String,
+        preferGpu: Boolean,
+        maxOutputTokens: Int,
+        systemPrompt: String,
+        userPrompt: String,
+        timeoutMillis: Long,
+        stopWhen: (String) -> Boolean
     ): String = withContext(Dispatchers.Default) {
         mutex.withLock {
             val activeEngine = ensureEngine(modelPath, preferGpu)

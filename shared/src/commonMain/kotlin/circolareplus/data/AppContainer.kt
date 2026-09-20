@@ -13,6 +13,7 @@ import circolareplus.ai.LocalLlm
 import circolareplus.ai.LocalModelStore
 import circolareplus.ai.PdfTextExtractor
 import circolareplus.ai.deviceTierForRam
+import circolareplus.ai.shouldPreferCloudForLength
 import circolareplus.ai.totalDeviceRamMb
 import circolareplus.data.local.LocalSettingsManager
 import circolareplus.data.remote.ApiClient
@@ -118,14 +119,20 @@ object AppContainer {
      * situazioni opposte — Google senza rete o con la quota finita, il locale se il modello non
      * è stato scaricato — quindi chi ha configurato entrambi ottiene un riassunto vero anche
      * quando uno dei due non è utilizzabile, invece dell'euristica a parole chiave.
-     */
-    /**
+     *
      * [allowLocalFallback] a `false` disattiva l'escalation al modello locale quando il primario
      * e' il cloud e fallisce — vedi il commento su [ChainedAiClassifier.escalateToSecondary].
      * Non ha effetto quando il provider scelto e' gia' l'AI locale: li' non c'e' nessuna
      * escalation "pesante" da evitare, il locale e' gia' il primario.
+     *
+     * [pdfTextLength] e' la lunghezza del testo da classificare, se già nota a chi chiama (vedi
+     * [circolareplus.ui.MainAppShell.classifyCircularIfNeeded]). Quando supera
+     * [circolareplus.ai.LocalAiModel.maxPromptChars] del modello locale selezionato e c'e' una
+     * chiave cloud configurata, il provider "AI locale" scelto dall'utente viene anteposto dal
+     * cloud solo per questa chiamata — vedi [shouldPreferCloudForLength] — invece di lasciar
+     * troncare silenziosamente una circolare che il cloud potrebbe leggere per intero.
      */
-    fun newAiClassifier(allowLocalFallback: Boolean = true): AiClassifier {
+    fun newAiClassifier(allowLocalFallback: Boolean = true, pdfTextLength: Int? = null): AiClassifier {
         val cloud = ClientSideAiClassifier(userApiKey = settings.userAiApiKey)
 
         val model = selectedLocalModel()
@@ -136,7 +143,22 @@ object AppContainer {
         )
 
         return when (AiProvider.fromId(settings.aiProvider)) {
-            AiProvider.ON_DEVICE -> ChainedAiClassifier(primary = local, secondary = cloud)
+            AiProvider.ON_DEVICE -> {
+                val preferCloudForLength = pdfTextLength != null && shouldPreferCloudForLength(
+                    textLength = pdfTextLength,
+                    localModel = model,
+                    hasCloudKey = settings.userAiApiKey.isNotBlank()
+                )
+                if (preferCloudForLength) {
+                    ChainedAiClassifier(
+                        primary = cloud,
+                        secondary = local,
+                        escalateToSecondary = allowLocalFallback
+                    )
+                } else {
+                    ChainedAiClassifier(primary = local, secondary = cloud)
+                }
+            }
             AiProvider.GOOGLE_AI_STUDIO -> ChainedAiClassifier(
                 primary = cloud,
                 secondary = local,

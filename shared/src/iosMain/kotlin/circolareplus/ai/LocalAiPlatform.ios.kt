@@ -31,56 +31,78 @@ actual fun onDeviceAiUnavailableReason(): String? {
 }
 
 /**
- * Su iOS non esiste il concetto di "modello da scaricare": Apple Intelligence è sempre
- * "installata" se il dispositivo la supporta (iPhone 15 Pro+, iOS 26+), altrimenti non
- * disponibile. Questo class rappresenta lo stato di disponibilità come se fosse "il modello
- * installato".
+ * Apple Intelligence (Tier 1) è sempre "installata" o mai: nessun file, solo verifica di
+ * sistema. I modelli MLX (Tier 2) sono invece scaricati per davvero, tramite [MLXLocalBridge] —
+ * vedi il commento su `LocalAiModels.ios.kt` per lo stato di quell'integrazione.
  */
 actual class LocalModelStore actual constructor() {
 
-    actual fun isInstalled(model: LocalAiModel): Boolean {
-        // Il modello è "installato" se Apple Intelligence è disponibile
-        return isOnDeviceAiAvailable()
+    private fun isAppleIntelligence(model: LocalAiModel) = model.id == "apple-intelligence"
+
+    actual fun isInstalled(model: LocalAiModel): Boolean = if (isAppleIntelligence(model)) {
+        isOnDeviceAiAvailable()
+    } else {
+        MLXLocalBridgeHolder.bridge?.isDownloaded(model.id) ?: false
     }
 
     actual fun installedPath(model: LocalAiModel): String? {
-        // Percorso finto: il modello di sistema non ha un percorso su disco
-        return if (isOnDeviceAiAvailable()) "apple-intelligence" else null
+        if (!isInstalled(model)) return null
+        // Percorso finto per entrambi i tier: né il modello di sistema né MLXLocalEngine
+        // caricano un file per path su iOS, LocalLlm.ios.kt sceglie il bridge dall'id.
+        return model.id
     }
 
     actual fun partialBytes(model: LocalAiModel): Long = 0L
-    // Non esiste download parziale: il modello è di sistema
+    // Nessun download parziale esposto da MLXLocalBridge per ora: l'integrazione è inerte.
 
     actual fun freeSpaceBytes(): Long = 0L
-    // Non occupa spazio nel dispositivo
+    // Non calcolato: nessun download reale avviene ancora su questa build.
 
-    actual fun delete(model: LocalAiModel): Boolean = false
-    // Non si può cancellare il modello di sistema
+    actual fun delete(model: LocalAiModel): Boolean {
+        if (isAppleIntelligence(model)) return false // non si può cancellare il modello di sistema
+        return MLXLocalBridgeHolder.bridge?.delete(model.id) ?: false
+    }
 
     actual fun orphanBytes(): Long = 0L
-    // Non ci sono file orfani su iOS
+    // Non ci sono file orfani gestiti da questa build.
 
     actual fun deleteOrphans(): Long = 0L
-    // Non c'è nulla da cancellare
+    // Non c'è nulla da cancellare.
 
-    actual fun installedModels(): List<LocalAiModel> {
-        // Se Apple Intelligence è disponibile, è l'unico "modello installato"
-        // Il catalogo iOS (LocalAiModels.ios.kt) ha una sola voce
-        return if (isOnDeviceAiAvailable()) LocalAiCatalog.all else emptyList()
-    }
+    actual fun installedModels(): List<LocalAiModel> = LocalAiCatalog.all.filter { isInstalled(it) }
 
     actual suspend fun download(
         model: LocalAiModel,
         onProgress: (downloadedBytes: Long, totalBytes: Long) -> Unit
     ): ModelDownloadState {
-        // Su iOS "scaricare" il modello = verificare che Apple Intelligence sia disponibile
-        // Chiama onProgress(1, 1) per completamento istantaneo
-        onProgress(1, 1)
-        return if (isOnDeviceAiAvailable()) {
-            ModelDownloadState.Installed("apple-intelligence")
-        } else {
+        if (isAppleIntelligence(model)) {
+            // "Scaricare" il modello di sistema = verificare che sia disponibile: completamento
+            // istantaneo, nessun byte reale da trasferire.
+            onProgress(1, 1)
+            return if (isOnDeviceAiAvailable()) {
+                ModelDownloadState.Installed("apple-intelligence")
+            } else {
+                ModelDownloadState.Failed(
+                    onDeviceAiUnavailableReason() ?: "Apple Intelligence non disponibile su questo dispositivo."
+                )
+            }
+        }
+
+        val bridge = MLXLocalBridgeHolder.bridge
+            ?: return ModelDownloadState.Failed(
+                "AI locale MLX non ancora disponibile in questa build."
+            )
+        return try {
+            val ok = bridge.download(
+                modelId = model.id,
+                modelRepoId = model.downloadUrl,
+                onProgress = onProgress
+            )
+            if (ok) ModelDownloadState.Installed(model.id)
+            else ModelDownloadState.Failed(bridge.unavailableReason(model.id) ?: "Download non riuscito.")
+        } catch (e: Exception) {
             ModelDownloadState.Failed(
-                onDeviceAiUnavailableReason() ?: "Apple Intelligence non disponibile su questo dispositivo."
+                "Download interrotto: ${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}"
             )
         }
     }
@@ -92,8 +114,17 @@ actual class LocalModelStore actual constructor() {
  */
 actual class LocalLlm actual constructor() {
 
-    actual fun backendLabel(): String = "Apple Intelligence (Neural Engine)"
+    @Volatile
+    private var lastEngineLabel: String = "Apple Intelligence (Neural Engine)"
 
+    actual fun backendLabel(): String = lastEngineLabel
+
+    /**
+     * `modelPath` qui è sempre l'id del modello ([LocalAiModel.id], vedi
+     * `LocalModelStore.installedPath`), non un path su disco: sceglie il bridge giusto in base
+     * a quale motore serve questo modello — stesso ruolo del branch `modelPath == "aicore"`
+     * aggiunto lato Android in `LocalLlm.android.kt`.
+     */
     actual suspend fun generate(
         modelPath: String,
         preferGpu: Boolean,
@@ -103,15 +134,30 @@ actual class LocalLlm actual constructor() {
         timeoutMillis: Long,
         stopWhen: (String) -> Boolean
     ): String {
-        // Ignora modelPath (non c'è file), preferGpu (il backend lo sceglie il sistema),
-        // maxOutputTokens (lo decide Apple Intelligence). Delega al bridge Swift.
-        val bridge = AppleIntelligenceBridgeHolder.bridge
-            ?: throw IllegalStateException("Apple Intelligence non disponibile.")
-        return bridge.generate(systemPrompt, userPrompt, timeoutMillis, stopWhen)
+        if (modelPath == "apple-intelligence") {
+            lastEngineLabel = "Apple Intelligence (Neural Engine)"
+            val bridge = AppleIntelligenceBridgeHolder.bridge
+                ?: throw IllegalStateException("Apple Intelligence non disponibile.")
+            return bridge.generate(systemPrompt, userPrompt, timeoutMillis, stopWhen)
+        }
+
+        // Tier 2: modello MLX. maxOutputTokens/preferGpu: preferGpu è ignorato (MLX su iOS usa
+        // sempre Metal), maxOutputTokens passa al bridge come su Android.
+        lastEngineLabel = "MLX (Metal)"
+        val bridge = MLXLocalBridgeHolder.bridge
+            ?: throw IllegalStateException("AI locale MLX non ancora disponibile in questa build.")
+        return bridge.generate(
+            modelId = modelPath,
+            systemPrompt = systemPrompt,
+            userPrompt = userPrompt,
+            maxOutputTokens = maxOutputTokens,
+            timeoutMillis = timeoutMillis,
+            stopWhen = stopWhen
+        )
     }
 
     actual fun unload() {
-        // Non fare nulla: il modello di sistema non si scarica dall'app.
-        // iOS lo gestisce automaticamente.
+        // Non fare nulla: né il modello di sistema né (per ora) MLXLocalEngine tengono uno stato
+        // da liberare esplicitamente lato Kotlin.
     }
 }

@@ -12,6 +12,11 @@ googleServices = "4.5.0"
 activityCompose = "1.11.0"
 androidxCoreKtx = "1.17.0"
 litertlm = "0.17.0"
+# AICore (Tier 1 Android, Gemini Nano di sistema): coordinate/versione NON verificate — questo
+# ambiente di sviluppo non ha accesso di rete a Maven. Da confermare su una macchina con accesso
+# pieno prima di scommentare la voce in [libraries] e in shared/build.gradle.kts (vedi
+# AiCoreEngine.kt per lo stato dell'integrazione).
+# aicore = "TODO_VERIFY"
 androidxWork = "2.10.0"
 # API ufficiale di splash screen (androidx.core.splashscreen): senza, sotto Android 12+ il
 # sistema genera da sé uno splash di default ingrandendo l'icona dell'app, con bordi sfocati —
@@ -55,6 +60,8 @@ androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx
 # E' la ragione per cui Kotlin e' stato portato a 2.4: questa libreria e' scritta in Kotlin e i
 # suoi .class portano metadata 2.4, illeggibili dal compilatore 2.0.20 di prima.
 litertlm-android = { module = "com.google.ai.edge.litertlm:litertlm-android", version.ref = "litertlm" }
+# Da scommentare solo dopo aver verificato le coordinate reali (vedi commento su "aicore" sopra).
+# aicore-android = { module = "com.google.ai.edge.aicore:aicore", version.ref = "aicore" }
 # Elaborazione in background reale (download modello locale, download PDF, classificazione in
 # coda): sopravvive a schermo spento, app in background o processo ucciso dal sistema, cosa che
 # prima non c'era — tutto girava in coroutine legate al lifecycle della UI Compose.

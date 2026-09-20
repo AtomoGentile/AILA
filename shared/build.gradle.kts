@@ -79,6 +79,9 @@ kotlin {
                 // facendo fallire il caricamento del modello solo a esecuzione (lo stesso
                 // problema gia' incontrato con Firebase Messaging).
                 api(libs.litertlm.android)
+                // AICore (Tier 1, Gemini Nano di sistema): dipendenza non ancora attiva, vedi
+                // AiCoreEngine.kt e i commenti su "aicore" in gradle/libs.versions.toml.
+                // api(libs.aicore.android)
                 // WorkManager: usata per il download del modello locale, il download dei PDF e
                 // la classificazione in coda, cosi' da sopravvivere a schermo spento o app in
                 // background (vedi CircularsBackgroundWorkers.android.kt). "api" per lo stesso
