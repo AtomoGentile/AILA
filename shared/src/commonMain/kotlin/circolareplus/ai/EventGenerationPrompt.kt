@@ -58,14 +58,16 @@ internal object EventGenerationPrompt {
             "$userPrompt"
 
             Rispondi con questo JSON:
-            {"title":"","subject":"","category":"$CALENDAR_CATEGORIES","dateIso":"YYYY-MM-DD","timeHm":"HH:MM","notes":""}
+            {"title":"","subject":"","category":"ALTRO","dateIso":"YYYY-MM-DD","timeHm":"HH:MM","notes":""}
 
             Regole:
             - "title": titolo breve dell'evento (es. "Verifica di matematica"). Obbligatorio.
             - "subject": la materia/argomento (es. "Matematica"). Può essere vuoto se non specificato.
-            - "category": deve essere uno di: VERIFICA (test, scritti), INTERROGAZIONE (interrogazioni),
-              PAGAMENTO (pagamenti, versamenti), USCITA_DIDATTICA (gite, uscite), AVVISO (avvisi generici),
-              ALTRO (se non rientra in nessun'altro). Obbligatorio.
+            - "category" deve essere ESATTAMENTE UNA di queste parole, mai unite con "|": VERIFICA
+              (test, scritti), INTERROGAZIONE (interrogazioni), PAGAMENTO (pagamenti, versamenti),
+              USCITA_DIDATTICA (gite, uscite), AVVISO (avvisi generici), ALTRO (se non rientra in
+              nessun'altro). "ALTRO" nell'esempio sopra e' solo un esempio, non il valore fisso.
+              Obbligatorio.
             - "dateIso": la data in formato YYYY-MM-DD se presente o deducibile (es. "domani", "lunedì
               prossimo"), calcolata rispetto a oggi ($todayIso). Altrimenti null.
             - "timeHm": l'ora in formato HH:MM 24 ore se presente nel testo (es. "alle 9" -> "09:00",
