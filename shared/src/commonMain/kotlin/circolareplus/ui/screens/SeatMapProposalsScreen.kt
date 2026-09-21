@@ -257,14 +257,6 @@ private fun ProposalCard(
                 StatChip("Didattica", proposal.didacticScore.toInt(), Modifier.weight(1f))
                 StatChip("Disciplina", proposal.disciplinePenalty.toInt(), Modifier.weight(1f))
             }
-
-            Spacer(modifier = Modifier.height(AppTheme.Space8))
-            ScoreTotalSummary(
-                total = proposal.totalScore,
-                priorityBonus = proposal.priorityBonus,
-                penalties = proposal.memoryPenalty + proposal.heightPenalty +
-                    proposal.burnoutPenalty + proposal.columnNoisePenalty
-            )
         }
     }
 }
@@ -278,39 +270,6 @@ internal fun satisfactionLabel(satisfaction: SeatMapOptimizer.VoteSatisfaction?)
     return if (satisfaction.uncomfortableStudents > 0) {
         "$base • ${satisfaction.uncomfortableStudents} con un compagno sgradito"
     } else base
-}
-
-/**
- * Le tre voci nelle schede (sociale, didattica, disciplina) non sommano al punteggio totale:
- * il totale comprende anche il bonus Priority Pass (+1000 a studente con priorità nelle prime tre
- * file) e le penalità di storico, altezza, burnout e chiasso di colonna. Senza questa riga si
- * vedevano tre zeri accanto a un totale di centinaia di punti, senza modo di capire perché.
- */
-@Composable
-internal fun ScoreTotalSummary(
-    total: Double,
-    priorityBonus: Double,
-    penalties: Double,
-    modifier: Modifier = Modifier,
-    showTotal: Boolean = true
-) {
-    fun signed(value: Double): String {
-        val v = value.toInt()
-        return if (v > 0) "+$v" else v.toString()
-    }
-    val parts = buildList {
-        if (showTotal) add("Punteggio totale ${total.toInt()} pt")
-        if (priorityBonus.toInt() != 0) add("Priority pass ${signed(priorityBonus)}")
-        if (penalties.toInt() != 0) add("Storico e altre penalità ${signed(-penalties)}")
-    }
-    if (parts.isEmpty()) return
-    Text(
-        text = parts.joinToString(" • "),
-        fontSize = 11.sp,
-        color = AppTheme.TextMuted,
-        lineHeight = 15.sp,
-        modifier = modifier
-    )
 }
 
 @Composable
