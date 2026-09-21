@@ -631,6 +631,12 @@ fun MainAppShell(
     var seatMapMode by rememberSaveable { mutableStateOf("MAP") } // "MAP" | "VOTE_PREFERENCES"
     val socialVotes = remember { mutableStateMapOf<String, SocialPreferenceScore>() }
     var proposalOptions by remember { mutableStateOf<List<SeatMapProposal>>(emptyList()) }
+    // Modalità richiesta per l'ultima generazione: serve alla schermata delle proposte per
+    // etichettare correttamente "banchi da due/tre" anche quando nessun banco della disposizione
+    // calcolata finisce per avere un terzo occupante (classe piccola, coppie vietate che spezzano
+    // i trii), caso in cui dedurlo dai soli dati (studentCId != null) darebbe "banchi da due" pur
+    // avendo l'utente scelto i trii.
+    var lastRequestedSeatsPerDesk by remember { mutableStateOf(SeatMapOptimizer.SEATS_PER_DESK_PAIR) }
     var isGeneratingProposals by remember { mutableStateOf(false) }
     var seatMapActionError by remember { mutableStateOf<String?>(null) }
     var isExportingSeatMapPdf by remember { mutableStateOf(false) }
@@ -2125,6 +2131,7 @@ fun MainAppShell(
                         SeatMapProposalsScreen(
                             proposals = proposalOptions,
                             studentsMap = proposalsStudentsMap,
+                            seatsPerDesk = lastRequestedSeatsPerDesk,
                             isBusy = isGeneratingProposals,
                             // Scegliere una proposta non la pubblica direttamente: apre l'editor
                             // manuale (swap-by-tap con ricalcolo live) da cui il Rappresentante
@@ -2361,6 +2368,7 @@ fun MainAppShell(
                                                 onGenerateProposals = { weights, seatsPerDesk ->
                                                     coroutineScope.launch {
                                                         isGeneratingProposals = true
+                                                        lastRequestedSeatsPerDesk = seatsPerDesk
                                                         try {
                                                             val (ratings, matrix, history) = coroutineScope {
                                                                 val ratingsDeferred = async { AppContainer.ratingsRepository.listRatings() }
