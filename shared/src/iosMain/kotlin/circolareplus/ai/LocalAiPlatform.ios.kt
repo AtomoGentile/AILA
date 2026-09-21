@@ -125,7 +125,7 @@ actual class LocalLlm actual constructor() {
         const val JSON_TEMPERATURE = 0.1
     }
 
-    @Volatile
+    @kotlin.concurrent.Volatile
     private var lastEngineLabel: String = "Apple Intelligence (Neural Engine)"
 
     actual fun backendLabel(): String = lastEngineLabel
