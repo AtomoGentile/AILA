@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
+    <!-- La libreria AICore dichiara minSdk 31, l'app parte da 26 (Gemma/Phi via LiteRT-LM girano
+         anche su Android 8-11). Senza questo override il manifest merger rifiuta la build.
+         E' sicuro perche' AiCoreEngine.prepare() esce subito sotto API 31, prima di toccare
+         qualunque classe della libreria: sui telefoni piu' vecchi il tier AICore resta
+         semplicemente "non disponibile". -->
+    <uses-sdk tools:overrideLibrary="com.google.ai.edge.aicore" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Il download del modello di AI locale e la sincronizzazione delle circolari girano ora in
