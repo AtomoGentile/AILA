@@ -43,19 +43,19 @@ class MLXLocalEngine: MLXLocalBridge {
     func download(
         modelId: String,
         modelRepoId: String,
-        onProgress: @escaping (Int64, Int64) -> Void
-    ) async throws -> Bool {
+        onProgress: @escaping (KotlinLong, KotlinLong) -> Void
+    ) async throws -> KotlinBoolean {
         let configuration = ModelConfiguration(id: modelRepoId)
         let container = try await LLMModelFactory.shared.loadContainer(
             configuration: configuration
         ) { progress in
             // fractionCompleted è un Double 0...1 (Foundation.Progress): lo si riporta come
             // millesimi per restare nell'Int64 di ModelDownloadState senza perdere precisione.
-            onProgress(Int64(progress.fractionCompleted * 1000), 1000)
+            onProgress(KotlinLong(value: Int64(progress.fractionCompleted * 1000)), KotlinLong(value: 1000))
         }
         containers[modelId] = container
         sessions[modelId] = nil // ricreata al primo generate, con le istruzioni di quella chiamata
-        return true
+        return KotlinBoolean(value: true)
     }
 
     func delete(modelId: String) -> Bool {
@@ -131,8 +131,8 @@ class MLXLocalEngine: MLXLocalBridge {
     func download(
         modelId: String,
         modelRepoId: String,
-        onProgress: @escaping (Int64, Int64) -> Void
-    ) async throws -> Bool {
+        onProgress: @escaping (KotlinLong, KotlinLong) -> Void
+    ) async throws -> KotlinBoolean {
         throw NSError(
             domain: "MLXLocalEngine",
             code: -10,
