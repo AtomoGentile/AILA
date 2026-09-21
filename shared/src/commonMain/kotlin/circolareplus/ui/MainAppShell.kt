@@ -134,12 +134,27 @@ fun MainAppShell(
     // Contatore di ricarica: serve al pulsante "Riprova" del nuovo stato d'errore, che prima
     // non esisteva (l'errore era solo una riga di testo rosso, senza modo di ritentare).
     var circularsRefreshTrigger by remember { mutableStateOf(0) }
-    val classifications = remember { mutableStateMapOf<Int, CircularAiClassification>() }
-    var isClassifyingCircular by remember { mutableStateOf(false) }
+    // Le analisi gia' fatte si rileggono dal telefono: a ogni avvio la lista le mostra subito
+    // invece di ripartire vuota (vedi LocalSettingsManager.readClassificationCache).
+    val classifications = remember {
+        mutableStateMapOf<Int, CircularAiClassification>().apply {
+            putAll(AppContainer.settings.readClassificationCache())
+        }
+    }
+    // Circolari senza analisi sul server: non si richiedono di nuovo a ogni cambio di lista.
+    val noServerAnalysis = remember { mutableSetOf<Int>() }
     // Circolari attualmente in fase di classificazione (splash, sfondo, o apertura manuale):
     // evita che due punti diversi del codice scarichino/classifichino la stessa circolare in
     // parallelo, sprecando chiamate AI e banda per lo stesso risultato.
-    val inFlightClassification = remember { mutableSetOf<Int>() }
+    // E' uno stato osservabile (non un insieme qualunque) perche' la lista delle circolari
+    // mostra "Analisi in corso" per ognuna: l'analisi non dipende piu' dalla schermata di
+    // dettaglio, quindi deve restare visibile anche dopo esserne usciti.
+    val inFlightClassification = remember { mutableStateListOf<Int>() }
+
+    fun storeClassification(classification: CircularAiClassification) {
+        classifications[classification.circularNumber] = classification
+        AppContainer.settings.saveClassification(classification)
+    }
 
     // Un solo posto che sa come classificare una circolare, usato sia dall'anticipo durante il
     // caricamento, sia dal ciclo in background mentre si è dentro l'app, sia dall'apertura
@@ -166,7 +181,7 @@ fun MainAppShell(
                     null // Server irraggiungibile: si procede con l'analisi locale come prima.
                 }
                 if (cached != null) {
-                    classifications[circular.number] = cached
+                    storeClassification(cached)
                     return
                 }
             }
@@ -202,7 +217,7 @@ fun MainAppShell(
                 circularTitle = circular.title,
                 pdfText = pdfText
             )
-            classifications[circular.number] = result
+            storeClassification(result)
 
             // Si condivide il risultato con tutti gli altri utenti, qualunque sia il provider che
             // l'ha prodotto: mostra sempre in app il modello usato (modelLabel), così chi la legge
@@ -274,10 +289,23 @@ fun MainAppShell(
                 settings.lastSeenCircularNumber = newest
             } else if (newest > lastSeen) {
                 if (settings.isNotificationKindEnabled(NotificationKind.CIRCULARS.key)) {
+                    // Il push FCM scrive gia' la sua voce ("Circolare n. N: titolo"): senza questo
+                    // controllo la stessa circolare compariva due volte in campanella, e con il
+                    // rinfresco dinamico (che rilegge la lista appena arriva il push) quasi sempre.
+                    val alreadyLogged = settings.listNotifications()
+                        .filter { it.category == NotificationKind.CIRCULARS.key }
                     freshCirculars
                         .filter { it.number > lastSeen }
                         .sortedBy { it.number }
-                        .forEach { settings.addNotification("Circolare n. ${it.number}", it.title, NotificationKind.CIRCULARS.key) }
+                        .forEach { circular ->
+                            val duplicate = alreadyLogged.any {
+                                it.title == "Circolare n. ${circular.number}" ||
+                                    it.body.startsWith("Circolare n. ${circular.number}:")
+                            }
+                            if (!duplicate) {
+                                settings.addNotification("Circolare n. ${circular.number}", circular.title, NotificationKind.CIRCULARS.key)
+                            }
+                        }
                     wroteSomething = true
                 }
                 settings.lastSeenCircularNumber = newest
@@ -1038,11 +1066,33 @@ fun MainAppShell(
     LaunchedEffect(selectedCircularForDetail) {
         val circular = selectedCircularForDetail
         if (circular != null && !classifications.containsKey(circular.number)) {
-            isClassifyingCircular = true
-            try {
-                classifyCircularIfNeeded(circular)
-            } finally {
-                isClassifyingCircular = false
+            // Nello scope della schermata principale e non in quello di questo effetto: l'effetto
+            // viene cancellato appena si esce dal dettaglio, e con lui l'analisi (minuti di lavoro
+            // sul telefono buttati). Cosi' prosegue, e la lista mostra "Analisi in corso".
+            coroutineScope.launch { classifyCircularIfNeeded(circular) }
+        }
+    }
+
+    // Le spiegazioni gia' pronte sul server (fatte da altri, o da un altro telefono) si scaricano
+    // appena la lista cambia, per tutte le circolari che non ne hanno ancora una: una richiesta
+    // leggera ciascuna, senza toccare il modello. Prima questo avveniva solo dentro la
+    // classificazione, che con l'AI locale parte soltanto all'apertura di ogni singola circolare:
+    // dopo un riavvio o all'arrivo di una circolare nuova le altre restavano senza spiegazione.
+    LaunchedEffect(circulars) {
+        for (circular in circulars.sortedByDescending { it.number }) {
+            if (classifications.containsKey(circular.number)) continue
+            if (circular.number in inFlightClassification || circular.number in noServerAnalysis) continue
+            val cached = try {
+                AppContainer.circularsRepository.getCachedAnalysis(circular.number)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                continue // Rete assente: si riprova al prossimo cambio di lista.
+            }
+            if (cached == null) {
+                noServerAnalysis += circular.number
+            } else if (!classifications.containsKey(circular.number)) {
+                storeClassification(cached)
             }
         }
     }
@@ -1087,6 +1137,35 @@ fun MainAppShell(
         }
     }
 
+    // Circolari: rilettura dinamica dell'elenco.
+    //
+    // Prima l'elenco si caricava una volta sola (quando era vuoto) e una circolare nuova, anche
+    // con la notifica gia' arrivata, restava invisibile finche' non si usciva e rientrava.
+    // Ora si rilegge ogni minuto, subito quando arriva un push o l'app torna in primo piano
+    // (DataRefreshEvents), e si aggiorna quello che si vede solo se e' davvero cambiato. La lista
+    // usa il numero come chiave, quindi le voci gia' a schermo non saltano.
+    suspend fun refreshCirculars() {
+        if (isCircularsLoading) return
+        try {
+            val fresh = AppContainer.circularsRepository.listCirculars()
+            if (fresh != circulars) circulars = fresh
+            noteNovelties(freshCirculars = fresh)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Rete assente: si riprova al giro dopo.
+        }
+    }
+    LaunchedEffect(user.id) {
+        while (isActive) {
+            delay(60_000L)
+            refreshCirculars()
+        }
+    }
+    LaunchedEffect(user.id) {
+        circolareplus.push.DataRefreshEvents.requests.collect { refreshCirculars() }
+    }
+
     // Controllo periodico delle novità mentre l'app è aperta.
     //
     // Senza, una novità si scopriva solo entrando nella sua sezione: la campanella restava vuota
@@ -1094,19 +1173,13 @@ fun MainAppShell(
     // caso, ma vale solo quando il server manda davvero un messaggio e non è configurato finché
     // non esiste il progetto Firebase.
     //
-    // Volutamente non aggiorna le liste a schermo: si limita a rilevare e a scrivere in
+    // Circolari escluse (le gestisce il rinfresco dinamico qui sopra). Le altre liste non si
+    // aggiornano a schermo: questo giro si limita a rilevare e a scrivere in
     // campanella. Sovrascrivere quello che l'utente sta guardando mentre lo guarda è il tipo di
     // cosa che fa "saltare" una lista sotto il dito.
     LaunchedEffect(user.id) {
         while (isActive) {
             delay(5 * 60 * 1000L)
-            try {
-                noteNovelties(freshCirculars = AppContainer.circularsRepository.listCirculars())
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // Rete assente: si riproverà al giro dopo.
-            }
             try {
                 noteNovelties(freshProposals = AppContainer.proposalsRepository.listProposals())
             } catch (e: CancellationException) {
@@ -1363,7 +1436,7 @@ fun MainAppShell(
         CircularDetailScreen(
             circular = circularForDetail,
             classification = classifications[circularForDetail.number],
-            isClassifying = isClassifyingCircular,
+            isClassifying = circularForDetail.number in inFlightClassification,
             onBackClick = { selectedCircularForDetail = null },
             onDownloadPdfClick = {
                 circularForDetail.downloadUrl?.let { uriHandler.openUri(it) }
@@ -1426,16 +1499,11 @@ fun MainAppShell(
                 }
             },
             onReanalyze = {
+                // Si toglie il risultato dalla cache in memoria e si riclassifica da capo:
+                // classifyCircularIfNeeded salta le circolari già presenti nella mappa.
+                classifications.remove(circularForDetail.number)
                 coroutineScope.launch {
-                    // Si toglie il risultato dalla cache in memoria e si riclassifica da capo:
-                    // classifyCircularIfNeeded salta le circolari già presenti nella mappa.
-                    classifications.remove(circularForDetail.number)
-                    isClassifyingCircular = true
-                    try {
-                        classifyCircularIfNeeded(circularForDetail, forceReanalyze = true)
-                    } finally {
-                        isClassifyingCircular = false
-                    }
+                    classifyCircularIfNeeded(circularForDetail, forceReanalyze = true)
                 }
             }
         )
@@ -2493,6 +2561,7 @@ fun MainAppShell(
                                             CircularsScreen(
                                                 circulars = circulars,
                                                 classifications = classifications,
+                                                analyzingNumbers = inFlightClassification,
                                                 onSelectCircular = { selectedCircularForDetail = it }
                                             )
                                         }

@@ -67,6 +67,8 @@ class CircolareMessagingService : FirebaseMessagingService() {
         // dell'app, che si autoelimina dopo qualche giorno) stanno tutti in onPushReceived: la
         // notifica di sistema si mostra solo se ritorna true.
         val show = AppContainer.settings.onPushReceived(message.messageId, title, body, category)
+        // A schermata aperta la lista deve aggiornarsi da sola, non solo mostrare la notifica.
+        circolareplus.push.DataRefreshEvents.request()
         if (show) showSystemNotification(title, body, category)
     }
 

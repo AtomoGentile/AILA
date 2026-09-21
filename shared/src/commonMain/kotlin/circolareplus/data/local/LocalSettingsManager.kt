@@ -1,6 +1,7 @@
 package circolareplus.data.local
 
 import circolareplus.ai.assistant.AssistantConversation
+import circolareplus.domain.model.CircularAiClassification
 import circolareplus.domain.model.NotificationLogEntry
 import circolareplus.platform.currentTimeMillis
 import com.russhwolf.settings.Settings
@@ -39,6 +40,10 @@ class LocalSettingsManager(
         private const val KEY_LAST_SEEN_PREFERENCES_OPEN = "last_seen_preferences_open"
         private const val KEY_LAST_SEEN_POLL_ID = "last_seen_poll_id"
         private const val KEY_ASSISTANT_HISTORY = "assistant_history_json"
+        private const val KEY_CIRCULAR_ANALYSES = "circular_analyses_json"
+
+        /** Quante analisi di circolari tenere sul telefono: le piu' recenti, per numero. */
+        private const val MAX_CACHED_ANALYSES = 100
         /**
          * Quante conversazioni di AILA Assistant tenere, e quanti messaggi per conversazione.
          *
@@ -317,6 +322,32 @@ class LocalSettingsManager(
 
     fun deleteAssistantConversation(id: String) {
         writeAssistantConversations(readAssistantConversations().filter { it.id != id })
+    }
+
+    /**
+     * Le analisi AI delle circolari gia' prodotte (o scaricate dalla cache del server), per numero.
+     *
+     * Stavano solo in memoria: a ogni riavvio dell'app le spiegazioni sparivano dalla lista e
+     * tornavano una per volta, quando tornavano — con l'AI locale, solo aprendo ciascuna
+     * circolare. Non si salvano i ripieghi euristici ([CircularAiClassification.isFallback]): non
+     * sono spiegazioni, e tenerli bloccherebbe una nuova analisi.
+     */
+    fun readClassificationCache(): Map<Int, CircularAiClassification> {
+        val raw = settings.getStringOrNull(KEY_CIRCULAR_ANALYSES) ?: return emptyMap()
+        return try {
+            json.decodeFromString<List<CircularAiClassification>>(raw).associateBy { it.circularNumber }
+        } catch (e: Exception) {
+            emptyMap()
+        }
+    }
+
+    fun saveClassification(classification: CircularAiClassification) {
+        if (classification.isFallback) return
+        val updated = (readClassificationCache() + (classification.circularNumber to classification))
+            .values
+            .sortedByDescending { it.circularNumber }
+            .take(MAX_CACHED_ANALYSES)
+        settings.putString(KEY_CIRCULAR_ANALYSES, json.encodeToString(updated))
     }
 
     fun clearAssistantHistory() {

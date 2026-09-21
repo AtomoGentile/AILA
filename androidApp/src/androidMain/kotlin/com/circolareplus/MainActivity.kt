@@ -82,6 +82,13 @@ class MainActivity : ComponentActivity() {
         applyPendingDeepLinkFrom(intent)
     }
 
+    // Tornando in primo piano si rilegge l'elenco: nel frattempo puo' essere arrivata una
+    // circolare (e la notifica di sistema che l'annunciava non aggiorna nulla da sola).
+    override fun onResume() {
+        super.onResume()
+        circolareplus.push.DataRefreshEvents.request()
+    }
+
     private fun applyPendingDeepLinkFrom(intent: Intent) {
         val explicit = intent.getStringExtra("notification_category")
         val category = if (!explicit.isNullOrBlank()) {
