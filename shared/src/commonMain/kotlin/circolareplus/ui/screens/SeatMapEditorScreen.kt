@@ -69,8 +69,8 @@ fun SeatMapEditorScreen(
         ) {
             Column(modifier = Modifier.padding(AppTheme.Space12)) {
                 Text(
-                    text = "Punteggio: ${breakdown.total.toInt()} pt",
-                    fontSize = 14.sp,
+                    text = satisfactionLabel(satisfaction),
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = AppTheme.TextDark
                 )
@@ -80,19 +80,6 @@ fun SeatMapEditorScreen(
                     StatChip("Didattica", breakdown.didactic.toInt(), Modifier.weight(1f))
                     StatChip("Disciplina", breakdown.discipline.toInt(), Modifier.weight(1f))
                 }
-                Spacer(modifier = Modifier.height(AppTheme.Space8))
-                ScoreTotalSummary(
-                    total = breakdown.total,
-                    priorityBonus = breakdown.priorityBonus,
-                    penalties = breakdown.memoryPenalty + breakdown.heightPenalty +
-                        breakdown.burnoutPenalty + breakdown.columnNoisePenalty,
-                    showTotal = false
-                )
-                Text(
-                    text = satisfactionLabel(satisfaction),
-                    fontSize = 12.sp,
-                    color = AppTheme.TextMuted
-                )
                 Text(
                     text = if (selectedSeat == null)
                         "Tocca un nome per selezionarlo, poi un secondo per scambiarli."
