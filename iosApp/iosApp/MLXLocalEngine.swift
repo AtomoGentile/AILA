@@ -1,7 +1,9 @@
 import Foundation
+import shared
+
+#if canImport(MLXLLM)
 import MLXLLM
 import MLXLMCommon
-import shared
 
 /// Implementazione del bridge MLXLocalBridge in Swift — Tier 2 iOS, per gli iPhone senza Apple
 /// Intelligence (11-14, 15 base).
@@ -115,3 +117,43 @@ class MLXLocalEngine: MLXLocalBridge {
         }
     }
 }
+
+#else
+
+// Senza il pacchetto MLX (oggi tolto da project.yml: `mlx-swift-lm` su `main` richiede Swift
+// tools 6.3 e non si risolveva con l'Xcode dei runner, quindi la CI iOS non compilava nulla)
+// il bridge resta iniettato ma dichiara sempre il Tier 2 non disponibile. Il catalogo iOS non
+// espone comunque i modelli MLX (vedi LocalAiModels.ios.kt). Per riattivare: rimettere il pacchetto
+// in project.yml e la classe vera sotto si compila da sola grazie a `canImport`.
+class MLXLocalEngine: MLXLocalBridge {
+    func isDownloaded(modelId: String) -> Bool { false }
+    func localSizeBytes(modelId: String) -> Int64 { 0 }
+    func download(
+        modelId: String,
+        modelRepoId: String,
+        onProgress: @escaping (Int64, Int64) -> Void
+    ) async throws -> Bool {
+        throw NSError(
+            domain: "MLXLocalEngine",
+            code: -10,
+            userInfo: [NSLocalizedDescriptionKey: "MLX non è incluso in questa build."]
+        )
+    }
+    func delete(modelId: String) -> Bool { false }
+    func unavailableReason(modelId: String) -> String? { "MLX non è incluso in questa build." }
+    func generate(
+        modelId: String,
+        systemPrompt: String,
+        userPrompt: String,
+        maxOutputTokens: Int32,
+        timeoutMillis: Int64,
+        stopWhen: @escaping (String) -> KotlinBoolean
+    ) async throws -> String {
+        throw NSError(
+            domain: "MLXLocalEngine",
+            code: -10,
+            userInfo: [NSLocalizedDescriptionKey: "MLX non è incluso in questa build."]
+        )
+    }
+}
+#endif
