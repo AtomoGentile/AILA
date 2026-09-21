@@ -107,6 +107,7 @@ Thumbs.db
 .tmp/
 
 # === KMP Common ===
+.kotlin/
 .kotlin_build/
 .k2/
 
