@@ -65,8 +65,13 @@ internal object CircularClassificationPrompt {
         askForCalendarActions: Boolean = true
     ): String {
         val trimmed = truncatePdfTextForAi(pdfText, MAX_PDF_CHARS)
+        // L'esempio nel JSON deve mostrare UN valore vero, non l'elenco delle opzioni unite da
+        // "|": un modello piccolo (visto sia con Phi-4 mini sia con AICore/Gemini Nano) copia
+        // l'esempio quasi alla lettera quando non e' sicuro, e "RELEVANT|POTENTIAL|NOT_RELEVANT"
+        // preso alla lettera e' un valore di badge che non esiste — la classificazione falliva
+        // dichiarando il JSON "incompleto" (in realta' leggibile, ma con un badge non valido).
         val actionsField = if (askForCalendarActions) {
-            ",\"deadlines\":[{\"title\":\"\",\"dueDate\":\"YYYY-MM-DD\",\"time\":null,\"category\":\"$CALENDAR_CATEGORIES\"}]"
+            ",\"deadlines\":[{\"title\":\"\",\"dueDate\":\"YYYY-MM-DD\",\"time\":null,\"category\":\"AVVISO\"}]"
         } else {
             ""
         }
@@ -78,9 +83,10 @@ internal object CircularClassificationPrompt {
               se una data non c'e' scritta nel testo, non metterla.
             - Non mettere in "deadlines" la data di pubblicazione della circolare.
             - "dueDate" sempre in formato YYYY-MM-DD; "time" in HH:MM oppure null.
-            - "category" deve essere uno di: VERIFICA (test, scritti), INTERROGAZIONE (interrogazioni),
-              PAGAMENTO (pagamenti, versamenti), USCITA_DIDATTICA (gite, uscite), AVVISO (avvisi generici),
-              ALTRO (se non rientra in nessun'altro).
+            - "category" deve essere ESATTAMENTE UNA di queste parole, mai unite con "|": VERIFICA
+              (test, scritti), INTERROGAZIONE (interrogazioni), PAGAMENTO (pagamenti, versamenti),
+              USCITA_DIDATTICA (gite, uscite), AVVISO (avvisi generici), ALTRO (se non rientra in
+              nessun'altro). "AVVISO" nell'esempio sopra e' solo un esempio, non il valore fisso.
             - Lascia "deadlines" vuoto se non c'e' nessuna data da segnare.
             """.trimIndent()
         } else {
@@ -95,9 +101,12 @@ internal object CircularClassificationPrompt {
             $trimmed
 
             Rispondi con questo JSON:
-            {"badge":"RELEVANT|POTENTIAL|NOT_RELEVANT","summary":"5-6 righe in italiano"$actionsField}
+            {"badge":"POTENTIAL","summary":"5-6 righe in italiano"$actionsField}
 
             Regole:
+            - "badge" deve essere ESATTAMENTE UNA di queste tre parole, mai unite con "|":
+              RELEVANT, POTENTIAL, NOT_RELEVANT. "POTENTIAL" nell'esempio sopra e' solo un
+              esempio, non il valore fisso: sceglila in base al contenuto della circolare.
             - RELEVANT: obblighi, uscite o pagamenti per la sua classe o per tutti gli studenti.
             - POTENTIAL: attivita' facoltative, corsi, gare, borse di studio, open day.
             - NOT_RELEVANT: riservata ad altre classi, ai docenti o al personale ATA.
