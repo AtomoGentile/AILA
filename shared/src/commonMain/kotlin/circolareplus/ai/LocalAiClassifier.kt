@@ -110,8 +110,8 @@ class LocalAiClassifier(
         failure?.let { e ->
             return heuristicFallback(
                 circularNumber, circularTitle, pdfText,
-                "il modello ${model.displayName} non è riuscito a rispondere: " +
-                    "${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}"
+                "${model.displayName} non ha risposto: " +
+                    (e.message ?: e::class.simpleName ?: "nessun dettaglio")
             )
         }
         val answer = raw.orEmpty()

@@ -213,9 +213,10 @@ internal object AiCoreEngine {
             // sicurezza", una supposizione. Il testo "testo vuoto" e' usato da
             // LocalAiClassifier per decidere di riprovare con un prompt piu' corto.
             val finish = response.candidates.firstOrNull()?.finishReason
+            // Corto di proposito: il messaggio finisce in una riga di 140 caratteri (vedi
+            // HeuristicClassification.shortenReason) e il valore che serve e' proprio in fondo.
             throw IllegalStateException(
-                "AICore ha risposto con testo vuoto (finishReason=$finish, " +
-                    "prompt di ${prompt.length} caratteri)."
+                "testo vuoto da AICore (finish=$finish, ${prompt.length} car.)"
             )
         }
         return text
