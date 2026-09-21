@@ -19,8 +19,9 @@ import kotlinx.coroutines.flow.Flow
  * Implementazioni di piattaforma:
  * - **Android**: `android.graphics.pdf.PdfRenderer`, incluso nel sistema (API 21+, qui minSdk 26),
  *   quindi nessuna libreria in più nell'APK.
- * - **iOS**: non ancora implementato — vedi il file `.ios.kt`. Restituisce un Flow vuoto e la
- *   schermata ricade sul tasto "Apri esternamente", come prima.
+ * - **iOS**: PDFKit (`PDFDocument`/`PDFPage.drawWithBox`) su un contesto bitmap CoreGraphics — vedi
+ *   il file `.ios.kt`. Come su Android, un PDF illeggibile o protetto da password produce un Flow
+ *   vuoto e la schermata ricade sul tasto "Apri esternamente".
  *
  * [maxPages] a 12 tagliava a metà i documenti più lunghi (es. una circolare di 44 pagine si
  * fermava all'anteprima della dodicesima, senza alcun indizio che ne mancassero altre). Il

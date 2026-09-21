@@ -45,6 +45,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -52,6 +54,7 @@ import androidx.compose.ui.unit.sp
 import circolareplus.ai.LocalAiModel
 import circolareplus.ai.ModelDownloadState
 import circolareplus.design.AilaLogoTile
+import circolareplus.design.iosSafeDrawingPadding
 import circolareplus.design.AilaPrimaryButton
 import circolareplus.design.AilaSecondaryButton
 import circolareplus.design.AppIcons
@@ -85,7 +88,9 @@ class OnboardingAiSetup(
     val saveApiKey: (String) -> Unit,
     val downloadModel: suspend (LocalAiModel, (Long, Long) -> Unit) -> ModelDownloadState,
     /** Sceglie il modello e mette l'AI locale come provider principale. */
-    val activateModel: (LocalAiModel) -> Unit
+    val activateModel: (LocalAiModel) -> Unit,
+    /** Ferma il download in corso (Android: annulla il lavoro in background, non solo l'ascolto). */
+    val cancelDownload: (LocalAiModel) -> Unit = {}
 )
 
 /**
@@ -211,6 +216,7 @@ fun OnboardingScreen(
                     onDragCancel = { dragAccumulated = 0f }
                 ) { _, delta -> dragAccumulated += delta }
             }
+            .iosSafeDrawingPadding()
             .padding(AppTheme.Space24)
     ) {
         Row(
@@ -229,6 +235,22 @@ fun OnboardingScreen(
                     color = AppTheme.PrimaryBlue
                 )
             }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+            // "Indietro" visibile: prima si tornava al passo precedente solo col gesto/tasto di
+            // sistema o trascinando, e dal passo AI il trascinamento e' disattivato di proposito
+            // (su iOS il gesto di sistema non c'e', quindi non si poteva tornare al tour).
+            if (stepIndex > 0) {
+                Text(
+                    text = "Indietro",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = AppTheme.TextMuted,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(enabled = !aiBusy) { stepIndex-- }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+            }
             if (!isLast) {
                 Text(
                     text = "Salta",
@@ -240,6 +262,7 @@ fun OnboardingScreen(
                         .clickable(enabled = !aiBusy) { onFinish() }
                         .padding(horizontal = 12.dp, vertical = 8.dp)
                 )
+            }
             }
         }
 
@@ -504,6 +527,10 @@ private fun AiSetupStep(
             },
             placeholder = { Text("AIzaSy…", fontSize = 13.sp) },
             singleLine = true,
+            keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.None,
+                autoCorrectEnabled = false
+            ),
             shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
             colors = ailaFieldColors(),
             modifier = Modifier.fillMaxWidth()
@@ -639,6 +666,7 @@ private fun AiSetupStep(
                     text = "Annulla download",
                     onClick = {
                         downloadJob?.cancel()
+                        setup.cancelDownload(model)
                         isDownloading = false
                         modelStatus = "Download annullato. Quello che era già arrivato resta, " +
                             "e riparte da lì se ci riprovi."

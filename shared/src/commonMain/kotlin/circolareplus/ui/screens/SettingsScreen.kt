@@ -13,6 +13,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -229,6 +231,10 @@ fun SettingsScreen(
                             },
                             placeholder = { Text("AIzaSy…", fontSize = 13.sp) },
                             singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                capitalization = KeyboardCapitalization.None,
+                                autoCorrectEnabled = false
+            ),
                             shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
                             colors = ailaFieldColors(),
                             modifier = Modifier.fillMaxWidth()
@@ -360,111 +366,86 @@ fun SettingsScreen(
 
                             Spacer(modifier = Modifier.height(AppTheme.Space12))
 
-                            // Su iOS: solo Apple Intelligence (modello di sistema)
-                            // Su Android: elenco di 5 modelli scaricabili
-                            if (circolareplus.platform.isIos()) {
-                                // --- iOS: Apple Intelligence è sempre "installato" se il dispositivo lo supporta ---
-                                val aiAvailable = circolareplus.ai.isOnDeviceAiAvailable()
-                                val statusColor = if (aiAvailable) AppTheme.TintGreenInk else AppTheme.TextMuted
-                                val statusText = if (aiAvailable) {
-                                    "✓ Apple Intelligence disponibile"
-                                } else {
-                                    "✗ Apple Intelligence non disponibile"
-                                }
-                                Text(
-                                    text = statusText,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = statusColor
-                                )
-                                if (!aiAvailable) {
-                                    Spacer(modifier = Modifier.height(AppTheme.Space8))
-                                    Text(
-                                        text = circolareplus.ai.onDeviceAiUnavailableReason() ?: "Non disponibile su questo dispositivo.",
-                                        fontSize = 11.sp,
-                                        color = AppTheme.TextMuted,
-                                        lineHeight = 15.sp
-                                    )
-                                }
-                            } else {
-                                // --- Android: elenco di modelli scaricabili ---
-                                // Solo il modello scelto, con la possibilità di aprire l'elenco
-                                // completo: mostrare cinque schede tutte insieme renderebbe la
-                                // pagina illeggibile, e nella pratica si sceglie una volta sola.
-                                modelsRevision // rilegge lo stato su disco dopo download/eliminazione
-                                val shownModels = if (showAllModels) localModels else listOfNotNull(activeModel)
-                                shownModels.forEach { model ->
-                                    LocalModelRow(
-                                        model = model,
-                                        isSelected = model.id == activeModel?.id,
-                                        isInstalled = isLocalModelInstalled(model),
-                                        isRecommended = model.id == localModels.firstOrNull()?.id,
-                                        fits = model.fitsComfortablyIn(deviceRamMb),
-                                        supportsActions = model.supportsActions,
-                                        onClick = {
-                                            if (model.id != activeModel?.id) {
-                                                selectedModelIdState = model.id
-                                                onSelectLocalModel(model)
-                                                downloadStatus = null
-                                                downloadedBytes = 0L
-                                                downloadTotalBytes = 0L
-                                            }
-                                            showAllModels = false
+                            // Stesso elenco su entrambe le piattaforme. Su iOS il catalogo contiene solo
+                            // Apple Intelligence (modello di sistema, nessun download), su Android i modelli
+                            // scaricabili piu' AICore: la UI non deve distinguere, lo fa il catalogo.
+                            // --- Android: elenco di modelli scaricabili ---
+                            // Solo il modello scelto, con la possibilità di aprire l'elenco
+                            // completo: mostrare cinque schede tutte insieme renderebbe la
+                            // pagina illeggibile, e nella pratica si sceglie una volta sola.
+                            modelsRevision // rilegge lo stato su disco dopo download/eliminazione
+                            val shownModels = if (showAllModels) localModels else listOfNotNull(activeModel)
+                            shownModels.forEach { model ->
+                                LocalModelRow(
+                                    model = model,
+                                    isSelected = model.id == activeModel?.id,
+                                    isInstalled = isLocalModelInstalled(model),
+                                    isRecommended = model.id == localModels.firstOrNull()?.id,
+                                    fits = model.fitsComfortablyIn(deviceRamMb),
+                                    supportsActions = model.supportsActions,
+                                    onClick = {
+                                        if (model.id != activeModel?.id) {
+                                            selectedModelIdState = model.id
+                                            onSelectLocalModel(model)
+                                            downloadStatus = null
+                                            downloadedBytes = 0L
+                                            downloadTotalBytes = 0L
                                         }
-                                    )
-                                    Spacer(modifier = Modifier.height(AppTheme.Space8))
-                                }
-
-                                if (orphanModelBytes > 0 && !orphansCleared) {
-                                    Spacer(modifier = Modifier.height(AppTheme.Space8))
-                                    Text(
-                                        text = "Ci sono ${formatBytes(orphanModelBytes)} di modelli " +
-                                            "non piu' usati. Libera spazio",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = AppTheme.TintRedInk,
-                                        lineHeight = 16.sp,
-                                        modifier = Modifier
-                                            .clickable {
-                                                val freed = onDeleteOrphanModels()
-                                                orphansCleared = true
-                                                downloadStatus = "Liberati ${formatBytes(freed)}."
-                                            }
-                                            .padding(vertical = AppTheme.Space4)
-                                    )
-                                }
-
-                                if (localModels.size > 1) {
-                                    Text(
-                                        text = if (showAllModels) "Chiudi l'elenco" else "Scegli un altro modello",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = AppTheme.PrimaryBlue,
-                                        modifier = Modifier
-                                            .clickable { showAllModels = !showAllModels }
-                                            .padding(vertical = AppTheme.Space4)
-                                    )
-                                }
+                                        showAllModels = false
+                                    }
+                                )
+                                Spacer(modifier = Modifier.height(AppTheme.Space8))
                             }
 
-                            if (!circolareplus.platform.isIos()) {
-                                if (isDownloading) {
-                                    Spacer(modifier = Modifier.height(AppTheme.Space12))
-                                    DownloadProgressBar(
-                                        downloadedBytes = downloadedBytes,
-                                        totalBytes = downloadTotalBytes
-                                    )
-                                }
+                            if (orphanModelBytes > 0 && !orphansCleared) {
+                                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                                Text(
+                                    text = "Ci sono ${formatBytes(orphanModelBytes)} di modelli " +
+                                        "non piu' usati. Libera spazio",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AppTheme.TintRedInk,
+                                    lineHeight = 16.sp,
+                                    modifier = Modifier
+                                        .clickable {
+                                            val freed = onDeleteOrphanModels()
+                                            orphansCleared = true
+                                            downloadStatus = "Liberati ${formatBytes(freed)}."
+                                        }
+                                        .padding(vertical = AppTheme.Space4)
+                                )
+                            }
 
-                                if (downloadStatus != null) {
-                                    Spacer(modifier = Modifier.height(AppTheme.Space8))
-                                    Text(
-                                        text = downloadStatus!!,
-                                        fontSize = 12.sp,
-                                        color = AppTheme.TextMuted,
-                                        lineHeight = 17.sp
-                                    )
-                                }
+                            if (localModels.size > 1) {
+                                Text(
+                                    text = if (showAllModels) "Chiudi l'elenco" else "Scegli un altro modello",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AppTheme.PrimaryBlue,
+                                    modifier = Modifier
+                                        .clickable { showAllModels = !showAllModels }
+                                        .padding(vertical = AppTheme.Space4)
+                                )
+                            }
+
+                            if (isDownloading) {
+                                Spacer(modifier = Modifier.height(AppTheme.Space12))
+                                DownloadProgressBar(
+                                    downloadedBytes = downloadedBytes,
+                                    totalBytes = downloadTotalBytes
+                                )
+                            }
+
+                            // Esito di "Prova il modello", download, eliminazione: prima su iOS era
+                            // nascosto, quindi il tasto "Prova il modello" non mostrava mai nulla.
+                            if (downloadStatus != null) {
+                                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                                Text(
+                                    text = downloadStatus!!,
+                                    fontSize = 12.sp,
+                                    color = AppTheme.TextMuted,
+                                    lineHeight = 17.sp
+                                )
                             }
 
                             Spacer(modifier = Modifier.height(AppTheme.Space12))
@@ -490,21 +471,27 @@ fun SettingsScreen(
                                         }
                                     )
                                     Spacer(modifier = Modifier.weight(1f))
-                                    AilaSecondaryButton(
-                                        text = "Elimina",
-                                        onClick = {
-                                            activeModel?.let(onDeleteLocalModel)
-                                            downloadStatus = "Modello eliminato: hai liberato " +
-                                                "${activeModel?.readableSize ?: ""}."
-                                            modelsRevision++
-                                        }
-                                    )
+                                    // I modelli di sistema (Apple Intelligence, AICore) non sono file
+                                    // dell'app: non c'e' niente da eliminare, e il pulsante dichiarava
+                                    // "hai liberato 0 MB" senza fare nulla.
+                                    if (activeModel?.isSystemModel != true) {
+                                        AilaSecondaryButton(
+                                            text = "Elimina",
+                                            onClick = {
+                                                activeModel?.let(onDeleteLocalModel)
+                                                downloadStatus = "Modello eliminato: hai liberato " +
+                                                    "${activeModel?.readableSize ?: ""}."
+                                                modelsRevision++
+                                            }
+                                        )
+                                    }
                                 } else {
                                     Spacer(modifier = Modifier.weight(1f))
                                     AilaPrimaryButton(
                                         text = when {
                                             isDownloading -> "Scarico…"
                                             activeModel == null -> "Scarica"
+                                            activeModel.isSystemModel -> "Attiva"
                                             else -> "Scarica (${activeModel.readableSize})"
                                         },
                                         enabled = !isDownloading && activeModel != null,
@@ -528,7 +515,7 @@ fun SettingsScreen(
                                 }
                             }
 
-                            if (!installed) {
+                            if (!installed && activeModel?.isSystemModel != true) {
                                 Spacer(modifier = Modifier.height(AppTheme.Space8))
                                 Text(
                                     text = "Scarica con il Wi-Fi. Se il download si interrompe " +

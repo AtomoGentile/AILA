@@ -35,6 +35,8 @@ import circolareplus.data.remote.dto.RatingEntryDto
 import circolareplus.data.repository.SessionRestore
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
+import circolareplus.design.iosImePadding
+import circolareplus.design.iosSafeDrawingPadding
 // Estensione (non richiamabile per nome qualificato come le altre composable di
 // circolareplus.design usate in questo file): va importata per poterla usare come Modifier.ailaPressable(...).
 import circolareplus.design.ailaPressable
@@ -459,7 +461,8 @@ fun MainAppShell(
                     // Il motore tiene in memoria l'ultimo modello caricato: si scarica per
                     // essere certi che la prima analisi usi quello appena scelto.
                     AppContainer.localLlm.unload()
-                }
+                },
+                cancelDownload = { model -> AppContainer.localModelStore.cancelDownload(model) }
             )
         }
         OnboardingScreen(
@@ -1520,7 +1523,11 @@ fun MainAppShell(
         Surface(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
+                .padding(innerPadding)
+                // Tastiera (solo iOS, vedi PlatformInsets.kt): l'altezza di innerPadding include
+                // gia' la barra in basso, quindi la si scala prima di applicare il margine.
+                .consumeWindowInsets(innerPadding)
+                .iosImePadding(),
             color = AppTheme.BackgroundLight
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -3023,6 +3030,7 @@ private fun AddCalendarEventDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .iosImePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = AppTheme.Space20)
                 .padding(bottom = AppTheme.Space32)
@@ -3421,6 +3429,7 @@ private fun EventDetailDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .iosImePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = AppTheme.Space20)
                 .padding(bottom = AppTheme.Space32)
@@ -3680,6 +3689,7 @@ private fun CreatePollDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .iosImePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = AppTheme.Space20)
                 .padding(bottom = AppTheme.Space32)
@@ -3837,6 +3847,7 @@ private fun AddProposalDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .iosImePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = AppTheme.Space20)
                 .padding(bottom = AppTheme.Space32)
@@ -3972,7 +3983,7 @@ private fun OfflineGateScreen(
     onLogout: () -> Unit
 ) {
     Box(
-        modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight),
+        modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight).iosSafeDrawingPadding(),
         contentAlignment = Alignment.Center
     ) {
         Column(

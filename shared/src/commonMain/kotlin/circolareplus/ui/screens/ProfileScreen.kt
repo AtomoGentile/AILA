@@ -292,6 +292,11 @@ private fun DeleteAccountDialog(
                     singleLine = true,
                     enabled = !isDeleting,
                     visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None,
+                        autoCorrectEnabled = false,
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Password
+                    ),
                     shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
                     colors = circolareplus.design.ailaFieldColors(),
                     modifier = Modifier.fillMaxWidth()

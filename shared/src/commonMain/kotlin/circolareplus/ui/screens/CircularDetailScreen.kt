@@ -27,6 +27,7 @@ import circolareplus.design.AilaSecondaryButton
 import circolareplus.design.ailaAppear
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
+import circolareplus.design.iosSafeDrawingPadding
 import circolareplus.domain.model.Circular
 import circolareplus.domain.model.CircularAiClassification
 import circolareplus.domain.model.CircularAttachment
@@ -41,8 +42,8 @@ import kotlinx.coroutines.launch
  *
  * Prima qui c'era solo un segnaposto ("Documento PDF ufficiale") e un tasto che apriva il file nel
  * visualizzatore di sistema: per leggere una circolare si usciva da AILA. Ora le pagine vengono
- * disegnate e scorrono in linea; il tasto per aprirla fuori resta come alternativa (ed è l'unica
- * strada su iOS, dove il rendering non è ancora implementato — vedi `PdfPageRenderer.ios.kt`).
+ * disegnate e scorrono in linea (su iOS con PDFKit, vedi `PdfPageRenderer.ios.kt`); il tasto per
+ * aprirla fuori resta come alternativa, ed è l'unica strada se il PDF è protetto o illeggibile.
  */
 @Composable
 fun CircularDetailScreen(
@@ -151,6 +152,7 @@ fun CircularDetailScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(AppTheme.BackgroundLight)
+            .iosSafeDrawingPadding()
     ) {
         AilaBackBar(
             title = "Circolare n. ${circular.number}",
@@ -441,7 +443,7 @@ fun CircularDetailScreen(
                 }
             } else {
                 item {
-                    // Nessuna anteprima: su iOS sempre, su Android se il PDF è protetto o corrotto.
+                    // Nessuna anteprima: PDF protetto da password o corrotto (su entrambe le piattaforme).
                     AilaCard {
                         Column(
                             modifier = Modifier.fillMaxWidth().padding(AppTheme.Space24),
