@@ -83,18 +83,29 @@ class LocalAiClassifier(
                         CircularClassificationPrompt.extractJsonObject(partial) != null
                     },
                     systemPrompt = CircularClassificationPrompt.SYSTEM_PROMPT,
-                    userPrompt = CircularClassificationPrompt.buildUserPrompt(
-                        circularNumber = circularNumber,
-                        circularTitle = circularTitle,
-                        pdfText = pdfText,
-                        studentContext = studentContext,
-                        // Un modello non addestrato al tool calling, se gli si chiede anche di
-                        // produrre azioni per il calendario, tende a perdere il filo e a
-                        // rovinare pure il riassunto: a TinyLlama si chiede soltanto di
-                        // classificare.
-                        askForCalendarActions = model.supportsActions,
-                        maxPdfChars = pdfLimit
-                    )
+                    userPrompt = if (attempt == 0) {
+                        CircularClassificationPrompt.buildUserPrompt(
+                            circularNumber = circularNumber,
+                            circularTitle = circularTitle,
+                            pdfText = pdfText,
+                            studentContext = studentContext,
+                            // Un modello non addestrato al tool calling, se gli si chiede anche
+                            // di produrre azioni per il calendario, tende a perdere il filo e a
+                            // rovinare pure il riassunto: a TinyLlama si chiede soltanto di
+                            // classificare.
+                            askForCalendarActions = model.supportsActions,
+                            maxPdfChars = pdfLimit
+                        )
+                    } else {
+                        // Secondo giro: non solo meno testo, anche un prompt di forma diversa.
+                        CircularClassificationPrompt.buildCompactUserPrompt(
+                            circularNumber = circularNumber,
+                            circularTitle = circularTitle,
+                            pdfText = pdfText,
+                            askForCalendarActions = model.supportsActions,
+                            maxPdfChars = pdfLimit
+                        )
+                    }
                 )
                 failure = null
                 break

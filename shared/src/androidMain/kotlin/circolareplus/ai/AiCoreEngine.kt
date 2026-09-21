@@ -5,9 +5,12 @@ import circolareplus.platform.AndroidAppContext
 import com.google.ai.edge.aicore.DownloadCallback
 import com.google.ai.edge.aicore.DownloadConfig
 import com.google.ai.edge.aicore.GenerationConfig
+import com.google.ai.edge.aicore.GenerateContentResponse
 import com.google.ai.edge.aicore.GenerativeAIException
 import com.google.ai.edge.aicore.GenerativeModel
+import com.google.ai.edge.aicore.TextPart
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.Executors
 
@@ -205,20 +208,43 @@ internal object AiCoreEngine {
                 throw IllegalStateException("${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}", e)
             }
         } ?: throw IllegalStateException("AICore non ha risposto entro ${timeoutMillis / 1000} secondi.")
-        val text = response.text
-        if (text.isNullOrBlank()) {
-            // Il motivo sta in `finishReason` (STOP = 1 e MAX_TOKENS = 2 sono le uniche
-            // costanti pubbliche; qualunque altro valore, o null, non e' un normale fine
-            // risposta) e va nel messaggio: prima l'errore diceva solo "possibile filtro di
-            // sicurezza", una supposizione. Il testo "testo vuoto" e' usato da
-            // LocalAiClassifier per decidere di riprovare con un prompt piu' corto.
-            val finish = response.candidates.firstOrNull()?.finishReason
-            // Corto di proposito: il messaggio finisce in una riga di 140 caratteri (vedi
-            // HeuristicClassification.shortenReason) e il valore che serve e' proprio in fondo.
-            throw IllegalStateException(
-                "testo vuoto da AICore (finish=$finish, ${prompt.length} car.)"
-            )
+
+        // `response.text` e' solo la PRIMA parte di testo: se il modello risponde con piu' parti,
+        // o con una prima parte vuota, sembra una risposta vuota anche quando non lo e'.
+        val direct = textOf(response)
+        if (direct.isNotBlank()) return direct
+
+        // Ultimo tentativo: la stessa richiesta in streaming, che passa da un altro percorso del
+        // servizio di sistema. Costa una seconda generazione solo quando la prima e' vuota.
+        val streamed = withTimeoutOrNull(timeoutMillis) {
+            try {
+                activeModel.generateContentStream(prompt).toList().joinToString("") { textOf(it) }
+            } catch (e: GenerativeAIException) {
+                ""
+            }
+        }.orEmpty()
+        if (streamed.isNotBlank()) return streamed
+
+        // finishReason: 0 = STOP (il modello ha chiuso da solo, senza scrivere niente), 1 =
+        // MAX_TOKENS. Verificato sulle costanti dell'SDK: un commento precedente le dava sbagliate
+        // (1 e 2). Corto di proposito: il messaggio finisce in una riga di 140 caratteri (vedi
+        // HeuristicClassification.shortenReason) e i valori che servono sono in fondo. "testo vuoto"
+        // e' il segnale con cui LocalAiClassifier decide di riprovare con un prompt diverso.
+        val candidate = response.candidates.firstOrNull()
+        val finish = when (val reason = candidate?.finishReason) {
+            0 -> "STOP"
+            1 -> "MAX_TOKENS"
+            else -> reason.toString()
         }
-        return text
+        throw IllegalStateException(
+            "testo vuoto da AICore (finish=$finish, parti=${candidate?.content?.parts?.size}, ${prompt.length} car.)"
+        )
     }
+
+    private fun textOf(response: GenerateContentResponse): String =
+        response.text?.takeIf { it.isNotBlank() }
+            ?: response.candidates
+                .flatMap { it.content.parts }
+                .filterIsInstance<TextPart>()
+                .joinToString("") { it.text }
 }

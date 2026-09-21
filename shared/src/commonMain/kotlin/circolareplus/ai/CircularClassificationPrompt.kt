@@ -129,6 +129,45 @@ internal object CircularClassificationPrompt {
     }
 
     /**
+     * Versione minima del prompt, per il secondo tentativo dopo che il modello ha rifiutato o non
+     * ha saputo rispondere al prompt completo (AICore: `finish=STOP` con testo vuoto).
+     *
+     * Istruzioni brevi in testa, documento, e una riga finale che introduce la risposta: il prompt
+     * completo finisce con un elenco di regole e nessun invito a rispondere, ed e' il punto in cui
+     * i modelli piccoli e Gemini Nano tendono a chiudere subito. E' un'ipotesi, non una certezza:
+     * per questo il tentativo cambia forma oltre che lunghezza.
+     */
+    fun buildCompactUserPrompt(
+        circularNumber: Int,
+        circularTitle: String,
+        pdfText: String,
+        askForCalendarActions: Boolean,
+        maxPdfChars: Int
+    ): String {
+        val trimmed = truncatePdfTextForAi(cleanPdfTextForAi(pdfText), maxPdfChars)
+        val now = today()
+        val deadlinesRule = if (askForCalendarActions) {
+            """
+            - "deadlines": elenco di date da segnare in agenda, ognuna {"title":"...","dueDate":"AAAA-MM-GG","time":"HH:MM" oppure null,"category":"VERIFICA, INTERROGAZIONE, PAGAMENTO, USCITA_DIDATTICA, AVVISO o ALTRO"}; vuoto se non ce ne sono
+            """.trimIndent()
+        } else {
+            ""
+        }
+        return """
+            Leggi questa circolare scolastica e rispondi con un oggetto JSON con questi campi:
+            - "badge": una sola parola tra RELEVANT (riguarda gli studenti), POTENTIAL (attivita' facoltativa), NOT_RELEVANT (per docenti o altre classi)
+            - "summary": riassunto in italiano di 3-4 righe con destinatari, date (copiate come scritte nel testo) e cosa deve fare lo studente
+            $deadlinesRule
+            Oggi e' ${now.toIso()}.
+
+            CIRCOLARE N. $circularNumber: $circularTitle
+            $trimmed
+
+            Risposta JSON:
+        """.trimIndent()
+    }
+
+    /**
      * Ripulisce l'output di un modello piccolo prima di provare a leggerlo come JSON.
      *
      * I modelli locali sporcano quasi sempre la risposta: la incapsulano in un blocco ```json,
