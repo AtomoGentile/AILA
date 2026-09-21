@@ -141,3 +141,19 @@ fun formatDayMonth(isoDateTime: String): String {
     val month = ITALIAN_MONTHS.getOrNull(date.month)?.lowercase() ?: return ""
     return "${date.day} $month"
 }
+
+/**
+ * "2026-03-12" -> "giovedì 12 marzo". Stringa originale se la data non è in formato ISO.
+ *
+ * Serve a passare al modello dell'assistente ([circolareplus.ai.assistant.AssistantContext])
+ * date gia' pronte da citare, invece di lasciargli fare la conversione da AAAA-MM-GG a italiano
+ * leggibile: un modello piccolo la sbaglia spesso (es. "2026-09-20" diventa "209-23"), un
+ * calcolo di stringhe no.
+ */
+fun formatItalianDateWithWeekday(iso: String): String {
+    val datePart = iso.take(10)
+    val date = parseIsoDate(datePart) ?: return iso
+    val weekday = ITALIAN_WEEKDAYS.getOrNull(weekdayOf(date))?.lowercase() ?: return iso
+    val month = ITALIAN_MONTHS.getOrNull(date.month)?.lowercase() ?: return iso
+    return "$weekday ${date.day} $month"
+}
