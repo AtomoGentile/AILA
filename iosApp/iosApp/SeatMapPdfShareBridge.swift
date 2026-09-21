@@ -10,9 +10,13 @@ import shared
  * stessi margini, stessa barra blu) — e apre subito lo share sheet di sistema tramite
  * UIActivityViewController.
  *
- * `desks` arriva già "appiattito" da Kotlin (SeatMapPdfExporter.ios.kt): niente row/col, solo
- * un'etichetta e i nomi da mostrare, nell'ordine in cui vanno disegnati. Per il layout si
- * assume una griglia fissa a 3 colonne (DEFAULT_DESKS_PER_ROW lato Kotlin).
+ * `desks` arriva già "appiattito" da Kotlin (SeatMapPdfExporter.ios.kt): un'etichetta, i nomi da
+ * mostrare e la posizione (row/column, da 0) di ogni banco. Il layout e' quello di Android: colonne
+ * e righe ricavate dalla posizione massima, celle senza banco lasciate vuote.
+ *
+ * Gli errori (file non scrivibile, nessun view controller) non si perdono in un `print`: il
+ * metodo ritorna il messaggio e Kotlin lo trasforma in eccezione, cosi' l'utente vede
+ * "Impossibile generare il PDF" come su Android.
  */
 class SeatMapPdfShareBridgeImpl: SeatMapPdfShareBridge {
 
@@ -20,7 +24,6 @@ class SeatMapPdfShareBridgeImpl: SeatMapPdfShareBridge {
     private let pageWidth: CGFloat = 595
     private let pageHeight: CGFloat = 842
     private let margin: CGFloat = 36
-    private let desksPerRow = 3
 
     // Palette allineata al design system AILA (vedi AppTheme.kt: PrimaryBlue, HeroGradient*,
     // TextDark/Muted, Hairline) e alla stessa costante usata da SeatMapPdfExporter.android.kt.
@@ -57,7 +60,8 @@ class SeatMapPdfShareBridgeImpl: SeatMapPdfShareBridge {
         ctx.restoreGState()
     }
 
-    func presentSeatMapPdf(className: String, generatedOnLabel: String, desks: [SeatMapPdfDesk]) {
+    /// Ritorna nil se lo share sheet e' stato presentato, altrimenti il motivo del fallimento.
+    func presentSeatMapPdf(className: String, generatedOnLabel: String, desks: [SeatMapPdfDesk]) -> String? {
         let data = renderPdf(desks: desks)
 
         let fileName = "mappa_posti_\(Int(Date().timeIntervalSince1970)).pdf"
@@ -67,10 +71,10 @@ class SeatMapPdfShareBridgeImpl: SeatMapPdfShareBridge {
             try data.write(to: fileURL)
         } catch {
             print("SeatMapPdfShareBridge: impossibile scrivere il PDF temporaneo: \(error)")
-            return
+            return "impossibile salvare il file temporaneo (\(error.localizedDescription))"
         }
 
-        presentShareSheet(for: fileURL)
+        return presentShareSheet(for: fileURL)
     }
 
     // MARK: - Disegno PDF
@@ -166,8 +170,11 @@ class SeatMapPdfShareBridgeImpl: SeatMapPdfShareBridge {
     private func drawDesks(_ desks: [SeatMapPdfDesk], in ctx: CGContext, top: CGFloat) {
         guard !desks.isEmpty else { return }
 
-        let columns = desksPerRow
-        let rows = Int(ceil(Double(desks.count) / Double(columns)))
+        // Come su Android: la griglia e' larga quanto la colonna piu' a destra + 1 e alta quanto la
+        // fila piu' in fondo + 1, e ogni banco va nella sua cella (row/column reali, non l'indice
+        // nella lista), lasciando vuote le celle senza banco.
+        let columns = max((desks.map { Int($0.column) }.max() ?? 0) + 1, 1)
+        let rows = max((desks.map { Int($0.row) }.max() ?? 0) + 1, 1)
 
         let gutter: CGFloat = 8
         let gridWidth = pageWidth - 2 * margin
@@ -190,9 +197,9 @@ class SeatMapPdfShareBridgeImpl: SeatMapPdfShareBridge {
             .foregroundColor: colorTextDark
         ]
 
-        for (index, desk) in desks.enumerated() {
-            let row = index / columns
-            let col = index % columns
+        for desk in desks {
+            let row = max(Int(desk.row), 0)
+            let col = max(Int(desk.column), 0)
             let left = margin + CGFloat(col) * (deskWidth + gutter)
             let boxTop = top + CGFloat(row) * (deskHeight + gutter)
             let rect = CGRect(x: left, y: boxTop, width: deskWidth, height: deskHeight)
@@ -251,10 +258,11 @@ class SeatMapPdfShareBridgeImpl: SeatMapPdfShareBridge {
 
     // MARK: - Share sheet
 
-    private func presentShareSheet(for fileURL: URL) {
+    /// Ritorna nil se la presentazione e' stata avviata, altrimenti il motivo del fallimento.
+    private func presentShareSheet(for fileURL: URL) -> String? {
         guard let rootViewController = topMostViewController() else {
             print("SeatMapPdfShareBridge: nessun view controller su cui presentare lo share sheet.")
-            return
+            return "nessuna schermata su cui aprire la condivisione"
         }
 
         let activityVC = UIActivityViewController(activityItems: [fileURL], applicationActivities: nil)
@@ -272,6 +280,7 @@ class SeatMapPdfShareBridgeImpl: SeatMapPdfShareBridge {
         DispatchQueue.main.async {
             rootViewController.present(activityVC, animated: true)
         }
+        return nil
     }
 
     /// Trova il view controller "più in alto" attualmente presentato, attraversando le scene

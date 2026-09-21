@@ -17,7 +17,15 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UILaunchScreen</key>
-	<dict/>
+	<dict>
+		<!-- Come lo splash Android (windowSplashScreenBackground #0A1330 + marchio AILA): senza
+		     queste chiavi la partenza era un rettangolo bianco che poi lampeggiava nel tema scuro.
+		     LaunchBackground e LaunchLogo sono in Assets.xcassets. -->
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+		<key>UIImageName</key>
+		<string>LaunchLogo</string>
+	</dict>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

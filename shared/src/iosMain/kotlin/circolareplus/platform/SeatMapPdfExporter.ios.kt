@@ -14,7 +14,7 @@ import kotlinx.coroutines.withContext
  * disponibile su questo target, e Date() lato Swift è semplicissimo da formattare.
  *
  * presentSeatMapPdf deve girare sul thread principale (UIActivityViewController lo richiede),
- * da qui il withContext(Dispatchers.Main).
+ * da qui il withContext(Dispatchers.Main). Ritorna un messaggio d'errore (o null se ok): vedi sotto.
  */
 actual suspend fun exportSeatMapPdf(
     assignments: List<DeskAssignment>,
@@ -30,11 +30,17 @@ actual suspend fun exportSeatMapPdf(
                 .map { id -> studentsMap[id]?.let { "${it.firstName} ${it.lastName}" } ?: "Vuoto" }
             SeatMapPdfDesk(
                 label = "F${assignment.row + 1} · C${assignment.column + 1}",
+                row = assignment.row,
+                column = assignment.column,
                 names = names
             )
         }
 
-    withContext(Dispatchers.Main) {
+    val error = withContext(Dispatchers.Main) {
         bridge.presentSeatMapPdf(className = "", generatedOnLabel = "", desks = desks)
     }
+    // Il bridge segnala il fallimento con un messaggio invece di lanciare (le eccezioni Kotlin non
+    // attraversano Swift): qui diventa l'eccezione che MainAppShell mostra come "Impossibile
+    // generare il PDF: ...", come per Android.
+    if (error != null) throw IllegalStateException(error)
 }

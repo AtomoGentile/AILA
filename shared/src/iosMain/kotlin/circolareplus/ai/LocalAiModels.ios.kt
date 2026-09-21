@@ -4,6 +4,13 @@ package circolareplus.ai
  * Catalogo iOS: Apple Intelligence (Tier 1, di sistema) più due modelli MLX (Tier 2, da
  * scaricare) per gli iPhone senza Apple Intelligence (11-14, 15 base).
  *
+ * **Al momento l'utente vede SOLO Apple Intelligence.** Le voci MLX restano nel codice ma sono
+ * nascoste da [all], [byId], [selectableFor] e [knownFileNames]: l'integrazione MLX Swift non e'
+ * mai stata compilata né provata su un Mac (vedi `MLXLocalEngine.swift`), e mostrare un modello
+ * che poi non parte darebbe solo un errore all'utente. Per riattivarle una volta verificata la
+ * build: aggiungere [MLX_MODELS] a [all] (`listOf(APPLE_INTELLIGENCE) + MLX_MODELS`); il resto
+ * (byId, selectableFor, knownFileNames, LocalModelStore) le raccoglie da li'.
+ *
  * Apple Intelligence: nessun download, disponibile su iPhone 15 Pro+ con iOS 26+.
  * `LocalModelStore.download()` su iOS ritorna immediatamente "Installed"/"Failed" per questa
  * voce, cosi' il pulsante "Scarica" della UI (pensata per Android) funziona come "Attiva"
@@ -71,14 +78,19 @@ actual object LocalAiCatalog {
             "senza Apple Intelligence. Scritta ma mai compilata in questa build (serve un Mac)."
     )
 
-    actual val all: List<LocalAiModel> = listOf(APPLE_INTELLIGENCE, PHI_35_MINI_MLX, GEMMA_2B_MLX)
+    /** Modelli MLX, mantenuti ma non esposti finche' l'integrazione non e' verificata (vedi sopra). */
+    val MLX_MODELS: List<LocalAiModel> = listOf(PHI_35_MINI_MLX, GEMMA_2B_MLX)
+
+    // Solo Apple Intelligence: `all` e' l'unica fonte per byId/selectableFor/knownFileNames e per
+    // LocalModelStore.installedModels, quindi escludere qui MLX lo nasconde ovunque in un colpo solo.
+    actual val all: List<LocalAiModel> = listOf(APPLE_INTELLIGENCE)
 
     actual fun byId(id: String?): LocalAiModel? = all.firstOrNull { it.id == id }
 
     // Apple Intelligence resta sempre la voce "consigliata": è di sistema, gratuita in termini di
-    // spazio, e migliore in qualità quando disponibile. Le due voci MLX compaiono comunque in
-    // selectableFor per chi non ce l'ha — la UI Impostazioni distingue "consigliato" da
-    // "disponibile davvero" chiamando LocalModelStore, non recommendedFor.
+    // spazio, e migliore in qualità quando disponibile. Con MLX riattivato (vedi commento in cima)
+    // le due voci MLX compaiono in selectableFor per chi non ce l'ha — la UI Impostazioni
+    // distingue "consigliato" da "disponibile davvero" chiamando LocalModelStore, non recommendedFor.
     actual fun recommendedFor(tier: DeviceTier): LocalAiModel = APPLE_INTELLIGENCE
 
     actual fun selectableFor(totalRamMb: Int): List<LocalAiModel> = all
