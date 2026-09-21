@@ -22,20 +22,30 @@ data class DeskAssignment(
     // Terzo posto per i "banchi da trio" (SeatMapOptimizer.optimize(..., seatsPerDesk = 3)).
     // Default null: i banchi da coppia esistenti (storico, mappe già pubblicate) restano
     // validi senza bisogno di migrazione, sia lato client sia nel JSON già salvato sul server.
-    val studentCId: String? = null
+    val studentCId: String? = null,
+    // Capienza del banco (2 = coppia, 3 = trio), salvata nel JSON pubblicato. Serve perché un
+    // banco da trio può avere meno di tre occupanti (classe piccola, coppie vietate): dedurre
+    // "trio" da studentCId != null faceva sparire il terzo posto in una mappa già pubblicata.
+    // Default 2: le mappe pubblicate prima di questo campo restano banchi da coppia.
+    val seats: Int = 2
 )
 
 data class SeatMapProposal(
     val id: String,
     val assignments: List<DeskAssignment>,
     val totalScore: Double,
-    val satisfactionPercentage: Double,
+    // null = nessun voto espresso: vedi SeatMapOptimizer.voteSatisfaction.
+    val satisfaction: SeatMapOptimizer.VoteSatisfaction?,
     val socialScore: Double,
     val disciplinePenalty: Double,
     val didacticScore: Double,
     val heightPenalty: Double,
     val memoryPenalty: Double,
-    val burnoutPenalty: Double
+    val burnoutPenalty: Double,
+    // Con default: le componenti sotto contribuiscono al totale ma non hanno un campo dedicato
+    // fra le tre "voci principali" (sociale/didattica/disciplina) mostrate nelle schede.
+    val priorityBonus: Double = 0.0,
+    val columnNoisePenalty: Double = 0.0
 )
 
 data class SeatMapHistoryRecord(
@@ -496,6 +506,62 @@ object SeatMapOptimizer {
         )
     }
 
+    /**
+     * Soddisfazione media degli studenti di una disposizione.
+     * @property percentage 0-100, media delle soddisfazioni dei singoli studenti valutati.
+     * @property evaluatedStudents studenti che hanno votato e siedono con almeno un compagno.
+     * @property uncomfortableStudents fra questi, quanti siedono con almeno una persona che hanno
+     * votato in negativo (-1 o -2).
+     */
+    data class VoteSatisfaction(val percentage: Double, val evaluatedStudents: Int, val uncomfortableStudents: Int)
+
+    /**
+     * Soddisfazione stimata di una disposizione, calcolata sul SINGOLO studente: ciascuno guarda
+     * solo i compagni con cui siede davvero, non l'insieme di tutte le sue preferenze (che in un
+     * banco da due o tre non possono essere soddisfatte in blocco).
+     *
+     * Ogni compagno di banco vale in base al voto dato dallo studente: +2 = 100%, +1 = 75%,
+     * 0 = 50%, -1 = 25%, -2 = 0% (lineare, `(voto + 2) / 4`). La soddisfazione dello studente è la
+     * media sui suoi compagni (uno in un banco da coppia, fino a due in un trio); quella della
+     * disposizione è la media sugli studenti valutati.
+     *
+     * Sono valutati solo gli studenti che hanno espresso almeno un voto (diverso da 0) su
+     * qualcuno seduto in disposizione, e che siedono con almeno un compagno: chi non ha votato
+     * varrebbe un 50% "neutro" che diluisce la media senza dire nulla, chi siede solo non ha
+     * compagni da giudicare.
+     *
+     * Volutamente NON dipende da pesi dei cursori, modalità coppia/trio, storico, altezza, chiasso,
+     * didattica o Priority Pass. Ritorna null se nessuno studente è valutabile ("non calcolabile" è
+     * più onesto di un 0% o un 100% inventato).
+     */
+    fun voteSatisfaction(
+        assignments: List<DeskAssignment>,
+        socialPreferences: Map<Pair<String, String>, SocialPreferenceScore>
+    ): VoteSatisfaction? {
+        val seated = assignments.flatMap { deskOccupantIds(it) }.toSet()
+        val voters = socialPreferences
+            .filter { (pair, score) -> score.value != 0 && pair.first in seated && pair.second in seated }
+            .keys.map { it.first }.toSet()
+
+        var evaluated = 0
+        var uncomfortable = 0
+        var sumOfSatisfactions = 0.0
+        for (desk in assignments) {
+            val occupants = deskOccupantIds(desk)
+            for (student in occupants) {
+                if (student !in voters) continue
+                val mates = occupants.filter { it != student }
+                if (mates.isEmpty()) continue
+                val votes = mates.map { (socialPreferences[student to it]?.value ?: 0) }
+                sumOfSatisfactions += votes.map { (it + 2) / 4.0 }.average()
+                evaluated++
+                if (votes.any { it < 0 }) uncomfortable++
+            }
+        }
+        if (evaluated == 0) return null
+        return VoteSatisfaction(sumOfSatisfactions / evaluated * 100.0, evaluated, uncomfortable)
+    }
+
     /** Numero di posti per banco supportati dall'algoritmo: coppia (default, storico) o trio. */
     const val SEATS_PER_DESK_PAIR = 2
     const val SEATS_PER_DESK_TRIO = 3
@@ -598,7 +664,8 @@ object SeatMapOptimizer {
                 column = index % maxCols,
                 studentAId = group.getOrNull(0)?.id,
                 studentBId = group.getOrNull(1)?.id,
-                studentCId = group.getOrNull(2)?.id
+                studentCId = group.getOrNull(2)?.id,
+                seats = groupSize
             )
         }
     }

@@ -38,17 +38,20 @@ fun SeatMapEditorScreen(
     assignments: List<DeskAssignment>,
     studentsMap: Map<String, User>,
     socialPreferences: Map<Pair<String, String>, SocialPreferenceScore>,
-    totalScore: Double,
-    satisfactionPercentage: Double,
+    breakdown: SeatMapOptimizer.ScoreBreakdown,
+    satisfaction: SeatMapOptimizer.VoteSatisfaction?,
     isPublishing: Boolean,
     onSwapSeats: (deskIndex1: Int, seatIndex1: Int, deskIndex2: Int, seatIndex2: Int) -> Unit,
     onRestore: () -> Unit,
-    onPublish: () -> Unit
+    onPublish: () -> Unit,
+    // Modalità scelta per QUESTA generazione (coppia o trio), come in SeatMapProposalsScreen:
+    // dedurla dai dati (nessun banco con un terzo occupante -> "coppie") faceva sparire il terzo
+    // posto anche in modalità trio quando la classe è piccola o i trii vengono spezzati dai vincoli.
+    seatsPerDesk: Int = SeatMapOptimizer.SEATS_PER_DESK_PAIR
 ) {
     var selectedSeat by remember { mutableStateOf<EditableSeatRef?>(null) }
-    // Come in SeatMapScreen: si disegnano tre posti per banco solo se la disposizione in editing
-    // li usa davvero, così un banco da coppia resta a due righe.
-    val hasTrioDesks = remember(assignments) { assignments.any { it.studentCId != null } }
+    val hasTrioDesks = seatsPerDesk == SeatMapOptimizer.SEATS_PER_DESK_TRIO ||
+        assignments.any { it.seats >= 3 || it.studentCId != null }
 
     // Uno scambio può cambiare la composizione dei banchi: se la selezione punta a un indice
     // ormai fuori range, la si azzera invece di lasciarla puntare a un posto inesistente.
@@ -66,13 +69,27 @@ fun SeatMapEditorScreen(
         ) {
             Column(modifier = Modifier.padding(AppTheme.Space12)) {
                 Text(
-                    text = "Punteggio: ${totalScore.toInt()} pt",
+                    text = "Punteggio: ${breakdown.total.toInt()} pt",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = AppTheme.TextDark
                 )
+                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                    StatChip("Sociale", breakdown.social.toInt(), Modifier.weight(1f))
+                    StatChip("Didattica", breakdown.didactic.toInt(), Modifier.weight(1f))
+                    StatChip("Disciplina", breakdown.discipline.toInt(), Modifier.weight(1f))
+                }
+                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                ScoreTotalSummary(
+                    total = breakdown.total,
+                    priorityBonus = breakdown.priorityBonus,
+                    penalties = breakdown.memoryPenalty + breakdown.heightPenalty +
+                        breakdown.burnoutPenalty + breakdown.columnNoisePenalty,
+                    showTotal = false
+                )
                 Text(
-                    text = "Soddisfazione stimata: ${satisfactionPercentage.toInt()}%",
+                    text = satisfactionLabel(satisfaction),
                     fontSize = 12.sp,
                     color = AppTheme.TextMuted
                 )

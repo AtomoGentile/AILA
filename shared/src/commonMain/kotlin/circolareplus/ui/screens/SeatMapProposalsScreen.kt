@@ -120,8 +120,9 @@ fun SeatMapProposalsScreen(
                     )
                     Spacer(modifier = Modifier.height(AppTheme.Space8))
                     Text(
-                        text = "Proposta ${safePreview + 1} • ${proposal.satisfactionPercentage.toInt()}% • " +
-                            if (hasTrio) "banchi da tre" else "banchi da due",
+                        text = "Proposta ${safePreview + 1} • " +
+                            (proposal.satisfaction?.let { "${it.percentage.toInt()}% soddisfazione" } ?: "nessun voto") +
+                            " • " + if (hasTrio) "banchi da tre" else "banchi da due",
                         fontSize = 12.sp,
                         color = AppTheme.TextMuted
                     )
@@ -175,7 +176,7 @@ private fun ProposalCard(
     onToggleView: () -> Unit,
     onSelect: () -> Unit
 ) {
-    val percent = proposal.satisfactionPercentage.toInt().coerceIn(0, 100)
+    val percent = proposal.satisfaction?.percentage?.toInt()?.coerceIn(0, 100)
 
     AilaCard {
         Column(modifier = Modifier.padding(AppTheme.Space12)) {
@@ -203,7 +204,7 @@ private fun ProposalCard(
                         }
                     }
                     Text(
-                        text = "Soddisfazione stimata $percent%",
+                        text = satisfactionLabel(proposal.satisfaction),
                         fontSize = 12.sp,
                         color = AppTheme.TextMuted
                     )
@@ -229,36 +230,91 @@ private fun ProposalCard(
 
             Spacer(modifier = Modifier.height(AppTheme.Space8))
 
-            // Barra della soddisfazione: a colpo d'occhio, senza leggere le percentuali.
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(AppTheme.TintSlate)
-            ) {
+            // Barra della soddisfazione: a colpo d'occhio, senza leggere le percentuali. Senza
+            // voti espressi non c'è niente da misurare, quindi niente barra.
+            if (percent != null) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(percent / 100f)
-                        .fillMaxHeight()
+                        .fillMaxWidth()
+                        .height(6.dp)
                         .clip(RoundedCornerShape(50))
-                        .background(AppTheme.PrimaryBlue)
-                )
-            }
+                        .background(AppTheme.TintSlate)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(percent / 100f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(50))
+                            .background(AppTheme.PrimaryBlue)
+                    )
+                }
 
-            Spacer(modifier = Modifier.height(AppTheme.Space8))
+                Spacer(modifier = Modifier.height(AppTheme.Space8))
+            }
 
             Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
                 StatChip("Sociale", proposal.socialScore.toInt(), Modifier.weight(1f))
                 StatChip("Didattica", proposal.didacticScore.toInt(), Modifier.weight(1f))
                 StatChip("Disciplina", proposal.disciplinePenalty.toInt(), Modifier.weight(1f))
             }
+
+            Spacer(modifier = Modifier.height(AppTheme.Space8))
+            ScoreTotalSummary(
+                total = proposal.totalScore,
+                priorityBonus = proposal.priorityBonus,
+                penalties = proposal.memoryPenalty + proposal.heightPenalty +
+                    proposal.burnoutPenalty + proposal.columnNoisePenalty
+            )
         }
     }
 }
 
+/** Testo della soddisfazione: media dei singoli studenti in base ai compagni di banco che hanno
+ * davvero, con quanti siedono con qualcuno che hanno votato in negativo; oppure l'avviso che nessuno
+ * ha votato e quindi non c'è nulla da misurare. */
+internal fun satisfactionLabel(satisfaction: SeatMapOptimizer.VoteSatisfaction?): String {
+    if (satisfaction == null) return "Nessun voto espresso: soddisfazione non calcolabile"
+    val base = "Soddisfazione media: ${satisfaction.percentage.toInt()}% (${satisfaction.evaluatedStudents} studenti)"
+    return if (satisfaction.uncomfortableStudents > 0) {
+        "$base • ${satisfaction.uncomfortableStudents} con un compagno sgradito"
+    } else base
+}
+
+/**
+ * Le tre voci nelle schede (sociale, didattica, disciplina) non sommano al punteggio totale:
+ * il totale comprende anche il bonus Priority Pass (+1000 a studente con priorità nelle prime tre
+ * file) e le penalità di storico, altezza, burnout e chiasso di colonna. Senza questa riga si
+ * vedevano tre zeri accanto a un totale di centinaia di punti, senza modo di capire perché.
+ */
 @Composable
-private fun StatChip(label: String, value: Int, modifier: Modifier = Modifier) {
+internal fun ScoreTotalSummary(
+    total: Double,
+    priorityBonus: Double,
+    penalties: Double,
+    modifier: Modifier = Modifier,
+    showTotal: Boolean = true
+) {
+    fun signed(value: Double): String {
+        val v = value.toInt()
+        return if (v > 0) "+$v" else v.toString()
+    }
+    val parts = buildList {
+        if (showTotal) add("Punteggio totale ${total.toInt()} pt")
+        if (priorityBonus.toInt() != 0) add("Priority pass ${signed(priorityBonus)}")
+        if (penalties.toInt() != 0) add("Storico e altre penalità ${signed(-penalties)}")
+    }
+    if (parts.isEmpty()) return
+    Text(
+        text = parts.joinToString(" • "),
+        fontSize = 11.sp,
+        color = AppTheme.TextMuted,
+        lineHeight = 15.sp,
+        modifier = modifier
+    )
+}
+
+@Composable
+internal fun StatChip(label: String, value: Int, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(AppTheme.SmallElementRadius))

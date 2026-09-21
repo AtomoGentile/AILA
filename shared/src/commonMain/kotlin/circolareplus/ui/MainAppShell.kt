@@ -2232,17 +2232,18 @@ fun MainAppShell(
                             isBusy = isGeneratingProposals,
                             // Scegliere una proposta non la pubblica direttamente: apre l'editor
                             // manuale (swap-by-tap con ricalcolo live) da cui il Rappresentante
-                            // pubblica quando e' pronto.
+                            // pubblica quando e' pronto. Le proposte NON vengono scartate qui:
+                            // il back dall'editor deve tornare a loro, non alla mappa iniziale.
                             onSelect = { chosen ->
                                 originalSeatMapProposal = chosen.assignments
                                 editingSeatMapProposal = chosen.assignments
-                                proposalOptions = emptyList()
                             }
                         )
                     }
                 }
                 editingSeatMapProposal != null -> {
                     val currentAssignments = editingSeatMapProposal!!
+                    // Il back torna alla schermata precedente (le proposte), non alla mappa.
                     circolareplus.platform.PlatformBackHandler {
                         editingSeatMapProposal = null
                         originalSeatMapProposal = null
@@ -2266,10 +2267,9 @@ fun MainAppShell(
                             isSmallClass = seatMapOptimizerIsSmallClass
                         )
                     }
-                    val editorMaxPossibleScore = classmates.size * 50.0
-                    val editorSatisfactionPct = if (editorMaxPossibleScore > 0) {
-                        (editorBreakdown.total / editorMaxPossibleScore * 100).coerceIn(0.0, 100.0)
-                    } else 0.0
+                    val editorSatisfaction = remember(currentAssignments, seatMapOptimizerSocialMap) {
+                        SeatMapOptimizer.voteSatisfaction(currentAssignments, seatMapOptimizerSocialMap)
+                    }
                     val editorStudentsMap = remember(classmates, user) {
                         classmates.associateBy { it.id } + (user.id to user)
                     }
@@ -2286,8 +2286,9 @@ fun MainAppShell(
                             assignments = currentAssignments,
                             studentsMap = editorStudentsMap,
                             socialPreferences = seatMapOptimizerSocialMap,
-                            totalScore = editorBreakdown.total,
-                            satisfactionPercentage = editorSatisfactionPct,
+                            breakdown = editorBreakdown,
+                            satisfaction = editorSatisfaction,
+                            seatsPerDesk = lastRequestedSeatsPerDesk,
                             isPublishing = isGeneratingProposals,
                             onSwapSeats = { deskIndex1, seatIndex1, deskIndex2, seatIndex2 ->
                                 editingSeatMapProposal = SeatMapOptimizer.swapSeats(
@@ -2305,6 +2306,8 @@ fun MainAppShell(
                                         seatMapAssignments = currentAssignments
                                         editingSeatMapProposal = null
                                         originalSeatMapProposal = null
+                                        // Pubblicata: le proposte non servono più, si torna alla mappa.
+                                        proposalOptions = emptyList()
                                     } catch (e: Exception) {
                                         seatMapActionError = "Pubblicazione non riuscita: ${e.message}"
                                     } finally {

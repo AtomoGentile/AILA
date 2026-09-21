@@ -71,13 +71,20 @@ class SeatMapOptimizerTest {
         val profileWithPriority = StudentProfile(userId = "s1", heightCm = 170, priorityPass = true)
         val normalProfile = StudentProfile(userId = "s2", heightCm = 175, priorityPass = false)
 
-        // Prima fila (row = 0) assegna +1000 pt
-        val bonusRow0 = SeatMapOptimizer.calculatePriorityBonus(profileWithPriority, normalProfile, row = 0)
-        assertEquals(1000, bonusRow0)
+        // Prime tre file (row 0, 1, 2 — MAX_PRIORITY_ROW) assegnano +1000 pt
+        for (row in 0..SeatMapOptimizer.MAX_PRIORITY_ROW) {
+            assertEquals(
+                1000,
+                SeatMapOptimizer.calculatePriorityBonus(profileWithPriority, normalProfile, row = row),
+                "Il priority pass deve valere +1000 pt in riga $row"
+            )
+        }
 
-        // Fila successiva applica penalità per mancato rispetto del priority pass
-        val penaltyRow1 = SeatMapOptimizer.calculatePriorityBonus(profileWithPriority, normalProfile, row = 1)
-        assertEquals(-1000, penaltyRow1)
+        // Oltre la terza fila applica penalità per mancato rispetto del priority pass
+        val penaltyBeyond = SeatMapOptimizer.calculatePriorityBonus(
+            profileWithPriority, normalProfile, row = SeatMapOptimizer.MAX_PRIORITY_ROW + 1
+        )
+        assertEquals(-1000, penaltyBeyond)
     }
 
     @Test
@@ -136,6 +143,91 @@ class SeatMapOptimizerTest {
         // Nessuno studente deve comparire due volte nella disposizione.
         val allIds = assignments.flatMap { listOfNotNull(it.studentAId, it.studentBId, it.studentCId) }
         assertEquals(students.size, allIds.toSet().size)
+    }
+
+    private val A2 = SocialPreferenceScore.STRONG_AFFINITY
+    private val M2 = SocialPreferenceScore.STRONG_REJECTION
+    private val M1 = SocialPreferenceScore.MILD_REJECTION
+
+    @Test
+    fun testSoddisfazioneDelSingoloInBaseAiCompagniDiBanco() {
+        // Ogni voto verso il compagno di banco: +2 -> 100%, +1 -> 75%, 0 -> 50%, -1 -> 25%, -2 -> 0%.
+        fun satisfactionOfPair(vote: SocialPreferenceScore): Double {
+            val layout = listOf(DeskAssignment(0, 0, "a", "b"))
+            // Solo "a" vota (e b resta neutro) -> e' l'unico studente valutato.
+            return SeatMapOptimizer.voteSatisfaction(layout, mapOf(("a" to "b") to vote))!!.percentage
+        }
+        assertEquals(100.0, satisfactionOfPair(SocialPreferenceScore.STRONG_AFFINITY))
+        assertEquals(75.0, satisfactionOfPair(SocialPreferenceScore.MEDIUM_AFFINITY))
+        assertEquals(25.0, satisfactionOfPair(M1))
+        assertEquals(0.0, satisfactionOfPair(M2))
+    }
+
+    @Test
+    fun testSoddisfazioneIgnoraLePreferenzeSuChiNonSiedeAccanto() {
+        // "a" vuole +2 con "c" ma siede con "b" (voto 0): conta solo b -> 50%, non 0% per "c" mancato.
+        val layout = listOf(DeskAssignment(0, 0, "a", "b"), DeskAssignment(0, 1, "c", "d"))
+        val prefs = mapOf(("a" to "c") to A2)
+        val result = SeatMapOptimizer.voteSatisfaction(layout, prefs)!!
+        assertEquals(50.0, result.percentage)
+        assertEquals(1, result.evaluatedStudents)
+        assertEquals(0, result.uncomfortableStudents)
+    }
+
+    @Test
+    fun testSoddisfazioneMediaSuStudentiEConteggioDisagio() {
+        val layout = listOf(DeskAssignment(0, 0, "a", "b"), DeskAssignment(0, 1, "c", "d"))
+        val prefs = mapOf(
+            ("a" to "b") to A2,  // a: 100%
+            ("c" to "d") to M2   // c: 0%, e siede con chi ha rifiutato
+        )
+        val result = SeatMapOptimizer.voteSatisfaction(layout, prefs)!!
+        assertEquals(50.0, result.percentage) // media di a (100) e c (0); b e d non hanno votato
+        assertEquals(2, result.evaluatedStudents)
+        assertEquals(1, result.uncomfortableStudents)
+    }
+
+    @Test
+    fun testSoddisfazioneTrioFaLaMediaSuiDueCompagni() {
+        val layout = listOf(DeskAssignment(0, 0, "a", "b", "c", seats = 3))
+        // a siede con b (+2 -> 100%) e c (-2 -> 0%): media 50%, e' a disagio.
+        val prefs = mapOf(("a" to "b") to A2, ("a" to "c") to M2)
+        val result = SeatMapOptimizer.voteSatisfaction(layout, prefs)!!
+        assertEquals(50.0, result.percentage)
+        assertEquals(1, result.uncomfortableStudents)
+    }
+
+    @Test
+    fun testSoddisfazioneNonCalcolabile() {
+        val layout = listOf(DeskAssignment(0, 0, "a", "b"))
+        assertEquals(null, SeatMapOptimizer.voteSatisfaction(layout, emptyMap()))
+        // Il voto riguarda uno studente fuori dalla disposizione: non conta.
+        assertEquals(null, SeatMapOptimizer.voteSatisfaction(layout, mapOf(("a" to "zz") to A2)))
+        // Chi vota ma siede da solo non ha compagni da giudicare.
+        val alone = listOf(DeskAssignment(0, 0, "a", null), DeskAssignment(0, 1, "b", "c"))
+        assertEquals(null, SeatMapOptimizer.voteSatisfaction(alone, mapOf(("a" to "b") to A2)))
+    }
+
+    @Test
+    fun testCapienzaBancoSopravviveAncheConMenoDiTreStudenti() {
+        // Un solo studente in modalità trio: nessun banco ha un terzo occupante, ma la capienza
+        // (che decide se disegnare il terzo posto nella mappa pubblicata) deve restare 3.
+        val students = listOf(User(id = "s1", firstName = "S", lastName = "1", username = "s1"))
+
+        fun seatsFor(seatsPerDesk: Int) = SeatMapOptimizer.optimize(
+            students = students,
+            profiles = emptyMap(),
+            ratings = emptyMap(),
+            socialPreferences = emptyMap(),
+            history = emptyList(),
+            weights = OptimizerWeights(),
+            isSmallClass = true,
+            seed = 1L,
+            seatsPerDesk = seatsPerDesk
+        ).map { it.seats }
+
+        assertEquals(listOf(3), seatsFor(SeatMapOptimizer.SEATS_PER_DESK_TRIO))
+        assertEquals(listOf(2), seatsFor(SeatMapOptimizer.SEATS_PER_DESK_PAIR))
     }
 
     @Test
