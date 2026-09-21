@@ -198,6 +198,22 @@ actual class LocalModelStore actual constructor() {
     }
 
     /**
+     * Ferma davvero il download in corso di [model] (annulla il Worker di WorkManager).
+     *
+     * Serve perche' cancellare la coroutine che chiama [download] non basta: quella si limita a
+     * osservare il Worker (vedi LocalModelDownloadWorker.downloadViaWorkManager), che per scelta
+     * prosegue anche quando la schermata sparisce. E' quindi da chiamare solo per un annullamento
+     * ESPLICITO dell'utente ("Annulla download"), non quando la schermata esce di scena: dal lato
+     * dell'osservatore le due cancellazioni sono indistinguibili, per questo non e' agganciata
+     * alla cancellazione del Flow. Il file `.part` resta, cosi' un nuovo tentativo riparte da li'.
+     * Le voci "di sistema" (AICore) non hanno un Worker: nessun effetto.
+     */
+    actual fun cancelDownload(model: LocalAiModel) {
+        if (isSystemTier(model)) return
+        circolareplus.work.LocalModelDownloadWorker.cancel(AndroidAppContext.require(), model)
+    }
+
+    /**
      * Il download vero, byte per byte: eseguito dentro [circolareplus.work.LocalModelDownloadWorker],
      * non più da [download] direttamente. `internal` (non `private`) perché il Worker vive in un
      * altro package dello stesso modulo.

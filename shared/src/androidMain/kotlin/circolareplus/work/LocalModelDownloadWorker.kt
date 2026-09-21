@@ -183,9 +183,17 @@ class LocalModelDownloadWorker(
             }
         }
 
-        /** Annulla un download in corso per questo modello — usato dal tasto "Annulla" nelle Impostazioni. */
+        /**
+         * Annulla un download in corso per questo modello — usato dai tasti "Annulla download"
+         * (tramite [LocalModelStore.cancelDownload]).
+         */
         fun cancel(context: Context, model: LocalAiModel) {
             WorkManager.getInstance(context).cancelUniqueWork(uniqueWorkName(model.id))
+            // Il Worker aggiorna la notifica a ogni blocco e la toglie solo a fine lavoro: nei
+            // pochi istanti fino a che vede la cancellazione potrebbe ripubblicarla, quindi la
+            // si toglie anche da qui (il servizio in primo piano la rimuove comunque quando si ferma).
+            (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                .cancel(model.notificationId)
         }
     }
 }

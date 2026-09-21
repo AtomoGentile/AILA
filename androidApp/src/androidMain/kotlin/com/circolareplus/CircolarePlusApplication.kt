@@ -29,5 +29,8 @@ class CircolarePlusApplication : Application() {
         // MainAppShell, che si fermava appena l'app andava in background. Questo copre
         // l'intervallo in mezzo, con un giro ogni 15 minuti quando c'e' rete.
         CircularsSyncWorker.schedulePeriodic(this)
+        // Il canale delle notifiche esiste fin dall'avvio, cosi' e' regolabile dalle impostazioni
+        // di sistema anche prima del primo push.
+        CircolareMessagingService.ensureNotificationChannel(this)
     }
 }

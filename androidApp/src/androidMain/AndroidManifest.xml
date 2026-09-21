@@ -26,6 +26,17 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
+        <!-- Valori di riserva per le notifiche che FCM mostra da solo, senza passare da
+             CircolareMessagingService (payload con blocco "notification"): senza, FCM usa
+             l'icona del launcher, che in barra di stato diventa un quadrato bianco, e un canale
+             generico. Il canale e' creato all'avvio da ensureNotificationChannel. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_aila" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="aila_notifications" />
+
         <!-- Accelerazione GPU dell'AI locale. Da Android 12 le librerie native di sistema vanno
              dichiarate esplicitamente: senza queste righe il motore non trova OpenCL e ricade
              sulla CPU, che per un modello da qualche miliardo di parametri significa attese di

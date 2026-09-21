@@ -2,6 +2,7 @@ package com.circolareplus
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -52,6 +53,12 @@ class MainActivity : ComponentActivity() {
         // Avvio a freddo dal tocco su una notifica di sistema (vedi CircolareMessagingService):
         // l'extra viene letto qui e MainAppShell, non appena parte, ci naviga sopra da sé.
         applyPendingDeepLinkFrom(intent)
+
+        // Telefoni solo in verticale; i tablet (lato corto >= 600dp) restano liberi di ruotare.
+        // Fatto da codice e non con screenOrientation nel manifest, che bloccherebbe anche i tablet.
+        if (resources.configuration.smallestScreenWidthDp < 600) {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
 
         setContent {
             // AilaTheme avvolge tutto (login e caricamento compresi): senza, i componenti
