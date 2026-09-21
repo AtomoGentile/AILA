@@ -102,6 +102,15 @@ data class LocalAiModel(
      * generazione invece di accorciare il prompt.
      */
     val maxInputTokens: Int = 4_096,
+    /**
+     * Se il modello ha una vera modalita' di ragionamento (Gemma 4).
+     *
+     * Non e' un'impostazione innocua da lasciare accesa "tanto se non la conosce la ignora":
+     * Phi-4 mini non e' un modello di reasoning, e con la modalita' accesa (temperatura 0.6 e
+     * tetto ai token triplicato) sul campo ha prodotto solo ripetizioni senza senso. Dove e'
+     * `false` l'interruttore non si mostra e il ragionamento resta sempre spento.
+     */
+    val supportsThinking: Boolean = false,
     val description: String
 ) {
     /** "2,0 GB" / "963 MB" — per le etichette dei pulsanti di download. */

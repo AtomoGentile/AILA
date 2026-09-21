@@ -58,6 +58,7 @@ actual object LocalAiCatalog {
         preferGpu = true,
         supportsActions = true,
         maxOutputTokens = 900,
+        supportsThinking = true,
         description = "La taglia più piccola di Gemma 4. Riassunti in italiano già buoni."
     )
 
@@ -72,6 +73,7 @@ actual object LocalAiCatalog {
         preferGpu = true,
         supportsActions = true,
         maxOutputTokens = 900,
+        supportsThinking = true,
         description = "Taglia intermedia. Coglie meglio destinatari e scadenze implicite."
     )
 
@@ -87,6 +89,13 @@ actual object LocalAiCatalog {
         preferGpu = true,
         supportsActions = true,
         maxOutputTokens = 900,
+        // Il file e' compilato con ekv4096: 4096 token di KV cache in TOTALE, non solo in
+        // ingresso. Con il default (4096 in ingresso) prompt + 900 di risposta sforano la
+        // finestra, e un modello che la supera non si ferma con un errore: degenera in
+        // ripetizioni (segnalato in campo con la chat). 4096 - 900 - margine = 2800, lo stesso
+        // conto gia' fatto per Apple Intelligence. Il prompt piu' corto accorcia anche il
+        // prefill, che su Phi (q8, 3,8B) e' la parte piu' lenta.
+        maxInputTokens = 2_800,
         description = "Alternativa a Gemma 4 E4B per la fascia alta: stesso ordine di grandezza, " +
             "famiglia diversa. Unico Phi confermato in formato LiteRT-LM."
     )
