@@ -1781,7 +1781,11 @@ fun MainAppShell(
                                             val byDate = assignmentsToAdd
                                                 .filter { it.slotDate != null }
                                                 .groupBy { it.slotDate!! }
-                                                .toSortedMap()
+                                                // toSortedMap() e' solo JVM: non compila su iOS.
+                                                // toMap() da una lista ordinata mantiene l'ordine.
+                                                .toList()
+                                                .sortedBy { it.first }
+                                                .toMap()
 
                                             var added = 0
                                             var skipped = 0
