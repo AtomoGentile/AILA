@@ -23,15 +23,22 @@ interface ScrapedCircular {
 // della classe e l'anno, "&amp;" in un titolo). Non serve un decoder completo: la pagina è
 // generata da un CMS e usa solo queste.
 function decodeHtmlEntities(text: string): string {
-  return text
-    .replace(/&nbsp;|&#160;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'")
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/\s+/g, ' ')
-    .trim();
+  // Due giri: un testo gia' passato da un decoder puo' contenere ancora entita' ("&amp;#160;"
+  // diventava "&#160;" e li' restava, visto in app come "Festa di sport - &#160;2026"). "&amp;"
+  // va per ultimo, una volta per giro, altrimenti decodifica anche cio' che dovrebbe restare.
+  const decodeOnce = (t: string): string =>
+    t
+      .replace(/&#(x[0-9a-f]+|\d+);/gi, (match, body: string) => {
+        const code = body[0].toLowerCase() === 'x' ? parseInt(body.slice(1), 16) : parseInt(body, 10);
+        return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : match;
+      })
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&quot;/gi, '"')
+      .replace(/&apos;/gi, "'")
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&amp;/gi, '&');
+  return decodeOnce(decodeOnce(text)).replace(/\s+/g, ' ').trim();
 }
 
 // Estrae tutti i link `<a href="...">label</a>` da un frammento HTML (la cella "Allegati" può

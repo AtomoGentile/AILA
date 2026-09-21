@@ -14,6 +14,7 @@ import circolareplus.domain.model.CircularAiClassification
 import circolareplus.domain.model.CircularAttachment
 import circolareplus.domain.model.CircularRelevanceBadge
 import circolareplus.domain.model.ExtractedDeadline
+import circolareplus.util.decodeHtmlEntities
 
 /**
  * Circolari: la rilevazione/deduplicazione/cache PDF avviene lato server (Cron Trigger su
@@ -97,7 +98,7 @@ private fun CircularAnalysisDto.toDomain(): CircularAiClassification {
 
 private fun CircularDto.toDomain(baseUrl: String): Circular = Circular(
     number = number,
-    title = title,
+    title = decodeHtmlEntities(title),
     publishDate = publishDate,
     r2PdfKey = pdfKey,
     downloadUrl = "$baseUrl/api/circulars/pdf/$pdfKey",
@@ -106,7 +107,7 @@ private fun CircularDto.toDomain(baseUrl: String): Circular = Circular(
 
 private fun CircularAttachmentDto.toDomain(baseUrl: String): CircularAttachment =
     if (pdfKey != null) {
-        CircularAttachment(label = label, downloadUrl = "$baseUrl/api/circulars/pdf/$pdfKey", isPdf = true, pdfKey = pdfKey)
+        CircularAttachment(label = decodeHtmlEntities(label), downloadUrl = "$baseUrl/api/circulars/pdf/$pdfKey", isPdf = true, pdfKey = pdfKey)
     } else {
-        CircularAttachment(label = label, downloadUrl = url ?: "", isPdf = false)
+        CircularAttachment(label = decodeHtmlEntities(label), downloadUrl = url ?: "", isPdf = false)
     }
