@@ -3,6 +3,7 @@ package com.circolareplus
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
@@ -25,22 +26,48 @@ class CircolareMessagingService : FirebaseMessagingService() {
         // Importanza HIGH: solo cosi' Android mostra il banner a comparsa (heads-up) anche ad app
         // aperta. Con DEFAULT la notifica finiva soltanto come icona nella barra di stato e
         // sembrava "non arrivata". L'importanza di un canale gia' creato non si puo' cambiare da
-        // codice, quindi serve un ID nuovo; il vecchio si elimina sotto.
+        // codice, quindi serve un ID nuovo; il vecchio si elimina qui sotto.
+        // Lo stesso ID e' dichiarato nel manifest (default_notification_channel_id).
         private const val CHANNEL_ID = "aila_notifications"
         private const val OLD_CHANNEL_ID = "circolare_plus_default"
+
+        /**
+         * Crea il canale delle notifiche (idempotente). Chiamato da
+         * [CircolarePlusApplication.onCreate]: cosi' il canale compare nelle impostazioni di
+         * sistema fin dal primo avvio, e non solo dopo l'arrivo del primo push (prima l'utente non
+         * poteva regolare suono e vibrazione prima di riceverne uno). Il servizio lo richiama
+         * comunque prima di notificare, per sicurezza.
+         */
+        fun ensureNotificationChannel(context: Context) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+            val manager = context.getSystemService(NotificationManager::class.java) ?: return
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "AILA",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Circolari, bacheca, sondaggi e mappa posti"
+            }
+            manager.createNotificationChannel(channel)
+            manager.deleteNotificationChannel(OLD_CHANNEL_ID)
+        }
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
 
-        val title = message.notification?.title ?: message.data["title"] ?: "AILA"
-        val body = message.notification?.body ?: message.data["body"] ?: ""
+        // Il backend manda ad Android messaggi SOLO data (titolo e testo dentro "data"), cosi'
+        // questo metodo gira sempre, anche ad app chiusa; il fallback sul blocco "notification"
+        // copre un eventuale invio vecchio stile dalla console Firebase.
+        val title = message.data["title"] ?: message.notification?.title ?: "AILA"
+        val body = message.data["body"] ?: message.notification?.body ?: ""
         val category = circolareplus.domain.model.NotificationCategoryMapper.categoryFrom(message.data)
 
-        // Storico locale: letto dalla campanella nell'app (si autoelimina dopo qualche giorno).
-        AppContainer.settings.addNotification(title, body, category)
-
-        showSystemNotification(title, body, category)
+        // Interruttori dell'utente, deduplica per messageId e storico locale (la campanella
+        // dell'app, che si autoelimina dopo qualche giorno) stanno tutti in onPushReceived: la
+        // notifica di sistema si mostra solo se ritorna true.
+        val show = AppContainer.settings.onPushReceived(message.messageId, title, body, category)
+        if (show) showSystemNotification(title, body, category)
     }
 
     override fun onNewToken(token: String) {
@@ -53,17 +80,7 @@ class CircolareMessagingService : FirebaseMessagingService() {
     private fun showSystemNotification(title: String, body: String, category: String) {
         val manager = getSystemService(NotificationManager::class.java) ?: return
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "AILA",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Circolari, bacheca, sondaggi e mappa posti"
-            }
-            manager.createNotificationChannel(channel)
-            manager.deleteNotificationChannel(OLD_CHANNEL_ID)
-        }
+        ensureNotificationChannel(this)
 
         // Intent esplicito verso MainActivity (non più getLaunchIntentForPackage): serve a
         // poter allegare la categoria della notifica come extra, così MainActivity può
@@ -83,7 +100,7 @@ class CircolareMessagingService : FirebaseMessagingService() {
         )
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.ic_stat_aila)
             .setContentTitle(title)
             .setContentText(body)
             .setAutoCancel(true)

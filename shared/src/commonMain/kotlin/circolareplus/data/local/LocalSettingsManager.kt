@@ -233,10 +233,10 @@ class LocalSettingsManager(
      * della soglia di conservazione. Va chiamata dal lato piattaforma che riceve davvero il push
      * (es. il FirebaseMessagingService su Android), non dal solo invio.
      */
-    fun addNotification(title: String, body: String, category: String = "") {
+    fun addNotification(title: String, body: String, category: String = "", id: String? = null) {
         val now = currentTimeMillis()
         val entry = NotificationLogEntry(
-            id = "$now-${(0..999999).random()}",
+            id = id ?: "$now-${(0..999999).random()}",
             title = title,
             body = body,
             receivedAtMillis = now,
@@ -244,6 +244,28 @@ class LocalSettingsManager(
         )
         val updated = (readNotifications(now) + entry).sortedByDescending { it.receivedAtMillis }
         writeNotifications(updated)
+    }
+
+    /**
+     * Punto unico con cui Android e iOS registrano un push appena ricevuto: applica gli
+     * interruttori dell'utente, evita i doppioni e scrive nella campanella. Ritorna `true` se
+     * la piattaforma deve anche mostrare la notifica di sistema (banner).
+     *
+     * - Categoria silenziata in Impostazioni: né campanella né banner.
+     * - "Notifiche di sistema" spento: solo campanella, niente banner.
+     * - [messageId] già visto (es. iOS: prima `willPresent`, poi il tocco `didReceive` sullo
+     *   stesso messaggio): non si scrive di nuovo, la campanella non ha doppioni.
+     *
+     * [messageId] deve essere l'id del messaggio FCM; se assente si registra senza dedup.
+     */
+    fun onPushReceived(messageId: String?, title: String, body: String, category: String): Boolean {
+        val kind = if (category == "seatmap_preferences") "seatmap" else category
+        if (kind.isNotBlank() && !isNotificationKindEnabled(kind)) return false
+
+        val id = messageId?.takeIf { it.isNotBlank() }?.let { "push-$it" }
+        val alreadyLogged = id != null && readNotifications(currentTimeMillis()).any { it.id == id }
+        if (!alreadyLogged) addNotification(title, body, category, id)
+        return isSystemNotificationsEnabled
     }
 
     /** Elenco notifiche non scadute, più recenti prima. Scarta e ripulisce quelle scadute. */

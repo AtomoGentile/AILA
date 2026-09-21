@@ -66,6 +66,15 @@ expect class LocalModelStore() {
     fun delete(model: LocalAiModel): Boolean
 
     /**
+     * Ferma davvero il download in corso di [model]. Va chiamata solo per un annullamento
+     * ESPLICITO dell'utente ("Annulla download"): cancellare la coroutine che osserva il
+     * download non basta su Android, dove il lavoro gira in un Worker che per scelta prosegue
+     * anche quando la schermata sparisce. Il parziale resta, così un nuovo tentativo riparte da lì.
+     * No-op dove il download non e' un lavoro separato (iOS) o il modello e' di sistema.
+     */
+    fun cancelDownload(model: LocalAiModel)
+
+    /**
      * Byte occupati da file di modelli che non sono più in catalogo.
      *
      * Il catalogo cambia — sono già stati tolti i build solo-GPU, che non si avviavano — e i file

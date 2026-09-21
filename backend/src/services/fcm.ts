@@ -27,6 +27,13 @@ interface FcmMessage {
   data?: Record<string, string>;
 }
 
+// Un destinatario: il token FCM e la piattaforma con cui e' stato registrato (colonna
+// fcm_tokens.platform, "android" | "ios"). Serve a scegliere la forma del messaggio.
+interface FcmRecipient {
+  token: string;
+  platform: string | null;
+}
+
 interface ServiceAccount {
   client_email: string;
   private_key: string;
@@ -136,11 +143,48 @@ async function getAccessToken(sa: ServiceAccount): Promise<string | null> {
   }
 }
 
+/**
+ * Costruisce il messaggio nella forma giusta per la piattaforma.
+ *
+ * Android: SOLO `data`, senza blocco `notification`. Con `notification` e app in background FCM
+ * mostra la notifica da solo e `onMessageReceived` non parte mai, quindi la campanella in-app
+ * (che vive solo sul telefono, vedi LocalSettingsManager.onPushReceived) restava vuota. Con un
+ * messaggio data-only il servizio gira sempre, in primo piano e in background, applica gli
+ * interruttori dell'utente, scrive la cronologia e mostra lui la notifica. Priorita' HIGH:
+ * senza, in Doze i messaggi data-only vengono ritardati.
+ *
+ * iOS (e piattaforma sconosciuta): `notification` + `data`, come prima; iOS non ha un servizio
+ * equivalente e la notifica la mostra il sistema. Il suono va chiesto esplicitamente.
+ */
+function buildMessage(
+  target: { token: string } | { topic: string },
+  platform: string | null,
+  message: FcmMessage
+): Record<string, unknown> {
+  const data = message.data ?? {};
+
+  if (platform === 'android') {
+    return {
+      ...target,
+      // title/body dopo i data: quelli "veri" non devono poter essere sovrascritti da chiavi omonime.
+      data: { ...data, title: message.title, body: message.body },
+      android: { priority: 'HIGH' },
+    };
+  }
+
+  return {
+    ...target,
+    notification: { title: message.title, body: message.body },
+    data,
+    apns: { payload: { aps: { sound: 'default' } } },
+  };
+}
+
 async function sendV1(
   env: Env,
   accessToken: string,
   projectId: string,
-  target: { token: string } | { topic: string },
+  recipient: FcmRecipient,
   message: FcmMessage
 ): Promise<boolean> {
   const res = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
@@ -150,11 +194,7 @@ async function sendV1(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      message: {
-        ...target,
-        notification: { title: message.title, body: message.body },
-        data: message.data ?? {},
-      },
+      message: buildMessage({ token: recipient.token }, recipient.platform, message),
     }),
   });
 
@@ -217,9 +257,9 @@ export async function notifyClass(
   if (!creds) return;
 
   if (!classId) {
-    const all = await env.DB.prepare('SELECT DISTINCT token FROM fcm_tokens').all<{ token: string }>();
+    const all = await env.DB.prepare('SELECT DISTINCT token, platform FROM fcm_tokens').all<FcmRecipient>();
     await Promise.allSettled(
-      all.results.map((row) => sendV1(env, creds.accessToken, creds.projectId, { token: row.token }, message))
+      all.results.map((row) => sendV1(env, creds.accessToken, creds.projectId, row, message))
     );
     return;
   }
@@ -230,15 +270,15 @@ export async function notifyClass(
     .prepare(
       // DISTINCT: lo stesso telefono può comparire sotto più account (vedi routes/fcm.ts), e
       // senza raggruppare per token la stessa notifica partiva una volta per account.
-      `SELECT DISTINCT t.token FROM fcm_tokens t
+      `SELECT DISTINCT t.token, t.platform FROM fcm_tokens t
        JOIN users u ON u.id = t.user_id
        WHERE u.class_id = ?`
     )
     .bind(classId)
-    .all<{ token: string }>();
+    .all<FcmRecipient>();
 
   await Promise.allSettled(
-    tokens.results.map((row) => sendV1(env, creds.accessToken, creds.projectId, { token: row.token }, message))
+    tokens.results.map((row) => sendV1(env, creds.accessToken, creds.projectId, row, message))
   );
 }
 
@@ -249,12 +289,12 @@ export async function notifyUser(env: Env, userId: string, title: string, body: 
   const creds = await resolveCredentials(env);
   if (!creds) return;
 
-  const tokens = await env.DB.prepare('SELECT DISTINCT token FROM fcm_tokens WHERE user_id = ?')
+  const tokens = await env.DB.prepare('SELECT DISTINCT token, platform FROM fcm_tokens WHERE user_id = ?')
     .bind(userId)
-    .all<{ token: string }>();
+    .all<FcmRecipient>();
 
   const message: FcmMessage = { title, body, data };
   await Promise.allSettled(
-    tokens.results.map((row) => sendV1(env, creds.accessToken, creds.projectId, { token: row.token }, message))
+    tokens.results.map((row) => sendV1(env, creds.accessToken, creds.projectId, row, message))
   );
 }
