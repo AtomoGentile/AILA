@@ -32,6 +32,8 @@ import circolareplus.domain.model.Circular
 import circolareplus.domain.model.CircularAiClassification
 import circolareplus.domain.model.CircularAttachment
 import circolareplus.domain.model.CircularRelevanceBadge
+import circolareplus.ai.CalendarDuplicates
+import circolareplus.domain.model.CalendarEvent
 import circolareplus.domain.model.ExtractedDeadline
 import circolareplus.pdf.renderPdfPages
 import kotlinx.coroutines.flow.collect
@@ -72,7 +74,12 @@ fun CircularDetailScreen(
      * tutti; e un modello da qualche miliardo di parametri che gira su un telefono una data ogni
      * tanto la sbaglia. Un tocco di conferma costa niente e rende l'errore innocuo.
      */
-    onCreateCalendarEvent: (suspend (ExtractedDeadline) -> String)? = null
+    onCreateCalendarEvent: (suspend (ExtractedDeadline) -> String)? = null,
+    /**
+     * Gli eventi gia' in calendario: una scadenza che c'e' gia' non mostra il tasto
+     * "Aggiungi al calendario", che creava un evento doppio.
+     */
+    calendarEvents: List<CalendarEvent> = emptyList()
 ) {
     val scope = rememberCoroutineScope()
     // Scadenze già aggiunte in questa visita, con l'esito: evita di ricreare due volte lo stesso
@@ -271,11 +278,15 @@ fun CircularDetailScreen(
                         val deadlines = classification?.detectedDeadlines.orEmpty()
                         if (deadlines.isNotEmpty() && onCreateCalendarEvent != null) {
                             Spacer(modifier = Modifier.height(AppTheme.Space16))
+                            val allInCalendar = deadlines.all {
+                                CalendarDuplicates.findExisting(it, calendarEvents) != null
+                            }
                             Text(
-                                text = if (deadlines.size == 1) {
-                                    "Ho trovato una scadenza"
-                                } else {
-                                    "Ho trovato ${deadlines.size} scadenze"
+                                text = when {
+                                    allInCalendar && deadlines.size == 1 -> "Scadenza gia' in calendario"
+                                    allInCalendar -> "Scadenze gia' in calendario"
+                                    deadlines.size == 1 -> "Ho trovato una scadenza"
+                                    else -> "Ho trovato ${deadlines.size} scadenze"
                                 },
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
@@ -288,6 +299,7 @@ fun CircularDetailScreen(
                                     deadline = deadline,
                                     outcome = actionOutcomes[key],
                                     isAdding = actionInFlight == key,
+                                    existingEvent = CalendarDuplicates.findExisting(deadline, calendarEvents),
                                     onAdd = {
                                         if (actionInFlight == null && actionOutcomes[key] == null) {
                                             actionInFlight = key
@@ -493,6 +505,8 @@ private fun ProposedDeadlineRow(
     deadline: ExtractedDeadline,
     outcome: String?,
     isAdding: Boolean,
+    /** L'evento che corrisponde gia' in calendario, se c'e': al posto del tasto si dice che c'e'. */
+    existingEvent: CalendarEvent?,
     onAdd: () -> Unit
 ) {
     val shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp)
@@ -527,6 +541,14 @@ private fun ProposedDeadlineRow(
                 text = outcome,
                 fontSize = 11.sp,
                 color = AppTheme.TextMuted,
+                lineHeight = 15.sp
+            )
+        } else if (existingEvent != null) {
+            Text(
+                text = "Gia' in calendario: ${existingEvent.title}",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = AppTheme.TintGreenInk,
                 lineHeight = 15.sp
             )
         } else {
