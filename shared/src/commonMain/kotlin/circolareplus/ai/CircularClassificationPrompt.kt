@@ -3,6 +3,7 @@ package circolareplus.ai
 import circolareplus.domain.model.CircularAiClassification
 import circolareplus.domain.model.CircularRelevanceBadge
 import circolareplus.domain.model.ExtractedDeadline
+import circolareplus.util.today
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -95,8 +96,12 @@ internal object CircularClassificationPrompt {
             ""
         }
 
+        val now = today()
+        val schoolYear = DeadlineSanity.schoolYearStart(now)
+
         return """
             Studente: $studentContext
+            Oggi e' ${now.toIso()}. Anno scolastico $schoolYear/${(schoolYear + 1) % 100}: le date scritte senza anno appartengono a questo anno scolastico (da settembre a dicembre l'anno e' $schoolYear, da gennaio ad agosto e' ${schoolYear + 1}).
 
             CIRCOLARE N. $circularNumber: $circularTitle
             TESTO:
@@ -117,6 +122,8 @@ internal object CircularClassificationPrompt {
               di persone/enti coinvolti (relatori, associazioni, uffici), e l'obiettivo concreto
               della circolare (cosa deve fare lo studente, entro quando, con quali modalita').
               Non riassumere in modo generico se il testo contiene questi dettagli: riportali.
+              Le date copiale ESATTAMENTE come sono scritte nel testo (stesso giorno, stesso mese):
+              non convertirle e non calcolarle.
             $actionRules
         """.trimIndent()
     }
@@ -150,7 +157,15 @@ internal object CircularClassificationPrompt {
             value.substring(3, 5).toIntOrNull()?.let { it in 0..59 } == true
 
     /** Legge badge, riassunto e azioni dal JSON del modello. `null` se il JSON non è leggibile. */
-    fun parse(circularNumber: Int, jsonText: String): CircularAiClassification? {
+    fun parse(
+        circularNumber: Int,
+        jsonText: String,
+        /**
+         * Il testo del PDF da cui il modello ha lavorato. Se c'e', le scadenze si verificano
+         * contro di esso ([DeadlineSanity]); `null` salta il controllo.
+         */
+        sourceText: String? = null
+    ): CircularAiClassification? {
         val obj = try {
             json.parseToJsonElement(jsonText).jsonObject
         } catch (e: Exception) {
@@ -194,7 +209,11 @@ internal object CircularClassificationPrompt {
             circularNumber = circularNumber,
             badge = badge,
             personalSummary = summary,
-            detectedDeadlines = deadlines
+            detectedDeadlines = if (sourceText != null) {
+                DeadlineSanity.sanitize(deadlines, sourceText)
+            } else {
+                deadlines
+            }
         )
     }
 }
