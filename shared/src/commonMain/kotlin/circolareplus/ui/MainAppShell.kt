@@ -1532,7 +1532,7 @@ fun MainAppShell(
             if (!isInPollsScreen && !isInClassRosterScreen && !isInNotificationsScreen && !isInSearchScreen && !isInAssistantScreen && !isInSettingsScreen && editingSeatMapProposal == null && proposalOptions.isEmpty()) {
                 NavigationBar(
                     containerColor = AppTheme.SurfaceWhite,
-                    tonalElevation = AppTheme.Space8
+                    tonalElevation = 0.dp
                 ) {
                     // Stesso aspetto di sempre (stesse icone/etichette, stessa altezza), ma non
                     // sono più NavigationBarItem: quelli portano il proprio ripple grigio di
