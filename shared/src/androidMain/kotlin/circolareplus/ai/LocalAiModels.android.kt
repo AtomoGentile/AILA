@@ -27,9 +27,9 @@ actual object LocalAiCatalog {
      * iOS): `downloadUrl` vuoto e `approxSizeBytes = 0` sono il segnale che [LocalModelStore]
      * legge per trattarla come modello "di sistema" invece che come file da scaricare.
      *
-     * Scritta contro l'API reale di AICore (verificata via ricerca web, vedi `AiCoreEngine.kt`)
-     * ma mai compilata: la dipendenza Gradle non è mai stata risolta da questo ambiente. Non è
-     * mai proposta come "consigliata" (serve una prima build reale prima di fidarsene).
+     * Verificata in campo su un Galaxy S26 Ultra: chat e analisi delle circolari funzionano
+     * (vedi `AiCoreEngine.kt` per gli accorgimenti sul prompt). Non e' mai proposta come
+     * "consigliata": dipende dal telefono e da Gemini Nano di sistema.
      */
     val AICORE = LocalAiModel(
         id = "aicore",
@@ -42,8 +42,8 @@ actual object LocalAiCatalog {
         preferGpu = false,
         supportsActions = true,
         maxOutputTokens = 900,
-        description = "Motore di sistema Android. Nessun download, ma integrazione mai " +
-            "compilata in questa build (vedi AiCoreEngine.kt)."
+        description = "Gemini Nano, il modello che Android include gia': nessun download e " +
+            "tutto resta sul telefono. Disponibile solo sui dispositivi compatibili."
     )
 
     // --- Gemma 4 ---

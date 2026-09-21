@@ -577,30 +577,31 @@ private fun LocalModelRow(
             .clickable(onClick = onClick)
             .padding(AppTheme.Space12)
     ) {
+        // Il nome e il tag stanno sulla stessa riga, il peso va sotto: con tutti e tre in fila
+        // ("Android AICore (Gemini Nano)", "Incluso nel sistema", "Installato") la riga non stava
+        // in larghezza, il tag veniva schiacciato e andava a capo una lettera per riga — una
+        // colonna alta e verde che allargava la scheda di centinaia di pixel.
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text(
                 text = model.displayName,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
-                color = AppTheme.TextDark
+                color = AppTheme.TextDark,
+                modifier = Modifier.weight(1f)
             )
-            Spacer(modifier = Modifier.width(AppTheme.Space8))
-            Text(
-                text = model.readableSize,
-                fontSize = 11.sp,
-                color = AppTheme.TextMuted
-            )
-            Spacer(modifier = Modifier.weight(1f))
             val tag = when {
                 isInstalled -> "Installato"
                 isRecommended -> "Consigliato"
                 else -> null
             }
             if (tag != null) {
+                Spacer(modifier = Modifier.width(AppTheme.Space8))
                 Text(
                     text = tag,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    softWrap = false,
                     color = if (isInstalled) AppTheme.TintGreenInk else AppTheme.TintSlateInk,
                     modifier = Modifier
                         .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
@@ -609,6 +610,11 @@ private fun LocalModelRow(
                 )
             }
         }
+        Text(
+            text = model.readableSize,
+            fontSize = 11.sp,
+            color = AppTheme.TextMuted
+        )
         Spacer(modifier = Modifier.height(AppTheme.Space4))
         Text(
             text = model.description,
