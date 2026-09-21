@@ -18,9 +18,14 @@ packages:
   # validi ma puntano qui). `branch: main` invece di un numero di versione perché questo
   # ambiente non ha un Mac per verificare quale tag sia compatibile con Xcode/iOS 26 al momento
   # della build — la prima build reale dovrebbe passare a un tag fisso una volta verificato.
-  MLXSwiftLM:
-    url: https://github.com/ml-explore/mlx-swift-lm
-    branch: main
+  # DISATTIVATO (21/9/2026): `mlx-swift-lm` su `main` richiede Swift tools 6.3.0 e la risoluzione
+  # dei pacchetti falliva ("incompatible tools version") con l'Xcode dei runner GitHub, quindi la
+  # CI iOS non arrivava nemmeno a compilare l'app (falliva gia' su tutti i run di main). Il Tier 2
+  # MLX e' comunque nascosto (LocalAiModels.ios.kt). Per riattivarlo: togliere i commenti qui e
+  # sotto, ed eventualmente fissare un tag compatibile invece di `main`.
+  # MLXSwiftLM:
+  #   url: https://github.com/ml-explore/mlx-swift-lm
+  #   branch: main
 
 targets:
   iosApp:
@@ -50,10 +55,10 @@ targets:
         product: FirebaseMessaging
       - package: Firebase
         product: FirebaseCore
-      - package: MLXSwiftLM
-        product: MLXLLM
-      - package: MLXSwiftLM
-        product: MLXLMCommon
+      # - package: MLXSwiftLM
+      #   product: MLXLLM
+      # - package: MLXSwiftLM
+      #   product: MLXLMCommon
     preBuildScripts:
       - name: Embed and Sign Apple Framework
         script: |
