@@ -3,6 +3,44 @@
 Elenco vivo dei problemi aperti e del lavoro ancora mancante, aggiornato mano a mano.
 Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esistente.
 
+## 21/9: allineamento Android/iOS (branch `parita-android-ios`)
+
+Audit completo delle due piattaforme e correzioni. La UI e' quasi tutta Compose condiviso, quindi le
+differenze stavano nel livello di piattaforma. **Nulla del lato iOS e' stato compilato o provato su un
+dispositivo** (nessun Mac disponibile): la verifica e' la CI `ios-build.yml` (compila e avvia il
+simulatore, non prova i singoli flussi). Android compila e assembla.
+
+Fatto:
+- **Insets/tastiera iOS**: `design/PlatformInsets.kt` (`iosSafeDrawingPadding`, `iosImePadding`, no-op su
+  Android perche' la finestra non e' edge-to-edge). Applicati a Onboarding, Auth, Offline, dettaglio
+  circolare, contenuto dello Scaffold e ai bottom sheet con campi di testo.
+- **Back gesture iOS**: `PlatformBackHandler.ios.kt` usa il `BackHandler` comune di Compose 1.11
+  (swipe dal bordo). Onboarding: "Indietro" visibile.
+- **Anteprima PDF iOS** con PDFKit (`PdfPageRenderer.ios.kt`); estrazione testo su `Dispatchers.Default`.
+- **Launch screen iOS** con colore/logo dello splash Android. Status bar/finestra iOS seguono il tema in-app.
+- **Tastiera**: `KeyboardOptions` su username, password, chiavi API, nomi (autocorrect off, tipo password).
+- **Impostazioni**: tolto il ramo `isIos()`; l'elenco modelli e' lo stesso e lo distingue il catalogo.
+  `LocalAiModel.isSystemModel`: niente "Elimina"/"Scarica (0 MB)" per Apple Intelligence/AICore.
+- **MLX nascosto su iOS** (`LocalAiCatalog.all` ha solo Apple Intelligence; le voci restano in `MLX_MODELS`).
+  Riattivarlo richiede un Mac: persistere lo stato su disco, sessione nuova a ogni chiamata, `stopWhen`.
+- **Annulla download Android** ora ferma il Worker (`LocalModelStore.cancelDownload`).
+- **Notifiche**: `LocalSettingsManager.onPushReceived` (dedup per id messaggio, rispetta interruttori per
+  categoria e "notifiche di sistema") usato da Android e iOS. Il backend manda ad Android solo `data`
+  (`onMessageReceived` gira sempre, cronologia autonoma); iOS resta `notification` + suono. Canale creato
+  all'avvio, icona di stato vera, retry sul token FCM iOS, badge azzerato. **Serve rideploy del backend
+  insieme alla nuova app** (i vecchi client leggono comunque titolo/testo da `data`).
+- **Android**: verticale sui telefoni (< 600dp), tablet liberi. Export PDF mappa posti iOS: errori
+  propagati e layout da `row/column`.
+
+Non fatto / limiti:
+- Push iOS: senza account Apple a pagamento non ricevono nulla (niente capability APNs).
+- Sync in background iOS (`BGAppRefreshTask`): non fatto, non verificabile qui.
+- AICore Android: non e' mai il modello consigliato e il suo stato si perde al riavvio.
+- Il retry sul contesto pieno esiste solo nell'assistente, non in classificazione/eventi.
+- Status bar Android non legata al tema in-app: la barra ha un colore di sistema fisso, icone scure
+  sarebbero illeggibili.
+- `RIEPILOGO_FASI_ABC.md` dichiara "fatto" cose mai compilate (Fase C): non riscritto.
+
 ## 20/9 (quarta parte): valutato e scartato un modello più leggero per fascia MID con CPU debole
 
 Richiesta: un modello più leggero di Gemma 4 E2B per telefoni con RAM adeguata (~6 GB) ma

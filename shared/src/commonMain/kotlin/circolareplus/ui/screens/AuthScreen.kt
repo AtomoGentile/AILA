@@ -20,6 +20,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -33,6 +36,7 @@ import circolareplus.design.AilaLogoTile
 import circolareplus.design.AilaSegmentedTabs
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
+import circolareplus.design.iosSafeDrawingPadding
 import circolareplus.design.ailaAppear
 import circolareplus.design.ailaFieldColors
 import circolareplus.domain.model.StudentProfile
@@ -163,6 +167,7 @@ fun AuthScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .iosSafeDrawingPadding()
                 .verticalScroll(scrollState)
                 .padding(horizontal = AppTheme.Space20, vertical = AppTheme.Space32),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -253,13 +258,15 @@ fun AuthScreen(
                                     value = firstName,
                                     onValueChange = { firstName = it },
                                     placeholder = "Nome",
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f),
+                                    keyboardOptions = nameKeyboard
                                 )
                                 AuthField(
                                     value = lastName,
                                     onValueChange = { lastName = it },
                                     placeholder = "Cognome",
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f),
+                                    keyboardOptions = nameKeyboard
                                 )
                             }
 
@@ -286,7 +293,11 @@ fun AuthScreen(
                         value = username,
                         onValueChange = { username = it },
                         placeholder = "Username",
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.None,
+                            autoCorrectEnabled = false
+                        )
                     )
 
                     Spacer(modifier = Modifier.height(AppTheme.Space12))
@@ -296,6 +307,11 @@ fun AuthScreen(
                         onValueChange = { password = it },
                         placeholder = "Password",
                         modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.None,
+                            autoCorrectEnabled = false,
+                            keyboardType = KeyboardType.Password
+                        ),
                         visualTransformation = if (isPasswordVisible) {
                             VisualTransformation.None
                         } else {
@@ -328,7 +344,11 @@ fun AuthScreen(
                                 value = representativeCode,
                                 onValueChange = { representativeCode = it },
                                 placeholder = "Codice rappresentante (facoltativo)",
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                keyboardOptions = KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.None,
+                                    autoCorrectEnabled = false
+                                )
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
@@ -390,6 +410,11 @@ fun AuthScreen(
     }
 }
 
+private val nameKeyboard = KeyboardOptions(
+    capitalization = KeyboardCapitalization.Words,
+    autoCorrectEnabled = false
+)
+
 /** Campo di testo del login: segnaposto invece di etichetta fluttuante, come nel mockup. */
 @Composable
 private fun AuthField(
@@ -398,6 +423,9 @@ private fun AuthField(
     placeholder: String,
     modifier: Modifier = Modifier,
     visualTransformation: VisualTransformation = VisualTransformation.None,
+    // Senza indicazioni iOS correggeva/maiuscolava a suo modo username e codici, e la password
+    // non veniva trattata come tale (niente modalita' sicura, niente suggerimenti password).
+    keyboardOptions: KeyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
     trailing: (@Composable () -> Unit)? = null
 ) {
     OutlinedTextField(
@@ -408,6 +436,7 @@ private fun AuthField(
         },
         singleLine = true,
         visualTransformation = visualTransformation,
+        keyboardOptions = keyboardOptions,
         trailingIcon = trailing,
         shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
         colors = ailaFieldColors(),

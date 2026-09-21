@@ -113,9 +113,17 @@ data class LocalAiModel(
     val supportsThinking: Boolean = false,
     val description: String
 ) {
+    /**
+     * `true` per i modelli forniti dal sistema (Apple Intelligence, AICore): nessun file da
+     * scaricare né da eliminare, l'app si limita ad attivarli.
+     */
+    val isSystemModel: Boolean
+        get() = downloadUrl.isBlank()
+
     /** "2,0 GB" / "963 MB" — per le etichette dei pulsanti di download. */
     val readableSize: String
         get() {
+            if (isSystemModel) return "Incluso nel sistema"
             val mb = approxSizeBytes / 1_000_000
             return if (mb >= 1000) {
                 val tenthsOfGb = mb / 100
