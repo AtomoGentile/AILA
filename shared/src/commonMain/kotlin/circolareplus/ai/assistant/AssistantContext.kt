@@ -80,10 +80,20 @@ internal object AssistantContext {
         val budget = Budget(maxChars)
         val terms = tokenize(question)
         val explicitNumbers = circularNumbersIn(question)
+        // "questa settimana", "domani"...: il filtro lo fa il codice (vedi TimeScope).
+        val scope = TimeScopeParser.parse(question, knowledge.todayIso)
         val builder = StringBuilder()
 
         builder.appendSection("OGGI") {
             appendLine("${knowledge.todayIso} (${weekdayName(knowledge.todayIso)})")
+            if (scope != null) {
+                appendLine(
+                    "PERIODO CHIESTO: ${scope.describe()}. Le sezioni qui sotto contengono gia' " +
+                        "solo gli eventi e le scadenze di questo periodo: rispondi con quelli, " +
+                        "e se non ce ne sono dillo. Ignora ogni data fuori dal periodo, anche " +
+                        "se la leggi in un riassunto."
+                )
+            }
         }
 
         builder.appendSection("CHI TI STA FACENDO LA DOMANDA") {
@@ -113,10 +123,10 @@ internal object AssistantContext {
             }
         }
 
-        renderCirculars(builder, knowledge, terms, explicitNumbers, deepTexts, budget)
-        renderCalendar(builder, knowledge, terms, budget)
+        renderCirculars(builder, knowledge, terms, explicitNumbers, deepTexts, budget, scope)
+        renderCalendar(builder, knowledge, terms, budget, scope)
         renderBoard(builder, knowledge, terms, budget)
-        if (budget.includePolls) renderPolls(builder, knowledge)
+        if (budget.includePolls) renderPolls(builder, knowledge, scope)
         renderSeatMap(builder, knowledge, budget)
         renderClassData(builder, knowledge, budget)
 
@@ -155,7 +165,8 @@ internal object AssistantContext {
         terms: List<String>,
         explicitNumbers: Set<Int>,
         deepTexts: Map<Int, String>,
-        budget: Budget
+        budget: Budget,
+        scope: TimeScope?
     ) {
         if (knowledge.circulars.isEmpty()) {
             builder.appendSection("CIRCOLARI") { appendLine("Nessuna circolare scaricata.") }
@@ -175,13 +186,27 @@ internal object AssistantContext {
 
         val ranked = knowledge.circulars
             .sortedByDescending { circular -> scoreCircular(circular, knowledge, terms, explicitNumbers) }
-        val detailed = ranked.take(budget.detailedCirculars)
+        // Con un periodo chiesto si dettagliano solo le circolari che c'entrano con quel
+        // periodo: una scadenza al suo interno, o la pubblicazione. Le altre restano nell'indice.
+        val detailed = if (scope == null) {
+            ranked.take(budget.detailedCirculars)
+        } else {
+            ranked.filter { circular ->
+                circular.number in explicitNumbers ||
+                    scope.contains(circular.publishDate) ||
+                    knowledge.classifications[circular.number]?.detectedDeadlines.orEmpty()
+                        .any { scope.contains(it.dueDate) }
+            }.take(budget.detailedCirculars)
+        }
 
         builder.appendSection("CIRCOLARI PIU' ATTINENTI ALLA DOMANDA") {
             appendLine(
                 "Solo di queste hai il riassunto. Se la domanda riguarda una circolare " +
                     "dell'indice che qui non compare, chiedine il testo con needsCircularText."
             )
+            if (scope != null && detailed.isEmpty()) {
+                appendLine("Nessuna circolare ha scadenze o e' stata pubblicata in questo periodo.")
+            }
             detailed.forEach { circular ->
                 appendLine("")
                 appendLine("--- Circolare n. ${circular.number} (${circular.publishDate}) ---")
@@ -207,9 +232,14 @@ internal object AssistantContext {
                         )
                     }
                     appendLine("Riassunto: ${analysis.personalSummary.take(budget.summaryChars)}")
-                    if (analysis.detectedDeadlines.isNotEmpty()) {
-                        appendLine("Scadenze rilevate:")
-                        analysis.detectedDeadlines.forEach { deadline ->
+                    val deadlines = if (scope == null) {
+                        analysis.detectedDeadlines
+                    } else {
+                        analysis.detectedDeadlines.filter { scope.contains(it.dueDate) }
+                    }
+                    if (deadlines.isNotEmpty()) {
+                        appendLine(if (scope == null) "Scadenze rilevate:" else "Scadenze nel periodo:")
+                        deadlines.forEach { deadline ->
                             appendLine(
                                 "  - ${deadline.title} | ${deadline.dueDate} " +
                                     "(${formatItalianDateWithWeekday(deadline.dueDate)})" +
@@ -274,10 +304,23 @@ internal object AssistantContext {
         builder: StringBuilder,
         knowledge: AssistantKnowledge,
         terms: List<String>,
-        budget: Budget
+        budget: Budget,
+        scope: TimeScope?
     ) {
         if (knowledge.calendarEvents.isEmpty()) {
             builder.appendSection("CALENDARIO") { appendLine("Nessun evento in calendario.") }
+            return
+        }
+
+        // Periodo chiesto: solo gli eventi di quell'intervallo, passati o futuri che siano, al
+        // posto delle due sezioni generiche qui sotto.
+        if (scope != null) {
+            val inRange = knowledge.calendarEvents.filter { scope.contains(it.date) }.sortedBy { it.date }
+            builder.appendSection("CALENDARIO — EVENTI DEL PERIODO CHIESTO (${scope.from} / ${scope.to})") {
+                appendLine("Formato: data (data leggibile) | ora | categoria | titolo | destinatari | note")
+                if (inRange.isEmpty()) appendLine("Nessun evento in calendario in questo periodo.")
+                inRange.take(budget.futureEvents + budget.pastEvents).forEach { appendLine(formatEvent(it, knowledge)) }
+            }
             return
         }
 
@@ -372,7 +415,7 @@ internal object AssistantContext {
     // Sondaggi
     // -----------------------------------------------------------------------
 
-    private fun renderPolls(builder: StringBuilder, knowledge: AssistantKnowledge) {
+    private fun renderPolls(builder: StringBuilder, knowledge: AssistantKnowledge, scope: TimeScope?) {
         val dynamic = knowledge.dynamic
         if (dynamic.polls.isEmpty() && dynamic.currentPoll == null) {
             builder.appendSection("SONDAGGI") { appendLine("Nessun sondaggio.") }
@@ -394,7 +437,11 @@ internal object AssistantContext {
                 appendLine("--- Sondaggio attivo: ${poll.subject} ---")
                 appendLine("Il tuo bonus sacrificio: ${poll.mySacrificeBonus}")
                 appendLine("Formato slot: data | posti | i tuoi voti | preferenze della classe")
-                poll.slots.forEach { slot ->
+                val slots = if (scope == null) poll.slots else poll.slots.filter { scope.contains(it.slotDate) }
+                if (scope != null && slots.isEmpty()) {
+                    appendLine("Nessuna data di questo sondaggio cade nel periodo chiesto.")
+                }
+                slots.forEach { slot ->
                     appendLine(
                         "${slot.slotDate} | ${slot.capacity} posti | " +
                             "tuo voto: ${slot.myVote?.toString() ?: "non votato"} | " +

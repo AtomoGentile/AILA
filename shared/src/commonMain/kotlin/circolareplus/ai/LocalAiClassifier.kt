@@ -45,8 +45,11 @@ class LocalAiClassifier(
         const val THINKING_TOKEN_MULTIPLIER = 3
         const val THINKING_TIMEOUT_MILLIS = 300_000L
 
-        /** Testo di PDF del secondo tentativo, dopo che il modello ha rifiutato quello intero. */
+        /** Testo di PDF dell'ultimo tentativo, solo se il motore dice che il prompt e' troppo lungo. */
         const val SHRUNK_PDF_CHARS = 2_500
+
+        /** Modelli che hanno bisogno del prompt compatto (scoperto in questa sessione). */
+        val compactPromptModels = mutableSetOf<String>()
     }
 
     override suspend fun classifyCircularText(
@@ -67,9 +70,13 @@ class LocalAiClassifier(
         // digerisce il testo) si riprova una volta con meno PDF: la stessa idea del mezzo budget
         // in generateAnswer. Un tentativo solo, ogni giro e' un'altra generazione.
         var pdfLimit = CircularClassificationPrompt.MAX_PDF_CHARS
+        // AICore risponde vuoto al prompt completo e funziona con quello compatto: una volta
+        // scoperto, si parte direttamente da li' invece di sprecare ogni volta una generazione.
+        val startedCompact = model.id in compactPromptModels
+        var compact = startedCompact
         var raw: String? = null
         var failure: Exception? = null
-        for (attempt in 0..1) {
+        for (attempt in 0..2) {
             try {
                 raw = llm.generate(
                     modelPath = path,
@@ -83,7 +90,7 @@ class LocalAiClassifier(
                         CircularClassificationPrompt.extractJsonObject(partial) != null
                     },
                     systemPrompt = CircularClassificationPrompt.SYSTEM_PROMPT,
-                    userPrompt = if (attempt == 0) {
+                    userPrompt = if (!compact) {
                         CircularClassificationPrompt.buildUserPrompt(
                             circularNumber = circularNumber,
                             circularTitle = circularTitle,
@@ -97,7 +104,6 @@ class LocalAiClassifier(
                             maxPdfChars = pdfLimit
                         )
                     } else {
-                        // Secondo giro: non solo meno testo, anche un prompt di forma diversa.
                         CircularClassificationPrompt.buildCompactUserPrompt(
                             circularNumber = circularNumber,
                             circularTitle = circularTitle,
@@ -108,13 +114,23 @@ class LocalAiClassifier(
                     }
                 )
                 failure = null
+                if (compact && !startedCompact) compactPromptModels += model.id
                 break
             } catch (e: Exception) {
                 failure = e
-                if (attempt == 0 && isPromptTooLong(e.message.orEmpty())) {
-                    pdfLimit = SHRUNK_PDF_CHARS
-                } else {
-                    break
+                val message = e.message.orEmpty()
+                if (attempt == 2 || !isPromptTooLong(message)) break
+                when {
+                    // Risposta vuota: la lunghezza non c'entra (finish=STOP), cambia la FORMA del
+                    // prompt e si tiene tutto il testo — un tetto piu' basso qui faceva analizzare
+                    // le circolari con meno della meta' del documento senza che servisse.
+                    isEmptyAnswer(message) && !compact -> compact = true
+                    // Il compatto con tutto il testo e' fallito, o il motore ha detto "troppo
+                    // lungo": ora si accorcia davvero.
+                    else -> {
+                        compact = true
+                        pdfLimit = SHRUNK_PDF_CHARS
+                    }
                 }
             }
         }
@@ -256,6 +272,9 @@ class LocalAiClassifier(
             )
         }
     }
+
+    /** `true` per la risposta vuota di AICore (`finish=STOP`, nessun testo). */
+    private fun isEmptyAnswer(reason: String): Boolean = reason.lowercase().contains("testo vuoto")
 
     /** Riconosce il fallimento "prompt troppo lungo" del motore nativo dal testo dell'errore. */
     private fun isPromptTooLong(reason: String): Boolean {

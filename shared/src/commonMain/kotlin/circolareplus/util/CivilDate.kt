@@ -49,6 +49,20 @@ fun civilFromEpochMillis(millis: Long): CivilDate {
     return CivilDate(year.toInt(), m.toInt(), d.toInt())
 }
 
+/** Giorni dal 1970-01-01, algoritmo days_from_civil di Hinnant (inverso di [civilFromEpochMillis]). */
+private fun epochDaysOf(date: CivilDate): Long {
+    val y = (if (date.month <= 2) date.year - 1 else date.year).toLong()
+    val era = (if (y >= 0) y else y - 399) / 400
+    val yoe = y - era * 400
+    val doy = (153L * (date.month + (if (date.month > 2) -3 else 9)) + 2) / 5 + date.day - 1
+    val doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+    return era * 146_097 + doe - 719_468
+}
+
+/** La data [days] giorni dopo (o prima, se negativo). Gestisce mesi, anni e bisestili. */
+fun CivilDate.plusDays(days: Int): CivilDate =
+    civilFromEpochMillis((epochDaysOf(this) + days) * 86_400_000L)
+
 /** L'istante corrente spostato sul fuso locale: la parte "data" e' quella di oggi per l'utente. */
 private fun localNowMillis(): Long {
     val now = currentTimeMillis()
