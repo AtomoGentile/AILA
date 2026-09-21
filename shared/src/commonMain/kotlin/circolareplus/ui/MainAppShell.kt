@@ -1073,6 +1073,22 @@ fun MainAppShell(
         }
     }
 
+    // Il dettaglio di una circolare deve sapere cosa c'e' gia' in calendario, altrimenti propone
+    // come "da aggiungere" scadenze che ci sono gia' (evento doppio). Il calendario si caricava
+    // solo aprendo la sua tab, e dopo un'aggiunta non si ricaricava se si era altrove: si rilegge
+    // ad ogni apertura del dettaglio e ad ogni aggiunta (calendarRefreshTrigger).
+    LaunchedEffect(selectedCircularForDetail?.number, calendarRefreshTrigger) {
+        if (selectedCircularForDetail != null) {
+            try {
+                calendarEvents = AppContainer.calendarRepository.listEvents()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Senza rete resta l'elenco che c'e': al peggio il tasto compare.
+            }
+        }
+    }
+
     // Le spiegazioni gia' pronte sul server (fatte da altri, o da un altro telefono) si scaricano
     // appena la lista cambia, per tutte le circolari che non ne hanno ancora una: una richiesta
     // leggera ciascuna, senza toccare il modello. Prima questo avveniva solo dentro la
@@ -1437,6 +1453,7 @@ fun MainAppShell(
             circular = circularForDetail,
             classification = classifications[circularForDetail.number],
             isClassifying = circularForDetail.number in inFlightClassification,
+            calendarEvents = calendarEvents,
             onBackClick = { selectedCircularForDetail = null },
             onDownloadPdfClick = {
                 circularForDetail.downloadUrl?.let { uriHandler.openUri(it) }
