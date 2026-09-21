@@ -1,5 +1,6 @@
 package circolareplus.ai
 
+import android.os.Build
 import circolareplus.platform.AndroidAppContext
 import com.google.ai.edge.aicore.DownloadCallback
 import com.google.ai.edge.aicore.DownloadConfig
@@ -65,6 +66,12 @@ internal object AiCoreEngine {
      */
     suspend fun prepare(maxOutputTokens: Int, onProgress: (downloaded: Long, total: Long) -> Unit): Boolean {
         model?.let { return true }
+        // La libreria richiede API 31 (l'app parte da 26, con override nel manifest): sotto, non
+        // va nemmeno toccata, o le sue classi lancerebbero al primo uso.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            lastFailureReason = "AICore richiede Android 12 o successivo."
+            return false
+        }
         val context = AndroidAppContext.getOrNull() ?: run {
             lastFailureReason = "AI locale non ancora inizializzata."
             return false
@@ -98,12 +105,14 @@ internal object AiCoreEngine {
         }
 
         return try {
-            val generationConfig = GenerationConfig.Builder()
-                .setContext(context)
-                .setMaxOutputTokens(maxOutputTokens)
-                .setCallbackExecutor(callbackExecutor)
-                .setWorkerExecutor(workerExecutor)
-                .build()
+            // Il Builder di 0.0.1-exp02 espone proprietà (var), non setter concatenabili: i
+            // metodi setX() restituiscono Unit.
+            val generationConfig = GenerationConfig.Builder().apply {
+                this.context = context
+                this.maxOutputTokens = maxOutputTokens
+                this.callbackExecutor = this@AiCoreEngine.callbackExecutor
+                this.workerExecutor = this@AiCoreEngine.workerExecutor
+            }.build()
             val candidate = GenerativeModel(generationConfig, DownloadConfig(callback))
             candidate.prepareInferenceEngine()
             model = candidate
