@@ -6,9 +6,16 @@ Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esist
 ## 21/9: allineamento Android/iOS (branch `parita-android-ios`)
 
 Audit completo delle due piattaforme e correzioni. La UI e' quasi tutta Compose condiviso, quindi le
-differenze stavano nel livello di piattaforma. **Nulla del lato iOS e' stato compilato o provato su un
-dispositivo** (nessun Mac disponibile): la verifica e' la CI `ios-build.yml` (compila e avvia il
-simulatore, non prova i singoli flussi). Android compila e assembla.
+differenze stavano nel livello di piattaforma. Android compila e assembla. **iOS: la CI compila l'app
+(run 35616777070, "Build iOS app" verde) ma nulla e' stato provato a schermo** (nessun Mac): il passo
+"smoke-test" e' scaduto nel boot del simulatore ("Waiting on BackBoard", blocco noto dei runner), quindi
+l'avvio non e' confermato.
+
+La CI iOS falliva GIA' su tutti i run di `main` (e mai arrivava a compilare): il pacchetto
+`mlx-swift-lm` (branch `main`) richiede Swift tools 6.3.0 e non si risolveva; poi c'erano tre errori
+Kotlin/Native reali (`toSortedMap()` solo JVM in MainAppShell, `@Volatile`, import di
+`secondsFromGMTForDate`) e la firma di `MLXLocalBridge.download` in Swift. Corretti; il pacchetto MLX e'
+disattivato in `project.yml` e `MLXLocalEngine.swift` usa `canImport(MLXLLM)`.
 
 Fatto:
 - **Insets/tastiera iOS**: `design/PlatformInsets.kt` (`iosSafeDrawingPadding`, `iosImePadding`, no-op su
