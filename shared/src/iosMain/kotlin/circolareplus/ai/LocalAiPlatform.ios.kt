@@ -12,9 +12,11 @@ import platform.Foundation.NSProcessInfo
  */
 
 actual fun totalDeviceRamMb(): Int {
-    // Memoria fisica totale in byte → MB
+    // Memoria fisica totale in byte → MiB (1024*1024), non MB decimali: come su Android
+    // (ActivityManager.totalMem / 1024 / 1024), perché le soglie di LocalAiModels.kt in commonMain
+    // sono tarate su quella unità e con /1.000.000 un iPhone da 8 GiB risultava ~6% "più piccolo".
     val bytes = NSProcessInfo.processInfo.physicalMemory
-    return (bytes.toLong() / 1_000_000L).toInt()
+    return (bytes.toLong() / 1024L / 1024L).toInt()
 }
 
 actual fun isOnDeviceAiAvailable(): Boolean {
@@ -57,6 +59,10 @@ actual class LocalModelStore actual constructor() {
 
     actual fun freeSpaceBytes(): Long = 0L
     // Non calcolato: nessun download reale avviene ancora su questa build.
+
+    // Il download MLX gira nella coroutine del chiamante (nessun lavoro separato in background):
+    // annullarla, come fa gia' la UI, e' sufficiente.
+    actual fun cancelDownload(model: LocalAiModel) {}
 
     actual fun delete(model: LocalAiModel): Boolean {
         if (isAppleIntelligence(model)) return false // non si può cancellare il modello di sistema
