@@ -111,6 +111,19 @@ object AppContainer {
             localModelStore.isInstalled(selectedLocalModel())
 
     /**
+     * Se, con una chiave cloud configurata, le circolari lunghe scavalcano il provider "AI
+     * locale" scelto dall'utente (vedi [shouldPreferCloudForLength]).
+     *
+     * Spento: la soglia e' `maxPromptChars` (8.192 caratteri per AICore, 5.600 per Phi), ma il
+     * classificatore locale tronca comunque a 6.000 caratteri di PDF, quindi la maggior parte
+     * delle circolari con allegati la superava e andava a Gemini senza che l'utente lo sapesse:
+     * in campo AICore sembrava "non funzionare" e partiva Gemini Flash, mentre senza chiave
+     * funzionava. Una scelta esplicita del provider vale piu' di un'ottimizzazione silenziosa.
+     * Se il locale fallisce davvero, la catena passa comunque al cloud.
+     */
+    private const val PREFER_CLOUD_FOR_LONG_TEXT = false
+
+    /**
      * Nuova istanza ad ogni chiamata (non lazy/singleton) perché rilegge ogni volta provider,
      * chiave AI e modello locale dalle impostazioni: se l'utente li cambia, la classificazione
      * successiva deve usare subito i valori aggiornati.
@@ -130,7 +143,8 @@ object AppContainer {
      * [circolareplus.ai.LocalAiModel.maxPromptChars] del modello locale selezionato e c'e' una
      * chiave cloud configurata, il provider "AI locale" scelto dall'utente viene anteposto dal
      * cloud solo per questa chiamata — vedi [shouldPreferCloudForLength] — invece di lasciar
-     * troncare silenziosamente una circolare che il cloud potrebbe leggere per intero.
+     * troncare silenziosamente una circolare che il cloud potrebbe leggere per intero. Oggi
+     * l'anteposizione e' spenta: vedi [PREFER_CLOUD_FOR_LONG_TEXT].
      */
     fun newAiClassifier(
         allowLocalFallback: Boolean = true,
@@ -150,7 +164,8 @@ object AppContainer {
 
         return when (AiProvider.fromId(settings.aiProvider)) {
             AiProvider.ON_DEVICE -> {
-                val preferCloudForLength = pdfTextLength != null && shouldPreferCloudForLength(
+                val preferCloudForLength = PREFER_CLOUD_FOR_LONG_TEXT &&
+                    pdfTextLength != null && shouldPreferCloudForLength(
                     textLength = pdfTextLength,
                     localModel = model,
                     hasCloudKey = settings.userAiApiKey.isNotBlank()

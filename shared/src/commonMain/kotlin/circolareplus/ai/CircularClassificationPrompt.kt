@@ -62,9 +62,11 @@ internal object CircularClassificationPrompt {
         circularTitle: String,
         pdfText: String,
         studentContext: String,
-        askForCalendarActions: Boolean = true
+        askForCalendarActions: Boolean = true,
+        /** Piu' basso di [MAX_PDF_CHARS] quando il modello ha rifiutato il prompt intero. */
+        maxPdfChars: Int = MAX_PDF_CHARS
     ): String {
-        val trimmed = truncatePdfTextForAi(pdfText, MAX_PDF_CHARS)
+        val trimmed = truncatePdfTextForAi(pdfText, maxPdfChars)
         // L'esempio nel JSON deve mostrare UN valore vero, non l'elenco delle opzioni unite da
         // "|": un modello piccolo (visto sia con Phi-4 mini sia con AICore/Gemini Nano) copia
         // l'esempio quasi alla lettera quando non e' sicuro, e "RELEVANT|POTENTIAL|NOT_RELEVANT"

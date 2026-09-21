@@ -44,6 +44,9 @@ class LocalAiClassifier(
          */
         const val THINKING_TOKEN_MULTIPLIER = 3
         const val THINKING_TIMEOUT_MILLIS = 300_000L
+
+        /** Testo di PDF del secondo tentativo, dopo che il modello ha rifiutato quello intero. */
+        const val SHRUNK_PDF_CHARS = 2_500
     }
 
     override suspend fun classifyCircularText(
@@ -60,42 +63,63 @@ class LocalAiClassifier(
             )
         }
 
-        val raw = try {
-            llm.generate(
-                modelPath = path,
-                preferGpu = model.preferGpu,
-                maxOutputTokens = model.maxOutputTokens,
-                timeoutMillis = GENERATION_TIMEOUT_MILLIS,
-                // Appena il JSON e' completo si smette: tutto quello che il modello scrive dopo
-                // verrebbe comunque scartato da extractJsonObject, quindi aspettarlo e' tempo
-                // regalato.
-                stopWhen = { partial ->
-                    CircularClassificationPrompt.extractJsonObject(partial) != null
-                },
-                systemPrompt = CircularClassificationPrompt.SYSTEM_PROMPT,
-                userPrompt = CircularClassificationPrompt.buildUserPrompt(
-                    circularNumber = circularNumber,
-                    circularTitle = circularTitle,
-                    pdfText = pdfText,
-                    studentContext = studentContext,
-                    // Un modello non addestrato al tool calling, se gli si chiede anche di
-                    // produrre azioni per il calendario, tende a perdere il filo e a rovinare
-                    // pure il riassunto: a TinyLlama si chiede soltanto di classificare.
-                    askForCalendarActions = model.supportsActions
+        // Se il modello rifiuta il prompt (troppo lungo, o risposta vuota come AICore quando non
+        // digerisce il testo) si riprova una volta con meno PDF: la stessa idea del mezzo budget
+        // in generateAnswer. Un tentativo solo, ogni giro e' un'altra generazione.
+        var pdfLimit = CircularClassificationPrompt.MAX_PDF_CHARS
+        var raw: String? = null
+        var failure: Exception? = null
+        for (attempt in 0..1) {
+            try {
+                raw = llm.generate(
+                    modelPath = path,
+                    preferGpu = model.preferGpu,
+                    maxOutputTokens = model.maxOutputTokens,
+                    timeoutMillis = GENERATION_TIMEOUT_MILLIS,
+                    // Appena il JSON e' completo si smette: tutto quello che il modello scrive
+                    // dopo verrebbe comunque scartato da extractJsonObject, quindi aspettarlo e'
+                    // tempo regalato.
+                    stopWhen = { partial ->
+                        CircularClassificationPrompt.extractJsonObject(partial) != null
+                    },
+                    systemPrompt = CircularClassificationPrompt.SYSTEM_PROMPT,
+                    userPrompt = CircularClassificationPrompt.buildUserPrompt(
+                        circularNumber = circularNumber,
+                        circularTitle = circularTitle,
+                        pdfText = pdfText,
+                        studentContext = studentContext,
+                        // Un modello non addestrato al tool calling, se gli si chiede anche di
+                        // produrre azioni per il calendario, tende a perdere il filo e a
+                        // rovinare pure il riassunto: a TinyLlama si chiede soltanto di
+                        // classificare.
+                        askForCalendarActions = model.supportsActions,
+                        maxPdfChars = pdfLimit
+                    )
                 )
-            )
-        } catch (e: Exception) {
+                failure = null
+                break
+            } catch (e: Exception) {
+                failure = e
+                if (attempt == 0 && isPromptTooLong(e.message.orEmpty())) {
+                    pdfLimit = SHRUNK_PDF_CHARS
+                } else {
+                    break
+                }
+            }
+        }
+        failure?.let { e ->
             return heuristicFallback(
                 circularNumber, circularTitle, pdfText,
                 "il modello ${model.displayName} non è riuscito a rispondere: " +
                     "${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}"
             )
         }
+        val answer = raw.orEmpty()
 
-        val jsonText = CircularClassificationPrompt.extractJsonObject(raw)
+        val jsonText = CircularClassificationPrompt.extractJsonObject(answer)
             ?: return heuristicFallback(
                 circularNumber, circularTitle, pdfText,
-                "${model.displayName} non ha risposto in JSON: ${raw.take(120)}"
+                "${model.displayName} non ha risposto in JSON: ${answer.take(120)}"
             )
 
         val parsed = CircularClassificationPrompt.parse(circularNumber, jsonText)
@@ -227,7 +251,9 @@ class LocalAiClassifier(
         val lower = reason.lowercase()
         return lower.contains("token ids are too long") ||
             lower.contains("maximum number of tokens") ||
-            lower.contains("exceeding")
+            lower.contains("exceeding") ||
+            // AICore che non digerisce il prompt risponde "" invece di lanciare (AiCoreEngine).
+            lower.contains("testo vuoto")
     }
 
     override suspend fun testConfiguration(): String {
