@@ -90,7 +90,6 @@ class SeatMapRepository(private val api: ApiClient? = null) {
     ): List<SeatMapProposal> {
         val isSmallClass = students.size < 22
         val baseSeed = kotlin.random.Random.nextLong()
-        val maxPossibleScore = students.size * 50.0
 
         val proposals = (1..3).map { i ->
             val seed = baseSeed + i
@@ -114,19 +113,20 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                 weights = weights,
                 isSmallClass = isSmallClass
             )
-            val satisfactionPct = ((breakdown.total / maxPossibleScore) * 100).coerceIn(0.0, 100.0)
 
             SeatMapProposal(
                 id = "proposal_$i",
                 assignments = assignments,
                 totalScore = breakdown.total,
-                satisfactionPercentage = satisfactionPct,
+                satisfaction = SeatMapOptimizer.voteSatisfaction(assignments, socialPreferences),
                 socialScore = breakdown.social,
                 disciplinePenalty = breakdown.discipline,
                 didacticScore = breakdown.didactic,
                 heightPenalty = breakdown.heightPenalty,
                 memoryPenalty = breakdown.memoryPenalty,
-                burnoutPenalty = breakdown.burnoutPenalty
+                burnoutPenalty = breakdown.burnoutPenalty,
+                priorityBonus = breakdown.priorityBonus,
+                columnNoisePenalty = breakdown.columnNoisePenalty
             )
         }
 

@@ -40,6 +40,11 @@ fun SocialPreferencesVotingScreen(
     val plusTwoCount = currentVotes.values.count { it == SocialPreferenceScore.STRONG_AFFINITY }
     val minusTwoCount = currentVotes.values.count { it == SocialPreferenceScore.STRONG_REJECTION }
 
+    // Votare tutti è obbligatorio: "0" non è più preselezionato per chi non è mai stato votato,
+    // è una scelta esplicita come le altre (e viene registrato come tale). Il tasto Salva resta
+    // spento finché resta anche un solo compagno senza voto.
+    val missingVotes = classmates.count { it.id !in currentVotes }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -56,6 +61,15 @@ fun SocialPreferencesVotingScreen(
             text = "Finestra aperta dal Rappresentante \u2022 Voti strettamente confidenziali",
             fontSize = 12.sp,
             color = AppTheme.TextMuted
+        )
+
+        Text(
+            text = "Devi votare tutti i compagni prima di salvare" +
+                if (missingVotes > 0) " • ne mancano $missingVotes" else " • hai votato tutti",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (missingVotes > 0) AppTheme.PollDarkRed else AppTheme.TintGreenInk,
+            modifier = Modifier.padding(top = AppTheme.Space4)
         )
 
         Spacer(modifier = Modifier.height(AppTheme.Space12))
@@ -96,7 +110,8 @@ fun SocialPreferencesVotingScreen(
                 .fillMaxWidth()
         ) {
             items(classmates) { classmate ->
-                val currentScore = currentVotes[classmate.id] ?: SocialPreferenceScore.NEUTRAL
+                // null = non ancora votato: nessun pulsante selezionato.
+                val currentScore = currentVotes[classmate.id]
 
                 Card(
                     shape = RoundedCornerShape(AppTheme.CardCornerRadius),
@@ -104,12 +119,23 @@ fun SocialPreferencesVotingScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(AppTheme.Space12)) {
-                        Text(
-                            text = "${classmate.firstName} ${classmate.lastName}",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = AppTheme.TextDark
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "${classmate.firstName} ${classmate.lastName}",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = AppTheme.TextDark,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (currentScore == null) {
+                                Text(
+                                    text = "Da votare",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AppTheme.PollDarkRed
+                                )
+                            }
+                        }
 
                         Spacer(modifier = Modifier.height(AppTheme.Space8))
 
@@ -160,11 +186,16 @@ fun SocialPreferencesVotingScreen(
 
         Button(
             onClick = onSubmitVotes,
+            enabled = missingVotes == 0,
             shape = RoundedCornerShape(AppTheme.ButtonCornerRadius),
             colors = ButtonDefaults.buttonColors(containerColor = AppTheme.PrimaryBlue),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(text = "Salva preferenze", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(
+                text = if (missingVotes == 0) "Salva preferenze" else "Vota ancora $missingVotes ${if (missingVotes == 1) "compagno" else "compagni"}",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }

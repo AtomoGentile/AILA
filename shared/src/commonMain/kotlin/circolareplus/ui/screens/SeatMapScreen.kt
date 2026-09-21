@@ -53,10 +53,9 @@ fun SeatMapScreen(
     // Banchi da coppia (2) o da trio (3): stesso algoritmo, vedi SeatMapOptimizer.optimize.
     var seatsPerDesk by remember { mutableStateOf(SeatMapOptimizer.SEATS_PER_DESK_PAIR) }
 
-    // Una disposizione pubblicata usa banchi da trio se ANCHE UN SOLO banco ha un terzo
-    // occupante: da qui la griglia sa se disegnare due o tre righe per banco, senza bisogno di
-    // tenere lo stato "modalità" separato dai dati (che sopravviverebbe male a un riavvio app).
-    val hasTrioDesks = remember(assignments) { assignments.any { it.studentCId != null } }
+    // Una disposizione pubblicata usa banchi da trio se un banco ha capienza 3 (campo `seats`,
+    // salvato nel JSON) o, per le mappe vecchie senza il campo, un terzo occupante.
+    val hasTrioDesks = remember(assignments) { assignments.any { it.seats >= 3 || it.studentCId != null } }
 
     Column(
         modifier = Modifier
