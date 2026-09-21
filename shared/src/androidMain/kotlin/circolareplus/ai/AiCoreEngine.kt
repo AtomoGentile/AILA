@@ -53,7 +53,38 @@ internal object AiCoreEngine {
     private val callbackExecutor = Executors.newSingleThreadExecutor()
     private val workerExecutor = Executors.newFixedThreadPool(2)
 
-    fun isAvailable(): Boolean = model != null
+    private const val PREFS = "aicore"
+    private const val KEY_PREPARED = "prepared"
+
+    /**
+     * `true` se AICore e' pronto **o lo e' stato in un avvio precedente**.
+     *
+     * Prima valeva solo `model != null`, cioe' lo stato in memoria del processo: dopo ogni
+     * riavvio dell'app AICore risultava "non installato" anche se il modello di sistema era
+     * pronto da tempo, `LocalModelStore.installedPath` restituiva `null`, il classificatore
+     * dichiarava "nessun modello locale" e la catena passava al cloud (Gemini Flash) senza mai
+     * provare AICore. Il flag persistente dice che la preparazione e' gia' andata a buon fine;
+     * [generate] ricrea il `GenerativeModel` da solo alla prima chiamata.
+     */
+    fun isAvailable(): Boolean = model != null || wasPreparedBefore()
+
+    private fun wasPreparedBefore(): Boolean = try {
+        AndroidAppContext.getOrNull()
+            ?.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+            ?.getBoolean(KEY_PREPARED, false) == true
+    } catch (e: Exception) {
+        false
+    }
+
+    private fun rememberPrepared(prepared: Boolean) {
+        try {
+            AndroidAppContext.getOrNull()
+                ?.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+                ?.edit()?.putBoolean(KEY_PREPARED, prepared)?.apply()
+        } catch (e: Exception) {
+            // Solo un'ottimizzazione: senza flag si torna al comportamento di prima.
+        }
+    }
 
     fun unavailableReason(): String =
         lastFailureReason ?: "AICore non ancora preparato: scaricalo dalle Impostazioni."
@@ -117,12 +148,14 @@ internal object AiCoreEngine {
             candidate.prepareInferenceEngine()
             model = candidate
             if (!outcome.isCompleted) outcome.complete(true)
-            outcome.await()
+            outcome.await().also { rememberPrepared(it) }
         } catch (e: GenerativeAIException) {
             lastFailureReason = "${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}"
+            rememberPrepared(false)
             false
         } catch (e: Exception) {
             lastFailureReason = "${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}"
+            rememberPrepared(false)
             false
         }
     }
@@ -131,7 +164,17 @@ internal object AiCoreEngine {
      * @throws IllegalStateException se AICore non è ancora stato preparato — [LocalLlm]
      * intercetta e ricade sul modello LiteRT-LM, esattamente come già fa per un fallimento GPU.
      */
-    suspend fun generate(systemPrompt: String, userPrompt: String, timeoutMillis: Long): String {
+    suspend fun generate(
+        systemPrompt: String,
+        userPrompt: String,
+        timeoutMillis: Long,
+        maxOutputTokens: Int
+    ): String {
+        // Dopo un riavvio `model` e' null anche se AICore era gia' pronto (vedi isAvailable):
+        // si ricrea qui, senza far ripassare l'utente dalle Impostazioni. Se non riesce, il
+        // motivo vero (dispositivo non supportato, Gemini Nano non ancora scaricato...) finisce
+        // nell'eccezione invece di sparire dietro il ripiego sul cloud.
+        if (model == null) prepare(maxOutputTokens) { _, _ -> }
         val activeModel = model ?: throw IllegalStateException(unavailableReason())
 
         val firstAttempt = generateOnce(activeModel, systemPrompt, userPrompt, timeoutMillis)

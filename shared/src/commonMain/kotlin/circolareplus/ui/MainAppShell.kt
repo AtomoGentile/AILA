@@ -2015,6 +2015,7 @@ fun MainAppShell(
                         conversations = assistantConversations,
                         onSend = { question -> askAssistant(question) },
                         thinkingEnabled = assistantThinking,
+                        thinkingAvailable = AppContainer.selectedLocalModel().supportsThinking,
                         onThinkingChange = { enabled ->
                             AppContainer.settings.assistantThinkingEnabled = enabled
                             assistantThinking = enabled

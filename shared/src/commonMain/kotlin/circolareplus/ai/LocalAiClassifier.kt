@@ -178,17 +178,21 @@ class LocalAiClassifier(
         maxPromptChars: Int
     ): AiTextResult {
         val built = prompt.build(maxPromptChars)
+        // Un modello senza modalita' di ragionamento (Phi) la ignora a prescindere
+        // dall'interruttore: acceso, gli si darebbe temperatura piu' alta e tetto ai token
+        // triplicato per un ragionamento che non sa fare, ed e' il caso delle ripetizioni.
+        val thinking = enableThinking && model.supportsThinking
         return try {
             val raw = llm.generate(
                 modelPath = modelPath,
                 preferGpu = model.preferGpu,
-                maxOutputTokens = if (enableThinking) {
+                maxOutputTokens = if (thinking) {
                     model.maxOutputTokens * THINKING_TOKEN_MULTIPLIER
                 } else {
                     model.maxOutputTokens
                 },
-                timeoutMillis = if (enableThinking) THINKING_TIMEOUT_MILLIS else GENERATION_TIMEOUT_MILLIS,
-                enableThinking = enableThinking,
+                timeoutMillis = if (thinking) THINKING_TIMEOUT_MILLIS else GENERATION_TIMEOUT_MILLIS,
+                enableThinking = thinking,
                 // Appena la risposta JSON e' completa si smette: il resto sarebbe scartato.
                 stopWhen = { partial ->
                     circolareplus.ai.assistant.AssistantPrompt.isCompleteAnswer(partial)
@@ -196,7 +200,7 @@ class LocalAiClassifier(
                 // Gemma 4 ragiona solo se il system prompt comincia con `<|think|>`: e' il suo
                 // interruttore, oltre al flag passato al motore. Senza il token, con
                 // l'interruttore acceso, Gemma continuerebbe a rispondere subito.
-                systemPrompt = if (enableThinking && model.id.startsWith("gemma")) {
+                systemPrompt = if (thinking && model.id.startsWith("gemma")) {
                     "<|think|>\n" + built.systemPrompt
                 } else {
                     built.systemPrompt

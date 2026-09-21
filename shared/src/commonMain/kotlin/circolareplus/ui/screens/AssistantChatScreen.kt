@@ -68,7 +68,9 @@ fun AssistantChatScreen(
     onOpenSource: (AssistantSource) -> Unit,
     /** Ragionamento del modello locale (modalita' thinking): piu' ponderato ma molto piu' lento. */
     thinkingEnabled: Boolean = false,
-    onThinkingChange: (Boolean) -> Unit = {}
+    onThinkingChange: (Boolean) -> Unit = {},
+    /** `false` quando il modello locale scelto non ha un ragionamento (Phi): niente interruttore. */
+    thinkingAvailable: Boolean = true
 ) {
     var draft by remember { mutableStateOf("") }
     var isHistoryOpen by remember { mutableStateOf(false) }
@@ -138,7 +140,7 @@ fun AssistantChatScreen(
                 .background(AppTheme.SurfaceWhite)
                 .padding(AppTheme.Space12)
         ) {
-            Row(
+            if (thinkingAvailable) Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = AppTheme.Space8),
                 verticalAlignment = Alignment.CenterVertically
             ) {

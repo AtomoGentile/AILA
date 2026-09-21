@@ -86,14 +86,15 @@ actual class LocalLlm actual constructor() {
         // in `engine`. `stopWhen`/streaming non si applicano (AICore genera in un colpo solo,
         // per ora): vedi AiCoreEngine.kt per lo stato reale dell'integrazione.
         if (modelPath == "aicore") {
-            // maxOutputTokens non si passa qui: è fissato una volta sola in AiCoreEngine.prepare
-            // (dentro GenerationConfig), che LocalModelStore.download ha già chiamato prima che
-            // questo modello risultasse "installato" — GenerativeModel non lo accetta per
-            // singola chiamata come fa ConversationConfig con LiteRT-LM.
+            // maxOutputTokens serve solo se AICore va ricreato (dopo un riavvio dell'app):
+            // è fissato una volta sola in AiCoreEngine.prepare, dentro GenerationConfig —
+            // GenerativeModel non lo accetta per singola chiamata come fa ConversationConfig
+            // con LiteRT-LM.
             return AiCoreEngine.generate(
                 systemPrompt = systemPrompt,
                 userPrompt = userPrompt,
-                timeoutMillis = timeoutMillis
+                timeoutMillis = timeoutMillis,
+                maxOutputTokens = maxOutputTokens
             )
         }
         return generateWithLiteRtLm(
