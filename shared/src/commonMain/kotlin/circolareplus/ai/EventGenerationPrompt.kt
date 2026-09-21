@@ -78,36 +78,8 @@ internal object EventGenerationPrompt {
         """.trimIndent()
     }
 
-    fun extractJsonObject(raw: String): String? {
-        var text = raw.trim()
-
-        val thinkEnd = text.indexOf("</think>")
-        if (thinkEnd >= 0) text = text.substring(thinkEnd + "</think>".length).trim()
-
-        text = text.removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
-
-        val start = text.indexOf('{')
-        if (start < 0) return null
-
-        var depth = 0
-        var inString = false
-        var escaped = false
-        for (i in start until text.length) {
-            val c = text[i]
-            when {
-                escaped -> escaped = false
-                c == '\\' && inString -> escaped = true
-                c == '"' -> inString = !inString
-                inString -> {}
-                c == '{' -> depth++
-                c == '}' -> {
-                    depth--
-                    if (depth == 0) return text.substring(start, i + 1)
-                }
-            }
-        }
-        return null
-    }
+    /** Ripulisce/ripara l'output prima di leggerlo come JSON. Vedi [ModelJsonExtractor]. */
+    fun extractJsonObject(raw: String): String? = ModelJsonExtractor.extractJsonObject(raw)
 
     private val VALID_CATEGORIES = CALENDAR_CATEGORIES.split("|").toSet()
 

@@ -114,43 +114,13 @@ internal object CircularClassificationPrompt {
      * Ripulisce l'output di un modello piccolo prima di provare a leggerlo come JSON.
      *
      * I modelli locali sporcano quasi sempre la risposta: la incapsulano in un blocco ```json,
-     * la fanno precedere da "Ecco il risultato:", oppure — le varianti "thinking" di Qwen —
-     * antepongono un blocco `<think>…</think>`. Nessuna di queste cose è un errore del modello,
-     * quindi si tagliano invece di dichiarare fallita la classificazione.
+     * la fanno precedere da "Ecco il risultato:", lasciano virgolette non scappate quando citano
+     * per esteso un nome fra virgolette del documento originale, oppure — le varianti "thinking"
+     * di Qwen — antepongono un blocco `<think>…</think>`. Nessuna di queste cose è un errore del
+     * modello, quindi si ripara/taglia invece di dichiarare fallita la classificazione. Vedi
+     * [ModelJsonExtractor] per i dettagli (condiviso con [EventGenerationPrompt], stesso bug).
      */
-    fun extractJsonObject(raw: String): String? {
-        var text = raw.trim()
-
-        val thinkEnd = text.indexOf("</think>")
-        if (thinkEnd >= 0) text = text.substring(thinkEnd + "</think>".length).trim()
-
-        text = text.removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
-
-        val start = text.indexOf('{')
-        if (start < 0) return null
-
-        // Si cerca la parentesi che chiude davvero l'oggetto, contando le annidate e ignorando
-        // quelle dentro le stringhe: prendere l'ultima '}' del testo includerebbe l'eventuale
-        // chiacchiera che il modello aggiunge dopo il JSON.
-        var depth = 0
-        var inString = false
-        var escaped = false
-        for (i in start until text.length) {
-            val c = text[i]
-            when {
-                escaped -> escaped = false
-                c == '\\' && inString -> escaped = true
-                c == '"' -> inString = !inString
-                inString -> {}
-                c == '{' -> depth++
-                c == '}' -> {
-                    depth--
-                    if (depth == 0) return text.substring(start, i + 1)
-                }
-            }
-        }
-        return null
-    }
+    fun extractJsonObject(raw: String): String? = ModelJsonExtractor.extractJsonObject(raw)
 
     private val VALID_CATEGORIES = CALENDAR_CATEGORIES.split("|").toSet()
 
