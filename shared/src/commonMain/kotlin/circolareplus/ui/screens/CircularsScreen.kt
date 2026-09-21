@@ -34,7 +34,9 @@ import circolareplus.domain.model.CircularRelevanceBadge
 fun CircularsScreen(
     circulars: List<Circular>,
     classifications: Map<Int, CircularAiClassification>,
-    onSelectCircular: (Circular) -> Unit
+    onSelectCircular: (Circular) -> Unit,
+    /** Numeri delle circolari la cui analisi e' in corso adesso (anche se non si e' nel dettaglio). */
+    analyzingNumbers: List<Int> = emptyList()
 ) {
     var selectedFilter by remember { mutableStateOf<CircularRelevanceBadge?>(null) }
     var searchQuery by remember { mutableStateOf("") }
@@ -146,11 +148,14 @@ fun CircularsScreen(
                     )
                 }
             }
-            itemsIndexed(filteredCirculars) { index, circ ->
+            // La chiave e' il numero: quando arriva una circolare nuova le altre restano dove
+            // sono invece di essere ridisegnate per posizione (e di perdere lo stato).
+            itemsIndexed(filteredCirculars, key = { _, circ -> circ.number }) { index, circ ->
                 val classification = classifications[circ.number]
                 CircularListItem(
                     circular = circ,
                     classification = classification,
+                    isAnalyzing = circ.number in analyzingNumbers,
                     onClick = { onSelectCircular(circ) },
                     modifier = Modifier.ailaAppear(index)
                 )
@@ -164,13 +169,18 @@ fun CircularListItem(
     circular: Circular,
     classification: CircularAiClassification?,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isAnalyzing: Boolean = false
 ) {
     val (badgeColor, badgeText) = when (classification?.badge) {
         CircularRelevanceBadge.RELEVANT -> Pair(AppTheme.BadgeRelevantGreen, "Ti riguarda")
         CircularRelevanceBadge.POTENTIAL -> Pair(AppTheme.BadgePotentialYellow, "Potenziale interesse")
         CircularRelevanceBadge.NOT_RELEVANT -> Pair(AppTheme.BadgeNotRelevantGray, "Non sembra riguardarti")
-        null -> Pair(AppTheme.TextFaint, "Da classificare")
+        null -> if (isAnalyzing) {
+            Pair(AppTheme.PrimaryBlue, "Analisi in corso\u2026")
+        } else {
+            Pair(AppTheme.TextFaint, "Da classificare")
+        }
     }
 
     AilaCard(onClick = onClick, modifier = modifier) {
@@ -181,7 +191,15 @@ fun CircularListItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    AilaDot(color = badgeColor)
+                    if (classification == null && isAnalyzing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(12.dp),
+                            strokeWidth = 2.dp,
+                            color = badgeColor
+                        )
+                    } else {
+                        AilaDot(color = badgeColor)
+                    }
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = badgeText,

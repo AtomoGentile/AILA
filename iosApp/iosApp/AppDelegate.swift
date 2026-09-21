@@ -200,6 +200,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
             body: content.body,
             category: category
         )
+        // A schermata aperta la lista deve aggiornarsi da sola (vedi DataRefreshEvents, Kotlin).
+        DataRefreshEvents.shared.request()
 
         if showBanner {
             completionHandler([.banner, .sound, .badge])
