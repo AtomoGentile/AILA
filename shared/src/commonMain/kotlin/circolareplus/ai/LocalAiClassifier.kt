@@ -122,7 +122,7 @@ class LocalAiClassifier(
                 "${model.displayName} non ha risposto in JSON: ${answer.take(120)}"
             )
 
-        val parsed = CircularClassificationPrompt.parse(circularNumber, jsonText)
+        val parsed = CircularClassificationPrompt.parse(circularNumber, jsonText, sourceText = pdfText)
             ?: return heuristicFallback(
                 circularNumber, circularTitle, pdfText,
                 "JSON di ${model.displayName} incompleto: ${jsonText.take(120)}"
