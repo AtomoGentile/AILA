@@ -3,6 +3,7 @@ package circolareplus.ai.assistant
 import circolareplus.domain.model.Circular
 import circolareplus.domain.model.CircularRelevanceBadge
 import circolareplus.domain.model.UserRole
+import circolareplus.util.formatItalianDateWithWeekday
 import circolareplus.util.weekdayName
 
 /**
@@ -210,7 +211,8 @@ internal object AssistantContext {
                         appendLine("Scadenze rilevate:")
                         analysis.detectedDeadlines.forEach { deadline ->
                             appendLine(
-                                "  - ${deadline.title} | ${deadline.dueDate}" +
+                                "  - ${deadline.title} | ${deadline.dueDate} " +
+                                    "(${formatItalianDateWithWeekday(deadline.dueDate)})" +
                                     (deadline.time?.let { " $it" } ?: "") +
                                     " | ${deadline.category}"
                             )
@@ -284,7 +286,7 @@ internal object AssistantContext {
             .partition { it.date >= knowledge.todayIso }
 
         builder.appendSection("CALENDARIO — EVENTI DA OGGI IN POI") {
-            appendLine("Formato: data | ora | categoria | titolo | destinatari | note")
+            appendLine("Formato: data (data leggibile) | ora | categoria | titolo | destinatari | note")
             if (future.isEmpty()) appendLine("Nessun evento futuro.")
             future.take(budget.futureEvents).forEach { appendLine(formatEvent(it, knowledge)) }
         }
@@ -321,6 +323,7 @@ internal object AssistantContext {
         }
         return buildString {
             append(event.date)
+            append(" (").append(formatItalianDateWithWeekday(event.date)).append(")")
             append(" | ").append(event.time ?: "-")
             append(" | ").append(event.category.name)
             append(" | ").append(event.title)
