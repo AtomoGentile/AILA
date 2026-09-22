@@ -41,6 +41,15 @@ class AilaAssistant(
 
         /** Testo dei PDF: lo stesso tetto della classificazione, per gli stessi motivi di quota. */
         private const val MAX_PDF_CHARS_PER_CIRCULAR = 12_000
+
+        /** Circolari lette per intero prima di chiedere al modello: le due piu' attinenti. */
+        private const val PREFETCHED_CIRCULARS = 2
+
+        /**
+         * Testo gia' estratto per circolare: la stessa domanda riformulata, o la domanda dopo,
+         * non riscarica e non rilegge lo stesso PDF.
+         */
+        private val textCache = mutableMapOf<Int, String>()
     }
 
     /**
@@ -59,9 +68,18 @@ class AilaAssistant(
     ): AssistantReply {
         val classifier = classifierFactory()
 
+        // Le circolari che c'entrano davvero con la domanda si leggono per intero subito, senza
+        // aspettare che sia il modello a chiederlo: i modelli sul telefono non lo chiedono quasi
+        // mai e rispondevano col solo riassunto, dove dettagli come "scienze il martedi'" non
+        // ci sono. Per saluti e domande generali la lista e' vuota e non si scarica niente.
+        val prefetched = fetchCircularTexts(
+            AssistantContext.mostRelevantCirculars(knowledge, question, PREFETCHED_CIRCULARS),
+            knowledge.circulars
+        )
+
         val firstRaw = when (
             val result = classifier.generateAnswer(
-                AssistantPrompt.builderFor(knowledge, history, question, emptyMap())
+                AssistantPrompt.builderFor(knowledge, history, question, prefetched)
             )
         ) {
             is AiTextResult.Failure -> return AssistantReply(
@@ -72,24 +90,20 @@ class AilaAssistant(
         }
 
         val firstAnswer = AssistantPrompt.parse(firstRaw.text)
-        if (firstAnswer.needsCircularText.isEmpty()) {
-            return AssistantReply(
-                text = firstAnswer.answer,
-                sources = firstAnswer.sources,
-                modelLabel = firstRaw.modelLabel
-            )
-        }
+        val firstReply = AssistantReply(
+            text = firstAnswer.answer,
+            sources = checkedSources(firstAnswer, question, prefetched.keys, knowledge),
+            modelLabel = firstRaw.modelLabel
+        )
+        val requested = firstAnswer.needsCircularText.filter { it !in prefetched }
+        if (requested.isEmpty()) return firstReply
 
-        val deepTexts = fetchCircularTexts(firstAnswer.needsCircularText, knowledge.circulars)
-        if (deepTexts.isEmpty()) {
+        val deepTexts = prefetched + fetchCircularTexts(requested, knowledge.circulars)
+        if (deepTexts.size == prefetched.size) {
             // Nessuno dei PDF richiesti si e' lasciato leggere (rete, scansione senza testo):
             // si tiene la prima risposta, che per contratto contiene gia' quello che il modello
             // sapeva, invece di far ripartire un giro identico al precedente.
-            return AssistantReply(
-                text = firstAnswer.answer,
-                sources = firstAnswer.sources,
-                modelLabel = firstRaw.modelLabel
-            )
+            return firstReply
         }
 
         val secondResult = classifier.generateAnswer(
@@ -98,21 +112,50 @@ class AilaAssistant(
         if (secondResult !is AiTextResult.Success) {
             // Il secondo giro e' un miglioramento, non un requisito: se cade (tipicamente per
             // quota esaurita dopo la prima chiamata) resta la risposta del primo giro.
-            return AssistantReply(
-                text = firstAnswer.answer,
-                sources = firstAnswer.sources,
-                modelLabel = firstRaw.modelLabel
-            )
+            return firstReply
         }
 
         val secondAnswer = AssistantPrompt.parse(secondResult.text)
         return AssistantReply(
             text = secondAnswer.answer,
-            // Le circolari lette per intero entrano fra le fonti anche se il modello si
-            // dimentica di citarle: sono quelle su cui la risposta si regge davvero.
-            sources = mergeSources(secondAnswer.sources, deepTexts.keys, knowledge.circulars),
+            // Le circolari richieste e lette per intero entrano fra le fonti anche se il modello
+            // si dimentica di citarle: sono quelle su cui la risposta si regge davvero.
+            sources = mergeSources(
+                checkedSources(secondAnswer, question, deepTexts.keys, knowledge),
+                requested.filter { it in deepTexts }.toSet(),
+                knowledge.circulars
+            ),
             modelLabel = secondResult.modelLabel
         )
+    }
+
+    /**
+     * Le fonti dichiarate dal modello, tolte quelle che non possono essere vere.
+     *
+     * Un modello piccolo copia gli esempi e cita circolari a caso anche per rispondere a un
+     * "ciao": una fonte sbagliata e' peggio di nessuna, perche' manda a leggere il documento
+     * sbagliato. Una circolare resta fra le fonti solo se esiste, e se e' stata letta per intero,
+     * e' citata nella domanda o nella risposta, o e' fra le piu' attinenti alla domanda.
+     */
+    private fun checkedSources(
+        parsed: AssistantPrompt.ParsedAnswer,
+        question: String,
+        readNumbers: Set<Int>,
+        knowledge: AssistantKnowledge
+    ): List<AssistantSource> {
+        if (AssistantContext.isSmallTalk(knowledge, question)) return emptyList()
+        val known = knowledge.circulars.map { it.number }.toSet()
+        val plausible = readNumbers +
+            AssistantContext.circularNumbersIn(question) +
+            AssistantContext.mostRelevantCirculars(knowledge, question, limit = 6)
+        return parsed.sources.filter { source ->
+            if (source.kind != AssistantSourceKind.CIRCULAR) return@filter true
+            val number = source.circularNumber ?: return@filter false
+            number in known && (
+                number in plausible ||
+                    Regex("(?<!\\d)$number(?!\\d)").containsMatchIn(parsed.answer)
+                )
+        }
     }
 
     /**
@@ -130,6 +173,10 @@ class AilaAssistant(
         val result = mutableMapOf<Int, String>()
         for (number in numbers) {
             val circular = circulars.firstOrNull { it.number == number } ?: continue
+            textCache[number]?.let { cached ->
+                result[number] = cached
+                continue
+            }
             try {
                 val bytes = circularsRepository.downloadPdfBytes(circular.r2PdfKey)
                 var text = pdfTextExtractor.extractText(bytes)
@@ -150,7 +197,11 @@ class AilaAssistant(
                     }
                 }
 
-                if (text.isNotBlank()) result[number] = text.take(MAX_PDF_CHARS_PER_CIRCULAR)
+                if (text.isNotBlank()) {
+                    val capped = text.take(MAX_PDF_CHARS_PER_CIRCULAR)
+                    result[number] = capped
+                    textCache[number] = capped
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
