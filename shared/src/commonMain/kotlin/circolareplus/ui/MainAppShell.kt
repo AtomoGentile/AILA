@@ -966,16 +966,29 @@ fun MainAppShell(
             isProposalsLoading = true
             proposalsError = null
             try {
-                proposals = AppContainer.proposalsRepository.listProposals()
-                noteNovelties(freshProposals = proposals)
-                // Un errore qui non deve far sparire la bacheca: le richieste sono un di più. Lo
-                // chiedono tutti, perché è la risposta a dire se si è la Guardia della classe.
-                try {
-                    val state = AppContainer.proposalsRepository.listUnlockRequests()
-                    isSecurityGuard = state.canSign && !isRepresentative
-                    unlockRequests = state.requests
-                } catch (e: Exception) {
-                    unlockRequests = emptyList()
+                // Le due richieste sono indipendenti, e prima partivano in sequenza: il tempo di
+                // rete di listUnlockRequests() si sommava a quello di listProposals() invece di
+                // sovrapporsi, rallentando l'ingresso in bacheca di un'attesa che non serviva.
+                coroutineScope {
+                    val proposalsDeferred = async { AppContainer.proposalsRepository.listProposals() }
+                    // Un errore qui non deve far sparire la bacheca: le richieste sono un di più. Lo
+                    // chiedono tutti, perché è la risposta a dire se si è la Guardia della classe.
+                    val unlockDeferred = async {
+                        try {
+                            AppContainer.proposalsRepository.listUnlockRequests()
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
+                    proposals = proposalsDeferred.await()
+                    noteNovelties(freshProposals = proposals)
+                    val state = unlockDeferred.await()
+                    if (state != null) {
+                        isSecurityGuard = state.canSign && !isRepresentative
+                        unlockRequests = state.requests
+                    } else {
+                        unlockRequests = emptyList()
+                    }
                 }
             } catch (e: Exception) {
                 proposalsError = "Impossibile caricare la bacheca. Controlla la connessione."
