@@ -9,6 +9,7 @@ import com.google.ai.edge.aicore.GenerateContentResponse
 import com.google.ai.edge.aicore.GenerativeAIException
 import com.google.ai.edge.aicore.GenerativeModel
 import com.google.ai.edge.aicore.TextPart
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.withTimeoutOrNull
@@ -57,6 +58,9 @@ internal object AiCoreEngine {
     private val callbackExecutor = Executors.newSingleThreadExecutor()
     private val workerExecutor = Executors.newFixedThreadPool(2)
 
+    /** Tempo concesso alla generazione di prova durante "Attiva". */
+    private const val PROBE_TIMEOUT_MS = 30_000L
+
     private const val PREFS = "aicore"
     private const val KEY_PREPARED = "prepared"
 
@@ -88,6 +92,38 @@ internal object AiCoreEngine {
         } catch (e: Exception) {
             // Solo un'ottimizzazione: senza flag si torna al comportamento di prima.
         }
+    }
+
+    /**
+     * Messaggio leggibile per un errore di AICore.
+     *
+     * "AICore failed with error type 2-INFERENCE_ERROR and error code 8-NOT_AVAILABLE: Required
+     * LLM feature not found" (visto sul campo con AICore installato e attivo) non vuol dire che
+     * AICore manchi: vuol dire che su quel telefono il servizio non offre Gemini Nano alle app
+     * esterne. Mostrato cosi' com'era sembrava un guasto da riprovare; non lo e'.
+     */
+    private fun describe(e: Throwable): String {
+        val raw = "${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}"
+        return if (isFeatureMissing(raw)) {
+            "Su questo telefono AICore non mette Gemini Nano a disposizione delle app " +
+                "(errore NOT_AVAILABLE). Scegli un altro modello, per esempio Gemma 4 E2B, " +
+                "oppure usa Google AI Studio. Dettaglio: $raw"
+        } else {
+            raw
+        }
+    }
+
+    private fun isFeatureMissing(message: String): Boolean =
+        message.contains("NOT_AVAILABLE") || message.contains("feature not found", ignoreCase = true)
+
+    /**
+     * Dopo un errore che dice "non supportato" AICore non va piu' considerato pronto: prima il
+     * flag persistente restava vero e l'app continuava a sceglierlo e a fallire a ogni analisi.
+     */
+    private fun forgetIfUnsupported(message: String) {
+        if (!isFeatureMissing(message)) return
+        model = null
+        rememberPrepared(false)
     }
 
     fun unavailableReason(): String =
@@ -156,15 +192,24 @@ internal object AiCoreEngine {
             }.build()
             val candidate = GenerativeModel(generationConfig, DownloadConfig(callback))
             candidate.prepareInferenceEngine()
-            model = candidate
             if (!outcome.isCompleted) outcome.complete(true)
-            outcome.await().also { rememberPrepared(it) }
-        } catch (e: GenerativeAIException) {
-            lastFailureReason = "${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}"
-            rememberPrepared(false)
-            false
+            if (!outcome.await()) {
+                rememberPrepared(false)
+                return false
+            }
+            // Motore pronto non vuol dire modello utilizzabile: su alcuni telefoni la
+            // preparazione riesce e poi ogni generazione fallisce con NOT_AVAILABLE. Una prova
+            // minuscola qui fa fallire subito "Attiva", con il motivo, invece di ogni analisi.
+            withTimeoutOrNull(PROBE_TIMEOUT_MS) { candidate.generateContent("Rispondi solo: OK") }
+                ?: throw IllegalStateException("AICore non ha risposto alla prova entro ${PROBE_TIMEOUT_MS / 1000} secondi.")
+            model = candidate
+            rememberPrepared(true)
+            true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            lastFailureReason = "${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}"
+            lastFailureReason = describe(e)
+            model = null
             rememberPrepared(false)
             false
         }
@@ -205,7 +250,10 @@ internal object AiCoreEngine {
             try {
                 activeModel.generateContent(prompt)
             } catch (e: GenerativeAIException) {
-                throw IllegalStateException("${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}", e)
+                val reason = describe(e)
+                forgetIfUnsupported(reason)
+                lastFailureReason = reason
+                throw IllegalStateException(reason, e)
             }
         } ?: throw IllegalStateException("AICore non ha risposto entro ${timeoutMillis / 1000} secondi.")
 
