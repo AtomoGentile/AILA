@@ -372,4 +372,22 @@ class SeatMapOptimizerTest {
             "La ricerca locale ($optimizedScore) non dovrebbe fare peggio della media di shuffle casuali ($naiveAverage)"
         )
     }
+
+    @Test
+    fun laCoppiaDaSepararePenalizzaSoloQuelBanco() {
+        val layout = listOf(
+            DeskAssignment(row = 0, column = 0, studentAId = "marco", studentBId = "luca"),
+            DeskAssignment(row = 0, column = 1, studentAId = "anna", studentBId = "sara")
+        )
+        fun discipline(pairs: Set<Pair<String, String>>) = SeatMapOptimizer.scoreLayout(
+            layout, emptyMap(), emptyMap(), emptyMap(), emptyList(), OptimizerWeights(),
+            isSmallClass = false, disciplinePairs = pairs
+        ).discipline
+
+        assertEquals(0.0, discipline(emptySet()))
+        // In qualunque ordine sia stata segnata la coppia.
+        assertEquals(SeatMapOptimizer.DISCIPLINE_PAIR_PENALTY.toDouble(), discipline(setOf("luca" to "marco")))
+        // Marco con un altro compagno non e' penalizzato.
+        assertEquals(0.0, discipline(setOf("marco" to "anna")))
+    }
 }

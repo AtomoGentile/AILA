@@ -715,6 +715,7 @@ fun MainAppShell(
 
     // --- Stato Scheda Classe (solo Rappresentante) ------------------------------------------
     var classRosterEntries by remember { mutableStateOf<List<RatingEntryDto>>(emptyList()) }
+    var disciplinePairs by remember { mutableStateOf<List<circolareplus.data.remote.dto.DisciplinePairDto>>(emptyList()) }
     var isClassRosterLoading by remember { mutableStateOf(false) }
     var classRosterError by remember { mutableStateOf<String?>(null) }
     // Errore di una singola azione (stepper/switch), separato dall'errore di caricamento iniziale:
@@ -827,6 +828,7 @@ fun MainAppShell(
     // punteggio nell'editor manuale senza rifare le chiamate di rete (ratings/matrice/storico).
     var seatMapOptimizerProfiles by remember { mutableStateOf<Map<String, StudentProfile>>(emptyMap()) }
     var seatMapOptimizerRatings by remember { mutableStateOf<Map<String, RepresentativeRating>>(emptyMap()) }
+    var seatMapOptimizerDisciplinePairs by remember { mutableStateOf<Set<Pair<String, String>>>(emptySet()) }
     var seatMapOptimizerSocialMap by remember { mutableStateOf<Map<Pair<String, String>, SocialPreferenceScore>>(emptyMap()) }
     var seatMapOptimizerHistory by remember { mutableStateOf<List<SeatMapHistoryRecord>>(emptyList()) }
     var seatMapOptimizerWeights by remember { mutableStateOf(OptimizerWeights()) }
@@ -1534,6 +1536,14 @@ fun MainAppShell(
                 classRosterError = "Impossibile caricare la scheda classe."
             } finally {
                 isClassRosterLoading = false
+            }
+            // A parte: un server senza la rotta nuova non deve nascondere le valutazioni.
+            try {
+                disciplinePairs = AppContainer.ratingsRepository.listDisciplinePairs()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                disciplinePairs = emptyList()
             }
         }
     }
@@ -2277,6 +2287,33 @@ fun MainAppShell(
                             ClassRosterScreen(
                                 entries = classRosterEntries,
                                 currentUserId = user.id,
+                                disciplinePairs = disciplinePairs,
+                                onAddDisciplinePair = { studentA, studentB, duration ->
+                                    coroutineScope.launch {
+                                        try {
+                                            AppContainer.ratingsRepository.addDisciplinePair(studentA, studentB, duration)
+                                            disciplinePairs = AppContainer.ratingsRepository.listDisciplinePairs()
+                                        } catch (e: CancellationException) {
+                                            throw e
+                                        } catch (e: Exception) {
+                                            classRosterActionError = "Coppia non salvata: ${e.message}"
+                                        }
+                                    }
+                                },
+                                onRemoveDisciplinePair = { id ->
+                                    val previous = disciplinePairs
+                                    disciplinePairs = disciplinePairs.filter { it.id != id }
+                                    coroutineScope.launch {
+                                        try {
+                                            AppContainer.ratingsRepository.removeDisciplinePair(id)
+                                        } catch (e: CancellationException) {
+                                            throw e
+                                        } catch (e: Exception) {
+                                            disciplinePairs = previous
+                                            classRosterActionError = "Coppia non rimossa: ${e.message}"
+                                        }
+                                    }
+                                },
                                 onDidacticChange = { studentId, value ->
                                     val previous = classRosterEntries
                                     classRosterEntries = classRosterEntries.map {
@@ -2493,7 +2530,8 @@ fun MainAppShell(
                         seatMapOptimizerSocialMap,
                         seatMapOptimizerHistory,
                         seatMapOptimizerWeights,
-                        seatMapOptimizerIsSmallClass
+                        seatMapOptimizerIsSmallClass,
+                        seatMapOptimizerDisciplinePairs
                     ) {
                         SeatMapOptimizer.scoreLayout(
                             assignments = currentAssignments,
@@ -2502,7 +2540,8 @@ fun MainAppShell(
                             socialPreferences = seatMapOptimizerSocialMap,
                             history = seatMapOptimizerHistory,
                             weights = seatMapOptimizerWeights,
-                            isSmallClass = seatMapOptimizerIsSmallClass
+                            isSmallClass = seatMapOptimizerIsSmallClass,
+                            disciplinePairs = seatMapOptimizerDisciplinePairs
                         )
                     }
                     val editorSatisfaction = remember(currentAssignments, seatMapOptimizerSocialMap) {
@@ -2710,12 +2749,25 @@ fun MainAppShell(
                                                         isGeneratingProposals = true
                                                         lastRequestedSeatsPerDesk = seatsPerDesk
                                                         try {
+                                                            val disciplinePairsDeferred = async {
+                                                                // Un server senza la rotta nuova non deve impedire le proposte.
+                                                                try {
+                                                                    AppContainer.ratingsRepository.listDisciplinePairs()
+                                                                        .map { it.studentA to it.studentB }
+                                                                        .toSet()
+                                                                } catch (e: CancellationException) {
+                                                                    throw e
+                                                                } catch (e: Exception) {
+                                                                    emptySet()
+                                                                }
+                                                            }
                                                             val (ratings, matrix, history) = coroutineScope {
                                                                 val ratingsDeferred = async { AppContainer.ratingsRepository.listRatings() }
                                                                 val matrixDeferred = async { AppContainer.preferencesRepository.matrixForAlgorithm().matrix }
                                                                 val historyDeferred = async { AppContainer.seatMapRepository.getHistoryForOptimizer() }
                                                                 Triple(ratingsDeferred.await(), matrixDeferred.await(), historyDeferred.await())
                                                             }
+                                                            val disciplinePairs = disciplinePairsDeferred.await()
                                                             val ratingsMap = ratings.associate { rating ->
                                                                 rating.studentId to circolareplus.domain.model.RepresentativeRating(
                                                                     studentId = rating.studentId,
@@ -2737,6 +2789,7 @@ fun MainAppShell(
                                                             // che riusa questi stessi input invece di rifare le chiamate di rete.
                                                             seatMapOptimizerProfiles = profiles
                                                             seatMapOptimizerRatings = ratingsMap
+                                                            seatMapOptimizerDisciplinePairs = disciplinePairs
                                                             seatMapOptimizerSocialMap = socialMap
                                                             seatMapOptimizerHistory = history
                                                             seatMapOptimizerWeights = weights
@@ -2749,7 +2802,8 @@ fun MainAppShell(
                                                                     socialPreferences = socialMap,
                                                                     history = history,
                                                                     weights = weights,
-                                                                    seatsPerDesk = seatsPerDesk
+                                                                    seatsPerDesk = seatsPerDesk,
+                                                                    disciplinePairs = disciplinePairs
                                                                 )
                                                             }
                                                         } catch (e: Exception) {

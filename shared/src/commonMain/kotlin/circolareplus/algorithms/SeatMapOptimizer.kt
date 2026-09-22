@@ -154,6 +154,15 @@ object SeatMapOptimizer {
         }
     }
 
+    /**
+     * Penalita' per una coppia segnata dal Rappresentante come "da separare per disciplina":
+     * insieme fanno caos anche se separatamente vanno bene, cosa che il voto per persona non sa
+     * dire. Stesso peso del doppio 5 di comportamento, e come quello non e' un divieto: con la
+     * rotazione mensile l'ottimizzatore deve poter variare, e un vincolo rigido in piu' su una
+     * classe piccola restringerebbe troppo le disposizioni possibili.
+     */
+    const val DISCIPLINE_PAIR_PENALTY = -180
+
     fun calculateColumnNoisePenalty(noiseFront: Int, noiseBack: Int): Int {
         return if (noiseFront == 5 && noiseBack == 5) -120 else 0
     }
@@ -421,7 +430,9 @@ object SeatMapOptimizer {
         socialPreferences: Map<Pair<String, String>, SocialPreferenceScore>,
         history: List<SeatMapHistoryRecord>,
         weights: OptimizerWeights,
-        isSmallClass: Boolean
+        isSmallClass: Boolean,
+        /** Coppie da separare per disciplina, in un ordine qualsiasi (vedi [DISCIPLINE_PAIR_PENALTY]). */
+        disciplinePairs: Set<Pair<String, String>> = emptySet()
     ): ScoreBreakdown {
         var social = 0.0
         var discipline = 0.0
@@ -444,6 +455,10 @@ object SeatMapOptimizer {
                 val prefBtoA = socialPreferences[b to a] ?: SocialPreferenceScore.NEUTRAL
                 social += calculateSocialScore(prefAtoB, prefBtoA)
                 if (isForbiddenPair(a, b, socialPreferences)) hasForbiddenPair = true
+
+                if ((a to b) in disciplinePairs || (b to a) in disciplinePairs) {
+                    discipline += DISCIPLINE_PAIR_PENALTY
+                }
 
                 val ratA = ratings[a]
                 val ratB = ratings[b]
@@ -692,7 +707,8 @@ object SeatMapOptimizer {
         // 2 = banchi da coppia (default, storico), 3 = banchi da trio. Stesso identico algoritmo
         // (stesse funzioni di punteggio, stesso hill-climbing): cambia solo quante persone per
         // banco costruisce buildInitialLayout e quanti posti esplora la ricerca locale.
-        seatsPerDesk: Int = SEATS_PER_DESK_PAIR
+        seatsPerDesk: Int = SEATS_PER_DESK_PAIR,
+        disciplinePairs: Set<Pair<String, String>> = emptySet()
     ): List<DeskAssignment> {
         require(seatsPerDesk == SEATS_PER_DESK_PAIR || seatsPerDesk == SEATS_PER_DESK_TRIO) {
             "seatsPerDesk deve essere $SEATS_PER_DESK_PAIR (coppia) o $SEATS_PER_DESK_TRIO (trio), ricevuto $seatsPerDesk"
@@ -701,7 +717,7 @@ object SeatMapOptimizer {
 
         val random = Random(seed)
         fun score(layout: List<DeskAssignment>) =
-            scoreLayout(layout, profiles, ratings, socialPreferences, history, weights, isSmallClass).total
+            scoreLayout(layout, profiles, ratings, socialPreferences, history, weights, isSmallClass, disciplinePairs).total
 
         var current = buildInitialLayout(students, socialPreferences, random, seatsPerDesk)
         var currentScore = score(current)

@@ -85,6 +85,19 @@ CREATE TABLE IF NOT EXISTS representative_ratings (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Coppie da separare per disciplina (migrazione 007): segnate dal Rappresentante, con scadenza.
+-- L'ottimizzatore penalizza solo quel banco, senza vietarlo.
+CREATE TABLE IF NOT EXISTS discipline_pairs (
+    id TEXT PRIMARY KEY,
+    class_id TEXT NOT NULL,
+    student_a TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    student_b TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at DATE NOT NULL,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(class_id, student_a, student_b)
+);
+
 -- 5. PREFERENZE INTERPERSONALI (+2, +1, 0, -1, -2)
 -- Attive solo quando preferences_open = 1
 CREATE TABLE IF NOT EXISTS social_preferences (

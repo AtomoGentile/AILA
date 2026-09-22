@@ -133,4 +133,81 @@ ratings.put('/:studentId/priority-pass', requireRole('REPRESENTATIVE'), async (c
   return c.json({ success: true, priorityPass: enabled });
 });
 
+// ---------------------------------------------------------------------------
+// Coppie da separare per disciplina (solo REPRESENTATIVE)
+//
+// Il voto di comportamento e' per persona; qui si segna una coppia che insieme fa caos anche se
+// separatamente va bene. Ha sempre una scadenza: chi e' maturato non resta segnato per sempre.
+// POST e non PUT: `PUT /:studentId` catturerebbe "pairs" come id di uno studente.
+// ---------------------------------------------------------------------------
+
+const PAIR_DURATIONS = ['MONTH', 'QUARTER', 'SCHOOL_YEAR'] as const;
+type PairDuration = (typeof PAIR_DURATIONS)[number];
+
+/** Data di scadenza (YYYY-MM-DD) per la durata scelta, contata da oggi. */
+function pairExpiry(duration: PairDuration, now = new Date()): string {
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  if (duration === 'MONTH') d.setUTCMonth(d.getUTCMonth() + 1);
+  else if (duration === 'QUARTER') d.setUTCMonth(d.getUTCMonth() + 3);
+  else {
+    // Fine anno scolastico: 31 agosto (da settembre in poi, quello dell'anno dopo).
+    const year = now.getUTCMonth() >= 8 ? now.getUTCFullYear() + 1 : now.getUTCFullYear();
+    return `${year}-08-31`;
+  }
+  return d.toISOString().slice(0, 10);
+}
+
+ratings.get('/pairs', requireRole('REPRESENTATIVE'), async (c) => {
+  const classId = await resolveClassId(c);
+  // Le scadute si cancellano qui: nessun dato sui compagni resta oltre il necessario.
+  await c.env.DB.prepare("DELETE FROM discipline_pairs WHERE class_id = ? AND expires_at < date('now')")
+    .bind(classId).run();
+  const rows = await c.env.DB.prepare(
+    'SELECT id, student_a, student_b, expires_at FROM discipline_pairs WHERE class_id = ? ORDER BY created_at DESC'
+  ).bind(classId).all<{ id: string; student_a: string; student_b: string; expires_at: string }>();
+  return c.json({
+    pairs: rows.results.map((r) => ({
+      id: r.id,
+      studentA: r.student_a,
+      studentB: r.student_b,
+      expiresAt: r.expires_at,
+    })),
+  });
+});
+
+ratings.post('/pairs', requireRole('REPRESENTATIVE'), async (c) => {
+  const body = await c.req.json<{ studentA?: string; studentB?: string; duration?: string }>();
+  if (!body.studentA || !body.studentB || body.studentA === body.studentB) {
+    return c.json({ error: 'Servono due studenti diversi' }, 400);
+  }
+  const duration = (body.duration ?? 'MONTH') as PairDuration;
+  if (!PAIR_DURATIONS.includes(duration)) return c.json({ error: 'Durata non valida' }, 400);
+
+  const classId = await resolveClassId(c);
+  const found = await c.env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM users WHERE id IN (?, ?) AND class_id = ? AND role IN ('STUDENT', 'REPRESENTATIVE')"
+  ).bind(body.studentA, body.studentB, classId).first<{ n: number }>();
+  if ((found?.n ?? 0) !== 2) return c.json({ error: 'Studenti non trovati in questa classe' }, 404);
+
+  const [a, b] = [body.studentA, body.studentB].sort();
+  const payload = c.get('jwtPayload') as JWTPayload;
+  const expiresAt = pairExpiry(duration);
+  const id = crypto.randomUUID();
+  // Segnare di nuovo la stessa coppia aggiorna la scadenza invece di duplicarla.
+  await c.env.DB.prepare(
+    `INSERT INTO discipline_pairs (id, class_id, student_a, student_b, expires_at, created_by)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(class_id, student_a, student_b) DO UPDATE SET
+       expires_at = excluded.expires_at, created_by = excluded.created_by`
+  ).bind(id, classId, a, b, expiresAt, payload.sub).run();
+
+  return c.json({ success: true, expiresAt });
+});
+
+ratings.delete('/pairs/:id', requireRole('REPRESENTATIVE'), async (c) => {
+  await c.env.DB.prepare('DELETE FROM discipline_pairs WHERE id = ? AND class_id = ?')
+    .bind(c.req.param('id'), await resolveClassId(c)).run();
+  return c.json({ success: true });
+});
+
 export default ratings;
