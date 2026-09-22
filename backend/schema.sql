@@ -120,11 +120,11 @@ CREATE TABLE IF NOT EXISTS circulars (
 -- niente lo rifà da capo consumando quota/tempo per lo stesso risultato. La chiave è solo
 -- circular_number: se in futuro l'analisi diventasse per-classe/per-studente, andrà aggiunta una
 -- colonna alla chiave primaria invece di riusare questa tabella così com'è.
--- Salva solo l'ESITO dell'analisi (badge, riassunto, scadenze), mai il testo del PDF: il
--- documento stesso non deve transitare dal server, per coerenza con la scelta di non farlo
--- transitare nemmeno durante l'analisi (vedi commento sulla tabella `circulars`).
--- Sovrascrivibile da chiunque: chi rigenera un'analisi di bassa qualità la reinvia e sostituisce
--- quella salvata, non serve un flusso di approvazione.
+-- Salva solo l'ESITO dell'analisi (badge, riassunto, scadenze), non il testo estratto dal PDF.
+-- `tier` è il livello di qualità (0 ripiego euristico, 1 AI locale, 2 Gemini): il PUT accetta solo
+-- un livello uguale o superiore a quello salvato, quindi un riassunto locale non sostituisce mai
+-- quello di Gemini. Se è impostato il secret GEMINI_API_KEY, il cron lo produce direttamente sul
+-- server (services/summarizer.ts) mandando a Gemini il PDF già in cache su R2.
 CREATE TABLE IF NOT EXISTS circular_ai_analysis (
     circular_number INTEGER PRIMARY KEY REFERENCES circulars(number) ON DELETE CASCADE,
     badge TEXT NOT NULL CHECK(badge IN ('RELEVANT', 'POTENTIAL', 'NOT_RELEVANT')),
@@ -133,7 +133,18 @@ CREATE TABLE IF NOT EXISTS circular_ai_analysis (
     is_fallback BOOLEAN NOT NULL DEFAULT 0,
     model_label TEXT NOT NULL DEFAULT 'Sconosciuto',
     submitted_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    tier INTEGER NOT NULL DEFAULT 1,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_circular_ai_analysis_updated ON circular_ai_analysis(updated_at);
+
+-- Tentativi del riassunto fatto dal server: una circolare che Gemini non riesce a leggere non
+-- viene ritentata all'infinito (vedi services/summarizer.ts).
+CREATE TABLE IF NOT EXISTS circular_ai_server_attempts (
+    circular_number INTEGER PRIMARY KEY REFERENCES circulars(number) ON DELETE CASCADE,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    last_attempt_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 7. CALENDARIO DI CLASSE ED EVENTI AI

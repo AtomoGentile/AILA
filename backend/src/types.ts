@@ -15,6 +15,10 @@ export interface Env {
   // ruolo REPRESENTATIVE invece di STUDENT. Se non impostato, la registrazione con codice fallisce
   // esplicitamente (nessun ruolo speciale "silenzioso" senza che il secret esista davvero).
   REPRESENTATIVE_SIGNUP_CODE?: string;
+  // Chiave Google AI Studio per il riassunto delle circolari fatto dal server (services/summarizer.ts).
+  // Solo come secret (`wrangler secret put GEMINI_API_KEY`), mai in [vars]. Se assente, i riassunti
+  // restano ai telefoni come prima.
+  GEMINI_API_KEY?: string;
 }
 
 export interface JWTPayload {

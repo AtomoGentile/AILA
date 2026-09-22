@@ -5,6 +5,7 @@
 import { Hono } from 'hono';
 import type { CircularAttachment, Env, JWTPayload } from '../types';
 import { authMiddleware } from '../auth';
+import { upsertAnalysis } from '../services/summarizer';
 
 // `attachments_json` è sempre valido JSON (scritto solo da syncSpaggiariCirculars, default
 // '[]' per le righe precedenti alla colonna) — un parse fallito è un bug, non un caso da
@@ -64,6 +65,55 @@ circulars.get('/', authMiddleware(), async (c) => {
   });
 });
 
+interface AnalysisRow {
+  circular_number: number;
+  badge: string;
+  summary: string;
+  deadlines_json: string;
+  is_fallback: number;
+  model_label: string;
+  tier: number;
+  updated_at: string;
+}
+
+const ANALYSIS_COLUMNS =
+  'circular_number, badge, summary, deadlines_json, is_fallback, model_label, tier, updated_at';
+
+function analysisJson(row: AnalysisRow) {
+  return {
+    circularNumber: row.circular_number,
+    badge: row.badge,
+    summary: row.summary,
+    deadlines: JSON.parse(row.deadlines_json),
+    isFallback: !!row.is_fallback,
+    modelLabel: row.model_label,
+    tier: row.tier,
+    updatedAt: row.updated_at,
+  };
+}
+
+// Livello di qualità deciso dal server, non dal client: 0 ripiego euristico, 1 AI locale,
+// 2 Gemini. Vedi la migrazione 006.
+function tierOf(isFallback: boolean, modelLabel: string): number {
+  if (isFallback) return 0;
+  return modelLabel.startsWith('Google Gemini') ? 2 : 1;
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/circulars/analyses?since=... — Analisi cambiate dopo `since`
+// ---------------------------------------------------------------------------
+// Chi ha l'app aperta la chiama insieme al rinfresco della lista: così vede subito un riassunto
+// fatto da un compagno o dal server, e un'analisi locale in corso sulla stessa circolare si ferma.
+// Registrata prima di `/:number`, che altrimenti catturerebbe "analyses" come numero.
+circulars.get('/analyses', authMiddleware(), async (c) => {
+  const since = c.req.query('since') ?? '1970-01-01 00:00:00';
+  const rows = await c.env.DB.prepare(
+    `SELECT ${ANALYSIS_COLUMNS} FROM circular_ai_analysis
+     WHERE updated_at > ? AND tier > 0 ORDER BY updated_at ASC LIMIT 200`
+  ).bind(since).all<AnalysisRow>();
+  return c.json({ analyses: rows.results.map(analysisJson) });
+});
+
 // ---------------------------------------------------------------------------
 // GET /api/circulars/:number — Dettaglio singola circolare
 // ---------------------------------------------------------------------------
@@ -104,36 +154,22 @@ circulars.get('/:number/analysis', authMiddleware(), async (c) => {
   if (isNaN(number)) return c.json({ error: 'Numero non valido' }, 400);
 
   const row = await c.env.DB.prepare(
-    'SELECT circular_number, badge, summary, deadlines_json, is_fallback, model_label, updated_at FROM circular_ai_analysis WHERE circular_number = ?'
-  ).bind(number).first<{
-    circular_number: number;
-    badge: string;
-    summary: string;
-    deadlines_json: string;
-    is_fallback: number;
-    model_label: string;
-    updated_at: string;
-  }>();
+    `SELECT ${ANALYSIS_COLUMNS} FROM circular_ai_analysis WHERE circular_number = ?`
+  ).bind(number).first<AnalysisRow>();
 
   if (!row) return c.json({ error: 'Nessuna analisi in cache per questa circolare' }, 404);
 
-  return c.json({
-    circularNumber: row.circular_number,
-    badge: row.badge,
-    summary: row.summary,
-    deadlines: JSON.parse(row.deadlines_json),
-    isFallback: !!row.is_fallback,
-    modelLabel: row.model_label,
-    updatedAt: row.updated_at,
-  });
+  return c.json(analysisJson(row));
 });
 
 // ---------------------------------------------------------------------------
-// PUT /api/circulars/:number/analysis — Salva/sovrascrive l'analisi AI in cache
+// PUT /api/circulars/:number/analysis — Salva l'analisi AI in cache
 // ---------------------------------------------------------------------------
-// Chiunque sia autenticato può scrivere qui, senza flusso di approvazione: chi rigenera
-// un'analisi di bassa qualità la reinvia e sostituisce quella salvata (vedi commento sulla
-// tabella in schema.sql). Non riceve mai il testo del PDF, solo l'esito.
+// Chiunque sia autenticato può scrivere, ma solo con un livello uguale o superiore a quello già
+// salvato: un riassunto dell'AI locale non sostituisce mai quello di Gemini, e il ripiego
+// euristico non si salva affatto. Se il salvataggio viene rifiutato la risposta contiene
+// l'analisi che resta valida (`stored: false, current`), così il telefono mostra quella.
+// Non riceve mai il testo del PDF, solo l'esito.
 circulars.put('/:number/analysis', authMiddleware(), async (c) => {
   const number = parseInt(c.req.param('number') ?? '', 10);
   if (isNaN(number)) return c.json({ error: 'Numero non valido' }, 400);
@@ -154,31 +190,30 @@ circulars.put('/:number/analysis', authMiddleware(), async (c) => {
   }
 
   const payload = c.get('jwtPayload') as JWTPayload;
-  const deadlinesJson = JSON.stringify(body.deadlines ?? []);
+  const modelLabel = body.modelLabel ?? 'Sconosciuto';
+  const isFallback = !!body.isFallback;
+  const tier = tierOf(isFallback, modelLabel);
 
-  await c.env.DB.prepare(
-    `INSERT INTO circular_ai_analysis
-       (circular_number, badge, summary, deadlines_json, is_fallback, model_label, submitted_by, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-     ON CONFLICT(circular_number) DO UPDATE SET
-       badge = excluded.badge,
-       summary = excluded.summary,
-       deadlines_json = excluded.deadlines_json,
-       is_fallback = excluded.is_fallback,
-       model_label = excluded.model_label,
-       submitted_by = excluded.submitted_by,
-       updated_at = CURRENT_TIMESTAMP`
-  ).bind(
+  const stored = tier > 0 && await upsertAnalysis(
+    c.env,
     number,
-    body.badge,
-    body.summary,
-    deadlinesJson,
-    body.isFallback ? 1 : 0,
-    body.modelLabel ?? 'Sconosciuto',
+    {
+      badge: body.badge,
+      summary: body.summary,
+      deadlines: body.deadlines ?? [],
+      isFallback,
+      modelLabel,
+    },
+    tier,
     payload.sub
-  ).run();
+  );
 
-  return c.json({ success: true });
+  if (stored) return c.json({ success: true, stored: true });
+
+  const current = await c.env.DB.prepare(
+    `SELECT ${ANALYSIS_COLUMNS} FROM circular_ai_analysis WHERE circular_number = ?`
+  ).bind(number).first<AnalysisRow>();
+  return c.json({ success: true, stored: false, current: current ? analysisJson(current) : null });
 });
 
 // ---------------------------------------------------------------------------

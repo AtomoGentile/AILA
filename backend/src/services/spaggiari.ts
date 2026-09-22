@@ -3,6 +3,7 @@
 // Fetch the school circular board (HTML table) and sync to D1 + R2
 // =============================================================================
 
+import { summarizeCircular } from './summarizer';
 import type { CircularAttachment, Env } from '../types';
 import { notifyClass } from './fcm';
 
@@ -244,7 +245,16 @@ export async function syncSpaggiariCirculars(env: Env): Promise<void> {
       .bind(circ.number, circ.title, circ.date, r2Key, circ.pdfUrl, JSON.stringify(attachments))
       .run();
 
-    // 5. Push notification to class
+    // 5. Riassunto sul server (se c'è GEMINI_API_KEY) prima della notifica: chi apre la
+    //    circolare dalla notifica trova il riassunto già pronto invece di aspettare il telefono.
+    await summarizeCircular(env, {
+      number: circ.number,
+      title: circ.title,
+      r2_pdf_key: r2Key,
+      attachments_json: JSON.stringify(attachments),
+    });
+
+    // 6. Push notification to class
     await notifyClass(
       env,
       'Nuova Circolare',
