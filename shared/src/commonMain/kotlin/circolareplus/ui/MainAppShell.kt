@@ -1002,7 +1002,12 @@ fun MainAppShell(
                     isClassmatesLoading = false
                 }
             }
-            isSeatMapLoading = true
+            // Se si torna sulla tab con la mappa già in memoria da una visita precedente, la si
+            // aggiorna in background senza far scattare lo spinner a piena schermata di
+            // LoadableContent: altrimenti la mappa già disegnata sparirebbe per un istante a ogni
+            // rientro nella tab, anche quando i dati non sono cambiati.
+            val isFirstSeatMapLoad = seatMapAssignments.isEmpty()
+            if (isFirstSeatMapLoad) isSeatMapLoading = true
             try {
                 seatMapAssignments = AppContainer.seatMapRepository.getCurrentSeatMap() ?: emptyList()
                 val config = AppContainer.preferencesRepository.getConfig()
@@ -1011,7 +1016,7 @@ fun MainAppShell(
             } catch (e: Exception) {
                 seatMapError = "Impossibile caricare la mappa posti attuale."
             } finally {
-                isSeatMapLoading = false
+                if (isFirstSeatMapLoad) isSeatMapLoading = false
             }
         }
     }
