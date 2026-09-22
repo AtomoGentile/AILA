@@ -39,8 +39,12 @@ class AilaAssistant(
             "Quali proposte della bacheca sono ancora aperte?"
         )
 
-        /** Testo dei PDF: lo stesso tetto della classificazione, per gli stessi motivi di quota. */
-        private const val MAX_PDF_CHARS_PER_CIRCULAR = 12_000
+        /**
+         * Testo letto da ogni PDF. Alto di proposito: nel prompt non entra tutto, ma solo i
+         * passaggi che c'entrano con la domanda (vedi [PassageSelector]), e per sceglierli serve
+         * il documento intero, anche di 30 pagine. Il tetto evita solo casi patologici.
+         */
+        private const val MAX_PDF_CHARS_PER_CIRCULAR = 150_000
 
         /** Circolari lette per intero prima di chiedere al modello: le due piu' attinenti. */
         private const val PREFETCHED_CIRCULARS = 2

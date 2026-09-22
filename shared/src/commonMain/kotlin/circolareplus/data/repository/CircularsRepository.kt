@@ -80,24 +80,50 @@ class CircularsRepository(private val api: ApiClient) {
         return if (response.stored) null else response.current?.toDomain()
     }
 
+    /** Esito di [getAnalysesSince]: le analisi nuove e cosa fa il server per conto suo. */
+    data class AnalysesSync(
+        val analyses: List<CircularAiClassification>,
+        /** Da passare alla chiamata successiva. */
+        val cursor: String?,
+        val serverSummaries: Boolean,
+        val serverWindowFrom: Int?,
+        val serverGaveUp: Set<Int>
+    ) {
+        /**
+         * `true` se il server riassumera' da solo questa circolare con Gemini: vale la pena
+         * aspettarlo invece di farle leggere all'AI locale solo le prime pagine.
+         */
+        fun serverWillSummarize(circularNumber: Int): Boolean =
+            serverSummaries &&
+                circularNumber !in serverGaveUp &&
+                (serverWindowFrom == null || circularNumber >= serverWindowFrom)
+    }
+
     /**
      * Le analisi cambiate sul server dopo [since] (`null` = tutte), con il nuovo valore da
      * passare alla chiamata successiva. Una sola richiesta al posto di una per circolare, e
      * chi ha l'app aperta vede i riassunti fatti da altri senza dover riaprire l'app.
      */
-    suspend fun getAnalysesSince(since: String?): Pair<List<CircularAiClassification>, String?> {
+    suspend fun getAnalysesSince(since: String?): AnalysesSync {
         val all = mutableListOf<CircularAiClassification>()
         var cursor = since
+        var lastPage: CircularAnalysesDto? = null
         // Il server ne restituisce al massimo 200 per volta, dalla più vecchia.
-        repeat(MAX_ANALYSIS_PAGES) {
+        for (pageIndex in 0 until MAX_ANALYSIS_PAGES) {
             val query = cursor?.let { "?since=" + it.replace(" ", "%20") } ?: ""
             val page: CircularAnalysesDto = api.get("/api/circulars/analyses$query")
+            lastPage = page
             all += page.analyses.map { it.toDomain() }
-            val last = page.analyses.lastOrNull()?.updatedAt
-            if (last != null) cursor = last
-            if (page.analyses.size < ANALYSES_PAGE_SIZE) return all to cursor
+            page.analyses.lastOrNull()?.updatedAt?.let { cursor = it }
+            if (page.analyses.size < ANALYSES_PAGE_SIZE) break
         }
-        return all to cursor
+        return AnalysesSync(
+            analyses = all,
+            cursor = cursor,
+            serverSummaries = lastPage?.serverSummaries == true,
+            serverWindowFrom = lastPage?.serverWindowFrom,
+            serverGaveUp = lastPage?.serverGaveUp.orEmpty().toSet()
+        )
     }
 
     private companion object {

@@ -55,6 +55,11 @@ fun CircularDetailScreen(
     isClassifying: Boolean = false,
     /** In attesa che finisca l'analisi di un'altra circolare: sul telefono ne gira una alla volta. */
     isQueued: Boolean = false,
+    /**
+     * Circolare troppo lunga per l'AI del telefono, che ne leggerebbe solo l'inizio: il riassunto
+     * completo arriva dal server. "Analizza" la analizza comunque sul telefono.
+     */
+    isAwaitingServer: Boolean = false,
     /** `false` quando l'analisi in corso e' di Gemini e non del modello sul telefono. */
     analysisOnDevice: Boolean = true,
     /** Ferma l'analisi in corso o in coda (tasto quadrato accanto al titolo della sezione). */
@@ -269,7 +274,14 @@ fun CircularDetailScreen(
                         } else {
                             Text(
                                 text = classification?.personalSummary
-                                    ?: "Nessuna analisi disponibile per questa circolare.",
+                                    ?: if (isAwaitingServer) {
+                                        "Circolare lunga: l'AI del telefono ne leggerebbe solo le " +
+                                            "prime pagine. Il riassunto completo arriva dal server " +
+                                            "con Gemini appena pronto. Se non vuoi aspettare, " +
+                                            "tocca \"Analizza\"."
+                                    } else {
+                                        "Nessuna analisi disponibile per questa circolare."
+                                    },
                                 fontSize = 13.sp,
                                 color = AppTheme.TextMuted,
                                 lineHeight = 19.sp

@@ -264,11 +264,15 @@ internal object AssistantContext {
 
         if (deepTexts.isNotEmpty()) {
             builder.appendSection("TESTO INTEGRALE DELLE CIRCOLARI PIU' ATTINENTI") {
+                appendLine(
+                    "Dei documenti lunghi ci sono solo l'inizio e i passaggi che c'entrano con la " +
+                        "domanda; \"[...]\" indica una parte saltata. Se la risposta non c'e', dillo."
+                )
                 deepTexts.forEach { (number, text) ->
                     val circularTitle = knowledge.circulars.firstOrNull { it.number == number }?.title ?: ""
                     appendLine("")
                     appendLine("--- Testo della circolare n. $number: $circularTitle ---")
-                    appendLine(text.take(budget.deepTextChars))
+                    appendLine(PassageSelector.select(text, question, budget.deepTextChars))
                 }
             }
         }

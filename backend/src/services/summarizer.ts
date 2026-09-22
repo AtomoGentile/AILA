@@ -32,9 +32,9 @@ const STUDENT_CONTEXT = 'Studente di scuola superiore, classe 4^ CSA';
 /** Circolari riassunte al massimo per giro di cron (ogni 15 minuti). */
 const MAX_PER_RUN = 3;
 /** Dopo questi tentativi falliti una circolare si lascia ai telefoni. */
-const MAX_ATTEMPTS = 3;
+export const MAX_ATTEMPTS = 3;
 /** Solo le circolari più recenti: quelle vecchie non le apre più nessuno. */
-const BACKFILL_WINDOW = 30;
+export const BACKFILL_WINDOW = 30;
 /** Oltre questa dimensione totale (PDF + allegati) gli allegati restano fuori. Limite API: 20 MB. */
 const MAX_INLINE_BYTES = 12 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 60_000;
