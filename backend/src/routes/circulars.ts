@@ -5,7 +5,7 @@
 import { Hono } from 'hono';
 import type { CircularAttachment, Env, JWTPayload } from '../types';
 import { authMiddleware } from '../auth';
-import { upsertAnalysis } from '../services/summarizer';
+import { BACKFILL_WINDOW, MAX_ATTEMPTS, upsertAnalysis } from '../services/summarizer';
 
 // `attachments_json` è sempre valido JSON (scritto solo da syncSpaggiariCirculars, default
 // '[]' per le righe precedenti alla colonna) — un parse fallito è un bug, non un caso da
@@ -111,7 +111,32 @@ circulars.get('/analyses', authMiddleware(), async (c) => {
     `SELECT ${ANALYSIS_COLUMNS} FROM circular_ai_analysis
      WHERE updated_at > ? AND tier > 0 ORDER BY updated_at ASC LIMIT 200`
   ).bind(since).all<AnalysisRow>();
-  return c.json({ analyses: rows.results.map(analysisJson) });
+
+  // Cosa fa il server per conto suo, così il telefono sa quando conviene aspettare invece di
+  // leggere con l'AI locale solo le prime pagine di una circolare lunga:
+  // - serverSummaries: c'è GEMINI_API_KEY, quindi il cron riassume le circolari da solo;
+  // - serverWindowFrom: il cron recupera solo le circolari da questo numero in su;
+  // - serverGaveUp: circolari su cui ha smesso di riprovare (MAX_ATTEMPTS tentativi falliti).
+  const serverSummaries = !!c.env.GEMINI_API_KEY;
+  let serverWindowFrom: number | null = null;
+  let serverGaveUp: number[] = [];
+  if (serverSummaries) {
+    const windowRow = await c.env.DB.prepare(
+      'SELECT MIN(number) AS first FROM (SELECT number FROM circulars ORDER BY number DESC LIMIT ?)'
+    ).bind(BACKFILL_WINDOW).first<{ first: number | null }>();
+    serverWindowFrom = windowRow?.first ?? null;
+    const gaveUp = await c.env.DB.prepare(
+      'SELECT circular_number FROM circular_ai_server_attempts WHERE attempts >= ?'
+    ).bind(MAX_ATTEMPTS).all<{ circular_number: number }>();
+    serverGaveUp = gaveUp.results.map((r) => r.circular_number);
+  }
+
+  return c.json({
+    analyses: rows.results.map(analysisJson),
+    serverSummaries,
+    serverWindowFrom,
+    serverGaveUp,
+  });
 });
 
 // ---------------------------------------------------------------------------

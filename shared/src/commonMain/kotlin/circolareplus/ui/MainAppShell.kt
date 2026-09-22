@@ -32,6 +32,7 @@ import circolareplus.data.AppContainer
 import circolareplus.data.remote.dto.PollDetailDto
 import circolareplus.data.remote.dto.CreatePollSlotRequestDto
 import circolareplus.data.remote.dto.RatingEntryDto
+import circolareplus.data.repository.CircularsRepository
 import circolareplus.data.repository.SessionRestore
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
@@ -55,6 +56,8 @@ import circolareplus.ai.EventDraft
 import circolareplus.ai.HeuristicClassification
 import circolareplus.ai.AnalysisActivity
 import circolareplus.ai.tier
+import circolareplus.ai.CircularClassificationPrompt
+import circolareplus.ai.cleanPdfTextForAi
 import circolareplus.domain.model.Proposal
 import circolareplus.domain.model.SocialPreferenceScore
 import circolareplus.domain.model.StudentProfile
@@ -167,6 +170,11 @@ fun MainAppShell(
     val analysisTitles = remember { mutableMapOf<Int, String>() }
     // Fermate a mano: non ripartono da sole riaprendo la circolare, solo col tasto "Analizza".
     val stoppedByUser = remember { mutableStateListOf<Int>() }
+    // Circolari troppo lunghe per l'AI del telefono (ne leggerebbe solo l'inizio) che il server
+    // riassumera' con Gemini: si aspetta lui invece di produrre un riassunto parziale.
+    val awaitingServer = remember { mutableStateListOf<Int>() }
+    // Cosa fa il server per conto suo (ultima lettura di /analyses), vedi AnalysesSync.
+    var serverSyncInfo by remember { mutableStateOf<CircularsRepository.AnalysesSync?>(null) }
 
     fun storeClassification(classification: CircularAiClassification) {
         classifications[classification.circularNumber] = classification
@@ -197,6 +205,7 @@ fun MainAppShell(
         val current = classifications[number]
         if (current != null && current.tier > incoming.tier) return
         if (current != incoming) storeClassification(incoming)
+        awaitingServer -= number
         val runningTier = inFlightTier[number] ?: return
         if (incoming.tier >= runningTier) analysisJobs[number]?.cancel()
     }
@@ -210,7 +219,12 @@ fun MainAppShell(
     }
 
     // Download del PDF (con gli allegati), classificazione, e condivisione del risultato.
-    suspend fun classifyAndShare(circular: Circular, allowLocalFallback: Boolean) {
+    suspend fun classifyAndShare(
+        circular: Circular,
+        allowLocalFallback: Boolean,
+        /** Con l'AI del telefono: una circolare lunga si lascia al server, se la riassumera' lui. */
+        waitForServerIfLong: Boolean = false
+    ) {
         val pdfBytes = AppContainer.circularsRepository.downloadPdfBytes(circular.r2PdfKey)
         var pdfText = AppContainer.pdfTextExtractor.extractText(pdfBytes)
 
@@ -232,6 +246,18 @@ fun MainAppShell(
             } catch (e: Exception) {
                 // Ignorato di proposito: vedi commento sopra.
             }
+        }
+
+        // Il modello sul telefono legge al massimo CircularClassificationPrompt.MAX_PDF_CHARS
+        // caratteri (2-3 pagine): di una circolare da 30 pagine riassumerebbe solo l'inizio, dopo
+        // minuti di calcolo, e il riassunto verrebbe comunque sostituito da quello del server.
+        if (
+            waitForServerIfLong &&
+            cleanPdfTextForAi(pdfText).length > CircularClassificationPrompt.MAX_PDF_CHARS &&
+            serverSyncInfo?.serverWillSummarize(circular.number) == true
+        ) {
+            if (circular.number !in awaitingServer) awaitingServer += circular.number
+            return
         }
 
         val result = AppContainer.newAiClassifier(
@@ -305,7 +331,9 @@ fun MainAppShell(
                     runningLocalClassification = number
                     publishAnalysisActivity()
                     try {
-                        classifyAndShare(circular, allowLocalFallback)
+                        // "Analizza"/"Rianalizza" (forceReanalyze) e' una richiesta esplicita:
+                        // si analizza sul telefono anche una circolare lunga.
+                        classifyAndShare(circular, allowLocalFallback, waitForServerIfLong = !forceReanalyze)
                     } finally {
                         runningLocalClassification = null
                     }
@@ -357,6 +385,7 @@ fun MainAppShell(
     ): Job {
         analysisJobs[circular.number]?.takeIf { it.isActive }?.let { return it }
         stoppedByUser -= circular.number
+        if (forceReanalyze) awaitingServer -= circular.number
         val job = AnalysisActivity.scope.launch {
             classifyCircularIfNeeded(circular, forceReanalyze, allowLocalFallback)
         }
@@ -1242,7 +1271,9 @@ fun MainAppShell(
             // dettaglio, e con lui l'analisi (minuti di lavoro sul telefono buttati). Cosi'
             // prosegue, e la lista mostra "Analisi in corso".
             // Fermata a mano: riparte solo col tasto "Analizza", non riaprendo la circolare.
-            if (circular.number !in stoppedByUser) launchClassification(circular)
+            if (circular.number !in stoppedByUser && circular.number !in awaitingServer) {
+                launchClassification(circular)
+            }
         }
     }
 
@@ -1270,15 +1301,20 @@ fun MainAppShell(
     // e' in corso su questo telefono (un riassunto arrivato la ferma, vedi adoptServerAnalysis).
     var serverAnalysesCursor by remember { mutableStateOf<String?>(null) }
     suspend fun syncServerAnalyses() {
-        val (fresh, cursor) = try {
+        val sync = try {
             AppContainer.circularsRepository.getAnalysesSince(serverAnalysesCursor)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             return // Rete assente o server vecchio senza questa rotta: si riprova al giro dopo.
         }
-        serverAnalysesCursor = cursor
-        fresh.forEach { adoptServerAnalysis(it) }
+        serverAnalysesCursor = sync.cursor
+        serverSyncInfo = sync.copy(analyses = emptyList())
+        sync.analyses.forEach { adoptServerAnalysis(it) }
+        // Se il server ha smesso di provarci (o non ha piu' la chiave), le circolari lunghe in
+        // attesa tornano all'AI del telefono: si possono analizzare col tasto "Analizza".
+        val noLongerAwaited = awaitingServer.filter { !sync.serverWillSummarize(it) }
+        if (noLongerAwaited.isNotEmpty()) awaitingServer.removeAll(noLongerAwaited)
     }
     LaunchedEffect(user.id) {
         // Giri da 15 secondi: la lettura vera parte ogni 4 giri, o a ogni giro se c'e'
@@ -1646,6 +1682,7 @@ fun MainAppShell(
             classification = classifications[circularForDetail.number],
             isClassifying = circularForDetail.number in inFlightClassification,
             isQueued = circularForDetail.number in queuedClassification,
+            isAwaitingServer = circularForDetail.number in awaitingServer,
             analysisOnDevice = circularForDetail.number !in cloudClassification,
             onStopAnalysis = { stopClassification(circularForDetail.number) },
             calendarEvents = calendarEvents,

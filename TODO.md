@@ -38,6 +38,13 @@ Fatto:
 - **Mappa posti**: le tre letture in parallelo, lettura anticipata 2 s dopo l'ingresso, spinner
   solo alla prima lettura (prima tornava a ogni ingresso se non c'era una mappa).
 - AI locale etichettata **Beta** in onboarding e Impostazioni.
+- **Circolari lunghe**: se il testo supera quello che l'AI locale legge (6.000 caratteri) e il
+  server la riassumera' (`/analyses` ora dice `serverSummaries`, `serverWindowFrom`,
+  `serverGaveUp`), il telefono non la analizza e lo dice nel dettaglio; "Analizza" la forza.
+- **Assistente sui documenti lunghi**: `PassageSelector` passa al modello l'intestazione e i
+  blocchi con le parole della domanda (in ordine, con "[...]"), non piu' la prima pagina; il PDF
+  si legge per intero (fino a 150.000 caratteri) per poter scegliere. Test in
+  `PassageSelectorTest` (verificati su una copia Python della stessa logica, non con Gradle).
 
 Non fatto / da valutare:
 - AICore: la libreria `0.0.1-exp02` e' sperimentale e funziona su pochi telefoni. La strada

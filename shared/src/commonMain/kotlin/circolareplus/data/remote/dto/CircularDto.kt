@@ -59,7 +59,13 @@ data class CircularAnalysisDto(
 /** Risposta di GET /api/circulars/analyses?since=...: le analisi cambiate dopo `since`. */
 @Serializable
 data class CircularAnalysesDto(
-    val analyses: List<CircularAnalysisDto> = emptyList()
+    val analyses: List<CircularAnalysisDto> = emptyList(),
+    /** Il server riassume da solo le circolari con Gemini (ha GEMINI_API_KEY). */
+    val serverSummaries: Boolean = false,
+    /** Il server recupera solo le circolari da questo numero in su. */
+    val serverWindowFrom: Int? = null,
+    /** Circolari su cui il server ha smesso di riprovare. */
+    val serverGaveUp: List<Int> = emptyList()
 )
 
 /**
