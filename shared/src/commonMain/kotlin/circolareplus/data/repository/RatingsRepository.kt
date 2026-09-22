@@ -1,6 +1,9 @@
 package circolareplus.data.repository
 
 import circolareplus.data.remote.ApiClient
+import circolareplus.data.remote.dto.AddDisciplinePairRequestDto
+import circolareplus.data.remote.dto.DisciplinePairDto
+import circolareplus.data.remote.dto.DisciplinePairsResponseDto
 import circolareplus.data.remote.dto.RatingEntryDto
 import circolareplus.data.remote.dto.RatingsListResponseDto
 import circolareplus.data.remote.dto.SetPriorityPassRequestDto
@@ -21,5 +24,20 @@ class RatingsRepository(private val api: ApiClient) {
             "/api/ratings/$studentId/priority-pass",
             SetPriorityPassRequestDto(enabled)
         )
+    }
+
+    /** Coppie da separare per disciplina ancora valide (le scadute le cancella il server). */
+    suspend fun listDisciplinePairs(): List<DisciplinePairDto> =
+        api.get<DisciplinePairsResponseDto>("/api/ratings/pairs").pairs
+
+    suspend fun addDisciplinePair(studentA: String, studentB: String, duration: String) {
+        api.post<AddDisciplinePairRequestDto, SuccessDto>(
+            "/api/ratings/pairs",
+            AddDisciplinePairRequestDto(studentA, studentB, duration)
+        )
+    }
+
+    suspend fun removeDisciplinePair(id: String) {
+        api.delete<SuccessDto>("/api/ratings/pairs/$id")
     }
 }

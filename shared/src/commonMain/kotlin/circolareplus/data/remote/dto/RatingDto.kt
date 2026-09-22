@@ -24,3 +24,19 @@ data class SetRatingRequestDto(val didactic: Int? = null, val behavior: Int? = n
 
 @Serializable
 data class SetPriorityPassRequestDto(val enabled: Boolean)
+
+/** Coppia da separare per disciplina, con la data in cui smette di valere (YYYY-MM-DD). */
+@Serializable
+data class DisciplinePairDto(
+    val id: String,
+    val studentA: String,
+    val studentB: String,
+    val expiresAt: String
+)
+
+@Serializable
+data class DisciplinePairsResponseDto(val pairs: List<DisciplinePairDto> = emptyList())
+
+/** `duration`: MONTH, QUARTER o SCHOOL_YEAR. */
+@Serializable
+data class AddDisciplinePairRequestDto(val studentA: String, val studentB: String, val duration: String)

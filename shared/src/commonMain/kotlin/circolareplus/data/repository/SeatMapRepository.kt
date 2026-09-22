@@ -86,7 +86,9 @@ class SeatMapRepository(private val api: ApiClient? = null) {
         history: List<SeatMapHistoryRecord>,
         weights: OptimizerWeights = OptimizerWeights(),
         // 2 = banchi da coppia, 3 = banchi da trio (stesso algoritmo, vedi SeatMapOptimizer.optimize).
-        seatsPerDesk: Int = SeatMapOptimizer.SEATS_PER_DESK_PAIR
+        seatsPerDesk: Int = SeatMapOptimizer.SEATS_PER_DESK_PAIR,
+        // Coppie da separare per disciplina (Scheda Classe): penalizzate, non vietate.
+        disciplinePairs: Set<Pair<String, String>> = emptySet()
     ): List<SeatMapProposal> {
         val isSmallClass = students.size < 22
         val baseSeed = kotlin.random.Random.nextLong()
@@ -102,7 +104,8 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                 weights = weights,
                 isSmallClass = isSmallClass,
                 seed = seed,
-                seatsPerDesk = seatsPerDesk
+                seatsPerDesk = seatsPerDesk,
+                disciplinePairs = disciplinePairs
             )
             val breakdown = SeatMapOptimizer.scoreLayout(
                 assignments = assignments,
@@ -111,7 +114,8 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                 socialPreferences = socialPreferences,
                 history = history,
                 weights = weights,
-                isSmallClass = isSmallClass
+                isSmallClass = isSmallClass,
+                disciplinePairs = disciplinePairs
             )
 
             SeatMapProposal(
