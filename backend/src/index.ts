@@ -9,6 +9,7 @@ import { logger } from 'hono/logger';
 
 import type { Env } from './types';
 import { syncSpaggiariCirculars } from './services/spaggiari';
+import { summarizePendingCirculars } from './services/summarizer';
 
 // Routes
 import authRoutes from './routes/auth';
@@ -88,6 +89,8 @@ export default {
   // Cron handler — Spaggiari sync ogni 15 minuti
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     console.log(`[Cron] Avvio sync Spaggiari: ${new Date().toISOString()}`);
-    ctx.waitUntil(syncSpaggiariCirculars(env));
+    // Il recupero dei riassunti mancanti parte dopo la sync, così le circolari appena arrivate
+    // (già riassunte dentro la sync) non vengono prese due volte.
+    ctx.waitUntil(syncSpaggiariCirculars(env).then(() => summarizePendingCirculars(env)));
   },
 };

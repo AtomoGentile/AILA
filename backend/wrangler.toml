@@ -33,6 +33,11 @@ SPAGGIARI_URL = "https://www.iisprimolevi.edu.it/pagine/circolari-studenti-20262
 #                           Account di servizio → Genera nuova chiave privata). Finché questi due
 #                           secret non sono impostati, le notifiche push sono semplicemente
 #                           disattivate (nessun errore): vedi backend/src/services/fcm.ts.
+# GEMINI_API_KEY          — chiave Google AI Studio (opzionale): se impostata, il cron riassume
+#                           ogni circolare nuova sul server con Gemini (services/summarizer.ts) e i
+#                           telefoni non devono più farlo con l'AI locale. Usata solo dal cron, mai
+#                           esposta a una rotta HTTP. Per revocarla basta crearne una nuova su AI
+#                           Studio e rifare `wrangler secret put GEMINI_API_KEY`.
 #
 # NOTA: la vecchia "Legacy HTTP API" (una singola FCM_SERVER_KEY) è stata dismessa da Google
 # il 20 giugno 2024 e non funziona più su nessun progetto Firebase, incluso uno creato oggi:
