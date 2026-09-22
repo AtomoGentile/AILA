@@ -49,7 +49,10 @@ internal object AssistantContext {
     private class Budget(val maxChars: Int) {
         val tight = maxChars < TIGHT_BUDGET_THRESHOLD
 
-        val detailedCirculars = if (tight) 3 else 12
+        // Con il modello sul telefono meno circolari ma lette meglio: le due piu' attinenti
+        // arrivano gia' col testo integrale (vedi [AilaAssistant]), e un terzo riassunto
+        // toglierebbe spazio proprio a quel testo.
+        val detailedCirculars = if (tight) 2 else 12
         val indexEntries = if (tight) 15 else 200
         val summaryChars = if (tight) 450 else 1_400
         val futureEvents = if (tight) 15 else 60
@@ -59,7 +62,7 @@ internal object AssistantContext {
         val includeSeatMapHistory = !tight
         val includeRatings = !tight
         val includePolls = true
-        val deepTextChars = if (tight) 2_500 else 9_000
+        val deepTextChars = if (tight) 2_000 else 9_000
         val classmatesInHeader = !tight
     }
 
@@ -212,7 +215,11 @@ internal object AssistantContext {
                 appendLine("--- Circolare n. ${circular.number} (${circular.publishDate}) ---")
                 appendLine("Titolo: ${circular.title}")
                 val analysis = knowledge.classifications[circular.number]
-                if (analysis == null) {
+                if (budget.tight && circular.number in deepTexts) {
+                    // Con poco spazio il riassunto e il testo integrale della stessa circolare
+                    // sarebbero un doppione: resta il testo, che contiene tutto.
+                    appendLine("Testo integrale nella sezione piu' sotto.")
+                } else if (analysis == null) {
                     appendLine("Analisi AI: non ancora prodotta per questa circolare.")
                 } else {
                     appendLine(
@@ -256,7 +263,7 @@ internal object AssistantContext {
         }
 
         if (deepTexts.isNotEmpty()) {
-            builder.appendSection("TESTO INTEGRALE DELLE CIRCOLARI CHE HAI CHIESTO") {
+            builder.appendSection("TESTO INTEGRALE DELLE CIRCOLARI PIU' ATTINENTI") {
                 deepTexts.forEach { (number, text) ->
                     val circularTitle = knowledge.circulars.firstOrNull { it.number == number }?.title ?: ""
                     appendLine("")
@@ -288,13 +295,54 @@ internal object AssistantContext {
         val title = normalize(circular.title)
         val summary = normalize(knowledge.classifications[circular.number]?.personalSummary ?: "")
         terms.forEach { term ->
-            if (title.contains(term)) score += 6.0
-            if (summary.contains(term)) score += 2.5
+            // Si confronta la radice e non la parola intera: "scienze" deve trovare anche
+            // "scientifiche", "sportelli" anche "sportello".
+            val stem = stemOf(term)
+            if (title.contains(stem)) score += 6.0
+            if (summary.contains(stem)) score += 2.5
         }
         // Spareggio sulla recenza, sempre minore del peso di una singola parola trovata.
         score += circular.number.toDouble() / 100_000.0
         return score
     }
+
+    /**
+     * Sotto questo punteggio una circolare non c'entra davvero con la domanda: serve almeno una
+     * parola nel titolo, o due nel riassunto. Lo spareggio sulla recenza da solo non basta.
+     */
+    private const val RELEVANCE_THRESHOLD = 5.0
+
+    /**
+     * Le circolari da leggere per intero prima ancora di chiedere al modello (vedi
+     * [AilaAssistant]): al massimo [limit], e solo quelle che c'entrano davvero con la domanda.
+     * Vuota per saluti, domande generali e domande su un periodo ("cosa ho questa settimana"),
+     * che si reggono su calendario e scadenze e non sul testo di una circolare.
+     */
+    fun mostRelevantCirculars(knowledge: AssistantKnowledge, question: String, limit: Int): List<Int> {
+        if (TimeScopeParser.parse(question, knowledge.todayIso) != null) return emptyList()
+        val terms = tokenize(question)
+        val explicitNumbers = circularNumbersIn(question)
+        return knowledge.circulars
+            .map { it to scoreCircular(it, knowledge, terms, explicitNumbers) }
+            .filter { (_, score) -> score >= RELEVANCE_THRESHOLD }
+            .sortedByDescending { (_, score) -> score }
+            .take(limit)
+            .map { (circular, _) -> circular.number }
+    }
+
+    /**
+     * `true` per un saluto o una domanda senza nessun aggancio ai dati ("ciao", "grazie").
+     * Serve a non allegare fonti a una risposta che non ne ha: un modello piccolo altrimenti
+     * cita la prima circolare che vede.
+     */
+    fun isSmallTalk(knowledge: AssistantKnowledge, question: String): Boolean =
+        tokenize(question).isEmpty() &&
+            circularNumbersIn(question).isEmpty() &&
+            TimeScopeParser.parse(question, knowledge.todayIso) == null
+
+    /** Radice approssimata di una parola italiana: bastano le prime lettere oltre la desinenza. */
+    internal fun stemOf(term: String): String =
+        if (term.length >= 6) term.dropLast(2) else term
 
     // -----------------------------------------------------------------------
     // Calendario
@@ -649,6 +697,9 @@ internal object AssistantContext {
         "sai", "dimmi", "mio", "mia", "miei", "mie", "sul", "sulla", "questo", "questa", "quale",
         "quali", "piu", "meno", "tutti", "tutte", "tutto", "non", "anche", "ancora", "solo",
         "ciao", "grazie", "puoi", "devo", "posso", "fare", "quanto", "quanti", "quante", "ho",
-        "mi", "ti", "si", "la", "le", "lo", "il", "un", "di", "da", "in", "su", "tra", "fra"
+        "mi", "ti", "si", "la", "le", "lo", "il", "un", "di", "da", "in", "su", "tra", "fra",
+        // Saluti e verbi di contorno: non dicono niente su quale circolare serva.
+        "buongiorno", "buonasera", "salve", "hey", "trovo", "trova", "trovare", "vorrei",
+        "sapere", "serve", "servono", "giorni", "giorno", "aiutarmi", "aiuto", "bene", "okay"
     )
 }
