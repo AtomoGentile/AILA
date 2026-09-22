@@ -2,6 +2,7 @@ package circolareplus.ui.screens
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -52,6 +53,12 @@ fun CircularDetailScreen(
     circular: Circular,
     classification: CircularAiClassification?,
     isClassifying: Boolean = false,
+    /** In attesa che finisca l'analisi di un'altra circolare: sul telefono ne gira una alla volta. */
+    isQueued: Boolean = false,
+    /** `false` quando l'analisi in corso e' di Gemini e non del modello sul telefono. */
+    analysisOnDevice: Boolean = true,
+    /** Ferma l'analisi in corso o in coda (tasto quadrato accanto al titolo della sezione). */
+    onStopAnalysis: (() -> Unit)? = null,
     onBackClick: () -> Unit = {},
     onDownloadPdfClick: () -> Unit = {},
     onOpenAttachmentClick: (CircularAttachment) -> Unit = {},
@@ -228,9 +235,12 @@ fun CircularDetailScreen(
                             // Rianalizza: senza questo, una circolare già classificata restava
                             // con il risultato vecchio per sempre — impossibile riprovare dopo
                             // aver messo la chiave AI o corretto il prompt.
+                            if (isClassifying && onStopAnalysis != null) {
+                                StopAnalysisButton(onClick = onStopAnalysis)
+                            }
                             if (onReanalyze != null && !isClassifying) {
                                 AilaSecondaryButton(
-                                    text = "Rianalizza",
+                                    text = if (classification == null) "Analizza" else "Rianalizza",
                                     onClick = onReanalyze,
                                     compact = true,
                                     icon = { tint -> AppIcons.Sparkle(modifier = Modifier.size(13.dp), color = tint) }
@@ -247,7 +257,11 @@ fun CircularDetailScreen(
                                 )
                                 Spacer(modifier = Modifier.width(AppTheme.Space8))
                                 Text(
-                                    text = "Analisi del documento in corso sul dispositivo…",
+                                    text = when {
+                                        isQueued -> "In coda: parte appena finisce l'analisi in corso."
+                                        analysisOnDevice -> "Analisi del documento in corso sul dispositivo…"
+                                        else -> "Analisi del documento in corso con Gemini…"
+                                    },
                                     fontSize = 13.sp,
                                     color = AppTheme.TextMuted
                                 )
@@ -576,4 +590,28 @@ private fun readableCategory(category: String): String = when (category.uppercas
     "USCITA_DIDATTICA" -> "Uscita didattica"
     "AVVISO" -> "Avviso"
     else -> "Altro"
+}
+
+/**
+ * Il tasto per fermare l'analisi: un quadrato con dentro il simbolo di stop, come nei lettori
+ * multimediali. Si ferma solo l'analisi su questo telefono; se nel frattempo un compagno o il
+ * server finiscono il riassunto, compare quello.
+ */
+@Composable
+private fun StopAnalysisButton(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(32.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(AppTheme.TintRed)
+            .clickable(onClickLabel = "Ferma l'analisi", onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(11.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(AppTheme.TintRedInk)
+        )
+    }
 }

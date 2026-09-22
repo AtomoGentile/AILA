@@ -53,6 +53,8 @@ import circolareplus.ai.assistant.AssistantMessage
 import circolareplus.ai.assistant.AssistantSourceKind
 import circolareplus.ai.EventDraft
 import circolareplus.ai.HeuristicClassification
+import circolareplus.ai.AnalysisActivity
+import circolareplus.ai.tier
 import circolareplus.domain.model.Proposal
 import circolareplus.domain.model.SocialPreferenceScore
 import circolareplus.domain.model.StudentProfile
@@ -63,6 +65,9 @@ import circolareplus.platform.currentTimeMillis
 import circolareplus.push.currentPushPlatform
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -141,8 +146,6 @@ fun MainAppShell(
             putAll(AppContainer.settings.readClassificationCache())
         }
     }
-    // Circolari senza analisi sul server: non si richiedono di nuovo a ogni cambio di lista.
-    val noServerAnalysis = remember { mutableSetOf<Int>() }
     // Circolari attualmente in fase di classificazione (splash, sfondo, o apertura manuale):
     // evita che due punti diversi del codice scarichino/classifichino la stessa circolare in
     // parallelo, sprecando chiamate AI e banda per lo stesso risultato.
@@ -150,10 +153,114 @@ fun MainAppShell(
     // mostra "Analisi in corso" per ognuna: l'analisi non dipende piu' dalla schermata di
     // dettaglio, quindi deve restare visibile anche dopo esserne usciti.
     val inFlightClassification = remember { mutableStateListOf<Int>() }
+    // Sul telefono gira una sola analisi alla volta: due in parallelo si rubano CPU/NPU e
+    // memoria e finiscono entrambe piu' tardi. Le altre aspettano qui il loro turno.
+    val localAnalysisGate = remember { Mutex() }
+    val queuedClassification = remember { mutableStateListOf<Int>() }
+    var runningLocalClassification by remember { mutableStateOf<Int?>(null) }
+    // Analisi in corso con Gemini (dal telefono, con la chiave personale): non passano dalla coda.
+    val cloudClassification = remember { mutableStateListOf<Int>() }
+    // Livello (vedi [circolareplus.ai.tier]) che l'analisi in corso produrra': un riassunto di
+    // livello uguale o superiore arrivato dal server la rende inutile e la ferma.
+    val inFlightTier = remember { mutableMapOf<Int, Int>() }
+    val analysisJobs = remember { mutableMapOf<Int, Job>() }
+    val analysisTitles = remember { mutableMapOf<Int, String>() }
+    // Fermate a mano: non ripartono da sole riaprendo la circolare, solo col tasto "Analizza".
+    val stoppedByUser = remember { mutableStateListOf<Int>() }
 
     fun storeClassification(classification: CircularAiClassification) {
         classifications[classification.circularNumber] = classification
         AppContainer.settings.saveClassification(classification)
+    }
+
+    // Lo stato letto dalla notifica di Android (servizio in primo piano con il tasto Stop).
+    fun publishAnalysisActivity() {
+        val running = runningLocalClassification ?: cloudClassification.firstOrNull()
+        AnalysisActivity.update(
+            AnalysisActivity.State(
+                running = running,
+                runningTitle = running?.let { analysisTitles[it] } ?: "",
+                onDevice = running != null && running == runningLocalClassification,
+                queued = queuedClassification.toList()
+            )
+        )
+    }
+
+    /**
+     * Mostra un'analisi arrivata dal server se vale almeno quanto quella che c'e', e ferma
+     * l'analisi in corso su questo telefono se ormai e' inutile: un riassunto fatto da un
+     * compagno o dal server compare subito invece di aspettare che finisca la propria.
+     * Un'analisi con Gemini si ferma solo per un altro riassunto di Gemini, mai per uno locale.
+     */
+    fun adoptServerAnalysis(incoming: CircularAiClassification) {
+        val number = incoming.circularNumber
+        val current = classifications[number]
+        if (current != null && current.tier > incoming.tier) return
+        if (current != incoming) storeClassification(incoming)
+        val runningTier = inFlightTier[number] ?: return
+        if (incoming.tier >= runningTier) analysisJobs[number]?.cancel()
+    }
+
+    suspend fun fetchServerAnalysisOrNull(number: Int): CircularAiClassification? = try {
+        AppContainer.circularsRepository.getCachedAnalysis(number)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null // Server irraggiungibile: si procede con l'analisi come prima.
+    }
+
+    // Download del PDF (con gli allegati), classificazione, e condivisione del risultato.
+    suspend fun classifyAndShare(circular: Circular, allowLocalFallback: Boolean) {
+        val pdfBytes = AppContainer.circularsRepository.downloadPdfBytes(circular.r2PdfKey)
+        var pdfText = AppContainer.pdfTextExtractor.extractText(pdfBytes)
+
+        // Gli allegati PDF (colonna "Allegati" di Spaggiari) entrano nello stesso testo
+        // analizzato dall'AI: un'informativa pubblicata come allegato invece che nel corpo
+        // della circolare non deve passare inosservata al riassunto/classificazione. Un
+        // allegato che non si scarica o non si legge viene saltato senza far fallire
+        // l'intera analisi — meglio un riassunto senza quell'allegato che nessun riassunto.
+        for (attachment in circular.attachments) {
+            val pdfKey = attachment.pdfKey ?: continue
+            try {
+                val attBytes = AppContainer.circularsRepository.downloadPdfBytes(pdfKey)
+                val attText = AppContainer.pdfTextExtractor.extractText(attBytes)
+                if (attText.isNotBlank()) {
+                    pdfText += "$ATTACHMENT_TEXT_MARKER${attachment.label} ---\n\n$attText"
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Ignorato di proposito: vedi commento sopra.
+            }
+        }
+
+        val result = AppContainer.newAiClassifier(
+            allowLocalFallback = allowLocalFallback,
+            pdfTextLength = pdfText.length
+        ).classifyCircularText(
+            circularNumber = circular.number,
+            circularTitle = circular.title,
+            pdfText = pdfText
+        )
+        // Nel frattempo potrebbe essere arrivato un riassunto migliore dal server: non si
+        // sostituisce con uno peggiore.
+        val current = classifications[circular.number]
+        if (current == null || current.tier <= result.tier) storeClassification(result)
+
+        // Il ripiego euristico e' un messaggio d'errore, non un riassunto: resta su questo
+        // telefono e non si condivide (il server lo rifiuterebbe comunque).
+        if (result.isFallback) return
+
+        // Si condivide il risultato con tutti gli altri utenti: il server tiene quello di
+        // livello piu' alto e, se ne ha gia' uno migliore, lo restituisce e si mostra quello.
+        // Un fallimento nel salvataggio non deve rompere la classificazione gia' ottenuta.
+        try {
+            AppContainer.circularsRepository.saveAnalysis(result)?.let { better -> adoptServerAnalysis(better) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Ignorato di proposito: vedi commento sopra.
+        }
     }
 
     // Un solo posto che sa come classificare una circolare, usato sia dall'anticipo durante il
@@ -164,8 +271,11 @@ fun MainAppShell(
         forceReanalyze: Boolean = false,
         allowLocalFallback: Boolean = true
     ) {
-        if (classifications.containsKey(circular.number) || circular.number in inFlightClassification) return
-        inFlightClassification += circular.number
+        val number = circular.number
+        if ((classifications.containsKey(number) && !forceReanalyze) || number in inFlightClassification) return
+        inFlightClassification += number
+        analysisTitles[number] = circular.title
+        val onDevice = AppContainer.isUsingLocalAiFirst()
         try {
             // Prima di rifare l'analisi sul telefono si controlla se qualcuno l'ha già mandata al
             // server: la cache è condivisa fra tutti gli utenti (stesso numero circolare, stesso
@@ -173,67 +283,43 @@ fun MainAppShell(
             // risultato che esiste già. "Rianalizza" salta questo controllo di proposito: serve
             // proprio a rifare un'analisi giudicata scadente.
             if (!forceReanalyze) {
-                val cached = try {
-                    AppContainer.circularsRepository.getCachedAnalysis(circular.number)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    null // Server irraggiungibile: si procede con l'analisi locale come prima.
-                }
-                if (cached != null) {
+                fetchServerAnalysisOrNull(number)?.let { cached ->
                     storeClassification(cached)
                     return
                 }
             }
 
-            val pdfBytes = AppContainer.circularsRepository.downloadPdfBytes(circular.r2PdfKey)
-            var pdfText = AppContainer.pdfTextExtractor.extractText(pdfBytes)
-
-            // Gli allegati PDF (colonna "Allegati" di Spaggiari) entrano nello stesso testo
-            // analizzato dall'AI: un'informativa pubblicata come allegato invece che nel corpo
-            // della circolare non deve passare inosservata al riassunto/classificazione. Un
-            // allegato che non si scarica o non si legge viene saltato senza far fallire
-            // l'intera analisi — meglio un riassunto senza quell'allegato che nessun riassunto.
-            for (attachment in circular.attachments) {
-                val pdfKey = attachment.pdfKey ?: continue
-                try {
-                    val attBytes = AppContainer.circularsRepository.downloadPdfBytes(pdfKey)
-                    val attText = AppContainer.pdfTextExtractor.extractText(attBytes)
-                    if (attText.isNotBlank()) {
-                        pdfText += "$ATTACHMENT_TEXT_MARKER${attachment.label} ---\n\n$attText"
+            if (onDevice) {
+                inFlightTier[number] = 1
+                queuedClassification += number
+                publishAnalysisActivity()
+                localAnalysisGate.withLock {
+                    queuedClassification -= number
+                    // Mentre era in coda un compagno o il server potrebbero averla gia' fatta.
+                    if (!forceReanalyze) {
+                        fetchServerAnalysisOrNull(number)?.let { cached ->
+                            storeClassification(cached)
+                            return
+                        }
                     }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    // Ignorato di proposito: vedi commento sopra.
+                    runningLocalClassification = number
+                    publishAnalysisActivity()
+                    try {
+                        classifyAndShare(circular, allowLocalFallback)
+                    } finally {
+                        runningLocalClassification = null
+                    }
                 }
-            }
-
-            val result = AppContainer.newAiClassifier(
-                allowLocalFallback = allowLocalFallback,
-                pdfTextLength = pdfText.length
-            ).classifyCircularText(
-                circularNumber = circular.number,
-                circularTitle = circular.title,
-                pdfText = pdfText
-            )
-            storeClassification(result)
-
-            // Si condivide il risultato con tutti gli altri utenti, qualunque sia il provider che
-            // l'ha prodotto: mostra sempre in app il modello usato (modelLabel), così chi la legge
-            // sa quanto fidarsene senza dover indovinare. Un fallimento nel salvataggio non deve
-            // rompere la classificazione già ottenuta: il telefono ha comunque il suo risultato.
-            try {
-                AppContainer.circularsRepository.saveAnalysis(result)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // Ignorato di proposito: vedi commento sopra.
+            } else {
+                inFlightTier[number] = 2
+                cloudClassification += number
+                publishAnalysisActivity()
+                classifyAndShare(circular, allowLocalFallback)
             }
         } catch (e: CancellationException) {
-            // Va sempre rilanciata: è così che funzionano la cancellazione strutturata e il
-            // timeout dell'anticipo durante il caricamento (withTimeoutOrNull più sotto).
-            // Inghiottirla qui romperebbe entrambi i meccanismi.
+            // Va sempre rilanciata: è così che funzionano la cancellazione strutturata, il
+            // timeout dell'anticipo durante il caricamento (withTimeoutOrNull più sotto) e il
+            // tasto Stop. Inghiottirla qui romperebbe tutti e tre i meccanismi.
             throw e
         } catch (e: Exception) {
             // Fallimento prima ancora di arrivare a un classificatore (download del PDF o
@@ -241,16 +327,47 @@ fun MainAppShell(
             // classificatori, invece di una CircularAiClassification costruita a mano con
             // isFallback di default a false — altrimenti questo errore si mimetizzava da vera
             // classificazione POTENTIAL, esattamente il problema descritto nel punto 1.
-            classifications[circular.number] = HeuristicClassification.classify(
-                circularNumber = circular.number,
-                title = circular.title,
-                text = "",
-                failureReason = "impossibile analizzare il PDF: ${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}",
-                notConfiguredMessage = "Analisi di AILA Assistant non disponibile."
-            )
+            if (!classifications.containsKey(number)) {
+                classifications[number] = HeuristicClassification.classify(
+                    circularNumber = number,
+                    title = circular.title,
+                    text = "",
+                    failureReason = "impossibile analizzare il PDF: ${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}",
+                    notConfiguredMessage = "Analisi di AILA Assistant non disponibile."
+                )
+            }
         } finally {
-            inFlightClassification -= circular.number
+            inFlightClassification -= number
+            queuedClassification -= number
+            cloudClassification -= number
+            inFlightTier.remove(number)
+            publishAnalysisActivity()
         }
+    }
+
+    /**
+     * Avvia l'analisi di una circolare fuori dalla schermata, cosi' prosegue anche uscendo dal
+     * dettaglio o mettendo l'app in background (su Android la tiene viva il servizio in primo
+     * piano, vedi AnalysisForegroundService). Il Job resta qui per il tasto Stop.
+     */
+    fun launchClassification(
+        circular: Circular,
+        forceReanalyze: Boolean = false,
+        allowLocalFallback: Boolean = true
+    ): Job {
+        analysisJobs[circular.number]?.takeIf { it.isActive }?.let { return it }
+        stoppedByUser -= circular.number
+        val job = AnalysisActivity.scope.launch {
+            classifyCircularIfNeeded(circular, forceReanalyze, allowLocalFallback)
+        }
+        analysisJobs[circular.number] = job
+        job.invokeOnCompletion { if (analysisJobs[circular.number] === job) analysisJobs.remove(circular.number) }
+        return job
+    }
+
+    fun stopClassification(number: Int) {
+        stoppedByUser += number
+        analysisJobs[number]?.cancel()
     }
 
     // --- Stato Notifiche (storico locale, mai sul server) -------------------------------------
@@ -1084,10 +1201,11 @@ fun MainAppShell(
     LaunchedEffect(selectedCircularForDetail) {
         val circular = selectedCircularForDetail
         if (circular != null && !classifications.containsKey(circular.number)) {
-            // Nello scope della schermata principale e non in quello di questo effetto: l'effetto
-            // viene cancellato appena si esce dal dettaglio, e con lui l'analisi (minuti di lavoro
-            // sul telefono buttati). Cosi' prosegue, e la lista mostra "Analisi in corso".
-            coroutineScope.launch { classifyCircularIfNeeded(circular) }
+            // Fuori dallo scope di questo effetto: l'effetto viene cancellato appena si esce dal
+            // dettaglio, e con lui l'analisi (minuti di lavoro sul telefono buttati). Cosi'
+            // prosegue, e la lista mostra "Analisi in corso".
+            // Fermata a mano: riparte solo col tasto "Analizza", non riaprendo la circolare.
+            if (circular.number !in stoppedByUser) launchClassification(circular)
         }
     }
 
@@ -1107,28 +1225,36 @@ fun MainAppShell(
         }
     }
 
-    // Le spiegazioni gia' pronte sul server (fatte da altri, o da un altro telefono) si scaricano
-    // appena la lista cambia, per tutte le circolari che non ne hanno ancora una: una richiesta
-    // leggera ciascuna, senza toccare il modello. Prima questo avveniva solo dentro la
-    // classificazione, che con l'AI locale parte soltanto all'apertura di ogni singola circolare:
-    // dopo un riavvio o all'arrivo di una circolare nuova le altre restavano senza spiegazione.
-    LaunchedEffect(circulars) {
-        for (circular in circulars.sortedByDescending { it.number }) {
-            if (classifications.containsKey(circular.number)) continue
-            if (circular.number in inFlightClassification || circular.number in noServerAnalysis) continue
-            val cached = try {
-                AppContainer.circularsRepository.getCachedAnalysis(circular.number)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                continue // Rete assente: si riprova al prossimo cambio di lista.
-            }
-            if (cached == null) {
-                noServerAnalysis += circular.number
-            } else if (!classifications.containsKey(circular.number)) {
-                storeClassification(cached)
-            }
+    // I riassunti gia' pronte sul server (fatti da altri, da un altro telefono o dal server
+    // stesso con Gemini) si scaricano tutti insieme con una sola richiesta, e poi solo quelli
+    // cambiati dall'ultima volta. Prima si chiedeva circolare per circolare una volta sola:
+    // chi era dentro l'app non vedeva il riassunto appena fatto da un compagno e continuava ad
+    // analizzare il suo finche' non riapriva l'app. Ogni 60 secondi, ogni 15 mentre un'analisi
+    // e' in corso su questo telefono (un riassunto arrivato la ferma, vedi adoptServerAnalysis).
+    var serverAnalysesCursor by remember { mutableStateOf<String?>(null) }
+    suspend fun syncServerAnalyses() {
+        val (fresh, cursor) = try {
+            AppContainer.circularsRepository.getAnalysesSince(serverAnalysesCursor)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return // Rete assente o server vecchio senza questa rotta: si riprova al giro dopo.
         }
+        serverAnalysesCursor = cursor
+        fresh.forEach { adoptServerAnalysis(it) }
+    }
+    LaunchedEffect(user.id) {
+        while (isActive) {
+            syncServerAnalyses()
+            delay(if (inFlightClassification.isEmpty()) 60_000L else 15_000L)
+        }
+    }
+    LaunchedEffect(user.id) {
+        circolareplus.push.DataRefreshEvents.requests.collect { syncServerAnalyses() }
+    }
+    // Il tasto Stop della notifica di Android.
+    LaunchedEffect(user.id) {
+        AnalysisActivity.stopRequests.collect { number -> stopClassification(number) }
     }
 
     // Mentre si è dentro l'app, continua a classificare in background le circolari rimaste
@@ -1146,7 +1272,10 @@ fun MainAppShell(
         var consecutiveLocalFallbacks = 0
         while (isActive) {
             val next = circulars.sortedByDescending { it.number }
-                .firstOrNull { it.number !in classifications && it.number !in inFlightClassification }
+                .firstOrNull {
+                    it.number !in classifications && it.number !in inFlightClassification &&
+                        it.number !in stoppedByUser
+                }
             // Con l'AI locale questo ciclo non gira affatto, e non e' una prudenza: e' la
             // ragione principale per cui aprire una circolare sembrava non finire mai. Il motore
             // e' uno solo e le richieste sono in coda su un mutex, quindi la circolare appena
@@ -1159,10 +1288,11 @@ fun MainAppShell(
             if (AppContainer.isUsingLocalAiFirst()) {
                 delay(3000L)
             } else if (next != null) {
-                classifyCircularIfNeeded(
+                // Come Job a parte e non chiamata diretta: cosi' anche questa si ferma col tasto Stop.
+                launchClassification(
                     next,
                     allowLocalFallback = consecutiveLocalFallbacks < 2
-                )
+                ).join()
                 val usedLocal = classifications[next.number]?.modelLabel?.startsWith("AI locale") == true
                 consecutiveLocalFallbacks = if (usedLocal) consecutiveLocalFallbacks + 1 else 0
             } else {
@@ -1471,6 +1601,9 @@ fun MainAppShell(
             circular = circularForDetail,
             classification = classifications[circularForDetail.number],
             isClassifying = circularForDetail.number in inFlightClassification,
+            isQueued = circularForDetail.number in queuedClassification,
+            analysisOnDevice = circularForDetail.number !in cloudClassification,
+            onStopAnalysis = { stopClassification(circularForDetail.number) },
             calendarEvents = calendarEvents,
             onBackClick = { selectedCircularForDetail = null },
             onDownloadPdfClick = {
@@ -1533,12 +1666,18 @@ fun MainAppShell(
                     "Non aggiunto: ${e.message ?: e::class.simpleName}"
                 }
             },
-            onReanalyze = {
-                // Si toglie il risultato dalla cache in memoria e si riclassifica da capo:
-                // classifyCircularIfNeeded salta le circolari già presenti nella mappa.
-                classifications.remove(circularForDetail.number)
-                coroutineScope.launch {
-                    classifyCircularIfNeeded(circularForDetail, forceReanalyze = true)
+            // Un riassunto di Gemini non si rifà con l'AI del telefono: il risultato sarebbe
+            // peggiore e il server lo rifiuterebbe comunque.
+            onReanalyze = if (
+                classifications[circularForDetail.number]?.tier == 2 && AppContainer.isUsingLocalAiFirst()
+            ) {
+                null
+            } else {
+                {
+                    // Il risultato vecchio resta visibile finché non arriva quello nuovo (o finché
+                    // non si ferma l'analisi col tasto Stop).
+                    launchClassification(circularForDetail, forceReanalyze = true)
+                    Unit
                 }
             }
         )
