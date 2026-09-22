@@ -769,6 +769,8 @@ fun MainAppShell(
     var isClassmatesLoading by remember { mutableStateOf(false) }
     var seatMapAssignments by remember { mutableStateOf<List<DeskAssignment>>(emptyList()) }
     var isSeatMapLoading by remember { mutableStateOf(false) }
+    // La mappa e' stata letta almeno una volta in questa sessione (anche se vuota).
+    var seatMapLoadedOnce by remember { mutableStateOf(false) }
     var seatMapError by remember { mutableStateOf<String?>(null) }
     var seatMapRefreshTrigger by remember { mutableStateOf(0) }
     var isPreferencesOpen by remember { mutableStateOf(false) }
@@ -1115,6 +1117,42 @@ fun MainAppShell(
         }
     }
 
+    // Le tre letture della Mappa Posti (compagni, mappa attuale, finestra preferenze) partono
+    // insieme invece che una dopo l'altra: erano tre giri di rete in fila dietro lo spinner a
+    // piena schermata, il secondo abbondante che si vedeva entrando nella tab.
+    suspend fun loadSeatMapData(reportErrors: Boolean = true): Unit = coroutineScope {
+        val classmatesDeferred = if (classmates.isEmpty()) {
+            async { runCatching { AppContainer.usersRepository.listStudents() } }
+        } else {
+            null
+        }
+        val mapDeferred = async { runCatching { AppContainer.seatMapRepository.getCurrentSeatMap() ?: emptyList() } }
+        val configDeferred = async { runCatching { AppContainer.preferencesRepository.getConfig() } }
+
+        classmatesDeferred?.await()?.let { result ->
+            result.onSuccess { classmates = it }
+                .onFailure {
+                    if (it is CancellationException) throw it
+                    if (reportErrors) seatMapError = "Impossibile caricare l'elenco dei compagni."
+                }
+        }
+        val map = mapDeferred.await()
+        val config = configDeferred.await()
+        map.exceptionOrNull()?.let { if (it is CancellationException) throw it }
+        config.exceptionOrNull()?.let { if (it is CancellationException) throw it }
+        val freshMap = map.getOrNull()
+        val freshConfig = config.getOrNull()
+        if (reportErrors && (freshMap == null || freshConfig == null)) {
+            seatMapError = "Impossibile caricare la mappa posti attuale."
+        }
+        if (freshMap != null) seatMapAssignments = freshMap
+        if (freshConfig != null) isPreferencesOpen = freshConfig.preferencesOpen
+        if (freshMap != null && freshConfig != null) {
+            seatMapLoadedOnce = true
+            noteNovelties(freshSeatMap = freshMap, freshPreferencesOpen = freshConfig.preferencesOpen)
+        }
+    }
+
     // Ingresso nella tab Mappa Posti: carica compagni, mappa attuale e stato finestra preferenze.
     // Prima era un flusso aperto solo dalla Home (isInSeatMapScreen); ora è una tab vera e
     // propria della bottom bar, quindi si aggancia direttamente al cambio di selectedTab.
@@ -1122,31 +1160,30 @@ fun MainAppShell(
         if (selectedTab == MainTab.SEATMAP) {
             seatMapMode = "MAP"
             seatMapError = null
-            if (classmates.isEmpty() && !isClassmatesLoading) {
-                isClassmatesLoading = true
-                try {
-                    classmates = AppContainer.usersRepository.listStudents()
-                } catch (e: Exception) {
-                    seatMapError = "Impossibile caricare l'elenco dei compagni."
-                } finally {
-                    isClassmatesLoading = false
-                }
-            }
-            // Se si torna sulla tab con la mappa già in memoria da una visita precedente, la si
-            // aggiorna in background senza far scattare lo spinner a piena schermata di
-            // LoadableContent: altrimenti la mappa già disegnata sparirebbe per un istante a ogni
-            // rientro nella tab, anche quando i dati non sono cambiati.
-            val isFirstSeatMapLoad = seatMapAssignments.isEmpty()
-            if (isFirstSeatMapLoad) isSeatMapLoading = true
+            // Lo spinner a piena schermata solo la prima volta in assoluto: dopo, la mappa gia'
+            // in memoria resta a schermo e si aggiorna sotto. Prima valeva "mappa vuota", quindi
+            // senza una mappa pubblicata lo spinner tornava a ogni ingresso nella tab.
+            val showSpinner = !seatMapLoadedOnce
+            if (showSpinner) isSeatMapLoading = true
             try {
-                seatMapAssignments = AppContainer.seatMapRepository.getCurrentSeatMap() ?: emptyList()
-                val config = AppContainer.preferencesRepository.getConfig()
-                isPreferencesOpen = config.preferencesOpen
-                noteNovelties(freshSeatMap = seatMapAssignments, freshPreferencesOpen = isPreferencesOpen)
-            } catch (e: Exception) {
-                seatMapError = "Impossibile caricare la mappa posti attuale."
+                loadSeatMapData()
             } finally {
-                if (isFirstSeatMapLoad) isSeatMapLoading = false
+                if (showSpinner) isSeatMapLoading = false
+            }
+        }
+    }
+
+    // La mappa si legge anche in anticipo, pochi secondi dopo l'ingresso nell'app: cosi' la prima
+    // apertura della tab la trova gia' pronta invece di aspettare la rete.
+    LaunchedEffect(user.id) {
+        delay(2_000L)
+        if (!seatMapLoadedOnce) {
+            try {
+                loadSeatMapData(reportErrors = false)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Si riprova entrando nella tab.
             }
         }
     }
@@ -1244,9 +1281,16 @@ fun MainAppShell(
         fresh.forEach { adoptServerAnalysis(it) }
     }
     LaunchedEffect(user.id) {
+        // Giri da 15 secondi: la lettura vera parte ogni 4 giri, o a ogni giro se c'e'
+        // un'analisi in corso (anche iniziata a meta' di un'attesa lunga).
+        var ticksSinceSync = Int.MAX_VALUE
         while (isActive) {
-            syncServerAnalyses()
-            delay(if (inFlightClassification.isEmpty()) 60_000L else 15_000L)
+            if (ticksSinceSync >= 4 || inFlightClassification.isNotEmpty()) {
+                syncServerAnalyses()
+                ticksSinceSync = 0
+            }
+            delay(15_000L)
+            ticksSinceSync++
         }
     }
     LaunchedEffect(user.id) {
@@ -2552,7 +2596,9 @@ fun MainAppShell(
                         MainTab.SEATMAP -> {
                             Column(modifier = Modifier.fillMaxSize()) {
                                 LoadableContent(
-                                    isLoading = isSeatMapLoading || isClassmatesLoading,
+                                    // Il caricamento dei compagni avviato dal calendario non deve
+                                    // coprire la mappa con lo spinner: ci pensa loadSeatMapData.
+                                    isLoading = isSeatMapLoading,
                                     error = seatMapError,
                                     onRetry = { seatMapRefreshTrigger++ }
                                 ) {

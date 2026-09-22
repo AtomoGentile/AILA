@@ -596,13 +596,16 @@ private fun AiSetupStep(
     // --- Strada 2: modello sul telefono --------------------------------------------------------
     val model = setup.localModels.firstOrNull { it.id == selectedModelId }
     AiChoiceCard(
-        title = "Modello sul telefono",
+        title = "Modello sul telefono (Beta)",
+        // Beta: sulla maggior parte dei telefoni un riassunto richiede minuti. I riassunti delle
+        // circolari arrivano comunque gia' pronti dal server quando ci sono.
         subtitle = if (localAvailable) {
-            "Funziona anche offline e nessun dato esce dal dispositivo."
+            "Funziona anche offline e nessun dato esce dal dispositivo, ma su molti telefoni " +
+                "e' lento: una risposta puo' richiedere minuti."
         } else {
             setup.unavailableReason ?: "Non disponibile su questo dispositivo."
         },
-        badge = if (localAvailable) "Privato e offline" else null,
+        badge = if (localAvailable) "Beta" else null,
         selected = choice == AiChoice.LOCAL && localAvailable,
         enabled = localAvailable && !busy,
         onClick = { choice = AiChoice.LOCAL }

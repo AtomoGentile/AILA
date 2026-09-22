@@ -324,7 +324,7 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.height(AppTheme.Space8))
                             AilaSegmentedTabs(
-                                labels = listOf("Google AI", "AI locale"),
+                                labels = listOf("Google AI", "AI locale (Beta)"),
                                 selectedIndex = if (selectedAiProvider == "ON_DEVICE") 1 else 0,
                                 onSelect = { index ->
                                     selectedAiProvider = if (index == 1) "ON_DEVICE" else "GOOGLE_AI_STUDIO"
@@ -333,6 +333,17 @@ fun SettingsScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
                             Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            if (selectedAiProvider == "ON_DEVICE") {
+                                Text(
+                                    text = "L'AI sul telefono e' in beta: su molti telefoni e' " +
+                                        "lenta. I riassunti delle circolari arrivano comunque " +
+                                        "dal server appena pronti e fermano l'analisi sul telefono.",
+                                    fontSize = 11.sp,
+                                    color = AppTheme.TextMuted,
+                                    lineHeight = 15.sp
+                                )
+                                Spacer(modifier = Modifier.height(AppTheme.Space4))
+                            }
                             Text(
                                 text = "Qualunque sia la scelta, se il provider principale non " +
                                     "risponde l'app prova in automatico con l'altro.",

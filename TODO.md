@@ -3,6 +3,48 @@
 Elenco vivo dei problemi aperti e del lavoro ancora mancante, aggiornato mano a mano.
 Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esistente.
 
+## 22/9: riassunti dal server, coda unica, stop, assistente, mappa posti (branch `claude/app-optimization-circulars-px87fk`)
+
+**Non compilato**: in questa sessione Gradle non scarica le dipendenze (proxy) e la CI di GitHub
+non parte (job chiusi in 3 secondi senza runner: minuti Actions esauriti o limite di spesa). Il
+backend passa `tsc`. Prima cosa da fare: `./gradlew :androidApp:assembleDebug` e
+`:shared:testDebugUnitTest` (nuovo `AssistantRelevanceTest`), oppure riattivare Actions: e'
+stato aggiunto `.github/workflows/android-build.yml`.
+
+**Deploy, in quest'ordine** (le app nuove leggono i riassunti solo dalla rotta nuova):
+1. `wrangler d1 execute circolare_d1 --remote --file=./migrations/006_analysis_tier.sql`
+2. `wrangler secret put GEMINI_API_KEY` (chiave personale di Google AI Studio; su Google Cloud
+   Console limitarla alla sola "Generative Language API")
+3. `wrangler deploy`, poi la nuova app.
+
+Fatto:
+- **Riassunti fatti dal server** (`services/summarizer.ts`): il cron manda a Gemini il PDF in
+  cache su R2 appena una circolare arriva (prima della notifica) e recupera le ultime 30 senza
+  riassunto Gemini, max 3 per giro e 3 tentativi per circolare. Chiave solo in header, nessuna
+  rotta HTTP la usa.
+- **Livello di qualita'** (`tier`: 0 ripiego, 1 locale, 2 Gemini): il server tiene sempre il
+  migliore, il ripiego euristico non si salva piu'.
+- **Riassunti in tempo reale**: `GET /api/circulars/analyses?since=` ogni 60 s (15 s durante
+  un'analisi e a ogni push). Un riassunto arrivato ferma l'analisi locale; Gemini si ferma solo
+  per un altro Gemini.
+- **Coda unica sul telefono** (anche AICore passa dal mutex), stato "In coda" nel dettaglio,
+  **tasto stop quadrato**, analisi fuori dalla schermata + servizio in primo piano Android
+  (`AnalysisForegroundService`) con notifica e Stop. iOS: prosegue solo ad app aperta.
+- **Assistente**: legge sempre per intero le 2 circolari piu' attinenti (non per saluti, domande
+  generali o su un periodo), ricerca per radice, 2 circolari dettagliate invece di 3 col modello
+  locale, niente "214" negli esempi, fonti non plausibili scartate.
+- **AICore**: "Attiva" fa una generazione di prova; NOT_AVAILABLE ("Required LLM feature not
+  found") ha un messaggio chiaro e AICore non resta segnato come pronto.
+- **Mappa posti**: le tre letture in parallelo, lettura anticipata 2 s dopo l'ingresso, spinner
+  solo alla prima lettura (prima tornava a ogni ingresso se non c'era una mappa).
+- AI locale etichettata **Beta** in onboarding e Impostazioni.
+
+Non fatto / da valutare:
+- AICore: la libreria `0.0.1-exp02` e' sperimentale e funziona su pochi telefoni. La strada
+  ufficiale per Gemini Nano nelle app e' ML Kit GenAI (Prompt API), con un controllo di stato
+  esplicito: migrazione da fare con una build vera sotto mano.
+- Prova di velocita' del modello locale prima di attivarlo (per ora c'e' solo l'etichetta Beta).
+
 ## 21/9: allineamento Android/iOS (branch `parita-android-ios`)
 
 Audit completo delle due piattaforme e correzioni. La UI e' quasi tutta Compose condiviso, quindi le
