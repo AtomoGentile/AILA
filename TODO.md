@@ -12,7 +12,8 @@ backend passa `tsc`. Prima cosa da fare: `./gradlew :androidApp:assembleDebug` e
 stato aggiunto `.github/workflows/android-build.yml`.
 
 **Deploy, in quest'ordine** (le app nuove leggono i riassunti solo dalla rotta nuova):
-1. `wrangler d1 execute circolare_d1 --remote --file=./migrations/006_analysis_tier.sql`
+1. `wrangler d1 execute circolare_d1 --remote --file=./migrations/006_analysis_tier.sql` e poi
+   `--file=./migrations/007_discipline_pairs.sql` (coppie da separare, Scheda Classe)
 2. `wrangler secret put GEMINI_API_KEY` (chiave personale di Google AI Studio; su Google Cloud
    Console limitarla alla sola "Generative Language API")
 3. `wrangler deploy`, poi la nuova app.
