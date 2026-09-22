@@ -3,6 +3,7 @@ package com.circolareplus
 import android.app.Application
 import circolareplus.ai.PdfBoxInit
 import circolareplus.platform.AndroidAppContext
+import circolareplus.work.AnalysisForegroundService
 import circolareplus.work.CircularsSyncWorker
 
 /**
@@ -32,5 +33,8 @@ class CircolarePlusApplication : Application() {
         // Il canale delle notifiche esiste fin dall'avvio, cosi' e' regolabile dalle impostazioni
         // di sistema anche prima del primo push.
         CircolareMessagingService.ensureNotificationChannel(this)
+        // Notifica con tasto Stop mentre il modello sul telefono analizza una circolare: tiene
+        // viva l'analisi anche con l'app in background.
+        AnalysisForegroundService.observe(this)
     }
 }

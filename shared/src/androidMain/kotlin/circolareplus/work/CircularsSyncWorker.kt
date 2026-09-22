@@ -10,6 +10,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import circolareplus.ai.tier
 import circolareplus.data.AppContainer
 import kotlinx.coroutines.CancellationException
 import java.util.concurrent.TimeUnit
@@ -49,7 +50,10 @@ class CircularsSyncWorker(
             for (circular in circulars.sortedByDescending { it.number }) {
                 if (isStopped || processed >= MAX_CIRCULARS_PER_RUN) break
                 try {
-                    if (AppContainer.circularsRepository.getCachedAnalysis(circular.number) != null) continue
+                    // Si salta solo quella gia' fatta da Gemini: una fatta dall'AI locale di un
+                    // compagno si puo' migliorare, e il server tiene comunque la migliore.
+                    val existing = AppContainer.circularsRepository.getCachedAnalysis(circular.number)
+                    if (existing != null && existing.tier >= 2) continue
 
                     val bytes = AppContainer.circularsRepository.downloadPdfBytes(circular.r2PdfKey)
                     val text = AppContainer.pdfTextExtractor.extractText(bytes)
@@ -59,7 +63,9 @@ class CircularsSyncWorker(
                             circularTitle = circular.title,
                             pdfText = text
                         )
-                    AppContainer.circularsRepository.saveAnalysis(result)
+                    // Il ripiego euristico non si condivide: e' un messaggio d'errore, non un
+                    // riassunto, e il server lo rifiuterebbe comunque.
+                    if (!result.isFallback) AppContainer.circularsRepository.saveAnalysis(result)
                     processed++
                 } catch (e: CancellationException) {
                     throw e

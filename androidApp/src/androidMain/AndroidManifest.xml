@@ -80,6 +80,14 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- Analisi di una circolare con l'AI sul telefono: tiene vivo il processo con una
+             notifica e il tasto Stop mentre l'app e' in background (vedi
+             circolareplus.work.AnalysisForegroundService). -->
+        <service
+            android:name="circolareplus.work.AnalysisForegroundService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
+
         <!-- WorkManager: per Android 14+ (API 34) è obbligatorio dichiarare esplicitamente il
              tipo del servizio in primo piano se si usa setForeground() con un tipo specifico.
              LocalModelDownloadWorker usa FOREGROUND_SERVICE_TYPE_DATA_SYNC. -->

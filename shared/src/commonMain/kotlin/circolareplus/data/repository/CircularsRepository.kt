@@ -2,12 +2,14 @@ package circolareplus.data.repository
 
 import circolareplus.data.remote.ApiClient
 import circolareplus.data.remote.ApiException
+import circolareplus.data.remote.dto.CircularAnalysesDto
 import circolareplus.data.remote.dto.CircularAnalysisDto
 import circolareplus.data.remote.dto.CircularAttachmentDto
 import circolareplus.data.remote.dto.CircularDto
 import circolareplus.data.remote.dto.CircularsListResponseDto
 import circolareplus.data.remote.dto.ExtractedDeadlineDto
 import circolareplus.data.remote.dto.SaveCircularAnalysisRequestDto
+import circolareplus.data.remote.dto.SaveCircularAnalysisResponseDto
 import circolareplus.data.remote.dto.SuccessDto
 import circolareplus.domain.model.Circular
 import circolareplus.domain.model.CircularAiClassification
@@ -55,12 +57,15 @@ class CircularsRepository(private val api: ApiClient) {
     }
 
     /**
-     * Salva/sovrascrive sul server l'analisi appena prodotta sul telefono, così diventa visibile
-     * a tutti senza che ciascuno la rifaccia. Non manda mai il testo del PDF, solo l'esito
-     * (badge, riassunto, scadenze) — vedi la nota di privacy sulla tabella `circulars`.
+     * Salva sul server l'analisi appena prodotta sul telefono, così diventa visibile a tutti
+     * senza che ciascuno la rifaccia. Non manda mai il testo del PDF, solo l'esito (badge,
+     * riassunto, scadenze) — vedi la nota di privacy sulla tabella `circulars`.
+     *
+     * Il server tiene l'analisi di livello più alto (vedi [circolareplus.ai.tier]): se ne ha già
+     * una migliore rifiuta questa e la restituisce, e qui torna quella. `null` se è stata salvata.
      */
-    suspend fun saveAnalysis(classification: CircularAiClassification) {
-        api.put<SaveCircularAnalysisRequestDto, SuccessDto>(
+    suspend fun saveAnalysis(classification: CircularAiClassification): CircularAiClassification? {
+        val response = api.put<SaveCircularAnalysisRequestDto, SaveCircularAnalysisResponseDto>(
             "/api/circulars/${classification.circularNumber}/analysis",
             SaveCircularAnalysisRequestDto(
                 badge = classification.badge.name,
@@ -72,6 +77,32 @@ class CircularsRepository(private val api: ApiClient) {
                 modelLabel = classification.modelLabel
             )
         )
+        return if (response.stored) null else response.current?.toDomain()
+    }
+
+    /**
+     * Le analisi cambiate sul server dopo [since] (`null` = tutte), con il nuovo valore da
+     * passare alla chiamata successiva. Una sola richiesta al posto di una per circolare, e
+     * chi ha l'app aperta vede i riassunti fatti da altri senza dover riaprire l'app.
+     */
+    suspend fun getAnalysesSince(since: String?): Pair<List<CircularAiClassification>, String?> {
+        val all = mutableListOf<CircularAiClassification>()
+        var cursor = since
+        // Il server ne restituisce al massimo 200 per volta, dalla più vecchia.
+        repeat(MAX_ANALYSIS_PAGES) {
+            val query = cursor?.let { "?since=" + it.replace(" ", "%20") } ?: ""
+            val page: CircularAnalysesDto = api.get("/api/circulars/analyses$query")
+            all += page.analyses.map { it.toDomain() }
+            val last = page.analyses.lastOrNull()?.updatedAt
+            if (last != null) cursor = last
+            if (page.analyses.size < ANALYSES_PAGE_SIZE) return all to cursor
+        }
+        return all to cursor
+    }
+
+    private companion object {
+        const val ANALYSES_PAGE_SIZE = 200
+        const val MAX_ANALYSIS_PAGES = 5
     }
 }
 

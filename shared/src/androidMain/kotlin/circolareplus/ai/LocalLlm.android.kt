@@ -81,21 +81,25 @@ actual class LocalLlm actual constructor() {
         stopWhen: (String) -> Boolean,
         enableThinking: Boolean
     ): String {
-        // Tier 1: AICore (Gemini Nano di sistema) invece di LiteRT-LM. Non condivide né il
-        // motore né il mutex sotto: è un servizio di sistema separato, non il modello caricato
-        // in `engine`. `stopWhen`/streaming non si applicano (AICore genera in un colpo solo,
-        // per ora): vedi AiCoreEngine.kt per lo stato reale dell'integrazione.
+        // Tier 1: AICore (Gemini Nano di sistema) invece di LiteRT-LM. Non condivide il motore
+        // caricato in `engine`, ma passa comunque dallo stesso mutex: due generazioni AICore in
+        // parallelo (due circolari aperte una dopo l'altra) si rubavano NPU e memoria a vicenda
+        // e finivano entrambe piu' tardi di quanto avrebbero fatto una dopo l'altra.
+        // `stopWhen`/streaming non si applicano (AICore genera in un colpo solo, per ora): vedi
+        // AiCoreEngine.kt per lo stato reale dell'integrazione.
         if (modelPath == "aicore") {
             // maxOutputTokens serve solo se AICore va ricreato (dopo un riavvio dell'app):
             // è fissato una volta sola in AiCoreEngine.prepare, dentro GenerationConfig —
             // GenerativeModel non lo accetta per singola chiamata come fa ConversationConfig
             // con LiteRT-LM.
-            return AiCoreEngine.generate(
-                systemPrompt = systemPrompt,
-                userPrompt = userPrompt,
-                timeoutMillis = timeoutMillis,
-                maxOutputTokens = maxOutputTokens
-            )
+            return mutex.withLock {
+                AiCoreEngine.generate(
+                    systemPrompt = systemPrompt,
+                    userPrompt = userPrompt,
+                    timeoutMillis = timeoutMillis,
+                    maxOutputTokens = maxOutputTokens
+                )
+            }
         }
         return generateWithLiteRtLm(
             modelPath, preferGpu, maxOutputTokens, systemPrompt, userPrompt, timeoutMillis, stopWhen,

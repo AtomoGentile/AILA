@@ -56,6 +56,24 @@ data class CircularAnalysisDto(
     val updatedAt: String? = null
 )
 
+/** Risposta di GET /api/circulars/analyses?since=...: le analisi cambiate dopo `since`. */
+@Serializable
+data class CircularAnalysesDto(
+    val analyses: List<CircularAnalysisDto> = emptyList()
+)
+
+/**
+ * Risposta della PUT dell'analisi. `stored = false` quando il server l'ha rifiutata perche' ne ha
+ * gia' una di livello piu' alto (per esempio di Gemini): in quel caso `current` e' quella che vale.
+ * I server precedenti rispondono solo `{"success": true}`, cioe' salvata.
+ */
+@Serializable
+data class SaveCircularAnalysisResponseDto(
+    val success: Boolean = false,
+    val stored: Boolean = true,
+    val current: CircularAnalysisDto? = null
+)
+
 /** Corpo della PUT che salva/sovrascrive l'analisi in cache. */
 @Serializable
 data class SaveCircularAnalysisRequestDto(
