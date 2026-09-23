@@ -689,6 +689,31 @@ fun MainAppShell(
     val coroutineScope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
 
+    // Avvio senza rete: la striscia "Nessuna connessione" veniva decisa una volta sola e restava
+    // anche dopo il ritorno della rete (lista e calendario si aggiornavano, la striscia no, e
+    // bastava un timeout all'avvio su una rete lenta). Si riprova in silenzio finche' il server
+    // risponde: allora la striscia sparisce e il profilo si aggiorna.
+    LaunchedEffect(startedOffline) {
+        while (startedOffline) {
+            delay(8_000L)
+            when (val outcome = AppContainer.authRepository.restoreSession()) {
+                is SessionRestore.Online -> {
+                    currentUser = outcome.user
+                    currentProfile = outcome.profile
+                    startedOffline = false
+                }
+                // Il server ha risposto che il token non vale piu' (restoreSession ha gia' fatto
+                // il logout): si torna al login come a un avvio normale.
+                is SessionRestore.SessionExpired, is SessionRestore.NoSession -> {
+                    startedOffline = false
+                    currentUser = null
+                    currentProfile = null
+                }
+                else -> Unit // Ancora offline: si riprova al giro dopo.
+            }
+        }
+    }
+
     // Registra il token push per questo dispositivo una volta per sessione (utente loggato).
     // Restituisce silenziosamente null finché Firebase non è configurato (vedi PushTokenProvider):
     // in quel caso la registrazione viene semplicemente saltata, senza errori visibili.
