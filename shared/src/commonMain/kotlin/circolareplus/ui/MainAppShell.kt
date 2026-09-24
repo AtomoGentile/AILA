@@ -876,7 +876,6 @@ fun MainAppShell(
     // Arriva dalla stessa risposta del dettaglio, letta con un secondo DTO.
     var pollProgress by remember { mutableStateOf<circolareplus.data.remote.dto.PollProgressDto?>(null) }
     var isSubmittingPoll by remember { mutableStateOf(false) }
-    var isCalculatingPoll by remember { mutableStateOf(false) }
     var pollAssignments by remember { mutableStateOf<List<circolareplus.data.remote.dto.PollAssignmentDto>>(emptyList()) }
     // Sondaggi per cui questo studente ha già premuto "Invia le mie scelte" (solo locale, vedi
     // LocalSettingsManager.isPollSubmitted).
@@ -2221,9 +2220,7 @@ fun MainAppShell(
                                                     // ricaricando: senza questo refresh `allPolls`/`currentPoll`
                                                     // restavano quelli di prima, isCalculated risultava ancora
                                                     // falso lato client e il sondaggio restava "aperto" finché
-                                                    // qualcuno non premeva "Calcola risultati" (che invece
-                                                    // aggiorna pollsRefreshTrigger) o non si usciva e rientrava
-                                                    // dalla schermata.
+                                                    // non si usciva e rientrava dalla schermata.
                                                     if (result.totalStudents > 0 && result.submittedCount >= result.totalStudents) {
                                                         pollsRefreshTrigger++
                                                     }
@@ -2247,27 +2244,6 @@ fun MainAppShell(
                                                 )
                                             } catch (e: Exception) {
                                                 pollError = "Non sono riuscito ad annullare l'invio: ${e.message}"
-                                            }
-                                        }
-                                    },
-                                    isRepresentative = isRepresentative,
-                                    isCalculating = isCalculatingPoll,
-                                    onRunAssignments = {
-                                        if (!isCalculatingPoll) {
-                                            isCalculatingPoll = true
-                                            coroutineScope.launch {
-                                                try {
-                                                    // `force=true`: il Rappresentante può far partire l'algoritmo a mano
-                                                    // anche se manca qualcuno, dato che l'avvio automatico all'ultimo
-                                                    // invio non è affidabile. Dopo il calcolo il sondaggio è chiuso, quindi
-                                                    // si ricarica la lista: sparisce da qui e compare nello Storico.
-                                                    AppContainer.pollsRepository.runAssignments(poll.id, force = true)
-                                                    pollsRefreshTrigger++
-                                                } catch (e: Exception) {
-                                                    pollError = "Impossibile calcolare i risultati: ${e.message}"
-                                                } finally {
-                                                    isCalculatingPoll = false
-                                                }
                                             }
                                         }
                                     }
