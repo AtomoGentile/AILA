@@ -103,6 +103,12 @@ enum class ClassSection(val title: String) {
  */
 const val NOTIFICATION_CATEGORY_SEATMAP_PREFERENCES = "seatmap_preferences"
 
+/**
+ * Categoria più specifica di [NotificationKind.POLLS] per i sondaggi a ordinamento: apre la
+ * schermata Sondaggi direttamente sulla sezione "Ordinamento". Segue l'interruttore Sondaggi.
+ */
+const val NOTIFICATION_CATEGORY_RANKING_POLLS = "ranking_polls"
+
 @Composable
 fun MainAppShell(
     initialUser: User? = null,
@@ -1063,6 +1069,11 @@ fun MainAppShell(
                 seatMapMode = "MAP"
             }
             NotificationKind.POLLS.key -> {
+                pollsSection = 0
+                isInPollsScreen = true
+            }
+            NOTIFICATION_CATEGORY_RANKING_POLLS -> {
+                pollsSection = 1
                 isInPollsScreen = true
             }
             NotificationKind.CALENDAR.key -> {

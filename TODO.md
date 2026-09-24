@@ -21,9 +21,9 @@ Fatto:
   Il Rappresentante può chiudere ed eliminare. Nella schermata Sondaggi c'è il selettore
   "Interrogazioni / Ordinamento".
 
-Da valutare:
-- La notifica di un nuovo sondaggio a ordinamento apre la schermata Sondaggi sulla sezione
-  Interrogazioni: andrebbe aperta direttamente su "Ordinamento".
+- La notifica di un nuovo sondaggio a ordinamento (categoria `ranking_polls`, sul modello di
+  `seatmap_preferences`) apre Sondaggi direttamente su "Ordinamento"; segue l'interruttore
+  Sondaggi e nella campanella ha la stessa icona.
 
 ## 22/9: riassunti dal server, coda unica, stop, assistente, mappa posti (branch `claude/app-optimization-circulars-px87fk`)
 
