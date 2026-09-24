@@ -14,7 +14,7 @@ object NotificationCategoryMapper {
             "open_preferences" -> "seatmap_preferences"
             "preferences_complete" -> "seatmap"
             "seat_map_updated" -> "seatmap"
-            "poll_published", "poll_complete", "swap_request", "swap_accepted" -> "polls"
+            "poll_published", "ranking_poll_published", "poll_complete", "swap_request", "swap_accepted" -> "polls"
             "new_circular" -> "circulars"
             "new_proposal" -> "board"
             else -> null

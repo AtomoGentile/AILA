@@ -21,6 +21,7 @@ import preferencesRoutes from './routes/preferences';
 import ratingsRoutes from './routes/ratings';
 import seatmapRoutes from './routes/seatmap';
 import pollsRoutes from './routes/polls';
+import rankingPollsRoutes from './routes/rankingPolls';
 import fcmRoutes from './routes/fcm';
 
 // ---------------------------------------------------------------------------
@@ -62,6 +63,7 @@ app.route('/api/preferences', preferencesRoutes);
 app.route('/api/ratings', ratingsRoutes);
 app.route('/api/seat-map', seatmapRoutes);
 app.route('/api/polls', pollsRoutes);
+app.route('/api/ranking-polls', rankingPollsRoutes);
 app.route('/api/fcm', fcmRoutes);
 
 // ---------------------------------------------------------------------------
