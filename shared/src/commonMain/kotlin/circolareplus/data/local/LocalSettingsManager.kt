@@ -264,7 +264,11 @@ class LocalSettingsManager(
      * [messageId] deve essere l'id del messaggio FCM; se assente si registra senza dedup.
      */
     fun onPushReceived(messageId: String?, title: String, body: String, category: String): Boolean {
-        val kind = if (category == "seatmap_preferences") "seatmap" else category
+        val kind = when (category) {
+            "seatmap_preferences" -> "seatmap"
+            "ranking_polls" -> "polls"
+            else -> category
+        }
         if (kind.isNotBlank() && !isNotificationKindEnabled(kind)) return false
 
         val id = messageId?.takeIf { it.isNotBlank() }?.let { "push-$it" }
