@@ -128,7 +128,7 @@ internal object AssistantContext {
             }
         }
 
-        renderCirculars(builder, knowledge, terms, explicitNumbers, deepTexts, budget, scope)
+        renderCirculars(builder, knowledge, question, terms, explicitNumbers, deepTexts, budget, scope)
         renderCalendar(builder, knowledge, terms, budget, scope)
         renderBoard(builder, knowledge, terms, budget)
         if (budget.includePolls) renderPolls(builder, knowledge, scope)
@@ -167,6 +167,7 @@ internal object AssistantContext {
     private fun renderCirculars(
         builder: StringBuilder,
         knowledge: AssistantKnowledge,
+        question: String,
         terms: List<String>,
         explicitNumbers: Set<Int>,
         deepTexts: Map<Int, String>,
