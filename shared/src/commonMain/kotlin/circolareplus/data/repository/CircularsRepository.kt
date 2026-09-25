@@ -7,6 +7,8 @@ import circolareplus.data.remote.dto.CircularAnalysisDto
 import circolareplus.data.remote.dto.CircularAttachmentDto
 import circolareplus.data.remote.dto.CircularDto
 import circolareplus.data.remote.dto.CircularsListResponseDto
+import circolareplus.data.remote.dto.NewerCircularDto
+import circolareplus.data.remote.dto.NewerCircularsResponseDto
 import circolareplus.data.remote.dto.ExtractedDeadlineDto
 import circolareplus.data.remote.dto.SaveCircularAnalysisRequestDto
 import circolareplus.data.remote.dto.SaveCircularAnalysisResponseDto
@@ -28,6 +30,12 @@ class CircularsRepository(private val api: ApiClient) {
     suspend fun listCirculars(limit: Int = 50, offset: Int = 0): List<Circular> {
         val response: CircularsListResponseDto = api.get("/api/circulars?limit=$limit&offset=$offset")
         return response.circulars.map { it.toDomain(api.baseUrl) }
+    }
+
+    /** Circolari con numero > [after], in ordine crescente (max 50). Solo numero, titolo, data. */
+    suspend fun listNewerThan(after: Int): List<NewerCircularDto> {
+        val response: NewerCircularsResponseDto = api.get("/api/circulars/newer?after=$after")
+        return response.circulars
     }
 
     suspend fun getCircular(number: Int): Circular {

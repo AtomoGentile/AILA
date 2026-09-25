@@ -97,6 +97,10 @@ fun SettingsScreen(
     orphanModelBytes: Long = 0L,
     onDeleteOrphanModels: () -> Long = { 0L },
     appVersion: String = "1.0",
+    /** Voce "Diagnostica background": visibile in debug o dopo 7 tocchi su "Versione". */
+    showDebugMenu: Boolean = false,
+    onUnlockDebugMenu: () -> Unit = {},
+    onOpenBackgroundDebug: () -> Unit = {},
     onBackClick: () -> Unit
 ) {
     var apiKeyInput by remember { mutableStateOf(apiKey) }
@@ -122,6 +126,7 @@ fun SettingsScreen(
     // I filtri delle notifiche stanno in LocalSettingsManager, che non è stato di Compose:
     // senza questo contatore gli interruttori non si muoverebbero al tocco, pur salvando.
     var notificationRevision by remember { mutableStateOf(0) }
+    var versionTaps by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
 
     Column(modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
@@ -575,8 +580,22 @@ fun SettingsScreen(
                         subtitle = "Versione $appVersion",
                         tint = AppTheme.TintSlate,
                         showChevron = false,
+                        // Opzione nascosta: 7 tocchi sbloccano la diagnostica.
+                        onClick = {
+                            versionTaps++
+                            if (versionTaps >= 7 && !showDebugMenu) onUnlockDebugMenu()
+                        },
                         icon = { AppIcons.Sparkle(modifier = Modifier.size(19.dp), color = AppTheme.TintSlateInk) }
                     )
+                    if (showDebugMenu) {
+                        AilaListRow(
+                            title = "Diagnostica background",
+                            subtitle = "Log dei risvegli e simulazione",
+                            tint = AppTheme.TintSlate,
+                            onClick = onOpenBackgroundDebug,
+                            icon = { AppIcons.Refresh(modifier = Modifier.size(19.dp), color = AppTheme.TintSlateInk) }
+                        )
+                    }
                 }
             }
         }

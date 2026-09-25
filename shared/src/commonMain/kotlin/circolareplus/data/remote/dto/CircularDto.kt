@@ -89,3 +89,16 @@ data class SaveCircularAnalysisRequestDto(
     val isFallback: Boolean = false,
     val modelLabel: String = "Sconosciuto"
 )
+
+/** Voce minima di GET /api/circulars/newer (refresh in background iOS). */
+@Serializable
+data class NewerCircularDto(
+    val number: Int,
+    val title: String,
+    val publishDate: String
+)
+
+@Serializable
+data class NewerCircularsResponseDto(
+    val circulars: List<NewerCircularDto> = emptyList()
+)
