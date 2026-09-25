@@ -5,8 +5,8 @@ Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esist
 
 ## 25/9: discrepanze Android/iOS (branch `claude/android-ios-discrepancies-j1dggy`)
 
-**Non compilato qui** (Gradle non scarica i plugin da questo ambiente): fa fede la CI di GitHub
-(Android Build e iOS Build). Backend: `tsc` passa.
+**Non compilato** (Gradle non raggiunge Google Maven da questo ambiente, e la CI non ha runner:
+vedi sotto). Backend: `tsc` passa.
 
 **Deploy, in quest'ordine**:
 1. `wrangler d1 execute circolare_d1 --remote --file=./migrations/008_push_preferences.sql`
@@ -40,6 +40,14 @@ Fatto:
 - `CircularsSyncWorker.runOnce` ora parte al push di una circolare nuova.
 - **Schermi piccoli**: illustrazione dell'onboarding che si riduce e pagina scorrevole, celle del
   calendario che non si sovrappongono sotto i 340dp, etichette della barra in basso con ellissi.
+- **Tablet e iPad**: contenuto in una colonna centrata (`appContentWidth`, max 840dp; 520dp per
+  accesso, onboarding e offline), barra in basso della stessa larghezza, dialoghi larghi al
+  massimo 560dp. Numero del posto nei banchi della mappa che non esce dal cerchio col testo grande.
+
+**CI**: il push del 25/9 ha aperto i run ma i job si chiudono in 1 secondo senza eseguire nessun
+passo (nessun runner: minuti Actions finiti o limite di spesa). Quindi **nulla di questo giro e'
+stato compilato**: prima cosa da fare e' riattivare Actions o lanciare
+`./gradlew :androidApp:assembleDebug` e la build Xcode in locale.
 
 Da provare a schermo (nessun dispositivo qui):
 - iOS: il task `BGContinuedProcessingTask` (API di iOS 26 scritta senza un Mac: se la CI non

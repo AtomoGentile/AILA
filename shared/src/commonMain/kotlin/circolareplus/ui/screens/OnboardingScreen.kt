@@ -56,6 +56,8 @@ import circolareplus.ai.LocalAiModel
 import circolareplus.ai.ModelDownloadState
 import circolareplus.design.AilaLogoTile
 import circolareplus.design.appSafeDrawingPadding
+import circolareplus.design.appContentWidth
+import circolareplus.design.MaxFormWidth
 import circolareplus.design.AilaPrimaryButton
 import circolareplus.design.AilaSecondaryButton
 import circolareplus.design.AppIcons
@@ -218,6 +220,7 @@ fun OnboardingScreen(
                 ) { _, delta -> dragAccumulated += delta }
             }
             .appSafeDrawingPadding()
+            .appContentWidth(MaxFormWidth)
             .padding(AppTheme.Space24)
     ) {
         Row(
