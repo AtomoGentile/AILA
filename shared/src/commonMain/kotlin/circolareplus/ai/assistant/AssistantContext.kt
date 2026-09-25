@@ -186,8 +186,10 @@ internal object AssistantContext {
             "INDICE DI TUTTE LE CIRCOLARI (${indexed.size})"
         }
         builder.appendSection(title) {
-            appendLine("Formato: numero | data di pubblicazione | titolo")
-            indexed.forEach { appendLine("${it.number} | ${it.publishDate} | ${it.title}") }
+            // Date gia' leggibili, come nel resto del contesto: il modello le ricopia cosi'.
+            indexed.forEach {
+                appendLine("- n. ${it.number}, pubblicata ${readableDate(it.publishDate, knowledge.todayIso)} — ${it.title}")
+            }
         }
 
         val ranked = knowledge.circulars
