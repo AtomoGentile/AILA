@@ -186,7 +186,7 @@ internal object AssistantContext {
             "INDICE DI TUTTE LE CIRCOLARI (${indexed.size})"
         }
         builder.appendSection(title) {
-            // Stessa forma leggibile del calendario: niente "|" ne' AAAA-MM-GG da ricopiare.
+            // Date gia' leggibili, come nel resto del contesto: il modello le ricopia cosi'.
             indexed.forEach {
                 appendLine("- n. ${it.number}, pubblicata ${readableDate(it.publishDate, knowledge.todayIso)} — ${it.title}")
             }
@@ -217,7 +217,7 @@ internal object AssistantContext {
             }
             detailed.forEach { circular ->
                 appendLine("")
-                appendLine("--- Circolare n. ${circular.number} (pubblicata ${readableDate(circular.publishDate, knowledge.todayIso)}) ---")
+                appendLine("--- Circolare n. ${circular.number} (${circular.publishDate}) ---")
                 appendLine("Titolo: ${circular.title}")
                 val analysis = knowledge.classifications[circular.number]
                 if (budget.tight && circular.number in deepTexts) {
