@@ -23,10 +23,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -42,6 +38,7 @@ import circolareplus.ai.assistant.AssistantSource
 import circolareplus.ai.assistant.AssistantSourceKind
 import circolareplus.design.AilaAssistantMark
 import circolareplus.design.AilaBackBar
+import circolareplus.design.AilaIconButton
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
 import circolareplus.design.ailaAppear
@@ -102,13 +99,13 @@ fun AssistantChatScreen(
                     // Lo storico resta raggiungibile anche a chat vuota: e' proprio quando non
                     // c'e' niente a schermo che si va a cercare la conversazione di ieri.
                     if (conversations.isNotEmpty()) {
-                        BarIconButton(label = "Cronologia chat", onClick = { isHistoryOpen = true }) {
-                            AppIcons.History(modifier = Modifier.size(20.dp), color = AppTheme.TextMuted)
+                        AilaIconButton(contentDescription = "Cronologia chat", onClick = { isHistoryOpen = true }) { tint ->
+                            AppIcons.History(modifier = Modifier.size(20.dp), color = tint)
                         }
                     }
                     if (messages.isNotEmpty()) {
-                        BarIconButton(label = "Nuova chat", onClick = onClearChat) {
-                            AppIcons.NewChat(modifier = Modifier.size(20.dp), color = AppTheme.TextMuted)
+                        AilaIconButton(contentDescription = "Nuova chat", onClick = onClearChat) { tint ->
+                            AppIcons.NewChat(modifier = Modifier.size(20.dp), color = tint)
                         }
                     }
                 }
@@ -236,25 +233,6 @@ fun AssistantChatScreen(
             onDelete = onDeleteConversation,
             onDismiss = { isHistoryOpen = false }
         )
-    }
-}
-
-/**
- * Pulsante a icona della barra in alto (cronologia, nuova chat). Quadrato come il pulsante
- * "indietro" di [AilaBackBar], cosi' la barra ha una sola forma; [label] va ai lettori di schermo.
- */
-@Composable
-private fun BarIconButton(label: String, onClick: () -> Unit, icon: @Composable () -> Unit) {
-    Box(
-        modifier = Modifier
-            .size(38.dp)
-            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-            .background(AppTheme.TintSlate)
-            .ailaPressable(pressedScale = 0.92f) { onClick() }
-            .semantics { contentDescription = label; role = Role.Button },
-        contentAlignment = Alignment.Center
-    ) {
-        icon()
     }
 }
 

@@ -8,6 +8,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpRequestRetry
 import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.retry
 import io.ktor.client.plugins.timeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
@@ -175,8 +176,20 @@ class ClientSideAiClassifier(
         /** Modelli che hanno rifiutato `thinkingConfig` (es. i "pro", dove non si spegne). */
         private val rejectsThinkingConfig = mutableSetOf<String>()
 
-        /** Oltre questo tempo una risposta in chat si considera persa e si prova il modello dopo. */
-        private const val CHAT_TIMEOUT_MS = 35_000L
+        /**
+         * Tempo totale per una risposta in chat, scaletta compresa. Con i ~4 s concessi ai PDF
+         * dall'assistente la risposta arriva entro 20 s (vedi AilaAssistant.TARGET_REPLY_MS).
+         */
+        private const val CHAT_BUDGET_MS = 15_000L
+
+        /**
+         * Tetto per un singolo modello quando ce ne sono altri dopo: flash-latest lento non deve
+         * mangiarsi tutto il tempo, a flash-lite servono pochi secondi per rispondere.
+         */
+        private const val CHAT_ATTEMPT_MS = 9_000L
+
+        /** Sotto questo tempo residuo un altro tentativo non farebbe in tempo a rispondere. */
+        private const val CHAT_MIN_ATTEMPT_MS = 2_500L
     }
 
     /** I candidati in ordine, con quelli sovraccarichi da poco spostati in fondo. */
@@ -366,18 +379,27 @@ class ClientSideAiClassifier(
         val built = prompt.build(MAX_PROMPT_CHARS)
         val text = built.systemPrompt + "\n\n" + built.userPrompt
         val candidates = orderedCandidates()
+        val deadline = currentTimeMillis() + CHAT_BUDGET_MS
 
         var lastFailure = "nessun modello disponibile"
-        for (candidate in candidates) {
+        for ((index, candidate) in candidates.withIndex()) {
+            val remaining = deadline - currentTimeMillis()
+            if (remaining < CHAT_MIN_ATTEMPT_MS) {
+                lastFailure = "Google non ha risposto in tempo ($lastFailure)"
+                break
+            }
+            val isLast = index == candidates.lastIndex
+            val attemptMs = if (isLast) remaining else minOf(remaining, CHAT_ATTEMPT_MS)
             val response = try {
-                postChat(candidate, text)
+                postChat(candidate, text, attemptMs)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Chat chiusa o tempo dell'assistente scaduto: non e' un fallimento di Google.
+                throw e
             } catch (e: Exception) {
                 // Un modello che non risponde entro il tempo e' sovraccarico quanto uno che
                 // risponde 503: si passa al successivo invece di arrendersi. (Il timeout del
                 // socket ha una classe diversa per piattaforma, da cui il controllo sul nome.)
-                if (e !is kotlinx.coroutines.CancellationException &&
-                    (e is HttpRequestTimeoutException || e::class.simpleName.orEmpty().contains("Timeout"))
-                ) {
+                if (e is HttpRequestTimeoutException || e::class.simpleName.orEmpty().contains("Timeout")) {
                     markBusy(candidate)
                     lastFailure = "il modello $candidate non ha risposto in tempo"
                     continue
@@ -396,15 +418,28 @@ class ClientSideAiClassifier(
             }
             val body = try { response.bodyAsText() } catch (e: Exception) { "" }
             lastFailure = "HTTP ${response.status.value} con il modello $candidate: ${body.take(200)}"
-            if (!isModelUnavailable(response.status.value, body)) return AiTextResult.Failure(lastFailure)
+            // In chat anche il 429 fa passare al modello dopo: nel piano gratuito la quota e' per
+            // modello, e flash-lite ha la sua anche quando quella di flash e' finita.
+            val code = response.status.value
+            if (code != 429 && !isModelUnavailable(code, body)) return AiTextResult.Failure(lastFailure)
             // Un modello che ha appena risposto 503 non va piu' tenuto come "risolto" e per
             // qualche minuto passa in fondo alla fila: la prossima domanda parte da uno che va.
             markBusy(candidate)
         }
 
+        val leftForDiscovery = deadline - currentTimeMillis()
+        if (leftForDiscovery < CHAT_MIN_ATTEMPT_MS * 2) return AiTextResult.Failure(lastFailure)
         val discovered = discoverUsableModel()
         if (discovered != null) {
-            val response = try { postChat(discovered, text) } catch (e: Exception) { return AiTextResult.Failure(lastFailure) }
+            val left = deadline - currentTimeMillis()
+            if (left < CHAT_MIN_ATTEMPT_MS) return AiTextResult.Failure(lastFailure)
+            val response = try {
+                postChat(discovered, text, left)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return AiTextResult.Failure(lastFailure)
+            }
             if (response.status.isSuccess()) {
                 resolvedModel = discovered
                 val answer = extractGeneratedText(response.bodyAsText())
@@ -484,19 +519,22 @@ class ClientSideAiClassifier(
      * Se il modello rifiuta `thinkingConfig` (i "pro" non lo lasciano spegnere) si riprova
      * senza, e lo si ricorda per le domande successive.
      */
-    private suspend fun postChat(modelName: String, prompt: String): HttpResponse {
+    private suspend fun postChat(modelName: String, prompt: String, timeoutMs: Long): HttpResponse {
+        val startedAt = currentTimeMillis()
         val withThinkingOff = modelName !in rejectsThinkingConfig
         val response = postGenerate(
             modelName,
             prompt,
             thinking = if (withThinkingOff) GeminiThinkingConfig(thinkingBudget = 0) else null,
-            timeoutMs = CHAT_TIMEOUT_MS
+            timeoutMs = timeoutMs,
+            allowRetries = false
         )
         if (withThinkingOff && response.status.value == 400) {
             val body = try { response.bodyAsText() } catch (e: Exception) { "" }
             if (body.contains("thinking", ignoreCase = true)) {
                 rejectsThinkingConfig += modelName
-                return postGenerate(modelName, prompt, thinking = null, timeoutMs = CHAT_TIMEOUT_MS)
+                val left = (timeoutMs - (currentTimeMillis() - startedAt)).coerceAtLeast(1_000L)
+                return postGenerate(modelName, prompt, thinking = null, timeoutMs = left, allowRetries = false)
             }
         }
         return response
@@ -507,10 +545,14 @@ class ClientSideAiClassifier(
         modelName: String,
         prompt: String,
         thinking: GeminiThinkingConfig? = null,
-        timeoutMs: Long? = null
+        timeoutMs: Long? = null,
+        allowRetries: Boolean = true
     ): HttpResponse =
         httpClient.post("$API_BASE/$modelName:generateContent") {
             timeoutMs?.let { ms -> timeout { requestTimeoutMillis = ms; socketTimeoutMillis = ms } }
+            // In chat niente ritentativi automatici: un 429 aspettava fino a 20 s prima di
+            // riprovare lo stesso modello, da solo oltre l'attesa accettabile per una risposta.
+            if (!allowRetries) retry { noRetry() }
             // Chiave sia in header (forma documentata da Google) sia come parametro: se una delle
             // due venisse ignorata l'altra regge, e non costa nulla mandarle entrambe.
             header("x-goog-api-key", userApiKey)

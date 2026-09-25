@@ -17,6 +17,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -320,16 +322,26 @@ fun AuthScreen(
                         trailing = {
                             // Prima non c'era: una password sbagliata di un carattere restava
                             // invisibile e sembrava un errore del server.
-                            Text(
-                                text = if (isPasswordVisible) "Nascondi" else "Mostra",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = AppTheme.PrimaryBlue,
+                            // L'occhio al posto di "Mostra"/"Nascondi": e' il simbolo che tutti
+                            // conoscono e non ruba spazio alla password.
+                            Box(
                                 modifier = Modifier
+                                    .padding(end = 4.dp)
+                                    .size(40.dp)
                                     .clip(RoundedCornerShape(8.dp))
                                     .clickable { isPasswordVisible = !isPasswordVisible }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                            )
+                                    .semantics {
+                                        contentDescription =
+                                            if (isPasswordVisible) "Nascondi password" else "Mostra password"
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isPasswordVisible) {
+                                    AppIcons.EyeOff(modifier = Modifier.size(20.dp), color = AppTheme.TextMuted)
+                                } else {
+                                    AppIcons.Eye(modifier = Modifier.size(20.dp), color = AppTheme.TextMuted)
+                                }
+                            }
                         }
                     )
 

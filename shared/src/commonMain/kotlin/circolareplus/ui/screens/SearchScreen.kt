@@ -154,14 +154,17 @@ fun SearchScreen(
                 },
                 trailingIcon = {
                     if (query.isNotEmpty()) {
-                        Text(
-                            text = "✕",
-                            fontSize = 15.sp,
-                            color = AppTheme.TextFaint,
+                        // Area di tocco di 40dp: il carattere "✕" di prima era largo pochi pixel.
+                        Box(
                             modifier = Modifier
-                                .padding(end = AppTheme.Space12)
-                                .clickable { query = "" }
-                        )
+                                .padding(end = AppTheme.Space4)
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                                .clickable { query = "" },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            AppIcons.Close(modifier = Modifier.size(16.dp), color = AppTheme.TextFaint)
+                        }
                     }
                 },
                 singleLine = true,

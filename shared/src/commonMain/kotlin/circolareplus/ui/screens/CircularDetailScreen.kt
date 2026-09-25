@@ -18,6 +18,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import circolareplus.design.AilaIconButton
 import circolareplus.design.AilaAssistantBadge
 import circolareplus.design.AilaBackBar
 import circolareplus.design.AilaCard
@@ -177,12 +178,9 @@ fun CircularDetailScreen(
             title = "Circolare n. ${circular.number}",
             onBackClick = onBackClick,
             action = {
-                AilaSecondaryButton(
-                    text = "Apri fuori",
-                    onClick = onDownloadPdfClick,
-                    compact = true,
-                    icon = { tint -> AppIcons.Document(modifier = Modifier.size(14.dp), color = tint) }
-                )
+                AilaIconButton(contentDescription = "Apri il PDF fuori dall'app", onClick = onDownloadPdfClick) { tint ->
+                    AppIcons.ExternalLink(modifier = Modifier.size(19.dp), color = tint)
+                }
             }
         )
 

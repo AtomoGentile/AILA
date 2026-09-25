@@ -40,6 +40,10 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -765,8 +769,60 @@ fun AilaErrorState(
         )
         if (onRetry != null) {
             Spacer(modifier = Modifier.height(AppTheme.Space20))
-            AilaPrimaryButton(text = "Riprova", onClick = onRetry)
+            AilaPrimaryButton(
+                text = "Riprova",
+                onClick = onRetry,
+                icon = { tint -> AppIcons.Refresh(modifier = Modifier.size(15.dp), color = tint) }
+            )
         }
+    }
+}
+
+/**
+ * Pulsante quadrato con sola icona, della stessa misura del pulsante "indietro" di [AilaBackBar]:
+ * per le azioni in una barra (aggiungi, apri fuori, esporta) dove una parola ruba spazio al
+ * titolo o alle schede accanto. [contentDescription] non si vede ma lo leggono TalkBack e
+ * VoiceOver, che altrimenti annuncerebbero solo "pulsante".
+ *
+ * [primary] usa il gradiente dei pulsanti principali: per l'azione che la schermata offre per
+ * prima (aggiungere un evento, proporre un'idea); le altre restano sul grigio.
+ */
+@Composable
+fun AilaIconButton(
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    primary: Boolean = false,
+    enabled: Boolean = true,
+    size: Dp = 38.dp,
+    icon: @Composable (Color) -> Unit
+) {
+    val shape = RoundedCornerShape(AppTheme.SmallElementRadius)
+    val background = when {
+        !enabled -> Modifier.background(AppTheme.TintSlate)
+        primary -> Modifier.background(AppTheme.PrimaryGradient)
+        else -> Modifier.background(AppTheme.TintSlate)
+    }
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(shape)
+            .then(background)
+            .alpha(if (enabled) 1f else 0.6f)
+            .ailaPressable(enabled = enabled, pressedScale = 0.9f) { onClick() }
+            .semantics {
+                this.contentDescription = contentDescription
+                role = Role.Button
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        icon(
+            when {
+                !enabled -> AppTheme.TextFaint
+                primary -> Color.White
+                else -> AppTheme.TextDark
+            }
+        )
     }
 }
 

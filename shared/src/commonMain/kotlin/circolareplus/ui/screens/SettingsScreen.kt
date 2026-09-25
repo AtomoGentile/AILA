@@ -18,6 +18,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import circolareplus.design.AilaIconButton
 import circolareplus.design.AilaBackBar
 import circolareplus.design.AilaCard
 import circolareplus.design.AilaListRow
@@ -490,15 +491,15 @@ fun SettingsScreen(
                                     // dell'app: non c'e' niente da eliminare, e il pulsante dichiarava
                                     // "hai liberato 0 MB" senza fare nulla.
                                     if (activeModel?.isSystemModel != true) {
-                                        AilaSecondaryButton(
-                                            text = "Elimina",
+                                        AilaIconButton(
+                                            contentDescription = "Elimina il modello dal telefono",
                                             onClick = {
                                                 activeModel?.let(onDeleteLocalModel)
                                                 downloadStatus = "Modello eliminato: hai liberato " +
                                                     "${activeModel?.readableSize ?: ""}."
                                                 modelsRevision++
                                             }
-                                        )
+                                        ) { tint -> AppIcons.Trash(modifier = Modifier.size(19.dp), color = tint) }
                                     }
                                 } else if (isDownloading && activeModel != null) {
                                     // Il download va fermato da qui, non solo dalla notifica: chi

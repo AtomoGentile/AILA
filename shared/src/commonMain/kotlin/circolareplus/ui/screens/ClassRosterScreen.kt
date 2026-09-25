@@ -21,9 +21,11 @@ import androidx.compose.ui.unit.sp
 import circolareplus.data.remote.dto.DisciplinePairDto
 import circolareplus.data.remote.dto.RatingEntryDto
 import circolareplus.design.AilaCard
+import circolareplus.design.AilaIconButton
 import circolareplus.design.AilaSecondaryButton
 import circolareplus.design.AilaSegmentedTabs
 import circolareplus.design.AilaSwitch
+import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
 
 /**
@@ -290,16 +292,11 @@ private fun DisciplinePairsCard(
                             color = AppTheme.TextMuted
                         )
                     }
-                    Text(
-                        text = "Rimuovi",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = AppTheme.PrimaryBlue,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { onRemove(pair.id) }
-                            .padding(horizontal = AppTheme.Space8, vertical = 4.dp)
-                    )
+                    AilaIconButton(
+                        contentDescription = "Rimuovi la coppia",
+                        onClick = { onRemove(pair.id) },
+                        size = 36.dp
+                    ) { tint -> AppIcons.Trash(modifier = Modifier.size(18.dp), color = tint) }
                 }
             }
             if (entries.size >= 2) {
@@ -375,7 +372,7 @@ private fun AddDisciplinePairDialog(
                                 modifier = Modifier.weight(1f)
                             )
                             if (isSelected) {
-                                Text(text = "✓", fontSize = 14.sp, color = AppTheme.TintBlueInk)
+                                AppIcons.Check(modifier = Modifier.size(16.dp), color = AppTheme.TintBlueInk)
                             }
                         }
                     }
