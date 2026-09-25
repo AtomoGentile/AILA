@@ -59,7 +59,11 @@ android {
     defaultConfig {
         applicationId = "com.circolareplus"
         minSdk = 26
-        targetSdk = 34
+        // 36 (Android 16): richiesto da Google Play per gli aggiornamenti dal 31/8/2026. Da 35 la
+        // finestra e' sempre edge-to-edge (vedi MainActivity.applySystemBarStyle e
+        // design/PlatformInsets.kt); da 36 i blocchi di orientamento non valgono sui tablet, che
+        // qui sono comunque liberi di ruotare.
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
 

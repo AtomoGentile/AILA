@@ -38,8 +38,42 @@ targets:
       # (locale, vedi .gitignore, come google-services.json per Android): xcodegen non
       # fallisce se manca, semplicemente non lo trova e non lo include.
       - path: iosApp
+    # XcodeGen RIGENERA questo file a ogni `xcodegen generate` con le sole chiavi di default piu'
+    # quelle elencate qui sotto: tutto quello che serve all'app va scritto QUI, non a mano nel
+    # plist (prima launch screen, orientamenti e nome "AILA" stavano solo nel file e si perdevano,
+    # e sulla home compariva "Circolare+", il PRODUCT_NAME).
     info:
       path: iosApp/Info.plist
+      properties:
+        CFBundleDisplayName: AILA
+        CFBundleName: AILA
+        CFBundleShortVersionString: "1.0.0"
+        CFBundleVersion: "1"
+        LSRequiresIPhoneOS: true
+        UIApplicationSupportsIndirectInputEvents: true
+        # Come lo splash Android (windowSplashScreenBackground #0A1330 + marchio AILA).
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+          UIImageName: LaunchLogo
+        # iPhone solo in verticale, come i telefoni Android; iPad libero, come i tablet.
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # remote-notification: push silenziosi e content-available (campanella anche senza
+        # tocco, preferenze notifiche). fetch: BGAppRefreshTask, il giro in background delle
+        # circolari. processing: il task che tiene viva l'analisi sul telefono con l'app in
+        # background (BGContinuedProcessingTask). Vedi AppDelegate.swift.
+        UIBackgroundModes:
+          - remote-notification
+          - fetch
+          - processing
+        BGTaskSchedulerPermittedIdentifiers:
+          - com.circolareplus.refresh
+          - com.circolareplus.analysis.*
     settings:
       PRODUCT_NAME: Circolare+
       PRODUCT_BUNDLE_IDENTIFIER: com.circolareplus

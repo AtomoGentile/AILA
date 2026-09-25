@@ -13,6 +13,22 @@ import shared
  */
 class AppleIntelligenceEngine: AppleIntelligenceBridge {
 
+    /// Generazione in corso, per [cancelGeneration] (il tasto Stop). Protetta da `lock`: la
+    /// imposta la chiamata di Kotlin e la legge lo stop, da thread diversi.
+    private var currentTask: Task<String, Error>?
+    private let lock = NSLock()
+
+    /**
+     * Ferma la generazione in corso. La cancellazione arriva allo stream di FoundationModels,
+     * che si interrompe subito invece di continuare fino alla fine o al timeout.
+     */
+    func cancelGeneration() {
+        lock.lock()
+        let task = currentTask
+        lock.unlock()
+        task?.cancel()
+    }
+
     /**
      * Verifica se Apple Intelligence è disponibile e pronto.
      *
@@ -68,6 +84,41 @@ class AppleIntelligenceEngine: AppleIntelligenceBridge {
      * @throws NSError Se la generazione fallisce o scade il timeout
      */
     func generate(
+        systemPrompt: String,
+        userPrompt: String,
+        timeoutMillis: Int64,
+        maxOutputTokens: Int32,
+        temperature: Double,
+        stopWhen: @escaping (String) -> KotlinBoolean
+    ) async throws -> String {
+        // La generazione vera gira in un Task a parte, cosi' cancelGeneration() la puo' fermare
+        // anche se chi aspetta (la chiamata da Kotlin) non propaga la cancellazione.
+        let task = Task<String, Error> {
+            try await self.runGeneration(
+                systemPrompt: systemPrompt,
+                userPrompt: userPrompt,
+                timeoutMillis: timeoutMillis,
+                maxOutputTokens: maxOutputTokens,
+                temperature: temperature,
+                stopWhen: stopWhen
+            )
+        }
+        lock.lock()
+        currentTask = task
+        lock.unlock()
+        defer {
+            lock.lock()
+            if currentTask == task { currentTask = nil }
+            lock.unlock()
+        }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func runGeneration(
         systemPrompt: String,
         userPrompt: String,
         timeoutMillis: Int64,

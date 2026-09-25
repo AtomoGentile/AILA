@@ -36,8 +36,8 @@ import circolareplus.data.repository.CircularsRepository
 import circolareplus.data.repository.SessionRestore
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
-import circolareplus.design.iosImePadding
-import circolareplus.design.iosSafeDrawingPadding
+import circolareplus.design.appImePadding
+import circolareplus.design.appSafeDrawingPadding
 // Estensione (non richiamabile per nome qualificato come le altre composable di
 // circolareplus.design usate in questo file): va importata per poterla usare come Modifier.ailaPressable(...).
 import circolareplus.design.ailaPressable
@@ -721,9 +721,31 @@ fun MainAppShell(
         val token = AppContainer.pushTokenProvider.getToken()
         if (token != null) {
             try {
-                AppContainer.fcmRepository.registerToken(token, currentPushPlatform())
+                AppContainer.fcmRepository.registerToken(
+                    token,
+                    currentPushPlatform(),
+                    mutedKinds = AppContainer.settings.mutedNotificationKinds,
+                    systemNotifications = AppContainer.settings.isSystemNotificationsEnabled
+                )
             } catch (e: Exception) {
                 // Non bloccante: l'app resta utilizzabile anche se la registrazione fallisce.
+            }
+        }
+    }
+
+    // Dopo un cambio negli interruttori delle notifiche: il server li applica ai messaggi iOS
+    // (con l'app in background il banner lo mostra il sistema, non onPushReceived).
+    fun syncPushPreferences() {
+        coroutineScope.launch {
+            try {
+                AppContainer.fcmRepository.syncPreferences(
+                    mutedKinds = AppContainer.settings.mutedNotificationKinds,
+                    systemNotifications = AppContainer.settings.isSystemNotificationsEnabled
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Si riprova da sola al prossimo avvio, che registra token e preferenze insieme.
             }
         }
     }
@@ -1860,15 +1882,18 @@ fun MainAppShell(
                                         MainTab.MORE -> AppIcons.Profile(modifier = Modifier.size(24.dp), color = iconColor)
                                     }
                                     Spacer(modifier = Modifier.height(4.dp))
-                                    // maxLines/softWrap espliciti: "Mappa posti" andava a capo su due
-                                    // righe e sballava l'altezza della barra rispetto alle altre voci.
+                                    // Una riga sola: "Mappa posti" andava a capo su due righe e
+                                    // sballava l'altezza della barra rispetto alle altre voci.
+                                    // Ellissi: su un telefono stretto (64dp per voce a 320dp) col
+                                    // testo di sistema ingrandito l'etichetta veniva tagliata a meta'.
                                     Text(
                                         text = tab.title,
                                         fontSize = 10.sp,
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                         color = iconColor,
                                         maxLines = 1,
-                                        softWrap = false
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(horizontal = 2.dp)
                                     )
                                 }
                             }
@@ -1882,10 +1907,10 @@ fun MainAppShell(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                // Tastiera (solo iOS, vedi PlatformInsets.kt): l'altezza di innerPadding include
+                // Tastiera (vedi PlatformInsets.kt): l'altezza di innerPadding include
                 // gia' la barra in basso, quindi la si scala prima di applicare il margine.
                 .consumeWindowInsets(innerPadding)
-                .iosImePadding(),
+                .appImePadding(),
             color = AppTheme.BackgroundLight
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -1934,6 +1959,7 @@ fun MainAppShell(
                         },
                         onNotificationKindChange = { kind, enabled ->
                             AppContainer.settings.setNotificationKindEnabled(kind.key, enabled)
+                            syncPushPreferences()
                         },
                         boardNotificationsEnabled = currentProfile?.notificationBoardEnabled ?: true,
                         onToggleBoardNotifications = { enabled ->
@@ -1948,6 +1974,7 @@ fun MainAppShell(
                         systemNotificationsEnabled = AppContainer.settings.isSystemNotificationsEnabled,
                         onToggleSystemNotifications = { enabled ->
                             AppContainer.settings.isSystemNotificationsEnabled = enabled
+                            syncPushPreferences()
                         },
                         aiProvider = AppContainer.settings.aiProvider,
                         onAiProviderChange = { provider ->
@@ -3442,7 +3469,7 @@ private fun AddCalendarEventDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .iosImePadding()
+                .appImePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = AppTheme.Space20)
                 .padding(bottom = AppTheme.Space32)
@@ -3841,7 +3868,7 @@ private fun EventDetailDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .iosImePadding()
+                .appImePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = AppTheme.Space20)
                 .padding(bottom = AppTheme.Space32)
@@ -4101,7 +4128,7 @@ private fun CreatePollDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .iosImePadding()
+                .appImePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = AppTheme.Space20)
                 .padding(bottom = AppTheme.Space32)
@@ -4259,7 +4286,7 @@ private fun AddProposalDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .iosImePadding()
+                .appImePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = AppTheme.Space20)
                 .padding(bottom = AppTheme.Space32)
@@ -4395,7 +4422,7 @@ private fun OfflineGateScreen(
     onLogout: () -> Unit
 ) {
     Box(
-        modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight).iosSafeDrawingPadding(),
+        modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight).appSafeDrawingPadding(),
         contentAlignment = Alignment.Center
     ) {
         Column(

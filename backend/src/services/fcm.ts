@@ -32,6 +32,51 @@ interface FcmMessage {
 interface FcmRecipient {
   token: string;
   platform: string | null;
+  // Preferenze del dispositivo (migrazione 008). Assenti se la migrazione non e' ancora applicata.
+  muted_kinds?: string | null;
+  system_notifications?: number | null;
+}
+
+/**
+ * Stessa logica di NotificationCategoryMapper (app, codice condiviso Kotlin): dal payload `data`
+ * alla categoria delle Impostazioni ("circulars", "board", "seatmap", "polls" o "" se nessuna).
+ * "seatmap_preferences" dell'app qui e' gia' "seatmap", la voce dell'interruttore.
+ */
+function notificationKind(data: Record<string, string>): string {
+  switch (data.action) {
+    case 'open_preferences':
+    case 'preferences_complete':
+    case 'seat_map_updated':
+      return 'seatmap';
+    case 'poll_published':
+    case 'poll_complete':
+    case 'swap_request':
+    case 'swap_accepted':
+      return 'polls';
+    case 'new_circular':
+      return 'circulars';
+    case 'new_proposal':
+      return 'board';
+  }
+  if ('circular_number' in data) return 'circulars';
+  if ('proposal_id' in data) return 'board';
+  if ('poll_id' in data || 'swap_id' in data || 'grid_id' in data) return 'polls';
+  return '';
+}
+
+/**
+ * Legge i destinatari con le loro preferenze; se la migrazione 008 non e' ancora applicata le
+ * colonne non esistono e la query fallisce: si ripiega sulla stessa query senza preferenze, cosi'
+ * le notifiche continuano ad arrivare come prima.
+ */
+async function queryRecipients(env: Env, where: string, binds: unknown[]): Promise<FcmRecipient[]> {
+  const run = (columns: string) =>
+    env.DB.prepare(`SELECT DISTINCT ${columns} FROM fcm_tokens t ${where}`).bind(...binds).all<FcmRecipient>();
+  try {
+    return (await run('t.token, t.platform, t.muted_kinds, t.system_notifications')).results;
+  } catch (e) {
+    return (await run('t.token, t.platform')).results;
+  }
 }
 
 interface ServiceAccount {
@@ -158,12 +203,12 @@ async function getAccessToken(sa: ServiceAccount): Promise<string | null> {
  */
 function buildMessage(
   target: { token: string } | { topic: string },
-  platform: string | null,
+  recipient: FcmRecipient,
   message: FcmMessage
-): Record<string, unknown> {
+): Record<string, unknown> | null {
   const data = message.data ?? {};
 
-  if (platform === 'android') {
+  if (recipient.platform === 'android') {
     return {
       ...target,
       // title/body dopo i data: quelli "veri" non devono poter essere sovrascritti da chiavi omonime.
@@ -172,11 +217,33 @@ function buildMessage(
     };
   }
 
+  // iOS: le preferenze le applica il server, perche' con l'app in background il banner lo
+  // mostra il sistema senza passare dall'app. Categoria silenziata: non si manda nulla (come su
+  // Android, dove onPushReceived la scarta senza scriverla in campanella).
+  const kind = notificationKind(data);
+  const muted = (recipient.muted_kinds ?? '').split(',').filter(Boolean);
+  if (kind && muted.includes(kind)) return null;
+
+  // "Notifiche di sistema" spento: push silenzioso (content-available), niente banner. L'app,
+  // se iOS la sveglia, lo scrive solo nella campanella (AppDelegate, didReceiveRemoteNotification).
+  if (recipient.system_notifications === 0) {
+    return {
+      ...target,
+      data: { ...data, title: message.title, body: message.body },
+      apns: {
+        headers: { 'apns-push-type': 'background', 'apns-priority': '5' },
+        payload: { aps: { 'content-available': 1 } },
+      },
+    };
+  }
+
   return {
     ...target,
     notification: { title: message.title, body: message.body },
     data,
-    apns: { payload: { aps: { sound: 'default' } } },
+    // content-available: con l'app sospesa iOS la sveglia qualche secondo, cosi' la notifica
+    // finisce in campanella anche se l'utente non la tocca (vedi AppDelegate).
+    apns: { payload: { aps: { sound: 'default', 'content-available': 1 } } },
   };
 }
 
@@ -187,15 +254,15 @@ async function sendV1(
   recipient: FcmRecipient,
   message: FcmMessage
 ): Promise<boolean> {
+  const built = buildMessage({ token: recipient.token }, recipient, message);
+  if (!built) return true; // Categoria silenziata su questo dispositivo: niente da inviare.
   const res = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      message: buildMessage({ token: recipient.token }, recipient.platform, message),
-    }),
+    body: JSON.stringify({ message: built }),
   });
 
   if (!res.ok) {
@@ -257,28 +324,21 @@ export async function notifyClass(
   if (!creds) return;
 
   if (!classId) {
-    const all = await env.DB.prepare('SELECT DISTINCT token, platform FROM fcm_tokens').all<FcmRecipient>();
+    const all = await queryRecipients(env, '', []);
     await Promise.allSettled(
-      all.results.map((row) => sendV1(env, creds.accessToken, creds.projectId, row, message))
+      all.map((row) => sendV1(env, creds.accessToken, creds.projectId, row, message))
     );
     return;
   }
 
   // Con una classe indicata non si può usare il topic 'class': è unico e raggiungerebbe anche
   // gli iscritti delle altre classi. Si mandano i messaggi ai token di quella classe soltanto.
-  const tokens = await env.DB
-    .prepare(
-      // DISTINCT: lo stesso telefono può comparire sotto più account (vedi routes/fcm.ts), e
-      // senza raggruppare per token la stessa notifica partiva una volta per account.
-      `SELECT DISTINCT t.token, t.platform FROM fcm_tokens t
-       JOIN users u ON u.id = t.user_id
-       WHERE u.class_id = ?`
-    )
-    .bind(classId)
-    .all<FcmRecipient>();
+  // DISTINCT (in queryRecipients): lo stesso telefono può comparire sotto più account (vedi
+  // routes/fcm.ts), e senza raggruppare per token la stessa notifica partiva una volta per account.
+  const tokens = await queryRecipients(env, 'JOIN users u ON u.id = t.user_id WHERE u.class_id = ?', [classId]);
 
   await Promise.allSettled(
-    tokens.results.map((row) => sendV1(env, creds.accessToken, creds.projectId, row, message))
+    tokens.map((row) => sendV1(env, creds.accessToken, creds.projectId, row, message))
   );
 }
 
@@ -289,12 +349,10 @@ export async function notifyUser(env: Env, userId: string, title: string, body: 
   const creds = await resolveCredentials(env);
   if (!creds) return;
 
-  const tokens = await env.DB.prepare('SELECT DISTINCT token, platform FROM fcm_tokens WHERE user_id = ?')
-    .bind(userId)
-    .all<FcmRecipient>();
+  const tokens = await queryRecipients(env, 'WHERE t.user_id = ?', [userId]);
 
   const message: FcmMessage = { title, body, data };
   await Promise.allSettled(
-    tokens.results.map((row) => sendV1(env, creds.accessToken, creds.projectId, row, message))
+    tokens.map((row) => sendV1(env, creds.accessToken, creds.projectId, row, message))
   );
 }

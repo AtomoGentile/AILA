@@ -333,13 +333,19 @@ private fun DayCell(
     modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = modifier.height(46.dp),
+        modifier = modifier.heightIn(min = 46.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
+            // Larga al massimo 40dp ma mai piu' della sua colonna: sui telefoni stretti (320-340dp,
+            // o schermo con "Dimensioni visualizzazione" grandi) sette celle da 40dp fissi non ci
+            // stavano e l'evidenziazione del giorno scelto si sovrapponeva a quelli accanto.
+            // Altezza minima e non fissa: col testo di sistema ingrandito il numero non si taglia.
             modifier = Modifier
-                .size(width = 40.dp, height = 42.dp)
+                .widthIn(max = 40.dp)
+                .fillMaxWidth()
+                .heightIn(min = 42.dp)
                 .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
                 .then(
                     when {
