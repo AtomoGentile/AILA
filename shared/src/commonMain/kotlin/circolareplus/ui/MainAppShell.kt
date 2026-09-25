@@ -105,6 +105,12 @@ enum class ClassSection(val title: String) {
  */
 const val NOTIFICATION_CATEGORY_SEATMAP_PREFERENCES = "seatmap_preferences"
 
+/**
+ * Categoria più specifica di [NotificationKind.POLLS] per i sondaggi a ordinamento: apre la
+ * schermata Sondaggi direttamente sulla sezione "Ordinamento". Segue l'interruttore Sondaggi.
+ */
+const val NOTIFICATION_CATEGORY_RANKING_POLLS = "ranking_polls"
+
 @Composable
 fun MainAppShell(
     initialUser: User? = null,
@@ -872,6 +878,16 @@ fun MainAppShell(
     var showCreatePollDialog by remember { mutableStateOf(false) }
     var isCreatingPoll by remember { mutableStateOf(false) }
     var showPollHistory by remember { mutableStateOf(false) }
+    // 0 = sondaggi interrogazioni, 1 = sondaggi a ordinamento.
+    var pollsSection by rememberSaveable { mutableStateOf(0) }
+    var rankingPolls by remember { mutableStateOf<List<circolareplus.data.remote.dto.RankingPollDto>>(emptyList()) }
+    var rankingTotalStudents by remember { mutableStateOf(0) }
+    var isRankingLoading by remember { mutableStateOf(false) }
+    var rankingError by remember { mutableStateOf<String?>(null) }
+    var rankingRefreshTrigger by remember { mutableStateOf(0) }
+    var submittingRankingPollId by remember { mutableStateOf<String?>(null) }
+    var showCreateRankingPollDialog by remember { mutableStateOf(false) }
+    var isCreatingRankingPoll by remember { mutableStateOf(false) }
     var allPolls by remember { mutableStateOf<List<circolareplus.data.remote.dto.PollSummaryDto>>(emptyList()) }
     var expandedResultsPollId by remember { mutableStateOf<String?>(null) }
     var isLoadingPollResults by remember { mutableStateOf(false) }
@@ -881,7 +897,6 @@ fun MainAppShell(
     // Arriva dalla stessa risposta del dettaglio, letta con un secondo DTO.
     var pollProgress by remember { mutableStateOf<circolareplus.data.remote.dto.PollProgressDto?>(null) }
     var isSubmittingPoll by remember { mutableStateOf(false) }
-    var isCalculatingPoll by remember { mutableStateOf(false) }
     var pollAssignments by remember { mutableStateOf<List<circolareplus.data.remote.dto.PollAssignmentDto>>(emptyList()) }
     // Sondaggi per cui questo studente ha già premuto "Invia le mie scelte" (solo locale, vedi
     // LocalSettingsManager.isPollSubmitted).
@@ -1060,6 +1075,11 @@ fun MainAppShell(
                 seatMapMode = "MAP"
             }
             NotificationKind.POLLS.key -> {
+                pollsSection = 0
+                isInPollsScreen = true
+            }
+            NOTIFICATION_CATEGORY_RANKING_POLLS -> {
+                pollsSection = 1
                 isInPollsScreen = true
             }
             NotificationKind.CALENDAR.key -> {
@@ -1536,6 +1556,24 @@ fun MainAppShell(
 
     // Espande/carica i risultati (assegnazioni) di un sondaggio dello storico: li calcola al volo
     // con l'algoritmo già esistente (`assignments/run`) invece di richiedere un passaggio separato.
+    LaunchedEffect(isInPollsScreen, pollsSection, rankingRefreshTrigger) {
+        if (isInPollsScreen && pollsSection == 1) {
+            // Lo spinner solo alla prima lettura: dopo un invio o una chiusura si ricarica in
+            // silenzio, senza far sparire le card sotto il dito.
+            isRankingLoading = rankingPolls.isEmpty()
+            rankingError = null
+            try {
+                val response = AppContainer.rankingPollsRepository.listPolls()
+                rankingPolls = response.polls
+                rankingTotalStudents = response.totalStudents
+            } catch (e: Exception) {
+                rankingError = "Impossibile caricare i sondaggi. Controlla la connessione."
+            } finally {
+                isRankingLoading = false
+            }
+        }
+    }
+
     LaunchedEffect(expandedResultsPollId) {
         val pollId = expandedResultsPollId
         if (pollId != null) {
@@ -1670,6 +1708,28 @@ fun MainAppShell(
                         reloadProposals()
                     } catch (e: Exception) {
                         proposalsError = "Impossibile pubblicare la proposta: ${e.message}"
+                    }
+                }
+            }
+        )
+    }
+
+    if (showCreateRankingPollDialog) {
+        CreateRankingPollDialog(
+            isSubmitting = isCreatingRankingPoll,
+            onDismiss = { showCreateRankingPollDialog = false },
+            onConfirm = { question, options ->
+                coroutineScope.launch {
+                    isCreatingRankingPoll = true
+                    try {
+                        AppContainer.rankingPollsRepository.createPoll(question, options)
+                        showCreateRankingPollDialog = false
+                        rankingRefreshTrigger++
+                    } catch (e: Exception) {
+                        rankingError = "Impossibile creare il sondaggio: ${e.message}"
+                        showCreateRankingPollDialog = false
+                    } finally {
+                        isCreatingRankingPoll = false
                     }
                 }
             }
@@ -2027,14 +2087,40 @@ fun MainAppShell(
                     // Se si è nello storico, il back torna prima al sondaggio corrente (come la
                     // freccia in ScreenBackBar sotto), solo un secondo back chiude il flusso.
                     circolareplus.platform.PlatformBackHandler {
-                        if (showPollHistory) showPollHistory = false else isInPollsScreen = false
+                        if (pollsSection == 0 && showPollHistory) showPollHistory = false else isInPollsScreen = false
                     }
                     Column(modifier = Modifier.fillMaxSize()) {
                         ScreenBackBar(
-                            title = "Sondaggi Interrogazioni",
-                            onBackClick = { if (showPollHistory) showPollHistory = false else isInPollsScreen = false }
+                            title = "Sondaggi",
+                            onBackClick = {
+                                if (pollsSection == 0 && showPollHistory) showPollHistory = false else isInPollsScreen = false
+                            }
                         )
-                        if (isRepresentative) {
+                        // Due tipi di sondaggio: le date delle interrogazioni e quelli in cui si
+                        // mettono in ordine delle opzioni. "Nuovo" crea quello della sezione aperta.
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(start = AppTheme.Space16, end = AppTheme.Space16, top = AppTheme.Space8),
+                            horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            circolareplus.design.AilaSegmentedTabs(
+                                labels = listOf("Interrogazioni", "Ordinamento"),
+                                selectedIndex = pollsSection,
+                                onSelect = { index -> pollsSection = index },
+                                modifier = Modifier.weight(1f),
+                                key = pollsSection
+                            )
+                            if (isRepresentative) {
+                                circolareplus.design.AilaIconButton(
+                                    contentDescription = "Nuovo sondaggio",
+                                    onClick = {
+                                        if (pollsSection == 1) showCreateRankingPollDialog = true else showCreatePollDialog = true
+                                    },
+                                    primary = true
+                                ) { tint -> AppIcons.Plus(modifier = Modifier.size(18.dp), color = tint) }
+                            }
+                        }
+                        if (isRepresentative && pollsSection == 0) {
                             // I due tasti erano entrambi sempre nello stesso stato: "Nuovo
                             // sondaggio" restava blu anche mentre si guardava lo storico, e non
                             // si capiva quale delle due viste fosse attiva. Ora è un selettore
@@ -2051,14 +2137,60 @@ fun MainAppShell(
                                     modifier = Modifier.weight(1f),
                                     key = showPollHistory
                                 )
-                                circolareplus.design.AilaIconButton(
-                                    contentDescription = "Nuovo sondaggio",
-                                    onClick = { showCreatePollDialog = true },
-                                    primary = true
-                                ) { tint -> AppIcons.Plus(modifier = Modifier.size(18.dp), color = tint) }
                             }
                         }
-                        if (showPollHistory) {
+                        if (pollsSection == 1) {
+                            LoadableContent(
+                                isLoading = isRankingLoading,
+                                error = rankingError,
+                                onRetry = { rankingRefreshTrigger++ }
+                            ) {
+                                RankingPollsScreen(
+                                    polls = rankingPolls,
+                                    totalStudents = rankingTotalStudents,
+                                    isRepresentative = isRepresentative,
+                                    submittingPollId = submittingRankingPollId,
+                                    onSubmitRanking = { pollId, optionIds ->
+                                        if (submittingRankingPollId == null) {
+                                            submittingRankingPollId = pollId
+                                            coroutineScope.launch {
+                                                try {
+                                                    AppContainer.rankingPollsRepository.submitRanking(pollId, optionIds)
+                                                    // Si rilegge dal server: è lui a calcolare la classifica
+                                                    // della classe, che ora diventa visibile.
+                                                    rankingRefreshTrigger++
+                                                } catch (e: Exception) {
+                                                    rankingError = "Invio non riuscito: ${e.message}"
+                                                } finally {
+                                                    submittingRankingPollId = null
+                                                }
+                                            }
+                                        }
+                                    },
+                                    onClosePoll = { pollId ->
+                                        coroutineScope.launch {
+                                            try {
+                                                AppContainer.rankingPollsRepository.closePoll(pollId)
+                                                rankingRefreshTrigger++
+                                            } catch (e: Exception) {
+                                                rankingError = "Impossibile chiudere il sondaggio: ${e.message}"
+                                            }
+                                        }
+                                    },
+                                    onDeletePoll = { pollId ->
+                                        coroutineScope.launch {
+                                            try {
+                                                AppContainer.rankingPollsRepository.deletePoll(pollId)
+                                                rankingPolls = rankingPolls.filterNot { it.id == pollId }
+                                            } catch (e: Exception) {
+                                                rankingError = "Impossibile eliminare: ${e.message}"
+                                            }
+                                        }
+                                    },
+                                    onCreatePoll = { showCreateRankingPollDialog = true }
+                                )
+                            }
+                        } else if (showPollHistory) {
                             PollHistoryScreen(
                                 polls = allPolls,
                                 expandedPollId = expandedResultsPollId,
@@ -2248,9 +2380,7 @@ fun MainAppShell(
                                                     // ricaricando: senza questo refresh `allPolls`/`currentPoll`
                                                     // restavano quelli di prima, isCalculated risultava ancora
                                                     // falso lato client e il sondaggio restava "aperto" finché
-                                                    // qualcuno non premeva "Calcola risultati" (che invece
-                                                    // aggiorna pollsRefreshTrigger) o non si usciva e rientrava
-                                                    // dalla schermata.
+                                                    // non si usciva e rientrava dalla schermata.
                                                     if (result.totalStudents > 0 && result.submittedCount >= result.totalStudents) {
                                                         pollsRefreshTrigger++
                                                     }
@@ -2274,27 +2404,6 @@ fun MainAppShell(
                                                 )
                                             } catch (e: Exception) {
                                                 pollError = "Non sono riuscito ad annullare l'invio: ${e.message}"
-                                            }
-                                        }
-                                    },
-                                    isRepresentative = isRepresentative,
-                                    isCalculating = isCalculatingPoll,
-                                    onRunAssignments = {
-                                        if (!isCalculatingPoll) {
-                                            isCalculatingPoll = true
-                                            coroutineScope.launch {
-                                                try {
-                                                    // `force=true`: il Rappresentante può far partire l'algoritmo a mano
-                                                    // anche se manca qualcuno, dato che l'avvio automatico all'ultimo
-                                                    // invio non è affidabile. Dopo il calcolo il sondaggio è chiuso, quindi
-                                                    // si ricarica la lista: sparisce da qui e compare nello Storico.
-                                                    AppContainer.pollsRepository.runAssignments(poll.id, force = true)
-                                                    pollsRefreshTrigger++
-                                                } catch (e: Exception) {
-                                                    pollError = "Impossibile calcolare i risultati: ${e.message}"
-                                                } finally {
-                                                    isCalculatingPoll = false
-                                                }
                                             }
                                         }
                                     }
@@ -4269,6 +4378,115 @@ private fun PollSlotDraftRow(
             contentAlignment = Alignment.Center
         ) {
             AppIcons.Trash(modifier = Modifier.size(15.dp), color = AppTheme.TintRedInk)
+        }
+    }
+}
+
+/**
+ * Creazione di un sondaggio a ordinamento (solo Rappresentante): una domanda e da 2 a 10
+ * opzioni che la classe metterà in ordine. Si pubblica subito, come i sondaggi interrogazioni.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CreateRankingPollDialog(
+    isSubmitting: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (String, List<String>) -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var question by remember { mutableStateOf("") }
+    val options = remember { mutableStateListOf("", "") }
+    val filled = options.map { it.trim() }.filter { it.isNotEmpty() }
+    val hasDuplicates = filled.map { it.lowercase() }.distinct().size != filled.size
+    val canSubmit = !isSubmitting && question.isNotBlank() && filled.size >= 2 && !hasDuplicates
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = AppTheme.SurfaceWhite
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .iosImePadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = AppTheme.Space20)
+                .padding(bottom = AppTheme.Space32)
+        ) {
+            CreationSheetHeader(title = "Nuovo sondaggio a ordinamento", onClose = onDismiss)
+
+            OutlinedTextField(
+                value = question,
+                onValueChange = { question = it.take(200) },
+                label = { Text("Domanda") },
+                placeholder = { Text("Es. Dove andiamo in gita?") },
+                colors = circolareplus.design.ailaFieldColors(),
+                shape = RoundedCornerShape(AppTheme.SmallElementRadius),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(AppTheme.Space16))
+
+            Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                options.forEachIndexed { index, option ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = option,
+                            onValueChange = { options[index] = it.take(80) },
+                            label = { Text("Opzione ${index + 1}") },
+                            singleLine = true,
+                            colors = circolareplus.design.ailaFieldColors(),
+                            shape = RoundedCornerShape(AppTheme.SmallElementRadius),
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (options.size > 2) {
+                            Box(
+                                modifier = Modifier
+                                    .padding(start = 4.dp)
+                                    .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                                    .clickable { options.removeAt(index) }
+                                    .padding(10.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                AppIcons.Trash(modifier = Modifier.size(16.dp), color = AppTheme.TintRedInk)
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(AppTheme.Space12))
+
+            if (options.size < 10) {
+                circolareplus.design.AilaSecondaryButton(
+                    text = "Aggiungi opzione",
+                    onClick = { options.add("") },
+                    icon = { color -> AppIcons.Plus(modifier = Modifier.size(15.dp), color = color) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            Text(
+                text = if (hasDuplicates) "Ci sono opzioni ripetute."
+                else "Ognuno le metterà in ordine; la classifica della classe è a punti.",
+                fontSize = 11.sp,
+                color = if (hasDuplicates) AppTheme.TintRedInk else AppTheme.TextMuted,
+                modifier = Modifier.padding(top = AppTheme.Space8)
+            )
+
+            Spacer(modifier = Modifier.height(AppTheme.Space24))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
+                circolareplus.design.AilaSecondaryButton(
+                    text = "Annulla",
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                )
+                circolareplus.design.AilaPrimaryButton(
+                    text = if (isSubmitting) "Creazione..." else "Crea e pubblica",
+                    onClick = { onConfirm(question.trim(), filled) },
+                    enabled = canSubmit,
+                    fillMaxWidth = true,
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
     }
 }

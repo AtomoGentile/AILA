@@ -31,6 +31,28 @@ Fatto:
 - **UI**: "Circolari" in "Dove posso cercare" apre le circolari (aveva la sola riga senza >);
   cronologia e nuova chat dell'assistente sono icone.
 
+## 24/9: sondaggi a ordinamento, via "Calcola risultati" (branch `claude/surveys-button-removal-ranking-q1nunl`)
+
+**Non compilato**: Maven Central risponde 429 in questa sessione, quindi Gradle non parte. Il
+backend passa `tsc` e le query sono state provate su SQLite. Prima cosa da fare:
+`./gradlew :androidApp:assembleDebug`.
+
+**Deploy**: `wrangler d1 execute circolare_d1 --remote --file=./migrations/008_ranking_polls.sql`,
+poi `wrangler deploy`, poi la nuova app (le app vecchie non vedono la sezione, nessun problema).
+
+Fatto:
+- Tolto il tasto **"Calcola risultati"** dal sondaggio interrogazioni: il calcolo parte da solo
+  quando hanno inviato tutti. `runAssignments(force = true)` resta nel repository ma nessuno lo usa.
+- **Sondaggi a ordinamento** (`/api/ranking-polls`, `RankingPollsScreen`): il Rappresentante
+  propone 2-10 opzioni, ognuno le ordina con le frecce su/giù, classifica a punti Borda sempre
+  aggiornata. Risultati visibili dopo aver inviato la propria classifica o a sondaggio chiuso.
+  Il Rappresentante può chiudere ed eliminare. Nella schermata Sondaggi c'è il selettore
+  "Interrogazioni / Ordinamento".
+
+- La notifica di un nuovo sondaggio a ordinamento (categoria `ranking_polls`, sul modello di
+  `seatmap_preferences`) apre Sondaggi direttamente su "Ordinamento"; segue l'interruttore
+  Sondaggi e nella campanella ha la stessa icona.
+
 ## 22/9: riassunti dal server, coda unica, stop, assistente, mappa posti (branch `claude/app-optimization-circulars-px87fk`)
 
 **Non compilato**: in questa sessione Gradle non scarica le dipendenze (proxy) e la CI di GitHub
