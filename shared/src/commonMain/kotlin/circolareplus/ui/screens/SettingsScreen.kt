@@ -68,6 +68,8 @@ fun SettingsScreen(
     onAiProviderChange: (String) -> Unit = {},
     /** Frase da mostrare se l'AI locale non è utilizzabile qui (iPhone, emulatore non ARM). */
     localAiUnavailableReason: String? = null,
+    /** false = sezione "AI locale" nascosta del tutto (vedi isOnDeviceAiOfferedHere). */
+    showLocalAiSection: Boolean = true,
     /** RAM totale del telefono in MB, 0 se non rilevabile. */
     deviceRamMb: Int = 0,
     /** Modelli selezionabili, con il consigliato per questo telefono in prima posizione. */
@@ -97,6 +99,10 @@ fun SettingsScreen(
     orphanModelBytes: Long = 0L,
     onDeleteOrphanModels: () -> Long = { 0L },
     appVersion: String = "1.0",
+    /** Voce "Diagnostica background": visibile in debug o dopo 7 tocchi su "Versione". */
+    showDebugMenu: Boolean = false,
+    onUnlockDebugMenu: () -> Unit = {},
+    onOpenBackgroundDebug: () -> Unit = {},
     onBackClick: () -> Unit
 ) {
     var apiKeyInput by remember { mutableStateOf(apiKey) }
@@ -122,6 +128,7 @@ fun SettingsScreen(
     // I filtri delle notifiche stanno in LocalSettingsManager, che non è stato di Compose:
     // senza questo contatore gli interruttori non si muoverebbero al tocco, pur salvando.
     var notificationRevision by remember { mutableStateOf(0) }
+    var versionTaps by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
 
     Column(modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
@@ -300,8 +307,9 @@ fun SettingsScreen(
             }
 
             // --- AI locale sul telefono -------------------------------------------------
-            item { AilaSectionTitle(text = "AI locale (sul telefono)", modifier = Modifier.ailaAppear(6)) }
-            item {
+            // Nascosta dove non potrà mai funzionare (iPhone con iOS < 26 o non idoneo).
+            if (showLocalAiSection) item { AilaSectionTitle(text = "AI locale (sul telefono)", modifier = Modifier.ailaAppear(6)) }
+            if (showLocalAiSection) item {
                 AilaCard(modifier = Modifier.ailaAppear(7)) {
                     Column(modifier = Modifier.padding(AppTheme.Space16)) {
                         if (localAiUnavailableReason != null) {
@@ -575,8 +583,22 @@ fun SettingsScreen(
                         subtitle = "Versione $appVersion",
                         tint = AppTheme.TintSlate,
                         showChevron = false,
+                        // Opzione nascosta: 7 tocchi sbloccano la diagnostica.
+                        onClick = {
+                            versionTaps++
+                            if (versionTaps >= 7 && !showDebugMenu) onUnlockDebugMenu()
+                        },
                         icon = { AppIcons.Sparkle(modifier = Modifier.size(19.dp), color = AppTheme.TintSlateInk) }
                     )
+                    if (showDebugMenu) {
+                        AilaListRow(
+                            title = "Diagnostica background",
+                            subtitle = "Log dei risvegli e simulazione",
+                            tint = AppTheme.TintSlate,
+                            onClick = onOpenBackgroundDebug,
+                            icon = { AppIcons.Refresh(modifier = Modifier.size(19.dp), color = AppTheme.TintSlateInk) }
+                        )
+                    }
                 }
             }
         }

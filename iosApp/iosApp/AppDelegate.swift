@@ -192,6 +192,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
+        // Notifica locale del refresh in background: solo banner, la campanella la aggiorna
+        // noteNovelties alla riapertura della lista (altrimenti comparirebbe due volte).
+        if notification.request.identifier.hasPrefix(AilaBackground.localNotificationPrefix) {
+            DataRefreshEvents.shared.request()
+            completionHandler([.banner, .sound])
+            return
+        }
+
         let content = notification.request.content
         let category = categoryFromUserInfo(content.userInfo)
         let showBanner = AppContainer.shared.settings.onPushReceived(
@@ -228,12 +236,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     ) {
         let content = response.notification.request.content
         let category = categoryFromUserInfo(content.userInfo)
-        _ = AppContainer.shared.settings.onPushReceived(
-            messageId: messageId(for: response.notification),
-            title: content.title,
-            body: content.body,
-            category: category
-        )
+        // Le notifiche locali del refresh in background non vanno in campanella (vedi willPresent).
+        if !response.notification.request.identifier.hasPrefix(AilaBackground.localNotificationPrefix) {
+            _ = AppContainer.shared.settings.onPushReceived(
+                messageId: messageId(for: response.notification),
+                title: content.title,
+                body: content.body,
+                category: category
+            )
+        }
 
         if !category.isEmpty {
             PendingDeepLink.shared.category = category

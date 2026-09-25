@@ -735,6 +735,9 @@ fun MainAppShell(
     var isInClassRosterScreen by rememberSaveable { mutableStateOf(false) }
     var isInNotificationsScreen by rememberSaveable { mutableStateOf(false) }
     var isInSettingsScreen by rememberSaveable { mutableStateOf(false) }
+    // Diagnostica background (iOS), aperta dalle Impostazioni.
+    var isInBackgroundDebugScreen by rememberSaveable { mutableStateOf(false) }
+    var debugMenuUnlocked by remember { mutableStateOf(AppContainer.settings.isDebugMenuEnabled) }
     // Ricomposizione dopo il salvataggio della chiave: la schermata legge il valore da
     // LocalSettingsManager, che non è stato di Compose e da solo non farebbe ridisegnare nulla.
     var apiKeyRevision by remember { mutableStateOf(0) }
@@ -1037,6 +1040,7 @@ fun MainAppShell(
         isInNotificationsScreen = false
         isInSearchScreen = false
         isInSettingsScreen = false
+        isInBackgroundDebugScreen = false
         isInClassRosterScreen = false
         when (category) {
             NotificationKind.CIRCULARS.key -> {
@@ -1910,6 +1914,18 @@ fun MainAppShell(
                 // spingerebbe la barra inferiore fuori dallo schermo.
                 Box(modifier = Modifier.weight(1f)) {
             when {
+                isInSettingsScreen && isInBackgroundDebugScreen -> {
+                    circolareplus.platform.PlatformBackHandler { isInBackgroundDebugScreen = false }
+                    BackgroundDebugScreen(
+                        isSupported = circolareplus.platform.isBackgroundRefreshSupported(),
+                        readLog = { AppContainer.settings.backgroundLog },
+                        onClearLog = { AppContainer.settings.clearBackgroundLog() },
+                        onSimulate = { circolareplus.platform.simulateBackgroundWakeUp() },
+                        readBookmark = { AppContainer.settings.bgLastCircularNumber },
+                        onRewindBookmark = { circolareplus.platform.rewindBackgroundBookmark() },
+                        onBackClick = { isInBackgroundDebugScreen = false }
+                    )
+                }
                 isInSettingsScreen -> {
                     circolareplus.platform.PlatformBackHandler { isInSettingsScreen = false }
                     SettingsScreen(
@@ -1956,6 +1972,7 @@ fun MainAppShell(
                             AppContainer.settings.aiProvider = provider
                         },
                         localAiUnavailableReason = circolareplus.ai.onDeviceAiUnavailableReason(),
+                        showLocalAiSection = circolareplus.ai.isOnDeviceAiOfferedHere(),
                         deviceRamMb = circolareplus.ai.totalDeviceRamMb(),
                         localModels = circolareplus.ai.LocalAiCatalog.selectableFor(
                             circolareplus.ai.totalDeviceRamMb()
@@ -1997,6 +2014,12 @@ fun MainAppShell(
                                 llm = AppContainer.localLlm
                             ).testConfiguration()
                         },
+                        showDebugMenu = debugMenuUnlocked || circolareplus.platform.isDebugBuild(),
+                        onUnlockDebugMenu = {
+                            AppContainer.settings.isDebugMenuEnabled = true
+                            debugMenuUnlocked = true
+                        },
+                        onOpenBackgroundDebug = { isInBackgroundDebugScreen = true },
                         onBackClick = { isInSettingsScreen = false }
                     )
                 }
@@ -3023,7 +3046,10 @@ fun MainAppShell(
                                     apiKeyRevision // dipendenza esplicita: rilegge dopo un salvataggio
                                     AppContainer.settings.userAiApiKey
                                 },
-                                onOpenSettings = { isInSettingsScreen = true },
+                                onOpenSettings = {
+                                    isInBackgroundDebugScreen = false
+                                    isInSettingsScreen = true
+                                },
                                 onManageClassRoster = { isInClassRosterScreen = true },
                                 onLogoutClick = {
                                     coroutineScope.launch {
