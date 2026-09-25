@@ -38,8 +38,10 @@ import circolareplus.data.repository.CircularsRepository
 import circolareplus.data.repository.SessionRestore
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
-import circolareplus.design.iosImePadding
-import circolareplus.design.iosSafeDrawingPadding
+import circolareplus.design.appImePadding
+import circolareplus.design.appSafeDrawingPadding
+import circolareplus.design.appContentWidth
+import circolareplus.design.MaxFormWidth
 // Estensione (non richiamabile per nome qualificato come le altre composable di
 // circolareplus.design usate in questo file): va importata per poterla usare come Modifier.ailaPressable(...).
 import circolareplus.design.ailaPressable
@@ -729,9 +731,31 @@ fun MainAppShell(
         val token = AppContainer.pushTokenProvider.getToken()
         if (token != null) {
             try {
-                AppContainer.fcmRepository.registerToken(token, currentPushPlatform())
+                AppContainer.fcmRepository.registerToken(
+                    token,
+                    currentPushPlatform(),
+                    mutedKinds = AppContainer.settings.mutedNotificationKinds,
+                    systemNotifications = AppContainer.settings.isSystemNotificationsEnabled
+                )
             } catch (e: Exception) {
                 // Non bloccante: l'app resta utilizzabile anche se la registrazione fallisce.
+            }
+        }
+    }
+
+    // Dopo un cambio negli interruttori delle notifiche: il server li applica ai messaggi iOS
+    // (con l'app in background il banner lo mostra il sistema, non onPushReceived).
+    fun syncPushPreferences() {
+        coroutineScope.launch {
+            try {
+                AppContainer.fcmRepository.syncPreferences(
+                    mutedKinds = AppContainer.settings.mutedNotificationKinds,
+                    systemNotifications = AppContainer.settings.isSystemNotificationsEnabled
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Si riprova da sola al prossimo avvio, che registra token e preferenze insieme.
             }
         }
     }
@@ -1880,7 +1904,9 @@ fun MainAppShell(
                     // al tocco, poi un vuoto, e solo dopo la pillola iniziava a scivolare. Con una
                     // colonna scritta a mano e `indication = null` il tocco muove la pillola subito,
                     // senza il doppio effetto.
-                    BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(80.dp)) {
+                    // Stessa larghezza massima del contenuto: su tablet e iPad le cinque voci non
+                    // restano sparse ai bordi di uno schermo largo.
+                    BoxWithConstraints(modifier = Modifier.appContentWidth().height(80.dp)) {
                         val tabs = MainTab.entries
                         val segmentWidth = maxWidth / tabs.size
                         val selectedTabIndex = tabs.indexOf(selectedTab).coerceAtLeast(0)
@@ -1926,15 +1952,18 @@ fun MainAppShell(
                                         MainTab.MORE -> AppIcons.Profile(modifier = Modifier.size(24.dp), color = iconColor)
                                     }
                                     Spacer(modifier = Modifier.height(4.dp))
-                                    // maxLines/softWrap espliciti: "Mappa posti" andava a capo su due
-                                    // righe e sballava l'altezza della barra rispetto alle altre voci.
+                                    // Una riga sola: "Mappa posti" andava a capo su due righe e
+                                    // sballava l'altezza della barra rispetto alle altre voci.
+                                    // Ellissi: su un telefono stretto (64dp per voce a 320dp) col
+                                    // testo di sistema ingrandito l'etichetta veniva tagliata a meta'.
                                     Text(
                                         text = tab.title,
                                         fontSize = 10.sp,
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                         color = iconColor,
                                         maxLines = 1,
-                                        softWrap = false
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(horizontal = 2.dp)
                                     )
                                 }
                             }
@@ -1948,13 +1977,14 @@ fun MainAppShell(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                // Tastiera (solo iOS, vedi PlatformInsets.kt): l'altezza di innerPadding include
+                // Tastiera (vedi PlatformInsets.kt): l'altezza di innerPadding include
                 // gia' la barra in basso, quindi la si scala prima di applicare il margine.
                 .consumeWindowInsets(innerPadding)
-                .iosImePadding(),
+                .appImePadding(),
             color = AppTheme.BackgroundLight
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
+            // Su tablet e iPad il contenuto resta una colonna centrata (vedi appContentWidth).
+            Column(modifier = Modifier.fillMaxHeight().appContentWidth()) {
                 // Striscia "sei offline": compare solo se l'avvio è avvenuto senza rete, e si
                 // può chiudere. Prima, in quel caso, non compariva niente perché l'app aveva
                 // già fatto uscire dall'account.
@@ -2012,6 +2042,7 @@ fun MainAppShell(
                         },
                         onNotificationKindChange = { kind, enabled ->
                             AppContainer.settings.setNotificationKindEnabled(kind.key, enabled)
+                            syncPushPreferences()
                         },
                         boardNotificationsEnabled = currentProfile?.notificationBoardEnabled ?: true,
                         onToggleBoardNotifications = { enabled ->
@@ -2026,6 +2057,7 @@ fun MainAppShell(
                         systemNotificationsEnabled = AppContainer.settings.isSystemNotificationsEnabled,
                         onToggleSystemNotifications = { enabled ->
                             AppContainer.settings.isSystemNotificationsEnabled = enabled
+                            syncPushPreferences()
                         },
                         aiProvider = AppContainer.settings.aiProvider,
                         onAiProviderChange = { provider ->
@@ -3584,7 +3616,7 @@ private fun AddCalendarEventDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .iosImePadding()
+                .appImePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = AppTheme.Space20)
                 .padding(bottom = AppTheme.Space32)
@@ -3983,7 +4015,7 @@ private fun EventDetailDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .iosImePadding()
+                .appImePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = AppTheme.Space20)
                 .padding(bottom = AppTheme.Space32)
@@ -4243,7 +4275,7 @@ private fun CreatePollDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .iosImePadding()
+                .appImePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = AppTheme.Space20)
                 .padding(bottom = AppTheme.Space32)
@@ -4510,7 +4542,7 @@ private fun AddProposalDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .iosImePadding()
+                .appImePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = AppTheme.Space20)
                 .padding(bottom = AppTheme.Space32)
@@ -4653,7 +4685,11 @@ private fun OfflineGateScreen(
     onLogout: () -> Unit
 ) {
     Box(
-        modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight).iosSafeDrawingPadding(),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppTheme.BackgroundLight)
+            .appSafeDrawingPadding()
+            .appContentWidth(MaxFormWidth),
         contentAlignment = Alignment.Center
     ) {
         Column(

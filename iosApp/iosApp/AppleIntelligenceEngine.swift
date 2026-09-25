@@ -12,6 +12,11 @@ import shared
  */
 class AppleIntelligenceEngine: AppleIntelligenceBridge {
 
+    /// Generazione in corso, per [cancelGeneration] (il tasto Stop). Protetta da `lock`: la
+    /// imposta la chiamata di Kotlin e la legge lo stop, da thread diversi.
+    private var currentTask: Task<String, Error>?
+    private let lock = NSLock()
+
     func isAvailable() -> Bool {
         if #available(iOS 26, *) {
             return FoundationModelsEngine.isAvailable()
@@ -33,6 +38,34 @@ class AppleIntelligenceEngine: AppleIntelligenceBridge {
         return "Apple Intelligence richiede iOS 26 o successivo."
     }
 
+    /**
+     * Ferma la generazione in corso. La cancellazione arriva allo stream di FoundationModels,
+     * che si interrompe subito invece di continuare fino alla fine o al timeout.
+     */
+    func cancelGeneration() {
+        lock.lock()
+        let task = currentTask
+        lock.unlock()
+        task?.cancel()
+    }
+
+    /**
+     * Genera una risposta in streaming fermandosi appena stopWhen ritorna true.
+     *
+     * Crea una sessione di linguaggio con systemPrompt come istruzioni, poi chiama
+     * session.streamResponse(to: userPrompt, options: options) e itera lo stream. Ad ogni chunk accumulato,
+     * chiama la closure Kotlin stopWhen(testoAccumulato): se ritorna true, interrompe.
+     *
+     * Racchiude tutto in un timeout: se scade prima che stopWhen diventi true o la
+     * generazione finisca, lancia un'eccezione descrittiva.
+     *
+     * @param systemPrompt Istruzioni di sistema per il modello
+     * @param userPrompt Prompt dell'utente
+     * @param timeoutMillis Timeout massimo in millisecondi
+     * @param stopWhen Lambda Kotlin che decide quando interrompere
+     * @return Testo generato accumulato
+     * @throws NSError Se la generazione fallisce o scade il timeout
+     */
     func generate(
         systemPrompt: String,
         userPrompt: String,
@@ -41,8 +74,17 @@ class AppleIntelligenceEngine: AppleIntelligenceBridge {
         temperature: Double,
         stopWhen: @escaping (String) -> KotlinBoolean
     ) async throws -> String {
-        if #available(iOS 26, *) {
-            return try await FoundationModelsEngine.generate(
+        guard #available(iOS 26, *) else {
+            throw NSError(
+                domain: "AppleIntelligenceEngine",
+                code: -4,
+                userInfo: [NSLocalizedDescriptionKey: "Apple Intelligence richiede iOS 26 o successivo."]
+            )
+        }
+        // La generazione vera gira in un Task a parte, cosi' cancelGeneration() la puo' fermare
+        // anche se chi aspetta (la chiamata da Kotlin) non propaga la cancellazione.
+        let task = Task<String, Error> {
+            try await FoundationModelsEngine.generate(
                 systemPrompt: systemPrompt,
                 userPrompt: userPrompt,
                 timeoutMillis: timeoutMillis,
@@ -51,11 +93,19 @@ class AppleIntelligenceEngine: AppleIntelligenceBridge {
                 stopWhen: stopWhen
             )
         }
-        throw NSError(
-            domain: "AppleIntelligenceEngine",
-            code: -4,
-            userInfo: [NSLocalizedDescriptionKey: "Apple Intelligence richiede iOS 26 o successivo."]
-        )
+        lock.lock()
+        currentTask = task
+        lock.unlock()
+        defer {
+            lock.lock()
+            if currentTask == task { currentTask = nil }
+            lock.unlock()
+        }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 }
 
@@ -108,23 +158,6 @@ private enum FoundationModelsEngine {
         return "Apple Intelligence non disponibile."
     }
 
-    /**
-     * Genera una risposta in streaming fermandosi appena stopWhen ritorna true.
-     *
-     * Crea una sessione di linguaggio con systemPrompt come istruzioni, poi chiama
-     * session.streamResponse(to: userPrompt, options: options) e itera lo stream. Ad ogni chunk accumulato,
-     * chiama la closure Kotlin stopWhen(testoAccumulato): se ritorna true, interrompe.
-     *
-     * Racchiude tutto in un timeout: se scade prima che stopWhen diventi true o la
-     * generazione finisca, lancia un'eccezione descrittiva.
-     *
-     * @param systemPrompt Istruzioni di sistema per il modello
-     * @param userPrompt Prompt dell'utente
-     * @param timeoutMillis Timeout massimo in millisecondi
-     * @param stopWhen Lambda Kotlin che decide quando interrompere
-     * @return Testo generato accumulato
-     * @throws NSError Se la generazione fallisce o scade il timeout
-     */
     static func generate(
         systemPrompt: String,
         userPrompt: String,
