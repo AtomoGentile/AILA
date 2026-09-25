@@ -38,6 +38,8 @@ import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
 import circolareplus.design.appImePadding
 import circolareplus.design.appSafeDrawingPadding
+import circolareplus.design.appContentWidth
+import circolareplus.design.MaxFormWidth
 // Estensione (non richiamabile per nome qualificato come le altre composable di
 // circolareplus.design usate in questo file): va importata per poterla usare come Modifier.ailaPressable(...).
 import circolareplus.design.ailaPressable
@@ -1836,7 +1838,9 @@ fun MainAppShell(
                     // al tocco, poi un vuoto, e solo dopo la pillola iniziava a scivolare. Con una
                     // colonna scritta a mano e `indication = null` il tocco muove la pillola subito,
                     // senza il doppio effetto.
-                    BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(80.dp)) {
+                    // Stessa larghezza massima del contenuto: su tablet e iPad le cinque voci non
+                    // restano sparse ai bordi di uno schermo largo.
+                    BoxWithConstraints(modifier = Modifier.appContentWidth().height(80.dp)) {
                         val tabs = MainTab.entries
                         val segmentWidth = maxWidth / tabs.size
                         val selectedTabIndex = tabs.indexOf(selectedTab).coerceAtLeast(0)
@@ -1913,7 +1917,8 @@ fun MainAppShell(
                 .appImePadding(),
             color = AppTheme.BackgroundLight
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
+            // Su tablet e iPad il contenuto resta una colonna centrata (vedi appContentWidth).
+            Column(modifier = Modifier.fillMaxHeight().appContentWidth()) {
                 // Striscia "sei offline": compare solo se l'avvio è avvenuto senza rete, e si
                 // può chiudere. Prima, in quel caso, non compariva niente perché l'app aveva
                 // già fatto uscire dall'account.
@@ -4422,7 +4427,11 @@ private fun OfflineGateScreen(
     onLogout: () -> Unit
 ) {
     Box(
-        modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight).appSafeDrawingPadding(),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppTheme.BackgroundLight)
+            .appSafeDrawingPadding()
+            .appContentWidth(MaxFormWidth),
         contentAlignment = Alignment.Center
     ) {
         Column(

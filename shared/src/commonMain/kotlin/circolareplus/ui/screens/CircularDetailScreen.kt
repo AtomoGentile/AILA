@@ -29,6 +29,7 @@ import circolareplus.design.ailaAppear
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
 import circolareplus.design.appSafeDrawingPadding
+import circolareplus.design.appContentWidth
 import circolareplus.domain.model.Circular
 import circolareplus.domain.model.CircularAiClassification
 import circolareplus.domain.model.CircularAttachment
@@ -172,6 +173,7 @@ fun CircularDetailScreen(
             .fillMaxSize()
             .background(AppTheme.BackgroundLight)
             .appSafeDrawingPadding()
+            .appContentWidth()
     ) {
         AilaBackBar(
             title = "Circolare n. ${circular.number}",
