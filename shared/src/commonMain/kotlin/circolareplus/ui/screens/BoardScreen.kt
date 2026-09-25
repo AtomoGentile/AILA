@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import circolareplus.design.AilaIconButton
 import circolareplus.design.AilaEmptyState
 import circolareplus.design.AilaIconAction
 import circolareplus.design.AilaCard
@@ -77,7 +78,9 @@ fun BoardScreen(
                 modifier = Modifier.weight(1f)
             )
 
-            AilaPrimaryButton(text = "+ Proponi", onClick = onCreateProposalClick)
+            AilaIconButton(contentDescription = "Nuova proposta", onClick = onCreateProposalClick, primary = true) { tint ->
+                AppIcons.Plus(modifier = Modifier.size(18.dp), color = tint)
+            }
         }
 
         Spacer(modifier = Modifier.height(AppTheme.Space12))

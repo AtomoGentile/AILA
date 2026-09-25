@@ -19,12 +19,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import circolareplus.design.AilaIconButton
 import circolareplus.design.AilaAssistantBadge
 import circolareplus.design.AilaCard
 import circolareplus.design.AilaDot
 import circolareplus.design.AilaEmptyState
 import circolareplus.design.AilaIconTile
-import circolareplus.design.AilaPrimaryButton
 import circolareplus.design.AilaScreenHeader
 import circolareplus.design.AilaSectionTitle
 import circolareplus.design.AnimatedFilterChip
@@ -100,7 +100,9 @@ fun CalendarScreen(
             // Niente più tasto AI separato in header: "AILA Assistant" è già la prima scelta
             // dentro il foglio che si apre da "Aggiungi", un tasto in più qui era ridondante.
             action = {
-                AilaPrimaryButton(text = "Aggiungi", onClick = onAddEventClick)
+                AilaIconButton(contentDescription = "Aggiungi evento", onClick = onAddEventClick, primary = true) { tint ->
+                    AppIcons.Plus(modifier = Modifier.size(18.dp), color = tint)
+                }
             }
         )
 

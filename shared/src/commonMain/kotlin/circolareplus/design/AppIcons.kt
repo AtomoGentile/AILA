@@ -790,6 +790,150 @@ object AppIcons {
         }
     }
 
+    /** "X" di chiusura: sostituisce il carattere "✕", che il sistema disegnava col suo font. */
+    @Composable
+    fun Close(modifier: Modifier = Modifier.size(24.dp), color: Color = Color(0xFF1E293B)) {
+        Canvas(modifier = modifier) {
+            val w = size.width; val h = size.height; val stroke = w * 0.1f
+            drawLine(color, Offset(w * 0.26f, h * 0.26f), Offset(w * 0.74f, h * 0.74f), strokeWidth = stroke, cap = StrokeCap.Round)
+            drawLine(color, Offset(w * 0.74f, h * 0.26f), Offset(w * 0.26f, h * 0.74f), strokeWidth = stroke, cap = StrokeCap.Round)
+        }
+    }
+
+    /** Occhio barrato: "nascondi", compagno di [Eye]. */
+    @Composable
+    fun EyeOff(modifier: Modifier = Modifier.size(24.dp), color: Color = Color(0xFF1E293B)) {
+        Canvas(modifier = modifier) {
+            val w = size.width; val h = size.height; val stroke = w * 0.08f
+            val outline = Path().apply {
+                moveTo(w * 0.08f, h * 0.5f)
+                quadraticBezierTo(w * 0.5f, h * 0.06f, w * 0.92f, h * 0.5f)
+                quadraticBezierTo(w * 0.5f, h * 0.94f, w * 0.08f, h * 0.5f)
+                close()
+            }
+            drawPath(outline, color, style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawPath(circlePath(w * 0.5f, h * 0.5f, w * 0.13f), color)
+            drawLine(color, Offset(w * 0.14f, h * 0.14f), Offset(w * 0.86f, h * 0.86f), strokeWidth = stroke, cap = StrokeCap.Round)
+        }
+    }
+
+    /** "Apri fuori dall'app": riquadro con la freccia che esce in alto a destra. */
+    @Composable
+    fun ExternalLink(modifier: Modifier = Modifier.size(24.dp), color: Color = Color(0xFF1E293B)) {
+        Canvas(modifier = modifier) {
+            val w = size.width; val h = size.height; val stroke = w * 0.085f
+            val style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            val box = Path().apply {
+                moveTo(w * 0.46f, h * 0.2f)
+                lineTo(w * 0.24f, h * 0.2f)
+                quadraticBezierTo(w * 0.16f, h * 0.2f, w * 0.16f, h * 0.28f)
+                lineTo(w * 0.16f, h * 0.76f)
+                quadraticBezierTo(w * 0.16f, h * 0.84f, w * 0.24f, h * 0.84f)
+                lineTo(w * 0.72f, h * 0.84f)
+                quadraticBezierTo(w * 0.8f, h * 0.84f, w * 0.8f, h * 0.76f)
+                lineTo(w * 0.8f, h * 0.54f)
+            }
+            drawPath(box, color, style = style)
+            drawLine(color, Offset(w * 0.46f, h * 0.54f), Offset(w * 0.84f, h * 0.16f), strokeWidth = stroke, cap = StrokeCap.Round)
+            val head = Path().apply {
+                moveTo(w * 0.6f, h * 0.16f)
+                lineTo(w * 0.84f, h * 0.16f)
+                lineTo(w * 0.84f, h * 0.4f)
+            }
+            drawPath(head, color, style = style)
+        }
+    }
+
+    /** Scarica / esporta: freccia verso il basso sopra un vassoio. */
+    @Composable
+    fun Download(modifier: Modifier = Modifier.size(24.dp), color: Color = Color(0xFF1E293B)) {
+        Canvas(modifier = modifier) {
+            val w = size.width; val h = size.height; val stroke = w * 0.085f
+            val style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            drawLine(color, Offset(w * 0.5f, h * 0.14f), Offset(w * 0.5f, h * 0.6f), strokeWidth = stroke, cap = StrokeCap.Round)
+            val head = Path().apply {
+                moveTo(w * 0.3f, h * 0.42f)
+                lineTo(w * 0.5f, h * 0.62f)
+                lineTo(w * 0.7f, h * 0.42f)
+            }
+            drawPath(head, color, style = style)
+            val tray = Path().apply {
+                moveTo(w * 0.16f, h * 0.64f)
+                lineTo(w * 0.16f, h * 0.78f)
+                quadraticBezierTo(w * 0.16f, h * 0.86f, w * 0.24f, h * 0.86f)
+                lineTo(w * 0.76f, h * 0.86f)
+                quadraticBezierTo(w * 0.84f, h * 0.86f, w * 0.84f, h * 0.78f)
+                lineTo(w * 0.84f, h * 0.64f)
+            }
+            drawPath(tray, color, style = style)
+        }
+    }
+
+    /** Mirino "trova la mia posizione": usato per "il mio posto" nella mappa. */
+    @Composable
+    fun Locate(modifier: Modifier = Modifier.size(24.dp), color: Color = Color(0xFF1E293B)) {
+        Canvas(modifier = modifier) {
+            val w = size.width; val h = size.height; val stroke = w * 0.085f
+            drawPath(circlePath(w * 0.5f, h * 0.5f, w * 0.28f), color, style = Stroke(width = stroke))
+            drawPath(circlePath(w * 0.5f, h * 0.5f, w * 0.1f), color)
+            drawLine(color, Offset(w * 0.5f, h * 0.06f), Offset(w * 0.5f, h * 0.2f), strokeWidth = stroke, cap = StrokeCap.Round)
+            drawLine(color, Offset(w * 0.5f, h * 0.8f), Offset(w * 0.5f, h * 0.94f), strokeWidth = stroke, cap = StrokeCap.Round)
+            drawLine(color, Offset(w * 0.06f, h * 0.5f), Offset(w * 0.2f, h * 0.5f), strokeWidth = stroke, cap = StrokeCap.Round)
+            drawLine(color, Offset(w * 0.8f, h * 0.5f), Offset(w * 0.94f, h * 0.5f), strokeWidth = stroke, cap = StrokeCap.Round)
+        }
+    }
+
+    /** Due persone: la scheda della classe (compagni, coppie, ruoli). */
+    @Composable
+    fun People(modifier: Modifier = Modifier.size(24.dp), color: Color = Color(0xFF1E293B)) {
+        Canvas(modifier = modifier) {
+            val w = size.width; val h = size.height; val stroke = w * 0.08f
+            val style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            drawPath(circlePath(w * 0.38f, h * 0.34f, w * 0.14f), color, style = style)
+            val front = Path().apply {
+                moveTo(w * 0.1f, h * 0.84f)
+                quadraticBezierTo(w * 0.12f, h * 0.58f, w * 0.38f, h * 0.58f)
+                quadraticBezierTo(w * 0.64f, h * 0.58f, w * 0.66f, h * 0.84f)
+            }
+            drawPath(front, color, style = style)
+            val backHead = Path().apply {
+                moveTo(w * 0.62f, h * 0.22f)
+                quadraticBezierTo(w * 0.8f, h * 0.2f, w * 0.8f, h * 0.36f)
+                quadraticBezierTo(w * 0.8f, h * 0.5f, w * 0.66f, h * 0.5f)
+            }
+            drawPath(backHead, color, style = style)
+            val back = Path().apply {
+                moveTo(w * 0.74f, h * 0.6f)
+                quadraticBezierTo(w * 0.9f, h * 0.64f, w * 0.92f, h * 0.84f)
+            }
+            drawPath(back, color, style = style)
+        }
+    }
+
+    /** Freccia circolare "riprova". Arco a curve quadratiche, come gli altri cerchi. */
+    @Composable
+    fun Refresh(modifier: Modifier = Modifier.size(24.dp), color: Color = Color(0xFF1E293B)) {
+        Canvas(modifier = modifier) {
+            val w = size.width; val h = size.height; val stroke = w * 0.09f
+            val style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            val cx = w * 0.5f; val cy = h * 0.52f; val r = w * 0.32f
+            val arc = Path().apply {
+                moveTo(cx + r * 0.8f, cy - r * 0.6f)
+                quadraticBezierTo(cx + r * 0.55f, cy - r, cx, cy - r)
+                quadraticBezierTo(cx - r, cy - r, cx - r, cy)
+                quadraticBezierTo(cx - r, cy + r, cx, cy + r)
+                quadraticBezierTo(cx + r, cy + r, cx + r, cy)
+            }
+            drawPath(arc, color, style = style)
+            val head = Path().apply {
+                moveTo(cx + r * 0.8f, cy - r * 1.15f)
+                lineTo(cx + r * 0.8f, cy - r * 0.6f)
+                lineTo(cx + r * 0.25f, cy - r * 0.6f)
+            }
+            drawPath(head, color, style = style)
+        }
+    }
+
     @Composable
     fun ChevronRight(modifier: Modifier = Modifier.size(24.dp), color: Color = Color(0xFF1E293B)) {
         Canvas(modifier = modifier) {

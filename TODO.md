@@ -20,6 +20,14 @@ Fatto:
   con ripiego automatico se il modello lo rifiuta).
 - **Sondaggi**: i voti negativi oltre un terzo delle date si diluiscono (e con loro il bonus
   sacrificio guadagnato); bonus accumulato massimo 500.
+- **Risposta di Gemini entro 20 s**: 15 s di tempo totale per la chiamata (max 9 s per modello
+  se ce n'e' un altro dopo), niente ritentativi automatici in chat, 429 = modello successivo,
+  PDF della domanda scaricati in parallelo con 4 s di tetto, secondo giro solo se c'e' tempo.
+  Il modello sul telefono non ha tetto. Da verificare con una chiave vera.
+- **Icone al posto dei testi**: nuovo `AilaIconButton`; icone Close, EyeOff, ExternalLink,
+  Download, Locate, People, Refresh. Barre (Apri fuori, Esporta PDF, Il mio posto, Aggiungi,
+  Proponi, Nuovo sondaggio, Scheda classe), tutte le "✕"/"✓" di testo, occhio della password,
+  cestino per Elimina/Rimuovi, freccia circolare accanto a "Riprova".
 - **UI**: "Circolari" in "Dove posso cercare" apre le circolari (aveva la sola riga senza >);
   cronologia e nuova chat dell'assistente sono icone.
 

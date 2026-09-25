@@ -14,6 +14,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
@@ -2026,12 +2028,11 @@ fun MainAppShell(
                                     modifier = Modifier.weight(1f),
                                     key = showPollHistory
                                 )
-                                circolareplus.design.AilaPrimaryButton(
-                                    text = "Nuovo",
+                                circolareplus.design.AilaIconButton(
+                                    contentDescription = "Nuovo sondaggio",
                                     onClick = { showCreatePollDialog = true },
-                                    compact = true,
-                                    icon = { tint -> AppIcons.Plus(modifier = Modifier.size(13.dp), color = tint) }
-                                )
+                                    primary = true
+                                ) { tint -> AppIcons.Plus(modifier = Modifier.size(18.dp), color = tint) }
                             }
                         }
                         if (showPollHistory) {
@@ -2308,7 +2309,7 @@ fun MainAppShell(
                                         color = AppTheme.TintRedInk
                                     )
                                 }
-                                Text(text = "✕", fontSize = 14.sp, color = AppTheme.TintRedInk)
+                                AppIcons.Close(modifier = Modifier.size(15.dp), color = AppTheme.TintRedInk)
                             }
                         }
                         LoadableContent(isLoading = isClassRosterLoading, error = classRosterError) {
@@ -2886,12 +2887,10 @@ fun MainAppShell(
                                         )
                                         if (isRepresentative) {
                                             Spacer(modifier = Modifier.width(AppTheme.Space8))
-                                            circolareplus.design.AilaSecondaryButton(
-                                                text = "Scheda",
-                                                onClick = { isInClassRosterScreen = true },
-                                                compact = true,
-                                                icon = { tint -> AppIcons.Crown(modifier = Modifier.size(14.dp), color = tint) }
-                                            )
+                                            circolareplus.design.AilaIconButton(
+                                                contentDescription = "Scheda della classe",
+                                                onClick = { isInClassRosterScreen = true }
+                                            ) { tint -> AppIcons.People(modifier = Modifier.size(20.dp), color = tint) }
                                         }
                                     }
                                     HorizontalDivider(color = AppTheme.Hairline)
@@ -3492,7 +3491,7 @@ private fun AddCalendarEventDialog(
                         .clickable { onDismiss() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("✕", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = AppTheme.TextMuted)
+                    AppIcons.Close(modifier = Modifier.size(16.dp), color = AppTheme.TextMuted)
                 }
             }
 
@@ -3883,7 +3882,7 @@ private fun EventDetailDialog(
                         .clickable { onDismiss() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("✕", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = AppTheme.TextMuted)
+                    AppIcons.Close(modifier = Modifier.size(16.dp), color = AppTheme.TextMuted)
                 }
             }
 
@@ -4058,7 +4057,7 @@ private fun CreationSheetHeader(title: String, onClose: () -> Unit) {
                 .clickable { onClose() },
             contentAlignment = Alignment.Center
         ) {
-            Text("✕", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = AppTheme.TextMuted)
+            AppIcons.Close(modifier = Modifier.size(16.dp), color = AppTheme.TextMuted)
         }
     }
 }
@@ -4369,25 +4368,32 @@ private fun OfflineBanner(
             )
         }
         Spacer(modifier = Modifier.width(AppTheme.Space8))
-        Text(
-            text = "Riprova",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = AppTheme.TintAmberInk,
+        Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))
                 .clickable { onRetry() }
-                .padding(horizontal = 10.dp, vertical = 6.dp)
-        )
-        Text(
-            text = "Chiudi",
-            fontSize = 12.sp,
-            color = AppTheme.TintAmberInk.copy(alpha = 0.75f),
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AppIcons.Refresh(modifier = Modifier.size(14.dp), color = AppTheme.TintAmberInk)
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = "Riprova",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = AppTheme.TintAmberInk
+            )
+        }
+        Box(
             modifier = Modifier
+                .size(32.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .clickable { onDismiss() }
-                .padding(horizontal = 8.dp, vertical = 6.dp)
-        )
+                .semantics { contentDescription = "Chiudi" },
+            contentAlignment = Alignment.Center
+        ) {
+            AppIcons.Close(modifier = Modifier.size(14.dp), color = AppTheme.TintAmberInk.copy(alpha = 0.75f))
+        }
     }
 }
 
@@ -4431,7 +4437,8 @@ private fun OfflineGateScreen(
             circolareplus.design.AilaPrimaryButton(
                 text = "Riprova",
                 onClick = onRetry,
-                fillMaxWidth = true
+                fillMaxWidth = true,
+                icon = { tint -> AppIcons.Refresh(modifier = Modifier.size(15.dp), color = tint) }
             )
             Spacer(modifier = Modifier.height(AppTheme.Space12))
             circolareplus.design.AilaSecondaryButton(

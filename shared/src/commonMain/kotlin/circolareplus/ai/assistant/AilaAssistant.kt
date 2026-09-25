@@ -5,7 +5,12 @@ import circolareplus.ai.AiTextResult
 import circolareplus.ai.PdfTextExtractor
 import circolareplus.data.repository.CircularsRepository
 import circolareplus.domain.model.Circular
+import circolareplus.platform.currentTimeMillis
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * L'assistente globale dell'app: una domanda in italiano, una risposta costruita su tutto
@@ -46,6 +51,15 @@ class AilaAssistant(
          */
         private const val MAX_PDF_CHARS_PER_CIRCULAR = 150_000
 
+        /** Attesa massima di una risposta di Gemini, dalla domanda alla risposta in chat. */
+        private const val TARGET_REPLY_MS = 19_000L
+
+        /** Tempo concesso ai PDF letti prima della domanda: il resto va al modello. */
+        private const val PREFETCH_BUDGET_MS = 4_000L
+
+        /** Sotto questo margine il secondo giro (PDF richiesti + nuova chiamata) non si tenta. */
+        private const val MIN_SECOND_ROUND_MS = 7_000L
+
         /** Circolari lette per intero prima di chiedere al modello: le due piu' attinenti. */
         private const val PREFETCHED_CIRCULARS = 2
 
@@ -71,6 +85,7 @@ class AilaAssistant(
         knowledge: AssistantKnowledge
     ): AssistantReply {
         val classifier = classifierFactory()
+        val startedAt = currentTimeMillis()
 
         // Le circolari che c'entrano davvero con la domanda si leggono per intero subito, senza
         // aspettare che sia il modello a chiederlo: i modelli sul telefono non lo chiedono quasi
@@ -78,7 +93,8 @@ class AilaAssistant(
         // ci sono. Per saluti e domande generali la lista e' vuota e non si scarica niente.
         val prefetched = fetchCircularTexts(
             AssistantContext.mostRelevantCirculars(knowledge, question, PREFETCHED_CIRCULARS),
-            knowledge.circulars
+            knowledge.circulars,
+            budgetMs = PREFETCH_BUDGET_MS
         )
 
         val firstRaw = when (
@@ -102,7 +118,19 @@ class AilaAssistant(
         val requested = firstAnswer.needsCircularText.filter { it !in prefetched }
         if (requested.isEmpty()) return firstReply
 
-        val deepTexts = prefetched + fetchCircularTexts(requested, knowledge.circulars)
+        // Con Gemini la risposta deve arrivare entro [TARGET_REPLY_MS]: il secondo giro si fa
+        // solo se resta il tempo per un altro PDF e un'altra chiamata, e comunque non oltre.
+        // Il modello sul telefono non ha questo tetto: e' lento per natura, e un secondo giro
+        // saltato li' vorrebbe dire rispondere quasi sempre col solo riassunto.
+        val isCloud = firstRaw.modelLabel.startsWith("Google")
+        val remainingMs = TARGET_REPLY_MS - (currentTimeMillis() - startedAt)
+        if (isCloud && remainingMs < MIN_SECOND_ROUND_MS) return firstReply
+
+        val deepTexts = prefetched + fetchCircularTexts(
+            requested,
+            knowledge.circulars,
+            budgetMs = if (isCloud) minOf(PREFETCH_BUDGET_MS, remainingMs - MIN_SECOND_ROUND_MS / 2) else Long.MAX_VALUE
+        )
         if (deepTexts.size == prefetched.size) {
             // Nessuno dei PDF richiesti si e' lasciato leggere (rete, scansione senza testo):
             // si tiene la prima risposta, che per contratto contiene gia' quello che il modello
@@ -110,9 +138,14 @@ class AilaAssistant(
             return firstReply
         }
 
-        val secondResult = classifier.generateAnswer(
-            AssistantPrompt.builderFor(knowledge, history, question, deepTexts)
-        )
+        val secondPrompt = AssistantPrompt.builderFor(knowledge, history, question, deepTexts)
+        val secondResult = if (isCloud) {
+            val left = TARGET_REPLY_MS - (currentTimeMillis() - startedAt)
+            if (left <= 0) return firstReply
+            withTimeoutOrNull(left) { classifier.generateAnswer(secondPrompt) } ?: return firstReply
+        } else {
+            classifier.generateAnswer(secondPrompt)
+        }
         if (secondResult !is AiTextResult.Success) {
             // Il secondo giro e' un miglioramento, non un requisito: se cade (tipicamente per
             // quota esaurita dopo la prima chiamata) resta la risposta del primo giro.
@@ -172,47 +205,69 @@ class AilaAssistant(
      */
     private suspend fun fetchCircularTexts(
         numbers: List<Int>,
-        circulars: List<Circular>
+        circulars: List<Circular>,
+        budgetMs: Long
     ): Map<Int, String> {
         val result = mutableMapOf<Int, String>()
-        for (number in numbers) {
-            val circular = circulars.firstOrNull { it.number == number } ?: continue
-            textCache[number]?.let { cached ->
+        val toDownload = numbers.mapNotNull { number ->
+            val cached = textCache[number]
+            if (cached != null) {
                 result[number] = cached
-                continue
-            }
-            try {
-                val bytes = circularsRepository.downloadPdfBytes(circular.r2PdfKey)
-                var text = pdfTextExtractor.extractText(bytes)
-
-                for (attachment in circular.attachments) {
-                    val pdfKey = attachment.pdfKey ?: continue
-                    if (text.length >= MAX_PDF_CHARS_PER_CIRCULAR) break
-                    try {
-                        val attachmentBytes = circularsRepository.downloadPdfBytes(pdfKey)
-                        val attachmentText = pdfTextExtractor.extractText(attachmentBytes)
-                        if (attachmentText.isNotBlank()) {
-                            text += "\n\n--- Allegato: ${attachment.label} ---\n\n$attachmentText"
-                        }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        // Ignorato di proposito: vedi commento sopra.
-                    }
-                }
-
-                if (text.isNotBlank()) {
-                    val capped = text.take(MAX_PDF_CHARS_PER_CIRCULAR)
-                    result[number] = capped
-                    textCache[number] = capped
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // Ignorato di proposito: vedi commento sopra.
+                null
+            } else {
+                circulars.firstOrNull { it.number == number }
             }
         }
+        if (toDownload.isEmpty() || budgetMs <= 0) return result
+
+        // In parallelo e con un tetto di tempo: prima si scaricavano uno dopo l'altro, e due PDF
+        // con allegati su una rete lenta mangiavano da soli meta' dell'attesa. Allo scadere si
+        // usa quello che e' arrivato; il resto lo chiede il modello, se gli serve davvero.
+        val downloaded = arrayOfNulls<String>(toDownload.size)
+        coroutineScope {
+            val jobs = toDownload.mapIndexed { index, circular ->
+                launch { downloaded[index] = downloadCircularText(circular) }
+            }
+            withTimeoutOrNull(budgetMs) { jobs.joinAll() }
+            jobs.forEach { it.cancel() }
+            jobs.joinAll()
+        }
+        toDownload.forEachIndexed { index, circular ->
+            val text = downloaded[index] ?: return@forEachIndexed
+            result[circular.number] = text
+            textCache[circular.number] = text
+        }
         return result
+    }
+
+    /** Testo del PDF di una circolare con i suoi allegati, o `null` se non si lascia leggere. */
+    private suspend fun downloadCircularText(circular: Circular): String? {
+        return try {
+            val bytes = circularsRepository.downloadPdfBytes(circular.r2PdfKey)
+            var text = pdfTextExtractor.extractText(bytes)
+
+            for (attachment in circular.attachments) {
+                val pdfKey = attachment.pdfKey ?: continue
+                if (text.length >= MAX_PDF_CHARS_PER_CIRCULAR) break
+                try {
+                    val attachmentBytes = circularsRepository.downloadPdfBytes(pdfKey)
+                    val attachmentText = pdfTextExtractor.extractText(attachmentBytes)
+                    if (attachmentText.isNotBlank()) {
+                        text += "\n\n--- Allegato: ${attachment.label} ---\n\n$attachmentText"
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Ignorato di proposito: vedi commento sopra.
+                }
+            }
+            text.takeIf { it.isNotBlank() }?.take(MAX_PDF_CHARS_PER_CIRCULAR)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Ignorato di proposito: vedi commento sopra.
+            null
+        }
     }
 
     private fun mergeSources(

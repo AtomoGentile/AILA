@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import circolareplus.algorithms.DeskAssignment
 import circolareplus.algorithms.OptimizerWeights
 import circolareplus.algorithms.SeatMapOptimizer
+import circolareplus.design.AilaIconButton
 import circolareplus.design.AilaCard
 import circolareplus.design.AilaPrimaryButton
 import circolareplus.design.AilaEmptyState
@@ -71,19 +72,22 @@ fun SeatMapScreen(
                     // Esporta la disposizione pubblicata in PDF (disegno del layout, non solo
                     // testo): utile a chiunque veda la mappa, non solo al Rappresentante.
                     if (assignments.isNotEmpty()) {
-                        AilaPrimaryButton(
-                            text = if (isExportingPdf) "Genero…" else "Esporta PDF",
+                        AilaIconButton(
+                            contentDescription = if (isExportingPdf) "Sto generando il PDF" else "Esporta la mappa in PDF",
                             onClick = onExportPdf,
-                            compact = true,
                             enabled = !isExportingPdf
-                        )
+                        ) { tint ->
+                            AppIcons.Download(modifier = Modifier.size(19.dp), color = tint)
+                        }
                     }
                     // Tasto Rapido Studente: "Dov'è il mio posto?"
-                    AilaPrimaryButton(
-                        text = "Il mio posto",
+                    AilaIconButton(
+                        contentDescription = "Trova il mio posto",
                         onClick = { focusedStudentId = currentUserId },
-                        compact = true
-                    )
+                        primary = true
+                    ) { tint ->
+                        AppIcons.Locate(modifier = Modifier.size(20.dp), color = tint)
+                    }
                 }
             }
         )
