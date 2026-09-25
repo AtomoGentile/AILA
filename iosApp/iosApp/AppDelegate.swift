@@ -163,7 +163,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
      * tipizzati come `AnyObject`/`NSString`) in un `[String: String]`, poi lo passa a
      * [NotificationCategoryMapper] (Kotlin condiviso, vedi
      * shared/.../domain/model/NotificationCategoryMapper.kt) per ottenere la categoria di
-     * destinazione ("circulars", "board", "seatmap", "seatmap_preferences", "polls", oppure ""
+     * destinazione ("circulars", "board", "seatmap", "seatmap_preferences", "polls", "ranking_polls", oppure ""
      * se non riconosciuta). Non deve mai crashare: valori non convertibili vengono ignorati.
      */
     private func categoryFromUserInfo(_ userInfo: [AnyHashable: Any]) -> String {
