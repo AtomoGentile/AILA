@@ -86,12 +86,7 @@ fun PollsScreen(
     isExpired: Boolean = false,
     isSubmitting: Boolean = false,
     onSubmit: () -> Unit = {},
-    onReopen: () -> Unit = {},
-    // Il Rappresentante può far partire l'algoritmo a mano: il calcolo automatico all'ultimo
-    // invio non è affidabile, quindi qui c'è sempre una via manuale che non dipende da quello.
-    isRepresentative: Boolean = false,
-    isCalculating: Boolean = false,
-    onRunAssignments: () -> Unit = {}
+    onReopen: () -> Unit = {}
 ) {
     val darkRedCount = slots.count { it.currentVote == InterrogationVoteType.DARK_RED }
     val votedCount = slots.count { it.currentVote != null }
@@ -143,36 +138,6 @@ fun PollsScreen(
                         )
                         Spacer(modifier = Modifier.height(AppTheme.Space12))
                         VoteLegend(darkRedLeft = MAX_DARK_RED - darkRedCount)
-                    }
-                }
-            }
-
-            if (isRepresentative && slots.isNotEmpty()) {
-                item {
-                    AilaCard(modifier = Modifier.ailaAppear(1)) {
-                        Column(modifier = Modifier.padding(AppTheme.Space16)) {
-                            Text(
-                                text = "Calcolo risultati",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = AppTheme.TextDark
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Chiude il sondaggio e calcola subito l'assegnazione con l'algoritmo, " +
-                                    "anche se non hanno ancora inviato tutti.",
-                                fontSize = 13.sp,
-                                color = AppTheme.TextMuted,
-                                lineHeight = 18.sp
-                            )
-                            Spacer(modifier = Modifier.height(AppTheme.Space12))
-                            AilaPrimaryButton(
-                                text = if (isCalculating) "Calcolo…" else "Calcola risultati",
-                                onClick = onRunAssignments,
-                                enabled = !isCalculating,
-                                fillMaxWidth = true
-                            )
-                        }
                     }
                 }
             }

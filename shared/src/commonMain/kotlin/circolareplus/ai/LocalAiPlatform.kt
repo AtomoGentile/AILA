@@ -24,6 +24,12 @@ expect fun isOnDeviceAiAvailable(): Boolean
  */
 expect fun onDeviceAiUnavailableReason(): String?
 
+/**
+ * Se mostrare la sezione "AI locale" nelle Impostazioni. Su iOS è falso quando Apple
+ * Intelligence non potrà mai funzionare (iOS < 26, iPhone non idoneo); su Android sempre vero.
+ */
+expect fun isOnDeviceAiOfferedHere(): Boolean
+
 /** Avanzamento del download di un modello, osservato dalla schermata Impostazioni. */
 sealed class ModelDownloadState {
     object Idle : ModelDownloadState()

@@ -5,49 +5,48 @@ import shared
 /**
  * Implementazione del bridge AppleIntelligenceBridge in Swift.
  *
- * Usa FoundationModels (iOS 26+) per accedere ad Apple Intelligence tramite il modello di
- * sistema. Non necessita download, API key, o configurazione: gira tutto sul dispositivo.
- *
- * Ogni metodo della classe SwiftUI implementa il corrispondente metodo Kotlin dell'interfaccia
- * AppleIntelligenceBridge, esportata come protocollo Objective-C dal framework `shared`.
+ * L'app gira da iOS 17, FoundationModels esiste solo da iOS 26: questa classe si può creare su
+ * qualunque versione e ogni metodo passa da `#available(iOS 26, *)`. Il codice vero sta in
+ * [FoundationModelsEngine], marcato `@available(iOS 26, *)`. Il framework è collegato in modo
+ * debole (-weak_framework in project.yml), quindi su iOS 17-25 l'app parte comunque.
  */
 class AppleIntelligenceEngine: AppleIntelligenceBridge {
 
-    /**
-     * Verifica se Apple Intelligence è disponibile e pronto.
-     *
-     * Controlla `SystemLanguageModel.default.availability`:
-     * - `.available` → dispositivo supportato, attivato, modello pronto
-     * - `.unavailable(let reason)` → motivo specifico
-     */
+    /// Generazione in corso, per [cancelGeneration] (il tasto Stop). Protetta da `lock`: la
+    /// imposta la chiamata di Kotlin e la legge lo stop, da thread diversi.
+    private var currentTask: Task<String, Error>?
+    private let lock = NSLock()
+
     func isAvailable() -> Bool {
-        return SystemLanguageModel.default.availability == .available
+        if #available(iOS 26, *) {
+            return FoundationModelsEngine.isAvailable()
+        }
+        return false
+    }
+
+    func isSupportedOnDevice() -> Bool {
+        if #available(iOS 26, *) {
+            return FoundationModelsEngine.isSupportedOnDevice()
+        }
+        return false
+    }
+
+    func unavailableReason() -> String? {
+        if #available(iOS 26, *) {
+            return FoundationModelsEngine.unavailableReason()
+        }
+        return "Apple Intelligence richiede iOS 26 o successivo."
     }
 
     /**
-     * Motivo leggibile se Apple Intelligence non è disponibile.
-     *
-     * Mappa i casi di `SystemLanguageModel.Availability.Reason` a messaggi in italiano
-     * comprensibili per un utente non tecnico.
+     * Ferma la generazione in corso. La cancellazione arriva allo stream di FoundationModels,
+     * che si interrompe subito invece di continuare fino alla fine o al timeout.
      */
-    func unavailableReason() -> String? {
-        guard !isAvailable() else { return nil }
-
-        let reason = SystemLanguageModel.default.availability
-        if case .unavailable(let reason) = reason {
-            switch reason {
-            case .deviceNotEligible:
-                return "Questo iPhone non supporta Apple Intelligence. Serve un iPhone 15 Pro o successivo."
-            case .appleIntelligenceNotEnabled:
-                return "Attiva Apple Intelligence nelle Impostazioni di sistema per usare l'AI locale."
-            case .modelNotReady:
-                return "Il modello si sta preparando. Riprova tra poco."
-            @unknown default:
-                return "Apple Intelligence non disponibile. Controlla le Impostazioni di sistema."
-            }
-        }
-
-        return "Apple Intelligence non disponibile."
+    func cancelGeneration() {
+        lock.lock()
+        let task = currentTask
+        lock.unlock()
+        task?.cancel()
     }
 
     /**
@@ -68,6 +67,98 @@ class AppleIntelligenceEngine: AppleIntelligenceBridge {
      * @throws NSError Se la generazione fallisce o scade il timeout
      */
     func generate(
+        systemPrompt: String,
+        userPrompt: String,
+        timeoutMillis: Int64,
+        maxOutputTokens: Int32,
+        temperature: Double,
+        stopWhen: @escaping (String) -> KotlinBoolean
+    ) async throws -> String {
+        guard #available(iOS 26, *) else {
+            throw NSError(
+                domain: "AppleIntelligenceEngine",
+                code: -4,
+                userInfo: [NSLocalizedDescriptionKey: "Apple Intelligence richiede iOS 26 o successivo."]
+            )
+        }
+        // La generazione vera gira in un Task a parte, cosi' cancelGeneration() la puo' fermare
+        // anche se chi aspetta (la chiamata da Kotlin) non propaga la cancellazione.
+        let task = Task<String, Error> {
+            try await FoundationModelsEngine.generate(
+                systemPrompt: systemPrompt,
+                userPrompt: userPrompt,
+                timeoutMillis: timeoutMillis,
+                maxOutputTokens: maxOutputTokens,
+                temperature: temperature,
+                stopWhen: stopWhen
+            )
+        }
+        lock.lock()
+        currentTask = task
+        lock.unlock()
+        defer {
+            lock.lock()
+            if currentTask == task { currentTask = nil }
+            lock.unlock()
+        }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+}
+
+/** Accesso a FoundationModels: solo iOS 26+. */
+@available(iOS 26, *)
+private enum FoundationModelsEngine {
+
+    /**
+     * Verifica se Apple Intelligence è disponibile e pronto.
+     *
+     * Controlla `SystemLanguageModel.default.availability`:
+     * - `.available` → dispositivo supportato, attivato, modello pronto
+     * - `.unavailable(let reason)` → motivo specifico
+     */
+    static func isAvailable() -> Bool {
+        return SystemLanguageModel.default.availability == .available
+    }
+
+    /** false su iPhone che non potranno mai usarla (non idonei): lì l'opzione si nasconde. */
+    static func isSupportedOnDevice() -> Bool {
+        if case .unavailable(.deviceNotEligible) = SystemLanguageModel.default.availability {
+            return false
+        }
+        return true
+    }
+
+    /**
+     * Motivo leggibile se Apple Intelligence non è disponibile.
+     *
+     * Mappa i casi di `SystemLanguageModel.Availability.Reason` a messaggi in italiano
+     * comprensibili per un utente non tecnico.
+     */
+    static func unavailableReason() -> String? {
+        guard !isAvailable() else { return nil }
+
+        let reason = SystemLanguageModel.default.availability
+        if case .unavailable(let reason) = reason {
+            switch reason {
+            case .deviceNotEligible:
+                return "Questo iPhone non supporta Apple Intelligence. Serve un iPhone 15 Pro o successivo."
+            case .appleIntelligenceNotEnabled:
+                return "Attiva Apple Intelligence nelle Impostazioni di sistema per usare l'AI locale."
+            case .modelNotReady:
+                return "Il modello si sta preparando. Riprova tra poco."
+            @unknown default:
+                return "Apple Intelligence non disponibile. Controlla le Impostazioni di sistema."
+            }
+        }
+
+        return "Apple Intelligence non disponibile."
+    }
+
+    static func generate(
         systemPrompt: String,
         userPrompt: String,
         timeoutMillis: Int64,
@@ -113,7 +204,7 @@ class AppleIntelligenceEngine: AppleIntelligenceBridge {
                     throw NSError(
                         domain: "AppleIntelligenceEngine",
                         code: -1,
-                        userInfo: [NSLocalizedDescriptionKey: AppleIntelligenceEngine.describe(error)]
+                        userInfo: [NSLocalizedDescriptionKey: FoundationModelsEngine.describe(error)]
                     )
                 }
             }

@@ -49,12 +49,15 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import circolareplus.ai.LocalAiModel
 import circolareplus.ai.ModelDownloadState
 import circolareplus.design.AilaLogoTile
-import circolareplus.design.iosSafeDrawingPadding
+import circolareplus.design.appSafeDrawingPadding
+import circolareplus.design.appContentWidth
+import circolareplus.design.MaxFormWidth
 import circolareplus.design.AilaPrimaryButton
 import circolareplus.design.AilaSecondaryButton
 import circolareplus.design.AppIcons
@@ -216,7 +219,8 @@ fun OnboardingScreen(
                     onDragCancel = { dragAccumulated = 0f }
                 ) { _, delta -> dragAccumulated += delta }
             }
-            .iosSafeDrawingPadding()
+            .appSafeDrawingPadding()
+            .appContentWidth(MaxFormWidth)
             .padding(AppTheme.Space24)
     ) {
         Row(
@@ -301,14 +305,27 @@ fun OnboardingScreen(
                     // Sul passo AI questo ramo esce con l'ultima pagina del tour ancora
                     // selezionata (coerce): così non cambia nulla mentre svanisce.
                     val tourIndex = stepIndex.coerceAtMost(tourSize - 1)
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        Spacer(modifier = Modifier.weight(1f))
-                        // Una sola illustrazione per tutto il tour: cambia colore ma non viene
-                        // ricreata, quindi orbita e "respiro" non ripartono da zero a ogni pagina.
-                        OnboardingIllustration(onboardingPages[tourIndex])
-                        Spacer(modifier = Modifier.height(AppTheme.Space32))
-                        OnboardingCopy(tourIndex)
-                        Spacer(modifier = Modifier.weight(1f))
+                    // Sui telefoni bassi (iPhone SE, Android compatti, o testo di sistema
+                    // ingrandito) illustrazione da 250dp e testo non ci stavano insieme fra
+                    // l'intestazione e il pulsante, e il testo veniva tagliato. Ora
+                    // l'illustrazione si riduce (fino a 140dp) e, se ancora non basta, la pagina
+                    // scorre; sui telefoni grandi resta centrata come prima.
+                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                        val areaHeight = maxHeight
+                        val illustrationHeight = (areaHeight * 0.45f).coerceIn(140.dp, 250.dp)
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(rememberScrollState())
+                                .heightIn(min = areaHeight),
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            // Una sola illustrazione per tutto il tour: cambia colore ma non viene
+                            // ricreata, quindi orbita e "respiro" non ripartono da zero a ogni pagina.
+                            OnboardingIllustration(onboardingPages[tourIndex], height = illustrationHeight)
+                            Spacer(modifier = Modifier.height(AppTheme.Space32))
+                            OnboardingCopy(tourIndex)
+                        }
                     }
                 }
             }
@@ -1010,7 +1027,7 @@ private fun formatMegabytes(bytes: Long): String {
  *   qualunque densità di schermo.
  */
 @Composable
-private fun OnboardingIllustration(page: OnboardingPage) {
+private fun OnboardingIllustration(page: OnboardingPage, height: Dp = 250.dp) {
     val transition = rememberInfiniteTransition(label = "onboardingLoop")
 
     val orbit = transition.animateFloat(
@@ -1052,7 +1069,7 @@ private fun OnboardingIllustration(page: OnboardingPage) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(250.dp)
+            .height(height)
             .clip(RoundedCornerShape(AppTheme.CardCornerRadius + 8.dp))
             .drawBehind {
                 val w = size.width

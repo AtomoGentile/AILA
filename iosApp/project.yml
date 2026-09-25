@@ -1,7 +1,9 @@
 name: iosApp
 options:
+  # iOS 17: minimo richiesto dal codice Swift (onChange a due parametri). Apple Intelligence
+  # (FoundationModels, iOS 26+) è protetta da #available in AppleIntelligenceEngine.swift.
   deploymentTarget:
-    iOS: "26.0"
+    iOS: "17.0"
   bundleIdPrefix: com.circolareplus
 
 packages:
@@ -31,20 +33,57 @@ targets:
   iosApp:
     type: application
     platform: iOS
-    deploymentTarget: "26.0"
+    deploymentTarget: "17.0"
     sources:
       # GoogleService-Info.plist, quando presente in questa cartella, viene raccolto
       # automaticamente da questo glob come risorsa dell'app (bundle). In CI non c'e'
       # (locale, vedi .gitignore, come google-services.json per Android): xcodegen non
       # fallisce se manca, semplicemente non lo trova e non lo include.
       - path: iosApp
+    # XcodeGen RIGENERA questo file a ogni `xcodegen generate` con le sole chiavi di default piu'
+    # quelle elencate qui sotto: tutto quello che serve all'app va scritto QUI, non a mano nel
+    # plist (prima launch screen, orientamenti e nome "AILA" stavano solo nel file e si perdevano,
+    # e sulla home compariva "Circolare+", il PRODUCT_NAME).
     info:
       path: iosApp/Info.plist
+      properties:
+        CFBundleDisplayName: AILA
+        CFBundleName: AILA
+        CFBundleShortVersionString: "1.0.0"
+        CFBundleVersion: "1"
+        LSRequiresIPhoneOS: true
+        UIApplicationSupportsIndirectInputEvents: true
+        # Come lo splash Android (windowSplashScreenBackground #0A1330 + marchio AILA).
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+          UIImageName: LaunchLogo
+        # iPhone solo in verticale, come i telefoni Android; iPad libero, come i tablet.
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # remote-notification: push silenziosi e content-available (campanella anche senza
+        # tocco, preferenze notifiche). fetch: BGAppRefreshTask, il giro in background delle
+        # circolari. processing: il task che tiene viva l'analisi sul telefono con l'app in
+        # background (BGContinuedProcessingTask, iOS 26). Vedi AilaBackground.swift e
+        # BackgroundWorkBridge.swift.
+        UIBackgroundModes:
+          - remote-notification
+          - fetch
+          - processing
+        BGTaskSchedulerPermittedIdentifiers:
+          - com.circolareplus.refresh
+          - com.circolareplus.analysis.*
     settings:
       PRODUCT_NAME: Circolare+
       PRODUCT_BUNDLE_IDENTIFIER: com.circolareplus
       FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)
-      OTHER_LDFLAGS: -framework shared
+      # FoundationModels collegato in modo debole: su iOS 17-25 il framework non esiste e un
+      # collegamento normale farebbe crashare l'app all'avvio.
+      OTHER_LDFLAGS: -framework shared -weak_framework FoundationModels
       # shared/build.gradle.kts non dichiara iosX64 (simulatore Mac Intel): Compose Multiplatform
       # ha smesso di pubblicare per quel target. Senza questa esclusione Xcode chiede comunque
       # x86_64 per il simulatore (default ARCHS = arm64 x86_64) e Gradle fallisce con

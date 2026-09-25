@@ -100,6 +100,28 @@ function tierOf(isFallback: boolean, modelLabel: string): number {
 }
 
 // ---------------------------------------------------------------------------
+// GET /api/circulars/newer?after=N — Circolari con numero > N
+// ---------------------------------------------------------------------------
+// Usata dal refresh in background di iOS (BGTaskScheduler): risposta minima per restare veloce.
+// Registrata prima di `/:number`, che altrimenti catturerebbe "newer" come numero.
+circulars.get('/newer', authMiddleware(), async (c) => {
+  const after = parseInt(c.req.query('after') ?? '0', 10);
+  if (isNaN(after) || after < 0) return c.json({ error: 'Parametro after non valido' }, 400);
+
+  const rows = await c.env.DB.prepare(
+    'SELECT number, title, publish_date FROM circulars WHERE number > ? ORDER BY number ASC LIMIT 50'
+  ).bind(after).all<{ number: number; title: string; publish_date: string }>();
+
+  return c.json({
+    circulars: rows.results.map((row) => ({
+      number: row.number,
+      title: row.title,
+      publishDate: row.publish_date,
+    })),
+  });
+});
+
+// ---------------------------------------------------------------------------
 // GET /api/circulars/analyses?since=... — Analisi cambiate dopo `since`
 // ---------------------------------------------------------------------------
 // Chi ha l'app aperta la chiama insieme al rinfresco della lista: così vede subito un riassunto

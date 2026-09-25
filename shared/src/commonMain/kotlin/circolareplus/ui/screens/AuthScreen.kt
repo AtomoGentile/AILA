@@ -38,7 +38,9 @@ import circolareplus.design.AilaLogoTile
 import circolareplus.design.AilaSegmentedTabs
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
-import circolareplus.design.iosSafeDrawingPadding
+import circolareplus.design.appSafeDrawingPadding
+import circolareplus.design.appContentWidth
+import circolareplus.design.MaxFormWidth
 import circolareplus.design.ailaAppear
 import circolareplus.design.ailaFieldColors
 import circolareplus.domain.model.StudentProfile
@@ -169,7 +171,8 @@ fun AuthScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .iosSafeDrawingPadding()
+                .appSafeDrawingPadding()
+                .appContentWidth(MaxFormWidth)
                 .verticalScroll(scrollState)
                 .padding(horizontal = AppTheme.Space20, vertical = AppTheme.Space32),
             horizontalAlignment = Alignment.CenterHorizontally

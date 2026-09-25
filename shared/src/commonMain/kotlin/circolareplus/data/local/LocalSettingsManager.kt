@@ -41,6 +41,10 @@ class LocalSettingsManager(
         private const val KEY_LAST_SEEN_POLL_ID = "last_seen_poll_id"
         private const val KEY_ASSISTANT_HISTORY = "assistant_history_json"
         private const val KEY_CIRCULAR_ANALYSES = "circular_analyses_json"
+        private const val KEY_BG_LAST_CIRCULAR = "bg_last_circular_number"
+        private const val KEY_DEBUG_MENU = "debug_menu_enabled"
+        /** Scritto da Swift (AilaBackground.swift): righe separate da "\n", max 100. */
+        const val KEY_BG_LOG = "bg_log"
 
         /** Quante analisi di circolari tenere sul telefono: le piu' recenti, per numero. */
         private const val MAX_CACHED_ANALYSES = 100
@@ -180,6 +184,11 @@ class LocalSettingsManager(
     fun isNotificationKindEnabled(kind: String): Boolean =
         kind !in (settings.getStringOrNull(KEY_MUTED_NOTIFICATIONS)?.split("\n").orEmpty())
 
+    /** Le categorie spente, da mandare al server insieme al token push (vedi FcmRepository). */
+    val mutedNotificationKinds: List<String>
+        get() = settings.getStringOrNull(KEY_MUTED_NOTIFICATIONS)?.split("\n")
+            ?.filter { it.isNotBlank() }.orEmpty()
+
     fun setNotificationKindEnabled(kind: String, enabled: Boolean) {
         val muted = settings.getStringOrNull(KEY_MUTED_NOTIFICATIONS)?.split("\n")
             ?.filter { it.isNotBlank() }.orEmpty()
@@ -196,6 +205,28 @@ class LocalSettingsManager(
     var lastSeenCircularNumber: Int
         get() = settings.getInt(KEY_LAST_SEEN_CIRCULAR, 0)
         set(value) = settings.putInt(KEY_LAST_SEEN_CIRCULAR, value)
+
+    /**
+     * Ultimo numero circolare visto dal refresh in background iOS. Separato da
+     * [lastSeenCircularNumber], che è il segnalibro della campanella: se il background lo
+     * spostasse, la campanella non registrerebbe più le circolari nuove.
+     */
+    var bgLastCircularNumber: Int
+        get() = settings.getInt(KEY_BG_LAST_CIRCULAR, 0)
+        set(value) = settings.putInt(KEY_BG_LAST_CIRCULAR, value)
+
+    /** Menu diagnostica sbloccato con 7 tocchi su "Versione" nelle Impostazioni. */
+    var isDebugMenuEnabled: Boolean
+        get() = settings.getBoolean(KEY_DEBUG_MENU, false)
+        set(value) = settings.putBoolean(KEY_DEBUG_MENU, value)
+
+    /** Log dei risvegli in background (scritto da Swift), vuoto se assente. */
+    val backgroundLog: String
+        get() = settings.getStringOrNull(KEY_BG_LOG) ?: ""
+
+    fun clearBackgroundLog() {
+        settings.remove(KEY_BG_LOG)
+    }
 
     var lastSeenProposalId: String
         get() = settings.getString(KEY_LAST_SEEN_PROPOSAL, "")
@@ -264,7 +295,11 @@ class LocalSettingsManager(
      * [messageId] deve essere l'id del messaggio FCM; se assente si registra senza dedup.
      */
     fun onPushReceived(messageId: String?, title: String, body: String, category: String): Boolean {
-        val kind = if (category == "seatmap_preferences") "seatmap" else category
+        val kind = when (category) {
+            "seatmap_preferences" -> "seatmap"
+            "ranking_polls" -> "polls"
+            else -> category
+        }
         if (kind.isNotBlank() && !isNotificationKindEnabled(kind)) return false
 
         val id = messageId?.takeIf { it.isNotBlank() }?.let { "push-$it" }
