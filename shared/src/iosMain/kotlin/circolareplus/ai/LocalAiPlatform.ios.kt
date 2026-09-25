@@ -1,5 +1,9 @@
 package circolareplus.ai
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import platform.Foundation.NSProcessInfo
 
 /**
@@ -23,6 +27,9 @@ actual fun isOnDeviceAiAvailable(): Boolean {
     // Se il bridge è stato iniettato e dice che Apple Intelligence è disponibile
     return AppleIntelligenceBridgeHolder.bridge?.isAvailable() ?: false
 }
+
+actual fun isOnDeviceAiOfferedHere(): Boolean =
+    AppleIntelligenceBridgeHolder.bridge?.isSupportedOnDevice() ?: false
 
 actual fun onDeviceAiUnavailableReason(): String? {
     val bridge = AppleIntelligenceBridgeHolder.bridge
@@ -82,14 +89,36 @@ actual class LocalModelStore actual constructor() {
         onProgress: (downloadedBytes: Long, totalBytes: Long) -> Unit
     ): ModelDownloadState {
         if (isAppleIntelligence(model)) {
-            // "Scaricare" il modello di sistema = verificare che sia disponibile: completamento
-            // istantaneo, nessun byte reale da trasferire.
-            onProgress(1, 1)
-            return if (isOnDeviceAiAvailable()) {
-                ModelDownloadState.Installed("apple-intelligence")
-            } else {
-                ModelDownloadState.Failed(
+            // "Scaricare" il modello di sistema = verificare che sia disponibile e che risponda
+            // davvero, come fa "Attiva" per AICore su Android: una lingua non supportata o un
+            // modello ancora in preparazione si scoprivano solo alla prima circolare.
+            if (!isOnDeviceAiAvailable()) {
+                return ModelDownloadState.Failed(
                     onDeviceAiUnavailableReason() ?: "Apple Intelligence non disponibile su questo dispositivo."
+                )
+            }
+            val bridge = AppleIntelligenceBridgeHolder.bridge
+                ?: return ModelDownloadState.Failed("Apple Intelligence non disponibile.")
+            return try {
+                val reply = bridge.generate(
+                    systemPrompt = "Rispondi in italiano con una sola parola.",
+                    userPrompt = "Scrivi: pronto",
+                    timeoutMillis = 30_000L,
+                    maxOutputTokens = 16,
+                    temperature = 0.1,
+                    stopWhen = { false }
+                )
+                onProgress(1, 1)
+                if (reply.isNotBlank()) {
+                    ModelDownloadState.Installed("apple-intelligence")
+                } else {
+                    ModelDownloadState.Failed("Apple Intelligence non ha risposto alla prova. Riprova tra poco.")
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                ModelDownloadState.Failed(
+                    "Apple Intelligence non ha superato la prova: ${e.message ?: "nessun dettaglio"}"
                 )
             }
         }
@@ -153,14 +182,16 @@ actual class LocalLlm actual constructor() {
             lastEngineLabel = "Apple Intelligence (Neural Engine)"
             val bridge = AppleIntelligenceBridgeHolder.bridge
                 ?: throw IllegalStateException("Apple Intelligence non disponibile.")
-            return bridge.generate(
-                systemPrompt = systemPrompt,
-                userPrompt = userPrompt,
-                timeoutMillis = timeoutMillis,
-                maxOutputTokens = maxOutputTokens,
-                temperature = JSON_TEMPERATURE,
-                stopWhen = stopWhen
-            )
+            return stoppable(onStop = { bridge.cancelGeneration() }) {
+                bridge.generate(
+                    systemPrompt = systemPrompt,
+                    userPrompt = userPrompt,
+                    timeoutMillis = timeoutMillis,
+                    maxOutputTokens = maxOutputTokens,
+                    temperature = JSON_TEMPERATURE,
+                    stopWhen = stopWhen
+                )
+            }
         }
 
         // Tier 2: modello MLX. maxOutputTokens/preferGpu: preferGpu è ignorato (MLX su iOS usa
@@ -176,6 +207,25 @@ actual class LocalLlm actual constructor() {
             timeoutMillis = timeoutMillis,
             stopWhen = stopWhen
         )
+    }
+
+    /**
+     * Esegue una chiamata al bridge Swift in modo che il tasto Stop la interrompa davvero.
+     *
+     * Annullare la coroutine che aspetta una funzione Swift `async` non arriva al `Task` Swift, e
+     * l'attesa stessa non si interrompe finche' Swift non risponde. Qui la chiamata gira in una
+     * coroutine a parte e si aspetta con `await`, che si interrompe subito; allo stop si chiede a
+     * Swift di fermare il modello ([onStop]).
+     */
+    private suspend fun <T> stoppable(onStop: () -> Unit, call: suspend () -> T): T {
+        val deferred = CoroutineScope(Dispatchers.Default).async { call() }
+        try {
+            return deferred.await()
+        } catch (e: CancellationException) {
+            onStop()
+            deferred.cancel()
+            throw e
+        }
     }
 
     actual fun unload() {

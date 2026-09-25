@@ -50,12 +50,19 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         // Si osserva la notifica di sistema invece di implementare applicationDidBecomeActive:
         // con il ciclo di vita SwiftUI (UIApplicationDelegateAdaptor + scene) quel metodo del
         // delegate non e' garantito, la notifica UIApplication.didBecomeActiveNotification si'.
+        //
+        // Allo stesso momento si rileggono i dati, come fa Android in MainActivity.onResume: nel
+        // frattempo puo' essere arrivata una circolare, e la notifica non aggiorna nulla da sola.
+        // E si recuperano in campanella le notifiche arrivate con l'app in background e non
+        // toccate, che altrimenti non ci finivano mai (su Android le scrive sempre il servizio).
         NotificationCenter.default.addObserver(
             forName: UIApplication.didBecomeActiveNotification,
             object: nil,
             queue: .main
-        ) { _ in
+        ) { [weak self] _ in
             AppDelegate.clearBadge()
+            DataRefreshEvents.shared.request()
+            self?.logDeliveredNotifications()
         }
 
         // Avvio a freddo: l'app era completamente chiusa ed è stata aperta tappando una
@@ -133,8 +140,63 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     }
 
     /**
+     * Scrive in campanella le notifiche ancora nel Centro Notifiche. Con l'app in background il
+     * banner lo mostra iOS e l'app ne sa qualcosa solo se l'utente lo tocca; qui si recuperano le
+     * altre. onPushReceived deduplica per id messaggio, quindi richiamarla e' innocuo.
+     */
+    private func logDeliveredNotifications() {
+        UNUserNotificationCenter.current().getDeliveredNotifications { notifications in
+            DispatchQueue.main.async {
+                for notification in notifications {
+                    let content = notification.request.content
+                    _ = AppContainer.shared.settings.onPushReceived(
+                        messageId: self.messageId(for: notification),
+                        title: content.title,
+                        body: content.body,
+                        category: self.categoryFromUserInfo(content.userInfo)
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Push ricevuto con l'app in background o sospesa (`content-available`, vedi buildMessage in
+     * backend/src/services/fcm.ts): lo si scrive in campanella anche se l'utente non lo tocca. Se
+     * "Notifiche di sistema" e' spento il server lo manda senza banner, e questo e' l'unico punto
+     * in cui l'app lo vede. Con l'app aperta passa anche da willPresent: l'id messaggio evita il
+     * doppione.
+     */
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        var title = ""
+        var body = ""
+        if let aps = userInfo["aps"] as? [AnyHashable: Any], let alert = aps["alert"] as? [AnyHashable: Any] {
+            title = alert["title"] as? String ?? ""
+            body = alert["body"] as? String ?? ""
+        }
+        // Push silenzioso: titolo e testo arrivano nei dati.
+        if title.isEmpty { title = userInfo["title"] as? String ?? "AILA" }
+        if body.isEmpty { body = userInfo["body"] as? String ?? "" }
+
+        if let messageId = userInfo["gcm.message_id"] as? String, !messageId.isEmpty {
+            _ = AppContainer.shared.settings.onPushReceived(
+                messageId: messageId,
+                title: title,
+                body: body,
+                category: categoryFromUserInfo(userInfo)
+            )
+        }
+        DataRefreshEvents.shared.request()
+        completionHandler(.newData)
+    }
+
+    /**
      * Azzera il badge dell'icona. `setBadgeCount` (iOS 16+) e' l'API corrente: il deployment
-     * target del progetto e' iOS 26 (vedi project.yml), quindi non serve il ripiego
+     * target del progetto e' iOS 17 (vedi project.yml), quindi non serve il ripiego
      * `applicationIconBadgeNumber`, deprecato da iOS 17.
      */
     private static func clearBadge() {
@@ -163,7 +225,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
      * tipizzati come `AnyObject`/`NSString`) in un `[String: String]`, poi lo passa a
      * [NotificationCategoryMapper] (Kotlin condiviso, vedi
      * shared/.../domain/model/NotificationCategoryMapper.kt) per ottenere la categoria di
-     * destinazione ("circulars", "board", "seatmap", "seatmap_preferences", "polls", oppure ""
+     * destinazione ("circulars", "board", "seatmap", "seatmap_preferences", "polls", "ranking_polls", oppure ""
      * se non riconosciuta). Non deve mai crashare: valori non convertibili vengono ignorati.
      */
     private func categoryFromUserInfo(_ userInfo: [AnyHashable: Any]) -> String {
@@ -192,6 +254,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
+        // Notifica locale del refresh in background: solo banner, la campanella la aggiorna
+        // noteNovelties alla riapertura della lista (altrimenti comparirebbe due volte).
+        if notification.request.identifier.hasPrefix(AilaBackground.localNotificationPrefix) {
+            DataRefreshEvents.shared.request()
+            completionHandler([.banner, .sound])
+            return
+        }
+
         let content = notification.request.content
         let category = categoryFromUserInfo(content.userInfo)
         let showBanner = AppContainer.shared.settings.onPushReceived(
@@ -228,16 +298,21 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     ) {
         let content = response.notification.request.content
         let category = categoryFromUserInfo(content.userInfo)
-        _ = AppContainer.shared.settings.onPushReceived(
-            messageId: messageId(for: response.notification),
-            title: content.title,
-            body: content.body,
-            category: category
-        )
+        // Le notifiche locali del refresh in background non vanno in campanella (vedi willPresent).
+        if !response.notification.request.identifier.hasPrefix(AilaBackground.localNotificationPrefix) {
+            _ = AppContainer.shared.settings.onPushReceived(
+                messageId: messageId(for: response.notification),
+                title: content.title,
+                body: content.body,
+                category: category
+            )
+        }
 
         if !category.isEmpty {
             PendingDeepLink.shared.category = category
         }
+        // Tornando dal tocco la lista deve gia' mostrare la novita', come su Android.
+        DataRefreshEvents.shared.request()
 
         completionHandler()
     }
