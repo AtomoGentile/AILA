@@ -24,6 +24,9 @@ actual fun isOnDeviceAiAvailable(): Boolean {
     return AppleIntelligenceBridgeHolder.bridge?.isAvailable() ?: false
 }
 
+actual fun isOnDeviceAiOfferedHere(): Boolean =
+    AppleIntelligenceBridgeHolder.bridge?.isSupportedOnDevice() ?: false
+
 actual fun onDeviceAiUnavailableReason(): String? {
     val bridge = AppleIntelligenceBridgeHolder.bridge
     if (bridge == null) {

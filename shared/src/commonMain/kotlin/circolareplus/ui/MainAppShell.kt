@@ -1921,6 +1921,8 @@ fun MainAppShell(
                         readLog = { AppContainer.settings.backgroundLog },
                         onClearLog = { AppContainer.settings.clearBackgroundLog() },
                         onSimulate = { circolareplus.platform.simulateBackgroundWakeUp() },
+                        readBookmark = { AppContainer.settings.bgLastCircularNumber },
+                        onRewindBookmark = { circolareplus.platform.rewindBackgroundBookmark() },
                         onBackClick = { isInBackgroundDebugScreen = false }
                     )
                 }
@@ -1970,6 +1972,7 @@ fun MainAppShell(
                             AppContainer.settings.aiProvider = provider
                         },
                         localAiUnavailableReason = circolareplus.ai.onDeviceAiUnavailableReason(),
+                        showLocalAiSection = circolareplus.ai.isOnDeviceAiOfferedHere(),
                         deviceRamMb = circolareplus.ai.totalDeviceRamMb(),
                         localModels = circolareplus.ai.LocalAiCatalog.selectableFor(
                             circolareplus.ai.totalDeviceRamMb()
