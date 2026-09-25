@@ -3,6 +3,26 @@
 Elenco vivo dei problemi aperti e del lavoro ancora mancante, aggiornato mano a mano.
 Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esistente.
 
+## 25/9: stop download, date dell'assistente, Gemini piu' rapido, sondaggi (branch `claude/ui-ux-improvements-i01wsr`)
+
+**Non compilato** (Gradle senza accesso ai plugin Google in questa sessione; il backend passa
+`tsc`). Da provare: `:shared:testDebugUnitTest` (nuovi casi in `TimeScopeTest`) e la build.
+**Deploy**: solo `wrangler deploy` (cambia `routes/polls.ts`, nessuna migrazione).
+
+Fatto:
+- **Download modelli locali**: "Interrompi download" nelle Impostazioni (prima c'era solo
+  nell'onboarding) e azione "Interrompi" nella notifica del Worker.
+- **Date nelle risposte dell'assistente**: il contesto non contiene piu' AAAA-MM-GG ne' righe con
+  "|": ogni evento arriva come "- venerdì 25 settembre, ore 14:15 — Titolo (avviso)", con
+  (oggi)/(domani). `AssistantPrompt.tidyAnswer` ripulisce comunque date in cifre e "| AVVISO".
+- **Gemini in chat**: niente retry sul 503 (si passa subito a flash-lite), modelli in 503/timeout
+  in fondo alla fila per 3 minuti, timeout chat 35 s, ragionamento spento (`thinkingBudget: 0`,
+  con ripiego automatico se il modello lo rifiuta).
+- **Sondaggi**: i voti negativi oltre un terzo delle date si diluiscono (e con loro il bonus
+  sacrificio guadagnato); bonus accumulato massimo 500.
+- **UI**: "Circolari" in "Dove posso cercare" apre le circolari (aveva la sola riga senza >);
+  cronologia e nuova chat dell'assistente sono icone.
+
 ## 22/9: riassunti dal server, coda unica, stop, assistente, mappa posti (branch `claude/app-optimization-circulars-px87fk`)
 
 **Non compilato**: in questa sessione Gradle non scarica le dipendenze (proxy) e la CI di GitHub

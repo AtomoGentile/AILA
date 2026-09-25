@@ -1978,6 +1978,9 @@ fun MainAppShell(
                                 else -> "Download non completato."
                             }
                         },
+                        onCancelLocalModelDownload = { model ->
+                            AppContainer.localModelStore.cancelDownload(model)
+                        },
                         onDeleteLocalModel = { model ->
                             AppContainer.localLlm.unload()
                             AppContainer.localModelStore.delete(model)
@@ -2489,6 +2492,11 @@ fun MainAppShell(
                         onOpenCircular = { circular ->
                             isInSearchScreen = false
                             selectedCircularForDetail = circular
+                            classSection = ClassSection.CIRCULARS
+                            selectedTab = MainTab.CLASS
+                        },
+                        onOpenCirculars = {
+                            isInSearchScreen = false
                             classSection = ClassSection.CIRCULARS
                             selectedTab = MainTab.CLASS
                         },

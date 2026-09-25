@@ -22,13 +22,17 @@ internal data class TimeScope(val from: String, val to: String, val label: Strin
     /** `true` se la data ISO (anche con l'ora dopo la data) cade nell'intervallo. */
     fun contains(isoDate: String): Boolean = isoDate.take(10) in from..to
 
-    /** Frase per il modello: etichetta ed estremi con giorno della settimana. */
+    /**
+     * Frase per il modello: etichetta ed estremi con giorno della settimana, senza AAAA-MM-GG —
+     * gli estremi finiscono spesso nella prima riga della risposta, e il modello li ricopiava
+     * storpiati ("dal lunedi' 219 settembre").
+     */
     fun describe(): String {
         val first = formatItalianDateWithWeekday(from)
         return if (from == to) {
-            "$label ($first, $from)"
+            "$label ($first)"
         } else {
-            "$label (dal $first, $from, al ${formatItalianDateWithWeekday(to)}, $to)"
+            "$label (da $first a ${formatItalianDateWithWeekday(to)})"
         }
     }
 }
