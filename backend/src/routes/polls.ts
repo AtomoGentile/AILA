@@ -611,8 +611,9 @@ async function computeAndPersistAssignments(
 polls.get('/:id/assignments', requireRole('REPRESENTATIVE'), async (c) => {
   const gridId = c.req.param('id');
 
-  const grid = await c.env.DB.prepare('SELECT id, subject FROM interrogation_grids WHERE id = ?')
-    .bind(gridId).first<{ id: string; subject: string }>();
+  // AND class_id: senza, un rappresentante di un'altra classe poteva leggere le assegnazioni altrui.
+  const grid = await c.env.DB.prepare('SELECT id, subject FROM interrogation_grids WHERE id = ? AND class_id = ?')
+    .bind(gridId, await resolveClassId(c)).first<{ id: string; subject: string }>();
   if (!grid) return c.json({ error: 'Griglia non trovata' }, 404);
 
   const assignments = await c.env.DB.prepare(
