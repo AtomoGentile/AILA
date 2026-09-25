@@ -4440,7 +4440,7 @@ private fun CreateRankingPollDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .iosImePadding()
+                .appImePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = AppTheme.Space20)
                 .padding(bottom = AppTheme.Space32)
