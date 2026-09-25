@@ -175,3 +175,9 @@ CircolarePlus_*.pdf
 Specifiche_Tecniche_*.pdf
 FIREBASE_SETUP.md.local
 prompt_claude_code_*.pdf
+
+# === File locali di una singola macchina / strumenti ===
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+gradle/config.properties
+Claude outputs/
