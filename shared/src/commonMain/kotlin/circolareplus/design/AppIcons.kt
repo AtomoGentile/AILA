@@ -728,6 +728,68 @@ object AppIcons {
         }
     }
 
+    /**
+     * Cronologia: un orologio con la freccia che gira all'indietro. Il cerchio resta aperto in
+     * alto a sinistra per fare posto alla punta della freccia; come per gli altri cerchi, curve
+     * quadratiche e niente drawArc/addArc.
+     */
+    @Composable
+    fun History(modifier: Modifier = Modifier.size(24.dp), color: Color = Color(0xFF1E293B)) {
+        Canvas(modifier = modifier) {
+            val w = size.width; val h = size.height; val stroke = w * 0.085f
+            val cx = w * 0.53f; val cy = h * 0.52f; val r = w * 0.34f
+            val style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            val arc = Path().apply {
+                moveTo(cx - r, cy)
+                quadraticBezierTo(cx - r, cy + r, cx, cy + r)
+                quadraticBezierTo(cx + r, cy + r, cx + r, cy)
+                quadraticBezierTo(cx + r, cy - r, cx, cy - r)
+                quadraticBezierTo(cx - r * 0.55f, cy - r, cx - r * 0.8f, cy - r * 0.6f)
+            }
+            drawPath(arc, color, style = style)
+            // Punta della freccia sull'estremo sinistro del cerchio.
+            val head = Path().apply {
+                moveTo(cx - r - r * 0.34f, cy - r * 0.3f)
+                lineTo(cx - r, cy + r * 0.02f)
+                lineTo(cx - r + r * 0.34f, cy - r * 0.3f)
+            }
+            drawPath(head, color, style = style)
+            // Lancette.
+            val hands = Path().apply {
+                moveTo(cx, cy - r * 0.52f)
+                lineTo(cx, cy)
+                lineTo(cx + r * 0.38f, cy + r * 0.26f)
+            }
+            drawPath(hands, color, style = style)
+        }
+    }
+
+    /** Nuova chat: il fumetto con un "+" dentro. */
+    @Composable
+    fun NewChat(modifier: Modifier = Modifier.size(24.dp), color: Color = Color(0xFF1E293B)) {
+        Canvas(modifier = modifier) {
+            val w = size.width; val h = size.height; val stroke = w * 0.085f
+            val bubble = Path().apply {
+                moveTo(w * 0.2f, h * 0.14f)
+                lineTo(w * 0.8f, h * 0.14f)
+                quadraticBezierTo(w * 0.9f, h * 0.14f, w * 0.9f, h * 0.24f)
+                lineTo(w * 0.9f, h * 0.64f)
+                quadraticBezierTo(w * 0.9f, h * 0.74f, w * 0.8f, h * 0.74f)
+                lineTo(w * 0.44f, h * 0.74f)
+                lineTo(w * 0.26f, h * 0.9f)
+                lineTo(w * 0.26f, h * 0.74f)
+                lineTo(w * 0.2f, h * 0.74f)
+                quadraticBezierTo(w * 0.1f, h * 0.74f, w * 0.1f, h * 0.64f)
+                lineTo(w * 0.1f, h * 0.24f)
+                quadraticBezierTo(w * 0.1f, h * 0.14f, w * 0.2f, h * 0.14f)
+                close()
+            }
+            drawPath(bubble, color, style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawLine(color, Offset(w * 0.5f, h * 0.3f), Offset(w * 0.5f, h * 0.58f), strokeWidth = stroke, cap = StrokeCap.Round)
+            drawLine(color, Offset(w * 0.36f, h * 0.44f), Offset(w * 0.64f, h * 0.44f), strokeWidth = stroke, cap = StrokeCap.Round)
+        }
+    }
+
     @Composable
     fun ChevronRight(modifier: Modifier = Modifier.size(24.dp), color: Color = Color(0xFF1E293B)) {
         Canvas(modifier = modifier) {

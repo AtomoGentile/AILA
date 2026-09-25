@@ -1,10 +1,12 @@
 package circolareplus.ai.assistant
 
+import circolareplus.domain.model.CalendarEventCategory
 import circolareplus.domain.model.Circular
 import circolareplus.domain.model.CircularRelevanceBadge
 import circolareplus.domain.model.UserRole
 import circolareplus.util.formatItalianDateWithWeekday
-import circolareplus.util.weekdayName
+import circolareplus.util.parseIsoDate
+import circolareplus.util.plusDays
 
 /**
  * Costruisce il blocco di CONTESTO che viene messo davanti alla domanda dell'utente.
@@ -88,7 +90,7 @@ internal object AssistantContext {
         val builder = StringBuilder()
 
         builder.appendSection("OGGI") {
-            appendLine("${knowledge.todayIso} (${weekdayName(knowledge.todayIso)})")
+            appendLine(readableDate(knowledge.todayIso, knowledge.todayIso, withYear = true).removeSuffix(" (oggi)"))
             if (scope != null) {
                 appendLine(
                     "PERIODO CHIESTO: ${scope.describe()}. Le sezioni qui sotto contengono gia' " +
@@ -248,10 +250,10 @@ internal object AssistantContext {
                         appendLine(if (scope == null) "Scadenze rilevate:" else "Scadenze nel periodo:")
                         deadlines.forEach { deadline ->
                             appendLine(
-                                "  - ${deadline.title} | ${deadline.dueDate} " +
-                                    "(${formatItalianDateWithWeekday(deadline.dueDate)})" +
-                                    (deadline.time?.let { " $it" } ?: "") +
-                                    " | ${deadline.category}"
+                                "  - ${readableDate(deadline.dueDate, knowledge.todayIso)}" +
+                                    (deadline.time?.takeIf { it.isNotBlank() }?.let { ", ore $it" } ?: "") +
+                                    " — ${deadline.title}" +
+                                    (categoryLabel(deadline.category)?.let { " ($it)" } ?: "")
                             )
                         }
                     }
@@ -368,8 +370,7 @@ internal object AssistantContext {
         // posto delle due sezioni generiche qui sotto.
         if (scope != null) {
             val inRange = knowledge.calendarEvents.filter { scope.contains(it.date) }.sortedBy { it.date }
-            builder.appendSection("CALENDARIO — EVENTI DEL PERIODO CHIESTO (${scope.from} / ${scope.to})") {
-                appendLine("Formato: data (data leggibile) | ora | categoria | titolo | destinatari | note")
+            builder.appendSection("CALENDARIO — EVENTI DEL PERIODO CHIESTO") {
                 if (inRange.isEmpty()) appendLine("Nessun evento in calendario in questo periodo.")
                 inRange.take(budget.futureEvents + budget.pastEvents).forEach { appendLine(formatEvent(it, knowledge)) }
             }
@@ -381,7 +382,6 @@ internal object AssistantContext {
             .partition { it.date >= knowledge.todayIso }
 
         builder.appendSection("CALENDARIO — EVENTI DA OGGI IN POI") {
-            appendLine("Formato: data (data leggibile) | ora | categoria | titolo | destinatari | note")
             if (future.isEmpty()) appendLine("Nessun evento futuro.")
             future.take(budget.futureEvents).forEach { appendLine(formatEvent(it, knowledge)) }
         }
@@ -416,15 +416,18 @@ internal object AssistantContext {
                 .ifEmpty { listOf("alcuni studenti") }
                 .joinToString("/")
         }
+        // Una riga gia' nella forma in cui va mostrata: "- venerdi' 25 settembre, ore 14:15 —
+        // Incontro (avviso)". Il modello la copia cosi' com'e'. Prima riceveva
+        // "2026-09-25 (venerdi' 25 settembre) | 14:15 | AVVISO | ..." e i modelli piccoli
+        // ricopiavano pipe, categorie in maiuscolo e date ISO storpiate ("206-9-27").
         return buildString {
-            append(event.date)
-            append(" (").append(formatItalianDateWithWeekday(event.date)).append(")")
-            append(" | ").append(event.time ?: "-")
-            append(" | ").append(event.category.name)
-            append(" | ").append(event.title)
-            append(" | ").append(recipients)
-            if (event.isAiGenerated) append(" | creato dall'AI da una circolare")
-            event.notes?.takeIf { it.isNotBlank() }?.let { append(" | note: ").append(it.take(200)) }
+            append("- ").append(readableDate(event.date, knowledge.todayIso))
+            event.time?.takeIf { it.isNotBlank() }?.let { append(", ore ").append(it) }
+            append(" — ").append(event.title)
+            event.category.readable()?.let { append(" (").append(it).append(")") }
+            if (recipients != "tutta la classe") append(", solo per ").append(recipients)
+            if (event.isAiGenerated) append(" [creato dall'AI da una circolare]")
+            event.notes?.takeIf { it.isNotBlank() }?.let { append(". Note: ").append(it.take(200)) }
         }
     }
 
@@ -488,18 +491,18 @@ internal object AssistantContext {
                 appendLine("")
                 appendLine("--- Sondaggio attivo: ${poll.subject} ---")
                 appendLine("Il tuo bonus sacrificio: ${poll.mySacrificeBonus}")
-                appendLine("Formato slot: data | posti | i tuoi voti | preferenze della classe")
+                appendLine("Date proposte (posti, il tuo voto, preferenze della classe):")
                 val slots = if (scope == null) poll.slots else poll.slots.filter { scope.contains(it.slotDate) }
                 if (scope != null && slots.isEmpty()) {
                     appendLine("Nessuna data di questo sondaggio cade nel periodo chiesto.")
                 }
                 slots.forEach { slot ->
                     appendLine(
-                        "${slot.slotDate} | ${slot.capacity} posti | " +
-                            "tuo voto: ${slot.myVote?.toString() ?: "non votato"} | " +
+                        "- ${readableDate(slot.slotDate, knowledge.todayIso)}: ${slot.capacity} posti; " +
+                            "tuo voto: ${slot.myVote?.toString() ?: "non votato"}; " +
                             "verde ${slot.counts.green}, giallo ${slot.counts.yellow}, " +
                             "rosso chiaro ${slot.counts.redLight}, rosso scuro ${slot.counts.redDark}" +
-                            (if (slot.teacherMandatory) " | data imposta dal docente" else "")
+                            (if (slot.teacherMandatory) "; data imposta dal docente" else "")
                     )
                 }
             }
@@ -511,7 +514,7 @@ internal object AssistantContext {
                     val name = assignment.studentName
                         ?: knowledge.nameOf(assignment.studentId)
                         ?: "studente"
-                    appendLine("${assignment.slotDate ?: "data ignota"} | $name")
+                    appendLine("- ${assignment.slotDate?.let { readableDate(it, knowledge.todayIso) } ?: "data ignota"}: $name")
                 }
             }
         }
@@ -636,6 +639,43 @@ internal object AssistantContext {
     // -----------------------------------------------------------------------
     // Utilita' di testo
     // -----------------------------------------------------------------------
+
+    /**
+     * "venerdi' 25 settembre", con "(oggi)"/"(domani)" quando serve e l'anno solo se diverso da
+     * quello in corso. E' la forma in cui ogni data arriva al modello: niente AAAA-MM-GG da
+     * convertire, perche' e' proprio la conversione che i modelli sul telefono sbagliano.
+     */
+    internal fun readableDate(iso: String, todayIso: String, withYear: Boolean = false): String {
+        val date = parseIsoDate(iso.take(10)) ?: return iso
+        val base = formatItalianDateWithWeekday(iso)
+        val today = parseIsoDate(todayIso.take(10))
+        val year = if (withYear || today == null || today.year != date.year) " ${date.year}" else ""
+        val relative = when {
+            today == null -> ""
+            date == today -> " (oggi)"
+            date == today.plusDays(1) -> " (domani)"
+            date == today.plusDays(-1) -> " (ieri)"
+            else -> ""
+        }
+        return base + year + relative
+    }
+
+    private fun CalendarEventCategory.readable(): String? = when (this) {
+        CalendarEventCategory.VERIFICA -> "verifica"
+        CalendarEventCategory.INTERROGAZIONE -> "interrogazione"
+        CalendarEventCategory.PAGAMENTO -> "pagamento"
+        CalendarEventCategory.USCITA_DIDATTICA -> "uscita didattica"
+        CalendarEventCategory.AVVISO -> "avviso"
+        CalendarEventCategory.ALTRO -> null
+    }
+
+    /** Le categorie delle scadenze sono stringhe libere del classificatore: si traducono se note. */
+    private fun categoryLabel(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        return CalendarEventCategory.entries.firstOrNull { it.name.equals(raw.trim(), ignoreCase = true) }
+            ?.readable()
+            ?: raw.trim().lowercase().replace('_', ' ')
+    }
 
     private inline fun StringBuilder.appendSection(title: String, body: StringBuilder.() -> Unit) {
         append("\n=== ").append(title).append(" ===\n")

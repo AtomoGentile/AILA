@@ -118,7 +118,7 @@ class TimeScopeTest {
         assertFalse(context.contains("Ponte dell'Immacolata"))
         assertFalse(context.contains("Giornate dello sport"))
         assertFalse(context.contains("Fine sportelli"))
-        assertFalse(context.contains("Buono libri | 2026-10-09"))
+        assertFalse(context.contains("9 ottobre"))
     }
 
     @Test
@@ -127,6 +127,26 @@ class TimeScopeTest {
         assertFalse(context.contains("PERIODO CHIESTO"))
         assertTrue(context.contains("Ponte dell'Immacolata"))
         assertTrue(context.contains("Giornate dello sport"))
+    }
+
+    @Test
+    fun leDateArrivanoGiaLeggibiliSenzaCifre() {
+        val context = knowledge("Cosa devo fare questa settimana?")
+        assertTrue(context.contains("- giovedì 24 settembre — Festa di sport (avviso)"))
+        assertTrue(context.contains("mercoledì 23 settembre — Iscrizione sportelli (avviso)"))
+        assertFalse(context.contains("2026-09-24"))
+        assertFalse(context.contains(" | "))
+    }
+
+    @Test
+    fun rispostaConDateInCifreVieneRipulita() {
+        val raw = "Questa settimana:\n" +
+            "• Incontro | 2026-9-25 (venerdì 5 settembre) 14:15 | AVVISO\n" +
+            "• Chiusura | 206-9-27 (domenica 27 settembre) 14:00"
+        val tidy = AssistantPrompt.tidyAnswer(raw)
+        assertTrue(tidy.contains("• Incontro — venerdì 25 settembre 14:15"), tidy)
+        assertTrue(tidy.contains("• Chiusura — domenica 27 settembre 14:00"), tidy)
+        assertFalse(tidy.contains("AVVISO"), tidy)
     }
 
     @Test

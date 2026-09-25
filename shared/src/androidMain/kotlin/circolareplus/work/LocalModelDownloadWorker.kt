@@ -101,6 +101,12 @@ class LocalModelDownloadWorker(
             .setProgress(100, percent, total <= 0)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            // Si ferma anche dalla tendina, senza dover riaprire l'app e cercare le Impostazioni.
+            .addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                "Interrompi",
+                WorkManager.getInstance(applicationContext).createCancelPendingIntent(id)
+            )
             .build()
     }
 

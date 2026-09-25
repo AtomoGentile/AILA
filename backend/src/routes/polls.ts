@@ -28,6 +28,29 @@ const VOTE_LIMITS: Record<VoteScore, number> = {
   [-300]: 2,      // ROSSO SCURO (veto): max 2
 };
 
+// Contro chi "gioca" col sondaggio: una data Verde e tutte le altre Rosso Chiaro.
+//
+// Senza tetti sui voti negativi (vedi VOTE_LIMITS) quella strategia rendeva: i "meglio di no"
+// tenevano lo studente lontano da ogni data tranne la sua a spese di chi aveva risposto con
+// onestà, e se l'algoritmo lo metteva comunque su una data "rossa" incassava pure il bonus
+// sacrificio — per una data che in realtà gli andava benissimo. Invece di rimettere un tetto
+// (che costringeva al Giallo su date su cui si aveva un'opinione vera) i voti negativi si
+// diluiscono: fino a un terzo delle date valgono pieni, oltre quella quota ognuno pesa in
+// proporzione meno, e lo stesso fattore riduce il bonus sacrificio guadagnato. Chi rifiuta
+// tutto finisce, di fatto, come chi ha messo Giallo ovunque.
+const FAIR_NEGATIVE_SHARE = 1 / 3;
+
+// Tetto al bonus sacrificio accumulato: senza, qualche giro "sfortunato" di fila dava un
+// credito tale da vincere qualunque data contro chiunque per il resto dell'anno.
+const MAX_SACRIFICE_BONUS = 500;
+
+/** Peso (0-1] dei voti negativi di uno studente che ne ha dati `negatives` su `slotCount` date. */
+function negativeVoteWeight(negatives: number, slotCount: number): number {
+  if (negatives <= 0) return 1;
+  const fair = Math.max(1, Math.floor(slotCount * FAIR_NEGATIVE_SHARE));
+  return Math.min(1, fair / negatives);
+}
+
 // ---------------------------------------------------------------------------
 // GET /api/polls — Lista griglie
 // ---------------------------------------------------------------------------
@@ -490,11 +513,20 @@ async function computeAndPersistAssignments(
     "SELECT id FROM users WHERE role IN ('STUDENT', 'REPRESENTATIVE') AND class_id = ?"
   ).bind(classId).all<{ id: string }>();
 
+  // Quanti voti negativi ha dato ciascuno: serve a diluirli (vedi negativeVoteWeight).
+  const negativeCount: Record<string, number> = {};
+  for (const v of votes.results) {
+    if (v.vote_score < 0) negativeCount[v.student_id] = (negativeCount[v.student_id] ?? 0) + 1;
+  }
+  const weightOf = (studentId: string) =>
+    negativeVoteWeight(negativeCount[studentId] ?? 0, slots.results.length);
+
   const scoreMatrix: Record<string, Record<string, number>> = {};
   for (const v of votes.results) {
     if (!scoreMatrix[v.student_id]) scoreMatrix[v.student_id] = {};
-    const sacrifice = v.vote_score === 50 ? v.sacrifice_bonus : 0;
-    scoreMatrix[v.student_id][v.slot_id] = v.vote_score + sacrifice;
+    const sacrifice = v.vote_score === 50 ? Math.min(v.sacrifice_bonus, MAX_SACRIFICE_BONUS) : 0;
+    const vote = v.vote_score < 0 ? v.vote_score * weightOf(v.student_id) : v.vote_score;
+    scoreMatrix[v.student_id][v.slot_id] = vote + sacrifice;
   }
 
   const allStudentIds = students.results.map((s) => s.id);
@@ -548,13 +580,16 @@ async function computeAndPersistAssignments(
     )?.vote_score ?? 0;
 
     if (originalVoteScore === -80 || originalVoteScore === -300) {
-      const bonus = originalVoteScore === -300 ? 250 : 100;
+      // Il bonus e' diluito come il voto: finire su una delle poche date rifiutate e' un
+      // sacrificio, finire su una delle nove "rosse" di chi ne ha lasciata libera una no.
+      const bonus = Math.round((originalVoteScore === -300 ? 250 : 100) * weightOf(a.studentId));
       bonusStmts.push(
         env.DB.prepare(
           `INSERT INTO student_sacrifice_bonus (student_id, subject, bonus_points)
-           VALUES (?, ?, ?)
-           ON CONFLICT(student_id, subject) DO UPDATE SET bonus_points = bonus_points + excluded.bonus_points`
-        ).bind(a.studentId, subject, bonus)
+           VALUES (?, ?, MIN(?, ?))
+           ON CONFLICT(student_id, subject) DO UPDATE SET
+             bonus_points = MIN(bonus_points + excluded.bonus_points, ?)`
+        ).bind(a.studentId, subject, bonus, MAX_SACRIFICE_BONUS, MAX_SACRIFICE_BONUS)
       );
     } else if (originalVoteScore >= 0) {
       bonusStmts.push(

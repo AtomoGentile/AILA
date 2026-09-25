@@ -3,9 +3,12 @@ package circolareplus.ai
 import circolareplus.domain.model.CircularAiClassification
 import circolareplus.domain.model.CircularRelevanceBadge
 import circolareplus.domain.model.ExtractedDeadline
+import circolareplus.platform.currentTimeMillis
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpRequestRetry
+import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.timeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -37,9 +40,14 @@ private data class GeminiPart(val text: String)
 private data class GeminiContent(val parts: List<GeminiPart>)
 
 @Serializable
+private data class GeminiThinkingConfig(val thinkingBudget: Int)
+
+@Serializable
 private data class GeminiGenerationConfig(
     val temperature: Double = 0.2,
-    val responseMimeType: String = "application/json"
+    val responseMimeType: String = "application/json",
+    /** Solo per la chat: `thinkingBudget = 0` spegne il ragionamento, che da solo costa secondi. */
+    val thinkingConfig: GeminiThinkingConfig? = null
 )
 
 @Serializable
@@ -84,7 +92,13 @@ class ClientSideAiClassifier(
         // stessa cosa che ApiClient fa gia' per gli errori 5xx verso il backend proprio.
         install(HttpRequestRetry) {
             maxRetries = 3
-            retryIf { _, response -> response.status.value == 429 || response.status.value in 500..599 }
+            // 503 escluso: e' "modello sovraccarico", e ritentare lo stesso modello tre volte con
+            // attese crescenti costava 15-20 secondi prima di passare a gemini-flash-lite-latest,
+            // che di solito risponde subito. Il 503 lo gestisce la scaletta dei modelli.
+            retryIf { _, response ->
+                val code = response.status.value
+                code == 429 || (code in 500..599 && code != 503)
+            }
             exponentialDelay(base = 2.0, maxDelayMs = 20_000)
         }
     }
@@ -148,6 +162,38 @@ class ClientSideAiClassifier(
          * `AppContainer.newAiClassifier()` costruisce una nuova istanza a ogni classificazione.
          */
         private var resolvedModel: String? = null
+
+        /**
+         * Modelli che hanno appena risposto 503 o non hanno risposto in tempo, con l'istante fino
+         * a cui vanno messi in fondo alla fila. Senza, ogni domanda in chat ripartiva da
+         * gemini-flash-latest e ripagava lo stesso fallimento prima di arrivare al modello che
+         * risponde.
+         */
+        private val busyUntil = mutableMapOf<String, Long>()
+        private const val BUSY_COOLDOWN_MS = 3 * 60_000L
+
+        /** Modelli che hanno rifiutato `thinkingConfig` (es. i "pro", dove non si spegne). */
+        private val rejectsThinkingConfig = mutableSetOf<String>()
+
+        /** Oltre questo tempo una risposta in chat si considera persa e si prova il modello dopo. */
+        private const val CHAT_TIMEOUT_MS = 35_000L
+    }
+
+    /** I candidati in ordine, con quelli sovraccarichi da poco spostati in fondo. */
+    private fun orderedCandidates(): List<String> {
+        val all = buildList {
+            resolvedModel?.let { add(it) }
+            add(model)
+            addAll(MODEL_LADDER)
+        }.distinct()
+        val now = currentTimeMillis()
+        val (busy, ready) = all.partition { (busyUntil[it] ?: 0L) > now }
+        return ready + busy
+    }
+
+    private fun markBusy(modelName: String) {
+        busyUntil[modelName] = currentTimeMillis() + BUSY_COOLDOWN_MS
+        if (resolvedModel == modelName) resolvedModel = null
     }
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -319,17 +365,23 @@ class ClientSideAiClassifier(
 
         val built = prompt.build(MAX_PROMPT_CHARS)
         val text = built.systemPrompt + "\n\n" + built.userPrompt
-        val candidates = buildList {
-            resolvedModel?.let { add(it) }
-            add(model)
-            addAll(MODEL_LADDER)
-        }.distinct()
+        val candidates = orderedCandidates()
 
         var lastFailure = "nessun modello disponibile"
         for (candidate in candidates) {
             val response = try {
-                postGenerate(candidate, text)
+                postChat(candidate, text)
             } catch (e: Exception) {
+                // Un modello che non risponde entro il tempo e' sovraccarico quanto uno che
+                // risponde 503: si passa al successivo invece di arrendersi. (Il timeout del
+                // socket ha una classe diversa per piattaforma, da cui il controllo sul nome.)
+                if (e !is kotlinx.coroutines.CancellationException &&
+                    (e is HttpRequestTimeoutException || e::class.simpleName.orEmpty().contains("Timeout"))
+                ) {
+                    markBusy(candidate)
+                    lastFailure = "il modello $candidate non ha risposto in tempo"
+                    continue
+                }
                 return AiTextResult.Failure(
                     "non sono riuscito a raggiungere Google: ${e::class.simpleName}: " +
                         "${e.message ?: "nessun dettaglio"}"
@@ -337,6 +389,7 @@ class ClientSideAiClassifier(
             }
             if (response.status.isSuccess()) {
                 resolvedModel = candidate
+                busyUntil.remove(candidate)
                 val answer = extractGeneratedText(response.bodyAsText())
                     ?: return AiTextResult.Failure("Google ha risposto senza contenuto utilizzabile.")
                 return AiTextResult.Success(answer, "Google Gemini ($candidate)")
@@ -344,14 +397,14 @@ class ClientSideAiClassifier(
             val body = try { response.bodyAsText() } catch (e: Exception) { "" }
             lastFailure = "HTTP ${response.status.value} con il modello $candidate: ${body.take(200)}"
             if (!isModelUnavailable(response.status.value, body)) return AiTextResult.Failure(lastFailure)
-            // Un modello che ha appena risposto 503 non va piu' tenuto come "risolto": la
-            // prossima domanda deve ripartire dalla scaletta invece di ributtarsi sullo stesso.
-            if (resolvedModel == candidate) resolvedModel = null
+            // Un modello che ha appena risposto 503 non va piu' tenuto come "risolto" e per
+            // qualche minuto passa in fondo alla fila: la prossima domanda parte da uno che va.
+            markBusy(candidate)
         }
 
         val discovered = discoverUsableModel()
         if (discovered != null) {
-            val response = postGenerate(discovered, text)
+            val response = try { postChat(discovered, text) } catch (e: Exception) { return AiTextResult.Failure(lastFailure) }
             if (response.status.isSuccess()) {
                 resolvedModel = discovered
                 val answer = extractGeneratedText(response.bodyAsText())
@@ -424,15 +477,55 @@ class ClientSideAiClassifier(
             "${lastFailure ?: "sconosciuto"}"
     }
 
+    /**
+     * Una generateContent per la chat: ragionamento spento e tempo massimo piu' corto di quello
+     * della classificazione. Chi guarda la chat aspetta la risposta; il ragionamento di Flash
+     * su una domanda come "cosa ho questa settimana" aggiunge secondi senza cambiare la risposta.
+     * Se il modello rifiuta `thinkingConfig` (i "pro" non lo lasciano spegnere) si riprova
+     * senza, e lo si ricorda per le domande successive.
+     */
+    private suspend fun postChat(modelName: String, prompt: String): HttpResponse {
+        val withThinkingOff = modelName !in rejectsThinkingConfig
+        val response = postGenerate(
+            modelName,
+            prompt,
+            thinking = if (withThinkingOff) GeminiThinkingConfig(thinkingBudget = 0) else null,
+            timeoutMs = CHAT_TIMEOUT_MS
+        )
+        if (withThinkingOff && response.status.value == 400) {
+            val body = try { response.bodyAsText() } catch (e: Exception) { "" }
+            if (body.contains("thinking", ignoreCase = true)) {
+                rejectsThinkingConfig += modelName
+                return postGenerate(modelName, prompt, thinking = null, timeoutMs = CHAT_TIMEOUT_MS)
+            }
+        }
+        return response
+    }
+
     /** Una singola chiamata generateContent al modello indicato. */
-    private suspend fun postGenerate(modelName: String, prompt: String): HttpResponse =
+    private suspend fun postGenerate(
+        modelName: String,
+        prompt: String,
+        thinking: GeminiThinkingConfig? = null,
+        timeoutMs: Long? = null
+    ): HttpResponse =
         httpClient.post("$API_BASE/$modelName:generateContent") {
+            timeoutMs?.let { ms -> timeout { requestTimeoutMillis = ms; socketTimeoutMillis = ms } }
             // Chiave sia in header (forma documentata da Google) sia come parametro: se una delle
             // due venisse ignorata l'altra regge, e non costa nulla mandarle entrambe.
             header("x-goog-api-key", userApiKey)
             parameter("key", userApiKey)
             contentType(ContentType.Application.Json)
-            setBody(GeminiRequest(contents = listOf(GeminiContent(parts = listOf(GeminiPart(prompt))))))
+            setBody(
+                GeminiRequest(
+                    contents = listOf(GeminiContent(parts = listOf(GeminiPart(prompt)))),
+                    generationConfig = if (thinking == null) {
+                        GeminiGenerationConfig()
+                    } else {
+                        GeminiGenerationConfig(thinkingConfig = thinking)
+                    }
+                )
+            )
         }
 
     /**

@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.SolidColor
@@ -70,6 +71,7 @@ fun SearchScreen(
     onSubmitQuery: (String) -> Unit = {},
     onOpenAssistant: (String) -> Unit = {},
     onOpenCircular: (Circular) -> Unit = {},
+    onOpenCirculars: () -> Unit = {},
     onOpenCalendar: () -> Unit = {},
     onOpenBoard: () -> Unit = {}
 ) {
@@ -197,6 +199,7 @@ fun SearchScreen(
             trimmed.length < 2 -> SearchIdleContent(
                 recentSearches = recentSearches,
                 onPickRecent = { query = it },
+                onOpenCirculars = onOpenCirculars,
                 onOpenCalendar = onOpenCalendar,
                 onOpenBoard = onOpenBoard
             )
@@ -244,6 +247,7 @@ fun SearchScreen(
 private fun SearchIdleContent(
     recentSearches: List<String>,
     onPickRecent: (String) -> Unit,
+    onOpenCirculars: () -> Unit,
     onOpenCalendar: () -> Unit,
     onOpenBoard: () -> Unit
 ) {
@@ -277,6 +281,7 @@ private fun SearchIdleContent(
                 title = "Circolari",
                 subtitle = "Per numero o titolo",
                 tint = AppTheme.TintBlue,
+                onClick = onOpenCirculars,
                 icon = { AppIcons.Document(modifier = Modifier.size(20.dp), color = AppTheme.TintBlueInk) }
             )
             AilaListRow(
@@ -367,11 +372,12 @@ private fun AskAilaButton(query: String, onClick: () -> Unit) {
                 text = if (hasQuery) {
                     "Risposta di AILA Assistant, cercando in tutta l'app"
                 } else {
-                    "Circolari, calendario, bacheca, sondaggi, mappa posti"
+                    "Circolari, calendario, bacheca e altro"
                 },
                 fontSize = 11.sp,
                 color = AppTheme.OnHeroSecondary,
-                maxLines = 1
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
         Spacer(modifier = Modifier.width(AppTheme.Space8))

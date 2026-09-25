@@ -32,6 +32,7 @@ import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
 import circolareplus.ai.LocalAiModel
 import circolareplus.ai.deviceTierForRam
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /** Categorie di notifica che si possono spegnere una per una. */
@@ -81,6 +82,8 @@ fun SettingsScreen(
      * riparte da lì — ma va detto all'utente, ed è quello che fa la riga sotto al pulsante.
      */
     downloadLocalModel: suspend (LocalAiModel, (Long, Long) -> Unit) -> String = { _, _ -> "" },
+    /** Ferma il download in corso (su Android anche il Worker che continua in background). */
+    onCancelLocalModelDownload: (LocalAiModel) -> Unit = {},
     onDeleteLocalModel: (LocalAiModel) -> Unit = {},
     onTestLocalModel: suspend () -> String = { "Non disponibile" },
     /**
@@ -104,6 +107,7 @@ fun SettingsScreen(
     var downloadedBytes by remember { mutableStateOf(0L) }
     var downloadTotalBytes by remember { mutableStateOf(0L) }
     var downloadStatus by remember { mutableStateOf<String?>(null) }
+    var downloadJob by remember { mutableStateOf<Job?>(null) }
     var isTestingLocal by remember { mutableStateOf(false) }
     // Come per i filtri delle notifiche: "il modello è installato" è un file su disco, non stato
     // di Compose. Senza questo contatore la scheda continuerebbe a mostrare "Scarica" anche
@@ -496,11 +500,27 @@ fun SettingsScreen(
                                             }
                                         )
                                     }
+                                } else if (isDownloading && activeModel != null) {
+                                    // Il download va fermato da qui, non solo dalla notifica: chi
+                                    // si accorge di essere sotto rete dati o di aver scelto il
+                                    // modello sbagliato non deve aspettare qualche giga.
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    AilaSecondaryButton(
+                                        text = "Interrompi download",
+                                        onClick = {
+                                            downloadJob?.cancel()
+                                            downloadJob = null
+                                            onCancelLocalModelDownload(activeModel)
+                                            isDownloading = false
+                                            downloadStatus = "Download interrotto. Quello che era già " +
+                                                "arrivato resta: se riprovi riparte da lì."
+                                            modelsRevision++
+                                        }
+                                    )
                                 } else {
                                     Spacer(modifier = Modifier.weight(1f))
                                     AilaPrimaryButton(
                                         text = when {
-                                            isDownloading -> "Scarico…"
                                             activeModel == null -> "Scarica"
                                             activeModel.isSystemModel -> "Attiva"
                                             else -> "Scarica (${activeModel.readableSize})"
@@ -513,12 +533,16 @@ fun SettingsScreen(
                                             downloadStatus = null
                                             downloadedBytes = 0L
                                             downloadTotalBytes = model.approxSizeBytes
-                                            scope.launch {
-                                                downloadStatus = downloadLocalModel(model) { done, total ->
+                                            downloadJob = scope.launch {
+                                                val message = downloadLocalModel(model) { done, total ->
                                                     downloadedBytes = done
                                                     downloadTotalBytes = total
                                                 }
+                                                // Interrotto a mano: il messaggio l'ha gia' scritto il
+                                                // pulsante, "Download annullato." dal Worker lo coprirebbe.
+                                                if (isDownloading) downloadStatus = message
                                                 isDownloading = false
+                                                downloadJob = null
                                                 modelsRevision++
                                             }
                                         }
