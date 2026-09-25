@@ -186,8 +186,10 @@ internal object AssistantContext {
             "INDICE DI TUTTE LE CIRCOLARI (${indexed.size})"
         }
         builder.appendSection(title) {
-            appendLine("Formato: numero | data di pubblicazione | titolo")
-            indexed.forEach { appendLine("${it.number} | ${it.publishDate} | ${it.title}") }
+            // Stessa forma leggibile del calendario: niente "|" ne' AAAA-MM-GG da ricopiare.
+            indexed.forEach {
+                appendLine("- n. ${it.number}, pubblicata ${readableDate(it.publishDate, knowledge.todayIso)} — ${it.title}")
+            }
         }
 
         val ranked = knowledge.circulars
@@ -215,7 +217,7 @@ internal object AssistantContext {
             }
             detailed.forEach { circular ->
                 appendLine("")
-                appendLine("--- Circolare n. ${circular.number} (${circular.publishDate}) ---")
+                appendLine("--- Circolare n. ${circular.number} (pubblicata ${readableDate(circular.publishDate, knowledge.todayIso)}) ---")
                 appendLine("Titolo: ${circular.title}")
                 val analysis = knowledge.classifications[circular.number]
                 if (budget.tight && circular.number in deepTexts) {
