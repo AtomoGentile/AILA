@@ -5,13 +5,63 @@ import shared
 /**
  * Implementazione del bridge AppleIntelligenceBridge in Swift.
  *
- * Usa FoundationModels (iOS 26+) per accedere ad Apple Intelligence tramite il modello di
- * sistema. Non necessita download, API key, o configurazione: gira tutto sul dispositivo.
- *
- * Ogni metodo della classe SwiftUI implementa il corrispondente metodo Kotlin dell'interfaccia
- * AppleIntelligenceBridge, esportata come protocollo Objective-C dal framework `shared`.
+ * L'app gira da iOS 17, FoundationModels esiste solo da iOS 26: questa classe si può creare su
+ * qualunque versione e ogni metodo passa da `#available(iOS 26, *)`. Il codice vero sta in
+ * [FoundationModelsEngine], marcato `@available(iOS 26, *)`. Il framework è collegato in modo
+ * debole (-weak_framework in project.yml), quindi su iOS 17-25 l'app parte comunque.
  */
 class AppleIntelligenceEngine: AppleIntelligenceBridge {
+
+    func isAvailable() -> Bool {
+        if #available(iOS 26, *) {
+            return FoundationModelsEngine.isAvailable()
+        }
+        return false
+    }
+
+    func isSupportedOnDevice() -> Bool {
+        if #available(iOS 26, *) {
+            return FoundationModelsEngine.isSupportedOnDevice()
+        }
+        return false
+    }
+
+    func unavailableReason() -> String? {
+        if #available(iOS 26, *) {
+            return FoundationModelsEngine.unavailableReason()
+        }
+        return "Apple Intelligence richiede iOS 26 o successivo."
+    }
+
+    func generate(
+        systemPrompt: String,
+        userPrompt: String,
+        timeoutMillis: Int64,
+        maxOutputTokens: Int32,
+        temperature: Double,
+        stopWhen: @escaping (String) -> KotlinBoolean
+    ) async throws -> String {
+        if #available(iOS 26, *) {
+            return try await FoundationModelsEngine.generate(
+                systemPrompt: systemPrompt,
+                userPrompt: userPrompt,
+                timeoutMillis: timeoutMillis,
+                maxOutputTokens: maxOutputTokens,
+                temperature: temperature,
+                stopWhen: stopWhen
+            )
+        }
+        throw NSError(
+            domain: "AppleIntelligenceEngine",
+            code: -4,
+            userInfo: [NSLocalizedDescriptionKey: "Apple Intelligence richiede iOS 26 o successivo."]
+        )
+    }
+}
+
+/** Accesso a FoundationModels: solo iOS 26+. */
+@available(iOS 26, *)
+private enum FoundationModelsEngine {
 
     /**
      * Verifica se Apple Intelligence è disponibile e pronto.
@@ -20,8 +70,16 @@ class AppleIntelligenceEngine: AppleIntelligenceBridge {
      * - `.available` → dispositivo supportato, attivato, modello pronto
      * - `.unavailable(let reason)` → motivo specifico
      */
-    func isAvailable() -> Bool {
+    static func isAvailable() -> Bool {
         return SystemLanguageModel.default.availability == .available
+    }
+
+    /** false su iPhone che non potranno mai usarla (non idonei): lì l'opzione si nasconde. */
+    static func isSupportedOnDevice() -> Bool {
+        if case .unavailable(.deviceNotEligible) = SystemLanguageModel.default.availability {
+            return false
+        }
+        return true
     }
 
     /**
@@ -30,7 +88,7 @@ class AppleIntelligenceEngine: AppleIntelligenceBridge {
      * Mappa i casi di `SystemLanguageModel.Availability.Reason` a messaggi in italiano
      * comprensibili per un utente non tecnico.
      */
-    func unavailableReason() -> String? {
+    static func unavailableReason() -> String? {
         guard !isAvailable() else { return nil }
 
         let reason = SystemLanguageModel.default.availability
@@ -67,7 +125,7 @@ class AppleIntelligenceEngine: AppleIntelligenceBridge {
      * @return Testo generato accumulato
      * @throws NSError Se la generazione fallisce o scade il timeout
      */
-    func generate(
+    static func generate(
         systemPrompt: String,
         userPrompt: String,
         timeoutMillis: Int64,
@@ -113,7 +171,7 @@ class AppleIntelligenceEngine: AppleIntelligenceBridge {
                     throw NSError(
                         domain: "AppleIntelligenceEngine",
                         code: -1,
-                        userInfo: [NSLocalizedDescriptionKey: AppleIntelligenceEngine.describe(error)]
+                        userInfo: [NSLocalizedDescriptionKey: FoundationModelsEngine.describe(error)]
                     )
                 }
             }

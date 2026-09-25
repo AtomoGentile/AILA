@@ -15,6 +15,12 @@ interface AppleIntelligenceBridge {
     fun isAvailable(): Boolean
 
     /**
+     * false se questo iPhone non potrà mai usarla (iOS < 26 o dispositivo non idoneo):
+     * le Impostazioni nascondono l'opzione. true se è solo spenta o in preparazione.
+     */
+    fun isSupportedOnDevice(): Boolean
+
+    /**
      * Motivo leggibile se isAvailable() è false: dispositivo non supportato, Apple
      * Intelligence disattivato nelle Impostazioni di sistema, o lingua non supportata.
      * Null se isAvailable() è true.
