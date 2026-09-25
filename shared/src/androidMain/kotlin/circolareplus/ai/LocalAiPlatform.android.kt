@@ -30,6 +30,9 @@ actual fun totalDeviceRamMb(): Int {
 
 actual fun isOnDeviceAiAvailable(): Boolean = onDeviceAiUnavailableReason() == null
 
+// Su Android la sezione resta com'era: il motivo di indisponibilità si mostra nella scheda.
+actual fun isOnDeviceAiOfferedHere(): Boolean = true
+
 actual fun onDeviceAiUnavailableReason(): String? {
     if (AndroidAppContext.getOrNull() == null) {
         return "AI locale non ancora inizializzata."

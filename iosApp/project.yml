@@ -1,7 +1,9 @@
 name: iosApp
 options:
+  # iOS 17: minimo richiesto dal codice Swift (onChange a due parametri). Apple Intelligence
+  # (FoundationModels, iOS 26+) è protetta da #available in AppleIntelligenceEngine.swift.
   deploymentTarget:
-    iOS: "26.0"
+    iOS: "17.0"
   bundleIdPrefix: com.circolareplus
 
 packages:
@@ -31,7 +33,7 @@ targets:
   iosApp:
     type: application
     platform: iOS
-    deploymentTarget: "26.0"
+    deploymentTarget: "17.0"
     sources:
       # GoogleService-Info.plist, quando presente in questa cartella, viene raccolto
       # automaticamente da questo glob come risorsa dell'app (bundle). In CI non c'e'
@@ -44,7 +46,9 @@ targets:
       PRODUCT_NAME: Circolare+
       PRODUCT_BUNDLE_IDENTIFIER: com.circolareplus
       FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)
-      OTHER_LDFLAGS: -framework shared
+      # FoundationModels collegato in modo debole: su iOS 17-25 il framework non esiste e un
+      # collegamento normale farebbe crashare l'app all'avvio.
+      OTHER_LDFLAGS: -framework shared -weak_framework FoundationModels
       # shared/build.gradle.kts non dichiara iosX64 (simulatore Mac Intel): Compose Multiplatform
       # ha smesso di pubblicare per quel target. Senza questa esclusione Xcode chiede comunque
       # x86_64 per il simulatore (default ARCHS = arm64 x86_64) e Gradle fallisce con

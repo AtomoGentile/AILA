@@ -16,6 +16,7 @@ import circolareplus.design.AilaCard
 import circolareplus.design.AilaPrimaryButton
 import circolareplus.design.AilaSecondaryButton
 import circolareplus.design.AppTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /**
@@ -28,6 +29,10 @@ fun BackgroundDebugScreen(
     readLog: () -> String,
     onClearLog: () -> Unit,
     onSimulate: suspend () -> String,
+    /** Segnalibro locale del refresh (bg_last_circular_number). */
+    readBookmark: () -> Int = { 0 },
+    /** Riporta il segnalibro a (ultima circolare - 1), solo sul telefono. */
+    onRewindBookmark: suspend () -> String = { "" },
     onBackClick: () -> Unit
 ) {
     // Il log sta in UserDefaults, non è stato di Compose: si rilegge a ogni revisione.
@@ -36,6 +41,24 @@ fun BackgroundDebugScreen(
     var lastResult by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val log = remember(revision) { readLog() }
+    val bookmark = remember(revision) { readBookmark() }
+
+    // Esegue un'azione lunga mostrando l'esito e rileggendo log e segnalibro.
+    fun runAction(action: suspend () -> String) {
+        isRunning = true
+        scope.launch {
+            lastResult = try {
+                action()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                "Errore: ${e.message}"
+            } finally {
+                isRunning = false
+                revision++
+            }
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
         AilaBackBar(title = "Diagnostica background", onBackClick = onBackClick)
@@ -62,18 +85,13 @@ fun BackgroundDebugScreen(
             AilaPrimaryButton(
                 text = if (isRunning) "In corso…" else "Simula risveglio",
                 enabled = !isRunning,
-                onClick = {
-                    isRunning = true
-                    scope.launch {
-                        lastResult = try {
-                            onSimulate()
-                        } finally {
-                            isRunning = false
-                            revision++
-                        }
-                    }
-                },
+                onClick = { runAction(onSimulate) },
                 fillMaxWidth = true
+            )
+            // Per provare la notifica senza toccare il D1: al prossimo risveglio risulta 1 nuova.
+            AilaSecondaryButton(
+                text = "Retrocedi segnalibro",
+                onClick = { if (!isRunning) runAction(onRewindBookmark) }
             )
             Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
                 AilaSecondaryButton(
@@ -85,6 +103,12 @@ fun BackgroundDebugScreen(
                 )
                 AilaSecondaryButton(text = "Aggiorna", onClick = { revision++ })
             }
+
+            Text(
+                text = "Segnalibro attuale: ${if (bookmark == 0) "non ancora fissato" else "n. $bookmark"}",
+                fontSize = 13.sp,
+                color = AppTheme.TextMuted
+            )
 
             lastResult?.let {
                 Text(text = "Esito: $it", fontSize = 13.sp, color = AppTheme.TextMuted)

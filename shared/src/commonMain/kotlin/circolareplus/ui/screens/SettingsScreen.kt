@@ -68,6 +68,8 @@ fun SettingsScreen(
     onAiProviderChange: (String) -> Unit = {},
     /** Frase da mostrare se l'AI locale non è utilizzabile qui (iPhone, emulatore non ARM). */
     localAiUnavailableReason: String? = null,
+    /** false = sezione "AI locale" nascosta del tutto (vedi isOnDeviceAiOfferedHere). */
+    showLocalAiSection: Boolean = true,
     /** RAM totale del telefono in MB, 0 se non rilevabile. */
     deviceRamMb: Int = 0,
     /** Modelli selezionabili, con il consigliato per questo telefono in prima posizione. */
@@ -305,8 +307,9 @@ fun SettingsScreen(
             }
 
             // --- AI locale sul telefono -------------------------------------------------
-            item { AilaSectionTitle(text = "AI locale (sul telefono)", modifier = Modifier.ailaAppear(6)) }
-            item {
+            // Nascosta dove non potrà mai funzionare (iPhone con iOS < 26 o non idoneo).
+            if (showLocalAiSection) item { AilaSectionTitle(text = "AI locale (sul telefono)", modifier = Modifier.ailaAppear(6)) }
+            if (showLocalAiSection) item {
                 AilaCard(modifier = Modifier.ailaAppear(7)) {
                     Column(modifier = Modifier.padding(AppTheme.Space16)) {
                         if (localAiUnavailableReason != null) {
