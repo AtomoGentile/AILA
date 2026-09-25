@@ -16,7 +16,14 @@ fcmRoutes.use('*', authMiddleware());
 // ---------------------------------------------------------------------------
 fcmRoutes.post('/token', async (c) => {
   const payload = c.get('jwtPayload');
-  const { token, platform } = await c.req.json<{ token: string; platform: 'android' | 'ios' }>();
+  const { token, platform, mutedKinds, systemNotifications } = await c.req.json<{
+    token: string;
+    platform: 'android' | 'ios';
+    // Preferenze delle Impostazioni del telefono (facoltative: le app vecchie non le mandano).
+    // Servono ai messaggi iOS, vedi buildMessage in services/fcm.ts.
+    mutedKinds?: string[];
+    systemNotifications?: boolean;
+  }>();
 
   if (!token) return c.json({ error: 'token è obbligatorio' }, 400);
   if (!['android', 'ios'].includes(platform)) {
@@ -36,6 +43,21 @@ fcmRoutes.post('/token', async (c) => {
        ON CONFLICT(user_id, platform) DO UPDATE SET token = excluded.token, updated_at = excluded.updated_at`
     ).bind(payload.sub, token, platform),
   ]);
+
+  if (Array.isArray(mutedKinds) || typeof systemNotifications === 'boolean') {
+    const muted = (Array.isArray(mutedKinds) ? mutedKinds : [])
+      .filter((k) => typeof k === 'string' && /^[a-z_]{1,32}$/.test(k))
+      .join(',');
+    try {
+      await c.env.DB.prepare(
+        'UPDATE fcm_tokens SET muted_kinds = ?, system_notifications = ? WHERE user_id = ? AND platform = ?'
+      ).bind(muted, systemNotifications === false ? 0 : 1, payload.sub, platform).run();
+    } catch (e) {
+      // Migrazione 008 non ancora applicata: il token e' comunque registrato, le notifiche
+      // arrivano come prima (senza filtri lato server).
+      console.error('[FCM] Preferenze non salvate (manca la migrazione 008?)', e);
+    }
+  }
 
   return c.json({ success: true });
 });

@@ -332,6 +332,9 @@ CREATE TABLE IF NOT EXISTS fcm_tokens (
     token TEXT NOT NULL,
     platform TEXT NOT NULL CHECK(platform IN ('android', 'ios')),
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    -- Preferenze del dispositivo (migrazione 008), usate per i messaggi iOS: vedi services/fcm.ts.
+    muted_kinds TEXT NOT NULL DEFAULT '',
+    system_notifications INTEGER NOT NULL DEFAULT 1,
     PRIMARY KEY (user_id, platform)
 );
 

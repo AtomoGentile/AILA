@@ -45,6 +45,13 @@ interface AppleIntelligenceBridge {
         temperature: Double,
         stopWhen: (String) -> Boolean
     ): String
+
+    /**
+     * Interrompe la generazione in corso, se c'e'. Serve al tasto Stop: annullare la coroutine
+     * Kotlin non arriva al `Task` Swift, che senza questa chiamata continuava a generare fino
+     * alla fine o al timeout mentre l'analisi successiva partiva gia'.
+     */
+    fun cancelGeneration()
 }
 
 /**

@@ -180,6 +180,11 @@ class LocalSettingsManager(
     fun isNotificationKindEnabled(kind: String): Boolean =
         kind !in (settings.getStringOrNull(KEY_MUTED_NOTIFICATIONS)?.split("\n").orEmpty())
 
+    /** Le categorie spente, da mandare al server insieme al token push (vedi FcmRepository). */
+    val mutedNotificationKinds: List<String>
+        get() = settings.getStringOrNull(KEY_MUTED_NOTIFICATIONS)?.split("\n")
+            ?.filter { it.isNotBlank() }.orEmpty()
+
     fun setNotificationKindEnabled(kind: String, enabled: Boolean) {
         val muted = settings.getStringOrNull(KEY_MUTED_NOTIFICATIONS)?.split("\n")
             ?.filter { it.isNotBlank() }.orEmpty()

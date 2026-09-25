@@ -3,21 +3,22 @@ package circolareplus.design
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.ui.Modifier
-import circolareplus.platform.isIos
 
 /**
- * Margini di sicurezza (notch, Dynamic Island, barra home, tastiera) da applicare solo su iOS.
+ * Margini di sicurezza (status bar, notch, Dynamic Island, barra di navigazione/home, tastiera).
  *
- * Su iOS l'app disegna a tutto schermo (iosApp/iOSApp.swift usa `.ignoresSafeArea`), quindi
- * fuori dallo Scaffold nessuno teneva il contenuto lontano dalle aree di sistema, e la tastiera
- * copriva i campi di testo. Su Android la finestra NON è edge-to-edge (targetSdk 34, nessun
- * `enableEdgeToEdge`): è già il sistema a tenere il contenuto sotto la status bar e a
- * ridimensionare la finestra per la tastiera, e applicare qui lo stesso margine rischierebbe di
- * contarlo due volte. Per questo il ramo Android resta un no-op esplicito.
+ * Su entrambe le piattaforme l'app disegna a tutto schermo: su iOS perche' iosApp/iOSApp.swift
+ * usa `.ignoresSafeArea`, su Android perche' da targetSdk 35 la finestra e' sempre edge-to-edge
+ * (MainActivity chiama `enableEdgeToEdge`). Fuori dallo Scaffold nessuno tiene il contenuto
+ * lontano dalle aree di sistema, e senza questi margini la tastiera copriva i campi di testo.
+ *
+ * Prima valevano solo su iOS: Android non era edge-to-edge e ci pensava il sistema.
  */
-fun Modifier.iosSafeDrawingPadding(): Modifier =
-    if (isIos()) safeDrawingPadding() else this
+fun Modifier.appSafeDrawingPadding(): Modifier = safeDrawingPadding()
 
-/** Solo la tastiera (senza status bar/home indicator), per schermate già dentro uno Scaffold. */
-fun Modifier.iosImePadding(): Modifier =
-    if (isIos()) imePadding() else this
+/**
+ * Solo la tastiera (senza status bar/home indicator), per schermate già dentro uno Scaffold o un
+ * bottom sheet. Se un genitore ha gia' applicato lo spazio della tastiera (i bottom sheet di
+ * Material lo fanno) quel margine risulta gia' consumato e qui non si aggiunge nulla.
+ */
+fun Modifier.appImePadding(): Modifier = imePadding()

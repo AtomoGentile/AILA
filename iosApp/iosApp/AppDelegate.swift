@@ -1,5 +1,6 @@
 import UIKit
 import UserNotifications
+import BackgroundTasks
 import FirebaseCore
 import FirebaseMessaging
 import shared
@@ -21,6 +22,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
      * Accessibile da qualunque punto dell'app che abbia bisogno di leggerlo.
      */
     static var apnsToken: String?
+
+    /// Giro periodico delle circolari (BGAppRefreshTask), l'equivalente di CircularsSyncWorker su
+    /// Android. Dichiarato in BGTaskSchedulerPermittedIdentifiers (project.yml).
+    static let refreshTaskIdentifier = "com.circolareplus.refresh"
 
     /**
      * Inizializzazione dell'app: richiesta dei permessi per le notifiche remote.
@@ -50,12 +55,32 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         // Si osserva la notifica di sistema invece di implementare applicationDidBecomeActive:
         // con il ciclo di vita SwiftUI (UIApplicationDelegateAdaptor + scene) quel metodo del
         // delegate non e' garantito, la notifica UIApplication.didBecomeActiveNotification si'.
+        //
+        // Allo stesso momento si rileggono i dati, come fa Android in MainActivity.onResume: nel
+        // frattempo puo' essere arrivata una circolare, e la notifica non aggiorna nulla da sola.
+        // E si recuperano in campanella le notifiche arrivate con l'app in background e non
+        // toccate, che altrimenti non ci finivano mai (su Android le scrive sempre il servizio).
         NotificationCenter.default.addObserver(
             forName: UIApplication.didBecomeActiveNotification,
             object: nil,
             queue: .main
-        ) { _ in
+        ) { [weak self] _ in
             AppDelegate.clearBadge()
+            DataRefreshEvents.shared.request()
+            self?.logDeliveredNotifications()
+        }
+
+        // Il giro in background va registrato prima che finisca il lancio, e riprogrammato ogni
+        // volta che l'app passa in background (iOS decide poi quando eseguirlo davvero).
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: AppDelegate.refreshTaskIdentifier, using: .main) { task in
+            AppDelegate.handleRefresh(task)
+        }
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            AppDelegate.scheduleRefresh()
         }
 
         // Avvio a freddo: l'app era completamente chiusa ed è stata aperta tappando una
@@ -130,6 +155,95 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     ) {
         print("Errore registrazione notifiche remote: \(error.localizedDescription)")
         // Questo non è un errore fatale: l'app continua a funzionare senza notifiche push
+    }
+
+    /**
+     * Chiede a iOS un giro in background fra almeno 15 minuti (come il periodico di Android).
+     * Richiederlo di nuovo sostituisce quello in attesa, quindi va bene farlo a ogni uscita.
+     */
+    static func scheduleRefresh() {
+        let request = BGAppRefreshTaskRequest(identifier: refreshTaskIdentifier)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+        do {
+            try BGTaskScheduler.shared.submit(request)
+        } catch {
+            print("Giro in background non programmato: \(error.localizedDescription)")
+        }
+    }
+
+    /** Esegue il giro (Kotlin, IosBackgroundWork.runRefresh) e riprogramma il successivo. */
+    private static func handleRefresh(_ task: BGTask) {
+        scheduleRefresh()
+        var completed = false
+        let finish: (Bool) -> Void = { success in
+            DispatchQueue.main.async {
+                guard !completed else { return }
+                completed = true
+                task.setTaskCompleted(success: success)
+            }
+        }
+        let run = IosBackgroundWork.shared.runRefresh { ok in
+            finish(ok.boolValue)
+        }
+        task.expirationHandler = {
+            run.cancel()
+            finish(false)
+        }
+    }
+
+    /**
+     * Scrive in campanella le notifiche ancora nel Centro Notifiche. Con l'app in background il
+     * banner lo mostra iOS e l'app ne sa qualcosa solo se l'utente lo tocca; qui si recuperano le
+     * altre. onPushReceived deduplica per id messaggio, quindi richiamarla e' innocuo.
+     */
+    private func logDeliveredNotifications() {
+        UNUserNotificationCenter.current().getDeliveredNotifications { notifications in
+            DispatchQueue.main.async {
+                for notification in notifications {
+                    let content = notification.request.content
+                    _ = AppContainer.shared.settings.onPushReceived(
+                        messageId: self.messageId(for: notification),
+                        title: content.title,
+                        body: content.body,
+                        category: self.categoryFromUserInfo(content.userInfo)
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Push ricevuto con l'app in background o sospesa (`content-available`, vedi buildMessage in
+     * backend/src/services/fcm.ts): lo si scrive in campanella anche se l'utente non lo tocca. Se
+     * "Notifiche di sistema" e' spento il server lo manda senza banner, e questo e' l'unico punto
+     * in cui l'app lo vede. Con l'app aperta passa anche da willPresent: l'id messaggio evita il
+     * doppione.
+     */
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        var title = ""
+        var body = ""
+        if let aps = userInfo["aps"] as? [AnyHashable: Any], let alert = aps["alert"] as? [AnyHashable: Any] {
+            title = alert["title"] as? String ?? ""
+            body = alert["body"] as? String ?? ""
+        }
+        // Push silenzioso: titolo e testo arrivano nei dati.
+        if title.isEmpty { title = userInfo["title"] as? String ?? "AILA" }
+        if body.isEmpty { body = userInfo["body"] as? String ?? "" }
+
+        if let messageId = userInfo["gcm.message_id"] as? String, !messageId.isEmpty {
+            _ = AppContainer.shared.settings.onPushReceived(
+                messageId: messageId,
+                title: title,
+                body: body,
+                category: categoryFromUserInfo(userInfo)
+            )
+        }
+        DataRefreshEvents.shared.request()
+        completionHandler(.newData)
     }
 
     /**
@@ -238,6 +352,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         if !category.isEmpty {
             PendingDeepLink.shared.category = category
         }
+        // Tornando dal tocco la lista deve gia' mostrare la novita', come su Android.
+        DataRefreshEvents.shared.request()
 
         completionHandler()
     }

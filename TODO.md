@@ -3,6 +3,56 @@
 Elenco vivo dei problemi aperti e del lavoro ancora mancante, aggiornato mano a mano.
 Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esistente.
 
+## 25/9: discrepanze Android/iOS (branch `claude/android-ios-discrepancies-j1dggy`)
+
+**Non compilato qui** (Gradle non scarica i plugin da questo ambiente): fa fede la CI di GitHub
+(Android Build e iOS Build). Backend: `tsc` passa.
+
+**Deploy, in quest'ordine**:
+1. `wrangler d1 execute circolare_d1 --remote --file=./migrations/008_push_preferences.sql`
+2. `wrangler deploy` (senza la migrazione il backend funziona come prima, senza filtri iOS)
+3. la nuova app.
+
+Fatto:
+- **iOS rilegge i dati tornando in primo piano** e dopo il tocco su una notifica (Android lo faceva
+  gia' in `onResume`).
+- **Notifiche iOS in background**: le preferenze (categorie silenziate, "Notifiche di sistema")
+  viaggiano col token (`POST /api/fcm/token`, migrazione 008) e il server le applica ai messaggi
+  iOS: categoria spenta = nessun invio, notifiche di sistema spente = push silenzioso che finisce
+  solo in campanella. I push iOS hanno `content-available`, e al rientro l'app recupera in
+  campanella quelle rimaste nel Centro Notifiche: prima entravano solo se toccate.
+- **Android: tocco su una notifica vecchia** apriva la sezione dell'ultima arrivata (PendingIntent
+  con requestCode fisso). Ora un requestCode per notifica.
+- **Stop di Apple Intelligence**: il tasto Stop ora cancella davvero il `Task` Swift
+  (`cancelGeneration`), prima la generazione continuava fino al timeout.
+- **Info.plist in `project.yml`** (`info.properties`): XcodeGen riscrive il plist a ogni
+  generazione, e launch screen, orientamenti e nome "AILA" si perdevano. La chiave degli
+  orientamenti iPad era anche sbagliata (`...IPad` invece di `~ipad`). iPhone solo verticale.
+- **Lavoro in background su iOS**: analisi sul telefono tenuta viva con `beginBackgroundTask` +
+  `BGContinuedProcessingTask` (avanzamento di sistema e annullamento = Stop della notifica
+  Android), giro circolari con `BGAppRefreshTask`. Il giro e' ora codice comune
+  (`work/BackgroundCircularsSync.kt`), usato anche da `CircularsSyncWorker`.
+- **Android edge-to-edge, targetSdk 36**: status bar e barra di navigazione seguono il tema
+  dell'app; i margini di sistema li applica `design/PlatformInsets.kt` su entrambe le piattaforme.
+  `onTimeout` sul servizio in primo piano (tetto di 6 ore dei dataSync da Android 15).
+- **"Attiva" Apple Intelligence** fa una generazione di prova, come AICore.
+- Impostazioni: la riga "Memoria rilevata" si nasconde con i soli modelli di sistema (oggi iOS).
+- `CircularsSyncWorker.runOnce` ora parte al push di una circolare nuova.
+- **Schermi piccoli**: illustrazione dell'onboarding che si riduce e pagina scorrevole, celle del
+  calendario che non si sovrappongono sotto i 340dp, etichette della barra in basso con ellissi.
+
+Da provare a schermo (nessun dispositivo qui):
+- iOS: il task `BGContinuedProcessingTask` (API di iOS 26 scritta senza un Mac: se la CI non
+  compila, e' il primo sospetto) e che Apple Intelligence giri con l'app in background.
+- Android 15+: margini di tutte le schermate ora che la finestra e' edge-to-edge (status bar,
+  barra dei gesti, tastiera nei bottom sheet).
+
+Da fare quando c'e' un Mac:
+- **MLX su iOS** (iPhone senza Apple Intelligence non hanno AI locale): riattivare
+  `MLX_MODELS` in `LocalAiModels.ios.kt` e il pacchetto in `project.yml`, aggiungere
+  `cancelGeneration` anche a `MLXLocalBridge`. La riga "Memoria rilevata" nelle Impostazioni
+  ricompare da sola.
+
 ## 22/9: riassunti dal server, coda unica, stop, assistente, mappa posti (branch `claude/app-optimization-circulars-px87fk`)
 
 **Non compilato**: in questa sessione Gradle non scarica le dipendenze (proxy) e la CI di GitHub

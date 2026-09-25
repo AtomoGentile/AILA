@@ -5,8 +5,12 @@ import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.os.Build
 import android.os.Bundle
+import android.graphics.Color
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.LaunchedEffect
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import circolareplus.ai.PdfBoxInit
@@ -45,6 +49,7 @@ class MainActivity : ComponentActivity() {
         // aspettasse un LaunchedEffect, chi usa il tema scuro vedrebbe un lampo bianco a ogni
         // avvio dell'app.
         AppTheme.isDarkMode = AppContainer.settings.isDarkMode
+        applySystemBarStyle(AppTheme.isDarkMode)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -61,6 +66,11 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
+            // Status bar e barra di navigazione seguono il tema scelto DENTRO l'app, come su iOS
+            // (MainViewController.kt): prima restavano chiare anche col tema scuro. AppTheme.isDarkMode
+            // e' stato di Compose, quindi l'effetto riparte a ogni cambio dalle Impostazioni.
+            val isDark = AppTheme.isDarkMode
+            LaunchedEffect(isDark) { applySystemBarStyle(isDark) }
             // AilaTheme avvolge tutto (login e caricamento compresi): senza, i componenti
             // standard di Material — interruttori, slider, campi di testo, dialoghi — restavano
             // nel viola di default invece del blu AILA.
@@ -87,6 +97,20 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         circolareplus.push.DataRefreshEvents.request()
+    }
+
+    /**
+     * Finestra edge-to-edge (obbligatoria da targetSdk 35: il contenuto passa sotto le barre di
+     * sistema e i margini li mette il codice condiviso, vedi design/PlatformInsets.kt) con barre
+     * trasparenti e icone chiare o scure secondo il tema dell'app.
+     */
+    private fun applySystemBarStyle(isDark: Boolean) {
+        val style = if (isDark) {
+            SystemBarStyle.dark(Color.TRANSPARENT)
+        } else {
+            SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+        }
+        enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
     }
 
     private fun applyPendingDeepLinkFrom(intent: Intent) {

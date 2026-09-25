@@ -23,6 +23,9 @@ struct iOSApp: App {
         MLXLocalBridgeHolder.shared.bridge = MLXLocalEngine()
         PushTokenBridgeHolder.shared.bridge = FirebasePushTokenBridge()
         SeatMapPdfShareBridgeHolder.shared.bridge = SeatMapPdfShareBridgeImpl()
+        // Analisi sul telefono che continua con l'app in background (vedi BackgroundWorkBridge.swift).
+        BackgroundWorkBridgeHolder.shared.bridge = BackgroundWorkBridgeImpl()
+        IosBackgroundWork.shared.start()
     }
 
     var body: some Scene {
