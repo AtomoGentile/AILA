@@ -26,9 +26,11 @@ val CircularAiClassification.tier: Int
 /**
  * Quali analisi di circolari sono in corso su questo telefono, visto da fuori della schermata.
  *
- * Serve al servizio in primo piano di Android (la notifica "Analisi della circolare n. X" con il
- * tasto Stop): l'analisi vive nell'interfaccia condivisa, la notifica nel codice Android, e
- * questo e' il punto dove si incontrano. Su iOS nessuno lo osserva.
+ * Serve a tenere viva l'analisi con l'app in background: su Android il servizio in primo piano
+ * (la notifica "Analisi della circolare n. X" con il tasto Stop), su iOS il task di sistema con
+ * la sua barra di avanzamento e il tasto per annullare (vedi `IosBackgroundWork`). L'analisi vive
+ * nell'interfaccia condivisa, la parte di sistema nel codice di piattaforma, e questo e' il punto
+ * dove si incontrano.
  */
 object AnalysisActivity {
 
@@ -48,12 +50,32 @@ object AnalysisActivity {
         val queued: List<Int> = emptyList()
     ) {
         val isIdle: Boolean get() = running == null && queued.isEmpty()
+
+        /**
+         * Se il sistema deve tenere viva l'app in background: un'analisi sul telefono (dura
+         * minuti) o una coda. Le analisi con Gemini durano pochi secondi e non servono.
+         */
+        val needsKeepAlive: Boolean get() = (running != null && onDevice) || queued.isNotEmpty()
+
+        /** Titolo della notifica (Android) o del task di sistema (iOS). */
+        val displayTitle: String
+            get() = running?.let { "Analisi della circolare n. $it" } ?: "Analisi circolari in coda"
+
+        /** Riga sotto il titolo: titolo della circolare e quante ne restano in coda. */
+        val displayDetail: String
+            get() = buildString {
+                if (runningTitle.isNotBlank()) append(runningTitle)
+                if (queued.isNotEmpty()) {
+                    if (isNotEmpty()) append(" · ")
+                    append(if (queued.size == 1) "1 in coda" else "${queued.size} in coda")
+                }
+            }
     }
 
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
 
-    private val _stopRequests = MutableSharedFlow<Int>(extraBufferCapacity = 8)
+    private val _stopRequests = MutableSharedFlow<Int>(extraBufferCapacity = 32)
 
     /** Numeri di circolare di cui qualcuno (la notifica) ha chiesto lo stop. */
     val stopRequests: SharedFlow<Int> = _stopRequests.asSharedFlow()
@@ -64,5 +86,14 @@ object AnalysisActivity {
 
     fun requestStop(circularNumber: Int) {
         _stopRequests.tryEmit(circularNumber)
+    }
+
+    /**
+     * Ferma l'analisi in corso e tutta la coda: chi preme Stop dalla notifica (o annulla il task
+     * di sistema su iOS) vuole che il telefono smetta di lavorare, non passare alla successiva.
+     */
+    fun requestStopAll() {
+        val current = _state.value
+        (listOfNotNull(current.running) + current.queued).forEach { requestStop(it) }
     }
 }

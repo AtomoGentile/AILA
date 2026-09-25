@@ -108,15 +108,17 @@ fun SeatMapDeskCard(
 @Composable
 private fun SeatRow(number: Int, name: String?, isFocused: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
+        // Almeno 15dp e non fisso: col testo di sistema ingrandito il numero usciva dal cerchio.
         Box(
             modifier = Modifier
-                .size(15.dp)
+                .sizeIn(minWidth = 15.dp, minHeight = 15.dp)
                 .clip(CircleShape)
                 .background(if (name == null) AppTheme.TintSlate else AppTheme.TintBlue),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = number.toString(),
+                modifier = Modifier.padding(horizontal = 3.dp),
                 fontSize = 8.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (name == null) AppTheme.TextFaint else AppTheme.TintBlueInk

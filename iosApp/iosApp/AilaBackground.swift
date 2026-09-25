@@ -6,7 +6,12 @@ import shared
 /**
  * Refresh in background delle circolari senza push remote (niente APNs: l'app è firmata con
  * Apple ID gratuito via SideStore). iOS risveglia l'app con un BGAppRefreshTask, si chiama
- * backgroundSync() (Kotlin) e, se ci sono circolari nuove, si mostra una notifica locale.
+ * backgroundSync() (Kotlin) e, se ci sono circolari nuove, si mostra una notifica locale. Con il
+ * tempo che resta si riassumono le circolari rimaste indietro (IosBackgroundWork.runRefresh,
+ * l'equivalente di CircularsSyncWorker su Android).
+ *
+ * È l'unico punto che registra `taskId`: registrare due volte lo stesso identificativo fa
+ * terminare l'app.
  *
  * Ogni evento finisce nel log circolare "bg_log" (UserDefaults), letto dalla schermata
  * "Diagnostica background" delle Impostazioni.
@@ -15,6 +20,12 @@ final class AilaBackground: BackgroundRefreshBridge {
 
     /** Deve coincidere con BGTaskSchedulerPermittedIdentifiers in Info.plist. */
     static let taskId = "com.circolareplus.refresh"
+
+    /** Tempo che ci si concede per risveglio, sotto i ~30 s di iOS. */
+    private static let refreshBudget: TimeInterval = 25
+
+    /** Giro dei riassunti in corso, annullato se iOS ritira il tempo. Solo dal main thread. */
+    private static var currentRun: BackgroundRun?
 
     private static let logKey = "bg_log"
     private static let maxLogLines = 100
@@ -56,11 +67,18 @@ final class AilaBackground: BackgroundRefreshBridge {
         // setTaskCompleted va chiamato una volta sola: scadenza e fine lavoro possono incrociarsi.
         let once = CompletionOnce(task: task)
         let work = Task { @MainActor in
+            let start = Date()
             let result = await runSync(source: "bg")
+            // Prima le circolari nuove (veloce, serve alla notifica), poi i riassunti se avanza tempo.
+            let left = refreshBudget - Date().timeIntervalSince(start)
+            if result.success && left >= 5 && !Task.isCancelled {
+                await summarizeBacklog(budgetMillis: Int64(left * 1000))
+            }
             once.complete(success: result.success)
         }
         task.expirationHandler = {
             work.cancel()
+            DispatchQueue.main.async { currentRun?.cancel() }
             log("scaduto (expirationHandler)")
             once.complete(success: false)
         }
@@ -82,6 +100,18 @@ final class AilaBackground: BackgroundRefreshBridge {
             let message = "errore: \(error.localizedDescription)"
             log("[\(source)] \(message)")
             return (false, message)
+        }
+    }
+
+    /** Riassume al massimo due circolari arretrate (Kotlin, BackgroundCircularsSync). */
+    @MainActor
+    private static func summarizeBacklog(budgetMillis: Int64) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            currentRun = IosBackgroundWork.shared.runRefresh(budgetMillis: budgetMillis) { ok in
+                currentRun = nil
+                log("[bg] riassunti: \(ok.boolValue ? "ok" : "interrotti")")
+                continuation.resume()
+            }
         }
     }
 
