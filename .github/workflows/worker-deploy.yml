@@ -1,0 +1,80 @@
+name: Worker deploy
+
+# Deploy del Worker Cloudflare, solo a mano (Actions → Worker deploy → Run workflow).
+# Secret richiesti: CLOUDFLARE_API_TOKEN (permessi Workers Scripts Edit + D1 Edit) e
+# CLOUDFLARE_ACCOUNT_ID. I secret del Worker (JWT_SECRET, GEMINI_API_KEY, FCM...) restano su
+# Cloudflare: il deploy non li tocca.
+on:
+  workflow_dispatch:
+    inputs:
+      migrations:
+        description: >-
+          Migrazioni D1 da applicare PRIMA del deploy, separate da spazi, nell'ordine
+          (es. "008_ranking_polls.sql 009_push_preferences.sql"). Vuoto = nessuna.
+          Attenzione: quelle con ALTER TABLE falliscono se lanciate due volte.
+        required: false
+        default: ''
+      deploy:
+        description: 'Esegui wrangler deploy dopo le migrazioni'
+        type: boolean
+        default: true
+
+# Un deploy alla volta: due lanci ravvicinati non si sovrappongono.
+concurrency:
+  group: worker-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check secrets
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Mancano i secret CLOUDFLARE_API_TOKEN e/o CLOUDFLARE_ACCOUNT_ID"
+            exit 1
+          fi
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      # Stesso controllo che si fa in locale: un errore di tipi non arriva in produzione.
+      - name: Typecheck
+        run: npx tsc --noEmit -p .
+
+      # Input passato via env e validato: solo nomi di file esistenti in migrations/.
+      - name: Apply D1 migrations
+        if: inputs.migrations != ''
+        env:
+          MIGRATIONS: ${{ inputs.migrations }}
+        run: |
+          set -e
+          for m in $MIGRATIONS; do
+            if ! [[ "$m" =~ ^[0-9]{3}_[a-z0-9_]+\.sql$ ]] || [ ! -f "migrations/$m" ]; then
+              echo "::error::Migrazione non valida o inesistente: $m"
+              exit 1
+            fi
+          done
+          for m in $MIGRATIONS; do
+            echo "== Applico $m"
+            npx wrangler d1 execute circolare_d1 --remote --file="./migrations/$m"
+          done
+
+      - name: Deploy Worker
+        if: inputs.deploy
+        run: npx wrangler deploy
