@@ -397,8 +397,13 @@ export async function needsServerSummary(env: Env, number: number): Promise<bool
   const row = await env.DB.prepare(
     `SELECT 1 AS missing FROM circulars c
      LEFT JOIN circular_ai_analysis a ON a.circular_number = c.number
-     WHERE c.number = ? AND (a.tier IS NULL OR a.tier < ? OR ${MISSING_CLASS_SQL})`
-  ).bind(number, SERVER_ANALYSIS_TIER).first<{ missing: number }>();
+     WHERE c.number = ? AND (
+       -- Senza riassunto del server conta solo se ci sono più classi: con una classe sola
+       -- quello del telefono è già fatto per lei, e una chiamata in più sarebbe quota sprecata.
+       ((a.tier IS NULL OR a.tier < ?) AND (SELECT COUNT(*) FROM classes) > 1)
+       OR (a.tier >= ? AND ${MISSING_CLASS_SQL})
+     )`
+  ).bind(number, SERVER_ANALYSIS_TIER, SERVER_ANALYSIS_TIER).first<{ missing: number }>();
   return !!row;
 }
 
