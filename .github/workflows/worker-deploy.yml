@@ -59,7 +59,7 @@ jobs:
           node-version: '22'
 
       # npm 10 (quello di Node 22) si ferma con "Cannot read properties of null (reading
-      # 'edgesOut')" su questo lockfile; npm 11 lo installa senza problemi.
+      # 'edgesOut')" risolvendo le dipendenze di vitest 4; npm 11 le installa senza problemi.
       - name: Install dependencies
         run: npx -y npm@11 install --no-audit --no-fund
 

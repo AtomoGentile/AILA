@@ -38,9 +38,11 @@ jobs:
         with:
           node-version: '22'
 
-      # Come per il Worker: i package-lock.json sono esclusi dal repo (.gitignore).
+      # Come per il Worker: i package-lock.json sono esclusi dal repo (.gitignore), quindi le
+      # dipendenze si risolvono a ogni deploy. npm 11 come nel Worker: npm 10 (quello di Node 22)
+      # va in errore ("reading 'edgesOut'") su alcuni alberi di dipendenze (es. vitest 4).
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npx -y npm@11 install --no-audit --no-fund
 
       - name: Test
         run: npm test
