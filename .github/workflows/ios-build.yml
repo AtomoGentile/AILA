@@ -126,7 +126,11 @@ jobs:
           # passare da "simctl spawn ... launchctl list" (che lista servizi di sistema, non
           # le app in foreground, e quindi non trovava mai nulla - falso allarme di crash
           # nella versione precedente di questo step).
-          LAUNCH_OUTPUT=$(xcrun simctl launch "$UDID" com.circolareplus)
+          # stdout/stderr dell'app su file: un'eccezione Kotlin non gestita (che fa SIGABRT)
+          # scrive il suo messaggio e lo stack solo li', non nel log di sistema.
+          APP_OUT="$RUNNER_TEMP/app-stdout.txt"
+          APP_ERR="$RUNNER_TEMP/app-stderr.txt"
+          LAUNCH_OUTPUT=$(xcrun simctl launch --stdout="$APP_OUT" --stderr="$APP_ERR" "$UDID" com.circolareplus)
           echo "$LAUNCH_OUTPUT"
           APP_PID=$(echo "$LAUNCH_OUTPUT" | grep -oE '[0-9]+$')
           if [ -z "$APP_PID" ]; then
@@ -152,6 +156,14 @@ jobs:
               | grep -iE 'termin|kill|watchdog|exit|crash|reason|jetsam|signal|assertion|timeout|timed out' \
               | grep -v 'BackgroundTask' | tail -80 || true
             echo "::endgroup::"
+            echo "::group::stderr dell'app (eccezioni Kotlin non gestite)"
+            tail -c 20000 "$APP_ERR" 2>/dev/null || echo "(vuoto)"
+            echo "::endgroup::"
+            echo "::group::stdout dell'app"
+            tail -c 6000 "$APP_OUT" 2>/dev/null || echo "(vuoto)"
+            echo "::endgroup::"
+            # Il crash report (.ips) lo scrive ReportCrash qualche secondo dopo la chiusura.
+            sleep 15
             echo "::group::Crash report"
             find ~/Library/Logs/DiagnosticReports -newer "$APP_PATH" \( -name '*Circolare*' -o -name '*iosApp*' \) 2>/dev/null \
               | while read -r f; do echo "== $f"; head -c 12000 "$f"; echo; done
