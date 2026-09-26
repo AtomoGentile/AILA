@@ -147,6 +147,9 @@ CREATE TABLE IF NOT EXISTS circular_ai_analysis (
     model_label TEXT NOT NULL DEFAULT 'Sconosciuto',
     submitted_by TEXT REFERENCES users(id) ON DELETE SET NULL,
     tier INTEGER NOT NULL DEFAULT 1,
+    -- Badge e nota per classe dal riassunto del server: {"<class_id>": {"badge", "note"}}.
+    -- NULL = vale uguale per tutte le classi. Vedi services/classAnalysis.ts.
+    per_class_json TEXT,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_circular_ai_analysis_updated ON circular_ai_analysis(updated_at);

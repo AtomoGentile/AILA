@@ -18,6 +18,7 @@
 // Worker non deve estrarre testo.
 
 import type { CircularAttachment, Env } from '../types';
+import { classIdForLabel, displayClassLabel, loadClasses, type ClassInfo, type ClassNote } from './classAnalysis';
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
@@ -25,9 +26,8 @@ const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 // successivo invece di smettere di funzionare.
 const MODEL_LADDER = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-2.5-flash'];
 
-// Stesso contesto di default dell'app (AiClassifier.classifyCircularText): l'analisi è condivisa
-// fra tutti, quindi deve essere fatta con lo stesso contesto che userebbe un telefono.
-const STUDENT_CONTEXT = 'Studente di scuola superiore, classe 4^CSA';
+// Una sola chiamata per circolare vale per tutte le classi registrate: il prompt le elenca e il
+// modello risponde con un riassunto comune più badge e nota per ciascuna (vedi classAnalysis.ts).
 
 /** Circolari riassunte al massimo per giro di cron (ogni 15 minuti). */
 const MAX_PER_RUN = 3;
@@ -49,6 +49,8 @@ interface Deadline {
   dueDate: string;
   time: string | null;
   category: string;
+  /** Id delle classi a cui vale; vuoto = tutte. */
+  classes: string[];
 }
 
 interface Analysis {
@@ -56,6 +58,8 @@ interface Analysis {
   summary: string;
   deadlines: Deadline[];
   modelLabel: string;
+  /** Badge e nota per classe (id -> ...). */
+  perClass: Record<string, ClassNote>;
 }
 
 type Outcome =
@@ -79,15 +83,16 @@ function schoolYearStart(now: Date): number {
   return now.getUTCMonth() >= 8 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
 }
 
-function buildPrompt(number: number, title: string, attachmentLabels: string[]): string {
+function buildPrompt(number: number, title: string, attachmentLabels: string[], classes: ClassInfo[]): string {
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
   const year = schoolYearStart(now);
   const attachmentsLine = attachmentLabels.length
     ? `Dopo il PDF della circolare ci sono ${attachmentLabels.length} allegati (${attachmentLabels.join(', ')}): considerali parte della circolare.`
     : '';
+  const classList = classes.map((c) => displayClassLabel(c.label)).join(', ');
   return `Sei AILA Assistant, l'assistente scolastico dell'app "AILA".
-Analizza la circolare scolastica ufficiale allegata per determinare se e quanto riguarda il seguente studente: "${STUDENT_CONTEXT}".
+Analizza la circolare scolastica ufficiale allegata per gli studenti di scuola superiore di queste classi dell'istituto: ${classList}.
 Oggi e' ${today}. Anno scolastico ${year}/${(year + 1) % 100}: le date scritte senza anno appartengono a questo anno scolastico (da settembre a dicembre l'anno e' ${year}, da gennaio ad agosto e' ${year + 1}).
 
 CIRCOLARE N. ${number}: ${title}
@@ -96,29 +101,43 @@ ${attachmentsLine}
 Rispondi rigorosamente in formato JSON con questa struttura, senza testo aggiuntivo:
 {
   "badge": "RELEVANT" | "POTENTIAL" | "NOT_RELEVANT",
-  "summary": "5-6 righe in italiano",
+  "summary": "5-6 righe in italiano, valide per tutti",
+  "classes": [
+    { "class": "4^CSA", "badge": "RELEVANT" | "POTENTIAL" | "NOT_RELEVANT", "note": "1-3 frasi solo per questa classe, oppure stringa vuota" }
+  ],
   "deadlines": [
-    { "title": "Titolo scadenza", "dueDate": "YYYY-MM-DD", "time": "HH:MM oppure null", "category": "VERIFICA" | "INTERROGAZIONE" | "PAGAMENTO" | "USCITA_DIDATTICA" | "AVVISO" | "ALTRO" }
+    { "title": "Titolo scadenza", "dueDate": "YYYY-MM-DD", "time": "HH:MM oppure null", "category": "VERIFICA" | "INTERROGAZIONE" | "PAGAMENTO" | "USCITA_DIDATTICA" | "AVVISO" | "ALTRO", "classes": ["4^CSA"] }
   ]
 }
 
-Regole sui badge:
+Regole sui badge (quello generale vale per uno studente qualunque dell'istituto, quelli in
+"classes" per uno studente di quella classe):
 - RELEVANT (Ti riguarda): indicazioni dirette e vincolanti, uscite o pagamenti per la classe o l'intero istituto.
 - POTENTIAL (Potenziale interesse): corsi facoltativi pomeridiani, borse di studio, gare, open day.
 - NOT_RELEVANT (Non sembra riguardarti): circolari riservate ad altre classi specifiche, docenti o personale ATA.
 
-Regole su "summary": deve avere 5-6 righe, non una o due frasi. Riporta sempre, se presenti nel
-testo: il destinatario esatto, tutte le date citate (giorno e mese), nomi di persone o enti
-coinvolti (relatori, associazioni, uffici), e l'obiettivo concreto della circolare (cosa deve fare
-lo studente, entro quando, con quali modalita'). Se la circolare elenca giorni, orari o materie
-(per esempio sportelli per disciplina), riportali. Non generalizzare se il documento contiene
-questi dettagli: riportali per esteso invece di ometterli.
+Regole su "summary": deve avere 5-6 righe, non una o due frasi, ed e' letto da tutte le classi.
+Riporta sempre, se presenti nel testo: il destinatario esatto, le date che valgono per tutti
+(giorno e mese), nomi di persone o enti coinvolti (relatori, associazioni, uffici), e l'obiettivo
+concreto della circolare (cosa deve fare lo studente, entro quando, con quali modalita'). Se la
+circolare elenca giorni, orari o materie per tutti (per esempio sportelli per disciplina),
+riportali. NON mettere nel riassunto i dettagli che valgono per una sola classe (la sua data,
+il suo orario, la sua aula presi da un calendario o da una tabella per classe): vanno nella nota
+di quella classe in "classes".
+
+Regole su "classes": una voce per OGNI classe dell'elenco (${classList}), con "class" scritto
+esattamente come nell'elenco. "note" contiene solo quello che la circolare dice per quella classe
+in particolare (es. "Il Consiglio della 4^CSA e' mercoledi' 14 ottobre dalle 16:00 alle 16:45,
+con i rappresentanti dalle 16:30."); stringa vuota se non dice nulla di specifico per lei.
 
 Scrivi le classi attaccate, senza spazio dopo il simbolo: "4^CSA", "5^BIA" (non "4^ CSA").
 
 Regole su "deadlines": solo date che lo studente deve segnare in agenda (consegne, pagamenti,
 adesioni entro una data, uscite, incontri). Non inventare date e non mettere la data di
-pubblicazione. Lascia l'elenco vuoto se non ce ne sono.`;
+pubblicazione. "classes" = le classi dell'elenco a cui vale quella scadenza, [] se vale per tutti.
+Se la circolare ha date diverse per classe (es. un calendario dei consigli di classe), crea una
+scadenza per ciascuna classe dell'elenco che vi compare, con la sua data e solo quella classe in
+"classes"; ignora le classi che non sono nell'elenco. Lascia l'elenco vuoto se non ci sono date.`;
 }
 
 /**
@@ -138,7 +157,7 @@ function isClockTime(v: unknown): v is string {
 }
 
 /** Stesse regole di CircularClassificationPrompt.parse nell'app. `null` se il JSON non va bene. */
-function parseAnalysis(text: string, model: string): Analysis | null {
+export function parseAnalysis(text: string, model: string, classes: ClassInfo[]): Analysis | null {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
   if (start < 0 || end <= start) return null;
@@ -159,15 +178,33 @@ function parseAnalysis(text: string, model: string): Analysis | null {
       const title = typeof item.title === 'string' ? item.title.trim() : '';
       if (!title || !isIsoDate(item.dueDate)) continue;
       const category = typeof item.category === 'string' ? item.category.toUpperCase() : '';
+      const labels = Array.isArray(item.classes) ? item.classes : [];
+      const classIds = [...new Set(labels.map((l) => classIdForLabel(l, classes)).filter((id): id is string => id !== null))];
+      // Una scadenza assegnata solo a classi che non sono registrate non riguarda nessuno qui.
+      if (labels.length > 0 && classIds.length === 0) continue;
       deadlines.push({
         title: compactClassLabels(title).slice(0, 120),
         dueDate: item.dueDate,
         time: isClockTime(item.time) ? item.time : null,
         category: VALID_CATEGORIES.includes(category) ? category : 'ALTRO',
+        classes: classIds,
       });
     }
   }
-  return { badge, summary, deadlines, modelLabel: `Google Gemini (${model})` };
+  const perClass: Record<string, ClassNote> = {};
+  if (Array.isArray(obj.classes)) {
+    for (const item of obj.classes as Record<string, unknown>[]) {
+      if (!item || typeof item !== 'object') continue;
+      const id = classIdForLabel(item.class, classes);
+      if (!id) continue;
+      const classBadge = typeof item.badge === 'string' ? item.badge.toUpperCase() : '';
+      perClass[id] = {
+        badge: VALID_BADGES.includes(classBadge) ? classBadge : badge,
+        note: typeof item.note === 'string' ? compactClassLabels(item.note.trim()).slice(0, 600) : '',
+      };
+    }
+  }
+  return { badge, summary, deadlines, modelLabel: `Google Gemini (${model})`, perClass };
 }
 
 async function readPdf(env: Env, key: string): Promise<Uint8Array | null> {
@@ -176,7 +213,7 @@ async function readPdf(env: Env, key: string): Promise<Uint8Array | null> {
   return new Uint8Array(await object.arrayBuffer());
 }
 
-async function callGemini(apiKey: string, parts: unknown[]): Promise<Outcome> {
+async function callGemini(apiKey: string, parts: unknown[], classes: ClassInfo[]): Promise<Outcome> {
   let lastReason = 'nessun modello disponibile';
   for (const model of MODEL_LADDER) {
     let res: Response;
@@ -198,7 +235,7 @@ async function callGemini(apiKey: string, parts: unknown[]): Promise<Outcome> {
         candidates?: { content?: { parts?: { text?: string }[] } }[];
       }>();
       const text = (body.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('');
-      const analysis = parseAnalysis(text, model);
+      const analysis = parseAnalysis(text, model, classes);
       if (analysis) return { ok: true, analysis };
       return { ok: false, reason: `risposta non valida da ${model}`, retryLater: false };
     }
@@ -226,15 +263,24 @@ async function recordFailure(env: Env, number: number, reason: string): Promise<
 export async function upsertAnalysis(
   env: Env,
   number: number,
-  a: { badge: string; summary: string; deadlines: unknown[]; isFallback: boolean; modelLabel: string },
+  a: {
+    badge: string;
+    summary: string;
+    deadlines: unknown[];
+    isFallback: boolean;
+    modelLabel: string;
+    /** Solo dal riassunto del server; un'analisi fatta da un telefono lo lascia vuoto. */
+    perClass?: Record<string, ClassNote> | null;
+  },
   tier: number,
   submittedBy: string | null
 ): Promise<boolean> {
   const result = await env.DB.prepare(
     `INSERT INTO circular_ai_analysis
-       (circular_number, badge, summary, deadlines_json, is_fallback, model_label, submitted_by, tier, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+       (circular_number, badge, summary, deadlines_json, is_fallback, model_label, submitted_by, tier, per_class_json, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
      ON CONFLICT(circular_number) DO UPDATE SET
+       per_class_json = excluded.per_class_json,
        badge = excluded.badge,
        summary = excluded.summary,
        deadlines_json = excluded.deadlines_json,
@@ -252,7 +298,10 @@ export async function upsertAnalysis(
     a.isFallback ? 1 : 0,
     a.modelLabel,
     submittedBy,
-    tier
+    tier,
+    // Anche vuoto ('{}') per il server: segna che l'analisi per classe è già stata fatta, così
+    // il recupero in summarizePendingCirculars non la rifà a ogni giro.
+    a.perClass ? JSON.stringify(a.perClass) : null
   ).run();
   return (result.meta.changes ?? 0) > 0;
 }
@@ -290,9 +339,10 @@ export async function summarizeCircular(
       labels.push(att.label);
       parts.push({ inline_data: { mime_type: 'application/pdf', data: toBase64(bytes) } });
     }
-    parts.push({ text: buildPrompt(circ.number, circ.title, labels) });
+    const classes = await loadClasses(env);
+    parts.push({ text: buildPrompt(circ.number, circ.title, labels, classes) });
 
-    const outcome = await callGemini(apiKey, parts);
+    const outcome = await callGemini(apiKey, parts, classes);
     if (!outcome.ok) {
       console.warn(`[Summarizer] Circolare ${circ.number}: ${outcome.reason}`);
       if (!outcome.retryLater) await recordFailure(env, circ.number, outcome.reason);
@@ -316,7 +366,8 @@ export async function summarizeCircular(
 
 /**
  * Recupera le circolari recenti senza un riassunto di Gemini (nuove prima che la chiave fosse
- * impostata, o fallite per quota esaurita). Al massimo MAX_PER_RUN per giro.
+ * impostata, o fallite per quota esaurita) o con un riassunto di prima dell'analisi per classe.
+ * Al massimo MAX_PER_RUN per giro.
  */
 export async function summarizePendingCirculars(env: Env): Promise<void> {
   if (!env.GEMINI_API_KEY) return;
@@ -325,7 +376,10 @@ export async function summarizePendingCirculars(env: Env): Promise<void> {
      FROM (SELECT * FROM circulars ORDER BY number DESC LIMIT ?) c
      LEFT JOIN circular_ai_analysis a ON a.circular_number = c.number
      LEFT JOIN circular_ai_server_attempts t ON t.circular_number = c.number
-     WHERE (a.tier IS NULL OR a.tier < ?)
+     WHERE (a.tier IS NULL OR a.tier < ?
+            -- Riassunti fatti prima dell'analisi per classe: con più classi registrate si
+            -- rifanno, altrimenti le altre classi vedrebbero i dettagli pensati per la 4^CSA.
+            OR (a.per_class_json IS NULL AND (SELECT COUNT(*) FROM classes) > 1))
        AND (t.attempts IS NULL OR t.attempts < ?)
      ORDER BY c.number DESC
      LIMIT ?`
