@@ -44,7 +44,7 @@ class AnalysisForegroundService : Service() {
         startInForeground(AnalysisActivity.state.value)
         scope.launch {
             AnalysisActivity.state.collect { state ->
-                if (!state.needsService()) {
+                if (!state.needsKeepAlive) {
                     ServiceCompat.stopForeground(this@AnalysisForegroundService, ServiceCompat.STOP_FOREGROUND_REMOVE)
                     stopSelf()
                 } else {
@@ -56,12 +56,20 @@ class AnalysisForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
-            // Si ferma l'analisi in corso e tutta la coda: chi preme Stop dalla notifica vuole
-            // che il telefono smetta di lavorare, non passare alla circolare successiva.
-            val state = AnalysisActivity.state.value
-            (listOfNotNull(state.running) + state.queued).forEach { AnalysisActivity.requestStop(it) }
+            AnalysisActivity.requestStopAll()
         }
         return START_NOT_STICKY
+    }
+
+    /**
+     * Da Android 15 i servizi "dataSync" hanno un tetto di 6 ore al giorno: allo scadere il sistema
+     * chiama questo metodo e, se il servizio non si ferma entro pochi secondi, chiude l'app con un
+     * errore. Un'analisi che dura ore e' comunque bloccata: la si ferma con la coda.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        AnalysisActivity.requestStopAll()
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     override fun onDestroy() {
@@ -83,14 +91,8 @@ class AnalysisForegroundService : Service() {
 
     private fun buildNotification(state: AnalysisActivity.State): android.app.Notification {
         ensureChannel()
-        val title = state.running?.let { "Analisi della circolare n. $it" } ?: "Analisi circolari in coda"
-        val text = buildString {
-            if (state.runningTitle.isNotBlank()) append(state.runningTitle)
-            if (state.queued.isNotEmpty()) {
-                if (isNotEmpty()) append(" · ")
-                append(if (state.queued.size == 1) "1 in coda" else "${state.queued.size} in coda")
-            }
-        }
+        val title = state.displayTitle
+        val text = state.displayDetail
         val stopIntent = PendingIntent.getService(
             this,
             0,
@@ -131,9 +133,6 @@ class AnalysisForegroundService : Service() {
         private const val NOTIFICATION_ID = 7_301
         private const val ACTION_STOP = "circolareplus.analysis.STOP"
 
-        private fun AnalysisActivity.State.needsService(): Boolean =
-            (running != null && onDevice) || queued.isNotEmpty()
-
         private val observerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
         private var observing = false
 
@@ -147,7 +146,7 @@ class AnalysisForegroundService : Service() {
             val appContext = context.applicationContext
             observerScope.launch {
                 AnalysisActivity.state
-                    .map { it.needsService() }
+                    .map { it.needsKeepAlive }
                     .distinctUntilChanged()
                     .collect { needed ->
                         if (!needed) return@collect

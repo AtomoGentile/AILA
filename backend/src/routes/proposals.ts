@@ -326,8 +326,9 @@ proposals.delete('/:id', async (c) => {
   const payload = c.get('jwtPayload');
   const id = c.req.param('id');
 
-  const proposal = await c.env.DB.prepare('SELECT id, author_id FROM proposals WHERE id = ?')
-    .bind(id).first<{ id: string; author_id: string }>();
+  // AND class_id: senza, un rappresentante di un'altra classe poteva cancellare le proposte altrui.
+  const proposal = await c.env.DB.prepare('SELECT id, author_id FROM proposals WHERE id = ? AND class_id = ?')
+    .bind(id, await resolveClassId(c)).first<{ id: string; author_id: string }>();
   if (!proposal) return c.json({ error: 'Proposta non trovata' }, 404);
 
   const isAuthor = proposal.author_id === payload.sub;

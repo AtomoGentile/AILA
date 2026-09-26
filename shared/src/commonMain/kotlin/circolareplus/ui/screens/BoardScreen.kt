@@ -757,7 +757,11 @@ private fun UnlockRequestDialog(
 
     AlertDialog(
         onDismissRequest = { if (!isSending) onDismiss() },
-        modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space20),
+        // Larga quasi quanto lo schermo sul telefono, non oltre MaxDialogWidth su tablet/iPad.
+        modifier = Modifier
+            .widthIn(max = circolareplus.design.MaxDialogWidth)
+            .fillMaxWidth()
+            .padding(horizontal = AppTheme.Space20),
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
         containerColor = AppTheme.SurfaceWhite,
         shape = RoundedCornerShape(AppTheme.CardCornerRadius),

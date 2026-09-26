@@ -42,7 +42,7 @@ enum class NotificationKind(val key: String, val label: String, val description:
     CALENDAR("calendar", "Calendario", "Nuove verifiche, scadenze e pagamenti"),
     BOARD("board", "Bacheca", "Nuove proposte della classe"),
     SEATMAP("seatmap", "Mappa posti", "Nuova disposizione o votazione aperta"),
-    POLLS("polls", "Sondaggi", "Nuovi sondaggi interrogazioni")
+    POLLS("polls", "Sondaggi", "Nuovi sondaggi, interrogazioni e a ordinamento")
 }
 
 /**
@@ -375,18 +375,24 @@ fun SettingsScreen(
                                 fontWeight = FontWeight.Bold,
                                 color = AppTheme.TextDark
                             )
-                            Spacer(modifier = Modifier.height(AppTheme.Space4))
-                            Text(
-                                text = if (deviceRamMb > 0) {
-                                    "Memoria rilevata: ${formatRam(deviceRamMb)} — fascia " +
-                                        deviceTierForRam(deviceRamMb).label
-                                } else {
-                                    "Memoria del dispositivo non rilevata."
-                                },
-                                fontSize = 11.sp,
-                                color = AppTheme.TextFaint,
-                                lineHeight = 15.sp
-                            )
+                            // Memoria e fascia servono a scegliere fra modelli da scaricare: con
+                            // i soli modelli di sistema (oggi iOS, solo Apple Intelligence) la riga
+                            // non dice nulla di utile. Ricompare da sola quando MLX tornera' nel
+                            // catalogo iOS (LocalAiModels.ios.kt).
+                            if (localModels.any { !it.isSystemModel }) {
+                                Spacer(modifier = Modifier.height(AppTheme.Space4))
+                                Text(
+                                    text = if (deviceRamMb > 0) {
+                                        "Memoria rilevata: ${formatRam(deviceRamMb)} — fascia " +
+                                            deviceTierForRam(deviceRamMb).label
+                                    } else {
+                                        "Memoria del dispositivo non rilevata."
+                                    },
+                                    fontSize = 11.sp,
+                                    color = AppTheme.TextFaint,
+                                    lineHeight = 15.sp
+                                )
+                            }
 
                             Spacer(modifier = Modifier.height(AppTheme.Space12))
 

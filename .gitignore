@@ -173,3 +173,6 @@ Circolare_*.pdf
 CircolarePlus_*.pdf
 Specifiche_Tecniche_*.pdf
 FIREBASE_SETUP.md.local
+
+# === File locali di una singola macchina / strumenti ===
+gradle/config.properties
