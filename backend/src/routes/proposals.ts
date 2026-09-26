@@ -8,6 +8,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 import type { Env, JWTPayload, ProposalStatus } from '../types';
 import { authMiddleware, requireRole, newUUID, resolveClassId } from '../auth';
 import { notifyClass, notifyUser } from '../services/fcm';
+import { inBackground } from '../services/background';
 
 // Quorum per svelare l'autore di una proposta o di un commento anonimi (specifica v3.0, sez. 3.3).
 const QUORUM_REPRESENTATIVES = 2;
@@ -188,7 +189,7 @@ proposals.post('/', async (c) => {
   ).bind(id, payload.sub, isAnonymous ? 1 : 0, title, description, category, classId).run();
 
   // Notify users who have board notifications enabled
-  await notifyClass(c.env, 'Nuova Proposta in Bacheca', title, { action: 'new_proposal', proposal_id: id }, classId);
+  inBackground(c, notifyClass(c.env, 'Nuova Proposta in Bacheca', title, { action: 'new_proposal', proposal_id: id }, classId));
 
   return c.json({ success: true, id }, 201);
 });
@@ -231,13 +232,13 @@ proposals.put('/security-guard', requireRole('REPRESENTATIVE'), async (c) => {
   ]);
 
   if (userId && userId !== previous?.security_guard_id) {
-    await notifyUser(
+    inBackground(c, notifyUser(
       c.env,
       userId,
       'Sei la Guardia di Sicurezza della classe',
       'Con i due Rappresentanti approvi lo svelamento di proposte e commenti anonimi.',
       { action: 'security_guard_assigned' }
-    );
+    ));
   }
 
   return c.json({ success: true, securityGuardId: userId });

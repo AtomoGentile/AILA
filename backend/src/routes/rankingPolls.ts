@@ -8,6 +8,7 @@ import type { Env, JWTPayload } from '../types';
 import { authMiddleware, requireRole, newUUID, resolveClassId } from '../auth';
 import { notifyClass, notifyUsers } from '../services/fcm';
 import { classMemberIds, effectiveAudience, isInAudience, normalizeAudience, parseAudience } from '../services/audience';
+import { inBackground } from '../services/background';
 
 const rankingPolls = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();
 
@@ -191,9 +192,9 @@ rankingPolls.post('/', requireRole('REPRESENTATIVE'), async (c) => {
   const text = `Metti in ordine le opzioni: ${question}`;
   const data = { action: 'ranking_poll_published', poll_id: pollId };
   if (audience) {
-    await notifyUsers(c.env, audience, title, text, data);
+    inBackground(c, notifyUsers(c.env, audience, title, text, data));
   } else {
-    await notifyClass(c.env, title, text, data, classId);
+    inBackground(c, notifyClass(c.env, title, text, data, classId));
   }
 
   return c.json({ success: true, id: pollId }, 201);

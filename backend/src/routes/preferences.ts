@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 import type { Env, JWTPayload } from '../types';
 import { authMiddleware, requireRole, resolveClassId, ensureClassRow } from '../auth';
 import { notifyClass, notifyUser } from '../services/fcm';
+import { inBackground } from '../services/background';
 
 const preferences = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();
 
@@ -106,13 +107,13 @@ preferences.post('/config', requireRole('REPRESENTATIVE'), async (c) => {
   ).bind(open ? 1 : 0, classId).run();
 
   if (open) {
-    await notifyClass(
+    inBackground(c, notifyClass(
       c.env,
       'Mappa Posti — Esprimi le tue preferenze',
       'Il Rappresentante ha aperto la finestra per esprimere le preferenze sui compagni di banco!',
       { action: 'open_preferences' },
       classId
-    );
+    ));
   }
 
   return c.json({ success: true, preferencesOpen: open });
