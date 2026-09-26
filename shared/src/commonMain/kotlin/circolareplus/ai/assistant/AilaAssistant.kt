@@ -181,19 +181,24 @@ class AilaAssistant(
         knowledge: AssistantKnowledge
     ): List<AssistantSource> {
         if (AssistantContext.isSmallTalk(knowledge, question)) return emptyList()
-        val known = knowledge.circulars.map { it.number }.toSet()
+        val byNumber = knowledge.circulars.associateBy { it.number }
         val plausible = readNumbers +
             AssistantContext.circularNumbersIn(question) +
             AssistantContext.mostRelevantCirculars(knowledge, question, limit = 6)
-        return parsed.sources.filter { source ->
-            if (source.kind != AssistantSourceKind.CIRCULAR) return@filter true
-            val number = source.circularNumber ?: return@filter false
-            number in known && (
-                number in plausible ||
-                    Regex("(?<!\\d)$number(?!\\d)").containsMatchIn(parsed.answer)
-                )
-        }
+        return parsed.sources.mapNotNull { source ->
+            if (source.kind != AssistantSourceKind.CIRCULAR) return@mapNotNull source
+            val number = source.circularNumber ?: return@mapNotNull null
+            val circular = byNumber[number] ?: return@mapNotNull null
+            val cited = number in plausible ||
+                Regex("(?<!\\d)$number(?!\\d)").containsMatchIn(parsed.answer)
+            if (!cited) return@mapNotNull null
+            // L'etichetta si ricostruisce dai dati veri: il modello puo' dare solo il numero
+            // (meno token da generare sul telefono) e non puo' storpiare o inventare il titolo.
+            source.copy(label = circularLabel(circular))
+        }.distinctBy { it.kind to (it.circularNumber ?: it.label) }
     }
+
+    private fun circularLabel(circular: Circular) = "Circolare n. ${circular.number} — ${circular.title}"
 
     /**
      * Scarica ed estrae il testo delle circolari indicate, allegati PDF compresi.
@@ -281,10 +286,10 @@ class AilaAssistant(
                 val circular = circulars.firstOrNull { it.number == number } ?: return@mapNotNull null
                 AssistantSource(
                     kind = AssistantSourceKind.CIRCULAR,
-                    label = "Circolare n. ${circular.number} — ${circular.title}",
+                    label = circularLabel(circular),
                     circularNumber = circular.number
                 )
             }
-        return (declared + missing).distinctBy { it.kind to it.label }.take(6)
+        return (declared + missing).distinctBy { it.kind to (it.circularNumber ?: it.label) }.take(6)
     }
 }
