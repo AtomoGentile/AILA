@@ -157,6 +157,12 @@ Ogni modifica alla configurazione del progetto va fatta in `project.yml`, poi si
 
 Copre principalmente gli algoritmi (`SeatMapOptimizer`, `SondaggiEngine`) in `shared/src/commonTest/`.
 
+### 5. PWA (web/)
+
+Versione web installabile per chi usa iPhone/iPad senza SideStore: affianca l'app nativa, stesso login e stesse API.
+Pubblicata su https://aila-scuola.pages.dev dal workflow **PWA deploy**. Dettagli, secret e prove in
+[web/README.md](web/README.md).
+
 ---
 
 ## Notifiche push (Firebase)
