@@ -10,7 +10,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -19,9 +18,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -61,13 +60,13 @@ fun Modifier.ailaAppear(index: Int = 0, enabled: Boolean = true): Modifier {
         }
     }
 
-    val alpha by animateFloatAsState(
+    val appearAlpha = animateFloatAsState(
         targetValue = if (shown) 1f else 0f,
         // Durata ridotta a 200ms per rendere la comparsa meno pesante.
         animationSpec = if (isInitialBatch) tween(durationMillis = 200) else snap(),
         label = "ailaAppearAlpha"
     )
-    val offsetY by animateDpAsState(
+    val offsetY = animateDpAsState(
         targetValue = if (shown) 0.dp else 12.dp,
         animationSpec = if (isInitialBatch) {
             spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
@@ -75,7 +74,13 @@ fun Modifier.ailaAppear(index: Int = 0, enabled: Boolean = true): Modifier {
         label = "ailaAppearOffset"
     )
 
-    return this.offset(y = offsetY).alpha(alpha)
+    // I valori animati si leggono dentro graphicsLayer (fase di disegno), non nella composizione:
+    // prima `offset(y)` + `alpha()` ricomponevano ogni card a ogni fotogramma dell'animazione, e
+    // con una decina di card in cascata all'apertura di una tab si sentiva il lag.
+    return this.graphicsLayer {
+        alpha = appearAlpha.value
+        translationY = offsetY.value.toPx()
+    }
 }
 
 /**
@@ -126,7 +131,7 @@ fun Modifier.ailaPressable(
 ): Modifier {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
+    val scale = animateFloatAsState(
         targetValue = if (isPressed && enabled) pressedScale else 1f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
@@ -135,15 +140,18 @@ fun Modifier.ailaPressable(
         label = "ailaPressScale"
     )
 
-    val pressAlpha by animateFloatAsState(
+    val pressAlpha = animateFloatAsState(
         targetValue = if (isPressed && enabled) 0.92f else 1f,
         animationSpec = tween(durationMillis = 100),
         label = "ailaPressAlpha"
     )
 
     return this
-        .scale(scale)
-        .alpha(pressAlpha)
+        .graphicsLayer {
+            scaleX = scale.value
+            scaleY = scale.value
+            alpha = pressAlpha.value
+        }
         .clickable(
             interactionSource = interactionSource,
             indication = null,

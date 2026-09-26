@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -29,6 +30,7 @@ import circolareplus.design.AilaScreenHeader
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
 import circolareplus.domain.model.User
+import kotlinx.coroutines.launch
 
 @Composable
 fun SeatMapScreen(
@@ -45,7 +47,43 @@ fun SeatMapScreen(
     onExportPdf: () -> Unit = {}
 ) {
     var searchQuery by remember { mutableStateOf("") }
+    // Chi evidenziare nella mappa: "Il mio posto" o il compagno cercato. Prima il tasto era solo
+    // un'icona di localizzazione (sembrava chiedere il GPS) e la ricerca non faceva nulla.
     var focusedStudentId by remember { mutableStateOf<String?>(null) }
+    val gridState = rememberLazyGridState()
+    val coroutineScope = rememberCoroutineScope()
+
+    // Il compagno cercato: basta l'inizio del nome o del cognome (maiuscole indifferenti).
+    val searchMatch: User? = remember(searchQuery, studentsMap, assignments) {
+        val q = searchQuery.trim().lowercase()
+        if (q.length < 2) null else {
+            val seated = assignments.flatMap { listOfNotNull(it.studentAId, it.studentBId, it.studentCId) }.toSet()
+            studentsMap.values
+                .filter { it.id in seated }
+                .firstOrNull { u ->
+                    val full = "${u.firstName} ${u.lastName}".lowercase()
+                    full.startsWith(q) || u.lastName.lowercase().startsWith(q) || full.contains(" $q")
+                }
+        }
+    }
+    val highlightedId = searchMatch?.id ?: focusedStudentId
+    val highlightedDeskIndex = remember(highlightedId, assignments) {
+        if (highlightedId == null) -1 else assignments.indexOfFirst {
+            it.studentAId == highlightedId || it.studentBId == highlightedId || it.studentCId == highlightedId
+        }
+    }
+    // I banchi sono gli ultimi elementi della griglia: l'indice assoluto si ricava dal totale.
+    fun scrollToDesk(deskIndex: Int) {
+        if (deskIndex < 0) return
+        coroutineScope.launch {
+            val total = gridState.layoutInfo.totalItemsCount
+            val target = (total - assignments.size + deskIndex).coerceAtLeast(0)
+            gridState.animateScrollToItem(target)
+        }
+    }
+    LaunchedEffect(searchMatch?.id) {
+        if (searchMatch != null) scrollToDesk(highlightedDeskIndex)
+    }
 
     // Pesi slider per Rappresentante (0.5x - 1.5x)
     var wSocial by remember { mutableStateOf(1.0f) }
@@ -80,14 +118,6 @@ fun SeatMapScreen(
                             AppIcons.Download(modifier = Modifier.size(19.dp), color = tint)
                         }
                     }
-                    // Tasto Rapido Studente: "Dov'è il mio posto?"
-                    AilaIconButton(
-                        contentDescription = "Trova il mio posto",
-                        onClick = { focusedStudentId = currentUserId },
-                        primary = true
-                    ) { tint ->
-                        AppIcons.Locate(modifier = Modifier.size(20.dp), color = tint)
-                    }
                 }
             }
         )
@@ -105,19 +135,68 @@ fun SeatMapScreen(
                 top = AppTheme.Space16,
                 bottom = AppTheme.Space32
             ),
+            state = gridState,
             modifier = Modifier.fillMaxSize()
         ) {
         fullRow {
 
-        // Ricerca compagno per localizzarlo
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            placeholder = { Text("Cerca compagno...", fontSize = 13.sp) },
-            singleLine = true,
-            shape = RoundedCornerShape(AppTheme.CardCornerRadius),
-            modifier = Modifier.fillMaxWidth()
-        )
+        // Ricerca compagno: evidenzia il suo banco e ci scorre sopra.
+        Column {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Cerca un compagno per nome...", fontSize = 13.sp) },
+                singleLine = true,
+                shape = RoundedCornerShape(AppTheme.CardCornerRadius),
+                modifier = Modifier.fillMaxWidth()
+            )
+            if (assignments.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Pulsante con testo, non piu' solo l'icona "mirino": chi lo vede capisce
+                    // subito che mostra dove si siede, non che chiede la posizione GPS.
+                    AilaPrimaryButton(
+                        text = if (focusedStudentId == currentUserId) "Nascondi il mio posto" else "Trova il mio posto",
+                        onClick = {
+                            searchQuery = ""
+                            if (focusedStudentId == currentUserId) {
+                                focusedStudentId = null
+                            } else {
+                                focusedStudentId = currentUserId
+                                scrollToDesk(assignments.indexOfFirst {
+                                    it.studentAId == currentUserId || it.studentBId == currentUserId || it.studentCId == currentUserId
+                                })
+                            }
+                        },
+                        compact = true,
+                        icon = { tint -> AppIcons.Chair(modifier = Modifier.size(15.dp), color = tint) }
+                    )
+                    Spacer(modifier = Modifier.width(AppTheme.Space8))
+                    val status = when {
+                        searchQuery.trim().length >= 2 && searchMatch == null -> "Nessun compagno trovato"
+                        highlightedId != null && highlightedDeskIndex < 0 -> "Nessun posto assegnato"
+                        highlightedId != null -> {
+                            val d = assignments[highlightedDeskIndex]
+                            val who = if (highlightedId == currentUserId) "Sei" else "${studentsMap[highlightedId]?.firstName ?: "Il compagno"} è"
+                            "$who in fila ${d.row + 1}, colonna ${d.column + 1}"
+                        }
+                        else -> null
+                    }
+                    if (status != null) {
+                        Text(
+                            text = status,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AppTheme.TextMuted,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        }
         }
 
         // Pannello Admin per il Rappresentante (Slider & Finestra Votazione)
@@ -274,7 +353,7 @@ fun SeatMapScreen(
                     desk = desk,
                     studentsMap = studentsMap,
                     showThirdSeat = hasTrioDesks,
-                    focusedStudentId = focusedStudentId
+                    focusedStudentId = highlightedId
                 )
             }
         }

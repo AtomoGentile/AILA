@@ -223,6 +223,7 @@ internal object CircularClassificationPrompt {
         } ?: return null
 
         val summary = obj["summary"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+            ?.let { circolareplus.util.compactClassLabels(it) }
             ?: return null
 
         // Le voci malformate si scartano invece di passarle avanti. Non e' pignoleria: da qui
@@ -236,7 +237,7 @@ internal object CircularClassificationPrompt {
             val dueDate = item["dueDate"]?.jsonPrimitive?.contentOrNull
                 ?.takeIf { isIsoDate(it) } ?: return@mapNotNull null
             ExtractedDeadline(
-                title = title.take(120),
+                title = circolareplus.util.compactClassLabels(title).take(120),
                 dueDate = dueDate,
                 time = item["time"]?.jsonPrimitive?.contentOrNull?.takeIf { isClockTime(it) },
                 category = item["category"]?.jsonPrimitive?.contentOrNull?.uppercase()

@@ -15,8 +15,8 @@ class RankingPollsRepository(private val api: ApiClient) {
     suspend fun listPolls(): RankingPollsListResponseDto = api.get("/api/ranking-polls")
 
     /** Solo Rappresentante. Il sondaggio è pubblicato subito e la classe riceve la notifica. */
-    suspend fun createPoll(question: String, options: List<String>): SuccessDto =
-        api.post("/api/ranking-polls", CreateRankingPollRequestDto(question, options))
+    suspend fun createPoll(question: String, options: List<String>, audienceUserIds: List<String>? = null): SuccessDto =
+        api.post("/api/ranking-polls", CreateRankingPollRequestDto(question, options, audienceUserIds))
 
     /** Invia o sostituisce la propria classifica: [optionIds] deve contenere tutte le opzioni. */
     suspend fun submitRanking(pollId: String, optionIds: List<String>) {

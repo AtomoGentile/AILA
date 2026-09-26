@@ -10,7 +10,11 @@ data class PollSummaryDto(
     val createdAt: String,
     val totalStudents: Int = 0,
     val submittedCount: Int = 0,
-    val isCalculated: Boolean = false
+    val isCalculated: Boolean = false,
+    /** Destinatari scelti dal Rappresentante; null = tutta la classe. */
+    val audienceUserIds: List<String>? = null,
+    /** False solo per il Rappresentante quando il sondaggio non è rivolto a lui. */
+    val isTarget: Boolean = true
 )
 
 @Serializable
@@ -36,14 +40,21 @@ data class PollDetailDto(
     val isPublished: Boolean,
     val createdAt: String,
     val mySacrificeBonus: Int,
-    val slots: List<PollSlotDto>
+    val slots: List<PollSlotDto>,
+    val audienceUserIds: List<String>? = null,
+    val isTarget: Boolean = true
 )
 
 @Serializable
 data class CreatePollSlotRequestDto(val slotDate: String, val capacity: Int, val teacherMandatory: Boolean = false)
 
 @Serializable
-data class CreatePollRequestDto(val subject: String, val slots: List<CreatePollSlotRequestDto>)
+data class CreatePollRequestDto(
+    val subject: String,
+    val slots: List<CreatePollSlotRequestDto>,
+    /** Chi deve essere interrogato; null = tutta la classe. */
+    val audienceUserIds: List<String>? = null
+)
 
 @Serializable
 data class VotePollSlotRequestDto(val slotId: String, val voteScore: Int? = null)

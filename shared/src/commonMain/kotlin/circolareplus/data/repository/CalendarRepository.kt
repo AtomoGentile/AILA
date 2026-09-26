@@ -47,7 +47,7 @@ class CalendarRepository(private val api: ApiClient) {
 
 private fun CalendarEventDto.toDomain(): CalendarEvent = CalendarEvent(
     id = id,
-    title = title,
+    title = circolareplus.util.compactClassLabels(title),
     date = eventDate,
     time = startTime,
     category = try {

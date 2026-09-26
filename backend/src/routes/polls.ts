@@ -6,7 +6,8 @@
 import { Hono } from 'hono';
 import type { Env, JWTPayload, VoteScore } from '../types';
 import { authMiddleware, requireRole, newUUID, resolveClassId } from '../auth';
-import { notifyClass, notifyUser } from '../services/fcm';
+import { notifyClass, notifyUser, notifyUsers } from '../services/fcm';
+import { classMemberIds, effectiveAudience, isInAudience, normalizeAudience, parseAudience } from '../services/audience';
 
 const polls = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();
 
@@ -55,11 +56,11 @@ function negativeVoteWeight(negatives: number, slotCount: number): number {
 // GET /api/polls — Lista griglie
 // ---------------------------------------------------------------------------
 polls.get('/', async (c) => {
+  const payload = c.get('jwtPayload');
   const classId = await resolveClassId(c);
+  const members = await classMemberIds(c.env, classId);
   const rows = await c.env.DB.prepare(
-    `SELECT g.id, g.subject, g.is_published, g.closes_at, g.created_at,
-            (SELECT COUNT(*) FROM users
-              WHERE class_id = g.class_id AND role IN ('STUDENT', 'REPRESENTATIVE')) AS total_students,
+    `SELECT g.id, g.subject, g.is_published, g.closes_at, g.created_at, g.audience_json,
             (SELECT COUNT(*) FROM interrogation_submissions WHERE grid_id = g.id) AS submitted_count,
             EXISTS(
               SELECT 1 FROM interrogation_assignments a
@@ -75,22 +76,29 @@ polls.get('/', async (c) => {
     is_published: number;
     closes_at: string | null;
     created_at: string;
-    total_students: number;
+    audience_json: string | null;
     submitted_count: number;
     is_calculated: number;
   }>();
 
+  // Chi non è fra i destinatari non vede la griglia; il Rappresentante le vede tutte.
+  const isRepresentative = payload.role === 'REPRESENTATIVE';
   return c.json({
-    polls: rows.results.map((p) => ({
-      id: p.id,
-      subject: p.subject,
-      isPublished: Boolean(p.is_published),
-      closesAt: p.closes_at,
-      createdAt: p.created_at,
-      totalStudents: p.total_students,
-      submittedCount: p.submitted_count,
-      isCalculated: Boolean(p.is_calculated),
-    })),
+    polls: rows.results
+      .map((p) => ({ ...p, audience: parseAudience(p.audience_json) }))
+      .filter((p) => isRepresentative || isInAudience(p.audience, payload.sub))
+      .map((p) => ({
+        id: p.id,
+        subject: p.subject,
+        isPublished: Boolean(p.is_published),
+        closesAt: p.closes_at,
+        createdAt: p.created_at,
+        totalStudents: effectiveAudience(p.audience, members).length,
+        submittedCount: p.submitted_count,
+        isCalculated: Boolean(p.is_calculated),
+        audienceUserIds: p.audience,
+        isTarget: isInAudience(p.audience, payload.sub),
+      })),
   });
 });
 
@@ -104,7 +112,7 @@ polls.get('/:id', async (c) => {
   const classId = await resolveClassId(c);
 
   const grid = await c.env.DB.prepare(
-    `SELECT id, subject, is_published, closes_at, created_at
+    `SELECT id, subject, is_published, closes_at, created_at, audience_json
      FROM interrogation_grids WHERE id = ? AND class_id = ?`
   ).bind(id, classId).first<{
     id: string;
@@ -112,9 +120,13 @@ polls.get('/:id', async (c) => {
     is_published: number;
     closes_at: string | null;
     created_at: string;
+    audience_json: string | null;
   }>();
 
   if (!grid) return c.json({ error: 'Griglia non trovata' }, 404);
+  const audience = parseAudience(grid.audience_json);
+  const isTarget = isInAudience(audience, payload.sub);
+  if (!isTarget && payload.role !== 'REPRESENTATIVE') return c.json({ error: 'Griglia non trovata' }, 404);
 
   const slots = await c.env.DB.prepare(
     `SELECT s.id, s.slot_date, s.capacity, s.teacher_mandatory,
@@ -151,18 +163,15 @@ polls.get('/:id', async (c) => {
   // l'algoritmo non aveva modo di partire da sé "quando hanno votato tutti".
   const progress = await c.env.DB.prepare(
     `SELECT
-       (SELECT COUNT(*) FROM users
-         WHERE class_id = ? AND role IN ('STUDENT', 'REPRESENTATIVE')) AS total_students,
        (SELECT COUNT(*) FROM interrogation_submissions WHERE grid_id = ?) AS submitted_count,
        (SELECT COUNT(*) FROM interrogation_submissions
          WHERE grid_id = ? AND student_id = ?) AS mine`
-  ).bind(classId, id, id, payload.sub).first<{
-    total_students: number;
+  ).bind(id, id, payload.sub).first<{
     submitted_count: number;
     mine: number;
   }>();
 
-  const totalStudents = progress?.total_students ?? 0;
+  const totalStudents = effectiveAudience(audience, await classMemberIds(c.env, classId)).length;
   const submittedCount = progress?.submitted_count ?? 0;
   const isExpired = grid.closes_at !== null && new Date(grid.closes_at).getTime() <= Date.now();
 
@@ -177,6 +186,10 @@ polls.get('/:id', async (c) => {
     submittedCount,
     hasSubmitted: (progress?.mine ?? 0) > 0,
     isExpired,
+    // Destinatari: `null` = tutta la classe. Chi non è fra i destinatari (può capitare solo al
+    // Rappresentante) vede l'avanzamento ma non vota.
+    audienceUserIds: audience,
+    isTarget,
     // Il Rappresentante può far girare l'algoritmo quando hanno inviato tutti oppure quando il
     // tempo è scaduto: senza la scadenza, un solo compagno che non vota bloccava la classe.
     canRunAssignments: totalStudents > 0 && (submittedCount >= totalStudents || isExpired),
@@ -206,6 +219,8 @@ polls.post('/', requireRole('REPRESENTATIVE'), async (c) => {
     // Scadenza della compilazione, in ISO 8601. Facoltativa: senza, la griglia resta aperta
     // finché non hanno inviato tutti (comportamento di prima).
     closesAt?: string | null;
+    // Chi deve essere interrogato. Vuoto/assente = tutta la classe.
+    audienceUserIds?: string[] | null;
   }>();
 
   const { subject, slots, closesAt } = body;
@@ -215,15 +230,17 @@ polls.post('/', requireRole('REPRESENTATIVE'), async (c) => {
     return c.json({ error: 'subject e almeno uno slot sono obbligatori' }, 400);
   }
 
-  // Validate total capacity >= number of registered students
-  const studentCount = await c.env.DB.prepare(
-    "SELECT COUNT(*) as cnt FROM users WHERE role = 'STUDENT' AND class_id = ?"
-  ).bind(classId).first<{ cnt: number }>();
+  const members = await classMemberIds(c.env, classId);
+  const audienceCheck = normalizeAudience(body.audienceUserIds, members);
+  if (!audienceCheck.ok) return c.json({ error: audienceCheck.error }, 400);
+  const audience = audienceCheck.audience;
 
+  // La capienza totale deve bastare per tutti quelli da interrogare.
+  const toAssign = effectiveAudience(audience, members).length;
   const totalCapacity = slots.reduce((sum, s) => sum + (s.capacity ?? 1), 0);
-  if (totalCapacity < (studentCount?.cnt ?? 0)) {
+  if (totalCapacity < toAssign) {
     return c.json({
-      error: `La capienza totale degli slot (${totalCapacity}) deve essere >= al numero di studenti (${studentCount?.cnt ?? 0})`
+      error: `La capienza totale degli slot (${totalCapacity}) deve essere almeno pari alle persone da interrogare (${toAssign})`
     }, 400);
   }
 
@@ -231,8 +248,8 @@ polls.post('/', requireRole('REPRESENTATIVE'), async (c) => {
 
   const statements = [
     c.env.DB.prepare(
-      'INSERT INTO interrogation_grids (id, subject, closes_at, class_id) VALUES (?, ?, ?, ?)'
-    ).bind(gridId, subject, closesAt ?? null, classId),
+      'INSERT INTO interrogation_grids (id, subject, closes_at, class_id, audience_json) VALUES (?, ?, ?, ?, ?)'
+    ).bind(gridId, subject, closesAt ?? null, classId, audience ? JSON.stringify(audience) : null),
     ...slots.map((s) =>
       c.env.DB.prepare(
         'INSERT INTO interrogation_slots (id, grid_id, slot_date, capacity, teacher_mandatory) VALUES (?, ?, ?, ?, ?)'
@@ -269,8 +286,8 @@ polls.put('/:id/publish', requireRole('REPRESENTATIVE'), async (c) => {
   const id = c.req.param('id');
 
   const classId = await resolveClassId(c);
-  const grid = await c.env.DB.prepare('SELECT id, subject, is_published FROM interrogation_grids WHERE id = ? AND class_id = ?')
-    .bind(id, classId).first<{ id: string; subject: string; is_published: number }>();
+  const grid = await c.env.DB.prepare('SELECT id, subject, is_published, audience_json FROM interrogation_grids WHERE id = ? AND class_id = ?')
+    .bind(id, classId).first<{ id: string; subject: string; is_published: number; audience_json: string | null }>();
 
   if (!grid) return c.json({ error: 'Griglia non trovata' }, 404);
   if (grid.is_published) return c.json({ error: 'Griglia già pubblicata' }, 409);
@@ -278,13 +295,15 @@ polls.put('/:id/publish', requireRole('REPRESENTATIVE'), async (c) => {
   await c.env.DB.prepare('UPDATE interrogation_grids SET is_published = 1 WHERE id = ?')
     .bind(id).run();
 
-  await notifyClass(
-    c.env,
-    'Nuovo Sondaggio Interrogazioni',
-    `È disponibile il sondaggio per le interrogazioni di ${grid.subject}. Esprimi le tue preferenze!`,
-    { action: 'poll_published', poll_id: id ?? '' },
-    classId
-  );
+  const publishTitle = 'Nuovo Sondaggio Interrogazioni';
+  const publishText = `È disponibile il sondaggio per le interrogazioni di ${grid.subject}. Esprimi le tue preferenze!`;
+  const publishData = { action: 'poll_published', poll_id: id ?? '' };
+  const audience = parseAudience(grid.audience_json);
+  if (audience) {
+    await notifyUsers(c.env, audience, publishTitle, publishText, publishData);
+  } else {
+    await notifyClass(c.env, publishTitle, publishText, publishData, classId);
+  }
 
   return c.json({ success: true });
 });
@@ -307,10 +326,13 @@ polls.post('/:id/vote', async (c) => {
 
   const classId = await resolveClassId(c);
   const grid = await c.env.DB.prepare(
-    'SELECT id, subject, is_published, closes_at FROM interrogation_grids WHERE id = ? AND class_id = ?'
-  ).bind(gridId, classId).first<{ id: string; subject: string; is_published: number; closes_at: string | null }>();
+    'SELECT id, subject, is_published, closes_at, audience_json FROM interrogation_grids WHERE id = ? AND class_id = ?'
+  ).bind(gridId, classId).first<{ id: string; subject: string; is_published: number; closes_at: string | null; audience_json: string | null }>();
   if (!grid) return c.json({ error: 'Griglia non trovata' }, 404);
   if (!grid.is_published) return c.json({ error: 'La griglia non è ancora pubblicata' }, 403);
+  if (!isInAudience(parseAudience(grid.audience_json), payload.sub)) {
+    return c.json({ error: 'Questo sondaggio non è rivolto a te' }, 403);
+  }
 
   if (grid.closes_at && new Date(grid.closes_at).getTime() <= Date.now()) {
     return c.json({ error: 'Il tempo per compilare questo sondaggio è scaduto' }, 403);
@@ -386,10 +408,14 @@ polls.post('/:id/submit', async (c) => {
   const classId = await resolveClassId(c);
 
   const grid = await c.env.DB.prepare(
-    'SELECT id, subject, is_published, closes_at FROM interrogation_grids WHERE id = ? AND class_id = ?'
-  ).bind(gridId, classId).first<{ id: string; subject: string; is_published: number; closes_at: string | null }>();
+    'SELECT id, subject, is_published, closes_at, audience_json FROM interrogation_grids WHERE id = ? AND class_id = ?'
+  ).bind(gridId, classId).first<{ id: string; subject: string; is_published: number; closes_at: string | null; audience_json: string | null }>();
   if (!grid) return c.json({ error: 'Griglia non trovata' }, 404);
   if (!grid.is_published) return c.json({ error: 'La griglia non è ancora pubblicata' }, 403);
+  const audience = parseAudience(grid.audience_json);
+  if (!isInAudience(audience, payload.sub)) {
+    return c.json({ error: 'Questo sondaggio non è rivolto a te' }, 403);
+  }
 
   await c.env.DB.prepare(
     `INSERT INTO interrogation_submissions (grid_id, student_id, submitted_at)
@@ -398,13 +424,10 @@ polls.post('/:id/submit', async (c) => {
   ).bind(gridId, payload.sub).run();
 
   const progress = await c.env.DB.prepare(
-    `SELECT
-       (SELECT COUNT(*) FROM users
-         WHERE class_id = ? AND role IN ('STUDENT', 'REPRESENTATIVE')) AS total_students,
-       (SELECT COUNT(*) FROM interrogation_submissions WHERE grid_id = ?) AS submitted_count`
-  ).bind(classId, gridId).first<{ total_students: number; submitted_count: number }>();
+    'SELECT COUNT(*) AS submitted_count FROM interrogation_submissions WHERE grid_id = ?'
+  ).bind(gridId).first<{ submitted_count: number }>();
 
-  const totalStudents = progress?.total_students ?? 0;
+  const totalStudents = effectiveAudience(audience, await classMemberIds(c.env, classId)).length;
   const submittedCount = progress?.submitted_count ?? 0;
 
   // Ultimo della classe a inviare: il sondaggio si chiude da solo, l'algoritmo calcola subito
@@ -414,13 +437,14 @@ polls.post('/:id/submit', async (c) => {
   if (totalStudents > 0 && submittedCount >= totalStudents) {
     await computeAndPersistAssignments(c.env, gridId, classId, grid.subject);
 
-    await notifyClass(
-      c.env,
-      'Sondaggio completo',
-      `Tutti hanno inviato le proprie scelte per ${grid.subject}: il calendario è pronto nello storico.`,
-      { action: 'poll_complete', poll_id: gridId ?? '' },
-      classId
-    );
+    const doneTitle = 'Sondaggio completo';
+    const doneText = `Tutti hanno inviato le proprie scelte per ${grid.subject}: il calendario è pronto nello storico.`;
+    const doneData = { action: 'poll_complete', poll_id: gridId ?? '' };
+    if (audience) {
+      await notifyUsers(c.env, audience, doneTitle, doneText, doneData);
+    } else {
+      await notifyClass(c.env, doneTitle, doneText, doneData, classId);
+    }
   }
 
   return c.json({ success: true, submittedCount, totalStudents });
@@ -509,9 +533,10 @@ async function computeAndPersistAssignments(
   // dove il Rappresentante era l'unico ad aver votato (es. durante i test), non assegnava
   // nessuno: zero righe in interrogation_assignments, quindi "isCalculated" restava falso e il
   // sondaggio non si chiudeva mai, nonostante il pulsante "Calcola risultati" rispondesse 200 OK.
-  const students = await env.DB.prepare(
-    "SELECT id FROM users WHERE role IN ('STUDENT', 'REPRESENTATIVE') AND class_id = ?"
-  ).bind(classId).all<{ id: string }>();
+  // Solo i destinatari della griglia, se il Rappresentante ne ha scelti alcuni.
+  const gridRow = await env.DB.prepare('SELECT audience_json FROM interrogation_grids WHERE id = ?')
+    .bind(gridId).first<{ audience_json: string | null }>();
+  const allStudentIds = effectiveAudience(parseAudience(gridRow?.audience_json), await classMemberIds(env, classId));
 
   // Quanti voti negativi ha dato ciascuno: serve a diluirli (vedi negativeVoteWeight).
   const negativeCount: Record<string, number> = {};
@@ -529,7 +554,6 @@ async function computeAndPersistAssignments(
     scoreMatrix[v.student_id][v.slot_id] = vote + sacrifice;
   }
 
-  const allStudentIds = students.results.map((s) => s.id);
   const allSlotIds = slots.results.map((s) => s.id);
   for (const sid of allStudentIds) {
     if (!scoreMatrix[sid]) scoreMatrix[sid] = {};
@@ -657,8 +681,8 @@ polls.post('/:id/assignments/run', requireRole('REPRESENTATIVE'), async (c) => {
 
   const classId = await resolveClassId(c);
   const grid = await c.env.DB.prepare(
-    'SELECT id, subject, is_published, closes_at FROM interrogation_grids WHERE id = ? AND class_id = ?'
-  ).bind(gridId, classId).first<{ id: string; subject: string; is_published: number; closes_at: string | null }>();
+    'SELECT id, subject, is_published, closes_at, audience_json FROM interrogation_grids WHERE id = ? AND class_id = ?'
+  ).bind(gridId, classId).first<{ id: string; subject: string; is_published: number; closes_at: string | null; audience_json: string | null }>();
   if (!grid) return c.json({ error: 'Griglia non trovata' }, 404);
   if (!grid.is_published) return c.json({ error: 'La griglia deve essere pubblicata prima di calcolare le assegnazioni' }, 400);
 
@@ -672,13 +696,10 @@ polls.post('/:id/assignments/run', requireRole('REPRESENTATIVE'), async (c) => {
 
   if (!force && !isExpired) {
     const progress = await c.env.DB.prepare(
-      `SELECT
-         (SELECT COUNT(*) FROM users
-           WHERE class_id = ? AND role IN ('STUDENT', 'REPRESENTATIVE')) AS total_students,
-         (SELECT COUNT(*) FROM interrogation_submissions WHERE grid_id = ?) AS submitted_count`
-    ).bind(classId, gridId).first<{ total_students: number; submitted_count: number }>();
+      'SELECT COUNT(*) AS submitted_count FROM interrogation_submissions WHERE grid_id = ?'
+    ).bind(gridId).first<{ submitted_count: number }>();
 
-    const totalStudents = progress?.total_students ?? 0;
+    const totalStudents = effectiveAudience(parseAudience(grid.audience_json), await classMemberIds(c.env, classId)).length;
     const submittedCount = progress?.submitted_count ?? 0;
 
     if (totalStudents > 0 && submittedCount < totalStudents) {

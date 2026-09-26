@@ -789,6 +789,7 @@ fun MainAppShell(
     var isCalendarLoading by remember { mutableStateOf(false) }
     var calendarError by remember { mutableStateOf<String?>(null) }
     var calendarRefreshTrigger by remember { mutableStateOf(0) }
+    var handledCalendarRefresh by remember { mutableStateOf(0) }
     var showAddEventDialog by remember { mutableStateOf(false) }
     // Con quale passo si apre il foglio "Nuovo evento" e quale data preselezionare: impostati da
     // dove si tocca "+" (menu generico dall'header, scorciatoia AILA, o "+" sul giorno scelto nella
@@ -1133,19 +1134,28 @@ fun MainAppShell(
 
     LaunchedEffect(selectedTab, calendarRefreshTrigger) {
         // Carica il calendario solo se:
-        // 1. È stato esplicitamente richiesto un refresh (calendarRefreshTrigger cambiato)
-        // 2. Non abbiamo ancora dati e siamo nella tab giusta
-        val shouldLoadCalendar = (calendarRefreshTrigger > 0 && selectedTab == MainTab.CALENDAR) ||
+        // 1. È stato chiesto un refresh nuovo (calendarRefreshTrigger cambiato da quello già servito)
+        // 2. Non abbiamo ancora dati e siamo in Calendario o in Home
+        // Prima bastava `calendarRefreshTrigger > 0`: dopo il primo refresh, ogni ingresso nella tab
+        // ricaricava tutto coprendo la griglia con lo spinner, da qui il "ritardo" nel comparire.
+        val refreshRequested = calendarRefreshTrigger != handledCalendarRefresh
+        val shouldLoadCalendar = (refreshRequested && (selectedTab == MainTab.CALENDAR || selectedTab == MainTab.HOME)) ||
             (calendarEvents.isEmpty() && !isCalendarLoading && (selectedTab == MainTab.CALENDAR || selectedTab == MainTab.HOME))
         if (shouldLoadCalendar) {
-            isCalendarLoading = true
+            handledCalendarRefresh = calendarRefreshTrigger
+            // Lo spinner a tutto schermo solo al primo caricamento: con dati già presenti il
+            // ricaricamento avviene in silenzio e la griglia resta visibile.
+            val showSpinner = calendarEvents.isEmpty()
+            if (showSpinner) isCalendarLoading = true
             calendarError = null
             try {
                 calendarEvents = AppContainer.calendarRepository.listEvents()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                calendarError = "Impossibile caricare il calendario. Controlla la connessione."
+                if (showSpinner) calendarError = "Impossibile caricare il calendario. Controlla la connessione."
             } finally {
-                isCalendarLoading = false
+                if (showSpinner) isCalendarLoading = false
             }
         }
         // Anche qui, non solo alla tab Mappa Posti: il dettaglio di un evento con destinatari
@@ -1535,9 +1545,9 @@ fun MainAppShell(
                 // è già girato lato server) è chiuso: deve sparire da "Sondaggio" e restare visibile
                 // solo nello Storico, altrimenti resterebbe "aperto" all'infinito anche a risultato
                 // già pronto.
-                val openPolls = publishedPolls.filterNot {
-                    it.isCalculated && it.totalStudents > 0 && it.submittedCount >= it.totalStudents
-                }
+                // Anche quelli chiusi in anticipo dal Rappresentante ("Chiudi" = calcolo forzato):
+                // prima restavano "aperti" perché non avevano tutti gli invii.
+                val openPolls = publishedPolls.filterNot { it.isCalculated }
                 if (publishedPolls.isNotEmpty()) {
                     val lastSeenId = AppContainer.settings.lastSeenPollId
                     if (lastSeenId.isBlank()) {
@@ -1604,10 +1614,10 @@ fun MainAppShell(
             isLoadingPollResults = true
             pollResultsError = null
             try {
-                // runAssignments (ri)calcola le assegnazioni ma risponde solo con id grezzi;
-                // getAssignments rilegge le stesse righe appena salvate con nome studente e data
-                // leggibili, pronte per la UI.
-                AppContainer.pollsRepository.runAssignments(pollId)
+                // Nello storico ci sono solo sondaggi già calcolati: basta rileggere le
+                // assegnazioni. Prima si rifaceva girare l'algoritmo a ogni apertura, che
+                // riassegnava i bonus sacrificio ogni volta e falliva (409) sui sondaggi chiusi
+                // in anticipo senza tutti gli invii.
                 pollAssignments = AppContainer.pollsRepository.getAssignments(pollId).assignments
             } catch (e: Exception) {
                 pollResultsError = "Impossibile calcolare i risultati: ${e.message}"
@@ -1742,11 +1752,11 @@ fun MainAppShell(
         CreateRankingPollDialog(
             isSubmitting = isCreatingRankingPoll,
             onDismiss = { showCreateRankingPollDialog = false },
-            onConfirm = { question, options ->
+            onConfirm = { question, options, audience ->
                 coroutineScope.launch {
                     isCreatingRankingPoll = true
                     try {
-                        AppContainer.rankingPollsRepository.createPoll(question, options)
+                        AppContainer.rankingPollsRepository.createPoll(question, options, audience)
                         showCreateRankingPollDialog = false
                         rankingRefreshTrigger++
                     } catch (e: Exception) {
@@ -1764,11 +1774,11 @@ fun MainAppShell(
         CreatePollDialog(
             isSubmitting = isCreatingPoll,
             onDismiss = { showCreatePollDialog = false },
-            onConfirm = { subject, slots ->
+            onConfirm = { subject, slots, audience ->
                 coroutineScope.launch {
                     isCreatingPoll = true
                     try {
-                        val created = AppContainer.pollsRepository.createPoll(subject, slots)
+                        val created = AppContainer.pollsRepository.createPoll(subject, slots, audience)
                         val newId = created.id
                         if (newId != null) {
                             AppContainer.pollsRepository.publishPoll(newId)
@@ -1910,7 +1920,10 @@ fun MainAppShell(
                         val tabs = MainTab.entries
                         val segmentWidth = maxWidth / tabs.size
                         val selectedTabIndex = tabs.indexOf(selectedTab).coerceAtLeast(0)
-                        val indicatorOffset by androidx.compose.animation.core.animateDpAsState(
+                        // State letto nel lambda di offset (fase di layout): prima l'offset
+                        // animato si leggeva in composizione e tutta la barra si ricomponeva a
+                        // ogni fotogramma del cambio tab.
+                        val indicatorOffset = androidx.compose.animation.core.animateDpAsState(
                             targetValue = segmentWidth * selectedTabIndex,
                             animationSpec = androidx.compose.animation.core.spring(
                                 dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
@@ -1921,7 +1934,12 @@ fun MainAppShell(
                         val pillWidth = 64.dp
                         Box(
                             modifier = Modifier
-                                .offset(x = indicatorOffset + (segmentWidth - pillWidth) / 2, y = 12.dp)
+                                .offset {
+                                    androidx.compose.ui.unit.IntOffset(
+                                        (indicatorOffset.value + (segmentWidth - pillWidth) / 2).roundToPx(),
+                                        12.dp.roundToPx()
+                                    )
+                                }
                                 .width(pillWidth)
                                 .height(32.dp)
                                 .clip(RoundedCornerShape(16.dp))
@@ -2119,28 +2137,28 @@ fun MainAppShell(
                     // Se si è nello storico, il back torna prima al sondaggio corrente (come la
                     // freccia in ScreenBackBar sotto), solo un secondo back chiude il flusso.
                     circolareplus.platform.PlatformBackHandler {
-                        if (pollsSection == 0 && showPollHistory) showPollHistory = false else isInPollsScreen = false
+                        if (showPollHistory) showPollHistory = false else isInPollsScreen = false
                     }
                     Column(modifier = Modifier.fillMaxSize()) {
                         ScreenBackBar(
                             title = "Sondaggi",
                             onBackClick = {
-                                if (pollsSection == 0 && showPollHistory) showPollHistory = false else isInPollsScreen = false
+                                if (showPollHistory) showPollHistory = false else isInPollsScreen = false
                             }
                         )
-                        // Due tipi di sondaggio: le date delle interrogazioni e quelli in cui si
-                        // mettono in ordine delle opzioni. "Nuovo" crea quello della sezione aperta.
+                        // Sopra: sondaggi in corso o storico (vale per entrambi i tipi), con
+                        // l'azione "nuovo" accanto. Sotto: il tipo di sondaggio.
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(start = AppTheme.Space16, end = AppTheme.Space16, top = AppTheme.Space8),
                             horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             circolareplus.design.AilaSegmentedTabs(
-                                labels = listOf("Interrogazioni", "Ordinamento"),
-                                selectedIndex = pollsSection,
-                                onSelect = { index -> pollsSection = index },
+                                labels = listOf("In corso", "Storico"),
+                                selectedIndex = if (showPollHistory) 1 else 0,
+                                onSelect = { index -> showPollHistory = index == 1 },
                                 modifier = Modifier.weight(1f),
-                                key = pollsSection
+                                key = showPollHistory
                             )
                             if (isRepresentative) {
                                 circolareplus.design.AilaIconButton(
@@ -2152,24 +2170,17 @@ fun MainAppShell(
                                 ) { tint -> AppIcons.Plus(modifier = Modifier.size(18.dp), color = tint) }
                             }
                         }
-                        if (isRepresentative && pollsSection == 0) {
-                            // I due tasti erano entrambi sempre nello stesso stato: "Nuovo
-                            // sondaggio" restava blu anche mentre si guardava lo storico, e non
-                            // si capiva quale delle due viste fosse attiva. Ora è un selettore
-                            // che mostra dove sei, con l'azione "nuovo" separata accanto.
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space8),
-                                horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                circolareplus.design.AilaSegmentedTabs(
-                                    labels = listOf("Sondaggio", "Storico"),
-                                    selectedIndex = if (showPollHistory) 1 else 0,
-                                    onSelect = { index -> showPollHistory = index == 1 },
-                                    modifier = Modifier.weight(1f),
-                                    key = showPollHistory
-                                )
-                            }
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space8),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            circolareplus.design.AilaSegmentedTabs(
+                                labels = listOf("Interrogazioni", "Ordinamento"),
+                                selectedIndex = pollsSection,
+                                onSelect = { index -> pollsSection = index },
+                                modifier = Modifier.weight(1f),
+                                key = pollsSection
+                            )
                         }
                         if (pollsSection == 1) {
                             LoadableContent(
@@ -2178,7 +2189,8 @@ fun MainAppShell(
                                 onRetry = { rankingRefreshTrigger++ }
                             ) {
                                 RankingPollsScreen(
-                                    polls = rankingPolls,
+                                    polls = rankingPolls.filter { it.isClosed == showPollHistory },
+                                    showingHistory = showPollHistory,
                                     totalStudents = rankingTotalStudents,
                                     isRepresentative = isRepresentative,
                                     submittingPollId = submittingRankingPollId,
@@ -2220,6 +2232,16 @@ fun MainAppShell(
                                         }
                                     },
                                     onCreatePoll = { showCreateRankingPollDialog = true }
+                                )
+                            }
+                        } else if (showPollHistory && !isRepresentative) {
+                            // Le assegnazioni complete le legge solo il Rappresentante: agli altri
+                            // si dice dove trovare le proprie date invece di una lista vuota.
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                                circolareplus.design.AilaEmptyState(
+                                    title = "Le tue interrogazioni",
+                                    message = "Quando il Rappresentante chiude un sondaggio e ne pubblica le date, quella assegnata a te compare nel tuo Calendario.",
+                                    icon = { AppIcons.Calendar(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
                                 )
                             }
                         } else if (showPollHistory) {
@@ -2354,6 +2376,35 @@ fun MainAppShell(
                                         )
                                     },
                                     sacrificeBonus = poll.mySacrificeBonus,
+                                    canVote = poll.isTarget,
+                                    isRepresentative = isRepresentative,
+                                    onClosePoll = {
+                                        // "Chiudi" = calcola subito le date anche se manca
+                                        // qualcuno (chi non ha votato vale come Giallo ovunque):
+                                        // il sondaggio passa nello Storico con il risultato pronto.
+                                        coroutineScope.launch {
+                                            try {
+                                                AppContainer.pollsRepository.runAssignments(poll.id, force = true)
+                                                pollsRefreshTrigger++
+                                            } catch (e: CancellationException) {
+                                                throw e
+                                            } catch (e: Exception) {
+                                                pollError = "Impossibile chiudere il sondaggio: ${e.message}"
+                                            }
+                                        }
+                                    },
+                                    onDeletePoll = {
+                                        coroutineScope.launch {
+                                            try {
+                                                AppContainer.pollsRepository.deletePoll(poll.id)
+                                                pollsRefreshTrigger++
+                                            } catch (e: CancellationException) {
+                                                throw e
+                                            } catch (e: Exception) {
+                                                pollError = "Impossibile eliminare: ${e.message}"
+                                            }
+                                        }
+                                    },
                                     onCastVote = { slotId, voteType ->
                                         // Aggiornamento ottimistico: la selezione cambia subito,
                                         // la richiesta parte in background.
@@ -4239,10 +4290,12 @@ private fun CreationSheetHeader(title: String, onClose: () -> Unit) {
 private fun CreatePollDialog(
     isSubmitting: Boolean,
     onDismiss: () -> Unit,
-    onConfirm: (String, List<CreatePollSlotRequestDto>) -> Unit
+    onConfirm: (String, List<CreatePollSlotRequestDto>, List<String>?) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var subject by remember { mutableStateOf("") }
+    // null = tutta la classe; altrimenti solo chi deve essere interrogato.
+    var audience by remember { mutableStateOf<List<String>?>(null) }
     val slots = remember { mutableStateListOf<PollSlotDraft>() }
     var pendingDateMillis by remember { mutableStateOf<Long?>(null) }
     var showDatePicker by remember { mutableStateOf(false) }
@@ -4320,6 +4373,12 @@ private fun CreatePollDialog(
                 modifier = Modifier.padding(top = AppTheme.Space8)
             )
 
+            Spacer(modifier = Modifier.height(AppTheme.Space20))
+            circolareplus.ui.screens.PollAudienceSelector(
+                selectedIds = audience,
+                onSelectionChange = { audience = it }
+            )
+
             Spacer(modifier = Modifier.height(AppTheme.Space24))
 
             Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
@@ -4333,10 +4392,11 @@ private fun CreatePollDialog(
                     onClick = {
                         onConfirm(
                             subject.trim(),
-                            slots.map { CreatePollSlotRequestDto(epochMillisToIsoDate(it.dateMillis), it.capacity, it.teacherMandatory) }
+                            slots.map { CreatePollSlotRequestDto(epochMillisToIsoDate(it.dateMillis), it.capacity, it.teacherMandatory) },
+                            audience
                         )
                     },
-                    enabled = !isSubmitting && subject.isNotBlank() && slots.isNotEmpty(),
+                    enabled = !isSubmitting && subject.isNotBlank() && slots.isNotEmpty() && audience?.isEmpty() != true,
                     fillMaxWidth = true,
                     modifier = Modifier.weight(1f)
                 )
@@ -4423,14 +4483,17 @@ private fun PollSlotDraftRow(
 private fun CreateRankingPollDialog(
     isSubmitting: Boolean,
     onDismiss: () -> Unit,
-    onConfirm: (String, List<String>) -> Unit
+    onConfirm: (String, List<String>, List<String>?) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var question by remember { mutableStateOf("") }
     val options = remember { mutableStateListOf("", "") }
+    // null = tutta la classe.
+    var audience by remember { mutableStateOf<List<String>?>(null) }
     val filled = options.map { it.trim() }.filter { it.isNotEmpty() }
     val hasDuplicates = filled.map { it.lowercase() }.distinct().size != filled.size
-    val canSubmit = !isSubmitting && question.isNotBlank() && filled.size >= 2 && !hasDuplicates
+    val canSubmit = !isSubmitting && question.isNotBlank() && filled.size >= 2 && !hasDuplicates &&
+        audience?.isEmpty() != true
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -4503,6 +4566,12 @@ private fun CreateRankingPollDialog(
                 modifier = Modifier.padding(top = AppTheme.Space8)
             )
 
+            Spacer(modifier = Modifier.height(AppTheme.Space20))
+            circolareplus.ui.screens.PollAudienceSelector(
+                selectedIds = audience,
+                onSelectionChange = { audience = it }
+            )
+
             Spacer(modifier = Modifier.height(AppTheme.Space24))
 
             Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
@@ -4513,7 +4582,7 @@ private fun CreateRankingPollDialog(
                 )
                 circolareplus.design.AilaPrimaryButton(
                     text = if (isSubmitting) "Creazione..." else "Crea e pubblica",
-                    onClick = { onConfirm(question.trim(), filled) },
+                    onClick = { onConfirm(question.trim(), filled, audience) },
                     enabled = canSubmit,
                     fillMaxWidth = true,
                     modifier = Modifier.weight(1f)

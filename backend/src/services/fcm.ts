@@ -356,3 +356,35 @@ export async function notifyUser(env: Env, userId: string, title: string, body: 
     tokens.map((row) => sendV1(env, creds.accessToken, creds.projectId, row, message))
   );
 }
+
+/**
+ * Notifica un gruppo di utenti (es. i destinatari di un sondaggio rivolto solo ad alcuni).
+ * Le credenziali si risolvono una volta sola; lo stesso telefono sotto più account riceve la
+ * notifica una volta (DISTINCT in queryRecipients).
+ */
+export async function notifyUsers(
+  env: Env,
+  userIds: string[],
+  title: string,
+  body: string,
+  data?: Record<string, string>
+): Promise<void> {
+  if (userIds.length === 0) return;
+  const creds = await resolveCredentials(env);
+  if (!creds) return;
+
+  const message: FcmMessage = { title, body, data };
+  // D1 limita i parametri per query: si procede a blocchi.
+  const CHUNK = 50;
+  for (let i = 0; i < userIds.length; i += CHUNK) {
+    const chunk = userIds.slice(i, i + CHUNK);
+    const tokens = await queryRecipients(
+      env,
+      `WHERE t.user_id IN (${chunk.map(() => '?').join(', ')})`,
+      chunk
+    );
+    await Promise.allSettled(
+      tokens.map((row) => sendV1(env, creds.accessToken, creds.projectId, row, message))
+    );
+  }
+}

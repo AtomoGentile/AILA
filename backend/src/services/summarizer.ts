@@ -27,7 +27,7 @@ const MODEL_LADDER = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini
 
 // Stesso contesto di default dell'app (AiClassifier.classifyCircularText): l'analisi è condivisa
 // fra tutti, quindi deve essere fatta con lo stesso contesto che userebbe un telefono.
-const STUDENT_CONTEXT = 'Studente di scuola superiore, classe 4^ CSA';
+const STUDENT_CONTEXT = 'Studente di scuola superiore, classe 4^CSA';
 
 /** Circolari riassunte al massimo per giro di cron (ogni 15 minuti). */
 const MAX_PER_RUN = 3;
@@ -114,9 +114,19 @@ lo studente, entro quando, con quali modalita'). Se la circolare elenca giorni, 
 (per esempio sportelli per disciplina), riportali. Non generalizzare se il documento contiene
 questi dettagli: riportali per esteso invece di ometterli.
 
+Scrivi le classi attaccate, senza spazio dopo il simbolo: "4^CSA", "5^BIA" (non "4^ CSA").
+
 Regole su "deadlines": solo date che lo studente deve segnare in agenda (consegne, pagamenti,
 adesioni entro una data, uscite, incontri). Non inventare date e non mettere la data di
 pubblicazione. Lascia l'elenco vuoto se non ce ne sono.`;
+}
+
+/**
+ * "4^ CSA" -> "4^CSA" (anche con °/ª): l'etichetta della classe si scrive attaccata. Il modello
+ * tende a copiare lo spazio dalle circolari, quindi si normalizza comunque dopo la risposta.
+ */
+export function compactClassLabels(text: string): string {
+  return text.replace(/(\d)\s*([\^°ª])\s+([A-Z]{1,4}\b)/g, '$1$2$3');
 }
 
 function isIsoDate(v: unknown): v is string {
@@ -140,7 +150,7 @@ function parseAnalysis(text: string, model: string): Analysis | null {
   }
   const badge = typeof obj.badge === 'string' ? obj.badge.toUpperCase() : '';
   if (!VALID_BADGES.includes(badge)) return null;
-  const summary = typeof obj.summary === 'string' ? obj.summary.trim() : '';
+  const summary = typeof obj.summary === 'string' ? compactClassLabels(obj.summary.trim()) : '';
   if (!summary) return null;
   const deadlines: Deadline[] = [];
   if (Array.isArray(obj.deadlines)) {
@@ -150,7 +160,7 @@ function parseAnalysis(text: string, model: string): Analysis | null {
       if (!title || !isIsoDate(item.dueDate)) continue;
       const category = typeof item.category === 'string' ? item.category.toUpperCase() : '';
       deadlines.push({
-        title: title.slice(0, 120),
+        title: compactClassLabels(title).slice(0, 120),
         dueDate: item.dueDate,
         time: isClockTime(item.time) ? item.time : null,
         category: VALID_CATEGORIES.includes(category) ? category : 'ALTRO',

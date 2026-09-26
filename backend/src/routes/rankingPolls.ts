@@ -6,7 +6,8 @@
 import { Hono } from 'hono';
 import type { Env, JWTPayload } from '../types';
 import { authMiddleware, requireRole, newUUID, resolveClassId } from '../auth';
-import { notifyClass } from '../services/fcm';
+import { notifyClass, notifyUsers } from '../services/fcm';
+import { classMemberIds, effectiveAudience, isInAudience, normalizeAudience, parseAudience } from '../services/audience';
 
 const rankingPolls = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();
 
@@ -30,12 +31,12 @@ rankingPolls.get('/', async (c) => {
   const classId = await resolveClassId(c);
   const db = c.env.DB;
 
-  const [pollRows, optionRows, aggregateRows, countRows, myRows, totalRow] = await Promise.all([
+  const [pollRows, optionRows, aggregateRows, countRows, myRows, members] = await Promise.all([
     db.prepare(
-      `SELECT id, question, is_closed, created_at
+      `SELECT id, question, is_closed, created_at, audience_json
        FROM ranking_polls WHERE class_id = ?
        ORDER BY created_at DESC, rowid DESC LIMIT ?`
-    ).bind(classId, LIST_LIMIT).all<{ id: string; question: string; is_closed: number; created_at: string }>(),
+    ).bind(classId, LIST_LIMIT).all<{ id: string; question: string; is_closed: number; created_at: string; audience_json: string | null }>(),
     db.prepare(
       `SELECT o.id, o.poll_id, o.label
        FROM ranking_poll_options o JOIN ranking_polls p ON p.id = o.poll_id
@@ -63,10 +64,9 @@ rankingPolls.get('/', async (c) => {
        WHERE p.class_id = ? AND a.user_id = ?
        ORDER BY a.rank ASC`
     ).bind(classId, payload.sub).all<{ poll_id: string; option_id: string; rank: number }>(),
-    db.prepare(
-      `SELECT COUNT(*) AS cnt FROM users WHERE class_id = ? AND role IN ('STUDENT', 'REPRESENTATIVE')`
-    ).bind(classId).first<{ cnt: number }>(),
+    classMemberIds(c.env, classId),
   ]);
+  const isRepresentative = payload.role === 'REPRESENTATIVE';
 
   const optionsByPoll = new Map<string, Array<{ id: string; label: string }>>();
   for (const o of optionRows.results) {
@@ -89,14 +89,21 @@ rankingPolls.get('/', async (c) => {
     myRankingByPoll.set(r.poll_id, list);
   }
 
+  // Chi non è fra i destinatari non vede il sondaggio; il Rappresentante li vede tutti.
+  const visiblePolls = pollRows.results
+    .map((p) => ({ ...p, audience: parseAudience(p.audience_json) }))
+    .filter((p) => isRepresentative || isInAudience(p.audience, payload.sub));
+
   return c.json({
-    totalStudents: totalRow?.cnt ?? 0,
-    polls: pollRows.results.map((p) => {
+    totalStudents: members.length,
+    polls: visiblePolls.map((p) => {
       const options = optionsByPoll.get(p.id) ?? [];
       const myRanking = myRankingByPoll.get(p.id) ?? null;
       const isClosed = Boolean(p.is_closed);
       const voters = votersByPoll.get(p.id) ?? 0;
-      const canSeeResults = isClosed || myRanking !== null;
+      const isTarget = isInAudience(p.audience, payload.sub);
+      // Il Rappresentante che non è fra i destinatari non può rispondere: vede subito i risultati.
+      const canSeeResults = isClosed || myRanking !== null || !isTarget;
 
       // Borda: con N opzioni la prima di ogni classifica vale N-1 punti, l'ultima 0.
       // Somma dei punti = N * risposte - somma delle posizioni.
@@ -129,6 +136,10 @@ rankingPolls.get('/', async (c) => {
         maxPoints: voters * Math.max(options.length - 1, 0),
         myRanking,
         results,
+        // Destinatari: `null` = tutta la classe. Il conteggio serve per "X di Y hanno risposto".
+        audienceUserIds: p.audience,
+        totalStudents: effectiveAudience(p.audience, members).length,
+        isTarget,
       };
     }),
   });
@@ -139,7 +150,7 @@ rankingPolls.get('/', async (c) => {
 // ---------------------------------------------------------------------------
 rankingPolls.post('/', requireRole('REPRESENTATIVE'), async (c) => {
   const payload = c.get('jwtPayload');
-  const body = await c.req.json<{ question?: string; options?: string[] }>();
+  const body = await c.req.json<{ question?: string; options?: string[]; audienceUserIds?: string[] | null }>();
   const classId = await resolveClassId(c);
 
   const question = (body.question ?? '').trim();
@@ -159,11 +170,16 @@ rankingPolls.post('/', requireRole('REPRESENTATIVE'), async (c) => {
     return c.json({ error: 'Ci sono opzioni ripetute' }, 400);
   }
 
+  const members = await classMemberIds(c.env, classId);
+  const audienceCheck = normalizeAudience(body.audienceUserIds, members);
+  if (!audienceCheck.ok) return c.json({ error: audienceCheck.error }, 400);
+  const audience = audienceCheck.audience;
+
   const pollId = newUUID();
   await c.env.DB.batch([
     c.env.DB.prepare(
-      'INSERT INTO ranking_polls (id, class_id, question, created_by) VALUES (?, ?, ?, ?)'
-    ).bind(pollId, classId, question, payload.sub),
+      'INSERT INTO ranking_polls (id, class_id, question, created_by, audience_json) VALUES (?, ?, ?, ?, ?)'
+    ).bind(pollId, classId, question, payload.sub, audience ? JSON.stringify(audience) : null),
     ...options.map((label, index) =>
       c.env.DB.prepare(
         'INSERT INTO ranking_poll_options (id, poll_id, label, position) VALUES (?, ?, ?, ?)'
@@ -171,13 +187,14 @@ rankingPolls.post('/', requireRole('REPRESENTATIVE'), async (c) => {
     ),
   ]);
 
-  await notifyClass(
-    c.env,
-    'Nuovo sondaggio',
-    `Metti in ordine le opzioni: ${question}`,
-    { action: 'ranking_poll_published', poll_id: pollId },
-    classId
-  );
+  const title = 'Nuovo sondaggio';
+  const text = `Metti in ordine le opzioni: ${question}`;
+  const data = { action: 'ranking_poll_published', poll_id: pollId };
+  if (audience) {
+    await notifyUsers(c.env, audience, title, text, data);
+  } else {
+    await notifyClass(c.env, title, text, data, classId);
+  }
 
   return c.json({ success: true, id: pollId }, 201);
 });
@@ -192,10 +209,13 @@ rankingPolls.put('/:id/ranking', async (c) => {
   const body = await c.req.json<{ optionIds?: string[] }>();
 
   const poll = await c.env.DB.prepare(
-    'SELECT id, is_closed FROM ranking_polls WHERE id = ? AND class_id = ?'
-  ).bind(pollId, classId).first<{ id: string; is_closed: number }>();
+    'SELECT id, is_closed, audience_json FROM ranking_polls WHERE id = ? AND class_id = ?'
+  ).bind(pollId, classId).first<{ id: string; is_closed: number; audience_json: string | null }>();
   if (!poll) return c.json({ error: 'Sondaggio non trovato' }, 404);
   if (poll.is_closed) return c.json({ error: 'Il sondaggio è chiuso' }, 409);
+  if (!isInAudience(parseAudience(poll.audience_json), payload.sub)) {
+    return c.json({ error: 'Questo sondaggio non è rivolto a te' }, 403);
+  }
 
   const options = await c.env.DB.prepare(
     'SELECT id FROM ranking_poll_options WHERE poll_id = ?'

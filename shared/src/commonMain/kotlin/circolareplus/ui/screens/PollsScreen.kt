@@ -86,8 +86,37 @@ fun PollsScreen(
     isExpired: Boolean = false,
     isSubmitting: Boolean = false,
     onSubmit: () -> Unit = {},
-    onReopen: () -> Unit = {}
+    onReopen: () -> Unit = {},
+    /** False se il sondaggio non è rivolto a chi guarda (solo il Rappresentante può vederlo così). */
+    canVote: Boolean = true,
+    isRepresentative: Boolean = false,
+    onClosePoll: () -> Unit = {},
+    onDeletePoll: () -> Unit = {}
 ) {
+    var pendingAction by remember { mutableStateOf<String?>(null) }
+    when (pendingAction) {
+        "close" -> circolareplus.design.AilaConfirmDialog(
+            title = "Chiudere il sondaggio?",
+            message = "Le date vengono calcolate subito con le risposte arrivate: chi non ha ancora votato " +
+                "conta come \"va bene tutto\". Il sondaggio passa nello Storico.",
+            onDismiss = { pendingAction = null },
+            onConfirm = {
+                pendingAction = null
+                onClosePoll()
+            },
+            confirmLabel = "Chiudi",
+            isDestructive = false
+        )
+        "delete" -> circolareplus.design.AilaConfirmDialog(
+            title = "Eliminare il sondaggio?",
+            message = "Voti e risultati andranno persi. L'azione non può essere annullata.",
+            onDismiss = { pendingAction = null },
+            onConfirm = {
+                pendingAction = null
+                onDeletePoll()
+            }
+        )
+    }
     val darkRedCount = slots.count { it.currentVote == InterrogationVoteType.DARK_RED }
     val votedCount = slots.count { it.currentVote != null }
     val progress = if (slots.isEmpty()) 0f else votedCount.toFloat() / slots.size
@@ -117,6 +146,27 @@ fun PollsScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
         ) {
+            if (isRepresentative) {
+                item {
+                    PollManagementCard(
+                        onClose = { pendingAction = "close" },
+                        onDelete = { pendingAction = "delete" }
+                    )
+                }
+            }
+            if (!canVote) {
+                item {
+                    AilaCard(containerColor = AppTheme.TintSlate) {
+                        Text(
+                            text = "Questo sondaggio non è rivolto a te: puoi seguirne l'avanzamento, ma non votare.",
+                            fontSize = 13.sp,
+                            color = AppTheme.TextMuted,
+                            lineHeight = 18.sp,
+                            modifier = Modifier.padding(AppTheme.Space16)
+                        )
+                    }
+                }
+            }
             item {
                 AilaCard(modifier = Modifier.ailaAppear(0)) {
                     Column(modifier = Modifier.padding(AppTheme.Space16)) {
@@ -186,14 +236,14 @@ fun PollsScreen(
                 SlotRowItem(
                     slot = slot,
                     darkRedLeft = MAX_DARK_RED - darkRedCount,
-                    enabled = !isSubmitted,
+                    enabled = !isSubmitted && canVote,
                     onSelectVote = { voteType -> onCastVote(slot.slotId, voteType) },
                     modifier = Modifier.ailaAppear(index + 2)
                 )
             }
         }
 
-        PollSubmitBar(
+        if (canVote) PollSubmitBar(
             isSubmitted = isSubmitted,
             allVoted = slots.isNotEmpty() && votedCount == slots.size,
             missing = slots.size - votedCount,
@@ -349,6 +399,47 @@ private fun LegendRow(color: Color, label: String, note: String) {
         Spacer(modifier = Modifier.width(AppTheme.Space8))
         Text(text = label, fontSize = 12.sp, color = AppTheme.TextDark, modifier = Modifier.weight(1f))
         Text(text = note, fontSize = 11.sp, color = AppTheme.TextFaint)
+    }
+}
+
+/**
+ * Azioni del Rappresentante sul sondaggio in corso, con la spiegazione di cosa fanno: prima
+ * "Chiudi" ed "Elimina" c'erano solo nei sondaggi a ordinamento e senza dire a cosa servissero.
+ */
+@Composable
+private fun PollManagementCard(onClose: () -> Unit, onDelete: () -> Unit) {
+    AilaCard(containerColor = AppTheme.TintSlate) {
+        Column(modifier = Modifier.padding(AppTheme.Space16)) {
+            Text(
+                text = "Gestione del sondaggio",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = AppTheme.TextDark
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Chiudi: calcola subito le date anche se manca qualcuno e sposta il sondaggio nello Storico. " +
+                    "Elimina: lo cancella con tutti i voti.",
+                fontSize = 12.sp,
+                color = AppTheme.TextMuted,
+                lineHeight = 16.sp
+            )
+            Spacer(modifier = Modifier.height(AppTheme.Space12))
+            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                AilaSecondaryButton(
+                    text = "Chiudi",
+                    onClick = onClose,
+                    compact = true,
+                    icon = { tint -> AppIcons.Lock(modifier = Modifier.size(13.dp), color = tint) }
+                )
+                AilaSecondaryButton(
+                    text = "Elimina",
+                    onClick = onDelete,
+                    compact = true,
+                    icon = { _ -> AppIcons.Trash(modifier = Modifier.size(13.dp), color = AppTheme.TintRedInk) }
+                )
+            }
+        }
     }
 }
 

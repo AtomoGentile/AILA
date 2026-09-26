@@ -154,8 +154,10 @@ private fun CircularAnalysisDto.toDomain(): CircularAiClassification {
     return CircularAiClassification(
         circularNumber = circularNumber,
         badge = parsedBadge ?: CircularRelevanceBadge.POTENTIAL,
-        personalSummary = summary,
-        detectedDeadlines = deadlines.map { ExtractedDeadline(it.title, it.dueDate, it.time, it.category) },
+        personalSummary = circolareplus.util.compactClassLabels(summary),
+        detectedDeadlines = deadlines.map {
+            ExtractedDeadline(circolareplus.util.compactClassLabels(it.title), it.dueDate, it.time, it.category)
+        },
         isFallback = isFallback || parsedBadge == null,
         modelLabel = modelLabel
     )

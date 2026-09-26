@@ -27,7 +27,13 @@ data class RankingPollDto(
     /** Id delle opzioni nell'ordine scelto, null se non si è ancora risposto. */
     val myRanking: List<String>? = null,
     /** Null finché non si invia la propria classifica (e il sondaggio è aperto). */
-    val results: List<RankingPollResultDto>? = null
+    val results: List<RankingPollResultDto>? = null,
+    /** Destinatari scelti dal Rappresentante; null = tutta la classe. */
+    val audienceUserIds: List<String>? = null,
+    /** Quanti possono rispondere (destinatari); null dai server che non lo mandano ancora. */
+    val totalStudents: Int? = null,
+    /** False solo per il Rappresentante quando il sondaggio non è rivolto a lui. */
+    val isTarget: Boolean = true
 )
 
 @Serializable
@@ -37,7 +43,11 @@ data class RankingPollsListResponseDto(
 )
 
 @Serializable
-data class CreateRankingPollRequestDto(val question: String, val options: List<String>)
+data class CreateRankingPollRequestDto(
+    val question: String,
+    val options: List<String>,
+    val audienceUserIds: List<String>? = null
+)
 
 @Serializable
 data class SubmitRankingRequestDto(val optionIds: List<String>)
