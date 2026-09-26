@@ -58,8 +58,10 @@ jobs:
         with:
           node-version: '22'
 
+      # npm 10 (quello di Node 22) si ferma con "Cannot read properties of null (reading
+      # 'edgesOut')" su questo lockfile; npm 11 lo installa senza problemi.
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npx -y npm@11 install --no-audit --no-fund
 
       # Stesso controllo che si fa in locale: un errore di tipi non arriva in produzione.
       - name: Typecheck
