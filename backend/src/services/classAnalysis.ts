@@ -26,12 +26,27 @@ export interface ClassNote {
 /** Oltre questo numero di classi il prompt e la risposta diventano troppo lunghi. */
 const MAX_CLASSES_IN_PROMPT = 40;
 
+/** Le classi che entrano nel prompt: le stesse di [MISSING_CLASS_SQL], nello stesso ordine. */
+const PROMPT_CLASSES_SQL = `SELECT id, label FROM classes ORDER BY label ASC LIMIT ${MAX_CLASSES_IN_PROMPT}`;
+
 export async function loadClasses(env: Env): Promise<ClassInfo[]> {
-  const rows = await env.DB.prepare('SELECT id, label FROM classes ORDER BY label ASC LIMIT ?')
-    .bind(MAX_CLASSES_IN_PROMPT)
-    .all<ClassInfo>();
+  const rows = await env.DB.prepare(PROMPT_CLASSES_SQL).all<ClassInfo>();
   return rows.results;
 }
+
+/**
+ * Condizione SQL (su `a` = circular_ai_analysis): l'analisi del server non ha la parte di almeno
+ * una classe registrata, per esempio perché la classe si è iscritta dopo. Le analisi senza dati
+ * per classe (NULL, fatte prima dell'analisi per classe) contano come "mancanti" solo se le
+ * classi sono più di una: con una classe sola erano già fatte per lei.
+ */
+export const MISSING_CLASS_SQL = `(
+  (a.per_class_json IS NULL AND (SELECT COUNT(*) FROM classes) > 1)
+  OR (a.per_class_json IS NOT NULL AND EXISTS (
+    SELECT 1 FROM (${PROMPT_CLASSES_SQL}) cl
+    WHERE json_type(a.per_class_json, '$."' || cl.id || '"') IS NULL
+  ))
+)`;
 
 /** "4 CSA" (come è salvata) -> "4^CSA" (come si scrive nelle circolari e nell'app). */
 export function displayClassLabel(label: string): string {
