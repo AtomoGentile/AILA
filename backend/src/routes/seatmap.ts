@@ -7,6 +7,7 @@ import { Hono } from 'hono';
 import type { Env, JWTPayload } from '../types';
 import { authMiddleware, requireRole, newUUID, resolveClassId } from '../auth';
 import { notifyClass } from '../services/fcm';
+import { inBackground } from '../services/background';
 
 const seatmap = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();
 
@@ -80,13 +81,13 @@ seatmap.post('/publish', requireRole('REPRESENTATIVE'), async (c) => {
   ).bind(id, 1, JSON.stringify(body.layout), classId).run();
 
   // Push notification to class
-  await notifyClass(
+  inBackground(c, notifyClass(
     c.env,
     'Nuova Mappa Posti Pubblicata',
     'Il Rappresentante ha pubblicato la nuova disposizione dei banchi. Scopri il tuo posto!',
     { action: 'seat_map_updated' },
     classId
-  );
+  ));
 
   return c.json({ success: true, id }, 201);
 });

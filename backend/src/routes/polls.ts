@@ -8,6 +8,7 @@ import type { Env, JWTPayload, VoteScore } from '../types';
 import { authMiddleware, requireRole, newUUID, resolveClassId } from '../auth';
 import { notifyClass, notifyUser, notifyUsers } from '../services/fcm';
 import { classMemberIds, effectiveAudience, isInAudience, normalizeAudience, parseAudience } from '../services/audience';
+import { inBackground } from '../services/background';
 
 const polls = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();
 
@@ -300,9 +301,9 @@ polls.put('/:id/publish', requireRole('REPRESENTATIVE'), async (c) => {
   const publishData = { action: 'poll_published', poll_id: id ?? '' };
   const audience = parseAudience(grid.audience_json);
   if (audience) {
-    await notifyUsers(c.env, audience, publishTitle, publishText, publishData);
+    inBackground(c, notifyUsers(c.env, audience, publishTitle, publishText, publishData));
   } else {
-    await notifyClass(c.env, publishTitle, publishText, publishData, classId);
+    inBackground(c, notifyClass(c.env, publishTitle, publishText, publishData, classId));
   }
 
   return c.json({ success: true });
@@ -441,9 +442,9 @@ polls.post('/:id/submit', async (c) => {
     const doneText = `Tutti hanno inviato le proprie scelte per ${grid.subject}: il calendario è pronto nello storico.`;
     const doneData = { action: 'poll_complete', poll_id: gridId ?? '' };
     if (audience) {
-      await notifyUsers(c.env, audience, doneTitle, doneText, doneData);
+      inBackground(c, notifyUsers(c.env, audience, doneTitle, doneText, doneData));
     } else {
-      await notifyClass(c.env, doneTitle, doneText, doneData, classId);
+      inBackground(c, notifyClass(c.env, doneTitle, doneText, doneData, classId));
     }
   }
 
@@ -769,13 +770,13 @@ polls.post('/:id/swap-request', async (c) => {
   ).bind(swapId, gridId, payload.sub, targetStudentId).run();
 
   // Notify target student
-  await notifyUser(
+  inBackground(c, notifyUser(
     c.env,
     targetStudentId,
     'Richiesta di Scambio Posto',
     'Uno studente vuole scambiare il posto di interrogazione con te. Apri l\'app per confermare o rifiutare.',
     { action: 'swap_request', swap_id: swapId, grid_id: gridId }
-  );
+  ));
 
   return c.json({ success: true, swapId }, 201);
 });
@@ -834,13 +835,13 @@ polls.put('/swap/:swapId/confirm', async (c) => {
   ]);
 
   // Notify requester
-  await notifyUser(
+  inBackground(c, notifyUser(
     c.env,
     swap.requester_id,
     'Scambio Posto Confermato',
     'Il tuo scambio di posto per l\'interrogazione è stato confermato!',
     { action: 'swap_accepted', swap_id: swapId }
-  );
+  ));
 
   return c.json({ success: true, accepted: true });
 });

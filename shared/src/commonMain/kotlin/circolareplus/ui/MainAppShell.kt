@@ -3000,10 +3000,19 @@ fun MainAppShell(
                                                     }
                                                 },
                                                 onTogglePreferencesWindow = { open ->
+                                                    // Subito, senza aspettare il server: prima il
+                                                    // tasto restava fermo per tutto l'invio delle
+                                                    // notifiche alla classe. Se la richiesta fallisce
+                                                    // si torna allo stato di prima.
+                                                    val previous = isPreferencesOpen
+                                                    isPreferencesOpen = open
                                                     coroutineScope.launch {
                                                         try {
                                                             isPreferencesOpen = AppContainer.preferencesRepository.setPreferencesOpen(open).preferencesOpen
+                                                        } catch (e: CancellationException) {
+                                                            throw e
                                                         } catch (e: Exception) {
+                                                            isPreferencesOpen = previous
                                                             seatMapActionError = "Impossibile aggiornare la finestra preferenze: ${e.message}"
                                                         }
                                                     }
