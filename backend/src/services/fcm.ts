@@ -20,6 +20,7 @@
 // =============================================================================
 
 import type { Env } from '../types';
+import { sendWebPush } from './webpush';
 
 interface FcmMessage {
   title: string;
@@ -42,7 +43,7 @@ interface FcmRecipient {
  * alla categoria delle Impostazioni ("circulars", "board", "seatmap", "polls" o "" se nessuna).
  * "seatmap_preferences" dell'app qui e' gia' "seatmap", la voce dell'interruttore.
  */
-function notificationKind(data: Record<string, string>): string {
+export function notificationKind(data: Record<string, string>): string {
   switch (data.action) {
     case 'open_preferences':
     case 'preferences_complete':
@@ -317,6 +318,20 @@ export async function notifyClass(
   // quelle di classe. Chi chiama e non la passa deve avere una ragione.
   classId?: string
 ): Promise<void> {
+  // Stessa notifica anche alla PWA (web push), in parallelo e isolata da FCM.
+  const web = classId
+    ? sendWebPush(env, 'JOIN users u ON u.id = w.user_id WHERE u.class_id = ?', [classId], webMessage(title, body, data))
+    : sendWebPush(env, '', [], webMessage(title, body, data));
+  await alongsideWebPush(fcmNotifyClass(env, title, body, data, classId), web);
+}
+
+async function fcmNotifyClass(
+  env: Env,
+  title: string,
+  body: string,
+  data?: Record<string, string>,
+  classId?: string
+): Promise<void> {
   const message: FcmMessage = { title, body, data };
   console.log(`[FCM] Notifica classe${classId ? ` ${classId}` : ' (tutte)'}: ${title} — ${body}`);
 
@@ -346,6 +361,11 @@ export async function notifyClass(
  * Notify a single user by userId.
  */
 export async function notifyUser(env: Env, userId: string, title: string, body: string, data?: Record<string, string>): Promise<void> {
+  const web = sendWebPush(env, 'WHERE w.user_id = ?', [userId], webMessage(title, body, data));
+  await alongsideWebPush(fcmNotifyUser(env, userId, title, body, data), web);
+}
+
+async function fcmNotifyUser(env: Env, userId: string, title: string, body: string, data?: Record<string, string>): Promise<void> {
   const creds = await resolveCredentials(env);
   if (!creds) return;
 
@@ -355,4 +375,21 @@ export async function notifyUser(env: Env, userId: string, title: string, body: 
   await Promise.allSettled(
     tokens.map((row) => sendV1(env, creds.accessToken, creds.projectId, row, message))
   );
+}
+
+// ---------------------------------------------------------------------------
+// Web push accanto a FCM
+// ---------------------------------------------------------------------------
+
+function webMessage(title: string, body: string, data?: Record<string, string>) {
+  return { title, body, data, kind: notificationKind(data ?? {}) };
+}
+
+/**
+ * Aspetta FCM e web push insieme (allSettled): un errore o un ritardo del web push non tocca FCM.
+ * Un errore di FCM invece si propaga come prima, così chi chiama si comporta come sempre.
+ */
+async function alongsideWebPush(fcm: Promise<void>, web: Promise<void>): Promise<void> {
+  const [fcmResult] = await Promise.allSettled([fcm, web]);
+  if (fcmResult.status === 'rejected') throw fcmResult.reason;
 }
