@@ -24,9 +24,14 @@ struct iOSApp: App {
         MLXLocalBridgeHolder.shared.bridge = MLXLocalEngine()
         PushTokenBridgeHolder.shared.bridge = FirebasePushTokenBridge()
         SeatMapPdfShareBridgeHolder.shared.bridge = SeatMapPdfShareBridgeImpl()
+        // Analisi sul telefono che continua con l'app in background (vedi BackgroundWorkBridge.swift).
+        BackgroundWorkBridgeHolder.shared.bridge = BackgroundWorkBridgeImpl()
+        IosBackgroundWork.shared.start()
         BackgroundRefreshBridgeHolder.shared.bridge = AilaBackground()
 
-        // Refresh in background delle circolari: va registrato prima della fine del lancio.
+        // Refresh in background delle circolari: va registrato prima della fine del lancio. E'
+        // l'unico punto che registra com.circolareplus.refresh (registrarlo due volte fa
+        // terminare l'app).
         AilaBackground.register()
     }
 

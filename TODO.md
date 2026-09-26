@@ -3,6 +3,33 @@
 Elenco vivo dei problemi aperti e del lavoro ancora mancante, aggiornato mano a mano.
 Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esistente.
 
+## 25/9: unione dei branch aperti (branch `claude/aila-public-cleanup-179v93`)
+
+**Non compilato** (Gradle senza dipendenze in questa sessione; il backend passa `tsc`). Da provare
+prima di tutto: `./gradlew :androidApp:assembleDebug`, `:shared:testDebugUnitTest` e la build iOS.
+
+**Deploy, in quest'ordine**:
+1. `wrangler d1 execute circolare_d1 --remote --file=./migrations/008_ranking_polls.sql`
+2. `wrangler d1 execute circolare_d1 --remote --file=./migrations/009_push_preferences.sql`
+   (era `008_push_preferences.sql` nel branch `claude/android-ios-discrepancies-j1dggy`: rinominata
+   perche' il numero 008 era gia' preso dai sondaggi a ordinamento)
+3. `wrangler deploy`, poi la nuova app.
+
+Fatto:
+- Uniti `claude/cross-class-registration-5n1rod`, `claude/aila-background-sync-notifications-q99yjo`,
+  `claude/surveys-button-removal-ranking-q1nunl` e `claude/android-ios-discrepancies-j1dggy`.
+- **iOS, un solo task in background**: i due branch registravano entrambi
+  `com.circolareplus.refresh` (in `AilaBackground.swift` e in `AppDelegate.swift`), e registrare due
+  volte lo stesso identificativo fa terminare l'app all'avvio. Ora lo registra solo
+  `AilaBackground`: a ogni risveglio prima le circolari nuove + notifica locale, poi con il tempo
+  che resta (tetto 25 s in tutto) i riassunti arretrati di `IosBackgroundWork.runRefresh`.
+- **iOS 17 minimo** rispettato anche dal codice di `discrepancies`: `BGContinuedProcessingTask`
+  (analisi che continua in background) e' dietro `#available(iOS 26, *)`, sotto resta
+  `beginBackgroundTask`. `AppleIntelligenceEngine` tiene sia la protezione iOS 26 sia il tasto Stop
+  (`cancelGeneration`).
+- Tasto "Nuovo" dei sondaggi: icona (`AilaIconButton`), accanto al selettore
+  Interrogazioni/Ordinamento.
+
 ## 25/9: stop download, date dell'assistente, Gemini piu' rapido, sondaggi (branch `claude/ui-ux-improvements-i01wsr`)
 
 **Non compilato** (Gradle senza accesso ai plugin Google in questa sessione; il backend passa
@@ -30,6 +57,85 @@ Fatto:
   cestino per Elimina/Rimuovi, freccia circolare accanto a "Riprova".
 - **UI**: "Circolari" in "Dove posso cercare" apre le circolari (aveva la sola riga senza >);
   cronologia e nuova chat dell'assistente sono icone.
+
+## 24/9: sondaggi a ordinamento, via "Calcola risultati" (branch `claude/surveys-button-removal-ranking-q1nunl`)
+
+**Non compilato**: Maven Central risponde 429 in questa sessione, quindi Gradle non parte. Il
+backend passa `tsc` e le query sono state provate su SQLite. Prima cosa da fare:
+`./gradlew :androidApp:assembleDebug`.
+
+**Deploy**: `wrangler d1 execute circolare_d1 --remote --file=./migrations/008_ranking_polls.sql`,
+poi `wrangler deploy`, poi la nuova app (le app vecchie non vedono la sezione, nessun problema).
+
+Fatto:
+- Tolto il tasto **"Calcola risultati"** dal sondaggio interrogazioni: il calcolo parte da solo
+  quando hanno inviato tutti. `runAssignments(force = true)` resta nel repository ma nessuno lo usa.
+- **Sondaggi a ordinamento** (`/api/ranking-polls`, `RankingPollsScreen`): il Rappresentante
+  propone 2-10 opzioni, ognuno le ordina con le frecce su/giù, classifica a punti Borda sempre
+  aggiornata. Risultati visibili dopo aver inviato la propria classifica o a sondaggio chiuso.
+  Il Rappresentante può chiudere ed eliminare. Nella schermata Sondaggi c'è il selettore
+  "Interrogazioni / Ordinamento".
+
+- La notifica di un nuovo sondaggio a ordinamento (categoria `ranking_polls`, sul modello di
+  `seatmap_preferences`) apre Sondaggi direttamente su "Ordinamento"; segue l'interruttore
+  Sondaggi e nella campanella ha la stessa icona.
+## 25/9: discrepanze Android/iOS (branch `claude/android-ios-discrepancies-j1dggy`)
+
+**Non compilato** (Gradle non raggiunge Google Maven da questo ambiente, e la CI non ha runner:
+vedi sotto). Backend: `tsc` passa.
+
+**Deploy, in quest'ordine**:
+1. `wrangler d1 execute circolare_d1 --remote --file=./migrations/009_push_preferences.sql`
+2. `wrangler deploy` (senza la migrazione il backend funziona come prima, senza filtri iOS)
+3. la nuova app.
+
+Fatto:
+- **iOS rilegge i dati tornando in primo piano** e dopo il tocco su una notifica (Android lo faceva
+  gia' in `onResume`).
+- **Notifiche iOS in background**: le preferenze (categorie silenziate, "Notifiche di sistema")
+  viaggiano col token (`POST /api/fcm/token`, migrazione 009) e il server le applica ai messaggi
+  iOS: categoria spenta = nessun invio, notifiche di sistema spente = push silenzioso che finisce
+  solo in campanella. I push iOS hanno `content-available`, e al rientro l'app recupera in
+  campanella quelle rimaste nel Centro Notifiche: prima entravano solo se toccate.
+- **Android: tocco su una notifica vecchia** apriva la sezione dell'ultima arrivata (PendingIntent
+  con requestCode fisso). Ora un requestCode per notifica.
+- **Stop di Apple Intelligence**: il tasto Stop ora cancella davvero il `Task` Swift
+  (`cancelGeneration`), prima la generazione continuava fino al timeout.
+- **Info.plist in `project.yml`** (`info.properties`): XcodeGen riscrive il plist a ogni
+  generazione, e launch screen, orientamenti e nome "AILA" si perdevano. La chiave degli
+  orientamenti iPad era anche sbagliata (`...IPad` invece di `~ipad`). iPhone solo verticale.
+- **Lavoro in background su iOS**: analisi sul telefono tenuta viva con `beginBackgroundTask` +
+  `BGContinuedProcessingTask` (avanzamento di sistema e annullamento = Stop della notifica
+  Android), giro circolari con `BGAppRefreshTask`. Il giro e' ora codice comune
+  (`work/BackgroundCircularsSync.kt`), usato anche da `CircularsSyncWorker`.
+- **Android edge-to-edge, targetSdk 36**: status bar e barra di navigazione seguono il tema
+  dell'app; i margini di sistema li applica `design/PlatformInsets.kt` su entrambe le piattaforme.
+  `onTimeout` sul servizio in primo piano (tetto di 6 ore dei dataSync da Android 15).
+- **"Attiva" Apple Intelligence** fa una generazione di prova, come AICore.
+- Impostazioni: la riga "Memoria rilevata" si nasconde con i soli modelli di sistema (oggi iOS).
+- `CircularsSyncWorker.runOnce` ora parte al push di una circolare nuova.
+- **Schermi piccoli**: illustrazione dell'onboarding che si riduce e pagina scorrevole, celle del
+  calendario che non si sovrappongono sotto i 340dp, etichette della barra in basso con ellissi.
+- **Tablet e iPad**: contenuto in una colonna centrata (`appContentWidth`, max 840dp; 520dp per
+  accesso, onboarding e offline), barra in basso della stessa larghezza, dialoghi larghi al
+  massimo 560dp. Numero del posto nei banchi della mappa che non esce dal cerchio col testo grande.
+
+**CI**: il push del 25/9 ha aperto i run ma i job si chiudono in 1 secondo senza eseguire nessun
+passo (nessun runner: minuti Actions finiti o limite di spesa). Quindi **nulla di questo giro e'
+stato compilato**: prima cosa da fare e' riattivare Actions o lanciare
+`./gradlew :androidApp:assembleDebug` e la build Xcode in locale.
+
+Da provare a schermo (nessun dispositivo qui):
+- iOS: il task `BGContinuedProcessingTask` (API di iOS 26 scritta senza un Mac: se la CI non
+  compila, e' il primo sospetto) e che Apple Intelligence giri con l'app in background.
+- Android 15+: margini di tutte le schermate ora che la finestra e' edge-to-edge (status bar,
+  barra dei gesti, tastiera nei bottom sheet).
+
+Da fare quando c'e' un Mac:
+- **MLX su iOS** (iPhone senza Apple Intelligence non hanno AI locale): riattivare
+  `MLX_MODELS` in `LocalAiModels.ios.kt` e il pacchetto in `project.yml`, aggiungere
+  `cancelGeneration` anche a `MLXLocalBridge`. La riga "Memoria rilevata" nelle Impostazioni
+  ricompare da sola.
 
 ## 22/9: riassunti dal server, coda unica, stop, assistente, mappa posti (branch `claude/app-optimization-circulars-px87fk`)
 

@@ -8,6 +8,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import circolareplus.data.AppContainer
+import circolareplus.work.CircularsSyncWorker
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 
@@ -70,6 +71,9 @@ class CircolareMessagingService : FirebaseMessagingService() {
         // A schermata aperta la lista deve aggiornarsi da sola, non solo mostrare la notifica.
         circolareplus.push.DataRefreshEvents.request()
         if (show) showSystemNotification(title, body, category)
+        // Circolare nuova: un giro di classificazione subito (solo cloud, vedi
+        // BackgroundCircularsSync), senza aspettare il periodico da 15 minuti.
+        if (category == "circulars") CircularsSyncWorker.runOnce(applicationContext)
     }
 
     override fun onNewToken(token: String) {
@@ -89,14 +93,22 @@ class CircolareMessagingService : FirebaseMessagingService() {
         // impostare PendingDeepLink e far navigare l'utente alla schermata giusta, esattamente
         // come già fa il tocco sulla campanella in-app.
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
+            // Con un'azione che corrisponde al filtro di MainActivity: le versioni recenti di
+            // Android possono rifiutare gli intent espliciti che non combaciano con i filtri.
+            action = Intent.ACTION_MAIN
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             if (category.isNotBlank()) {
                 putExtra("notification_category", category)
             }
         }
+        // Un id per notifica, usato sia per la notifica sia come requestCode del PendingIntent:
+        // con requestCode fisso tutte le notifiche condividevano lo stesso PendingIntent e
+        // FLAG_UPDATE_CURRENT ne sovrascriveva l'extra, quindi toccando una notifica vecchia si
+        // apriva la sezione dell'ultima arrivata.
+        val notificationId = currentTimeMillisAsNotificationId()
         val pendingIntent = PendingIntent.getActivity(
             this,
-            0,
+            notificationId,
             openAppIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -110,7 +122,7 @@ class CircolareMessagingService : FirebaseMessagingService() {
             .setContentIntent(pendingIntent)
             .build()
 
-        manager.notify(currentTimeMillisAsNotificationId(), notification)
+        manager.notify(notificationId, notification)
     }
 
     private fun currentTimeMillisAsNotificationId(): Int =

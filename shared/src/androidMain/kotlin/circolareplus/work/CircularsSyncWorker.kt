@@ -10,27 +10,16 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import circolareplus.ai.tier
-import circolareplus.data.AppContainer
 import kotlinx.coroutines.CancellationException
 import java.util.concurrent.TimeUnit
 
 /**
- * Scarica e classifica in background le circolari rimaste indietro, senza dipendere da una
- * schermata aperta.
+ * Il giro di [BackgroundCircularsSync] (codice condiviso con iOS) dentro WorkManager: ogni 15
+ * minuti quando c'e' rete, e subito dopo il push di una circolare nuova ([runOnce]).
  *
  * Prima questo lavoro girava solo dentro un `LaunchedEffect` di `MainAppShell`, legato al
  * lifecycle della composable: se l'utente chiudeva l'app o Android la metteva in background,
- * il ciclo si fermava e riprendeva daccapo (dal punto dove era rimasto, perché il progresso è
- * comunque salvato via [circolareplus.data.repository.CircularsRepository.saveAnalysis]) solo
- * alla riapertura. Questo Worker copre l'intervallo in mezzo.
- *
- * Non prova l'AI locale se non è il provider primario dello studente: se il primario è il cloud e
- * fallisce, qui NON si ricade sul modello on-device (`allowLocalFallback = false`) — farlo in un
- * Worker periodico senza che l'utente lo veda scaldava il telefono in tasca senza nessun
- * indicatore, esattamente il problema del punto 2. La circolare che il cloud non riesce a
- * classificare resta per l'apertura manuale, dove l'attesa del modello locale è accettata perché
- * è l'utente a chiederla.
+ * il ciclo si fermava e riprendeva solo alla riapertura. Questo Worker copre l'intervallo in mezzo.
  */
 class CircularsSyncWorker(
     context: Context,
@@ -38,42 +27,8 @@ class CircularsSyncWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
-        // Il motore locale è mutex-single-thread: se e' il provider scelto, va usato una
-        // circolare alla volta quando l'utente la apre, non in coda in un Worker che il telefono
-        // può far partire mentre e' in tasca (stesso motivo per cui MainAppShell disattiva il suo
-        // ciclo in background in questo caso — vedi il commento su isUsingLocalAiFirst()).
-        if (AppContainer.isUsingLocalAiFirst()) return Result.success()
-
         return try {
-            val circulars = AppContainer.circularsRepository.listCirculars(limit = 30)
-            var processed = 0
-            for (circular in circulars.sortedByDescending { it.number }) {
-                if (isStopped || processed >= MAX_CIRCULARS_PER_RUN) break
-                try {
-                    // Si salta solo quella gia' fatta da Gemini: una fatta dall'AI locale di un
-                    // compagno si puo' migliorare, e il server tiene comunque la migliore.
-                    val existing = AppContainer.circularsRepository.getCachedAnalysis(circular.number)
-                    if (existing != null && existing.tier >= 2) continue
-
-                    val bytes = AppContainer.circularsRepository.downloadPdfBytes(circular.r2PdfKey)
-                    val text = AppContainer.pdfTextExtractor.extractText(bytes)
-                    val result = AppContainer.newAiClassifier(allowLocalFallback = false)
-                        .classifyCircularText(
-                            circularNumber = circular.number,
-                            circularTitle = circular.title,
-                            pdfText = text
-                        )
-                    // Il ripiego euristico non si condivide: e' un messaggio d'errore, non un
-                    // riassunto, e il server lo rifiuterebbe comunque.
-                    if (!result.isFallback) AppContainer.circularsRepository.saveAnalysis(result)
-                    processed++
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    // Una singola circolare che fallisce (PDF non raggiungibile, server proprio
-                    // giù per quella chiamata) non deve fermare le altre: si prova la prossima.
-                }
-            }
+            BackgroundCircularsSync.run(MAX_CIRCULARS_PER_RUN) { isStopped }
             Result.success()
         } catch (e: CancellationException) {
             throw e
@@ -85,12 +40,7 @@ class CircularsSyncWorker(
     }
 
     companion object {
-        /**
-         * Tetto per esecuzione: un Worker periodico gira in una finestra di tempo limitata, e
-         * scaricare+classificare tutte le circolari arretrate in un colpo solo (potenzialmente
-         * decine) rischierebbe di non finire in tempo e di consumare la quota AI in un colpo solo
-         * senza che l'utente abbia nemmeno aperto l'app.
-         */
+        /** Tetto per esecuzione, vedi [BackgroundCircularsSync.run]. */
         private const val MAX_CIRCULARS_PER_RUN = 8
 
         private const val UNIQUE_PERIODIC_NAME = "circulars-sync-periodic"
@@ -117,8 +67,9 @@ class CircularsSyncWorker(
         }
 
         /**
-         * Un giro immediato, per esempio subito dopo che l'elenco circolari si è aggiornato:
-         * non aspetta i 15 minuti del periodico.
+         * Un giro immediato, chiamato da CircolareMessagingService quando arriva il push di una
+         * circolare nuova: non aspetta i 15 minuti del periodico, cosi' il riassunto e' spesso
+         * gia' pronto quando l'utente tocca la notifica.
          */
         fun runOnce(context: Context) {
             val request = OneTimeWorkRequestBuilder<CircularsSyncWorker>()

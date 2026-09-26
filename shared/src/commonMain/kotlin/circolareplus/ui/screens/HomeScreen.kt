@@ -135,8 +135,8 @@ fun HomeScreen(
 
             AilaCard(modifier = Modifier.ailaAppear(4)) {
                 AilaListRow(
-                    title = "Sondaggi Interrogazioni",
-                    subtitle = "Prenota le date con il sistema a punti",
+                    title = "Sondaggi",
+                    subtitle = "Date delle interrogazioni e opzioni da mettere in ordine",
                     tint = AppTheme.TintAmber,
                     onClick = onNavigateToPolls,
                     icon = {
