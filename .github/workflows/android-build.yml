@@ -3,6 +3,7 @@ name: Android Build
 # Compila il codice Kotlin di :shared e :androidApp per Android. Nessun test a schermo: serve a
 # scoprire subito un errore di compilazione, dato che non tutti gli ambienti di sviluppo
 # riescono a scaricare le dipendenze da Google Maven.
+# Produce anche AILA.apk (debug) come artifact, e lo allega alla release sui tag v*.
 
 on:
   push:
@@ -21,6 +22,9 @@ on:
       - 'gradle/**'
       - 'build.gradle.kts'
       - 'settings.gradle.kts'
+
+permissions:
+  contents: write # solo per allegare l'APK alla release sui tag
 
 jobs:
   build:
@@ -49,9 +53,16 @@ jobs:
       # google-services.json non e' nel repository (.gitignore): il plugin Google Services lo
       # richiede per configurare il modulo, quindi in CI se ne scrive uno finto con lo stesso
       # package. Non serve a far funzionare le notifiche, solo a compilare.
-      - name: Placeholder google-services.json
+      # Se c'e' il secret GOOGLE_SERVICES_JSON (contenuto del file in base64) si usa quello vero:
+      # senza, l'APK si installa ma le notifiche push FCM non funzionano.
+      - name: google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
-          if [ ! -f androidApp/google-services.json ]; then
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            echo "$GOOGLE_SERVICES_JSON" | base64 --decode > androidApp/google-services.json
+          elif [ ! -f androidApp/google-services.json ]; then
+            echo "::warning::Secret GOOGLE_SERVICES_JSON assente: APK con google-services.json finto, push FCM disattivate"
             cat > androidApp/google-services.json <<'EOF'
           {
             "project_info": { "project_number": "0", "project_id": "ci-placeholder", "storage_bucket": "ci-placeholder.appspot.com" },
@@ -69,3 +80,35 @@ jobs:
 
       - name: Shared unit tests
         run: ./gradlew --no-daemon :shared:testDebugUnitTest
+
+      # Chiave di firma debug stabile (secret ANDROID_DEBUG_KEYSTORE, base64 di debug.keystore):
+      # senza, ogni build ha una chiave diversa e per aggiornare l'app va prima disinstallata.
+      - name: Debug keystore
+        env:
+          ANDROID_DEBUG_KEYSTORE: ${{ secrets.ANDROID_DEBUG_KEYSTORE }}
+        run: |
+          if [ -n "$ANDROID_DEBUG_KEYSTORE" ]; then
+            mkdir -p ~/.android
+            echo "$ANDROID_DEBUG_KEYSTORE" | base64 --decode > ~/.android/debug.keystore
+          else
+            echo "::warning::Secret ANDROID_DEBUG_KEYSTORE assente: chiave di firma diversa a ogni build"
+          fi
+
+      - name: Build APK (debug)
+        run: |
+          ./gradlew --no-daemon :androidApp:assembleDebug
+          cp androidApp/build/outputs/apk/debug/androidApp-debug.apk AILA.apk
+          ls -lh AILA.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AILA-apk
+          path: AILA.apk
+          if-no-files-found: error
+
+      - name: Attach APK to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: AILA.apk
