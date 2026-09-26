@@ -1,18 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Livello primo piano dell'icona adattiva AILA, ricostruito a vettori con la stessa geometria del
-    marchio disegnato in shared/src/commonMain/kotlin/circolareplus/design/AilaLogo.kt (AilaGlyph):
-    due gambe dritte che si chiudono in una punta arrotondata più il pallino centrale.
-
-    Prima qui c'era un PNG raster (ic_launcher_foreground.png, uno per densità): a schermo intero
-    — come nell'animazione di avvio di sistema, che lo ingrandisce ben oltre le dimensioni
-    dell'icona sulla home — i bordi morbidi del PNG si vedevano sfocati/"pixelosi". Un vettore
-    resta nitido a qualunque dimensione.
-
-    Coordinate: il segno di AilaGlyph è definito in percentuale (0..1) di un riquadro quadrato;
-    qui sono state riportate dentro la "safe zone" da 66dp centrata nel riquadro da 108dp
-    dell'icona adattiva (offset di 21dp per lato), così nessun launcher la ritaglia scegliendo una
-    maschera non circolare.
+    Livello primo piano dell'icona adattiva AILA: il marchio "AI + AULA" (scintilla in cattedra,
+    banchi collegati come i nodi di una rete). Vettore e non PNG, così resta nitido anche
+    nell'animazione di avvio di sistema. Il marchio sta in un riquadro di 48dp al centro dei
+    108dp del livello, dentro la safe zone: nessuna maschera del launcher lo taglia.
+    GENERATO da design/logo/genera_icone.py: non modificare a mano.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
@@ -21,23 +13,46 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:pathData="M34.53,77.43 L48.39,37.83 Q54,24.63 59.61,37.83 L73.47,77.43"
-        android:strokeWidth="10.23"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:fillColor="#00000000">
-        <aapt:attr name="android:strokeColor">
+        android:pathData="M54.000,37.272 L38.726,56.184 M54.000,37.272 L54.000,56.184 M54.000,37.272 L69.274,56.184 M38.726,56.184 L38.726,73.637 M38.726,56.184 L54.000,73.637 M38.726,56.184 L69.274,73.637 M54.000,56.184 L38.726,73.637 M54.000,56.184 L54.000,73.637 M54.000,56.184 L69.274,73.637 M69.274,56.184 L38.726,73.637 M69.274,56.184 L54.000,73.637 M69.274,56.184 L69.274,73.637"
+        android:strokeColor="#6BB4C6FF"
+        android:strokeWidth="1.310"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M35.818,51.821 H41.635 A2.909,2.909 0 0 1 44.544,54.730 V57.638 A2.909,2.909 0 0 1 41.635,60.547 H35.818 A2.909,2.909 0 0 1 32.909,57.638 V54.730 A2.909,2.909 0 0 1 35.818,51.821 Z M51.091,51.821 H56.909 A2.909,2.909 0 0 1 59.818,54.730 V57.638 A2.909,2.909 0 0 1 56.909,60.547 H51.091 A2.909,2.909 0 0 1 48.182,57.638 V54.730 A2.909,2.909 0 0 1 51.091,51.821 Z M66.365,51.821 H72.182 A2.909,2.909 0 0 1 75.091,54.730 V57.638 A2.909,2.909 0 0 1 72.182,60.547 H66.365 A2.909,2.909 0 0 1 63.456,57.638 V54.730 A2.909,2.909 0 0 1 66.365,51.821 Z"
+        android:fillAlpha="1.0">
+        <aapt:attr name="android:fillColor">
             <gradient
                 android:type="linear"
-                android:startX="34.53"
-                android:startY="77.43"
-                android:endX="73.47"
-                android:endY="37.83"
+                android:startX="30.000" android:startY="78.000"
+                android:endX="78.000" android:endY="30.000"
                 android:startColor="#FF6FA8FF"
                 android:endColor="#FFA78BFA" />
         </aapt:attr>
     </path>
     <path
-        android:pathData="M54,55.782 C57.208,55.782 59.808,58.382 59.808,61.59 C59.808,64.798 57.208,67.398 54,67.398 C50.792,67.398 48.192,64.798 48.192,61.59 C48.192,58.382 50.792,55.782 54,55.782 Z"
-        android:fillColor="#FFEDF2FF" />
+        android:pathData="M35.818,69.274 H41.635 A2.909,2.909 0 0 1 44.544,72.182 V75.091 A2.909,2.909 0 0 1 41.635,78.000 H35.818 A2.909,2.909 0 0 1 32.909,75.091 V72.182 A2.909,2.909 0 0 1 35.818,69.274 Z M51.091,69.274 H56.909 A2.909,2.909 0 0 1 59.818,72.182 V75.091 A2.909,2.909 0 0 1 56.909,78.000 H51.091 A2.909,2.909 0 0 1 48.182,75.091 V72.182 A2.909,2.909 0 0 1 51.091,69.274 Z M66.365,69.274 H72.182 A2.909,2.909 0 0 1 75.091,72.182 V75.091 A2.909,2.909 0 0 1 72.182,78.000 H66.365 A2.909,2.909 0 0 1 63.456,75.091 V72.182 A2.909,2.909 0 0 1 66.365,69.274 Z"
+        android:fillAlpha="0.78">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="30.000" android:startY="78.000"
+                android:endX="78.000" android:endY="30.000"
+                android:startColor="#FF6FA8FF"
+                android:endColor="#FFA78BFA" />
+        </aapt:attr>
+    </path>
+    <path
+        android:pathData="M41.635,37.272 A12.365,12.365 0 1 1 66.365,37.272 A12.365,12.365 0 1 1 41.635,37.272 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="54.000" android:centerY="37.272"
+                android:gradientRadius="12.365"
+                android:startColor="#8CC9B8FF"
+                android:endColor="#00C9B8FF" />
+        </aapt:attr>
+    </path>
+    <path
+        android:pathData="M54.000,30.000 Q54.989,36.036 59.818,37.272 Q54.989,38.508 54.000,44.544 Q53.011,38.508 48.182,37.272 Q53.011,36.036 54.000,30.000 Z"
+        android:fillColor="#FFFFFFFF" />
 </vector>
