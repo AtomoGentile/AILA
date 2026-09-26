@@ -103,13 +103,34 @@ jobs:
         # solo il simulatore come parte della build con destinazione concreta): un timeout
         # esplicito trasforma un blocco silenzioso in un fallimento chiaro e veloce, invece
         # di consumare le 6 ore di timeout massimo del job.
-        timeout-minutes: 10
+        timeout-minutes: 15
         run: |
           set -e
           UDID="${{ steps.sim.outputs.udid }}"
           echo "Stato del simulatore prima del boot:"
           xcrun simctl list devices | grep "$UDID" || true
-          xcrun simctl bootstatus "$UDID" -b
+          # Il boot a volte resta fermo su "Waiting on BackBoard" per sempre (problema del
+          # runner, non dell'app): dopo 4 minuti si spegne, si azzera il simulatore e si riprova.
+          BOOT_OK=0
+          for attempt in 1 2; do
+            xcrun simctl boot "$UDID" 2>/dev/null || true
+            xcrun simctl bootstatus "$UDID" -b &
+            BS_PID=$!
+            for _ in $(seq 1 48); do kill -0 "$BS_PID" 2>/dev/null || break; sleep 5; done
+            if kill -0 "$BS_PID" 2>/dev/null; then
+              kill "$BS_PID" 2>/dev/null || true
+              echo "Boot bloccato (tentativo $attempt): spengo e azzero il simulatore."
+              xcrun simctl shutdown "$UDID" 2>/dev/null || true
+              xcrun simctl erase "$UDID" 2>/dev/null || true
+            elif wait "$BS_PID"; then
+              BOOT_OK=1
+              break
+            fi
+          done
+          if [ "$BOOT_OK" != 1 ]; then
+            echo "::error::Il simulatore non si avvia sul runner (non e' un problema dell'app)."
+            exit 1
+          fi
 
           APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "Circolare+.app" -path "*Debug-iphonesimulator*" -print -quit)
           if [ -z "$APP_PATH" ]; then
