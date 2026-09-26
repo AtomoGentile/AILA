@@ -21,6 +21,9 @@ bucket_name = "circolare-plus-pdf-cache"
 # Il nome reale della classe (4^ CSA) è salvato in D1 (app_config.class_label), non qui.
 [vars]
 SPAGGIARI_URL = "https://www.iisprimolevi.edu.it/pagine/circolari-studenti-202627"
+# Origini ammesse dal CORS (la PWA su Cloudflare Pages). localhost e 127.0.0.1 sono sempre
+# ammessi per lo sviluppo, vedi src/index.ts. L'app nativa non manda Origin e non ne dipende.
+WEB_ORIGINS = "https://aila-scuola.pages.dev"
 
 # Secrets (configurare con: wrangler secret put <NAME>)
 # JWT_SECRET               — chiave segreta per firma JWT (obbligatoria)
@@ -38,6 +41,12 @@ SPAGGIARI_URL = "https://www.iisprimolevi.edu.it/pagine/circolari-studenti-20262
 #                           telefoni non devono più farlo con l'AI locale. Usata solo dal cron, mai
 #                           esposta a una rotta HTTP. Per revocarla basta crearne una nuova su AI
 #                           Studio e rifare `wrangler secret put GEMINI_API_KEY`.
+#
+# VAPID_PUBLIC_KEY        — Web Push della PWA: chiave pubblica P-256 (base64url, 65 byte non compressi).
+# VAPID_PRIVATE_KEY       — Web Push della PWA: chiave privata (base64url, componente "d").
+# VAPID_SUBJECT           — contatto per i push service, es. "mailto:tuoindirizzo@esempio.it".
+#                           Generare la coppia con: node scripts/generate-vapid-keys.mjs
+#                           Senza questi tre secret il web push è spento (FCM non cambia).
 #
 # NOTA: la vecchia "Legacy HTTP API" (una singola FCM_SERVER_KEY) è stata dismessa da Google
 # il 20 giugno 2024 e non funziona più su nessun progetto Firebase, incluso uno creato oggi:

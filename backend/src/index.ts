@@ -23,6 +23,7 @@ import seatmapRoutes from './routes/seatmap';
 import pollsRoutes from './routes/polls';
 import rankingPollsRoutes from './routes/rankingPolls';
 import fcmRoutes from './routes/fcm';
+import webPushRoutes from './routes/webpush';
 
 // ---------------------------------------------------------------------------
 // App Setup
@@ -31,15 +32,18 @@ const app = new Hono<{ Bindings: Env }>();
 
 // Global middleware
 app.use('*', logger());
-app.use(
-  '*',
-  cors({
-    origin: '*', // Restrict in production to your app domain / bundle ID
+// CORS solo per la PWA e per lo sviluppo in locale. L'app nativa non manda l'header Origin,
+// quindi non ne è toccata.
+const LOCALHOST_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+app.use('*', async (c, next) => {
+  const allowed = (c.env.WEB_ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean);
+  return cors({
+    origin: (origin) => (allowed.includes(origin) || LOCALHOST_ORIGIN.test(origin) ? origin : null),
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],
     maxAge: 86400,
-  })
-);
+  })(c, next);
+});
 
 // ---------------------------------------------------------------------------
 // Health check
@@ -65,6 +69,7 @@ app.route('/api/seat-map', seatmapRoutes);
 app.route('/api/polls', pollsRoutes);
 app.route('/api/ranking-polls', rankingPollsRoutes);
 app.route('/api/fcm', fcmRoutes);
+app.route('/api/webpush', webPushRoutes);
 
 // ---------------------------------------------------------------------------
 // 404 fallback
