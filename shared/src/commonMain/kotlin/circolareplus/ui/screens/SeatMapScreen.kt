@@ -1,12 +1,27 @@
 package circolareplus.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,6 +30,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -26,6 +44,10 @@ import circolareplus.design.AilaIconButton
 import circolareplus.design.AilaCard
 import circolareplus.design.AilaPrimaryButton
 import circolareplus.design.AilaEmptyState
+import circolareplus.design.AilaDot
+import circolareplus.design.ailaAppear
+import circolareplus.design.ailaFieldColors
+import circolareplus.design.ailaPressable
 import circolareplus.design.AilaScreenHeader
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
@@ -140,60 +162,99 @@ fun SeatMapScreen(
         ) {
         fullRow {
 
-        // Ricerca compagno: evidenzia il suo banco e ci scorre sopra.
-        Column {
+        // Ricerca compagno: evidenzia il suo banco e ci scorre sopra. "Il mio posto" sta dentro
+        // la barra, a destra: prima era un pulsante grande su una riga a sé, che occupava spazio
+        // e sembrava staccato dalla ricerca pur facendo la stessa cosa (evidenziare un banco).
+        val isShowingMine = focusedStudentId == currentUserId && searchQuery.isEmpty()
+        val onToggleMySeat: () -> Unit = {
+            searchQuery = ""
+            if (focusedStudentId == currentUserId) {
+                focusedStudentId = null
+            } else {
+                focusedStudentId = currentUserId
+                scrollToDesk(assignments.indexOfFirst {
+                    it.studentAId == currentUserId || it.studentBId == currentUserId || it.studentCId == currentUserId
+                })
+            }
+        }
+        Column(modifier = Modifier.ailaAppear(0)) {
             OutlinedTextField(
                 value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = { Text("Cerca un compagno per nome...", fontSize = 13.sp) },
+                onValueChange = {
+                    searchQuery = it
+                    if (it.isNotEmpty()) focusedStudentId = null
+                },
+                placeholder = { Text("Cerca un compagno...", fontSize = 13.sp, maxLines = 1) },
+                leadingIcon = { AppIcons.Search(modifier = Modifier.size(18.dp), color = AppTheme.TextMuted) },
+                trailingIcon = {
+                    // Mentre si scrive c'è la X per svuotare; a campo vuoto, "Il mio posto".
+                    AnimatedContent(
+                        targetState = searchQuery.isNotEmpty(),
+                        transitionSpec = {
+                            (fadeIn(tween(160)) + scaleIn(tween(160), initialScale = 0.85f)) togetherWith
+                                (fadeOut(tween(120)) + scaleOut(tween(120), targetScale = 0.85f))
+                        },
+                        label = "searchTrailing"
+                    ) { typing ->
+                        when {
+                            typing -> Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .ailaPressable(pressedScale = 0.88f) { searchQuery = "" },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                AppIcons.Close(modifier = Modifier.size(16.dp), color = AppTheme.TextMuted)
+                            }
+                            assignments.isNotEmpty() -> MySeatPill(
+                                active = isShowingMine,
+                                onClick = onToggleMySeat
+                            )
+                            else -> Spacer(modifier = Modifier.size(1.dp))
+                        }
+                    }
+                },
                 singleLine = true,
                 shape = RoundedCornerShape(AppTheme.CardCornerRadius),
+                colors = ailaFieldColors(),
                 modifier = Modifier.fillMaxWidth()
             )
-            if (assignments.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(AppTheme.Space8))
+            val status = when {
+                searchQuery.trim().length >= 2 && searchMatch == null -> "Nessun compagno trovato"
+                highlightedId != null && highlightedDeskIndex < 0 -> "Nessun posto assegnato"
+                highlightedId != null -> {
+                    val d = assignments[highlightedDeskIndex]
+                    val who = if (highlightedId == currentUserId) "Sei" else "${studentsMap[highlightedId]?.firstName ?: "Il compagno"} è"
+                    "$who in fila ${d.row + 1}, colonna ${d.column + 1}"
+                }
+                else -> null
+            }
+            // Tiene l'ultimo testo mostrato: durante l'animazione d'uscita status e' gia' null, e
+            // senza questo la riga si svuoterebbe prima di chiudersi.
+            val lastStatus = remember { arrayOf("") }
+            if (status != null) lastStatus[0] = status
+            val found = !lastStatus[0].startsWith("Nessun")
+            // L'esito compare e scompare con un'animazione invece di spingere di colpo la mappa.
+            AnimatedVisibility(
+                visible = status != null,
+                enter = fadeIn(tween(180)) + expandVertically(tween(220)),
+                exit = fadeOut(tween(120)) + shrinkVertically(tween(180))
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.padding(top = AppTheme.Space8),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Pulsante con testo, non piu' solo l'icona "mirino": chi lo vede capisce
-                    // subito che mostra dove si siede, non che chiede la posizione GPS.
-                    AilaPrimaryButton(
-                        text = if (focusedStudentId == currentUserId) "Nascondi il mio posto" else "Trova il mio posto",
-                        onClick = {
-                            searchQuery = ""
-                            if (focusedStudentId == currentUserId) {
-                                focusedStudentId = null
-                            } else {
-                                focusedStudentId = currentUserId
-                                scrollToDesk(assignments.indexOfFirst {
-                                    it.studentAId == currentUserId || it.studentBId == currentUserId || it.studentCId == currentUserId
-                                })
-                            }
-                        },
-                        compact = true,
-                        icon = { tint -> AppIcons.Chair(modifier = Modifier.size(15.dp), color = tint) }
+                    AppIcons.Locate(
+                        modifier = Modifier.size(14.dp),
+                        color = if (found) AppTheme.TintAmberInk else AppTheme.TextFaint
                     )
-                    Spacer(modifier = Modifier.width(AppTheme.Space8))
-                    val status = when {
-                        searchQuery.trim().length >= 2 && searchMatch == null -> "Nessun compagno trovato"
-                        highlightedId != null && highlightedDeskIndex < 0 -> "Nessun posto assegnato"
-                        highlightedId != null -> {
-                            val d = assignments[highlightedDeskIndex]
-                            val who = if (highlightedId == currentUserId) "Sei" else "${studentsMap[highlightedId]?.firstName ?: "Il compagno"} è"
-                            "$who in fila ${d.row + 1}, colonna ${d.column + 1}"
-                        }
-                        else -> null
-                    }
-                    if (status != null) {
-                        Text(
-                            text = status,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = AppTheme.TextMuted,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = lastStatus[0],
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (found) AppTheme.TextDark else AppTheme.TextMuted
+                    )
                 }
             }
         }
@@ -202,8 +263,10 @@ fun SeatMapScreen(
         // Pannello Admin per il Rappresentante (Slider & Finestra Votazione)
         if (isRepresentative) {
         fullRow {
-            AilaCard(containerColor = AppTheme.TintSlate) {
-                Column(modifier = Modifier.padding(AppTheme.Space12)) {
+            AilaCard(containerColor = AppTheme.TintSlate, modifier = Modifier.ailaAppear(1)) {
+                // animateContentSize: quando arriva il conteggio dei voti il pannello cresce
+                // morbido invece di spingere giu' la mappa di scatto.
+                Column(modifier = Modifier.animateContentSize().padding(AppTheme.Space12)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         AppIcons.Sliders(modifier = Modifier.size(16.dp), color = AppTheme.TextDark)
                         Spacer(modifier = Modifier.width(AppTheme.Space8))
@@ -222,12 +285,31 @@ fun SeatMapScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = if (isPreferencesOpen) "Finestra Preferenze: APERTA" else "Finestra Preferenze: CHIUSA",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (isPreferencesOpen) AppTheme.PollGreen else AppTheme.PollDarkRed
+                        val windowColor by animateColorAsState(
+                            targetValue = if (isPreferencesOpen) AppTheme.PollGreen else AppTheme.PollDarkRed,
+                            animationSpec = tween(250),
+                            label = "prefWindowColor"
                         )
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            AilaDot(color = windowColor)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            AnimatedContent(
+                                targetState = isPreferencesOpen,
+                                transitionSpec = {
+                                    (fadeIn(tween(200)) + slideInVertically(tween(220)) { it / 2 }) togetherWith
+                                        (fadeOut(tween(120)) + slideOutVertically(tween(160)) { -it / 2 })
+                                },
+                                label = "prefWindowLabel"
+                            ) { open ->
+                                Text(
+                                    text = if (open) "Preferenze: APERTE" else "Preferenze: CHIUSE",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = windowColor
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(AppTheme.Space8))
                         AilaPrimaryButton(
                             text = if (isPreferencesOpen) "Chiudi votazione" else "Apri votazione",
                             onClick = { onTogglePreferencesWindow(!isPreferencesOpen) },
@@ -318,6 +400,7 @@ fun SeatMapScreen(
         fullRow {
             Box(
                 modifier = Modifier
+                    .ailaAppear(2)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
                     .background(AppTheme.HeroGradient)
@@ -338,6 +421,7 @@ fun SeatMapScreen(
         if (assignments.isEmpty()) {
             fullRow {
                 AilaEmptyState(
+                    modifier = Modifier.ailaAppear(3),
                     title = "Nessuna disposizione pubblicata",
                     message = if (isRepresentative)
                         "Apri la votazione delle preferenze, poi calcola e pubblica una delle tre proposte."
@@ -348,8 +432,12 @@ fun SeatMapScreen(
             }
         }
 
-            items(assignments) { desk ->
+            // I banchi entrano a cascata (prime file) e quello evidenziato "pulsa" al centro della
+            // scena: prima la mappa compariva tutta di colpo e il banco trovato cambiava colore
+            // e basta, facile da non notare.
+            itemsIndexed(assignments) { index, desk ->
                 SeatMapDeskCard(
+                    modifier = Modifier.ailaAppear(3 + index),
                     desk = desk,
                     studentsMap = studentsMap,
                     showThirdSeat = hasTrioDesks,
@@ -357,6 +445,36 @@ fun SeatMapScreen(
                 )
             }
         }
+    }
+}
+
+/**
+ * "Il mio posto", dentro la barra di ricerca della mappa: pillola che si accende (gradiente del
+ * brand) quando il proprio banco e' evidenziato e si spegne al secondo tocco.
+ */
+@Composable
+private fun MySeatPill(active: Boolean, onClick: () -> Unit) {
+    val ink by animateColorAsState(
+        if (active) Color.White else AppTheme.TintBlueInk, tween(200), label = "mySeatInk"
+    )
+    val fill by animateFloatAsState(if (active) 1f else 0f, tween(220), label = "mySeatFill")
+    Row(
+        modifier = Modifier
+            .padding(end = 6.dp)
+            .ailaPressable(pressedScale = 0.92f, onClick = onClick)
+            .clip(RoundedCornerShape(50))
+            .background(AppTheme.TintBlue)
+            .drawBehind {
+                // Il gradiente sfuma dentro sopra il fondo chiaro invece di scattare.
+                drawRect(brush = AppTheme.PrimaryGradient, alpha = fill)
+            }
+            .semantics { contentDescription = if (active) "Nascondi il mio posto" else "Trova il mio posto" }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AppIcons.Chair(modifier = Modifier.size(15.dp), color = ink)
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(text = "Il mio posto", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ink, maxLines = 1)
     }
 }
 
@@ -369,7 +487,15 @@ fun SeatMapScreen(
 private fun PreferencesProgressBlock(progress: circolareplus.data.remote.dto.PreferencesProgressDto) {
     val total = progress.totalStudents
     val voted = progress.votedCount.coerceIn(0, total)
-    val fraction = if (total == 0) 0f else voted.toFloat() / total
+    val targetFraction = if (total == 0) 0f else voted.toFloat() / total
+    // La barra si riempie invece di comparire gia' piena: si vede che il conteggio e' cambiato.
+    var started by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { started = true }
+    val fraction by animateFloatAsState(
+        targetValue = if (started) targetFraction else 0f,
+        animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing),
+        label = "prefProgress"
+    )
 
     Column(
         modifier = Modifier
@@ -411,7 +537,7 @@ private fun PreferencesProgressBlock(progress: circolareplus.data.remote.dto.Pre
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(fraction)
+                    .fillMaxWidth(fraction.coerceIn(0f, 1f))
                     .fillMaxHeight()
                     .clip(RoundedCornerShape(50))
                     .background(if (progress.allVoted) AppTheme.PollGreen else AppTheme.PrimaryBlue)
@@ -471,17 +597,23 @@ private fun WeightSlider(
 /** Una delle due opzioni "Coppie (2)" / "Trii (3)" per i posti per banco. */
 @Composable
 private fun RowScope.SeatsPerDeskOption(label: String, isSelected: Boolean, onClick: () -> Unit) {
+    // Colori animati e leggera pressione: prima la selezione cambiava di colpo.
+    val bg by animateColorAsState(
+        if (isSelected) AppTheme.PrimaryBlue else AppTheme.SurfaceWhite, tween(200), label = "seatsBg"
+    )
+    val stroke by animateColorAsState(
+        if (isSelected) AppTheme.PrimaryBlue else AppTheme.Hairline, tween(200), label = "seatsStroke"
+    )
+    val ink by animateColorAsState(
+        if (isSelected) Color.White else AppTheme.TextDark, tween(200), label = "seatsInk"
+    )
     Box(
         modifier = Modifier
             .weight(1f)
+            .ailaPressable(pressedScale = 0.95f, onClick = onClick)
             .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-            .background(if (isSelected) AppTheme.PrimaryBlue else AppTheme.SurfaceWhite)
-            .border(
-                1.dp,
-                if (isSelected) AppTheme.PrimaryBlue else AppTheme.Hairline,
-                RoundedCornerShape(AppTheme.SmallElementRadius)
-            )
-            .clickable(onClick = onClick)
+            .background(bg)
+            .border(1.dp, stroke, RoundedCornerShape(AppTheme.SmallElementRadius))
             .padding(vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -489,7 +621,7 @@ private fun RowScope.SeatsPerDeskOption(label: String, isSelected: Boolean, onCl
             text = label,
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
-            color = if (isSelected) Color.White else AppTheme.TextDark
+            color = ink
         )
     }
 }
