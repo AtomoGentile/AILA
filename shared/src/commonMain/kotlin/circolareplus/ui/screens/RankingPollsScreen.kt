@@ -3,7 +3,10 @@ package circolareplus.ui.screens
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,7 +19,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,13 +50,16 @@ import circolareplus.design.ailaAppear
  * vederli prima spingerebbe a mettersi dietro alla maggioranza. Non c'è nessun calcolo da far
  * partire: il server li ricalcola a ogni lettura.
  *
- * L'ordine si cambia con le frecce su/giù invece del trascinamento: dentro una lista che scorre
- * il trascinamento si confonde facilmente con lo scorrimento, e le frecce funzionano uguali su
- * Android e iOS.
+ * L'ordine si cambia trascinando la maniglia a sinistra di ogni opzione (o tenendo premuta la
+ * riga), oppure con le frecce su/giù, che restano per chi preferisce i tocchi singoli. La
+ * maniglia prende il trascinamento subito, quindi non si confonde con lo scorrimento della lista.
+ *
+ * [showingHistory]: la stessa schermata mostra i sondaggi aperti o, nello Storico, quelli chiusi.
  */
 @Composable
 fun RankingPollsScreen(
     polls: List<RankingPollDto>,
+    showingHistory: Boolean = false,
     totalStudents: Int,
     isRepresentative: Boolean,
     submittingPollId: String?,
@@ -83,10 +96,20 @@ fun RankingPollsScreen(
         )
     }
 
+    if (polls.isEmpty() && showingHistory) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+            AilaEmptyState(
+                title = "Nessun sondaggio chiuso",
+                message = "Quando un sondaggio a ordinamento viene chiuso, la classifica finale resta qui.",
+                icon = { AppIcons.History(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
+            )
+        }
+        return
+    }
     if (polls.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
             AilaEmptyState(
-                title = "Nessun sondaggio a ordinamento",
+                title = "Nessun sondaggio aperto",
                 message = if (isRepresentative)
                     "Proponi delle opzioni e fai mettere in ordine alla classe quelle che preferisce."
                 else
@@ -107,7 +130,7 @@ fun RankingPollsScreen(
         itemsIndexed(polls, key = { _, poll -> poll.id }) { index, poll ->
             RankingPollCard(
                 poll = poll,
-                totalStudents = totalStudents,
+                totalStudents = poll.totalStudents ?: totalStudents,
                 isRepresentative = isRepresentative,
                 isSubmitting = submittingPollId == poll.id,
                 onSubmit = { order -> onSubmitRanking(poll.id, order) },
@@ -137,7 +160,7 @@ private fun RankingPollCard(
         mutableStateOf(poll.myRanking ?: poll.options.map { it.id })
     }
     var isEditing by remember(poll.id, poll.myRanking) { mutableStateOf(poll.myRanking == null) }
-    val canEdit = !poll.isClosed && isEditing
+    val canEdit = !poll.isClosed && isEditing && poll.isTarget
 
     AilaCard(modifier = modifier) {
         Column(modifier = Modifier.padding(AppTheme.Space16).animateContentSize()) {
@@ -164,30 +187,30 @@ private fun RankingPollCard(
                 fontSize = 12.sp,
                 color = AppTheme.TextMuted
             )
+            if (poll.audienceUserIds != null) {
+                Text(
+                    text = if (poll.isTarget) "Rivolto solo ad alcune persone, tra cui tu"
+                    else "Rivolto solo ad alcune persone: non puoi rispondere",
+                    fontSize = 11.sp,
+                    color = AppTheme.TextFaint
+                )
+            }
 
             Spacer(modifier = Modifier.height(AppTheme.Space12))
 
             if (canEdit) {
                 Text(
-                    text = "Metti in cima quella che preferisci.",
+                    text = "Trascina le opzioni (o usa le frecce): in cima quella che preferisci.",
                     fontSize = 12.sp,
                     color = AppTheme.TextMuted
                 )
                 Spacer(modifier = Modifier.height(AppTheme.Space8))
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    draft.forEachIndexed { index, optionId ->
-                        key(optionId) {
-                            RankingDraftRow(
-                                position = index + 1,
-                                label = labels[optionId] ?: "",
-                                canMoveUp = index > 0 && !isSubmitting,
-                                canMoveDown = index < draft.lastIndex && !isSubmitting,
-                                onMoveUp = { draft = draft.swapped(index, index - 1) },
-                                onMoveDown = { draft = draft.swapped(index, index + 1) }
-                            )
-                        }
-                    }
-                }
+                DraggableRankingList(
+                    order = draft,
+                    labels = labels,
+                    enabled = !isSubmitting,
+                    onOrderChange = { draft = it }
+                )
                 Spacer(modifier = Modifier.height(AppTheme.Space12))
                 Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
                     if (poll.myRanking != null) {
@@ -229,6 +252,15 @@ private fun RankingPollCard(
 
             if (isRepresentative) {
                 Spacer(modifier = Modifier.height(AppTheme.Space12))
+                Text(
+                    text = if (poll.isClosed) "Elimina: cancella il sondaggio e la sua classifica."
+                    else "Chiudi: nessuno può più rispondere, la classifica diventa definitiva e passa nello Storico. " +
+                        "Elimina: cancella il sondaggio con tutte le risposte.",
+                    fontSize = 11.sp,
+                    color = AppTheme.TextFaint,
+                    lineHeight = 15.sp
+                )
+                Spacer(modifier = Modifier.height(AppTheme.Space8))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8, Alignment.End)
@@ -267,7 +299,110 @@ private fun StatusChip(isClosed: Boolean) {
     )
 }
 
-/** Una riga della propria classifica in compilazione: posizione, opzione, frecce su/giù. */
+/**
+ * La propria classifica in compilazione, riordinabile col trascinamento.
+ *
+ * Mentre si trascina, la riga segue il dito (translationY) e scambia posto con la vicina appena
+ * la supera per metà: l'ordine si aggiorna subito, quindi le posizioni 1, 2, 3 restano sempre
+ * vere. Le frecce restano per chi preferisce i tocchi singoli (e per l'accessibilità).
+ */
+@Composable
+private fun DraggableRankingList(
+    order: List<String>,
+    labels: Map<String, String>,
+    enabled: Boolean,
+    onOrderChange: (List<String>) -> Unit
+) {
+    val spacing = 6.dp
+    val spacingPx = with(LocalDensity.current) { spacing.toPx() }
+    var draggedId by remember { mutableStateOf<String?>(null) }
+    var dragOffset by remember { mutableStateOf(0f) }
+    val rowHeights = remember { mutableStateMapOf<String, Int>() }
+    // Il callback del gesto è creato una volta: legge sempre l'ordine più recente da qui.
+    val currentOrder by rememberUpdatedState(order)
+    val currentOnChange by rememberUpdatedState(onOrderChange)
+
+    fun onDrag(id: String, delta: Float) {
+        dragOffset += delta
+        val list = currentOrder
+        val index = list.indexOf(id)
+        if (index < 0) return
+        if (dragOffset > 0 && index < list.lastIndex) {
+            val next = list[index + 1]
+            val threshold = ((rowHeights[next] ?: 0) + spacingPx) / 2f
+            if (dragOffset > threshold) {
+                currentOnChange(list.swapped(index, index + 1))
+                dragOffset -= (rowHeights[next] ?: 0) + spacingPx
+            }
+        } else if (dragOffset < 0 && index > 0) {
+            val prev = list[index - 1]
+            val threshold = ((rowHeights[prev] ?: 0) + spacingPx) / 2f
+            if (-dragOffset > threshold) {
+                currentOnChange(list.swapped(index, index - 1))
+                dragOffset += (rowHeights[prev] ?: 0) + spacingPx
+            }
+        }
+    }
+
+    fun endDrag() {
+        draggedId = null
+        dragOffset = 0f
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(spacing)) {
+        order.forEachIndexed { index, optionId ->
+            key(optionId) {
+                val isDragged = draggedId == optionId
+                val dragModifier = if (enabled) {
+                    Modifier.pointerInput(optionId) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { draggedId = optionId; dragOffset = 0f },
+                            onDragEnd = { endDrag() },
+                            onDragCancel = { endDrag() },
+                            onDrag = { change, amount -> change.consume(); onDrag(optionId, amount.y) }
+                        )
+                    }
+                } else Modifier
+                val handleModifier = if (enabled) {
+                    Modifier.pointerInput(optionId) {
+                        detectDragGestures(
+                            onDragStart = { draggedId = optionId; dragOffset = 0f },
+                            onDragEnd = { endDrag() },
+                            onDragCancel = { endDrag() },
+                            onDrag = { change, amount -> change.consume(); onDrag(optionId, amount.y) }
+                        )
+                    }
+                } else Modifier
+                RankingDraftRow(
+                    position = index + 1,
+                    label = labels[optionId] ?: "",
+                    canMoveUp = index > 0 && enabled,
+                    canMoveDown = index < order.lastIndex && enabled,
+                    onMoveUp = { onOrderChange(order.swapped(index, index - 1)) },
+                    onMoveDown = { onOrderChange(order.swapped(index, index + 1)) },
+                    isDragged = isDragged,
+                    handleModifier = handleModifier,
+                    modifier = Modifier
+                        .onSizeChanged { rowHeights[optionId] = it.height }
+                        .zIndex(if (isDragged) 1f else 0f)
+                        .graphicsLayer {
+                            if (isDragged) {
+                                translationY = dragOffset
+                                scaleX = 1.02f
+                                scaleY = 1.02f
+                                shadowElevation = 8.dp.toPx()
+                                shape = RoundedCornerShape(AppTheme.SmallElementRadius)
+                                clip = true
+                            }
+                        }
+                        .then(dragModifier)
+                )
+            }
+        }
+    }
+}
+
+/** Una riga della propria classifica in compilazione: maniglia, posizione, opzione, frecce su/giù. */
 @Composable
 private fun RankingDraftRow(
     position: Int,
@@ -275,16 +410,28 @@ private fun RankingDraftRow(
     canMoveUp: Boolean,
     canMoveDown: Boolean,
     onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit
+    onMoveDown: () -> Unit,
+    isDragged: Boolean = false,
+    handleModifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-            .background(AppTheme.TintSlate)
-            .padding(start = AppTheme.Space12, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            .background(if (isDragged) AppTheme.TintBlue else AppTheme.TintSlate)
+            .padding(end = 4.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // Maniglia: tre righe orizzontali, area di tocco generosa.
+        Box(
+            modifier = Modifier
+                .size(width = 36.dp, height = 40.dp)
+                .then(handleModifier),
+            contentAlignment = Alignment.Center
+        ) {
+            DragHandleIcon(color = if (isDragged) AppTheme.PrimaryBlue else AppTheme.TextFaint)
+        }
         PositionBadge(position = position, highlighted = position == 1)
         Spacer(modifier = Modifier.width(AppTheme.Space12))
         Text(
@@ -395,6 +542,23 @@ private fun RankingResults(results: List<RankingPollResultDto>, maxPoints: Int, 
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(text = "il tuo primo posto", fontSize = 11.sp, color = AppTheme.TextFaint)
             }
+        }
+    }
+}
+
+@Composable
+private fun DragHandleIcon(color: Color) {
+    Canvas(modifier = Modifier.size(width = 16.dp, height = 12.dp)) {
+        val stroke = 2.dp.toPx()
+        for (i in 0..2) {
+            val y = stroke / 2 + i * (size.height - stroke) / 2f
+            drawLine(
+                color = color,
+                start = Offset(0f, y),
+                end = Offset(size.width, y),
+                strokeWidth = stroke,
+                cap = StrokeCap.Round
+            )
         }
     }
 }

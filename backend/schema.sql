@@ -267,6 +267,8 @@ CREATE TABLE IF NOT EXISTS interrogation_grids (
     -- qualcuno: senza, bastava un compagno che non votava per bloccare tutta la classe.
     closes_at DATETIME,
     class_id TEXT NOT NULL DEFAULT 'DEFAULT_CLASS' REFERENCES classes(id),
+    -- Destinatari (JSON di id utente). NULL = tutta la classe.
+    audience_json TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -322,6 +324,8 @@ CREATE TABLE IF NOT EXISTS ranking_polls (
     -- Chiuso dal Rappresentante: le classifiche non si cambiano più.
     is_closed BOOLEAN NOT NULL DEFAULT 0,
     created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    -- Destinatari (JSON di id utente). NULL = tutta la classe.
+    audience_json TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -16,7 +16,7 @@ interface AiClassifier {
         circularNumber: Int,
         circularTitle: String,
         pdfText: String,
-        studentContext: String = "Studente di scuola superiore, classe 4^ CSA"
+        studentContext: String = "Studente di scuola superiore, classe 4^CSA"
     ): CircularAiClassification
 
     /**

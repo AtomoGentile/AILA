@@ -74,8 +74,12 @@ class PollsRepository(private val api: ApiClient) {
     }
 
     /** Solo Rappresentante/Referente materia. La capienza totale deve essere >= studenti registrati. */
-    suspend fun createPoll(subject: String, slots: List<CreatePollSlotRequestDto>): SuccessDto =
-        api.post("/api/polls", CreatePollRequestDto(subject, slots))
+    suspend fun createPoll(
+        subject: String,
+        slots: List<CreatePollSlotRequestDto>,
+        audienceUserIds: List<String>? = null
+    ): SuccessDto =
+        api.post("/api/polls", CreatePollRequestDto(subject, slots, audienceUserIds))
 
     suspend fun publishPoll(id: String) {
         api.put<Unit, SuccessDto>("/api/polls/$id/publish", Unit)

@@ -48,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -109,7 +110,10 @@ fun AilaScreenHeader(
                 )
             }
         }
-        Row(
+        // L'azione (es. "+") sta sulla riga del titolo, non centrata su titolo + sottotitolo:
+        // così resta più in alto, vicino al titolo che la riguarda, e il sottotitolo può usare
+        // tutta la larghezza invece di essere troncato accanto al pulsante.
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(
@@ -117,32 +121,35 @@ fun AilaScreenHeader(
                     end = AppTheme.Space16,
                     top = if (showBrand) AppTheme.Space8 else AppTheme.Space24,
                     bottom = AppTheme.Space16
-                ),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                )
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
                     text = title,
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
                     color = AppTheme.TextDark,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
                 )
-                if (subtitle != null) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = subtitle,
-                        fontSize = 13.sp,
-                        color = AppTheme.TextMuted,
-                        maxLines = 1
-                    )
+                if (action != null) {
+                    Spacer(modifier = Modifier.width(AppTheme.Space12))
+                    action()
                 }
             }
-            if (action != null) {
-                Spacer(modifier = Modifier.width(AppTheme.Space12))
-                action()
+            if (subtitle != null) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    fontSize = 13.sp,
+                    color = AppTheme.TextMuted,
+                    maxLines = 2
+                )
             }
         }
         HorizontalDivider(color = AppTheme.Hairline)
@@ -235,7 +242,7 @@ fun AilaSegmentedTabs(
             .padding(4.dp)
     ) {
         val segmentWidth = maxWidth / labels.size
-        val indicatorOffset by animateDpAsState(
+        val indicatorOffset = animateDpAsState(
             targetValue = segmentWidth * selectedIndex,
             animationSpec = spring(
                 dampingRatio = Spring.DampingRatioNoBouncy,
@@ -248,7 +255,7 @@ fun AilaSegmentedTabs(
             val rowHeight = with(density) { rowHeightPx.toDp() }
             Box(
                 modifier = Modifier
-                    .offset(x = indicatorOffset)
+                    .offset { IntOffset(indicatorOffset.value.roundToPx(), 0) }
                     .width(segmentWidth)
                     .height(rowHeight)
                     .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
