@@ -3116,6 +3116,10 @@ fun MainAppShell(
                                             ),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
+                                        // Stesso marchio grande a sinistra delle altre intestazioni
+                                        // (AilaScreenHeader): qui al posto del titolo c'e' il selettore.
+                                        circolareplus.design.AilaBrandMark(size = 44.dp)
+                                        Spacer(modifier = Modifier.width(AppTheme.Space12))
                                         circolareplus.design.AilaSegmentedTabs(
                                             labels = listOf(ClassSection.CIRCULARS.title, ClassSection.BOARD.title),
                                             selectedIndex = if (classSection == ClassSection.CIRCULARS) 0 else 1,
