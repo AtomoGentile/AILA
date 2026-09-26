@@ -18,7 +18,7 @@
 // Worker non deve estrarre testo.
 
 import type { CircularAttachment, Env } from '../types';
-import { classIdForLabel, displayClassLabel, loadClasses, type ClassInfo, type ClassNote } from './classAnalysis';
+import { classIdForLabel, displayClassLabel, loadClasses, MISSING_CLASS_SQL, type ClassInfo, type ClassNote } from './classAnalysis';
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
@@ -204,6 +204,12 @@ export function parseAnalysis(text: string, model: string, classes: ClassInfo[])
       };
     }
   }
+  // Ogni classe dell'elenco ha la sua voce, anche se il modello l'ha saltata: vuol dire che la
+  // circolare non dice niente di specifico per lei. Senza, il recupero delle classi mancanti
+  // (MISSING_CLASS_SQL) rifarebbe questa circolare a ogni giro.
+  for (const c of classes) {
+    if (!perClass[c.id]) perClass[c.id] = { badge, note: '' };
+  }
   return { badge, summary, deadlines, modelLabel: `Google Gemini (${model})`, perClass };
 }
 
@@ -365,6 +371,38 @@ export async function summarizeCircular(
 }
 
 /**
+ * Le circolari più vecchie di BACKFILL_WINDOW il cron non le rifà: le rifà il server quando
+ * qualcuno di una classe senza la sua parte ne apre una (GET /api/circulars/:number/analysis).
+ * Una sola volta ogni ON_DEMAND_COOLDOWN_MINUTES per circolare, e mai oltre MAX_ATTEMPTS
+ * fallimenti, così dieci compagni che aprono la stessa circolare non fanno dieci chiamate.
+ * Ritorna `true` se questa richiesta si è presa il compito.
+ */
+const ON_DEMAND_COOLDOWN_MINUTES = 15;
+
+export async function claimOnDemandSummary(env: Env, number: number): Promise<boolean> {
+  if (!env.GEMINI_API_KEY) return false;
+  const result = await env.DB.prepare(
+    `INSERT INTO circular_ai_server_attempts (circular_number, attempts, last_attempt_at)
+     VALUES (?, 0, CURRENT_TIMESTAMP)
+     ON CONFLICT(circular_number) DO UPDATE SET last_attempt_at = CURRENT_TIMESTAMP
+     WHERE circular_ai_server_attempts.attempts < ?
+       AND circular_ai_server_attempts.last_attempt_at < datetime('now', ?)`
+  ).bind(number, MAX_ATTEMPTS, `-${ON_DEMAND_COOLDOWN_MINUTES} minutes`).run();
+  return (result.meta.changes ?? 0) > 0;
+}
+
+/** L'analisi di questa circolare manca della parte di qualche classe (o non è del server)? */
+export async function needsServerSummary(env: Env, number: number): Promise<boolean> {
+  if (!env.GEMINI_API_KEY) return false;
+  const row = await env.DB.prepare(
+    `SELECT 1 AS missing FROM circulars c
+     LEFT JOIN circular_ai_analysis a ON a.circular_number = c.number
+     WHERE c.number = ? AND (a.tier IS NULL OR a.tier < ? OR ${MISSING_CLASS_SQL})`
+  ).bind(number, SERVER_ANALYSIS_TIER).first<{ missing: number }>();
+  return !!row;
+}
+
+/**
  * Recupera le circolari recenti senza un riassunto di Gemini (nuove prima che la chiave fosse
  * impostata, o fallite per quota esaurita) o con un riassunto di prima dell'analisi per classe.
  * Al massimo MAX_PER_RUN per giro.
@@ -377,9 +415,9 @@ export async function summarizePendingCirculars(env: Env): Promise<void> {
      LEFT JOIN circular_ai_analysis a ON a.circular_number = c.number
      LEFT JOIN circular_ai_server_attempts t ON t.circular_number = c.number
      WHERE (a.tier IS NULL OR a.tier < ?
-            -- Riassunti fatti prima dell'analisi per classe: con più classi registrate si
-            -- rifanno, altrimenti le altre classi vedrebbero i dettagli pensati per la 4^CSA.
-            OR (a.per_class_json IS NULL AND (SELECT COUNT(*) FROM classes) > 1))
+            -- Manca la parte di una classe (iscritta dopo, o riassunto di prima dell'analisi
+            -- per classe): si rifà, così ogni classe ha le sue specifiche.
+            OR ${MISSING_CLASS_SQL})
        AND (t.attempts IS NULL OR t.attempts < ?)
      ORDER BY c.number DESC
      LIMIT ?`

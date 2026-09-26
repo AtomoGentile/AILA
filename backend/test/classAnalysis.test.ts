@@ -51,6 +51,18 @@ describe('analisi per classe', () => {
     ]);
   });
 
+  it('una classe saltata dal modello ha comunque la sua voce (niente recupero infinito)', () => {
+    const partial = JSON.stringify({
+      badge: 'POTENTIAL',
+      summary: 'Corso pomeridiano di robotica.',
+      classes: [{ class: '4^CSA', badge: 'RELEVANT', note: 'Consigliato alla 4^CSA.' }],
+      deadlines: [],
+    });
+    const analysis = parseAnalysis(partial, 'gemini-flash-latest', classes)!;
+    expect(analysis.perClass.c5bia).toEqual({ badge: 'POTENTIAL', note: '' });
+    expect(analysis.perClass.DEFAULT_CLASS.badge).toBe('RELEVANT');
+  });
+
   it('ogni classe vede la sua nota e solo le sue scadenze', () => {
     const analysis = parseAnalysis(response, 'gemini-flash-latest', classes)!;
     const stored = { ...analysis, perClass: analysis.perClass };

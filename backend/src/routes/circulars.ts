@@ -6,7 +6,15 @@ import { Hono } from 'hono';
 import type { CircularAttachment, Env, JWTPayload } from '../types';
 import { authMiddleware, resolveClassId } from '../auth';
 import { parsePerClass, resolveForClass } from '../services/classAnalysis';
-import { BACKFILL_WINDOW, MAX_ATTEMPTS, upsertAnalysis } from '../services/summarizer';
+import {
+  BACKFILL_WINDOW,
+  MAX_ATTEMPTS,
+  claimOnDemandSummary,
+  needsServerSummary,
+  summarizeCircular,
+  upsertAnalysis,
+} from '../services/summarizer';
+import { inBackground } from '../services/background';
 
 // `attachments_json` è sempre valido JSON (scritto solo da syncSpaggiariCirculars, default
 // '[]' per le righe precedenti alla colonna) — un parse fallito è un bug, non un caso da
@@ -216,6 +224,17 @@ circulars.get('/:number/analysis', authMiddleware(), async (c) => {
   const row = await c.env.DB.prepare(
     `SELECT ${ANALYSIS_COLUMNS} FROM circular_ai_analysis WHERE circular_number = ?`
   ).bind(number).first<AnalysisRow>();
+
+  // Circolare fuori dalla finestra del cron che non ha ancora la parte di ogni classe (o non ha
+  // un riassunto del server): la rifà il server in background, una volta sola anche se la aprono
+  // in tanti (claimOnDemandSummary). Chi la sta aprendo vede intanto quello che c'è; il riassunto
+  // nuovo arriva con il prossimo /analyses.
+  if (await needsServerSummary(c.env, number) && await claimOnDemandSummary(c.env, number)) {
+    const circ = await c.env.DB.prepare(
+      'SELECT number, title, r2_pdf_key, attachments_json FROM circulars WHERE number = ?'
+    ).bind(number).first<{ number: number; title: string; r2_pdf_key: string; attachments_json: string }>();
+    if (circ) inBackground(c, summarizeCircular(c.env, circ));
+  }
 
   if (!row) return c.json({ error: 'Nessuna analisi in cache per questa circolare' }, 404);
 
