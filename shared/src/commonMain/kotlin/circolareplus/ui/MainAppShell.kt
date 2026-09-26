@@ -185,6 +185,9 @@ fun MainAppShell(
     val awaitingServer = remember { mutableStateListOf<Int>() }
     // Cosa fa il server per conto suo (ultima lettura di /analyses), vedi AnalysesSync.
     var serverSyncInfo by remember { mutableStateOf<CircularsRepository.AnalysesSync?>(null) }
+    // Classe dell'utente ("4 CSA"), letta alla prima analisi fatta sul telefono: il contesto
+    // dell'AI era fisso sulla 4^CSA e le altre classi ricevevano un'analisi pensata per lei.
+    var myClassLabel by remember { mutableStateOf<String?>(null) }
 
     fun storeClassification(classification: CircularAiClassification) {
         classifications[classification.circularNumber] = classification
@@ -270,13 +273,25 @@ fun MainAppShell(
             return
         }
 
+        if (myClassLabel == null) {
+            myClassLabel = try {
+                AppContainer.preferencesRepository.getClassConfig().classLabel
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+        }
+        val classLabel = myClassLabel?.let { circolareplus.util.compactClassLabels(it.replace(Regex("^(\\d)\\s+"), "$1^")) }
         val result = AppContainer.newAiClassifier(
             allowLocalFallback = allowLocalFallback,
             pdfTextLength = pdfText.length
         ).classifyCircularText(
             circularNumber = circular.number,
             circularTitle = circular.title,
-            pdfText = pdfText
+            pdfText = pdfText,
+            studentContext = if (classLabel.isNullOrBlank()) "Studente di scuola superiore"
+            else "Studente di scuola superiore, classe $classLabel"
         )
         // Nel frattempo potrebbe essere arrivato un riassunto migliore dal server: non si
         // sostituisce con uno peggiore.

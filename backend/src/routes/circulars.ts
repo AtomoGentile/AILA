@@ -4,7 +4,8 @@
 
 import { Hono } from 'hono';
 import type { CircularAttachment, Env, JWTPayload } from '../types';
-import { authMiddleware } from '../auth';
+import { authMiddleware, resolveClassId } from '../auth';
+import { parsePerClass, resolveForClass } from '../services/classAnalysis';
 import { BACKFILL_WINDOW, MAX_ATTEMPTS, upsertAnalysis } from '../services/summarizer';
 
 // `attachments_json` è sempre valido JSON (scritto solo da syncSpaggiariCirculars, default
@@ -73,18 +74,29 @@ interface AnalysisRow {
   is_fallback: number;
   model_label: string;
   tier: number;
+  per_class_json: string | null;
   updated_at: string;
 }
 
 const ANALYSIS_COLUMNS =
-  'circular_number, badge, summary, deadlines_json, is_fallback, model_label, tier, updated_at';
+  'circular_number, badge, summary, deadlines_json, is_fallback, model_label, tier, per_class_json, updated_at';
 
-function analysisJson(row: AnalysisRow) {
+/** L'analisi nella versione della classe di chi la legge (vedi services/classAnalysis.ts). */
+function analysisJson(row: AnalysisRow, classId: string) {
+  const resolved = resolveForClass(
+    {
+      badge: row.badge,
+      summary: row.summary,
+      deadlines: JSON.parse(row.deadlines_json),
+      perClass: parsePerClass(row.per_class_json),
+    },
+    classId
+  );
   return {
     circularNumber: row.circular_number,
-    badge: row.badge,
-    summary: row.summary,
-    deadlines: JSON.parse(row.deadlines_json),
+    badge: resolved.badge,
+    summary: resolved.summary,
+    deadlines: resolved.deadlines,
     isFallback: !!row.is_fallback,
     modelLabel: row.model_label,
     tier: row.tier,
@@ -128,6 +140,7 @@ circulars.get('/newer', authMiddleware(), async (c) => {
 // fatto da un compagno o dal server, e un'analisi locale in corso sulla stessa circolare si ferma.
 // Registrata prima di `/:number`, che altrimenti catturerebbe "analyses" come numero.
 circulars.get('/analyses', authMiddleware(), async (c) => {
+  const classId = await resolveClassId(c);
   const since = c.req.query('since') ?? '1970-01-01 00:00:00';
   const rows = await c.env.DB.prepare(
     `SELECT ${ANALYSIS_COLUMNS} FROM circular_ai_analysis
@@ -154,7 +167,7 @@ circulars.get('/analyses', authMiddleware(), async (c) => {
   }
 
   return c.json({
-    analyses: rows.results.map(analysisJson),
+    analyses: rows.results.map((row) => analysisJson(row, classId)),
     serverSummaries,
     serverWindowFrom,
     serverGaveUp,
@@ -206,7 +219,7 @@ circulars.get('/:number/analysis', authMiddleware(), async (c) => {
 
   if (!row) return c.json({ error: 'Nessuna analisi in cache per questa circolare' }, 404);
 
-  return c.json(analysisJson(row));
+  return c.json(analysisJson(row, await resolveClassId(c)));
 });
 
 // ---------------------------------------------------------------------------
@@ -260,7 +273,11 @@ circulars.put('/:number/analysis', authMiddleware(), async (c) => {
   const current = await c.env.DB.prepare(
     `SELECT ${ANALYSIS_COLUMNS} FROM circular_ai_analysis WHERE circular_number = ?`
   ).bind(number).first<AnalysisRow>();
-  return c.json({ success: true, stored: false, current: current ? analysisJson(current) : null });
+  return c.json({
+    success: true,
+    stored: false,
+    current: current ? analysisJson(current, await resolveClassId(c)) : null,
+  });
 });
 
 // ---------------------------------------------------------------------------
