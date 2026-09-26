@@ -17,6 +17,7 @@ on:
       - 'gradle/**'
       - 'build.gradle.kts'
       - 'settings.gradle.kts'
+  workflow_dispatch:
 
 jobs:
   build:
@@ -102,7 +103,7 @@ jobs:
         # solo il simulatore come parte della build con destinazione concreta): un timeout
         # esplicito trasforma un blocco silenzioso in un fallimento chiaro e veloce, invece
         # di consumare le 6 ore di timeout massimo del job.
-        timeout-minutes: 5
+        timeout-minutes: 10
         run: |
           set -e
           UDID="${{ steps.sim.outputs.udid }}"
@@ -141,8 +142,24 @@ jobs:
           if kill -0 "$APP_PID" 2>/dev/null; then
             echo "App avviata (PID $APP_PID) e ancora in esecuzione dopo 8s."
           else
-            echo "L'app (PID $APP_PID) non risulta piu' in esecuzione: probabile crash all'avvio."
-            xcrun simctl spawn "$UDID" log show --predicate 'process == "Circolare+"' --last 1m || true
+            echo "L'app (PID $APP_PID) non risulta piu' in esecuzione."
+            # Perché è uscita: il log dell'app da solo non lo dice (un'app uccisa dal sistema non
+            # scrive nulla). Il motivo lo registrano runningboardd/SpringBoard/FrontBoard, e un
+            # crash vero lascia un report in DiagnosticReports sul Mac che ospita il simulatore.
+            echo "::group::Motivo della chiusura (runningboard, SpringBoard, FrontBoard)"
+            xcrun simctl spawn "$UDID" log show --last 3m --style compact \
+              --predicate "eventMessage CONTAINS 'circolareplus' OR eventMessage CONTAINS '$APP_PID'" 2>/dev/null \
+              | grep -iE 'termin|kill|watchdog|exit|crash|reason|jetsam|signal|assertion|timeout|timed out' \
+              | grep -v 'BackgroundTask' | tail -80 || true
+            echo "::endgroup::"
+            echo "::group::Crash report"
+            find ~/Library/Logs/DiagnosticReports -newer "$APP_PATH" \( -name '*Circolare*' -o -name '*iosApp*' \) 2>/dev/null \
+              | while read -r f; do echo "== $f"; head -c 12000 "$f"; echo; done
+            echo "::endgroup::"
+            echo "::group::Ultimo minuto del log dell'app"
+            xcrun simctl spawn "$UDID" log show --predicate 'process == "Circolare+"' --last 1m --style compact \
+              | grep -v BackgroundTask | tail -60 || true
+            echo "::endgroup::"
             exit 1
           fi
 
