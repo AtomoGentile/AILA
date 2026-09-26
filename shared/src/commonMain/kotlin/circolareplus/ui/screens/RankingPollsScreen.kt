@@ -224,7 +224,13 @@ private fun RankingPollCard(
                         )
                     }
                     AilaPrimaryButton(
-                        text = if (isSubmitting) "Invio…" else "Invia la mia classifica",
+                        // Accanto ad "Annulla" c'è metà larghezza: il testo lungo veniva tagliato
+                        // ("Invia la mia").
+                        text = when {
+                            isSubmitting -> "Invio…"
+                            poll.myRanking != null -> "Invia"
+                            else -> "Invia la mia classifica"
+                        },
                         onClick = { onSubmit(draft) },
                         enabled = !isSubmitting,
                         fillMaxWidth = true,
