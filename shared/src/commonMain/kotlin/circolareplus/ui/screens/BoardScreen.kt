@@ -109,8 +109,9 @@ fun BoardScreen(
 
         Spacer(modifier = Modifier.height(AppTheme.Space16))
 
-        val filtered = proposals.filter {
-            selectedStatusFilter == null || it.status == selectedStatusFilter
+        // Ricalcolato solo quando cambiano le proposte o il filtro, non a ogni ricomposizione.
+        val filtered = remember(proposals, selectedStatusFilter) {
+            proposals.filter { selectedStatusFilter == null || it.status == selectedStatusFilter }
         }
 
         LazyColumn(
@@ -144,9 +145,18 @@ fun BoardScreen(
             // La chiave è l'id: senza, lo stato locale di ogni card (voto, commenti aperti) restava
             // legato alla POSIZIONE e passava alla proposta che le subentrava quando una si
             // spostava di filtro — da qui i voti "doppi" dopo aver cambiato stato a una proposta.
-            itemsIndexed(filtered, key = { _, proposal -> proposal.id }) { index, proposal ->
+            // contentType: la lista riusa le card già composte invece di ricostruirle da zero
+            // mentre si scorre. animateItem: cambiando filtro le card scivolano al loro posto
+            // invece di teletrasportarsi.
+            itemsIndexed(
+                filtered,
+                key = { _, proposal -> proposal.id },
+                contentType = { _, _ -> "proposal" }
+            ) { index, proposal ->
                 ProposalCardItem(
-                    modifier = Modifier.ailaAppear(index),
+                    modifier = Modifier
+                        .animateItem(fadeInSpec = null, fadeOutSpec = null)
+                        .ailaAppear(index),
                     proposal = proposal,
                     currentUserId = currentUserId,
                     canDelete = isRepresentative || proposal.authorId == currentUserId,

@@ -1,6 +1,7 @@
 package circolareplus.design
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -32,6 +33,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -77,9 +79,13 @@ fun AilaBrandMark(size: Dp = 26.dp, modifier: Modifier = Modifier) {
 }
 
 /**
- * Intestazione chiara standard: riga del marchio, titolo, sottotitolo e uno slot di azione a
- * destra. Il marchio in cima c'è perché nel mockup ogni schermata lo porta: senza, le schermate
- * sembravano di un'app anonima.
+ * Intestazione chiara standard: marchio grande a sinistra, titolo e sottotitolo accanto, e uno
+ * slot di azione a destra. Prima il marchio stava piccolo su una riga a sé con la scritta "AILA"
+ * e il titolo sotto: tre righe per dire una cosa, e il logo si perdeva. Ora il logo fa da
+ * "avatar" della schermata e il titolo gli sta accanto, in un'unica fascia più compatta.
+ *
+ * Entra con una breve dissolvenza + scivolamento del titolo, così cambiare tab non è uno stacco
+ * secco (i valori si leggono nel graphicsLayer: nessuna ricomposizione per fotogramma).
  */
 @Composable
 fun AilaScreenHeader(
@@ -89,67 +95,76 @@ fun AilaScreenHeader(
     showBrand: Boolean = true,
     action: (@Composable () -> Unit)? = null
 ) {
+    var entered by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { entered = true }
+    val textAlpha = animateFloatAsState(
+        targetValue = if (entered) 1f else 0f,
+        animationSpec = tween(durationMillis = 260),
+        label = "headerTextAlpha"
+    )
+    val textShift = animateFloatAsState(
+        targetValue = if (entered) 0f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+        label = "headerTextShift"
+    )
+    val logoScale = animateFloatAsState(
+        targetValue = if (entered) 1f else 0.82f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+        label = "headerLogoScale"
+    )
+
     Column(modifier = modifier.fillMaxWidth().background(AppTheme.SurfaceWhite)) {
-        if (showBrand) {
-            Row(
-                modifier = Modifier.padding(
-                    start = AppTheme.Space16,
-                    end = AppTheme.Space16,
-                    top = AppTheme.Space20
-                ),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AilaBrandMark(size = 24.dp)
-                Spacer(modifier = Modifier.width(AppTheme.Space8))
-                Text(
-                    text = "AILA",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Black,
-                    color = AppTheme.PrimaryBlue,
-                    letterSpacing = 1.sp
-                )
-            }
-        }
-        // L'azione (es. "+") sta sulla riga del titolo, non centrata su titolo + sottotitolo:
-        // così resta più in alto, vicino al titolo che la riguarda, e il sottotitolo può usare
-        // tutta la larghezza invece di essere troncato accanto al pulsante.
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(
                     start = AppTheme.Space16,
                     end = AppTheme.Space16,
-                    top = if (showBrand) AppTheme.Space8 else AppTheme.Space24,
+                    top = AppTheme.Space20,
                     bottom = AppTheme.Space16
-                )
+                ),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            if (showBrand) {
+                AilaBrandMark(
+                    size = 48.dp,
+                    modifier = Modifier.graphicsLayer {
+                        scaleX = logoScale.value
+                        scaleY = logoScale.value
+                    }
+                )
+                Spacer(modifier = Modifier.width(AppTheme.Space12))
+            }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .graphicsLayer {
+                        alpha = textAlpha.value
+                        translationX = textShift.value * 12.dp.toPx()
+                    }
             ) {
                 Text(
                     text = title,
-                    fontSize = 24.sp,
+                    fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
                     color = AppTheme.TextDark,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
+                    overflow = TextOverflow.Ellipsis
                 )
-                if (action != null) {
-                    Spacer(modifier = Modifier.width(AppTheme.Space12))
-                    action()
+                if (subtitle != null) {
+                    Text(
+                        text = subtitle,
+                        fontSize = 12.sp,
+                        color = AppTheme.TextMuted,
+                        lineHeight = 16.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
-            if (subtitle != null) {
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = subtitle,
-                    fontSize = 13.sp,
-                    color = AppTheme.TextMuted,
-                    maxLines = 2
-                )
+            if (action != null) {
+                Spacer(modifier = Modifier.width(AppTheme.Space12))
+                action()
             }
         }
         HorizontalDivider(color = AppTheme.Hairline)
@@ -858,20 +873,22 @@ fun AilaIconAction(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
-    // Rimbalzo alla variazione del contatore: la chiave è il testo, quindi scatta quando cambia.
-    var bounce by remember { mutableStateOf(false) }
+    // Rimbalzo alla variazione del contatore — solo quando il numero cambia davvero. Prima
+    // l'effetto partiva anche alla prima composizione: ogni card della bacheca che entrava nello
+    // schermo faceva rimbalzare le sue tre pillole, e durante lo scorrimento erano decine di
+    // animazioni insieme (una delle cause del lag della Bacheca).
+    val bounce = remember { Animatable(1f) }
+    val lastLabel = remember { arrayOf(label) }
     LaunchedEffect(label) {
-        bounce = true
-        delay(160)
-        bounce = false
+        if (label != lastLabel[0]) {
+            lastLabel[0] = label
+            bounce.animateTo(1.10f, spring(stiffness = Spring.StiffnessHigh))
+            bounce.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium))
+        }
     }
 
-    val scale by animateFloatAsState(
-        targetValue = when {
-            isPressed -> 0.92f
-            bounce -> 1.10f
-            else -> 1f
-        },
+    val pressScale = animateFloatAsState(
+        targetValue = if (isPressed) 0.92f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
         label = "iconActionScale"
     )
@@ -885,8 +902,13 @@ fun AilaIconAction(
     // poco più di 30dp e sulle proposte si sbagliava spesso pulsante.
     Row(
         modifier = modifier
-            .scale(scale)
-            .alpha(if (enabled) 1f else 0.55f)
+            // Scala letta nel graphicsLayer: niente ricomposizione a ogni fotogramma.
+            .graphicsLayer {
+                val k = pressScale.value * bounce.value
+                scaleX = k
+                scaleY = k
+                alpha = if (enabled) 1f else 0.55f
+            }
             .heightIn(min = 44.dp)
             .widthIn(min = 56.dp)
             .clip(RoundedCornerShape(AppTheme.SmallElementRadius))

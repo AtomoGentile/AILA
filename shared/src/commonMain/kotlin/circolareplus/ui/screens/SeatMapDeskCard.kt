@@ -1,5 +1,10 @@
 package circolareplus.ui.screens
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -10,9 +15,11 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -48,17 +55,34 @@ fun SeatMapDeskCard(
     val isFocusedDesk = focusedStudentId != null && seatIds.any { it == focusedStudentId }
     val shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp)
 
+    // Il banco evidenziato cambia colore in dissolvenza e fa un piccolo "salto" di scala: prima
+    // passava al giallo di colpo e, in una griglia piena, era facile non accorgersene.
+    val containerColor by animateColorAsState(
+        if (isFocusedDesk) AppTheme.TintAmber else AppTheme.SurfaceWhite, tween(240), label = "deskBg"
+    )
+    val borderColor by animateColorAsState(
+        if (isFocusedDesk) AppTheme.TintAmberInk else AppTheme.Hairline, tween(240), label = "deskBorder"
+    )
+    val focusScale = animateFloatAsState(
+        targetValue = if (isFocusedDesk) 1.06f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+        label = "deskScale"
+    )
+
     Card(
         shape = shape,
-        colors = CardDefaults.cardColors(
-            containerColor = if (isFocusedDesk) AppTheme.TintAmber else AppTheme.SurfaceWhite
-        ),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
         elevation = CardDefaults.cardElevation(defaultElevation = AppTheme.CardElevation),
-        modifier = modifier.border(
-            width = if (isFocusedDesk) 2.dp else 1.dp,
-            color = if (isFocusedDesk) AppTheme.TintAmberInk else AppTheme.Hairline,
-            shape = shape
-        )
+        modifier = modifier
+            .graphicsLayer {
+                scaleX = focusScale.value
+                scaleY = focusScale.value
+            }
+            .border(
+                width = if (isFocusedDesk) 2.dp else 1.dp,
+                color = borderColor,
+                shape = shape
+            )
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp)

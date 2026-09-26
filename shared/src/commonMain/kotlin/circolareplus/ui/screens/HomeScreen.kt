@@ -240,6 +240,9 @@ private fun HomeHeroPanel(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Il marchio a sinistra del saluto, come nelle intestazioni delle altre schermate.
+            circolareplus.design.AilaBrandMark(size = 48.dp)
+            Spacer(modifier = Modifier.width(AppTheme.Space12))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "Ciao, $studentFirstName",
