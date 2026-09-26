@@ -5,14 +5,17 @@
   "main": "src/index.ts",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@block65/webcrypto-web-push": "^2.0.0",
     "hono": "^4.0.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260908.1",
     "typescript": "^5.3.3",
+    "vitest": "^4.1.11",
     "wrangler": "^4.130.0"
   },
   "allowScripts": {

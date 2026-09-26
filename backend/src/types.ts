@@ -19,6 +19,13 @@ export interface Env {
   // Solo come secret (`wrangler secret put GEMINI_API_KEY`), mai in [vars]. Se assente, i riassunti
   // restano ai telefoni come prima.
   GEMINI_API_KEY?: string;
+  // Web Push della PWA (VAPID, RFC 8292). Solo come secret; se mancano il web push è spento.
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  // Contatto per i push service, es. "mailto:indirizzo@esempio.it".
+  VAPID_SUBJECT?: string;
+  // Origini ammesse dal CORS, separate da virgola (in [vars] di wrangler.toml).
+  WEB_ORIGINS?: string;
 }
 
 export interface JWTPayload {
@@ -33,7 +40,9 @@ export interface JWTPayload {
   exp: number;
 }
 
-export type UserRole = 'STUDENT' | 'REPRESENTATIVE' | 'SECURITY_GUARD';
+// Definiti in contracts.ts, condiviso con la PWA.
+import type { EventCategory, ProposalStatus, UserRole } from './contracts';
+export type { EventCategory, ProposalStatus, UserRole };
 
 export interface User {
   id: string;
@@ -94,14 +103,6 @@ export interface CalendarEvent {
   created_at: string;
 }
 
-export type EventCategory =
-  | 'VERIFICA'
-  | 'INTERROGAZIONE'
-  | 'PAGAMENTO'
-  | 'USCITA_DIDATTICA'
-  | 'AVVISO'
-  | 'ALTRO';
-
 export interface Proposal {
   id: string;
   author_id: string;
@@ -115,7 +116,5 @@ export interface Proposal {
   class_id: string;
   created_at: string;
 }
-
-export type ProposalStatus = 'NUOVA' | 'IN_ANALISI' | 'CHIUSA';
 
 export type VoteScore = 50 | 0 | -80 | -300;
