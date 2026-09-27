@@ -1234,7 +1234,8 @@ fun AilaProfileButton(entry: AilaProfileEntry, modifier: Modifier = Modifier, on
     Box(
         modifier = modifier
             .size(44.dp)
-            .ailaTransformOrigin(22.dp)
+            // Sulla Home (Material) il profilo si apre dall'avatar alla Pixel e ci rientra.
+            .ailaTransformOrigin(22.dp, buttonColor = if (onHero && !AppTheme.isGlass) AppTheme.AccentDeep else null)
             .ailaPressScale(interactionSource, 0.9f)
             .clip(CircleShape)
             // Un tono piu' scuro di prima: sul pannello era un velo bianco che quasi spariva,

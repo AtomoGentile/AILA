@@ -395,8 +395,17 @@ fun Modifier.ailaSelectionPop(selected: Boolean): Modifier {
 // dei Pixel (Meteo, Impostazioni, Contatti). In Liquid Glass resta il push da destra di iOS.
 // ---------------------------------------------------------------------------------------------
 
-/** Punto di partenza di un container transform: rettangolo nello schermo e raggio degli angoli. */
-class AilaTransformOrigin(val bounds: androidx.compose.ui.geometry.Rect, val cornerRadiusPx: Float)
+/**
+ * Punto di partenza di un container transform: rettangolo nello schermo e raggio degli angoli.
+ * [buttonColor] c'e' solo per i pulsanti (ricerca, notifiche, avatar della Home): la forma nasce
+ * piena del colore del pulsante, esattamente sopra di lui, e ci rientra al ritorno. Per questi il
+ * container transform e' sempre acceso in Material, anche se sono piccoli.
+ */
+class AilaTransformOrigin(
+    val bounds: androidx.compose.ui.geometry.Rect,
+    val cornerRadiusPx: Float,
+    val buttonColor: Color? = null
+)
 
 /**
  * Memoria delle origini. Al tocco un elemento registra dove si trova ([recordTap]); quando la
@@ -463,7 +472,12 @@ object AilaContainerTransform {
  * del dito (senza consumare il tocco) ne salva posizione e angoli.
  */
 @Composable
-fun Modifier.ailaTransformOrigin(cornerRadius: androidx.compose.ui.unit.Dp, liveKey: Any? = null): Modifier {
+fun Modifier.ailaTransformOrigin(
+    cornerRadius: androidx.compose.ui.unit.Dp,
+    liveKey: Any? = null,
+    /** Colore del pulsante: lo rende un'origine "da pulsante" (vedi [AilaTransformOrigin.buttonColor]). */
+    buttonColor: Color? = null
+): Modifier {
     val holder = remember { arrayOf<androidx.compose.ui.geometry.Rect?>(null) }
     val liveHolder = remember { arrayOf<AilaTransformOrigin?>(null) }
     val density = androidx.compose.ui.platform.LocalDensity.current
@@ -478,15 +492,15 @@ fun Modifier.ailaTransformOrigin(cornerRadius: androidx.compose.ui.unit.Dp, live
             val bounds = it.boundsInRoot()
             holder[0] = bounds
             if (liveKey != null) {
-                val origin = AilaTransformOrigin(bounds, radiusPx)
+                val origin = AilaTransformOrigin(bounds, radiusPx, buttonColor)
                 liveHolder[0] = origin
                 AilaContainerTransform.updateLive(liveKey, origin)
             }
         }
-        .pointerInput(radiusPx) {
+        .pointerInput(radiusPx, buttonColor) {
             awaitEachGesture {
                 awaitFirstDown(requireUnconsumed = false)
-                holder[0]?.let { AilaContainerTransform.recordTap(AilaTransformOrigin(it, radiusPx)) }
+                holder[0]?.let { AilaContainerTransform.recordTap(AilaTransformOrigin(it, radiusPx, buttonColor)) }
             }
         }
 }
@@ -538,10 +552,19 @@ fun Modifier.ailaContainerReveal(
             // Agli estremi la forma e' trasparente: la card vera, sotto, resta visibile e piena.
             // Aprendo la forma "nasce" sopra la card; chiudendo ci si dissolve sopra, e quando
             // sparisce si vede la card gia' completa invece di una sagoma vuota che si riempie.
-            val contentAlpha = ((p - 0.72f) / 0.23f).coerceIn(0f, 1f)
-            val colorT = (p / 0.3f).coerceIn(0f, 1f)
-            val fill = androidx.compose.ui.graphics.lerp(containerColor, pageColor, colorT * colorT * (3f - 2f * colorT))
-            val edgeT = (p / 0.22f).coerceIn(0f, 1f)
+            // Da un pulsante (stile Meteo dei Pixel): la forma parte piena del colore del pulsante,
+            // esattamente sopra di lui, e l'icona si dissolve nei primissimi fotogrammi; poi la
+            // forma si schiarisce nel fondo della pagina e il contenuto arriva un po' prima che
+            // dalle card, perche' da un pulsante piccolo la corsa e' piu' lunga. Al ritorno lo
+            // stesso al contrario: si richiude nel colore del pulsante e ci si posa sopra.
+            val fromButton = origin.buttonColor != null
+            val contentAlpha = if (fromButton) ((p - 0.55f) / 0.3f).coerceIn(0f, 1f)
+                else ((p - 0.72f) / 0.23f).coerceIn(0f, 1f)
+            val colorT = (p / (if (fromButton) 0.4f else 0.3f)).coerceIn(0f, 1f)
+            val fill = androidx.compose.ui.graphics.lerp(
+                origin.buttonColor ?: containerColor, pageColor, colorT * colorT * (3f - 2f * colorT)
+            )
+            val edgeT = (p / (if (fromButton) 0.05f else 0.22f)).coerceIn(0f, 1f)
             val shapeAlpha = edgeT * edgeT * (3f - 2f * edgeT)
             clipPath(clip) {
                 // Niente saveLayer (un buffer grande quanto lo schermo a ogni fotogramma, la causa
