@@ -2,12 +2,16 @@ package circolareplus.design
 
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -19,7 +23,6 @@ import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.currentCompositeKeyHash
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,59 +46,15 @@ import kotlinx.coroutines.delay
  */
 
 /**
- * Elementi gia' "presentati" in questa sessione, per posizione nell'albero di composizione.
- * Serve a [ailaAppear]: l'entrata si vede la prima volta che si apre una schermata, poi non piu'.
- */
-private object AilaAppearMemory {
-    val seen = HashSet<Int>()
-}
-
-/**
- * Entrata di un elemento: sfuma dentro e si "posa" (scala da 0.96 a 1, pochi dp di salita) con
- * una molla, e un leggero sfalsamento fra i primi elementi di una lista.
+ * Entrata di un elemento: **ora non fa nulla**, resta per non toccare le decine di chiamate.
  *
- * **Solo la prima volta per sessione.** Prima la cascata ripartiva a ogni cambio di tab: carina
- * all'inizio, alla lunga stancava (feedback di Simone) e rallentava la lettura di schermate gia'
- * note. Ora al ritorno su una schermata gli elementi ci sono gia': il movimento lo da' la
- * transizione fra le tab (vedi MainAppShell), che e' breve e uguale per tutta la schermata.
- *
- * La chiave e' la posizione nella composizione ([currentCompositeKeyHash]), che resta la stessa
- * quando si rientra nella stessa schermata; nelle liste include la chiave dell'elemento, quindi un
- * elemento nuovo (una proposta appena pubblicata) entra comunque con l'animazione.
+ * Prima gli elementi arrivavano a cascata, poi solo alla prima apertura; ma sommata allo
+ * "sblocco" (tutto che si posa con un rimbalzo) la cascata faceva due animazioni diverse una
+ * dopo l'altra. Scelta di Simone: all'apertura rimbalza tutto insieme ([ailaUnlock]), e il
+ * movimento fra le schermate lo danno le transizioni, non i singoli elementi.
  */
-@Composable
-fun Modifier.ailaAppear(index: Int = 0, enabled: Boolean = true): Modifier {
-    if (!enabled) return this
-
-    val key = currentCompositeKeyHash
-    // Deciso una volta sola per questa comparsa: se l'elemento era gia' stato presentato, o e'
-    // oltre i primi della lista (arriva scorrendo, e li' un'animazione sarebbe solo ritardo),
-    // resta fermo.
-    val animate = remember { index < 6 && AilaAppearMemory.seen.add(key) }
-    if (!animate) {
-        if (index >= 6) AilaAppearMemory.seen.add(key)
-        return this
-    }
-
-    val progress = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        delay(index.coerceAtMost(4) * 35L)
-        progress.animateTo(
-            1f,
-            spring(dampingRatio = 0.78f, stiffness = Spring.StiffnessMediumLow)
-        )
-    }
-
-    // Valori letti nel graphicsLayer: nessuna ricomposizione a ogni fotogramma.
-    return this.graphicsLayer {
-        val p = progress.value
-        alpha = p.coerceIn(0f, 1f)
-        val scale = 0.96f + 0.04f * p
-        scaleX = scale
-        scaleY = scale
-        translationY = (1f - p) * 8.dp.toPx()
-    }
-}
+@Suppress("UNUSED_PARAMETER")
+fun Modifier.ailaAppear(index: Int = 0, enabled: Boolean = true): Modifier = this
 
 /**
  * Respiro lento: usata dal logo nella schermata di caricamento, per far capire che l'app sta
@@ -260,37 +219,82 @@ fun Modifier.ailaGlassOverlay(
 }
 
 // ---------------------------------------------------------------------------------------------
-// Movimenti "alla iOS". Il segreto delle animazioni di iOS non e' la durata ma la fisica: quasi
-// tutto e' una molla, che parte veloce, rallenta da sola e — dove serve dare vita — supera di
-// poco il punto d'arrivo e ci torna (il "rimbalzo" dello sblocco). Qui le molle condivise, cosi'
-// ogni schermata si muove con lo stesso carattere.
+// Movimento dei due stili (vedi UiStyle). Quasi tutto e' una molla, che parte veloce e rallenta da
+// sola; cambia il carattere:
+// - Liquid Glass: molle morbide, rimbalzo appena accennato; push da destra come iOS.
+// - Material Expressive: le "spatial spring" di M3 Expressive, piu' rigide e piu' rimbalzanti;
+//   navigazione "shared axis" (scorrimento breve + dissolvenza) e cambio tab "fade through".
 // ---------------------------------------------------------------------------------------------
 
-/** Molla del push/pop fra schermate: nessun rimbalzo, veloce e morbida come la navigazione iOS. */
-fun <T> iosNavigationSpring() = spring<T>(dampingRatio = 1f, stiffness = 420f)
+/** Molla del push/pop fra schermate. */
+fun <T> ailaNavigationSpring(): SpringSpec<T> =
+    if (AppTheme.isGlass) spring(dampingRatio = 1f, stiffness = 420f)
+    else spring(dampingRatio = 0.9f, stiffness = 700f)
 
-/** Molla "viva": un filo di rimbalzo, per cambi di tab, indicatori e comparse. */
-fun <T> iosBouncySpring() = spring<T>(dampingRatio = 0.72f, stiffness = 380f)
+/** Molla "viva" per indicatori, selezioni e comparse. */
+fun <T> ailaSpatialSpring(): SpringSpec<T> =
+    if (AppTheme.isGlass) spring(dampingRatio = 0.78f, stiffness = 380f)
+    else spring(dampingRatio = 0.6f, stiffness = 800f)
 
 /**
- * Push/pop come in UINavigationController: la schermata nuova entra da destra a tutta larghezza,
- * quella sotto scivola di un terzo a sinistra e si scurisce; al ritorno l'inverso, con la
- * schermata che se ne va disegnata sopra quella che torna.
+ * Push/pop fra schermate.
+ * Glass: come UINavigationController, la nuova entra da destra a tutta larghezza, quella sotto
+ * scivola di un terzo e si scurisce. Expressive: "shared axis X" di Material, scorrimento breve
+ * di pochi dp piu' dissolvenza incrociata.
  */
-fun AnimatedContentTransitionScope<*>.iosPushTransition(forward: Boolean): ContentTransform {
-    val transform = if (forward) {
-        slideInHorizontally(iosNavigationSpring()) { it } togetherWith
-            (slideOutHorizontally(iosNavigationSpring()) { -it / 3 } +
-                fadeOut(tween(durationMillis = 320), targetAlpha = 0.55f))
+fun AnimatedContentTransitionScope<*>.ailaPushTransition(forward: Boolean): ContentTransform {
+    val transform = if (AppTheme.isGlass) {
+        if (forward) {
+            slideInHorizontally(ailaNavigationSpring()) { it } togetherWith
+                (slideOutHorizontally(ailaNavigationSpring()) { -it / 3 } +
+                    fadeOut(tween(durationMillis = 320), targetAlpha = 0.55f))
+        } else {
+            (slideInHorizontally(ailaNavigationSpring()) { -it / 3 } +
+                fadeIn(tween(durationMillis = 320), initialAlpha = 0.55f)) togetherWith
+                slideOutHorizontally(ailaNavigationSpring()) { it }
+        }
     } else {
-        (slideInHorizontally(iosNavigationSpring()) { -it / 3 } +
-            fadeIn(tween(durationMillis = 320), initialAlpha = 0.55f)) togetherWith
-            slideOutHorizontally(iosNavigationSpring()) { it }
+        val dir = if (forward) 1 else -1
+        (slideInHorizontally(ailaNavigationSpring()) { dir * it / 10 } +
+            fadeIn(tween(durationMillis = 210, delayMillis = 60))) togetherWith
+            (slideOutHorizontally(ailaNavigationSpring()) { -dir * it / 10 } +
+                fadeOut(tween(durationMillis = 90)))
     }
     return transform.apply {
         targetContentZIndex = if (forward) 1f else -1f
     } using SizeTransform(clip = false)
 }
+
+/**
+ * Cambio di tab dalla barra in basso. Glass: dissolvenza rapida, quasi un taglio, come le tab
+ * bar di iOS. Expressive: "fade through" di Material, la vecchia svanisce e la nuova emerge
+ * crescendo appena.
+ */
+fun AnimatedContentTransitionScope<*>.ailaTabTransition(): ContentTransform =
+    if (AppTheme.isGlass) {
+        fadeIn(tween(durationMillis = 140)) togetherWith fadeOut(tween(durationMillis = 90))
+    } else {
+        (fadeIn(tween(durationMillis = 210, delayMillis = 70)) +
+            scaleIn(tween(durationMillis = 210, delayMillis = 70), initialScale = 0.94f)) togetherWith
+            fadeOut(tween(durationMillis = 70))
+    }
+
+/** Ingresso/uscita di un livello "push" mostrato con AnimatedVisibility (dettaglio circolare). */
+fun ailaPushEnter(): EnterTransition =
+    if (AppTheme.isGlass) slideInHorizontally(ailaNavigationSpring()) { it }
+    else slideInHorizontally(ailaNavigationSpring()) { it / 10 } + fadeIn(tween(210, delayMillis = 60))
+
+fun ailaPushExit(): ExitTransition =
+    if (AppTheme.isGlass) slideOutHorizontally(ailaNavigationSpring()) { it }
+    else slideOutHorizontally(ailaNavigationSpring()) { it / 10 } + fadeOut(tween(90))
+
+/**
+ * Quanto si sposta e si scurisce la schermata che resta sotto un push (0..1 = coperta del tutto).
+ * Glass: un terzo di larghezza e velo scuro, come iOS. Expressive: quasi ferma, solo un velo
+ * leggero (in "shared axis" la schermata sotto svanisce, non scivola).
+ */
+val ailaUnderlayShift: Float get() = if (AppTheme.isGlass) 1f / 3f else 0.06f
+val ailaUnderlayDim: Float get() = if (AppTheme.isGlass) 0.18f else 0.08f
 
 /** Si ricorda se lo "sblocco" e' gia' stato fatto in questo avvio dell'app. */
 private object AilaUnlockMemory {
@@ -298,34 +302,42 @@ private object AilaUnlockMemory {
 }
 
 /**
- * L'animazione dello sblocco di iOS: all'ingresso nell'app (dopo caricamento o login) il
- * contenuto arriva leggermente ingrandito e trasparente e si posa al suo posto con un piccolo
- * rimbalzo. Una volta sola per avvio: rientrare in una schermata non la ripete.
+ * L'animazione d'ingresso nell'app (dopo caricamento o login): tutto insieme, senza cascate.
+ * Glass: come lo sblocco di iOS, arriva leggermente ingrandito e si posa con un piccolo rimbalzo.
+ * Expressive: emerge da piu' piccolo con la molla vivace di Material. Una volta sola per avvio.
  */
 @Composable
-fun Modifier.iosUnlock(): Modifier {
+fun Modifier.ailaUnlock(): Modifier {
     val play = remember { !AilaUnlockMemory.played }
     if (!play) return this
+    val glass = AppTheme.isGlass
     val progress = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
         AilaUnlockMemory.played = true
-        progress.animateTo(1f, spring(dampingRatio = 0.62f, stiffness = 170f))
+        progress.animateTo(
+            1f,
+            // Glass: si posa dall'alto verso il basso (1.14 -> 1) come lo sblocco di iOS.
+            // Expressive: emerge dal basso verso l'alto (0.9 -> 1) con la molla piu' vivace.
+            if (glass) spring(dampingRatio = 0.62f, stiffness = 170f)
+            else spring(dampingRatio = 0.55f, stiffness = 260f)
+        )
     }
+    val from = if (glass) 1.14f else 0.9f
     return this.graphicsLayer {
         val p = progress.value
         alpha = (p * 1.6f).coerceIn(0f, 1f)
-        val scale = 1.14f - 0.14f * p
+        val scale = from + (1f - from) * p
         scaleX = scale
         scaleY = scale
     }
 }
 
 /**
- * "Pop" di un'icona quando diventa selezionata (barra in basso): si gonfia e torna con una molla
- * elastica, come le icone della tab bar di iOS.
+ * "Pop" di un'icona quando diventa selezionata (barra in basso): si comprime e torna con una
+ * molla elastica.
  */
 @Composable
-fun Modifier.iosSelectionPop(selected: Boolean): Modifier {
+fun Modifier.ailaSelectionPop(selected: Boolean): Modifier {
     val scale = remember { Animatable(1f) }
     val wasSelected = remember { arrayOf(selected) }
     LaunchedEffect(selected) {

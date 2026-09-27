@@ -57,10 +57,10 @@ fun BoardScreen(
 ) {
     var selectedStatusFilter by remember { mutableStateOf<ProposalStatus?>(null) }
 
+    Box(modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(AppTheme.BackgroundLight)
             .padding(horizontal = AppTheme.Space16)
             .padding(top = AppTheme.Space16)
     ) {
@@ -97,7 +97,7 @@ fun BoardScreen(
 
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(AppTheme.Space12),
-            contentPadding = PaddingValues(bottom = AppTheme.Space24),
+            contentPadding = PaddingValues(bottom = AppTheme.Space24 + 72.dp + circolareplus.design.LocalBottomBarPadding.current),
             modifier = Modifier.fillMaxSize()
         ) {
             if (canModerateIdentity && unlockRequests.isNotEmpty()) {
@@ -158,6 +158,15 @@ fun BoardScreen(
                 )
             }
         }
+    }
+    // "Nuova proposta": pulsante flottante in basso a destra, sopra la barra delle tab.
+    circolareplus.design.AilaFab(
+        contentDescription = "Nuova proposta",
+        onClick = onCreateProposalClick,
+        modifier = Modifier
+            .align(Alignment.BottomEnd)
+            .padding(end = AppTheme.Space16, bottom = circolareplus.design.LocalBottomBarPadding.current + AppTheme.Space16)
+    ) { tint -> AppIcons.Plus(modifier = Modifier.size(22.dp), color = tint) }
     }
 }
 

@@ -96,7 +96,6 @@ fun CalendarScreen(
     ) {
         AilaScreenHeader(
             title = "Calendario",
-            subtitle = "Scadenze, verifiche e pagamenti della classe",
             // Niente più tasto AI separato in header: "AILA Assistant" è già la prima scelta
             // dentro il foglio che si apre da "Aggiungi", un tasto in più qui era ridondante.
             action = {
@@ -112,7 +111,7 @@ fun CalendarScreen(
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = AppTheme.Space16)
-                .padding(top = AppTheme.Space16, bottom = AppTheme.Space32)
+                .padding(top = AppTheme.Space16, bottom = AppTheme.Space32 + circolareplus.design.LocalBottomBarPadding.current)
         ) {
             AilaCard(modifier = Modifier.ailaAppear(0)) {
                 Column(modifier = Modifier.padding(AppTheme.Space12)) {

@@ -308,7 +308,10 @@ fun AilaLogoTile(
                         )
                     )
             )
-            AilaGlyph(size = size * 0.62f)
+            // Il marchio completo (due file di banchi) appena il riquadro e' abbastanza grande:
+            // la soglia automatica guardava la misura del segno (62% del riquadro), quindi anche
+            // un logo da 48dp usciva nella variante ridotta, che sembrava "tagliata".
+            AilaGlyph(size = size * 0.62f, simplified = size < 40.dp)
         }
     }
 

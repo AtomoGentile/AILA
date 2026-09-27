@@ -127,7 +127,7 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = AppTheme.Space16)
-                .padding(bottom = AppTheme.Space24)
+                .padding(bottom = AppTheme.Space24 + circolareplus.design.LocalBottomBarPadding.current)
         ) {
             AilaSectionTitle(text = "Scorciatoie", modifier = Modifier.ailaAppear(3))
 
@@ -249,12 +249,6 @@ private fun HomeHeroPanel(
                     fontSize = 26.sp,
                     fontWeight = FontWeight.Bold,
                     color = AppTheme.OnHeroPrimary
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Tutto ciò che conta, in un unico posto.",
-                    fontSize = 13.sp,
-                    color = AppTheme.OnHeroSecondary
                 )
             }
 

@@ -33,6 +33,7 @@ class LocalSettingsManager(
         private const val KEY_RECENT_SEARCHES = "recent_searches"
         private const val KEY_SUBMITTED_POLLS = "submitted_polls"
         private const val KEY_DARK_MODE = "dark_mode"
+        private const val KEY_UI_STYLE = "ui_style"
         private const val KEY_MUTED_NOTIFICATIONS = "muted_notification_kinds"
         private const val KEY_LAST_SEEN_CIRCULAR = "last_seen_circular_number"
         private const val KEY_LAST_SEEN_PROPOSAL = "last_seen_proposal_id"
@@ -174,6 +175,11 @@ class LocalSettingsManager(
     var isDarkMode: Boolean
         get() = settings.getBoolean(KEY_DARK_MODE, false)
         set(value) = settings.putBoolean(KEY_DARK_MODE, value)
+
+    /** Stile grafico: "auto", "glass" o "expressive" (vedi circolareplus.design.UiStyle). */
+    var uiStyleKey: String
+        get() = settings.getString(KEY_UI_STYLE, "auto")
+        set(value) = settings.putString(KEY_UI_STYLE, value)
 
     // --- Filtri delle notifiche ----------------------------------------------------------------
 

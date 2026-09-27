@@ -44,7 +44,8 @@ fun AnimatedFilterChip(
     modifier: Modifier = Modifier,
     activeBackgroundColor: Color = AppTheme.PrimaryBlue,
     inactiveBackgroundColor: Color = AppTheme.SurfaceWhite,
-    activeTextColor: Color = Color.White,
+    /** null = bianco sul riempimento proprio, oppure il colore della selezione condivisa (stile). */
+    activeTextColor: Color? = null,
     inactiveTextColor: Color = AppTheme.TextMuted,
     /**
      * Quando la chip vive dentro un [AilaSlidingChipRow], il colore di selezione lo disegna il
@@ -89,7 +90,9 @@ fun AnimatedFilterChip(
 
     // Animazione colore del testo
     val textColor by animateColorAsState(
-        targetValue = if (isSelected) activeTextColor else inactiveTextColor,
+        targetValue = if (isSelected) {
+            activeTextColor ?: if (drawSelectionBackground) Color.White else AppTheme.OnSelection
+        } else inactiveTextColor,
         animationSpec = tween(durationMillis = 200),
         label = "chipTextColor"
     )

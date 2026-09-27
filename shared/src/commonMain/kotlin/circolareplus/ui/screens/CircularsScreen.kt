@@ -129,7 +129,7 @@ fun CircularsScreen(
 
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(AppTheme.Space12),
-            contentPadding = PaddingValues(bottom = AppTheme.Space24),
+            contentPadding = PaddingValues(bottom = AppTheme.Space24 + circolareplus.design.LocalBottomBarPadding.current),
             modifier = Modifier.fillMaxSize()
         ) {
             if (filteredCirculars.isEmpty()) {

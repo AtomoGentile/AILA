@@ -126,7 +126,6 @@ fun SeatMapScreen(
         // Intestazione chiara comune (design AILA), con l'azione rapida a destra.
         AilaScreenHeader(
             title = "Mappa Posti",
-            subtitle = "Layout 2D orientato rispetto alla Cattedra",
             action = {
                 Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
                     // Esporta la disposizione pubblicata in PDF (disegno del layout, non solo
@@ -155,7 +154,7 @@ fun SeatMapScreen(
                 start = AppTheme.Space16,
                 end = AppTheme.Space16,
                 top = AppTheme.Space16,
-                bottom = AppTheme.Space32
+                bottom = AppTheme.Space32 + circolareplus.design.LocalBottomBarPadding.current
             ),
             state = gridState,
             modifier = Modifier.fillMaxSize()

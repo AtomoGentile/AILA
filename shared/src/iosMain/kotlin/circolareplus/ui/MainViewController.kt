@@ -24,6 +24,7 @@ fun MainViewController(): UIViewController = ComposeUIViewController {
     // Come su Android: tema riletto prima della prima composizione, per non far lampeggiare
     // il bianco a chi usa il tema scuro.
     AppTheme.isDarkMode = AppContainer.settings.isDarkMode
+    AppTheme.uiStyle = circolareplus.design.UiStyle.fromKey(AppContainer.settings.uiStyleKey)
     SyncWindowInterfaceStyle()
     AilaTheme {
         MainAppShell()
