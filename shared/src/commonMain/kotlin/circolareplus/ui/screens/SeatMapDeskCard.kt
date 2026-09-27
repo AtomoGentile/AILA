@@ -55,12 +55,31 @@ fun SeatMapDeskCard(
         listOf(desk.studentAId, desk.studentBId)
     }
     val isFocusedDesk = focusedStudentId != null && seatIds.any { it == focusedStudentId }
-    val shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp)
+    val glass = AppTheme.isGlass
+    // Material Expressive: angoli ampi, e il banco evidenziato li allarga ancora con una molla
+    // (le forme che cambiano di M3E). Glass: angoli fissi.
+    val cornerDp by androidx.compose.animation.core.animateDpAsState(
+        targetValue = when {
+            glass -> AppTheme.SmallElementRadius + 2.dp
+            isFocusedDesk -> 26.dp
+            else -> 16.dp
+        },
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = 500f),
+        label = "deskCorner"
+    )
+    val shape = RoundedCornerShape(cornerDp)
 
     // Il banco evidenziato cambia colore in dissolvenza e fa un piccolo "salto" di scala: prima
     // passava al giallo di colpo e, in una griglia piena, era facile non accorgersene.
+    // Material: superfici tonali piene ("surface container"), il banco evidenziato e' il
+    // "tertiary container" ambra. Niente bordi: in M3 le card piene non ne hanno.
     val containerColor by animateColorAsState(
-        if (isFocusedDesk) AppTheme.TintAmber else AppTheme.SurfaceWhite, tween(240), label = "deskBg"
+        when {
+            glass -> if (isFocusedDesk) AppTheme.TintAmber else AppTheme.SurfaceWhite
+            isFocusedDesk -> if (AppTheme.isDarkMode) Color(0xFF5C4200) else Color(0xFFFFDDB3)
+            else -> if (AppTheme.isDarkMode) Color(0xFF22252C) else Color(0xFFECEEF8)
+        },
+        tween(240), label = "deskBg"
     )
     val borderColor by animateColorAsState(
         if (isFocusedDesk) AppTheme.TintAmberInk else AppTheme.Hairline, tween(240), label = "deskBorder"
@@ -73,7 +92,6 @@ fun SeatMapDeskCard(
 
     // Liquid Glass: il banco e' un riquadro di vetro (velo traslucido, riflesso, filo di luce);
     // quello evidenziato diventa vetro ambra con il bordo pieno.
-    val glass = AppTheme.isGlass
     val glassTint by animateColorAsState(
         if (isFocusedDesk) AppTheme.TintAmber.copy(alpha = 0.6f) else Color.Transparent, tween(240), label = "deskGlassTint"
     )
@@ -90,11 +108,7 @@ fun SeatMapDeskCard(
                 if (glass) Modifier
                     .ailaGlassSurface(shape, tint = glassTint)
                     .then(if (isFocusedDesk) Modifier.border(2.dp, borderColor, shape) else Modifier)
-                else Modifier.border(
-                    width = if (isFocusedDesk) 2.dp else 1.dp,
-                    color = borderColor,
-                    shape = shape
-                )
+                else Modifier
             )
     ) {
         Column(
@@ -127,10 +141,11 @@ fun SeatMapDeskCard(
 
             seatIds.forEachIndexed { index, studentId ->
                 if (index > 0) {
-                    HorizontalDivider(
+                    // Material: spazio invece delle righe divisorie.
+                    if (glass) HorizontalDivider(
                         modifier = Modifier.padding(vertical = 3.dp),
                         color = AppTheme.Hairline
-                    )
+                    ) else Spacer(modifier = Modifier.height(5.dp))
                 }
                 SeatRow(
                     number = index + 1,
@@ -146,19 +161,31 @@ fun SeatMapDeskCard(
 private fun SeatRow(number: Int, name: String?, isFocused: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         // Almeno 15dp e non fisso: col testo di sistema ingrandito il numero usciva dal cerchio.
+        // Material: numero del posto in un cerchio primario pieno (vuoto = solo contorno).
+        val expressive = !AppTheme.isGlass
         Box(
             modifier = Modifier
-                .sizeIn(minWidth = 15.dp, minHeight = 15.dp)
+                .sizeIn(minWidth = if (expressive) 17.dp else 15.dp, minHeight = if (expressive) 17.dp else 15.dp)
                 .clip(CircleShape)
-                .background(if (name == null) AppTheme.TintSlate else AppTheme.TintBlue),
+                .then(
+                    when {
+                        expressive && name != null -> Modifier.background(AppTheme.PrimaryBlue)
+                        expressive -> Modifier.border(1.dp, AppTheme.TextFaint, CircleShape)
+                        else -> Modifier.background(if (name == null) AppTheme.TintSlate else AppTheme.TintBlue)
+                    }
+                ),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = number.toString(),
                 modifier = Modifier.padding(horizontal = 3.dp),
-                fontSize = 8.sp,
+                fontSize = if (expressive) 9.sp else 8.sp,
                 fontWeight = FontWeight.Bold,
-                color = if (name == null) AppTheme.TextFaint else AppTheme.TintBlueInk
+                color = when {
+                    expressive && name != null -> Color.White
+                    name == null -> AppTheme.TextFaint
+                    else -> AppTheme.TintBlueInk
+                }
             )
         }
         Spacer(modifier = Modifier.width(5.dp))

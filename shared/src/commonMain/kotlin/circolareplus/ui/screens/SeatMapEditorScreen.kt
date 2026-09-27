@@ -135,23 +135,25 @@ fun SeatMapEditorScreen(
                     }
                 }
 
-                val deskShape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp)
+                val deskShape = RoundedCornerShape(if (AppTheme.isGlass) AppTheme.SmallElementRadius + 2.dp else 16.dp)
                 val glass = AppTheme.isGlass
                 // Liquid Glass: banco di vetro; se la coppia e' vietata, vetro rosso col bordo pieno.
                 Card(
                     shape = deskShape,
+                    // Material: card tonale piena; coppia vietata = "error container".
                     colors = CardDefaults.cardColors(
-                        containerColor = if (glass) androidx.compose.ui.graphics.Color.Transparent else AppTheme.SurfaceWhite
+                        containerColor = when {
+                            glass -> androidx.compose.ui.graphics.Color.Transparent
+                            isForbidden -> AppTheme.TintRed
+                            AppTheme.isDarkMode -> androidx.compose.ui.graphics.Color(0xFF22252C)
+                            else -> androidx.compose.ui.graphics.Color(0xFFECEEF8)
+                        }
                     ),
                     elevation = CardDefaults.cardElevation(defaultElevation = AppTheme.CardElevation),
                     modifier = if (glass) Modifier
                         .ailaGlassSurface(deskShape, tint = if (isForbidden) AppTheme.TintRed.copy(alpha = 0.6f) else null)
                         .then(if (isForbidden) Modifier.border(2.dp, AppTheme.PollDarkRed, deskShape) else Modifier)
-                    else Modifier.border(
-                        width = if (isForbidden) 2.dp else 1.dp,
-                        color = if (isForbidden) AppTheme.PollDarkRed else AppTheme.Hairline,
-                        shape = deskShape
-                    )
+                    else Modifier
                 ) {
                     Column(
                         modifier = Modifier.padding(8.dp),
