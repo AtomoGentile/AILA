@@ -9,6 +9,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -27,32 +30,70 @@ val AppTheme.GlassBase: Color
     get() = if (isDarkMode) Color(0xFF05070D) else Color(0xFFE9EEFA)
 
 /**
- * Sfondo dell'app in Liquid Glass: colore di base piu' quattro grandi macchie sfumate, come uno
- * sfondo di iOS. Piu' vivaci della prima versione: il vetro, ora molto piu' trasparente, prende
- * il colore da quello che ha dietro.
+ * Sfondo dell'app in Liquid Glass: colore di base e grandi macchie sfumate di colori diversi,
+ * come gli sfondi di iOS. Il vetro, molto trasparente, prende il colore da quello che ha dietro:
+ * piu' lo sfondo e' vario (zone chiare, zone sature, colori caldi e freddi), piu' l'effetto vetro
+ * si vede, anche mentre si scorre.
  */
-fun Modifier.ailaGlassBackdrop(): Modifier = drawBehind {
+fun Modifier.ailaGlassBackdrop(): Modifier = drawBehind { drawAilaGlassBackdrop() }
+
+/**
+ * Sfondo di una schermata che entra "alla iOS" sopra un'altra: le macchie restano ferme
+ * (allineate a quelle della schermata sotto) e si dipingono solo dalla posizione in cui e' gia'
+ * arrivata la pagina ([offset] in frazioni di larghezza). Se scorresse con la pagina, per un
+ * attimo si vedrebbero due sfondi diversi accostati.
+ */
+fun Modifier.ailaGlassPushBackdrop(
+    offset: () -> Float,
+    /** Spostamento del livello intero (es. scivola sotto il dettaglio circolare): si compensa. */
+    shift: () -> Float = { 0f }
+): Modifier = drawBehind {
+    val left = (offset() * size.width).coerceIn(0f, size.width)
+    if (left >= size.width) return@drawBehind
+    clipRect(left = left) {
+        translate(left = shift() * size.width) { drawAilaGlassBackdrop() }
+    }
+}
+
+/**
+ * Sfondo di una schermata che scivola sotto un'altra (la pagina coperta dal push si sposta di
+ * [shift] frazioni di larghezza verso sinistra): le macchie si disegnano spostate al contrario,
+ * cosi' sullo schermo restano ferme mentre il contenuto scorre.
+ */
+fun Modifier.ailaGlassBackdrop(shift: () -> Float): Modifier = drawBehind {
+    val dx = shift() * size.width
+    translate(left = dx) { drawAilaGlassBackdrop() }
+}
+
+fun DrawScope.drawAilaGlassBackdrop() {
     val dark = AppTheme.isDarkMode
     drawRect(AppTheme.GlassBase)
     val w = size.width
     val h = size.height
-    fun blob(center: Offset, radius: Float, color: Color) {
+    fun blob(x: Float, y: Float, radius: Float, color: Color) {
+        val center = Offset(w * x, h * y)
         drawCircle(
-            brush = Brush.radialGradient(listOf(color, color.copy(alpha = 0f)), center = center, radius = radius),
-            radius = radius,
+            brush = Brush.radialGradient(listOf(color, color.copy(alpha = 0f)), center = center, radius = w * radius),
+            radius = w * radius,
             center = center
         )
     }
+    // Il colore principale scelto entra nello sfondo (prima macchia, la piu' grande).
+    val accent = AppTheme.PrimaryBlue
     if (dark) {
-        blob(Offset(w * 0.05f, h * 0.05f), w * 1.0f, Color(0xA61E40AF))
-        blob(Offset(w * 1.0f, h * 0.38f), w * 0.9f, Color(0x8C6D28D9))
-        blob(Offset(w * 0.15f, h * 0.72f), w * 0.85f, Color(0x730E7490))
-        blob(Offset(w * 0.9f, h * 0.98f), w * 0.8f, Color(0x66BE185D))
+        blob(0.0f, 0.02f, 1.05f, accent.copy(alpha = 0.60f))
+        blob(1.05f, 0.22f, 0.8f, Color(0x996D28D9))
+        blob(0.1f, 0.45f, 0.7f, Color(0x800E7490))
+        blob(0.95f, 0.62f, 0.75f, Color(0x73BE185D))
+        blob(0.2f, 0.9f, 0.8f, Color(0x80047857))
+        blob(0.85f, 1.02f, 0.7f, Color(0x66B45309))
     } else {
-        blob(Offset(w * 0.05f, h * 0.05f), w * 1.0f, Color(0xB38FB8FF))
-        blob(Offset(w * 1.0f, h * 0.38f), w * 0.9f, Color(0x99C4A8FF))
-        blob(Offset(w * 0.15f, h * 0.72f), w * 0.85f, Color(0x8099E6F0))
-        blob(Offset(w * 0.9f, h * 0.98f), w * 0.8f, Color(0x80FFB8D9))
+        blob(0.0f, 0.02f, 1.05f, accent.copy(alpha = 0.42f))
+        blob(1.05f, 0.22f, 0.8f, Color(0xA6C4A8FF))
+        blob(0.1f, 0.45f, 0.7f, Color(0x9966E0F0))
+        blob(0.95f, 0.62f, 0.75f, Color(0x99FFA8CF))
+        blob(0.2f, 0.9f, 0.8f, Color(0x8C8EF0C0))
+        blob(0.85f, 1.02f, 0.7f, Color(0x8CFFD29A))
     }
 }
 
