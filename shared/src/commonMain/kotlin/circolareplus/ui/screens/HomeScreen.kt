@@ -234,11 +234,15 @@ private fun HomeHeroPanel(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
-            // Liquid Glass: nessun pannello. Come nelle app Apple il titolo grande sta
-            // direttamente sullo sfondo e solo i pulsanti sono di vetro: il riquadro colorato
-            // (anche velato) faceva sembrare la Home un giocattolo.
-            .then(if (AppTheme.isGlass) Modifier else Modifier.background(AppTheme.HeroGradient))
+            // Liquid Glass: pannello di vetro vero (lo stesso delle card: velo chiaro, bagliore in
+            // alto, bordo speculare), che lascia vedere lo sfondo a macchie invece di coprirlo con
+            // un colore suo. Il gradiente colorato di prima sembrava un giocattolo.
+            .then(
+                if (AppTheme.isGlass) Modifier.ailaGlassSurface(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
+                else Modifier
+                    .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
+                    .background(AppTheme.HeroGradient)
+            )
             .padding(horizontal = AppTheme.Space20)
             .padding(top = AppTheme.Space24, bottom = AppTheme.Space24)
     ) {
