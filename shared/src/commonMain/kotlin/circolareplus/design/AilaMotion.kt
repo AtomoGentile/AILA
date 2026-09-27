@@ -196,7 +196,8 @@ fun Modifier.ailaGlassOverlay(
     // più lentamente al rilascio, invece di un velo fisso che compare e basta.
     val fillProgress by animateFloatAsState(
         targetValue = if (isPressed && enabled) 1f else 0f,
-        animationSpec = tween(durationMillis = if (isPressed) 260 else 320),
+        // Rapido: il vetro deve rispondere subito al dito (prima 260 ms, sembrava in ritardo).
+        animationSpec = tween(durationMillis = if (isPressed) 120 else 240),
         label = "ailaGlassFill"
     )
 
