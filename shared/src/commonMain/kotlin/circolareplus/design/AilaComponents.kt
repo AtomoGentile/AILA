@@ -545,13 +545,6 @@ fun AilaPrimaryButton(
                 if (enabled) Modifier.background(AppTheme.PrimaryGradient)
                 else Modifier.background(AppTheme.TintSlate)
             )
-            // Glass: vetro colorato, con il riflesso "bagnato" in alto e il filo di luce.
-            .then(
-                if (AppTheme.isGlass && enabled) Modifier
-                    .background(AppTheme.GlassGloss)
-                    .border(1.dp, Color(0x73FFFFFF), shape)
-                else Modifier
-            )
             .clickable(interactionSource = interactionSource, indication = null, enabled = enabled) { onClick() }
             .then(
                 // Glass: la velatura di vetro che si accende dal punto del tocco. Expressive: il
@@ -574,7 +567,7 @@ fun AilaPrimaryButton(
             Text(
                 text = text,
                 fontSize = if (large) 15.sp else if (compact) 12.sp else 13.sp,
-                fontWeight = FontWeight.Bold,
+                fontWeight = if (AppTheme.isGlass) FontWeight.SemiBold else FontWeight.Bold,
                 color = contentColor,
                 maxLines = 1
             )
@@ -920,8 +913,8 @@ fun AilaIconButton(
             .then(background)
             .then(
                 if (AppTheme.isGlass) Modifier
-                    .then(if (primary) Modifier.background(AppTheme.GlassGloss) else Modifier.background(AppTheme.GlassFill))
-                    .border(1.dp, AppTheme.GlassEdge, shape)
+                    // Primario: tinta piatta, senza riflesso ne' bordo (vedi PrimaryGradient).
+                    .then(if (primary) Modifier else Modifier.background(AppTheme.GlassFill).border(1.dp, AppTheme.GlassEdge, shape))
                 else Modifier
             )
             .alpha(if (enabled) 1f else 0.6f)
@@ -1208,10 +1201,9 @@ fun AilaFab(
         modifier = modifier
             .size(56.dp)
             .then(if (glass) Modifier.ailaPressScale(interactionSource, 0.9f) else Modifier)
-            .shadow(if (glass) 12.dp else 6.dp, shape)
+            .shadow(if (glass) 8.dp else 6.dp, shape, ambientColor = Color.Black.copy(alpha = 0.12f), spotColor = Color.Black.copy(alpha = 0.18f))
             .clip(shape)
             .background(if (glass) AppTheme.PrimaryGradient else SolidColor(AppTheme.TintBlue))
-            .then(if (glass) Modifier.background(AppTheme.GlassGloss).border(1.dp, Color(0x73FFFFFF), shape) else Modifier)
             .clickable(interactionSource = interactionSource, indication = null) { onClick() }
             .semantics {
                 this.contentDescription = contentDescription

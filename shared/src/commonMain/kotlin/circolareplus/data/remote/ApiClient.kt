@@ -136,6 +136,10 @@ class ApiClient(
         return apiJson.decodeFromString(text)
     }
 
+    /** Come [get] ma restituisce il testo grezzo (stessa copia offline). */
+    suspend fun getText(path: String, auth: Boolean = true, offlineCopy: Boolean = true): String =
+        fetchText(path, auth, offlineCopy)
+
     @PublishedApi internal fun offlineName(path: String, prefix: String): String {
         val readable = path.replace(Regex("[^A-Za-z0-9]"), "_").take(80)
         return "${prefix}_${readable}_${path.hashCode().toUInt().toString(16)}"

@@ -228,6 +228,9 @@ fun SettingsScreen(
                 // Letto una volta all'apertura (e dopo lo svuotamento), non a ogni ricomposizione:
                 // e' un giro sul disco.
                 var offlineBytes by remember { mutableStateOf(circolareplus.platform.OfflineStore.totalBytes()) }
+                var syncProgress by remember { mutableStateOf<Float?>(null) }
+                var syncMessage by remember { mutableStateOf<String?>(null) }
+                var lastFullSync by remember { mutableStateOf(circolareplus.data.AppContainer.settings.lastFullOfflineSyncMillis) }
                 AilaCard {
                     Column(modifier = Modifier.padding(AppTheme.Space16)) {
                         Text(
@@ -240,17 +243,56 @@ fun SettingsScreen(
                         Text(
                             text = "Senza rete puoi consultare circolari (con i PDF delle ultime), " +
                                 "calendario, sondaggi, bacheca e mappa posti come li hai visti l'ultima " +
-                                "volta. Voti e modifiche richiedono la connessione. " +
+                                "volta. Con la rete l'app scarica tutto da sola in sottofondo. " +
+                                "Voti e modifiche richiedono la connessione.\n" +
+                                "Ultimo download completo: ${offlineAgeLabel(lastFullSync)} \u2022 " +
                                 "Spazio occupato: ${formatOfflineSize(offlineBytes)}.",
                             fontSize = 12.sp,
                             color = AppTheme.TextMuted,
                             lineHeight = 16.sp
                         )
                         Spacer(modifier = Modifier.height(AppTheme.Space12))
+                        val progress = syncProgress
+                        if (progress != null) {
+                            circolareplus.design.AilaProgressBar(
+                                progress = progress,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(AppTheme.Space8))
+                        }
+                        syncMessage?.let { message ->
+                            Text(text = message, fontSize = 12.sp, color = AppTheme.TextMuted)
+                            Spacer(modifier = Modifier.height(AppTheme.Space8))
+                        }
+                        AilaPrimaryButton(
+                            text = if (progress != null) "Scarico\u2026 ${(progress * 100).toInt()}%" else "Scarica tutto per l'uso offline",
+                            onClick = {
+                                if (syncProgress == null) {
+                                    syncProgress = 0f
+                                    syncMessage = null
+                                    scope.launch {
+                                        val ok = circolareplus.data.OfflineSync.run { syncProgress = it }
+                                        syncProgress = null
+                                        offlineBytes = circolareplus.platform.OfflineStore.totalBytes()
+                                        lastFullSync = circolareplus.data.AppContainer.settings.lastFullOfflineSyncMillis
+                                        syncMessage = when {
+                                            ok -> "Fatto: l'app \u00e8 pronta per l'uso senza rete."
+                                            circolareplus.data.remote.ConnectivityState.isOffline -> "Sei offline: riprova quando torni in rete."
+                                            else -> "Un download \u00e8 gi\u00e0 in corso in sottofondo, riprova tra poco."
+                                        }
+                                    }
+                                }
+                            },
+                            fillMaxWidth = true,
+                            enabled = syncProgress == null
+                        )
+                        Spacer(modifier = Modifier.height(AppTheme.Space8))
                         AilaSecondaryButton(
                             text = "Svuota dati offline",
                             onClick = {
                                 circolareplus.platform.OfflineStore.clear()
+                                circolareplus.data.AppContainer.settings.lastFullOfflineSyncMillis = 0L
+                                lastFullSync = 0L
                                 offlineBytes = circolareplus.platform.OfflineStore.totalBytes()
                             },
                             compact = true,
@@ -894,5 +936,16 @@ private fun formatOfflineSize(bytes: Long): String = when {
     else -> {
         val tenths = bytes * 10L / (1024L * 1024L)
         "${tenths / 10},${tenths % 10} MB"
+    }
+}
+
+private fun offlineAgeLabel(millis: Long): String {
+    if (millis <= 0L) return "mai"
+    val minutes = (circolareplus.platform.currentTimeMillis() - millis).coerceAtLeast(0L) / 60_000L
+    return when {
+        minutes < 1 -> "adesso"
+        minutes < 60 -> "$minutes min fa"
+        minutes < 60 * 24 -> "${minutes / 60} h fa"
+        else -> "${minutes / (60 * 24)} g fa"
     }
 }
