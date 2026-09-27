@@ -474,7 +474,7 @@ fun Modifier.ailaTransformOrigin(cornerRadius: androidx.compose.ui.unit.Dp, live
 fun <T> ailaContainerSpring(): SpringSpec<T> = spring(dampingRatio = 1f, stiffness = 520f)
 
 /** Come [ailaContainerSpring], per i Float, con la soglia di arrivo stretta. */
-fun ailaContainerFloatSpring(): SpringSpec<Float> = spring(dampingRatio = 1f, stiffness = 520f, visibilityThreshold = 0.0005f)
+fun ailaContainerFloatSpring(): SpringSpec<Float> = spring(dampingRatio = 1f, stiffness = 620f, visibilityThreshold = 0.0005f)
 
 /**
  * Disegna il contenuto dentro un "contenitore" che cresce dall'origine fino a tutto lo schermo

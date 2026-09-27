@@ -127,7 +127,14 @@ fun CircularsScreen(
             matchesFilter && matchesSearch
         }
 
+        // Cambiando filtro o ricerca si torna in cima: la lista tiene la posizione per chiave,
+        // quindi tornando a "Tutte" restava in alto la prima circolare del filtro precedente
+        // invece dell'ultima uscita.
+        val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+        LaunchedEffect(selectedFilter, searchQuery) { listState.scrollToItem(0) }
+
         LazyColumn(
+            state = listState,
             verticalArrangement = Arrangement.spacedBy(AppTheme.Space12),
             contentPadding = PaddingValues(bottom = AppTheme.Space24 + circolareplus.design.LocalBottomBarPadding.current),
             modifier = Modifier.fillMaxSize()

@@ -64,6 +64,7 @@ import circolareplus.design.ailaPushTransition
 import circolareplus.design.ailaTabTransition
 import circolareplus.design.ailaContainerReveal
 import circolareplus.design.ailaGlassBackdrop
+import circolareplus.design.ailaGlassPushBackdrop
 import circolareplus.design.GlassBase
 import circolareplus.design.GlassEdge
 import circolareplus.design.ailaGlassSurface
@@ -773,8 +774,29 @@ fun MainAppShell(
     // Rete caduta ad app gia' aperta (es. entrando a scuola): si comporta come un avvio offline,
     // cioe' striscia in cima e ricontrollo periodico finche' il server torna a rispondere. Le
     // schermate intanto mostrano le copie salvate (vedi ApiClient.get).
+    // Un solo errore di rete non basta per dire "sei offline": rientrando nell'app da un'altra,
+    // le prime richieste falliscono spesso perche' il sistema ha chiuso le connessioni mentre
+    // l'app era in background, anche con la rete perfetta. Prima di mostrare la striscia si
+    // riprova (con una pausa) a parlare davvero col server, e solo se fallisce ancora si e' offline.
     LaunchedEffect(ConnectivityState.isOffline) {
-        if (ConnectivityState.isOffline) startedOffline = true
+        if (!ConnectivityState.isOffline || startedOffline) return@LaunchedEffect
+        repeat(2) { attempt ->
+            delay(if (attempt == 0) 800L else 2_500L)
+            when (val outcome = AppContainer.authRepository.restoreSession()) {
+                is SessionRestore.Online -> {
+                    currentUser = outcome.user
+                    currentProfile = outcome.profile
+                    return@LaunchedEffect
+                }
+                is SessionRestore.SessionExpired, is SessionRestore.NoSession -> {
+                    currentUser = null
+                    currentProfile = null
+                    return@LaunchedEffect
+                }
+                else -> Unit
+            }
+        }
+        startedOffline = true
     }
 
     // Download automatico per l'uso offline: con la rete, in sottofondo, si scarica tutta l'app
@@ -1900,7 +1922,16 @@ fun MainAppShell(
     // nuova (l'elemento appena toccato) o che si sta tornando indietro. Fatto qui, durante la
     // composizione e prima dell'AnimatedContent, cosi' la transizione lo trova gia' pronto.
     val previousShellRoute = remember { arrayOf(shellRoute) }
+    // Container transform solo da elementi grandi (card, righe): da un avatar o un'icona di 44dp
+    // la pagina che nasce da un puntino e ci rientra "lampeggia". Da li' si usa lo shared axis.
+    val minOriginWidthPx = with(androidx.compose.ui.platform.LocalDensity.current) { 120.dp.toPx() }
+    fun largeOrigin(origin: circolareplus.design.AilaTransformOrigin?) =
+        origin?.takeIf { it.bounds.width >= minOriginWidthPx }
+    // Verso dell'ultima navigazione (avanti = si apre una schermata sopra): serve al push di
+    // Liquid Glass, che anima da se' il contenuto (vedi glassSlide piu' sotto).
+    val navForward = remember { arrayOf(true) }
     if (previousShellRoute[0] != shellRoute) {
+        navForward[0] = shellRoute.depth > previousShellRoute[0].depth
         if (shellRoute.depth > previousShellRoute[0].depth) {
             circolareplus.design.AilaContainerTransform.assignFreshTo(shellRoute)
         } else {
@@ -2038,7 +2069,11 @@ fun MainAppShell(
                         modifier = Modifier.fillMaxSize().then(
                             // Lo sfondo a macchie fa parte della sorgente: la barra lo sfoca insieme
                             // al contenuto, invece di sfocare il solo contenuto su un colore piatto.
-                            if (AppTheme.isGlass) Modifier.hazeSource(hazeState).ailaGlassBackdrop() else Modifier
+                            // Si sposta al contrario della pagina che scivola sotto un push, cosi'
+                            // sullo schermo resta fermo (vedi ailaGlassPushBackdrop).
+                            if (AppTheme.isGlass) Modifier.hazeSource(hazeState).ailaGlassBackdrop {
+                                circolareplus.design.ailaUnderlayShift * maxOf(shellProgress.value, detailProgress.value)
+                            } else Modifier
                         )
                     ) { tab ->
                     when (tab) {
@@ -2115,13 +2150,15 @@ fun MainAppShell(
                                     // Material) invece dello stacco secco.
                                     androidx.compose.animation.AnimatedContent(
                                         targetState = seatMapMode == "VOTE_PREFERENCES",
-                                        transitionSpec = { ailaPushTransition(forward = targetState) },
+                                        // Glass: dissolvenza (lo sfondo e' quello della tab, fermo);
+                                        // due pagine col proprio sfondo che scorrono mostravano lo stacco.
+                                        transitionSpec = { if (AppTheme.isGlass) ailaTabTransition() else ailaPushTransition(forward = targetState) },
                                         label = "seatMapMode",
                                         modifier = Modifier.fillMaxSize()
                                     ) { votingPreferences ->
                                     Box(modifier = Modifier.fillMaxSize().then(
                                         // Fondo pieno: durante lo scorrimento le due schermate non si sovrappongono.
-                                        if (AppTheme.isGlass) Modifier.ailaGlassBackdrop() else Modifier.background(AppTheme.BackgroundLight)
+                                        if (AppTheme.isGlass) Modifier else Modifier.background(AppTheme.BackgroundLight)
                                     )) {
                                     if (votingPreferences) {
                                         Column(modifier = Modifier.fillMaxSize()) {
@@ -2840,7 +2877,9 @@ fun MainAppShell(
                     // Material con un'origine: container transform, disegnato dalla schermata
                     // stessa (ailaContainerReveal). Qui solo chi sta sopra e quanto dura.
                     val containerKey = if (forward) targetState else initialState
-                    if (!AppTheme.isGlass && circolareplus.design.AilaContainerTransform.originOf(containerKey) != null) {
+                    // Liquid Glass: lo scorrimento lo fa la schermata stessa (glassSlide), con lo
+                    // sfondo fermo; qui solo chi sta sopra.
+                    if (AppTheme.isGlass || largeOrigin(circolareplus.design.AilaContainerTransform.originOf(containerKey)) != null) {
                         (androidx.compose.animation.EnterTransition.None togetherWith
                             androidx.compose.animation.ExitTransition.None).apply {
                             targetContentZIndex = if (forward) 1f else -1f
@@ -2855,7 +2894,7 @@ fun MainAppShell(
             // Avanzamento del container transform di questa schermata: 0 = chiusa nell'elemento
             // di partenza, 1 = a tutto schermo. Legato alla transizione, che aspetta la fine.
             val containerOrigin = if (AppTheme.isGlass || route == ShellRoute.TABS) null
-                else circolareplus.design.AilaContainerTransform.originOf(route)
+                else largeOrigin(circolareplus.design.AilaContainerTransform.originOf(route))
             val containerProgress = transition.animateFloat(
                 transitionSpec = { circolareplus.design.ailaContainerFloatSpring() },
                 label = "containerTransform"
@@ -2864,6 +2903,21 @@ fun MainAppShell(
             // negli altri casi (es. resta sotto mentre se ne apre un'altra) resta intera.
             val revealing = route == circolareplus.design.AilaContainerTransform.lastForwardKey ||
                 shellRoute.depth < route.depth
+            // Liquid Glass, push alla iOS: posizione del contenuto in frazioni di larghezza
+            // (0 = al suo posto, 1 = fuori a destra, -1/3 = scivolato sotto quella nuova). Lo
+            // sfondo a macchie invece resta fermo e allineato a quello sotto: prima scorreva
+            // insieme alla pagina e per un attimo si vedeva lo sfondo "cambiare".
+            val forwardNow = navForward[0]
+            val glassSlide = if (AppTheme.isGlass && route != ShellRoute.TABS) transition.animateFloat(
+                transitionSpec = { circolareplus.design.ailaNavigationSpring() },
+                label = "glassPush"
+            ) { state ->
+                when (state) {
+                    androidx.compose.animation.EnterExitState.Visible -> 0f
+                    androidx.compose.animation.EnterExitState.PreEnter -> if (forwardNow) 1f else -circolareplus.design.ailaUnderlayShift
+                    androidx.compose.animation.EnterExitState.PostExit -> if (forwardNow) -circolareplus.design.ailaUnderlayShift else 1f
+                }
+            } else null
             // Fondo pieno: durante il push la schermata sopra non deve lasciar intravedere
             // quella sotto.
             Box(
@@ -2878,10 +2932,27 @@ fun MainAppShell(
                         ) else Modifier
                     )
                     // Coprente: in Glass BackgroundLight e' trasparente, quindi qui si ridipinge
-                    // lo sfondo a macchie per nascondere le tab che stanno sotto.
+                    // lo sfondo a macchie per nascondere le tab che stanno sotto, fermo e solo
+                    // dove la pagina e' gia' arrivata.
+                    // Velo scuro sulla pagina coperta da quella nuova, come nel push di iOS.
                     .then(
-                        if (AppTheme.isGlass) Modifier.ailaGlassBackdrop()
+                        if (glassSlide != null) Modifier.drawWithContent {
+                            drawContent()
+                            val covered = (-glassSlide.value / circolareplus.design.ailaUnderlayShift).coerceIn(0f, 1f)
+                            if (covered > 0f) drawRect(Color.Black.copy(alpha = circolareplus.design.ailaUnderlayDim * covered))
+                        } else Modifier
+                    )
+                    .then(
+                        if (AppTheme.isGlass) Modifier.ailaGlassPushBackdrop(
+                            offset = { glassSlide?.value ?: 0f },
+                            shift = { circolareplus.design.ailaUnderlayShift * detailProgress.value }
+                        )
                         else Modifier.background(AppTheme.BackgroundLight)
+                    )
+                    .then(
+                        if (glassSlide != null) Modifier.graphicsLayer {
+                            translationX = glassSlide.value * size.width
+                        } else Modifier
                     )
                     .appSafeDrawingPadding()
                     // Prende i tocchi: sotto c'e' lo Scaffold con le tab, che non deve riceverli.
@@ -3427,10 +3498,15 @@ fun MainAppShell(
         }
         androidx.compose.animation.AnimatedVisibility(
             visible = selectedCircularForDetail != null,
-            enter = if (detailOrigin != null) androidx.compose.animation.EnterTransition.None else circolareplus.design.ailaPushEnter(),
-            exit = if (detailOrigin != null) androidx.compose.animation.ExitTransition.None else circolareplus.design.ailaPushExit()
+            // Glass: lo scorrimento lo fa il dettaglio stesso (detailGlassSlide), con lo sfondo fermo.
+            enter = if (detailOrigin != null || AppTheme.isGlass) androidx.compose.animation.EnterTransition.None else circolareplus.design.ailaPushEnter(),
+            exit = if (detailOrigin != null || AppTheme.isGlass) androidx.compose.animation.ExitTransition.None else circolareplus.design.ailaPushExit()
         ) {
         val circularForDetail = selectedCircularForDetail ?: lastDetailCircular[0]
+        val detailGlassSlide = if (AppTheme.isGlass) transition.animateFloat(
+            transitionSpec = { circolareplus.design.ailaNavigationSpring() },
+            label = "detailGlassPush"
+        ) { state -> if (state == androidx.compose.animation.EnterExitState.Visible) 0f else 1f } else null
         val detailProgressLocal = transition.animateFloat(
             transitionSpec = { circolareplus.design.ailaContainerFloatSpring() },
             label = "detailContainerTransform"
@@ -3448,7 +3524,12 @@ fun MainAppShell(
                         pageColor = AppTheme.BackgroundLight
                     ) else Modifier
                 )
-                .then(if (AppTheme.isGlass) Modifier.ailaGlassBackdrop() else Modifier)
+                .then(
+                    if (detailGlassSlide != null) Modifier
+                        .ailaGlassPushBackdrop(offset = { detailGlassSlide.value })
+                        .graphicsLayer { translationX = detailGlassSlide.value * size.width }
+                    else Modifier
+                )
                 .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
         ) {
         // Prima lo swipe/tasto indietro di sistema chiudeva l'app anche da qui: nessuna
