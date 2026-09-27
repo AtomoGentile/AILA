@@ -283,12 +283,15 @@ object AppIcons {
             val cx = w * 0.44f
             val cy = h * 0.44f
             val r = w * 0.26f
+            // Cerchio vero: quattro curve di Bezier cubiche (k = 0.5523). Con le quadratiche di
+            // prima la lente veniva un quadrato smussato.
+            val k = r * 0.5523f
             val circlePath = Path().apply {
                 moveTo(cx + r, cy)
-                quadraticBezierTo(cx + r, cy + r, cx, cy + r)
-                quadraticBezierTo(cx - r, cy + r, cx - r, cy)
-                quadraticBezierTo(cx - r, cy - r, cx, cy - r)
-                quadraticBezierTo(cx + r, cy - r, cx + r, cy)
+                cubicTo(cx + r, cy + k, cx + k, cy + r, cx, cy + r)
+                cubicTo(cx - k, cy + r, cx - r, cy + k, cx - r, cy)
+                cubicTo(cx - r, cy - k, cx - k, cy - r, cx, cy - r)
+                cubicTo(cx + k, cy - r, cx + r, cy - k, cx + r, cy)
                 close()
             }
             drawPath(circlePath, color = color, style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
@@ -372,12 +375,15 @@ object AppIcons {
     // ======================================================================================
 
     /** Cerchio come Path, sostituto sicuro di addArc/drawArc. */
+    // Cerchio con quattro cubiche (k = 0.5523): con le quadratiche i cerchi delle icone venivano
+    // quadrati smussati.
     private fun circlePath(cx: Float, cy: Float, r: Float): Path = Path().apply {
+        val k = r * 0.5523f
         moveTo(cx + r, cy)
-        quadraticBezierTo(cx + r, cy + r, cx, cy + r)
-        quadraticBezierTo(cx - r, cy + r, cx - r, cy)
-        quadraticBezierTo(cx - r, cy - r, cx, cy - r)
-        quadraticBezierTo(cx + r, cy - r, cx + r, cy)
+        cubicTo(cx + r, cy + k, cx + k, cy + r, cx, cy + r)
+        cubicTo(cx - k, cy + r, cx - r, cy + k, cx - r, cy)
+        cubicTo(cx - r, cy - k, cx - k, cy - r, cx, cy - r)
+        cubicTo(cx + k, cy - r, cx + r, cy - k, cx + r, cy)
         close()
     }
 
