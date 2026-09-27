@@ -61,6 +61,8 @@ import circolareplus.design.ailaSpatialSpring
 import circolareplus.design.ailaPushTransition
 import circolareplus.design.ailaTabTransition
 import circolareplus.design.ailaContainerReveal
+import circolareplus.design.ailaGlassBackdrop
+import circolareplus.design.GlassBase
 import androidx.compose.animation.core.animateFloat
 import circolareplus.design.ailaSelectionPop
 import circolareplus.design.ailaUnlock
@@ -2000,7 +2002,9 @@ fun MainAppShell(
                         transitionSpec = { ailaTabTransition() },
                         label = "mainTab",
                         modifier = Modifier.fillMaxSize().then(
-                            if (AppTheme.isGlass) Modifier.hazeSource(hazeState) else Modifier
+                            // Lo sfondo a macchie fa parte della sorgente: la barra lo sfoca insieme
+                            // al contenuto, invece di sfocare il solo contenuto su un colore piatto.
+                            if (AppTheme.isGlass) Modifier.hazeSource(hazeState).ailaGlassBackdrop() else Modifier
                         )
                     ) { tab ->
                     when (tab) {
@@ -2818,7 +2822,12 @@ fun MainAppShell(
                             containerColor = AppTheme.CardSurface
                         ) else Modifier
                     )
-                    .background(AppTheme.BackgroundLight)
+                    // Coprente: in Glass BackgroundLight e' trasparente, quindi qui si ridipinge
+                    // lo sfondo a macchie per nascondere le tab che stanno sotto.
+                    .then(
+                        if (AppTheme.isGlass) Modifier.ailaGlassBackdrop()
+                        else Modifier.background(AppTheme.BackgroundLight)
+                    )
                     .appSafeDrawingPadding()
                     // Prende i tocchi: sotto c'e' lo Scaffold con le tab, che non deve riceverli.
                     .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
@@ -3376,6 +3385,7 @@ fun MainAppShell(
                         containerColor = AppTheme.CardSurface
                     ) else Modifier
                 )
+                .then(if (AppTheme.isGlass) Modifier.ailaGlassBackdrop() else Modifier)
                 .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
         ) {
         // Prima lo swipe/tasto indietro di sistema chiudeva l'app anche da qui: nessuna
@@ -5049,11 +5059,13 @@ private fun FloatingTabBar(
                                 if (hazeState != null) Modifier.hazeEffect(
                                     state = hazeState,
                                     style = dev.chrisbanes.haze.HazeStyle(
-                                        backgroundColor = AppTheme.BackgroundLight,
+                                        backgroundColor = AppTheme.GlassBase,
+                                        // Piu' trasparente: il contenuto sotto si vede sfocato
+                                        // ma riconoscibile, come la tab bar di iOS 26.
                                         tint = dev.chrisbanes.haze.HazeTint(
-                                            if (AppTheme.isDarkMode) Color(0x8C202430) else Color(0x99FFFFFF)
+                                            if (AppTheme.isDarkMode) Color(0x59202430) else Color(0x4DFFFFFF)
                                         ),
-                                        blurRadius = 22.dp,
+                                        blurRadius = 28.dp,
                                         noiseFactor = 0f
                                     )
                                 ) else Modifier.background(
