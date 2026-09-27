@@ -411,7 +411,7 @@ fun AilaCard(
     val glass = AppTheme.isGlass
     val shape = RoundedCornerShape(AppTheme.CardCornerRadius)
     val glassTint = if (glass && containerColor != AppTheme.CardSurface) {
-        containerColor.copy(alpha = minOf(containerColor.alpha, 0.55f))
+        containerColor.copy(alpha = minOf(containerColor.alpha, 0.18f))
     } else null
     Card(
         shape = shape,

@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.dp
 
 /** Colore pieno di base dello sfondo Glass (serve dove occorre un colore opaco, es. Haze). */
 val AppTheme.GlassBase: Color
-    get() = if (isDarkMode) Color(0xFF05070D) else Color(0xFFE9EEFA)
+    get() = if (isDarkMode) Color(0xFF020306) else Color(0xFFE9EEFA)
 
 /**
  * Sfondo dell'app in Liquid Glass: colore di base e grandi macchie sfumate di colori diversi,
@@ -73,12 +73,15 @@ fun DrawScope.drawAilaGlassBackdrop() {
     // Base: un gradiente verticale lungo tutto lo schermo, ampio e morbido come gli sfondi di
     // iOS (dall'alto il colore principale, poi blu-ardesia, in fondo un azzurro ghiaccio: toni freddi, sobri). Il
     // vetro ci passa sopra e cambia tinta man mano che si scorre, senza chiazze.
+    // Scuro come su iPhone: fondo quasi nero (lo "system background" di iOS e' nero puro), con
+    // appena un alone del colore principale in alto. Il vetro scuro di iOS 26 non e' una lastra
+    // grigia: e' quasi invisibile e si riconosce dal filo di luce sui bordi.
     val stops = if (dark) {
         arrayOf(
-            0f to lerpColor(Color(0xFF070A14), accent, 0.38f),
-            0.45f to Color(0xFF111A30),
-            0.8f to Color(0xFF0D1C28),
-            1f to Color(0xFF0A131B)
+            0f to lerpColor(Color(0xFF000000), accent, 0.2f),
+            0.4f to Color(0xFF05070D),
+            0.8f to Color(0xFF03060A),
+            1f to Color(0xFF010204)
         )
     } else {
         arrayOf(
@@ -99,8 +102,8 @@ fun DrawScope.drawAilaGlassBackdrop() {
     }
     // Due soli bagliori molto larghi e tenui, per dare profondita' senza "macchie".
     if (dark) {
-        glow(0.1f, 0.12f, 1.2f, accent.copy(alpha = 0.22f))
-        glow(0.95f, 0.6f, 1.1f, Color(0x260E7490))
+        glow(0.1f, 0.12f, 1.2f, accent.copy(alpha = 0.16f))
+        glow(0.95f, 0.6f, 1.1f, Color(0x1A0E7490))
     } else {
         glow(0.1f, 0.12f, 1.2f, accent.copy(alpha = 0.18f))
         glow(0.95f, 0.6f, 1.1f, Color(0x3867C6D8))
@@ -109,13 +112,14 @@ fun DrawScope.drawAilaGlassBackdrop() {
 
 /**
  * Riempimento del vetro: quasi trasparente, appena piu' chiaro in alto. Il vetro di iOS 26 non
- * "colora" quello che copre: lo schiarisce un poco e lo lascia vedere.
+ * "colora" quello che copre: lo schiarisce un poco e lo lascia vedere. (Tre volte piu'
+ * trasparente di prima, richiesta di Simone: la forma la danno i bordi, non il velo.)
  */
 val AppTheme.GlassFill: Brush
     get() = if (isDarkMode) {
-        Brush.verticalGradient(listOf(Color(0x0DFFFFFF), Color(0x03FFFFFF)))
+        Brush.verticalGradient(listOf(Color(0x04FFFFFF), Color(0x01FFFFFF)))
     } else {
-        Brush.verticalGradient(listOf(Color(0x21FFFFFF), Color(0x0BFFFFFF)))
+        Brush.verticalGradient(listOf(Color(0x0BFFFFFF), Color(0x04FFFFFF)))
     }
 
 /**
@@ -125,8 +129,10 @@ val AppTheme.GlassFill: Brush
  */
 val AppTheme.GlassEdge: Brush
     get() = if (isDarkMode) {
+        // iPhone in scuro: riflesso netto nell'angolo in alto a sinistra e il suo ritorno in basso
+        // a destra, quasi spento lungo i lati. E' questo filo a disegnare il vetro sul nero.
         Brush.linearGradient(
-            0f to Color(0x8CFFFFFF), 0.35f to Color(0x14FFFFFF), 0.7f to Color(0x0AFFFFFF), 1f to Color(0x40FFFFFF),
+            0f to Color(0xB3FFFFFF), 0.3f to Color(0x1FFFFFFF), 0.7f to Color(0x0DFFFFFF), 1f to Color(0x66FFFFFF),
             start = Offset.Zero, end = Offset.Infinite
         )
     } else {
@@ -149,7 +155,7 @@ fun Modifier.ailaGlassSurface(shape: Shape, tint: Color? = null, edge: Dp = 1.dp
             // Bagliore interno in alto: la luce che attraversa lo spessore del vetro.
             drawRect(
                 Brush.verticalGradient(
-                    listOf(Color.White.copy(alpha = if (AppTheme.isDarkMode) 0.04f else 0.14f), Color.Transparent),
+                    listOf(Color.White.copy(alpha = if (AppTheme.isDarkMode) 0.03f else 0.05f), Color.Transparent),
                     endY = size.height * 0.35f
                 )
             )
