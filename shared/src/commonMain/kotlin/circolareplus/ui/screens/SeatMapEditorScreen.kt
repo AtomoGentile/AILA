@@ -21,6 +21,7 @@ import circolareplus.design.AilaCard
 import circolareplus.design.AilaPrimaryButton
 import circolareplus.design.AilaSecondaryButton
 import circolareplus.design.AppTheme
+import circolareplus.design.ailaGlassSurface
 import circolareplus.domain.model.SocialPreferenceScore
 import circolareplus.domain.model.User
 
@@ -64,7 +65,7 @@ fun SeatMapEditorScreen(
 
     Column(modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
         AilaCard(
-            containerColor = AppTheme.SurfaceWhite,
+            containerColor = if (AppTheme.isGlass) AppTheme.CardSurface else AppTheme.SurfaceWhite,
             modifier = Modifier.fillMaxWidth().padding(AppTheme.Space16)
         ) {
             Column(modifier = Modifier.padding(AppTheme.Space12)) {
@@ -134,15 +135,25 @@ fun SeatMapEditorScreen(
                     }
                 }
 
+                val deskShape = RoundedCornerShape(if (AppTheme.isGlass) AppTheme.SmallElementRadius + 2.dp else 16.dp)
+                val glass = AppTheme.isGlass
+                // Liquid Glass: banco di vetro; se la coppia e' vietata, vetro rosso col bordo pieno.
                 Card(
-                    shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
-                    colors = CardDefaults.cardColors(containerColor = AppTheme.SurfaceWhite),
+                    shape = deskShape,
+                    // Material: card tonale piena; coppia vietata = "error container".
+                    colors = CardDefaults.cardColors(
+                        containerColor = when {
+                            glass -> androidx.compose.ui.graphics.Color.Transparent
+                            isForbidden -> AppTheme.TintRed
+                            AppTheme.isDarkMode -> androidx.compose.ui.graphics.Color(0xFF22252C)
+                            else -> androidx.compose.ui.graphics.Color(0xFFECEEF8)
+                        }
+                    ),
                     elevation = CardDefaults.cardElevation(defaultElevation = AppTheme.CardElevation),
-                    modifier = Modifier.border(
-                        width = if (isForbidden) 2.dp else 1.dp,
-                        color = if (isForbidden) AppTheme.PollDarkRed else AppTheme.Hairline,
-                        shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp)
-                    )
+                    modifier = if (glass) Modifier
+                        .ailaGlassSurface(deskShape, tint = if (isForbidden) AppTheme.TintRed.copy(alpha = 0.6f) else null)
+                        .then(if (isForbidden) Modifier.border(2.dp, AppTheme.PollDarkRed, deskShape) else Modifier)
+                    else Modifier
                 ) {
                     Column(
                         modifier = Modifier.padding(8.dp),
