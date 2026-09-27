@@ -57,6 +57,7 @@ import circolareplus.design.MaxFormWidth
 import circolareplus.design.ailaPressable
 import circolareplus.design.ailaSpatialSpring
 import circolareplus.design.ailaPushTransition
+import circolareplus.design.ailaTabTransition
 import circolareplus.design.ailaSelectionPop
 import circolareplus.design.ailaUnlock
 import circolareplus.domain.model.CalendarEvent
@@ -1952,7 +1953,7 @@ fun MainAppShell(
                         targetState = selectedTab,
                         // Glass: dissolvenza rapida come le tab bar di iOS; Expressive: "fade
                         // through" di Material (vedi ailaTabTransition).
-                        transitionSpec = { circolareplus.design.ailaTabTransition() },
+                        transitionSpec = { ailaTabTransition() },
                         label = "mainTab",
                         modifier = Modifier.fillMaxSize()
                     ) { tab ->
