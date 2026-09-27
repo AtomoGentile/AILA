@@ -48,16 +48,8 @@ fun CircularsScreen(
             .padding(horizontal = AppTheme.Space16)
             .padding(top = AppTheme.Space16)
     ) {
-        // Il titolo grande non c'\u00e8 pi\u00f9: dentro la tab "Classe" lo d\u00e0 gi\u00e0 il selettore
-        // Circolari/Bacheca in cima (vedi MainAppShell), ripeterlo qui creava due intestazioni
-        // sovrapposte. Resta la sola riga di contesto sulla provenienza dei dati.
-        Text(
-            text = "Aggiornato da Spaggiari \u2022 Analisi AI locale",
-            fontSize = 12.sp,
-            color = AppTheme.TextFaint
-        )
-
-        Spacer(modifier = Modifier.height(AppTheme.Space12))
+        // Niente titolo ne' riga "Aggiornato da Spaggiari": l'intestazione la da' gia' il selettore
+        // Circolari/Bacheca in cima, e lo spazio serve per leggere.
 
         // Ricerca per numero o titolo: mancava del tutto, prevista nel design di riferimento.
         OutlinedTextField(
