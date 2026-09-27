@@ -63,6 +63,7 @@ import circolareplus.design.ailaTabTransition
 import circolareplus.design.ailaContainerReveal
 import circolareplus.design.ailaGlassBackdrop
 import circolareplus.design.GlassBase
+import circolareplus.design.GlassEdge
 import androidx.compose.animation.core.animateFloat
 import circolareplus.design.ailaSelectionPop
 import circolareplus.design.ailaUnlock
@@ -5097,23 +5098,17 @@ private fun FloatingTabBar(
                                         // Piu' trasparente: il contenuto sotto si vede sfocato
                                         // ma riconoscibile, come la tab bar di iOS 26.
                                         tint = dev.chrisbanes.haze.HazeTint(
-                                            if (AppTheme.isDarkMode) Color(0x59202430) else Color(0x4DFFFFFF)
+                                            if (AppTheme.isDarkMode) Color(0x33202430) else Color(0x29FFFFFF)
                                         ),
-                                        blurRadius = 28.dp,
+                                        blurRadius = 32.dp,
                                         noiseFactor = 0f
                                     )
                                 ) else Modifier.background(
                                     if (AppTheme.isDarkMode) Color(0xA6202430) else Color(0xB8FFFFFF)
                                 )
                             )
-                            .border(
-                                1.dp,
-                                androidx.compose.ui.graphics.Brush.verticalGradient(
-                                    if (AppTheme.isDarkMode) listOf(Color(0x40FFFFFF), Color(0x0DFFFFFF))
-                                    else listOf(Color(0xFFFFFFFF), Color(0x66FFFFFF))
-                                ),
-                                shape
-                            )
+                            // Bordo speculare come gli altri vetri (luce dall'alto a sinistra).
+                            .border(1.dp, AppTheme.GlassEdge, shape)
                     } else {
                         // Material Expressive: pillola piena "surface container", senza bordo,
                         // con l'ombra bassa delle barre flottanti di M3.
