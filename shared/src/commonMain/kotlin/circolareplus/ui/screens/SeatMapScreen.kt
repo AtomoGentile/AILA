@@ -500,7 +500,7 @@ private fun PreferencesProgressBlock(progress: circolareplus.data.remote.dto.Pre
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-            .background(if (progress.allVoted) AppTheme.TintGreen else AppTheme.SurfaceWhite)
+            .background(if (progress.allVoted) AppTheme.TintGreen else AppTheme.FieldSurface)
             .border(
                 1.dp,
                 if (progress.allVoted) AppTheme.PollGreen else AppTheme.Hairline,
@@ -587,7 +587,7 @@ private fun WeightSlider(
 private fun RowScope.SeatsPerDeskOption(label: String, isSelected: Boolean, onClick: () -> Unit) {
     // Colori animati e leggera pressione: prima la selezione cambiava di colpo.
     val bg by animateColorAsState(
-        if (isSelected) AppTheme.PrimaryBlue else AppTheme.SurfaceWhite, tween(200), label = "seatsBg"
+        if (isSelected) AppTheme.PrimaryBlue else AppTheme.FieldSurface, tween(200), label = "seatsBg"
     )
     val stroke by animateColorAsState(
         if (isSelected) AppTheme.PrimaryBlue else AppTheme.Hairline, tween(200), label = "seatsStroke"

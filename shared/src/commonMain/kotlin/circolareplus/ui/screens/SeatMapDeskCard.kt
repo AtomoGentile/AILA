@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -26,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import circolareplus.algorithms.DeskAssignment
 import circolareplus.design.AppTheme
+import circolareplus.design.ailaGlassSurface
 import circolareplus.domain.model.User
 
 /**
@@ -69,19 +71,30 @@ fun SeatMapDeskCard(
         label = "deskScale"
     )
 
+    // Liquid Glass: il banco e' un riquadro di vetro (velo traslucido, riflesso, filo di luce);
+    // quello evidenziato diventa vetro ambra con il bordo pieno.
+    val glass = AppTheme.isGlass
+    val glassTint by animateColorAsState(
+        if (isFocusedDesk) AppTheme.TintAmber.copy(alpha = 0.6f) else Color.Transparent, tween(240), label = "deskGlassTint"
+    )
     Card(
         shape = shape,
-        colors = CardDefaults.cardColors(containerColor = containerColor),
+        colors = CardDefaults.cardColors(containerColor = if (glass) Color.Transparent else containerColor),
         elevation = CardDefaults.cardElevation(defaultElevation = AppTheme.CardElevation),
         modifier = modifier
             .graphicsLayer {
                 scaleX = focusScale.value
                 scaleY = focusScale.value
             }
-            .border(
-                width = if (isFocusedDesk) 2.dp else 1.dp,
-                color = borderColor,
-                shape = shape
+            .then(
+                if (glass) Modifier
+                    .ailaGlassSurface(shape, tint = glassTint)
+                    .then(if (isFocusedDesk) Modifier.border(2.dp, borderColor, shape) else Modifier)
+                else Modifier.border(
+                    width = if (isFocusedDesk) 2.dp else 1.dp,
+                    color = borderColor,
+                    shape = shape
+                )
             )
     ) {
         Column(
