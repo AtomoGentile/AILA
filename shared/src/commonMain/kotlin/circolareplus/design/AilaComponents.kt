@@ -534,6 +534,9 @@ fun AilaPrimaryButton(
     Box(
         modifier = modifier
             .then(if (fillMaxWidth) Modifier.fillMaxWidth() else Modifier)
+            // Anche un pulsante puo' essere l'origine di un container transform (es. "Calcola
+            // 3 proposte": la pagina delle proposte si apre dal pulsante).
+            .ailaTransformOrigin(24.dp)
             .then(if (large) Modifier.heightIn(min = 48.dp) else Modifier)
             .clip(shape)
             .then(
@@ -1041,9 +1044,11 @@ fun AilaAssistantBadge(
 
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
+            // Capsula: con gli angoli a 6dp era un rettangolo dentro il riquadro molto
+            // arrotondato del riassunto, e stonava.
+            .clip(RoundedCornerShape(percent = 50))
             .background(tint)
-            .padding(horizontal = 7.dp, vertical = 3.dp),
+            .padding(horizontal = 9.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AilaAssistantMark(

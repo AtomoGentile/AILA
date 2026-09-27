@@ -404,6 +404,14 @@ object AilaContainerTransform {
         }
     }
 
+    /**
+     * Rinnova l'origine toccata: per le schermate che si aprono dopo un'attesa (es. il calcolo
+     * delle proposte, qualche secondo) il tocco sarebbe "scaduto" prima della navigazione.
+     */
+    fun touchFresh() {
+        if (fresh != null) freshMark = kotlin.time.TimeSource.Monotonic.markNow()
+    }
+
     fun onBack() {
         lastForwardKey = null
     }

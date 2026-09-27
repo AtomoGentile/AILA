@@ -2134,6 +2134,7 @@ fun MainAppShell(
                                                 isPreferencesOpen = isPreferencesOpen,
                                                 preferencesProgress = preferencesProgress,
                                                 isExportingPdf = isExportingSeatMapPdf,
+                                                isGeneratingProposals = isGeneratingProposals,
                                                 onExportPdf = {
                                                     coroutineScope.launch {
                                                         isExportingSeatMapPdf = true
@@ -2217,7 +2218,7 @@ fun MainAppShell(
                                                             seatMapOptimizerHistory = history
                                                             seatMapOptimizerWeights = weights
                                                             seatMapOptimizerIsSmallClass = classmates.size < 22
-                                                            proposalOptions = withContext(Dispatchers.Default) {
+                                                            val computed = withContext(Dispatchers.Default) {
                                                                 AppContainer.seatMapRepository.generateThreeProposals(
                                                                     students = classmates,
                                                                     profiles = profiles,
@@ -2229,6 +2230,10 @@ fun MainAppShell(
                                                                     disciplinePairs = disciplinePairs
                                                                 )
                                                             }
+                                                            // La pagina delle proposte si apre dal pulsante "Calcola":
+                                                            // il tocco e' di qualche secondo fa, lo si rinnova.
+                                                            circolareplus.design.AilaContainerTransform.touchFresh()
+                                                            proposalOptions = computed
                                                         } catch (e: Exception) {
                                                             seatMapActionError = "Impossibile calcolare le proposte: ${e.message}"
                                                         } finally {
