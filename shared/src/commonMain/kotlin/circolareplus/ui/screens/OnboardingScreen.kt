@@ -358,7 +358,7 @@ fun OnboardingScreen(
                     label = "onboardingDotWidth"
                 )
                 val dotColor by animateColorAsState(
-                    targetValue = if (isActive) accent else AppTheme.Hairline,
+                    targetValue = if (isActive) accent else AppTheme.FieldOutline,
                     animationSpec = tween(durationMillis = 240),
                     label = "onboardingDotColor"
                 )
@@ -785,7 +785,7 @@ private fun AiChoiceCard(
         label = "aiCardBackground"
     )
     val borderColor by animateColorAsState(
-        targetValue = if (selected) AppTheme.PrimaryBlue else AppTheme.Hairline,
+        targetValue = if (selected) AppTheme.PrimaryBlue else AppTheme.FieldOutline,
         animationSpec = tween(220, easing = PageEasing),
         label = "aiCardBorder"
     )
@@ -809,7 +809,7 @@ private fun AiChoiceCard(
                 modifier = Modifier
                     .size(20.dp)
                     .clip(CircleShape)
-                    .border(2.dp, if (selected) AppTheme.PrimaryBlue else AppTheme.Hairline, CircleShape),
+                    .border(2.dp, if (selected) AppTheme.PrimaryBlue else AppTheme.FieldOutline, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 if (selected) {
@@ -902,7 +902,7 @@ private fun OnboardingModelRow(
             .fillMaxWidth()
             .clip(shape)
             .background(if (isSelected) AppTheme.TintBlue else AppTheme.SurfaceWhite)
-            .border(1.dp, if (isSelected) AppTheme.PrimaryBlue else AppTheme.Hairline, shape)
+            .border(1.dp, if (isSelected) AppTheme.PrimaryBlue else AppTheme.FieldOutline, shape)
             .clickable(onClick = onClick)
             .padding(AppTheme.Space12)
     ) {

@@ -113,7 +113,11 @@ object AppTheme {
     val TextDark get() = style(Color(0xFF0B0D12), Color(0xFFFFFFFF), Color(0xFF1A1C22), Color(0xFFE2E2E9))
     val TextMuted get() = style(Color(0xFF5F6470), Color(0xFFB8BCC8), Color(0xFF44474F), Color(0xFFC4C6D0))
     val TextFaint get() = style(Color(0xFF8E929C), Color(0xFF7C8190), Color(0xFF74777F), Color(0xFF8E9099))
-    val Hairline get() = style(Color(0x1F0B1B45), Color(0x1FFFFFFF), Color(0xFFDDE0EA), Color(0xFF3A3D45))
+    // Material: le righe divisorie hanno il colore dello sfondo, cosi' dentro le card tonali
+    // diventano "stacchi" fra righe separate, come le liste segmentate di Android 16.
+    val Hairline get() = style(Color(0x1F0B1B45), Color(0x1FFFFFFF), Color(0xFFF9F9FF), Color(0xFF111318))
+    /** Bordo dei campi di testo (Material: "outline variant", visibile anche dove Hairline non c'e'). */
+    val FieldOutline get() = style(Color(0x1F0B1B45), Color(0x1FFFFFFF), Color(0xFFC4C6D0), Color(0xFF44474F))
     /** Fondo dei campi di testo: vetro in Glass, pieno in Expressive. */
     val FieldSurface get() = style(Color(0x99FFFFFF), Color(0x1FFFFFFF), Color(0xFFFFFFFF), Color(0xFF1D2026))
 

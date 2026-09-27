@@ -674,7 +674,7 @@ private fun LocalModelRow(
             .fillMaxWidth()
             .clip(shape)
             .background(if (isSelected) AppTheme.TintBlue else AppTheme.SurfaceWhite)
-            .border(1.dp, if (isSelected) AppTheme.PrimaryBlue else AppTheme.Hairline, shape)
+            .border(1.dp, if (isSelected) AppTheme.PrimaryBlue else AppTheme.FieldOutline, shape)
             .clickable(onClick = onClick)
             .padding(AppTheme.Space12)
     ) {

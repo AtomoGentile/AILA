@@ -82,7 +82,7 @@ fun SeatMapDeskCard(
         tween(240), label = "deskBg"
     )
     val borderColor by animateColorAsState(
-        if (isFocusedDesk) AppTheme.TintAmberInk else AppTheme.Hairline, tween(240), label = "deskBorder"
+        if (isFocusedDesk) AppTheme.TintAmberInk else AppTheme.FieldOutline, tween(240), label = "deskBorder"
     )
     val focusScale = animateFloatAsState(
         targetValue = if (isFocusedDesk) 1.06f else 1f,

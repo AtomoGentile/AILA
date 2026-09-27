@@ -80,3 +80,25 @@ fun Modifier.ailaGlassSurface(shape: Shape, tint: Color? = null, edge: Dp = 1.dp
 /** Riflesso "bagnato" sopra un riempimento pieno (pulsanti primari in vetro colorato). */
 val AppTheme.GlassGloss: Brush
     get() = Brush.verticalGradient(listOf(Color(0x59FFFFFF), Color(0x00FFFFFF), Color(0x14FFFFFF)))
+
+/**
+ * Forme "ondulate" di Material 3 Expressive (cookie, sunny, clover...): un cerchio il cui raggio
+ * varia con l'angolo, r(θ) = R·(1 − d·(1 − cos kθ)/2), con k lobi di profondita' d. In M3E sono
+ * i contenitori delle icone nelle liste, degli stati vuoti e degli avatar.
+ * Path di segmenti, niente archi (su Android in KMP gli archi possono crashare, vedi AppIcons).
+ */
+fun ailaCookieShape(lobes: Int = 9, depth: Float = 0.08f): androidx.compose.ui.graphics.Shape =
+    androidx.compose.foundation.shape.GenericShape { size, _ ->
+        val cx = size.width / 2f
+        val cy = size.height / 2f
+        val radius = minOf(cx, cy)
+        val steps = 144
+        for (i in 0..steps) {
+            val theta = 2.0 * kotlin.math.PI * i / steps
+            val r = radius * (1f - depth * (1f - kotlin.math.cos(lobes * theta).toFloat()) / 2f)
+            val x = cx + r * kotlin.math.cos(theta - kotlin.math.PI / 2).toFloat()
+            val y = cy + r * kotlin.math.sin(theta - kotlin.math.PI / 2).toFloat()
+            if (i == 0) moveTo(x, y) else lineTo(x, y)
+        }
+        close()
+    }

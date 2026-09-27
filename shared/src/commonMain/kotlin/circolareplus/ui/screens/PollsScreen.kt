@@ -657,7 +657,7 @@ private fun VoteCircle(
             .background(fill)
             .border(
                 width = if (isSelected) 0.dp else 1.5.dp,
-                color = if (enabled) color.copy(alpha = 0.55f) else AppTheme.Hairline,
+                color = if (enabled) color.copy(alpha = 0.55f) else AppTheme.FieldOutline,
                 shape = CircleShape
             )
             .clickable(enabled = enabled, interactionSource = interactionSource, indication = null) { onClick() },

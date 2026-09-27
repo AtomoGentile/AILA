@@ -112,10 +112,11 @@ fun AilaScreenHeader(
                 Spacer(modifier = Modifier.width(AppTheme.Space12))
             }
             Column(modifier = Modifier.weight(1f)) {
+                // Titoli grandi: "large title" di iOS in Glass, "headline" di Material in Expressive.
                 Text(
                     text = title,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = if (AppTheme.isGlass) 28.sp else 26.sp,
+                    fontWeight = if (AppTheme.isGlass) FontWeight.Bold else FontWeight.Medium,
                     color = AppTheme.TextDark,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -438,10 +439,12 @@ fun AilaIconTile(
     modifier: Modifier = Modifier,
     icon: @Composable () -> Unit
 ) {
+    // Material Expressive: il contenitore dell'icona e' una forma "cookie" a 9 lobi, come nelle
+    // liste di Android 16. Glass: quadrato arrotondato (le icone delle Impostazioni di iOS).
     Box(
         modifier = modifier
             .size(size)
-            .clip(RoundedCornerShape(size / 3))
+            .clip(if (AppTheme.isGlass) RoundedCornerShape(size / 3) else ailaCookieShape(9, 0.09f))
             .background(tint),
         contentAlignment = Alignment.Center
     ) {
@@ -621,7 +624,7 @@ fun AilaSecondaryButton(
             .then(if (large) Modifier.heightIn(min = 48.dp) else Modifier)
             .then(
                 if (AppTheme.isGlass) Modifier.ailaGlassSurface(shape)
-                else Modifier.clip(shape).background(AppTheme.SurfaceWhite).border(1.dp, AppTheme.Hairline, shape)
+                else Modifier.clip(shape).background(AppTheme.SurfaceWhite).border(1.dp, AppTheme.FieldOutline, shape)
             )
             .ailaGlassPressable(tint = AppTheme.PrimaryBlue) { onClick() }
             .padding(
@@ -738,11 +741,14 @@ fun AilaSectionTitle(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // Material: etichetta di gruppo come nelle Impostazioni di Android (piccola, colore
+        // primario). Glass: titolo di sezione in grassetto, come iOS.
         Text(
             text = text,
-            fontSize = 17.sp,
-            fontWeight = FontWeight.Bold,
-            color = AppTheme.TextDark
+            fontSize = if (AppTheme.isGlass) 17.sp else 14.sp,
+            fontWeight = if (AppTheme.isGlass) FontWeight.Bold else FontWeight.SemiBold,
+            color = if (AppTheme.isGlass) AppTheme.TextDark else AppTheme.PrimaryBlue,
+            modifier = if (AppTheme.isGlass) Modifier else Modifier.padding(start = 4.dp)
         )
         if (actionText != null && onActionClick != null) {
             Text(
@@ -760,7 +766,11 @@ fun AilaSectionTitle(
 @Composable
 private fun StateBadge(brush: Brush, icon: @Composable () -> Unit) {
     Box(
-        modifier = Modifier.size(84.dp).clip(CircleShape).background(brush),
+        // Material: forma "sunny" a 12 lobi piena; Glass: cerchio sfumato.
+        modifier = Modifier
+            .size(if (AppTheme.isGlass) 84.dp else 96.dp)
+            .clip(if (AppTheme.isGlass) CircleShape else ailaCookieShape(12, 0.1f))
+            .background(if (AppTheme.isGlass) brush else SolidColor(AppTheme.TintBlue)),
         contentAlignment = Alignment.Center
     ) {
         icon()
@@ -1079,6 +1089,27 @@ fun AilaSwitch(
     modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
+    // Material Expressive: l'interruttore di Material 3, con il pallino che cresce da acceso e la
+    // spunta dentro. La "goccia" elastica qui sotto resta per Liquid Glass.
+    if (!AppTheme.isGlass) {
+        androidx.compose.material3.Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            enabled = enabled,
+            modifier = modifier,
+            thumbContent = if (checked) {
+                { AppIcons.Check(modifier = Modifier.size(12.dp), color = AppTheme.PrimaryBlue) }
+            } else null,
+            colors = androidx.compose.material3.SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = AppTheme.PrimaryBlue,
+                uncheckedThumbColor = AppTheme.TextMuted,
+                uncheckedTrackColor = AppTheme.TrackFill,
+                uncheckedBorderColor = AppTheme.TextMuted
+            )
+        )
+        return
+    }
     val leftBound = SwitchPadding
     val rightBound = SwitchWidth - SwitchPadding - SwitchThumbSize
     val targetLeft = if (checked) rightBound else leftBound
@@ -1107,7 +1138,7 @@ fun AilaSwitch(
         targetValue = when {
             !enabled -> AppTheme.TintSlate
             checked -> AppTheme.PrimaryBlue
-            else -> AppTheme.Hairline
+            else -> AppTheme.FieldOutline
         },
         animationSpec = tween(180),
         label = "ailaSwitchTrack"
