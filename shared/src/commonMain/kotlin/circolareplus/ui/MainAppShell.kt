@@ -5366,7 +5366,9 @@ private fun FloatingTabBar(
                                         tint = dev.chrisbanes.haze.HazeTint(
                                             if (AppTheme.isDarkMode) Color(0x01202430) else Color(0x01FFFFFF)
                                         ),
-                                        blurRadius = 32.dp,
+                                        // Sfocatura leggera: a 32dp la barra sembrava opaca;
+                                        // cosi' il contenuto sotto si riconosce, semitrasparente.
+                                        blurRadius = 12.dp,
                                         noiseFactor = 0f
                                     )
                                 ) else Modifier.background(
@@ -5376,12 +5378,13 @@ private fun FloatingTabBar(
                             // Bordo speculare come gli altri vetri (luce dall'alto a sinistra).
                             .border(1.dp, AppTheme.GlassEdge, shape)
                     } else {
-                        // Material Expressive: pillola piena "surface container", senza bordo,
-                        // con l'ombra bassa delle barre flottanti di M3.
+                        // Material Expressive: pillola "surface container" semitrasparente, senza
+                        // bordo. Niente ombra: sotto una superficie traslucida si vedrebbe
+                        // attraverso come una macchia scura.
                         Modifier
-                            .shadow(elevation = 6.dp, shape = shape)
                             .clip(shape)
-                            .background(if (AppTheme.isDarkMode) Color(0xFF22252C) else Color(0xFFECEDF7))
+                            // Semitrasparente: il contenuto che scorre sotto si intravede.
+                            .background(if (AppTheme.isDarkMode) Color(0xB322252C) else Color(0xB3ECEDF7))
                     }
                 )
                 .padding(8.dp),
