@@ -23,7 +23,6 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -531,24 +530,34 @@ fun Modifier.ailaContainerReveal(
     pageColor: Color = containerColor
 ): Modifier {
     val selfOffset = arrayOf(Offset.Zero)
-    // Un solo Path riusato a ogni fotogramma: niente allocazioni durante l'animazione.
-    val clip = Path()
     return this
         .onGloballyPositioned { selfOffset[0] = it.positionInRoot() }
+        // La forma che cresce e' il contorno del livello grafico, non un clipPath: il contorno a
+        // rettangolo arrotondato lo ritaglia la GPU quasi gratis, mentre il clipPath di un
+        // tracciato a ogni fotogramma su Android passa da una maschera ed era la causa degli
+        // scatti. Cambiare contorno non ridisegna il contenuto: si aggiorna solo la proprieta'.
+        .graphicsLayer {
+            val p = progress().coerceIn(0f, 1f)
+            if (p >= 0.999f) {
+                clip = false
+                shape = androidx.compose.ui.graphics.RectangleShape
+                return@graphicsLayer
+            }
+            val o = origin.bounds.translate(-selfOffset[0])
+            fun lerp(a: Float, b: Float) = a + (b - a) * p
+            val rect = androidx.compose.ui.geometry.Rect(
+                lerp(o.left, 0f), lerp(o.top, 0f), lerp(o.right, size.width), lerp(o.bottom, size.height)
+            )
+            val radius = lerp(origin.cornerRadiusPx, 0f).coerceIn(0f, minOf(rect.width, rect.height) / 2f)
+            shape = AilaRevealShape(rect, radius)
+            clip = true
+        }
         .drawWithContent {
             val p = progress().coerceIn(0f, 1f)
             if (p >= 0.999f) {
                 drawContent()
                 return@drawWithContent
             }
-            val o = origin.bounds.translate(-selfOffset[0])
-            fun lerp(a: Float, b: Float) = a + (b - a) * p
-            val left = lerp(o.left, 0f)
-            val top = lerp(o.top, 0f)
-            val right = lerp(o.right, size.width)
-            val bottom = lerp(o.bottom, size.height)
-            val radius = lerp(origin.cornerRadiusPx, 0f)
-            ailaRoundRectPathInto(clip, left, top, right - left, bottom - top, radius)
             // Il contenitore prende subito il colore della pagina (niente "flash" colorato) e il
             // contenuto compare solo alla fine, quando il contenitore e' quasi a tutto schermo:
             // durante il movimento si vede una forma pulita, non righe di testo tagliate.
@@ -556,13 +565,9 @@ fun Modifier.ailaContainerReveal(
             // Aprendo la forma "nasce" sopra la card; chiudendo ci si dissolve sopra, e quando
             // sparisce si vede la card gia' completa invece di una sagoma vuota che si riempie.
             // Da un pulsante (stile Meteo dei Pixel): la forma parte piena del colore del pulsante,
-            // esattamente sopra di lui, e l'icona si dissolve nei primissimi fotogrammi; poi la
-            // forma si schiarisce nel fondo della pagina e il contenuto arriva un po' prima che
-            // dalle card, perche' da un pulsante piccolo la corsa e' piu' lunga. Al ritorno lo
-            // stesso al contrario: si richiude nel colore del pulsante e ci si posa sopra.
-            // Meno abbagliante: il colore passa dal pulsante al fondo della pagina lungo quasi
-            // tutta la corsa (non piu' un lampo chiaro subito all'inizio), l'icona si dissolve con
-            // calma e il contenuto arriva in una dissolvenza piu' lunga.
+            // esattamente sopra di lui; il colore passa a quello della pagina lungo quasi tutta la
+            // corsa (niente lampo chiaro all'inizio), l'icona si dissolve con calma e il contenuto
+            // arriva in una dissolvenza lunga. Al ritorno lo stesso al contrario.
             val fromButton = origin.buttonColor != null
             val contentAlpha = if (fromButton) ((p - 0.5f) / 0.42f).coerceIn(0f, 1f)
                 else ((p - 0.72f) / 0.23f).coerceIn(0f, 1f)
@@ -572,18 +577,29 @@ fun Modifier.ailaContainerReveal(
             )
             val edgeT = (p / (if (fromButton) 0.12f else 0.22f)).coerceIn(0f, 1f)
             val shapeAlpha = edgeT * edgeT * (3f - 2f * edgeT)
-            clipPath(clip) {
-                // Niente saveLayer (un buffer grande quanto lo schermo a ogni fotogramma, la causa
-                // principale degli scatti). Finche' il contenuto e' invisibile non lo si disegna
-                // affatto: meta' animazione costa un solo rettangolo, ed e' piu' fluida.
-                if (contentAlpha > 0f) {
-                    this@drawWithContent.drawContent()
-                    if (contentAlpha < 1f) drawRect(fill, alpha = 1f - contentAlpha)
-                } else {
-                    drawRect(fill, alpha = shapeAlpha)
-                }
+            // Il ritaglio lo fa il contorno del livello (sopra): qui solo cosa c'e' dentro. Finche'
+            // il contenuto e' invisibile non lo si disegna affatto, basta un rettangolo.
+            if (contentAlpha > 0f) {
+                drawContent()
+                if (contentAlpha < 1f) drawRect(fill, alpha = 1f - contentAlpha)
+            } else {
+                drawRect(fill, alpha = shapeAlpha)
             }
         }
+}
+
+/** Contorno del container transform: un rettangolo arrotondato dentro al livello, dove sta ora. */
+private class AilaRevealShape(
+    private val rect: androidx.compose.ui.geometry.Rect,
+    private val radius: Float
+) : androidx.compose.ui.graphics.Shape {
+    override fun createOutline(
+        size: androidx.compose.ui.geometry.Size,
+        layoutDirection: androidx.compose.ui.unit.LayoutDirection,
+        density: androidx.compose.ui.unit.Density
+    ): androidx.compose.ui.graphics.Outline = androidx.compose.ui.graphics.Outline.Rounded(
+        androidx.compose.ui.geometry.RoundRect(rect, androidx.compose.ui.geometry.CornerRadius(radius))
+    )
 }
 
 
