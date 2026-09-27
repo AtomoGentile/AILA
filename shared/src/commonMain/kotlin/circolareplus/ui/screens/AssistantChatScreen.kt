@@ -370,8 +370,10 @@ private fun AssistantHistorySheet(
                             // il foglio pieno (CardSurface in scuro e' uguale al foglio).
                             .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
                             .background(
+                                // Traslucide, un po' piu' piene del foglio: si stacca la riga e
+                                // il testo resta leggibile.
                                 if (AppTheme.isGlass) {
-                                    if (AppTheme.isDarkMode) Color(0xFF2C2C2E) else Color(0xFFFFFFFF)
+                                    if (AppTheme.isDarkMode) Color(0x803A3A3C) else Color(0x99FFFFFF)
                                 } else AppTheme.TrackFill
                             )
                             .then(

@@ -65,10 +65,10 @@ fun AilaBottomSheet(
                 .padding(start = inset, end = inset, bottom = inset)
                 .ailaGlassSurface(
                     shape,
-                    // Il foglio resta quasi pieno, come i fogli di iOS: trasparente come il resto
-                    // del vetro, senza sfocatura dietro, il testo sopra la schermata sotto era
-                    // praticamente illeggibile (provato: 0x28 non si leggeva).
-                    tint = if (AppTheme.isDarkMode) Color(0xF01C1C1E) else Color(0xF0F2F2F7)
+                    // Via di mezzo provata sul telefono: a 0x28 non si leggeva, a 0xF0 era un
+                    // pannello grigio senza niente di vetro. A circa 55% lo sfondo si vede
+                    // attraverso e il testo resta leggibile.
+                    tint = if (AppTheme.isDarkMode) Color(0x8C1C1C1E) else Color(0x8CF2F2F7)
                 ),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
