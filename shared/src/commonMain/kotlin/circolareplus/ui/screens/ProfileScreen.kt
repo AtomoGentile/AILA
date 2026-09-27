@@ -47,7 +47,9 @@ fun ProfileScreen(
      * Elimina l'account dopo la conferma con password. Restituisce il messaggio d'errore da
      * mostrare nella finestra, oppure `null` se l'account e' stato eliminato.
      */
-    onDeleteAccount: suspend (password: String) -> String? = { null }
+    onDeleteAccount: suspend (password: String) -> String? = { null },
+    /** false quando la schermata e' aperta dall'avatar, sotto una barra con la freccia indietro. */
+    showHeader: Boolean = true
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     val isRepresentative = user.role == UserRole.REPRESENTATIVE
@@ -69,9 +71,9 @@ fun ProfileScreen(
             .fillMaxSize()
             .background(AppTheme.BackgroundLight)
     ) {
-        AilaScreenHeader(
-            title = "Il mio Profilo"
-        )
+        if (showHeader) {
+            AilaScreenHeader(title = "Il mio Profilo")
+        }
 
         Column(
             modifier = Modifier

@@ -142,7 +142,7 @@ fun PollsScreen(
                 start = AppTheme.Space16,
                 end = AppTheme.Space16,
                 top = AppTheme.Space12,
-                bottom = AppTheme.Space16
+                bottom = AppTheme.Space16 + circolareplus.design.LocalBottomBarPadding.current
             ),
             verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
         ) {

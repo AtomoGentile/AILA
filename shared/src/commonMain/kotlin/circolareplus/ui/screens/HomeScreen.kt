@@ -140,7 +140,7 @@ fun HomeScreen(
                     tint = AppTheme.TintAmber,
                     onClick = onNavigateToPolls,
                     icon = {
-                        AppIcons.Calendar(modifier = Modifier.size(21.dp), color = AppTheme.TintAmberInk)
+                        AppIcons.Poll(modifier = Modifier.size(21.dp), color = AppTheme.TintAmberInk)
                     }
                 )
                 HorizontalDivider(color = AppTheme.Hairline, modifier = Modifier.padding(start = 72.dp))
@@ -263,6 +263,10 @@ private fun HomeHeroPanel(
                         color = AppTheme.OnHeroPrimary,
                         hasBadge = hasUnreadNotifications
                     )
+                }
+                // Profilo e impostazioni (prima erano la tab "Altro").
+                circolareplus.design.LocalProfileEntry.current?.let { entry ->
+                    circolareplus.design.AilaProfileButton(entry, onHero = true)
                 }
             }
         }
