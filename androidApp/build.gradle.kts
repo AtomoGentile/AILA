@@ -65,8 +65,13 @@ android {
         // design/PlatformInsets.kt); da 36 i blocchi di orientamento non valgono sui tablet, che
         // qui sono comunque liberi di ruotare.
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        // In CI il numero della build di GitHub Actions e l'inizio del commit: nelle Impostazioni
+        // ("Versione") si vede quale APK e' davvero installato. Il versionCode cresce a ogni
+        // build, cosi' Android tratta ogni APK come un aggiornamento.
+        val ciRun = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
+        val ciSha = System.getenv("GITHUB_SHA")?.take(7)
+        versionCode = ciRun ?: 1
+        versionName = if (ciRun != null) "1.0.$ciRun ($ciSha)" else "1.0.0"
 
         ndk {
             // Le librerie native del motore di AI locale esistono per quattro ABI e da sole

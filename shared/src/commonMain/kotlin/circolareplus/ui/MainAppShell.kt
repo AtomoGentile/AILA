@@ -3115,6 +3115,8 @@ fun MainAppShell(
                 ShellRoute.SETTINGS -> {
                     circolareplus.platform.PlatformBackHandler { isInSettingsScreen = false }
                     SettingsScreen(
+                        // Numero della build e commit: dice quale APK e' davvero installato.
+                        appVersion = circolareplus.platform.appVersionName(),
                         apiKey = run {
                             apiKeyRevision
                             AppContainer.settings.userAiApiKey
