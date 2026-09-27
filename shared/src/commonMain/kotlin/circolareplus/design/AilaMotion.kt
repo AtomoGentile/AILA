@@ -1,5 +1,13 @@
 package circolareplus.design
 
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -248,5 +256,87 @@ fun Modifier.ailaGlassOverlay(
                 center = pressPosition
             )
         }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Movimenti "alla iOS". Il segreto delle animazioni di iOS non e' la durata ma la fisica: quasi
+// tutto e' una molla, che parte veloce, rallenta da sola e — dove serve dare vita — supera di
+// poco il punto d'arrivo e ci torna (il "rimbalzo" dello sblocco). Qui le molle condivise, cosi'
+// ogni schermata si muove con lo stesso carattere.
+// ---------------------------------------------------------------------------------------------
+
+/** Molla del push/pop fra schermate: nessun rimbalzo, veloce e morbida come la navigazione iOS. */
+fun <T> iosNavigationSpring() = spring<T>(dampingRatio = 1f, stiffness = 420f)
+
+/** Molla "viva": un filo di rimbalzo, per cambi di tab, indicatori e comparse. */
+fun <T> iosBouncySpring() = spring<T>(dampingRatio = 0.72f, stiffness = 380f)
+
+/**
+ * Push/pop come in UINavigationController: la schermata nuova entra da destra a tutta larghezza,
+ * quella sotto scivola di un terzo a sinistra e si scurisce; al ritorno l'inverso, con la
+ * schermata che se ne va disegnata sopra quella che torna.
+ */
+fun AnimatedContentTransitionScope<*>.iosPushTransition(forward: Boolean): ContentTransform {
+    val transform = if (forward) {
+        slideInHorizontally(iosNavigationSpring()) { it } togetherWith
+            (slideOutHorizontally(iosNavigationSpring()) { -it / 3 } +
+                fadeOut(tween(durationMillis = 320), targetAlpha = 0.55f))
+    } else {
+        (slideInHorizontally(iosNavigationSpring()) { -it / 3 } +
+            fadeIn(tween(durationMillis = 320), initialAlpha = 0.55f)) togetherWith
+            slideOutHorizontally(iosNavigationSpring()) { it }
+    }
+    return transform.apply {
+        targetContentZIndex = if (forward) 1f else -1f
+    } using SizeTransform(clip = false)
+}
+
+/** Si ricorda se lo "sblocco" e' gia' stato fatto in questo avvio dell'app. */
+private object AilaUnlockMemory {
+    var played = false
+}
+
+/**
+ * L'animazione dello sblocco di iOS: all'ingresso nell'app (dopo caricamento o login) il
+ * contenuto arriva leggermente ingrandito e trasparente e si posa al suo posto con un piccolo
+ * rimbalzo. Una volta sola per avvio: rientrare in una schermata non la ripete.
+ */
+@Composable
+fun Modifier.iosUnlock(): Modifier {
+    val play = remember { !AilaUnlockMemory.played }
+    if (!play) return this
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        AilaUnlockMemory.played = true
+        progress.animateTo(1f, spring(dampingRatio = 0.62f, stiffness = 170f))
+    }
+    return this.graphicsLayer {
+        val p = progress.value
+        alpha = (p * 1.6f).coerceIn(0f, 1f)
+        val scale = 1.14f - 0.14f * p
+        scaleX = scale
+        scaleY = scale
+    }
+}
+
+/**
+ * "Pop" di un'icona quando diventa selezionata (barra in basso): si gonfia e torna con una molla
+ * elastica, come le icone della tab bar di iOS.
+ */
+@Composable
+fun Modifier.iosSelectionPop(selected: Boolean): Modifier {
+    val scale = remember { Animatable(1f) }
+    val wasSelected = remember { arrayOf(selected) }
+    LaunchedEffect(selected) {
+        if (selected && !wasSelected[0]) {
+            scale.animateTo(0.82f, spring(stiffness = 1400f))
+            scale.animateTo(1f, spring(dampingRatio = 0.42f, stiffness = 520f))
+        }
+        wasSelected[0] = selected
+    }
+    return this.graphicsLayer {
+        scaleX = scale.value
+        scaleY = scale.value
     }
 }
