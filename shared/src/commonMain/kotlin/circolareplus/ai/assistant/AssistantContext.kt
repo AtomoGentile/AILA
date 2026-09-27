@@ -128,9 +128,14 @@ internal object AssistantContext {
             }
         }
 
+        // Una domanda sulla bacheca la mette in testa: con la finestra stretta del modello sul
+        // telefono stava dopo circolari e calendario e finiva tagliata, e la risposta era
+        // "non risulta".
+        val aboutBoard = terms.any { it.startsWith("propost") || it.startsWith("bacheca") }
+        if (aboutBoard) renderBoard(builder, knowledge, terms, budget)
         renderCirculars(builder, knowledge, question, terms, explicitNumbers, deepTexts, budget, scope)
         renderCalendar(builder, knowledge, terms, budget, scope)
-        renderBoard(builder, knowledge, terms, budget)
+        if (!aboutBoard) renderBoard(builder, knowledge, terms, budget)
         if (budget.includePolls) renderPolls(builder, knowledge, scope)
         renderSeatMap(builder, knowledge, budget)
         renderClassData(builder, knowledge, budget)
@@ -445,6 +450,9 @@ internal object AssistantContext {
         budget: Budget
     ) {
         if (knowledge.proposals.isEmpty()) {
+            // Se non si e' caricata lo dice la sezione delle cose non caricate: "nessuna
+            // proposta" sarebbe falso.
+            if (knowledge.dynamic.unavailable.any { it.startsWith(AssistantBoard.UNAVAILABLE_LABEL) }) return
             builder.appendSection("BACHECA") { appendLine("Nessuna proposta in bacheca.") }
             return
         }
@@ -458,9 +466,9 @@ internal object AssistantContext {
             ranked.take(budget.proposals).forEach { proposal ->
                 appendLine("")
                 appendLine(
-                    "[${proposal.status.name}] ${proposal.title} — di ${proposal.authorName}" +
+                    "[${AssistantBoard.statusOf(proposal)}] ${proposal.title} — di ${proposal.authorName}" +
                         " — ${proposal.upvotes} a favore / ${proposal.downvotes} contrari" +
-                        " — ${proposal.commentsCount} commenti — ${proposal.createdAt}" +
+                        " — ${proposal.commentsCount} commenti — ${readableDate(proposal.createdAt, knowledge.todayIso)}" +
                         (if (proposal.isEdited) " — modificata dopo la pubblicazione" else "")
                 )
                 appendLine("Categoria: ${proposal.category}")

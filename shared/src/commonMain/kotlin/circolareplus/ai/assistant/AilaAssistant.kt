@@ -87,6 +87,8 @@ class AilaAssistant(
         // Scadenze, pagamenti, "cosa ho questa settimana": l'elenco lo fa il codice, esatto e
         // subito. Il modello sul telefono lo ricopiava storpiato (vedi [AssistantAgenda]).
         AssistantAgenda.answer(knowledge, question)?.let { return it }
+        // Stessa cosa per "quali proposte sono aperte?": vedi [AssistantBoard].
+        AssistantBoard.answer(knowledge, question)?.let { return it }
 
         val classifier = classifierFactory()
         val startedAt = currentTimeMillis()
