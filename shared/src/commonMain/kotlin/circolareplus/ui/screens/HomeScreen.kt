@@ -243,7 +243,14 @@ private fun HomeHeroPanel(
             // alto, bordo speculare), che lascia vedere lo sfondo a macchie invece di coprirlo con
             // un colore suo. Il gradiente colorato di prima sembrava un giocattolo.
             .then(
-                if (AppTheme.isGlass) Modifier.ailaGlassSurface(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
+                // In alto gli angoli seguono la curva dello schermo del telefono: squadrati, il
+                // bordo di luce e il riflesso in alto a sinistra finivano tagliati dalla curva.
+                if (AppTheme.isGlass) {
+                    val top = circolareplus.platform.displayCornerRadius()
+                    Modifier.ailaGlassSurface(
+                        RoundedCornerShape(topStart = top, topEnd = top, bottomStart = 32.dp, bottomEnd = 32.dp)
+                    )
+                }
                 else Modifier
                     .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
                     .background(AppTheme.HeroGradient)
