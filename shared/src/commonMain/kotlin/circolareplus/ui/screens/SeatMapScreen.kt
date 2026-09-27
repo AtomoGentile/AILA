@@ -49,6 +49,7 @@ import circolareplus.design.ailaAppear
 import circolareplus.design.ailaFieldColors
 import circolareplus.design.ailaPressable
 import circolareplus.design.AilaScreenHeader
+import circolareplus.design.AilaSegmentedTabs
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
 import circolareplus.domain.model.User
@@ -358,21 +359,15 @@ fun SeatMapScreen(
                         color = AppTheme.TextDark
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
-                    ) {
-                        SeatsPerDeskOption(
-                            label = "Coppie (2)",
-                            isSelected = seatsPerDesk == SeatMapOptimizer.SEATS_PER_DESK_PAIR,
-                            onClick = { seatsPerDesk = SeatMapOptimizer.SEATS_PER_DESK_PAIR }
-                        )
-                        SeatsPerDeskOption(
-                            label = "Trii (3)",
-                            isSelected = seatsPerDesk == SeatMapOptimizer.SEATS_PER_DESK_TRIO,
-                            onClick = { seatsPerDesk = SeatMapOptimizer.SEATS_PER_DESK_TRIO }
-                        )
-                    }
+                    // Selettore a pillole (connected button group in Material, segmented
+                    // control in Glass) invece di due riquadri separati.
+                    val seatOptions = listOf(SeatMapOptimizer.SEATS_PER_DESK_PAIR, SeatMapOptimizer.SEATS_PER_DESK_TRIO)
+                    AilaSegmentedTabs(
+                        labels = listOf("Coppie (2)", "Trii (3)"),
+                        selectedIndex = seatOptions.indexOf(seatsPerDesk).coerceAtLeast(0),
+                        onSelect = { index -> seatsPerDesk = seatOptions[index] },
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
                     Spacer(modifier = Modifier.height(AppTheme.Space8))
 
@@ -500,11 +495,21 @@ private fun PreferencesProgressBlock(progress: circolareplus.data.remote.dto.Pre
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-            .background(if (progress.allVoted) AppTheme.TintGreen else AppTheme.FieldSurface)
-            .border(
-                1.dp,
-                if (progress.allVoted) AppTheme.PollGreen else AppTheme.Hairline,
-                RoundedCornerShape(AppTheme.SmallElementRadius)
+            .background(
+                when {
+                    progress.allVoted -> AppTheme.TintGreen
+                    AppTheme.isGlass -> AppTheme.FieldSurface
+                    // Material: "surface container highest", pieno e senza bordo.
+                    AppTheme.isDarkMode -> Color(0xFF2E3138)
+                    else -> Color(0xFFE1E3EE)
+                }
+            )
+            .then(
+                if (AppTheme.isGlass || progress.allVoted) Modifier.border(
+                    1.dp,
+                    if (progress.allVoted) AppTheme.PollGreen else AppTheme.Hairline,
+                    RoundedCornerShape(AppTheme.SmallElementRadius)
+                ) else Modifier
             )
             .padding(AppTheme.Space12)
     ) {
@@ -582,37 +587,6 @@ private fun WeightSlider(
     }
 }
 
-/** Una delle due opzioni "Coppie (2)" / "Trii (3)" per i posti per banco. */
-@Composable
-private fun RowScope.SeatsPerDeskOption(label: String, isSelected: Boolean, onClick: () -> Unit) {
-    // Colori animati e leggera pressione: prima la selezione cambiava di colpo.
-    val bg by animateColorAsState(
-        if (isSelected) AppTheme.PrimaryBlue else AppTheme.FieldSurface, tween(200), label = "seatsBg"
-    )
-    val stroke by animateColorAsState(
-        if (isSelected) AppTheme.PrimaryBlue else AppTheme.Hairline, tween(200), label = "seatsStroke"
-    )
-    val ink by animateColorAsState(
-        if (isSelected) Color.White else AppTheme.TextDark, tween(200), label = "seatsInk"
-    )
-    Box(
-        modifier = Modifier
-            .weight(1f)
-            .ailaPressable(pressedScale = 0.95f, onClick = onClick)
-            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-            .background(bg)
-            .border(1.dp, stroke, RoundedCornerShape(AppTheme.SmallElementRadius))
-            .padding(vertical = 8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = label,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = ink
-        )
-    }
-}
 
 /**
  * Riga a tutta larghezza dentro la griglia dei banchi: serve per intestazioni, pannello del
