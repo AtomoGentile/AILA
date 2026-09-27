@@ -134,6 +134,12 @@ fun AilaScreenHeader(
                 Spacer(modifier = Modifier.width(AppTheme.Space12))
                 action()
             }
+            // Avatar: profilo e impostazioni (solo nelle schermate delle tab).
+            val profileEntry = LocalProfileEntry.current
+            if (profileEntry != null) {
+                Spacer(modifier = Modifier.width(AppTheme.Space8))
+                AilaProfileButton(profileEntry)
+            }
         }
         HorizontalDivider(color = AppTheme.Hairline)
     }
@@ -1129,5 +1135,44 @@ fun AilaFab(
         contentAlignment = Alignment.Center
     ) {
         icon(ink)
+    }
+}
+
+/** Accesso a profilo e impostazioni dall'avatar: iniziali dell'utente e cosa fare al tocco. */
+class AilaProfileEntry(val initials: String, val onClick: () -> Unit)
+
+/**
+ * Fornito da MainAppShell alle schermate delle tab: se c'e', le intestazioni mostrano l'avatar a
+ * destra. Da quando "Altro" non e' piu' una tab, profilo e impostazioni si aprono da qui.
+ */
+val LocalProfileEntry = androidx.compose.runtime.compositionLocalOf<AilaProfileEntry?> { null }
+
+/**
+ * Avatar tondo con le iniziali: apre profilo e impostazioni. [onHero] per la Home, dove sta sul
+ * pannello colorato e usa il vetro chiaro invece del blu tenue.
+ */
+@Composable
+fun AilaProfileButton(entry: AilaProfileEntry, modifier: Modifier = Modifier, onHero: Boolean = false) {
+    val interactionSource = remember { MutableInteractionSource() }
+    Box(
+        modifier = modifier
+            .size(44.dp)
+            .ailaPressScale(interactionSource, 0.9f)
+            .clip(CircleShape)
+            .background(if (onHero) AppTheme.OnHeroSurface else AppTheme.TintBlue)
+            .then(if (onHero) Modifier.border(1.dp, AppTheme.OnHeroBorder, CircleShape) else Modifier)
+            .clickable(interactionSource = interactionSource, indication = null) { entry.onClick() }
+            .semantics {
+                contentDescription = "Profilo e impostazioni"
+                role = Role.Button
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = entry.initials,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (onHero) AppTheme.OnHeroPrimary else AppTheme.TintBlueInk
+        )
     }
 }

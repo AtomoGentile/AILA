@@ -101,12 +101,17 @@ import kotlinx.coroutines.withTimeoutOrNull
 // Bottom bar riorganizzata secondo il nuovo IA di AILA: Circolari e Bacheca non sono più tab
 // separate, ma vivono dentro "Classe" (con un selettore interno); Mappa Posti diventa una tab
 // vera e propria invece di un flusso aperto solo dalla Home; "Profilo" diventa "Altro".
+/**
+ * Le tab della barra in basso, nell'ordine in cui compaiono: Home al centro, due sezioni per lato.
+ * "Altro" (profilo e impostazioni) non e' piu' una tab: si apre dall'avatar nelle intestazioni, e
+ * il suo posto l'hanno preso i Sondaggi, che prima stavano solo fra le scorciatoie della Home.
+ */
 enum class MainTab(val title: String) {
-    HOME("Home"),
     CALENDAR("Calendario"),
     CLASS("Classe"),
+    HOME("Home"),
     SEATMAP("Mappa posti"),
-    MORE("Altro")
+    POLLS("Sondaggi")
 }
 
 /** Sotto-sezione mostrata dentro la tab "Classe" (Circolari e Bacheca condividono la stessa tab). */
@@ -792,7 +797,9 @@ fun MainAppShell(
     }
 
     var selectedTab by rememberSaveable { mutableStateOf(MainTab.HOME) }
-    var isInPollsScreen by rememberSaveable { mutableStateOf(false) }
+    // I Sondaggi sono ora una tab: "essere nei sondaggi" vuol dire avere quella tab selezionata.
+    val isInPollsScreen = selectedTab == MainTab.POLLS
+    var isInProfileScreen by rememberSaveable { mutableStateOf(false) }
     var isInClassRosterScreen by rememberSaveable { mutableStateOf(false) }
     var isInNotificationsScreen by rememberSaveable { mutableStateOf(false) }
     var isInSettingsScreen by rememberSaveable { mutableStateOf(false) }
@@ -1115,6 +1122,7 @@ fun MainAppShell(
         isInSettingsScreen = false
         isInBackgroundDebugScreen = false
         isInClassRosterScreen = false
+        isInProfileScreen = false
         when (category) {
             NotificationKind.CIRCULARS.key -> {
                 classSection = ClassSection.CIRCULARS
@@ -1134,11 +1142,11 @@ fun MainAppShell(
             }
             NotificationKind.POLLS.key -> {
                 pollsSection = 0
-                isInPollsScreen = true
+                selectedTab = MainTab.POLLS
             }
             NOTIFICATION_CATEGORY_RANKING_POLLS -> {
                 pollsSection = 1
-                isInPollsScreen = true
+                selectedTab = MainTab.POLLS
             }
             NotificationKind.CALENDAR.key -> {
                 selectedTab = MainTab.CALENDAR
@@ -1846,8 +1854,8 @@ fun MainAppShell(
     val shellRoute = when {
         isInSettingsScreen && isInBackgroundDebugScreen -> ShellRoute.BACKGROUND_DEBUG
         isInSettingsScreen -> ShellRoute.SETTINGS
-        isInPollsScreen -> ShellRoute.POLLS
         isInClassRosterScreen -> ShellRoute.CLASS_ROSTER
+        isInProfileScreen -> ShellRoute.PROFILE
         isInAssistantScreen -> ShellRoute.ASSISTANT
         isInSearchScreen -> ShellRoute.SEARCH
         isInNotificationsScreen -> ShellRoute.NOTIFICATIONS
@@ -1929,8 +1937,15 @@ fun MainAppShell(
                 val bottomBarPadding = 84.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 val imeVisible = WindowInsets.isImeVisible
                 Box(modifier = Modifier.weight(1f)) {
+                val profileEntry = remember(user.firstName, user.lastName) {
+                    circolareplus.design.AilaProfileEntry(
+                        initials = "${user.firstName.take(1)}${user.lastName.take(1)}".uppercase(),
+                        onClick = { isInProfileScreen = true }
+                    )
+                }
                 androidx.compose.runtime.CompositionLocalProvider(
-                    circolareplus.design.LocalBottomBarPadding provides bottomBarPadding
+                    circolareplus.design.LocalBottomBarPadding provides bottomBarPadding,
+                    circolareplus.design.LocalProfileEntry provides profileEntry
                 ) {
                     // Da qualunque tab diversa da Home, il back di sistema torna a Home invece di
                     // chiudere l'app subito — comportamento standard delle bottom bar Android. Da
@@ -1974,7 +1989,7 @@ fun MainAppShell(
                                     classSection = ClassSection.BOARD
                                     selectedTab = MainTab.CLASS
                                 },
-                                onNavigateToPolls = { isInPollsScreen = true },
+                                onNavigateToPolls = { selectedTab = MainTab.POLLS },
                                 onNavigateToCalendar = { selectedTab = MainTab.CALENDAR },
                                 onNavigateToCirculars = {
                                     classSection = ClassSection.CIRCULARS
@@ -2219,6 +2234,10 @@ fun MainAppShell(
                                                 onClick = { isInClassRosterScreen = true }
                                             ) { tint -> AppIcons.People(modifier = Modifier.size(20.dp), color = tint) }
                                         }
+                                        circolareplus.design.LocalProfileEntry.current?.let { entry ->
+                                            Spacer(modifier = Modifier.width(AppTheme.Space8))
+                                            circolareplus.design.AilaProfileButton(entry)
+                                        }
                                     }
                                     HorizontalDivider(color = AppTheme.Hairline)
                                 }
@@ -2342,50 +2361,365 @@ fun MainAppShell(
                                 }
                             }
                         }
-                        MainTab.MORE -> {
-                            ProfileScreen(
-                                user = user,
-                                profile = profile,
-                                userAiApiKey = run {
-                                    apiKeyRevision // dipendenza esplicita: rilegge dopo un salvataggio
-                                    AppContainer.settings.userAiApiKey
-                                },
-                                onOpenSettings = {
-                                    isInBackgroundDebugScreen = false
-                                    isInSettingsScreen = true
-                                },
-                                onManageClassRoster = { isInClassRosterScreen = true },
-                                onLogoutClick = {
-                                    coroutineScope.launch {
-                                        try {
-                                            AppContainer.fcmRepository.clearTokens(currentPushPlatform())
-                                        } catch (e: Exception) {
-                                            // Non bloccante: il logout locale procede comunque.
-                                        }
-                                    }
-                                    AppContainer.authRepository.logout()
-                                    currentUser = null
-                                    currentProfile = null
-                                },
-                                onDeleteAccount = { password ->
-                                    try {
-                                        AppContainer.authRepository.deleteAccount(password)
-                                        // Il token push resta valido solo finche' esiste l'utente: il
-                                        // server lo ha gia' cancellato a cascata, qui basta uscire.
-                                        assistantMessages.clear()
-                                        assistantConversations = emptyList()
-                                        currentUser = null
-                                        currentProfile = null
-                                        null
-                                    } catch (e: CancellationException) {
-                                        throw e
-                                    } catch (e: circolareplus.data.remote.ApiException) {
-                                        e.message ?: "Eliminazione non riuscita."
-                                    } catch (e: Exception) {
-                                        "Impossibile eliminare l'account: controlla la connessione e riprova."
+                        MainTab.POLLS -> {
+                            // Se si è nello storico, il back torna prima al sondaggio corrente (come la
+                            // freccia in ScreenBackBar sotto), solo un secondo back chiude il flusso.
+                            // Dallo storico il back torna ai sondaggi in corso; da li' vale il back
+                            // delle tab (torna a Home).
+                            circolareplus.platform.PlatformBackHandler(enabled = showPollHistory) {
+                                showPollHistory = false
+                            }
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                circolareplus.design.AilaScreenHeader(title = "Sondaggi")
+                                // Sopra: sondaggi in corso o storico (vale per entrambi i tipi), con
+                                // l'azione "nuovo" accanto. Sotto: il tipo di sondaggio.
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(start = AppTheme.Space16, end = AppTheme.Space16, top = AppTheme.Space8),
+                                    horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    circolareplus.design.AilaSegmentedTabs(
+                                        labels = listOf("In corso", "Storico"),
+                                        selectedIndex = if (showPollHistory) 1 else 0,
+                                        onSelect = { index -> showPollHistory = index == 1 },
+                                        modifier = Modifier.weight(1f),
+                                        key = showPollHistory
+                                    )
+                                    if (isRepresentative) {
+                                        circolareplus.design.AilaIconButton(
+                                            contentDescription = "Nuovo sondaggio",
+                                            onClick = {
+                                                if (pollsSection == 1) showCreateRankingPollDialog = true else showCreatePollDialog = true
+                                            },
+                                            primary = true
+                                        ) { tint -> AppIcons.Plus(modifier = Modifier.size(18.dp), color = tint) }
                                     }
                                 }
-                            )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space8),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    circolareplus.design.AilaSegmentedTabs(
+                                        labels = listOf("Interrogazioni", "Ordinamento"),
+                                        selectedIndex = pollsSection,
+                                        onSelect = { index -> pollsSection = index },
+                                        modifier = Modifier.weight(1f),
+                                        key = pollsSection
+                                    )
+                                }
+                                if (pollsSection == 1) {
+                                    LoadableContent(
+                                        isLoading = isRankingLoading,
+                                        error = rankingError,
+                                        onRetry = { rankingRefreshTrigger++ }
+                                    ) {
+                                        RankingPollsScreen(
+                                            polls = rankingPolls.filter { it.isClosed == showPollHistory },
+                                            showingHistory = showPollHistory,
+                                            totalStudents = rankingTotalStudents,
+                                            isRepresentative = isRepresentative,
+                                            submittingPollId = submittingRankingPollId,
+                                            onSubmitRanking = { pollId, optionIds ->
+                                                if (submittingRankingPollId == null) {
+                                                    submittingRankingPollId = pollId
+                                                    coroutineScope.launch {
+                                                        try {
+                                                            AppContainer.rankingPollsRepository.submitRanking(pollId, optionIds)
+                                                            // Si rilegge dal server: è lui a calcolare la classifica
+                                                            // della classe, che ora diventa visibile.
+                                                            rankingRefreshTrigger++
+                                                        } catch (e: Exception) {
+                                                            rankingError = "Invio non riuscito: ${e.message}"
+                                                        } finally {
+                                                            submittingRankingPollId = null
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            onClosePoll = { pollId ->
+                                                coroutineScope.launch {
+                                                    try {
+                                                        AppContainer.rankingPollsRepository.closePoll(pollId)
+                                                        rankingRefreshTrigger++
+                                                    } catch (e: Exception) {
+                                                        rankingError = "Impossibile chiudere il sondaggio: ${e.message}"
+                                                    }
+                                                }
+                                            },
+                                            onDeletePoll = { pollId ->
+                                                coroutineScope.launch {
+                                                    try {
+                                                        AppContainer.rankingPollsRepository.deletePoll(pollId)
+                                                        rankingPolls = rankingPolls.filterNot { it.id == pollId }
+                                                    } catch (e: Exception) {
+                                                        rankingError = "Impossibile eliminare: ${e.message}"
+                                                    }
+                                                }
+                                            },
+                                            onCreatePoll = { showCreateRankingPollDialog = true }
+                                        )
+                                    }
+                                } else if (showPollHistory && !isRepresentative) {
+                                    // Le assegnazioni complete le legge solo il Rappresentante: agli altri
+                                    // si dice dove trovare le proprie date invece di una lista vuota.
+                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                                        circolareplus.design.AilaEmptyState(
+                                            title = "Le tue interrogazioni",
+                                            message = "Quando il Rappresentante chiude un sondaggio e ne pubblica le date, quella assegnata a te compare nel tuo Calendario.",
+                                            icon = { AppIcons.Calendar(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
+                                        )
+                                    }
+                                } else if (showPollHistory) {
+                                    PollHistoryScreen(
+                                        polls = allPolls,
+                                        expandedPollId = expandedResultsPollId,
+                                        isLoadingResults = isLoadingPollResults,
+                                        resultsError = pollResultsError,
+                                        assignments = pollAssignments,
+                                        onToggleResults = { pollId ->
+                                            expandedResultsPollId = if (expandedResultsPollId == pollId) null else pollId
+                                            pollCalendarMessage = null
+                                            pollCalendarMessageIsError = false
+                                        },
+                                        onDelete = { pollId ->
+                                            coroutineScope.launch {
+                                                try {
+                                                    AppContainer.pollsRepository.deletePoll(pollId)
+                                                    if (expandedResultsPollId == pollId) expandedResultsPollId = null
+                                                    pollsRefreshTrigger++
+                                                } catch (e: Exception) {
+                                                    pollResultsError = "Impossibile eliminare: ${e.message}"
+                                                }
+                                            }
+                                        },
+                                        isAddingToCalendar = isAddingPollToCalendar,
+                                        calendarAddMessage = pollCalendarMessage,
+                                        calendarAddIsError = pollCalendarMessageIsError,
+                                        onAddToCalendar = { poll, assignmentsToAdd ->
+                                            coroutineScope.launch {
+                                                isAddingPollToCalendar = true
+                                                pollCalendarMessage = null
+                                                pollCalendarMessageIsError = false
+                                                try {
+                                                    // Un evento per data (non per studente): la stessa data
+                                                    // interrogazione riguarda più studenti insieme, ed è
+                                                    // anche l'unico modo per non far scattare subito il
+                                                    // controllo doppioni del server (stessa categoria+
+                                                    // periodo per la classe, vedi CalendarRepository.createEvent).
+                                                    val byDate = assignmentsToAdd
+                                                        .filter { it.slotDate != null }
+                                                        .groupBy { it.slotDate!! }
+                                                        // toSortedMap() e' solo JVM: non compila su iOS.
+                                                        // toMap() da una lista ordinata mantiene l'ordine.
+                                                        .toList()
+                                                        .sortedBy { it.first }
+                                                        .toMap()
+
+                                                    var added = 0
+                                                    var skipped = 0
+                                                    var failed = 0
+                                                    byDate.forEach { (date, group) ->
+                                                        val studentNames = group.map { it.studentName ?: it.studentId }
+                                                        val studentIds = group.map { it.studentId }.distinct()
+                                                        try {
+                                                            val response = AppContainer.calendarRepository.createEvent(
+                                                                title = "Interrogazione di ${poll.subject}",
+                                                                eventDate = date,
+                                                                startTime = null,
+                                                                category = CalendarEventCategory.INTERROGAZIONE,
+                                                                isForAll = false,
+                                                                isAiGenerated = true,
+                                                                visibleToUserIds = studentIds,
+                                                                notes = "Studenti: ${studentNames.joinToString(", ")}"
+                                                            )
+                                                            if (response.warning != null) skipped++ else added++
+                                                        } catch (e: Exception) {
+                                                            failed++
+                                                        }
+                                                    }
+
+                                                    if (added > 0) reloadCalendar()
+
+                                                    pollCalendarMessageIsError = added == 0
+                                                    pollCalendarMessage = buildString {
+                                                        if (added > 0) append("$added dat${if (added == 1) "a aggiunta" else "e aggiunte"} al calendario.")
+                                                        if (skipped > 0) {
+                                                            if (isNotEmpty()) append(" ")
+                                                            append("$skipped già presenti nel periodo.")
+                                                        }
+                                                        if (failed > 0) {
+                                                            if (isNotEmpty()) append(" ")
+                                                            append("$failed non riuscite.")
+                                                        }
+                                                        if (isEmpty()) append("Nessuna data da aggiungere.")
+                                                    }
+                                                } finally {
+                                                    isAddingPollToCalendar = false
+                                                }
+                                            }
+                                        }
+                                    )
+                                } else {
+                                LoadableContent(
+                                    isLoading = isPollLoading,
+                                    error = pollError,
+                                    onRetry = { pollsRefreshTrigger++ }
+                                ) {
+                                    val poll = currentPoll
+                                    if (poll == null) {
+                                        // Tipo esplicito: un lambda scritto direttamente dentro un "if"
+                                        // come argomento nullable è ambiguo da leggere (e da inferire).
+                                        val createPollAction: (() -> Unit)? =
+                                            if (isRepresentative) {
+                                                { showCreatePollDialog = true }
+                                            } else {
+                                                null
+                                            }
+                                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                                            circolareplus.design.AilaEmptyState(
+                                                title = "Nessun sondaggio aperto",
+                                                message = if (isRepresentative)
+                                                    "Crea un sondaggio per far prenotare alla classe le date delle interrogazioni."
+                                                else
+                                                    "Quando il Rappresentante apre un sondaggio, lo trovi qui.",
+                                                actionLabel = if (isRepresentative) "+ Nuovo sondaggio" else null,
+                                                onAction = createPollAction,
+                                                icon = { AppIcons.Check(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
+                                            )
+                                        }
+                                    } else {
+                                        PollsScreen(
+                                            subjectName = poll.subject,
+                                            slots = poll.slots.map { s ->
+                                                SlotUiItem(
+                                                    slotId = s.id,
+                                                    dateLabel = s.slotDate,
+                                                    subject = poll.subject,
+                                                    capacity = s.capacity,
+                                                    isMandatory = s.teacherMandatory,
+                                                    currentVote = s.myVote?.let { InterrogationVoteType.fromScore(it) }
+                                                )
+                                            },
+                                            sacrificeBonus = poll.mySacrificeBonus,
+                                            canVote = poll.isTarget,
+                                            isRepresentative = isRepresentative,
+                                            onClosePoll = {
+                                                // "Chiudi" = calcola subito le date anche se manca
+                                                // qualcuno (chi non ha votato vale come Giallo ovunque):
+                                                // il sondaggio passa nello Storico con il risultato pronto.
+                                                coroutineScope.launch {
+                                                    try {
+                                                        AppContainer.pollsRepository.runAssignments(poll.id, force = true)
+                                                        pollsRefreshTrigger++
+                                                    } catch (e: CancellationException) {
+                                                        throw e
+                                                    } catch (e: Exception) {
+                                                        pollError = "Impossibile chiudere il sondaggio: ${e.message}"
+                                                    }
+                                                }
+                                            },
+                                            onDeletePoll = {
+                                                coroutineScope.launch {
+                                                    try {
+                                                        AppContainer.pollsRepository.deletePoll(poll.id)
+                                                        pollsRefreshTrigger++
+                                                    } catch (e: CancellationException) {
+                                                        throw e
+                                                    } catch (e: Exception) {
+                                                        pollError = "Impossibile eliminare: ${e.message}"
+                                                    }
+                                                }
+                                            },
+                                            onCastVote = { slotId, voteType ->
+                                                // Aggiornamento ottimistico: la selezione cambia subito,
+                                                // la richiesta parte in background.
+                                                //
+                                                // **Il "balbettio" dei pulsanti veniva da qui**: dopo ogni
+                                                // voto si ricaricava l'intero sondaggio dal server e si
+                                                // sovrascriveva lo stato locale. Cambiando scelta due o tre
+                                                // volte di fila, le risposte arrivavano in ordine sparso e
+                                                // ognuna riportava indietro la selezione a un valore
+                                                // precedente, finché l'ultima non vinceva. Ora la ricarica
+                                                // non si fa più: lo stato locale è già quello giusto, e il
+                                                // server viene riletto solo se la chiamata fallisce.
+                                                val previousPoll = currentPoll
+                                                currentPoll = currentPoll?.copy(
+                                                    slots = currentPoll!!.slots.map {
+                                                        if (it.id == slotId) it.copy(myVote = voteType.score) else it
+                                                    }
+                                                )
+                                                coroutineScope.launch {
+                                                    try {
+                                                        AppContainer.pollsRepository.voteSlot(poll.id, slotId, voteType.score)
+                                                    } catch (e: Exception) {
+                                                        currentPoll = previousPoll
+                                                        pollError = "Voto non registrato: ${e.message}"
+                                                    }
+                                                }
+                                            },
+                                            isSubmitted = submittedPollIds.contains(poll.id),
+                                            submittedCount = pollProgress?.submittedCount ?: 0,
+                                            totalStudents = pollProgress?.totalStudents ?: 0,
+                                            closesAtLabel = pollProgress?.closesAt
+                                                ?.let { circolareplus.util.formatDayMonth(it) }
+                                                ?.takeIf { it.isNotBlank() },
+                                            isExpired = pollProgress?.isExpired == true,
+                                            isSubmitting = isSubmittingPoll,
+                                            onSubmit = {
+                                                // L'invio adesso arriva al server: è così che il
+                                                // Rappresentante vede chi ha finito e che l'algoritmo
+                                                // può partire quando hanno inviato tutti. Prima era solo
+                                                // un interruttore sul telefono di chi votava.
+                                                if (!isSubmittingPoll) {
+                                                    isSubmittingPoll = true
+                                                    coroutineScope.launch {
+                                                        try {
+                                                            val result = AppContainer.pollsRepository.submitVotes(poll.id)
+                                                            AppContainer.settings.setPollSubmitted(poll.id, true)
+                                                            submittedPollIds = submittedPollIds + poll.id
+                                                            pollProgress = pollProgress?.copy(
+                                                                hasSubmitted = true,
+                                                                submittedCount = result.submittedCount,
+                                                                totalStudents = result.totalStudents
+                                                            )
+                                                            // Se questo era l'ultimo invio mancante, il server ha già
+                                                            // chiuso il sondaggio e calcolato le assegnazioni (vedi
+                                                            // POST /:id/submit in polls.ts), ma qui lo si saprebbe solo
+                                                            // ricaricando: senza questo refresh `allPolls`/`currentPoll`
+                                                            // restavano quelli di prima, isCalculated risultava ancora
+                                                            // falso lato client e il sondaggio restava "aperto" finché
+                                                            // non si usciva e rientrava dalla schermata.
+                                                            if (result.totalStudents > 0 && result.submittedCount >= result.totalStudents) {
+                                                                pollsRefreshTrigger++
+                                                            }
+                                                        } catch (e: Exception) {
+                                                            pollError = "Invio non riuscito: ${e.message}"
+                                                        } finally {
+                                                            isSubmittingPoll = false
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            onReopen = {
+                                                coroutineScope.launch {
+                                                    try {
+                                                        AppContainer.pollsRepository.withdrawSubmission(poll.id)
+                                                        AppContainer.settings.setPollSubmitted(poll.id, false)
+                                                        submittedPollIds = submittedPollIds - poll.id
+                                                        pollProgress = pollProgress?.copy(
+                                                            hasSubmitted = false,
+                                                            submittedCount = (pollProgress?.submittedCount ?: 1) - 1
+                                                        )
+                                                    } catch (e: Exception) {
+                                                        pollError = "Non sono riuscito ad annullare l'invio: ${e.message}"
+                                                    }
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                                }
+                            }
                         }
                     }
                     }
@@ -2545,367 +2879,56 @@ fun MainAppShell(
                         onBackClick = { isInSettingsScreen = false }
                     )
                 }
-                ShellRoute.POLLS -> {
-                    // Se si è nello storico, il back torna prima al sondaggio corrente (come la
-                    // freccia in ScreenBackBar sotto), solo un secondo back chiude il flusso.
-                    circolareplus.platform.PlatformBackHandler {
-                        if (showPollHistory) showPollHistory = false else isInPollsScreen = false
-                    }
+                ShellRoute.PROFILE -> {
+                    circolareplus.platform.PlatformBackHandler { isInProfileScreen = false }
                     Column(modifier = Modifier.fillMaxSize()) {
-                        ScreenBackBar(
-                            title = "Sondaggi",
-                            onBackClick = {
-                                if (showPollHistory) showPollHistory = false else isInPollsScreen = false
+                        ScreenBackBar(title = "Profilo", onBackClick = { isInProfileScreen = false })
+                        ProfileScreen(
+                            user = user,
+                            showHeader = false,
+                            profile = profile,
+                            userAiApiKey = run {
+                                apiKeyRevision // dipendenza esplicita: rilegge dopo un salvataggio
+                                AppContainer.settings.userAiApiKey
+                            },
+                            onOpenSettings = {
+                                isInBackgroundDebugScreen = false
+                                isInSettingsScreen = true
+                            },
+                            onManageClassRoster = { isInClassRosterScreen = true },
+                            onLogoutClick = {
+                                coroutineScope.launch {
+                                    try {
+                                        AppContainer.fcmRepository.clearTokens(currentPushPlatform())
+                                    } catch (e: Exception) {
+                                        // Non bloccante: il logout locale procede comunque.
+                                    }
+                                }
+                                AppContainer.authRepository.logout()
+                                isInProfileScreen = false
+                                currentUser = null
+                                currentProfile = null
+                            },
+                            onDeleteAccount = { password ->
+                                try {
+                                    AppContainer.authRepository.deleteAccount(password)
+                                    // Il token push resta valido solo finche' esiste l'utente: il
+                                    // server lo ha gia' cancellato a cascata, qui basta uscire.
+                                    assistantMessages.clear()
+                                    assistantConversations = emptyList()
+                                    isInProfileScreen = false
+                                currentUser = null
+                                    currentProfile = null
+                                    null
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: circolareplus.data.remote.ApiException) {
+                                    e.message ?: "Eliminazione non riuscita."
+                                } catch (e: Exception) {
+                                    "Impossibile eliminare l'account: controlla la connessione e riprova."
+                                }
                             }
                         )
-                        // Sopra: sondaggi in corso o storico (vale per entrambi i tipi), con
-                        // l'azione "nuovo" accanto. Sotto: il tipo di sondaggio.
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(start = AppTheme.Space16, end = AppTheme.Space16, top = AppTheme.Space8),
-                            horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            circolareplus.design.AilaSegmentedTabs(
-                                labels = listOf("In corso", "Storico"),
-                                selectedIndex = if (showPollHistory) 1 else 0,
-                                onSelect = { index -> showPollHistory = index == 1 },
-                                modifier = Modifier.weight(1f),
-                                key = showPollHistory
-                            )
-                            if (isRepresentative) {
-                                circolareplus.design.AilaIconButton(
-                                    contentDescription = "Nuovo sondaggio",
-                                    onClick = {
-                                        if (pollsSection == 1) showCreateRankingPollDialog = true else showCreatePollDialog = true
-                                    },
-                                    primary = true
-                                ) { tint -> AppIcons.Plus(modifier = Modifier.size(18.dp), color = tint) }
-                            }
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space8),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            circolareplus.design.AilaSegmentedTabs(
-                                labels = listOf("Interrogazioni", "Ordinamento"),
-                                selectedIndex = pollsSection,
-                                onSelect = { index -> pollsSection = index },
-                                modifier = Modifier.weight(1f),
-                                key = pollsSection
-                            )
-                        }
-                        if (pollsSection == 1) {
-                            LoadableContent(
-                                isLoading = isRankingLoading,
-                                error = rankingError,
-                                onRetry = { rankingRefreshTrigger++ }
-                            ) {
-                                RankingPollsScreen(
-                                    polls = rankingPolls.filter { it.isClosed == showPollHistory },
-                                    showingHistory = showPollHistory,
-                                    totalStudents = rankingTotalStudents,
-                                    isRepresentative = isRepresentative,
-                                    submittingPollId = submittingRankingPollId,
-                                    onSubmitRanking = { pollId, optionIds ->
-                                        if (submittingRankingPollId == null) {
-                                            submittingRankingPollId = pollId
-                                            coroutineScope.launch {
-                                                try {
-                                                    AppContainer.rankingPollsRepository.submitRanking(pollId, optionIds)
-                                                    // Si rilegge dal server: è lui a calcolare la classifica
-                                                    // della classe, che ora diventa visibile.
-                                                    rankingRefreshTrigger++
-                                                } catch (e: Exception) {
-                                                    rankingError = "Invio non riuscito: ${e.message}"
-                                                } finally {
-                                                    submittingRankingPollId = null
-                                                }
-                                            }
-                                        }
-                                    },
-                                    onClosePoll = { pollId ->
-                                        coroutineScope.launch {
-                                            try {
-                                                AppContainer.rankingPollsRepository.closePoll(pollId)
-                                                rankingRefreshTrigger++
-                                            } catch (e: Exception) {
-                                                rankingError = "Impossibile chiudere il sondaggio: ${e.message}"
-                                            }
-                                        }
-                                    },
-                                    onDeletePoll = { pollId ->
-                                        coroutineScope.launch {
-                                            try {
-                                                AppContainer.rankingPollsRepository.deletePoll(pollId)
-                                                rankingPolls = rankingPolls.filterNot { it.id == pollId }
-                                            } catch (e: Exception) {
-                                                rankingError = "Impossibile eliminare: ${e.message}"
-                                            }
-                                        }
-                                    },
-                                    onCreatePoll = { showCreateRankingPollDialog = true }
-                                )
-                            }
-                        } else if (showPollHistory && !isRepresentative) {
-                            // Le assegnazioni complete le legge solo il Rappresentante: agli altri
-                            // si dice dove trovare le proprie date invece di una lista vuota.
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-                                circolareplus.design.AilaEmptyState(
-                                    title = "Le tue interrogazioni",
-                                    message = "Quando il Rappresentante chiude un sondaggio e ne pubblica le date, quella assegnata a te compare nel tuo Calendario.",
-                                    icon = { AppIcons.Calendar(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
-                                )
-                            }
-                        } else if (showPollHistory) {
-                            PollHistoryScreen(
-                                polls = allPolls,
-                                expandedPollId = expandedResultsPollId,
-                                isLoadingResults = isLoadingPollResults,
-                                resultsError = pollResultsError,
-                                assignments = pollAssignments,
-                                onToggleResults = { pollId ->
-                                    expandedResultsPollId = if (expandedResultsPollId == pollId) null else pollId
-                                    pollCalendarMessage = null
-                                    pollCalendarMessageIsError = false
-                                },
-                                onDelete = { pollId ->
-                                    coroutineScope.launch {
-                                        try {
-                                            AppContainer.pollsRepository.deletePoll(pollId)
-                                            if (expandedResultsPollId == pollId) expandedResultsPollId = null
-                                            pollsRefreshTrigger++
-                                        } catch (e: Exception) {
-                                            pollResultsError = "Impossibile eliminare: ${e.message}"
-                                        }
-                                    }
-                                },
-                                isAddingToCalendar = isAddingPollToCalendar,
-                                calendarAddMessage = pollCalendarMessage,
-                                calendarAddIsError = pollCalendarMessageIsError,
-                                onAddToCalendar = { poll, assignmentsToAdd ->
-                                    coroutineScope.launch {
-                                        isAddingPollToCalendar = true
-                                        pollCalendarMessage = null
-                                        pollCalendarMessageIsError = false
-                                        try {
-                                            // Un evento per data (non per studente): la stessa data
-                                            // interrogazione riguarda più studenti insieme, ed è
-                                            // anche l'unico modo per non far scattare subito il
-                                            // controllo doppioni del server (stessa categoria+
-                                            // periodo per la classe, vedi CalendarRepository.createEvent).
-                                            val byDate = assignmentsToAdd
-                                                .filter { it.slotDate != null }
-                                                .groupBy { it.slotDate!! }
-                                                // toSortedMap() e' solo JVM: non compila su iOS.
-                                                // toMap() da una lista ordinata mantiene l'ordine.
-                                                .toList()
-                                                .sortedBy { it.first }
-                                                .toMap()
-
-                                            var added = 0
-                                            var skipped = 0
-                                            var failed = 0
-                                            byDate.forEach { (date, group) ->
-                                                val studentNames = group.map { it.studentName ?: it.studentId }
-                                                val studentIds = group.map { it.studentId }.distinct()
-                                                try {
-                                                    val response = AppContainer.calendarRepository.createEvent(
-                                                        title = "Interrogazione di ${poll.subject}",
-                                                        eventDate = date,
-                                                        startTime = null,
-                                                        category = CalendarEventCategory.INTERROGAZIONE,
-                                                        isForAll = false,
-                                                        isAiGenerated = true,
-                                                        visibleToUserIds = studentIds,
-                                                        notes = "Studenti: ${studentNames.joinToString(", ")}"
-                                                    )
-                                                    if (response.warning != null) skipped++ else added++
-                                                } catch (e: Exception) {
-                                                    failed++
-                                                }
-                                            }
-
-                                            if (added > 0) reloadCalendar()
-
-                                            pollCalendarMessageIsError = added == 0
-                                            pollCalendarMessage = buildString {
-                                                if (added > 0) append("$added dat${if (added == 1) "a aggiunta" else "e aggiunte"} al calendario.")
-                                                if (skipped > 0) {
-                                                    if (isNotEmpty()) append(" ")
-                                                    append("$skipped già presenti nel periodo.")
-                                                }
-                                                if (failed > 0) {
-                                                    if (isNotEmpty()) append(" ")
-                                                    append("$failed non riuscite.")
-                                                }
-                                                if (isEmpty()) append("Nessuna data da aggiungere.")
-                                            }
-                                        } finally {
-                                            isAddingPollToCalendar = false
-                                        }
-                                    }
-                                }
-                            )
-                        } else {
-                        LoadableContent(
-                            isLoading = isPollLoading,
-                            error = pollError,
-                            onRetry = { pollsRefreshTrigger++ }
-                        ) {
-                            val poll = currentPoll
-                            if (poll == null) {
-                                // Tipo esplicito: un lambda scritto direttamente dentro un "if"
-                                // come argomento nullable è ambiguo da leggere (e da inferire).
-                                val createPollAction: (() -> Unit)? =
-                                    if (isRepresentative) {
-                                        { showCreatePollDialog = true }
-                                    } else {
-                                        null
-                                    }
-                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-                                    circolareplus.design.AilaEmptyState(
-                                        title = "Nessun sondaggio aperto",
-                                        message = if (isRepresentative)
-                                            "Crea un sondaggio per far prenotare alla classe le date delle interrogazioni."
-                                        else
-                                            "Quando il Rappresentante apre un sondaggio, lo trovi qui.",
-                                        actionLabel = if (isRepresentative) "+ Nuovo sondaggio" else null,
-                                        onAction = createPollAction,
-                                        icon = { AppIcons.Check(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
-                                    )
-                                }
-                            } else {
-                                PollsScreen(
-                                    subjectName = poll.subject,
-                                    slots = poll.slots.map { s ->
-                                        SlotUiItem(
-                                            slotId = s.id,
-                                            dateLabel = s.slotDate,
-                                            subject = poll.subject,
-                                            capacity = s.capacity,
-                                            isMandatory = s.teacherMandatory,
-                                            currentVote = s.myVote?.let { InterrogationVoteType.fromScore(it) }
-                                        )
-                                    },
-                                    sacrificeBonus = poll.mySacrificeBonus,
-                                    canVote = poll.isTarget,
-                                    isRepresentative = isRepresentative,
-                                    onClosePoll = {
-                                        // "Chiudi" = calcola subito le date anche se manca
-                                        // qualcuno (chi non ha votato vale come Giallo ovunque):
-                                        // il sondaggio passa nello Storico con il risultato pronto.
-                                        coroutineScope.launch {
-                                            try {
-                                                AppContainer.pollsRepository.runAssignments(poll.id, force = true)
-                                                pollsRefreshTrigger++
-                                            } catch (e: CancellationException) {
-                                                throw e
-                                            } catch (e: Exception) {
-                                                pollError = "Impossibile chiudere il sondaggio: ${e.message}"
-                                            }
-                                        }
-                                    },
-                                    onDeletePoll = {
-                                        coroutineScope.launch {
-                                            try {
-                                                AppContainer.pollsRepository.deletePoll(poll.id)
-                                                pollsRefreshTrigger++
-                                            } catch (e: CancellationException) {
-                                                throw e
-                                            } catch (e: Exception) {
-                                                pollError = "Impossibile eliminare: ${e.message}"
-                                            }
-                                        }
-                                    },
-                                    onCastVote = { slotId, voteType ->
-                                        // Aggiornamento ottimistico: la selezione cambia subito,
-                                        // la richiesta parte in background.
-                                        //
-                                        // **Il "balbettio" dei pulsanti veniva da qui**: dopo ogni
-                                        // voto si ricaricava l'intero sondaggio dal server e si
-                                        // sovrascriveva lo stato locale. Cambiando scelta due o tre
-                                        // volte di fila, le risposte arrivavano in ordine sparso e
-                                        // ognuna riportava indietro la selezione a un valore
-                                        // precedente, finché l'ultima non vinceva. Ora la ricarica
-                                        // non si fa più: lo stato locale è già quello giusto, e il
-                                        // server viene riletto solo se la chiamata fallisce.
-                                        val previousPoll = currentPoll
-                                        currentPoll = currentPoll?.copy(
-                                            slots = currentPoll!!.slots.map {
-                                                if (it.id == slotId) it.copy(myVote = voteType.score) else it
-                                            }
-                                        )
-                                        coroutineScope.launch {
-                                            try {
-                                                AppContainer.pollsRepository.voteSlot(poll.id, slotId, voteType.score)
-                                            } catch (e: Exception) {
-                                                currentPoll = previousPoll
-                                                pollError = "Voto non registrato: ${e.message}"
-                                            }
-                                        }
-                                    },
-                                    isSubmitted = submittedPollIds.contains(poll.id),
-                                    submittedCount = pollProgress?.submittedCount ?: 0,
-                                    totalStudents = pollProgress?.totalStudents ?: 0,
-                                    closesAtLabel = pollProgress?.closesAt
-                                        ?.let { circolareplus.util.formatDayMonth(it) }
-                                        ?.takeIf { it.isNotBlank() },
-                                    isExpired = pollProgress?.isExpired == true,
-                                    isSubmitting = isSubmittingPoll,
-                                    onSubmit = {
-                                        // L'invio adesso arriva al server: è così che il
-                                        // Rappresentante vede chi ha finito e che l'algoritmo
-                                        // può partire quando hanno inviato tutti. Prima era solo
-                                        // un interruttore sul telefono di chi votava.
-                                        if (!isSubmittingPoll) {
-                                            isSubmittingPoll = true
-                                            coroutineScope.launch {
-                                                try {
-                                                    val result = AppContainer.pollsRepository.submitVotes(poll.id)
-                                                    AppContainer.settings.setPollSubmitted(poll.id, true)
-                                                    submittedPollIds = submittedPollIds + poll.id
-                                                    pollProgress = pollProgress?.copy(
-                                                        hasSubmitted = true,
-                                                        submittedCount = result.submittedCount,
-                                                        totalStudents = result.totalStudents
-                                                    )
-                                                    // Se questo era l'ultimo invio mancante, il server ha già
-                                                    // chiuso il sondaggio e calcolato le assegnazioni (vedi
-                                                    // POST /:id/submit in polls.ts), ma qui lo si saprebbe solo
-                                                    // ricaricando: senza questo refresh `allPolls`/`currentPoll`
-                                                    // restavano quelli di prima, isCalculated risultava ancora
-                                                    // falso lato client e il sondaggio restava "aperto" finché
-                                                    // non si usciva e rientrava dalla schermata.
-                                                    if (result.totalStudents > 0 && result.submittedCount >= result.totalStudents) {
-                                                        pollsRefreshTrigger++
-                                                    }
-                                                } catch (e: Exception) {
-                                                    pollError = "Invio non riuscito: ${e.message}"
-                                                } finally {
-                                                    isSubmittingPoll = false
-                                                }
-                                            }
-                                        }
-                                    },
-                                    onReopen = {
-                                        coroutineScope.launch {
-                                            try {
-                                                AppContainer.pollsRepository.withdrawSubmission(poll.id)
-                                                AppContainer.settings.setPollSubmitted(poll.id, false)
-                                                submittedPollIds = submittedPollIds - poll.id
-                                                pollProgress = pollProgress?.copy(
-                                                    hasSubmitted = false,
-                                                    submittedCount = (pollProgress?.submittedCount ?: 1) - 1
-                                                )
-                                            } catch (e: Exception) {
-                                                pollError = "Non sono riuscito ad annullare l'invio: ${e.message}"
-                                            }
-                                        }
-                                    }
-                                )
-                            }
-                        }
-                        }
                     }
                 }
                 ShellRoute.CLASS_ROSTER -> {
@@ -3091,7 +3114,7 @@ fun MainAppShell(
                                     classSection = ClassSection.BOARD
                                     selectedTab = MainTab.CLASS
                                 }
-                                AssistantSourceKind.POLL -> isInPollsScreen = true
+                                AssistantSourceKind.POLL -> selectedTab = MainTab.POLLS
                                 AssistantSourceKind.SEAT_MAP -> selectedTab = MainTab.SEATMAP
                                 AssistantSourceKind.CLASS -> isInClassRosterScreen = true
                             }
@@ -4892,10 +4915,10 @@ private fun OfflineGateScreen(
 /** Le schermate a tutto schermo della shell; `depth` decide il verso del push/pop. */
 private enum class ShellRoute(val depth: Int) {
     TABS(0),
-    SETTINGS(1),
-    BACKGROUND_DEBUG(2),
-    POLLS(1),
-    CLASS_ROSTER(1),
+    PROFILE(1),
+    SETTINGS(2),
+    BACKGROUND_DEBUG(3),
+    CLASS_ROSTER(2),
     ASSISTANT(1),
     SEARCH(1),
     NOTIFICATIONS(1),
@@ -5018,7 +5041,7 @@ private fun RowScope.FloatingTabItem(tab: MainTab, selected: Boolean, onClick: (
             MainTab.CALENDAR -> AppIcons.Calendar(modifier = iconModifier, color = iconColor)
             MainTab.CLASS -> AppIcons.Document(modifier = iconModifier, color = iconColor)
             MainTab.SEATMAP -> AppIcons.Chair(modifier = iconModifier, color = iconColor)
-            MainTab.MORE -> AppIcons.Profile(modifier = iconModifier, color = iconColor)
+            MainTab.POLLS -> AppIcons.Poll(modifier = iconModifier, color = iconColor)
         }
         androidx.compose.animation.AnimatedVisibility(
             visible = selected,

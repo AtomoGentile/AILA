@@ -83,7 +83,12 @@ fun PollHistoryScreen(
         } else {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(AppTheme.Space12),
-                contentPadding = PaddingValues(AppTheme.Space16),
+                contentPadding = PaddingValues(
+                    start = AppTheme.Space16,
+                    end = AppTheme.Space16,
+                    top = AppTheme.Space16,
+                    bottom = AppTheme.Space16 + circolareplus.design.LocalBottomBarPadding.current
+                ),
                 modifier = Modifier.fillMaxSize()
             ) {
                 itemsIndexed(completedPolls, key = { _, poll -> poll.id }) { index, poll ->

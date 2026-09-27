@@ -303,6 +303,20 @@ object AppIcons {
         }
     }
 
+    /** Sondaggi: tre barre di altezza diversa, come un grafico dei voti. */
+    @Composable
+    fun Poll(modifier: Modifier = Modifier.size(24.dp), color: Color = Color(0xFF2563EB)) {
+        Canvas(modifier = modifier) {
+            val w = size.width
+            val h = size.height
+            val stroke = w * 0.15f
+            val base = h * 0.82f
+            drawLine(color, Offset(w * 0.24f, base), Offset(w * 0.24f, h * 0.52f), strokeWidth = stroke, cap = StrokeCap.Round)
+            drawLine(color, Offset(w * 0.5f, base), Offset(w * 0.5f, h * 0.18f), strokeWidth = stroke, cap = StrokeCap.Round)
+            drawLine(color, Offset(w * 0.76f, base), Offset(w * 0.76f, h * 0.38f), strokeWidth = stroke, cap = StrokeCap.Round)
+        }
+    }
+
     @Composable
     fun Chair(modifier: Modifier = Modifier.size(24.dp), color: Color = Color(0xFF2563EB)) {
         Canvas(modifier = modifier) {
