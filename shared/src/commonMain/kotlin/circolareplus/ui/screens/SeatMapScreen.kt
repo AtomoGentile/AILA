@@ -527,21 +527,10 @@ private fun PreferencesProgressBlock(progress: circolareplus.data.remote.dto.Pre
             )
         }
         Spacer(modifier = Modifier.height(6.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(50))
-                .background(AppTheme.TintSlate)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(fraction.coerceIn(0f, 1f))
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(50))
-                    .background(if (progress.allVoted) AppTheme.PollGreen else AppTheme.PrimaryBlue)
-            )
-        }
+        circolareplus.design.AilaProgressBar(
+            progress = fraction,
+            color = if (progress.allVoted) AppTheme.PollGreen else AppTheme.PrimaryBlue
+        )
         if (!progress.allVoted && progress.pending.isNotEmpty()) {
             Spacer(modifier = Modifier.height(6.dp))
             Text(

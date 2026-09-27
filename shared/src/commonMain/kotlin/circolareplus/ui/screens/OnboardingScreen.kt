@@ -972,21 +972,7 @@ private fun OnboardingProgressBar(downloadedBytes: Long, totalBytes: Long) {
         label = "downloadFraction"
     )
     Column(modifier = Modifier.fillMaxWidth()) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(AppTheme.TintSlate)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(fraction)
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(AppTheme.PrimaryBlue)
-            )
-        }
+        circolareplus.design.AilaProgressBar(progress = fraction)
         Spacer(modifier = Modifier.height(AppTheme.Space4))
         Text(
             text = "${formatMegabytes(downloadedBytes)} di ${formatMegabytes(totalBytes)} " +

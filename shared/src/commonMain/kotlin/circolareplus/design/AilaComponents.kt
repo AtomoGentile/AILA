@@ -1184,8 +1184,17 @@ fun AilaProfileButton(entry: AilaProfileEntry, modifier: Modifier = Modifier, on
             .ailaTransformOrigin(22.dp)
             .ailaPressScale(interactionSource, 0.9f)
             .clip(CircleShape)
-            .background(if (onHero) AppTheme.OnHeroSurface else AppTheme.TintBlue)
-            .then(if (onHero) Modifier.border(1.dp, AppTheme.OnHeroBorder, CircleShape) else Modifier)
+            // Un tono piu' scuro di prima: sul pannello era un velo bianco che quasi spariva,
+            // fuori un azzurro chiarissimo. Ora si stacca come un avatar vero.
+            .background(
+                when {
+                    onHero && AppTheme.isDarkMode -> Color(0xFF14245A)
+                    onHero -> Color(0xFF1C3C9A)
+                    AppTheme.isDarkMode -> Color(0xFF34457A)
+                    else -> Color(0xFFBFD0FF)
+                }
+            )
+            .then(if (onHero && AppTheme.isGlass) Modifier.border(1.dp, AppTheme.OnHeroBorder, CircleShape) else Modifier)
             .clickable(interactionSource = interactionSource, indication = null) { entry.onClick() }
             .semantics {
                 contentDescription = "Profilo e impostazioni"
@@ -1197,7 +1206,7 @@ fun AilaProfileButton(entry: AilaProfileEntry, modifier: Modifier = Modifier, on
             text = entry.initials,
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
-            color = if (onHero) AppTheme.OnHeroPrimary else AppTheme.TintBlueInk
+            color = if (onHero || AppTheme.isDarkMode) AppTheme.OnHeroPrimary else Color(0xFF0B1B45)
         )
     }
 }

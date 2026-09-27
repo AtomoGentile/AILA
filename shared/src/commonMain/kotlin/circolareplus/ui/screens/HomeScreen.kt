@@ -12,6 +12,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -362,12 +365,32 @@ private fun parseDayMonth(isoDate: String): Pair<String, String> {
  * al 18%, che sul gradiente sembra una toppa grigia, ma un velo che scivola dall'alto al basso.
  */
 private val heroTileFill: Brush
-    get() = Brush.verticalGradient(listOf(Color(0x3DFFFFFF), Color(0x1FFFFFFF)))
+    get() = Brush.verticalGradient(listOf(Color(0x47FFFFFF), Color(0x1AFFFFFF)))
+
+/** Material: riempimento tonale dei pulsanti sul pannello, un tono piu' scuro del pannello. */
+private val heroTonalFill: Color
+    get() = if (AppTheme.isDarkMode) Color(0xFF14245A) else Color(0xFF1C3C9A)
 
 /** Tasto quadrato translucido nel pannello a gradiente (ricerca, notifiche). */
 @Composable
 private fun HeroIconButton(onClick: () -> Unit, icon: @Composable () -> Unit) {
-    val shape = RoundedCornerShape(14.dp)
+    if (!AppTheme.isGlass) {
+        // Material Expressive: pulsante tonale pieno (un tono piu' scuro del pannello), tondo,
+        // che alla pressione si schiaccia in un quadrato arrotondato. Niente vetro ne' bordo.
+        val interactionSource = remember { MutableInteractionSource() }
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(circolareplus.design.ailaMorphShape(interactionSource, pressedPercent = 28))
+                .background(heroTonalFill)
+                .clickable(interactionSource = interactionSource, indication = null) { onClick() },
+            contentAlignment = Alignment.Center
+        ) {
+            icon()
+        }
+        return
+    }
+    val shape = CircleShape
     Box(
         modifier = Modifier
             .size(44.dp)
@@ -389,8 +412,18 @@ private fun HomeQuickIcon(
     onClick: () -> Unit,
     icon: @Composable () -> Unit
 ) {
-    val shape = RoundedCornerShape(16.dp)
     val interactionSource = remember { MutableInteractionSource() }
+    val glass = AppTheme.isGlass
+    // Material: riquadro tonale pieno che alla pressione stringe gli angoli (forma che si
+    // deforma, come i pulsanti di M3 Expressive). Glass: vetro chiaro con filo di luce.
+    val pressed by interactionSource.collectIsPressedAsState()
+    val corner by androidx.compose.animation.core.animateDpAsState(
+        targetValue = if (!glass && pressed) 10.dp else if (glass) 18.dp else 22.dp,
+        animationSpec = if (pressed) androidx.compose.animation.core.spring(stiffness = 1400f)
+            else androidx.compose.animation.core.spring(dampingRatio = 0.5f, stiffness = 600f),
+        label = "quickIconCorner"
+    )
+    val shape = RoundedCornerShape(corner)
     Column(
         modifier = modifier.clickable(
             interactionSource = interactionSource,
@@ -403,9 +436,13 @@ private fun HomeQuickIcon(
                 .fillMaxWidth()
                 .height(56.dp)
                 .clip(shape)
-                .background(heroTileFill)
-                .border(1.dp, AppTheme.OnHeroBorder, shape)
-                .ailaGlassOverlay(interactionSource, tint = AppTheme.PrimaryBlue),
+                .then(
+                    if (glass) Modifier
+                        .background(heroTileFill)
+                        .border(1.dp, AppTheme.OnHeroBorder, shape)
+                        .ailaGlassOverlay(interactionSource, tint = AppTheme.PrimaryBlue)
+                    else Modifier.background(heroTonalFill)
+                ),
             contentAlignment = Alignment.Center
         ) {
             icon()
