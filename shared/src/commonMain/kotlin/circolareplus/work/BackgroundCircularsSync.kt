@@ -30,6 +30,26 @@ object BackgroundCircularsSync {
      * @param shouldStop controllato fra una circolare e l'altra (Worker fermato, tempo scaduto).
      */
     suspend fun run(maxCirculars: Int, shouldStop: () -> Boolean = { false }) {
+        try {
+            classifyNewCirculars(maxCirculars, shouldStop)
+        } finally {
+            // Copia offline aggiornata anche ad app chiusa: a scuola, senza rete, si trovano gia'
+            // i dati di stamattina senza aver dovuto ricordarsi di scaricarli. Dopo le analisi
+            // (piu' importanti se il tempo concesso dal sistema e' poco); ogni file salvato resta
+            // anche se il sistema interrompe il giro a meta', e il giro dopo riparte da li'.
+            if (!shouldStop()) {
+                try {
+                    circolareplus.data.OfflineSync.runIfDue(background = true)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Rete assente: si riprova al prossimo giro.
+                }
+            }
+        }
+    }
+
+    private suspend fun classifyNewCirculars(maxCirculars: Int, shouldStop: () -> Boolean) {
         // Il motore locale e' uno solo: se e' il provider scelto, va usato una circolare alla
         // volta quando l'utente la apre, non da un giro che il telefono fa partire in tasca
         // (stesso motivo per cui MainAppShell ferma il suo ciclo in background in questo caso).

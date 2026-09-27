@@ -243,7 +243,7 @@ fun SettingsScreen(
                         Text(
                             text = "Senza rete puoi consultare circolari (con i PDF delle ultime), " +
                                 "calendario, sondaggi, bacheca e mappa posti come li hai visti l'ultima " +
-                                "volta. Con la rete l'app scarica tutto da sola in sottofondo. " +
+                                "volta. L'app si aggiorna da sola, anche chiusa: non devi ricordarti di niente. " +
                                 "Voti e modifiche richiedono la connessione.\n" +
                                 "Ultimo download completo: ${offlineAgeLabel(lastFullSync)} \u2022 " +
                                 "Spazio occupato: ${formatOfflineSize(offlineBytes)}.",
@@ -265,7 +265,7 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.height(AppTheme.Space8))
                         }
                         AilaPrimaryButton(
-                            text = if (progress != null) "Scarico\u2026 ${(progress * 100).toInt()}%" else "Scarica tutto per l'uso offline",
+                            text = if (progress != null) "Scarico\u2026 ${(progress * 100).toInt()}%" else "Aggiorna adesso",
                             onClick = {
                                 if (syncProgress == null) {
                                     syncProgress = 0f
