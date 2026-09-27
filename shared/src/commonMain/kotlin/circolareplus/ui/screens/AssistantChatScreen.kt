@@ -504,7 +504,7 @@ private fun AssistantErrorBubble(text: String) {
     }
 }
 
-/** Tre puntini che respirano mentre il modello lavora. */
+/** Mentre il modello lavora: forma che cambia (Material) o tre puntini che respirano (Glass). */
 @Composable
 private fun ThinkingBubble() {
     var step by remember { mutableStateOf(0) }
@@ -525,7 +525,11 @@ private fun ThinkingBubble() {
                 .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            repeat(3) { index ->
+            // Material Expressive: la forma che ruota e cambia sagoma (il loading indicator di
+            // M3E). Liquid Glass: i tre puntini, come i messaggi in arrivo di iOS.
+            if (!AppTheme.isGlass) {
+                circolareplus.design.AilaMorphingLoader(size = 22.dp)
+            } else repeat(3) { index ->
                 val alpha by animateFloatAsState(
                     targetValue = if (index == step) 1f else 0.25f,
                     animationSpec = tween(400),
