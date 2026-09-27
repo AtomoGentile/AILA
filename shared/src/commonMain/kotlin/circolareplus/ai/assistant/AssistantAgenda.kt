@@ -22,8 +22,11 @@ import circolareplus.util.plusDays
  */
 internal object AssistantAgenda {
 
-    /** Senza un periodo nella domanda, "in arrivo" vuol dire i prossimi due mesi. */
-    private const val DEFAULT_HORIZON_DAYS = 60
+    /**
+     * Senza un periodo nella domanda, "in arrivo" vuol dire le prossime due settimane: oltre,
+     * e' roba da calendario, non da "cosa mi scade".
+     */
+    private const val DEFAULT_HORIZON_DAYS = 15
 
     /** Oltre questo l'elenco in chat diventa illeggibile: il resto e' nel Calendario. */
     private const val MAX_ITEMS = 12
