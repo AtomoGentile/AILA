@@ -82,10 +82,10 @@ fun DrawScope.drawAilaGlassBackdrop() {
         )
     } else {
         arrayOf(
-            0f to lerpColor(Color(0xFFEAF0FF), accent, 0.30f),
-            0.45f to Color(0xFFDCE3F5),
-            0.8f to Color(0xFFD8ECF0),
-            1f to Color(0xFFE6EEF2)
+            0f to lerpColor(Color(0xFFE6EDFF), accent, 0.36f),
+            0.45f to Color(0xFFD3DCF3),
+            0.8f to Color(0xFFCFE6EC),
+            1f to Color(0xFFDEE9EF)
         )
     }
     drawRect(Brush.verticalGradient(*stops, startY = 0f, endY = h))
@@ -102,8 +102,8 @@ fun DrawScope.drawAilaGlassBackdrop() {
         glow(0.1f, 0.12f, 1.2f, accent.copy(alpha = 0.22f))
         glow(0.95f, 0.6f, 1.1f, Color(0x260E7490))
     } else {
-        glow(0.1f, 0.12f, 1.2f, accent.copy(alpha = 0.14f))
-        glow(0.95f, 0.6f, 1.1f, Color(0x2E67C6D8))
+        glow(0.1f, 0.12f, 1.2f, accent.copy(alpha = 0.18f))
+        glow(0.95f, 0.6f, 1.1f, Color(0x3867C6D8))
     }
 }
 
@@ -113,9 +113,9 @@ fun DrawScope.drawAilaGlassBackdrop() {
  */
 val AppTheme.GlassFill: Brush
     get() = if (isDarkMode) {
-        Brush.verticalGradient(listOf(Color(0x12FFFFFF), Color(0x04FFFFFF)))
+        Brush.verticalGradient(listOf(Color(0x0DFFFFFF), Color(0x03FFFFFF)))
     } else {
-        Brush.verticalGradient(listOf(Color(0x30FFFFFF), Color(0x12FFFFFF)))
+        Brush.verticalGradient(listOf(Color(0x21FFFFFF), Color(0x0BFFFFFF)))
     }
 
 /**
@@ -149,7 +149,7 @@ fun Modifier.ailaGlassSurface(shape: Shape, tint: Color? = null, edge: Dp = 1.dp
             // Bagliore interno in alto: la luce che attraversa lo spessore del vetro.
             drawRect(
                 Brush.verticalGradient(
-                    listOf(Color.White.copy(alpha = if (AppTheme.isDarkMode) 0.05f else 0.18f), Color.Transparent),
+                    listOf(Color.White.copy(alpha = if (AppTheme.isDarkMode) 0.04f else 0.14f), Color.Transparent),
                     endY = size.height * 0.35f
                 )
             )
