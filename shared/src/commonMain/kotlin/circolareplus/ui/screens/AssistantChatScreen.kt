@@ -13,7 +13,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -331,10 +330,9 @@ private fun AssistantHistorySheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    ModalBottomSheet(
+    circolareplus.design.AilaBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = AppTheme.SurfaceWhite
+        sheetState = sheetState
     ) {
         Column(
             modifier = Modifier
@@ -367,13 +365,11 @@ private fun AssistantHistorySheet(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                            // Sul foglio pieno il velo di vetro non si vedrebbe: Glass usa il
-                            // riempimento grigio dei gruppi di iOS, Material la superficie tonale.
-                            .background(
-                                if (AppTheme.isGlass) {
-                                    if (AppTheme.isDarkMode) Color(0xFF2C2C2E) else Color(0xFFF2F2F7)
-                                } else AppTheme.CardSurface
+                            // Glass: righe di vetro sul foglio di vetro. Material: il tono "container"
+                            // sopra il foglio pieno (CardSurface in scuro e' uguale al foglio).
+                            .then(
+                                if (AppTheme.isGlass) Modifier.ailaGlassSurface(RoundedCornerShape(AppTheme.SmallElementRadius))
+                                else Modifier.clip(RoundedCornerShape(AppTheme.SmallElementRadius)).background(AppTheme.TrackFill)
                             )
                             .then(
                                 if (canOpen) {
