@@ -35,6 +35,7 @@ class LocalSettingsManager(
         private const val KEY_DARK_MODE = "dark_mode"
         private const val KEY_UI_STYLE = "ui_style"
         private const val KEY_ACCENT = "accent_color"
+        private const val KEY_LAST_ONLINE_SYNC = "last_online_sync_millis"
         private const val KEY_MUTED_NOTIFICATIONS = "muted_notification_kinds"
         private const val KEY_LAST_SEEN_CIRCULAR = "last_seen_circular_number"
         private const val KEY_LAST_SEEN_PROPOSAL = "last_seen_proposal_id"
@@ -181,6 +182,11 @@ class LocalSettingsManager(
     var uiStyleKey: String
         get() = settings.getString(KEY_UI_STYLE, "auto")
         set(value) = settings.putString(KEY_UI_STYLE, value)
+
+    /** Ultima risposta buona dal server: e' l'eta' dei dati mostrati quando si e' offline. */
+    var lastOnlineSyncMillis: Long
+        get() = settings.getLong(KEY_LAST_ONLINE_SYNC, 0L)
+        set(value) = settings.putLong(KEY_LAST_ONLINE_SYNC, value)
 
     /** Colore principale scelto dall'utente ("blue" = predefinito AILA). */
     var accentKey: String
