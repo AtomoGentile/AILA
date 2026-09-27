@@ -67,10 +67,29 @@ fun Modifier.ailaGlassBackdrop(shift: () -> Float): Modifier = drawBehind {
 
 fun DrawScope.drawAilaGlassBackdrop() {
     val dark = AppTheme.isDarkMode
-    drawRect(AppTheme.GlassBase)
     val w = size.width
     val h = size.height
-    fun blob(x: Float, y: Float, radius: Float, color: Color) {
+    val accent = AppTheme.PrimaryBlue
+    // Base: un gradiente verticale lungo tutto lo schermo, ampio e morbido come gli sfondi di
+    // iOS (dall'alto il colore principale, al centro lilla, in fondo un rosa/pesca tenue). Il
+    // vetro ci passa sopra e cambia tinta man mano che si scorre, senza chiazze.
+    val stops = if (dark) {
+        arrayOf(
+            0f to lerpColor(Color(0xFF070A14), accent, 0.38f),
+            0.45f to Color(0xFF1A1438),
+            0.8f to Color(0xFF221431),
+            1f to Color(0xFF1A0F1E)
+        )
+    } else {
+        arrayOf(
+            0f to lerpColor(Color(0xFFEAF0FF), accent, 0.30f),
+            0.45f to Color(0xFFE4DDFB),
+            0.8f to Color(0xFFF6E1EE),
+            1f to Color(0xFFFBEADF)
+        )
+    }
+    drawRect(Brush.verticalGradient(*stops, startY = 0f, endY = h))
+    fun glow(x: Float, y: Float, radius: Float, color: Color) {
         val center = Offset(w * x, h * y)
         drawCircle(
             brush = Brush.radialGradient(listOf(color, color.copy(alpha = 0f)), center = center, radius = w * radius),
@@ -78,20 +97,13 @@ fun DrawScope.drawAilaGlassBackdrop() {
             center = center
         )
     }
-    // Il colore principale scelto entra nello sfondo (prima macchia, la piu' grande).
-    val accent = AppTheme.PrimaryBlue
-    // Colori vicini fra loro (accento, viola, azzurro, un filo di rosa): varieta' senza
-    // contrasti. Sei macchie di colori opposti (verde, rosso, arancio) facevano un arlecchino.
+    // Due soli bagliori molto larghi e tenui, per dare profondita' senza "macchie".
     if (dark) {
-        blob(0.0f, 0.0f, 1.1f, accent.copy(alpha = 0.42f))
-        blob(1.05f, 0.35f, 0.95f, Color(0x594C1D95))
-        blob(0.05f, 0.75f, 0.9f, Color(0x33155E75))
-        blob(0.95f, 1.05f, 0.85f, Color(0x2E831843))
+        glow(0.1f, 0.12f, 1.2f, accent.copy(alpha = 0.22f))
+        glow(0.95f, 0.6f, 1.1f, Color(0x264C1D95))
     } else {
-        blob(0.0f, 0.0f, 1.1f, accent.copy(alpha = 0.30f))
-        blob(1.05f, 0.35f, 0.95f, Color(0x73C4B5FD))
-        blob(0.05f, 0.75f, 0.9f, Color(0x5CA5E8F5))
-        blob(0.95f, 1.05f, 0.85f, Color(0x52FBCFE8))
+        glow(0.1f, 0.12f, 1.2f, accent.copy(alpha = 0.14f))
+        glow(0.95f, 0.6f, 1.1f, Color(0x33C4B5FD))
     }
 }
 
