@@ -241,6 +241,7 @@ fun AilaSegmentedTabs(
         modifier = modifier
             .clip(RoundedCornerShape(percent = 50))
             .background(AppTheme.TrackFill)
+            .then(if (AppTheme.isGlass) Modifier.border(1.dp, AppTheme.GlassEdge, RoundedCornerShape(percent = 50)) else Modifier)
             .padding(4.dp)
     ) {
         val segmentWidth = maxWidth / labels.size
@@ -350,6 +351,7 @@ fun AilaSlidingChipRow(
             // spazio invece che dentro un contenitore comune.
             .clip(RoundedCornerShape(percent = 50))
             .background(AppTheme.TrackFill)
+            .then(if (AppTheme.isGlass) Modifier.border(1.dp, AppTheme.GlassEdge, RoundedCornerShape(percent = 50)) else Modifier)
             .padding(4.dp)
             .then(
                 if (scrollable) Modifier.horizontalScroll(scrollState) else Modifier
@@ -400,13 +402,18 @@ fun AilaCard(
     containerColor: Color = AppTheme.CardSurface,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    // Glass: vetro traslucido con un filo di luce sul bordo. Expressive: superficie tonale piena,
-    // senza bordo ne' ombra (vedi AppTheme.CardSurface).
+    // Glass: vetro traslucido (riflesso in alto, filo di luce sul bordo) sopra lo sfondo a
+    // macchie di colore; le card colorate diventano vetro tinto. Expressive: superficie tonale
+    // piena, senza bordo ne' ombra (vedi AppTheme.CardSurface).
+    val glass = AppTheme.isGlass
+    val shape = RoundedCornerShape(AppTheme.CardCornerRadius)
+    val glassTint = if (glass && containerColor != AppTheme.CardSurface) {
+        containerColor.copy(alpha = minOf(containerColor.alpha, 0.55f))
+    } else null
     Card(
-        shape = RoundedCornerShape(AppTheme.CardCornerRadius),
-        colors = CardDefaults.cardColors(containerColor = containerColor),
+        shape = shape,
+        colors = CardDefaults.cardColors(containerColor = if (glass) Color.Transparent else containerColor),
         elevation = CardDefaults.cardElevation(defaultElevation = AppTheme.CardElevation),
-        border = if (AppTheme.isGlass) androidx.compose.foundation.BorderStroke(1.dp, AppTheme.CardBorder) else null,
         modifier = modifier
             .fillMaxWidth()
             // Scala più contenuta delle righe: su una superficie grande il 3% si nota già.
@@ -417,7 +424,8 @@ fun AilaCard(
                         .ailaTransformOrigin(AppTheme.CardCornerRadius)
                         .ailaPressable(pressedScale = 0.985f) { onClick() }
                 } else Modifier
-            ),
+            )
+            .then(if (glass) Modifier.ailaGlassSurface(shape, tint = glassTint) else Modifier),
         content = content
     )
 }
@@ -529,6 +537,13 @@ fun AilaPrimaryButton(
                 if (enabled) Modifier.background(AppTheme.PrimaryGradient)
                 else Modifier.background(AppTheme.TintSlate)
             )
+            // Glass: vetro colorato, con il riflesso "bagnato" in alto e il filo di luce.
+            .then(
+                if (AppTheme.isGlass && enabled) Modifier
+                    .background(AppTheme.GlassGloss)
+                    .border(1.dp, Color(0x73FFFFFF), shape)
+                else Modifier
+            )
             .clickable(interactionSource = interactionSource, indication = null, enabled = enabled) { onClick() }
             .then(
                 // Glass: la velatura di vetro che si accende dal punto del tocco. Expressive: il
@@ -604,9 +619,10 @@ fun AilaSecondaryButton(
     Box(
         modifier = modifier
             .then(if (large) Modifier.heightIn(min = 48.dp) else Modifier)
-            .clip(shape)
-            .background(AppTheme.SurfaceWhite)
-            .border(1.dp, AppTheme.Hairline, shape)
+            .then(
+                if (AppTheme.isGlass) Modifier.ailaGlassSurface(shape)
+                else Modifier.clip(shape).background(AppTheme.SurfaceWhite).border(1.dp, AppTheme.Hairline, shape)
+            )
             .ailaGlassPressable(tint = AppTheme.PrimaryBlue) { onClick() }
             .padding(
                 horizontal = if (large) AppTheme.Space20 else if (compact) AppTheme.Space12 else AppTheme.Space16,
@@ -887,6 +903,12 @@ fun AilaIconButton(
             .then(if (AppTheme.isGlass) Modifier.ailaPressScale(interactionSource, 0.9f) else Modifier)
             .clip(shape)
             .then(background)
+            .then(
+                if (AppTheme.isGlass) Modifier
+                    .then(if (primary) Modifier.background(AppTheme.GlassGloss) else Modifier.background(AppTheme.GlassFill))
+                    .border(1.dp, AppTheme.GlassEdge, shape)
+                else Modifier
+            )
             .alpha(if (enabled) 1f else 0.6f)
             .clickable(interactionSource = interactionSource, indication = null, enabled = enabled) { onClick() }
             .semantics {
@@ -1151,6 +1173,7 @@ fun AilaFab(
             .shadow(if (glass) 12.dp else 6.dp, shape)
             .clip(shape)
             .background(if (glass) AppTheme.PrimaryGradient else SolidColor(AppTheme.TintBlue))
+            .then(if (glass) Modifier.background(AppTheme.GlassGloss).border(1.dp, Color(0x73FFFFFF), shape) else Modifier)
             .clickable(interactionSource = interactionSource, indication = null) { onClick() }
             .semantics {
                 this.contentDescription = contentDescription
