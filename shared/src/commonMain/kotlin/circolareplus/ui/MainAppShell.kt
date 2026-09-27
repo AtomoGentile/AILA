@@ -1908,8 +1908,15 @@ fun MainAppShell(
         circolareplus.design.AilaContainerTransform.assignFreshTo(DETAIL_TRANSFORM_KEY)
     }
     detailWasOpen[0] = detailOpen
-    val detailOrigin = if (AppTheme.isGlass) null
-        else circolareplus.design.AilaContainerTransform.originOf(DETAIL_TRANSFORM_KEY)
+    // Al ritorno ci si richiude sulla card della stessa circolare che si vede adesso (es. nella
+    // lista delle Circolari, se era stata aperta dalla Home); se non c'e', sul punto di partenza.
+    val detailOrigin = if (AppTheme.isGlass) null else {
+        val stored = circolareplus.design.AilaContainerTransform.originOf(DETAIL_TRANSFORM_KEY)
+        val number = (selectedCircularForDetail ?: lastDetailCircular[0])?.number
+        if (stored != null && number != null && !detailOpen) {
+            circolareplus.design.AilaContainerTransform.liveOf("circular:$number") ?: stored
+        } else stored
+    }
     Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         modifier = Modifier
@@ -2826,7 +2833,7 @@ fun MainAppShell(
             val containerOrigin = if (AppTheme.isGlass || route == ShellRoute.TABS) null
                 else circolareplus.design.AilaContainerTransform.originOf(route)
             val containerProgress = transition.animateFloat(
-                transitionSpec = { circolareplus.design.ailaContainerSpring() },
+                transitionSpec = { circolareplus.design.ailaContainerFloatSpring() },
                 label = "containerTransform"
             ) { state -> if (state == androidx.compose.animation.EnterExitState.Visible) 1f else 0f }
             // Si espande solo entrando "in avanti" e si richiude solo tornando indietro da lei;
@@ -2842,7 +2849,8 @@ fun MainAppShell(
                         if (containerOrigin != null) Modifier.ailaContainerReveal(
                             progress = { if (revealing) containerProgress.value else 1f },
                             origin = containerOrigin,
-                            containerColor = AppTheme.CardSurface
+                            containerColor = AppTheme.CardSurface,
+                            pageColor = AppTheme.BackgroundLight
                         ) else Modifier
                     )
                     // Coprente: in Glass BackgroundLight e' trasparente, quindi qui si ridipinge
@@ -3393,7 +3401,7 @@ fun MainAppShell(
         ) {
         val circularForDetail = selectedCircularForDetail ?: lastDetailCircular[0]
         val detailProgressLocal = transition.animateFloat(
-            transitionSpec = { circolareplus.design.ailaContainerSpring() },
+            transitionSpec = { circolareplus.design.ailaContainerFloatSpring() },
             label = "detailContainerTransform"
         ) { state -> if (state == androidx.compose.animation.EnterExitState.Visible) 1f else 0f }
         // Il dettaglio sta sopra le tab: questo livello "prende" i tocchi, altrimenti quelli
@@ -3405,7 +3413,8 @@ fun MainAppShell(
                     if (detailOrigin != null) Modifier.ailaContainerReveal(
                         progress = { detailProgressLocal.value },
                         origin = detailOrigin,
-                        containerColor = AppTheme.CardSurface
+                        containerColor = AppTheme.CardSurface,
+                        pageColor = AppTheme.BackgroundLight
                     ) else Modifier
                 )
                 .then(if (AppTheme.isGlass) Modifier.ailaGlassBackdrop() else Modifier)

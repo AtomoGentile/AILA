@@ -171,7 +171,7 @@ private fun LatestCircularCard(
     onClick: (() -> Unit)?,
     modifier: Modifier = Modifier
 ) {
-    AilaCard(onClick = onClick, modifier = modifier) {
+    AilaCard(onClick = onClick, modifier = modifier, transformKey = latestCircular?.let { "circular:${it.number}" }) {
         AilaListRow(
             title = if (latestCircular != null) "Circolare n. ${latestCircular.number}" else "Nuova circolare",
             subtitle = latestCircular?.title ?: "Nessuna circolare disponibile al momento",

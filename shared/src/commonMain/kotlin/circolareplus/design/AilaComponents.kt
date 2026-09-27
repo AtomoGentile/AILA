@@ -401,6 +401,8 @@ fun AilaCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     containerColor: Color = AppTheme.CardSurface,
+    /** Chiave "logica" dell'elemento per il ritorno del container transform (vedi ailaTransformOrigin). */
+    transformKey: Any? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     // Glass: vetro traslucido (riflesso in alto, filo di luce sul bordo) sopra lo sfondo a
@@ -422,7 +424,7 @@ fun AilaCard(
                 if (onClick != null) {
                     // Origine del container transform: toccata, la card si allarga nella pagina.
                     Modifier
-                        .ailaTransformOrigin(AppTheme.CardCornerRadius)
+                        .ailaTransformOrigin(AppTheme.CardCornerRadius, liveKey = transformKey)
                         .ailaPressable(pressedScale = 0.985f) { onClick() }
                 } else Modifier
             )
