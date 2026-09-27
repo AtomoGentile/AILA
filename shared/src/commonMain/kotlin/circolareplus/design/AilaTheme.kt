@@ -10,6 +10,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.fillMaxSize
 
 /**
  * Tema Material 3 dell'app.
@@ -100,9 +101,17 @@ fun AilaTheme(content: @Composable () -> Unit) {
         // Ricalcolati a ogni ricomposizione: dipendono da AppTheme.isDarkMode, che è stato di
         // Compose e cambia dalle Impostazioni.
         colorScheme = ailaColorScheme(),
-        shapes = ailaShapes(),
-        content = content
-    )
+        shapes = ailaShapes()
+    ) {
+        // Liquid Glass: lo sfondo a macchie di colore dietro a tutta l'app (vedi AilaGlass.kt).
+        androidx.compose.foundation.layout.Box(
+            modifier = androidx.compose.ui.Modifier
+                .fillMaxSize()
+                .then(if (AppTheme.isGlass) androidx.compose.ui.Modifier.ailaGlassBackdrop() else androidx.compose.ui.Modifier)
+        ) {
+            content()
+        }
+    }
 }
 
 /**
@@ -112,8 +121,8 @@ fun AilaTheme(content: @Composable () -> Unit) {
  */
 @Composable
 fun ailaFieldColors(): TextFieldColors = OutlinedTextFieldDefaults.colors(
-    focusedContainerColor = AppTheme.SurfaceWhite,
-    unfocusedContainerColor = AppTheme.SurfaceWhite,
+    focusedContainerColor = AppTheme.FieldSurface,
+    unfocusedContainerColor = AppTheme.FieldSurface,
     disabledContainerColor = AppTheme.TintSlate,
     focusedBorderColor = AppTheme.PrimaryBlue,
     unfocusedBorderColor = AppTheme.Hairline,
