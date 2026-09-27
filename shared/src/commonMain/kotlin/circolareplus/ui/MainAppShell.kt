@@ -5378,13 +5378,12 @@ private fun FloatingTabBar(
                             // Bordo speculare come gli altri vetri (luce dall'alto a sinistra).
                             .border(1.dp, AppTheme.GlassEdge, shape)
                     } else {
-                        // Material Expressive: pillola "surface container" semitrasparente, senza
-                        // bordo. Niente ombra: sotto una superficie traslucida si vedrebbe
-                        // attraverso come una macchia scura.
+                        // Material Expressive: pillola piena "surface container", senza bordo,
+                        // con l'ombra bassa delle barre flottanti di M3.
                         Modifier
+                            .shadow(elevation = 6.dp, shape = shape)
                             .clip(shape)
-                            // Semitrasparente: il contenuto che scorre sotto si intravede.
-                            .background(if (AppTheme.isDarkMode) Color(0xB322252C) else Color(0xB3ECEDF7))
+                            .background(if (AppTheme.isDarkMode) Color(0xFF22252C) else Color(0xFFECEDF7))
                     }
                 )
                 .padding(8.dp),
