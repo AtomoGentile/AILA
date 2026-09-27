@@ -137,8 +137,15 @@ object AppTheme {
     val HeroGradientTop get() = if (isDarkMode) Color(0xFF141C3A) else Color(0xFF1B2E7A)
     val HeroGradientMid get() = if (isDarkMode) Color(0xFF23408F) else Color(0xFF2F5BD8)
     val HeroGradientBottom get() = if (isDarkMode) Color(0xFF4B3AA8) else Color(0xFF7B4FE3)
-    val HeroGradient
-        get() = Brush.linearGradient(listOf(HeroGradientTop, HeroGradientMid, HeroGradientBottom))
+    val HeroGradient: Brush
+        get() = if (isGlass) {
+            Brush.linearGradient(listOf(HeroGradientTop, HeroGradientMid, HeroGradientBottom))
+        } else {
+            // Material Expressive: il pannello e' il primario "pieno" in due toni vicini, senza la
+            // virata al viola del gradiente di Glass.
+            if (isDarkMode) Brush.linearGradient(listOf(Color(0xFF1B2F6E), Color(0xFF263F8C)))
+            else Brush.linearGradient(listOf(Color(0xFF2A52C4), Color(0xFF3A63D8)))
+        }
 
     /** Variante più profonda, per splash e onboarding. */
     val HeroGradientDeep

@@ -94,7 +94,7 @@ fun AilaScreenHeader(
     showBrand: Boolean = true,
     action: (@Composable () -> Unit)? = null
 ) {
-    Column(modifier = modifier.fillMaxWidth().background(AppTheme.SurfaceWhite)) {
+    Column(modifier = modifier.fillMaxWidth().background(AppTheme.BackgroundLight)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -141,7 +141,8 @@ fun AilaScreenHeader(
                 AilaProfileButton(profileEntry)
             }
         }
-        HorizontalDivider(color = AppTheme.Hairline)
+        // Niente riga divisoria: in entrambi gli stili la barra in alto ha lo stesso fondo
+        // della schermata (grandi titoli di iOS, top app bar "surface" di Material).
     }
 }
 
@@ -157,7 +158,7 @@ fun AilaBackBar(
     modifier: Modifier = Modifier,
     action: (@Composable () -> Unit)? = null
 ) {
-    Column(modifier = modifier.fillMaxWidth().background(AppTheme.SurfaceWhite)) {
+    Column(modifier = modifier.fillMaxWidth().background(AppTheme.BackgroundLight)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -196,7 +197,8 @@ fun AilaBackBar(
                 action()
             }
         }
-        HorizontalDivider(color = AppTheme.Hairline)
+        // Niente riga divisoria: in entrambi gli stili la barra in alto ha lo stesso fondo
+        // della schermata (grandi titoli di iOS, top app bar "surface" di Material).
     }
 }
 

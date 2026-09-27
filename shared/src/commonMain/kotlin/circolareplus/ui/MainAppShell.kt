@@ -2208,7 +2208,7 @@ fun MainAppShell(
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .background(AppTheme.SurfaceWhite)
+                                        .background(AppTheme.BackgroundLight)
                                 ) {
                                     Row(
                                         modifier = Modifier
@@ -2245,7 +2245,6 @@ fun MainAppShell(
                                             circolareplus.design.AilaProfileButton(entry)
                                         }
                                     }
-                                    HorizontalDivider(color = AppTheme.Hairline)
                                 }
                                 // Dissolvenza tra le due sezioni: prima il contenuto veniva
                                 // sostituito di colpo, e con liste lunghe sembrava un salto.
