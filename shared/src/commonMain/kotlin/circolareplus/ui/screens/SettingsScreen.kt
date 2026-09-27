@@ -60,6 +60,8 @@ fun SettingsScreen(
     onDarkModeChange: (Boolean) -> Unit,
     uiStyle: circolareplus.design.UiStyle = circolareplus.design.UiStyle.AUTO,
     onUiStyleChange: (circolareplus.design.UiStyle) -> Unit = {},
+    accent: circolareplus.design.AilaAccent = circolareplus.design.AilaAccent.Default,
+    onAccentChange: (circolareplus.design.AilaAccent) -> Unit = {},
     isNotificationKindEnabled: (NotificationKind) -> Boolean,
     onNotificationKindChange: (NotificationKind, Boolean) -> Unit,
     boardNotificationsEnabled: Boolean = true,
@@ -198,7 +200,24 @@ fun SettingsScreen(
                             color = AppTheme.TextMuted,
                             lineHeight = 16.sp
                         )
-
+                        Spacer(modifier = Modifier.height(AppTheme.Space16))
+                        Text(
+                            text = "Colore principale",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = AppTheme.TextDark
+                        )
+                        Spacer(modifier = Modifier.height(AppTheme.Space8))
+                        AccentPicker(selected = accent, onSelect = onAccentChange)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (accent == circolareplus.design.AilaAccent.Default)
+                                "${accent.label} (predefinito)"
+                            else "${accent.label} \u2022 tocca il primo per tornare al predefinito",
+                            fontSize = 12.sp,
+                            color = AppTheme.TextMuted,
+                            lineHeight = 16.sp
+                        )
                     }
                 }
             }
@@ -791,4 +810,43 @@ private fun formatBytes(bytes: Long): String {
 private fun formatRam(totalRamMb: Int): String {
     val tenthsOfGb = totalRamMb * 10 / 1024
     return "${tenthsOfGb / 10},${tenthsOfGb % 10} GB"
+}
+
+/** Riga di campioni colore: il primo e' il blu AILA predefinito, quello scelto ha un anello. */
+@Composable
+private fun AccentPicker(
+    selected: circolareplus.design.AilaAccent,
+    onSelect: (circolareplus.design.AilaAccent) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        circolareplus.design.AilaAccent.entries.forEach { option ->
+            val isSelected = option == selected
+            val swatch = androidx.compose.ui.graphics.Color(
+                if (AppTheme.isDarkMode) option.primaryDark else option.primaryLight
+            )
+            val ring by androidx.compose.animation.core.animateDpAsState(
+                targetValue = if (isSelected) 3.dp else 0.dp,
+                animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.7f, stiffness = 600f),
+                label = "accentRing"
+            )
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .border(ring, swatch.copy(alpha = 0.45f), androidx.compose.foundation.shape.CircleShape)
+                    .clickable { onSelect(option) }
+                    .padding(if (isSelected) 6.dp else 3.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(swatch),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isSelected) {
+                    AppIcons.Check(modifier = Modifier.size(16.dp), color = androidx.compose.ui.graphics.Color.White)
+                }
+            }
+        }
+    }
 }

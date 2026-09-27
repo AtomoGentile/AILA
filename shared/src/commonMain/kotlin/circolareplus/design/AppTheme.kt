@@ -19,6 +19,33 @@ import androidx.compose.ui.unit.dp
  *   deformano alla pressione, molle piu' rimbalzanti, transizioni "shared axis" e "fade through".
  * - [AUTO] quello della piattaforma: Glass su iPhone/iPad, Expressive su Android.
  */
+/**
+ * Colore principale scelto dall'utente (Impostazioni > Aspetto). [BLUE] e' il predefinito, il blu
+ * AILA. Per ognuno: primario (chiaro/scuro), "container" tenue e il suo inchiostro, e un tono
+ * profondo per i pannelli e i pulsanti tonali. Toni scelti come quelli di Material 3 (tono 40 per
+ * il primario in chiaro, 80/30 per i container), cosi' il contrasto del testo regge.
+ */
+enum class AilaAccent(
+    val key: String,
+    val label: String,
+    val primaryLight: Long, val primaryDark: Long,
+    val containerLight: Long, val containerDark: Long,
+    val onContainerLight: Long, val onContainerDark: Long,
+    val deepLight: Long, val deepDark: Long
+) {
+    BLUE("blue", "Blu AILA", 0xFF2F5BD3, 0xFF5A8CFF, 0xFFDCE3FF, 0xFF223A7A, 0xFF0B1B45, 0xFFDCE3FF, 0xFF1C3C9A, 0xFF14245A),
+    VIOLET("violet", "Viola", 0xFF6B4FD8, 0xFF9A7DFF, 0xFFE9DDFF, 0xFF3E2A7A, 0xFF22005D, 0xFFE9DDFF, 0xFF4A2FA8, 0xFF2A1B5E),
+    GREEN("green", "Verde", 0xFF1E8E5A, 0xFF3DBE84, 0xFFC8F2DC, 0xFF1F4D36, 0xFF002111, 0xFFC8F2DC, 0xFF146B43, 0xFF103A27),
+    TEAL("teal", "Petrolio", 0xFF00838F, 0xFF33B5C2, 0xFFC7F1F5, 0xFF0E4A50, 0xFF002022, 0xFFC7F1F5, 0xFF00606A, 0xFF073236),
+    ORANGE("orange", "Arancio", 0xFFC2590C, 0xFFF08A3E, 0xFFFFDBC8, 0xFF5C2E0F, 0xFF331200, 0xFFFFDBC8, 0xFF8F3F05, 0xFF3F1D05),
+    PINK("pink", "Rosa", 0xFFC2185B, 0xFFF0679A, 0xFFFFD9E3, 0xFF5C1734, 0xFF3E001D, 0xFFFFD9E3, 0xFF8E0E43, 0xFF3E0A22);
+
+    companion object {
+        val Default = BLUE
+        fun fromKey(key: String?): AilaAccent = entries.firstOrNull { it.key == key } ?: Default
+    }
+}
+
 enum class UiStyle(val key: String, val label: String) {
     AUTO("auto", "Automatico"),
     GLASS("glass", "Liquid Glass"),
@@ -56,6 +83,14 @@ object AppTheme {
 
     /** Stile grafico scelto (Impostazioni); persiste in LocalSettingsManager. */
     var uiStyle by mutableStateOf(UiStyle.AUTO)
+
+    /** Colore principale scelto (Impostazioni); persiste in LocalSettingsManager. */
+    var accent by mutableStateOf(AilaAccent.Default)
+
+    /** Primario, container e toni profondi del colore scelto (vedi [AilaAccent]). */
+    val AccentContainer get() = Color(if (isDarkMode) accent.containerDark else accent.containerLight)
+    val OnAccentContainer get() = Color(if (isDarkMode) accent.onContainerDark else accent.onContainerLight)
+    val AccentDeep get() = Color(if (isDarkMode) accent.deepDark else accent.deepLight)
 
     /** true = Liquid Glass, false = Material Expressive (con AUTO decide la piattaforma). */
     val isGlass: Boolean
@@ -98,7 +133,11 @@ object AppTheme {
     // --- Colori brand -------------------------------------------------------------------------
     // Expressive usa il "tono 40" del blu AILA (piu' profondo, come i primari di Material) in
     // chiaro; in scuro resta il blu luminoso, che regge il testo bianco sopra.
-    val PrimaryBlue get() = style(Color(0xFF3B82F6), Color(0xFF5A9BFF), Color(0xFF2F5BD3), Color(0xFF5A8CFF))
+    val PrimaryBlue get() = if (accent == AilaAccent.BLUE) {
+        style(Color(0xFF3B82F6), Color(0xFF5A9BFF), Color(0xFF2F5BD3), Color(0xFF5A8CFF))
+    } else {
+        Color(if (isDarkMode) accent.primaryDark else accent.primaryLight)
+    }
     val SecondaryIndigo get() = if (isDarkMode) Color(0xFFA78BFA) else Color(0xFF8B5CF6)
     val AccentCyan = Color(0xFF06B6D4)
 
@@ -136,8 +175,10 @@ object AppTheme {
      * control di iOS. Expressive: il "secondary container" di Material, pieno.
      */
     val SelectionFill: Brush
-        get() = SolidColor(style(Color(0xF2FFFFFF), Color(0x47FFFFFF), Color(0xFFD9E2FF), Color(0xFF34457A)))
-    val OnSelection get() = style(Color(0xFF0B0D12), Color(0xFFFFFFFF), Color(0xFF0B1B45), Color(0xFFDCE3FF))
+        get() = SolidColor(if (!isGlass && accent != AilaAccent.BLUE) AccentContainer
+            else style(Color(0xF2FFFFFF), Color(0x47FFFFFF), Color(0xFFD9E2FF), Color(0xFF34457A)))
+    val OnSelection get() = if (!isGlass && accent != AilaAccent.BLUE) OnAccentContainer
+        else style(Color(0xFF0B0D12), Color(0xFFFFFFFF), Color(0xFF0B1B45), Color(0xFFDCE3FF))
     /** Fondo del binario su cui scorre la selezione. */
     val TrackFill get() = style(Color(0x4DFFFFFF), Color(0x1AFFFFFF), Color(0xFFE6E8F3), Color(0xFF282B32))
 
@@ -147,15 +188,17 @@ object AppTheme {
     val HeroGradientBottom get() = if (isDarkMode) Color(0xFF4B3AA8) else Color(0xFF7B4FE3)
     val HeroGradient: Brush
         get() = if (isGlass) {
-            // Vetro colorato: lo stesso gradiente, ma lascia intravedere lo sfondo.
-            Brush.linearGradient(
-                listOf(HeroGradientTop.copy(alpha = 0.62f), HeroGradientMid.copy(alpha = 0.55f), HeroGradientBottom.copy(alpha = 0.5f))
-            )
+            // Vetro chiaro, non un pannello colorato: il colore lo da' lo sfondo dietro. Il
+            // gradiente blu-viola pieno faceva l'app "giocattolo".
+            if (isDarkMode) Brush.verticalGradient(listOf(Color(0x29FFFFFF), Color(0x0FFFFFFF)))
+            else Brush.verticalGradient(listOf(Color(0x80FFFFFF), Color(0x40FFFFFF)))
         } else {
             // Material Expressive: il pannello e' il primario "pieno" in due toni vicini, senza la
             // virata al viola del gradiente di Glass.
-            if (isDarkMode) Brush.linearGradient(listOf(Color(0xFF1B2F6E), Color(0xFF263F8C)))
-            else Brush.linearGradient(listOf(Color(0xFF2A52C4), Color(0xFF3A63D8)))
+            if (accent == AilaAccent.BLUE) {
+                if (isDarkMode) Brush.linearGradient(listOf(Color(0xFF1B2F6E), Color(0xFF263F8C)))
+                else Brush.linearGradient(listOf(Color(0xFF2A52C4), Color(0xFF3A63D8)))
+            } else Brush.linearGradient(listOf(AccentDeep, lerpColor(AccentDeep, PrimaryBlue, 0.45f)))
         }
 
     /** Variante più profonda, per splash e onboarding. */
@@ -170,23 +213,28 @@ object AppTheme {
             // Material Expressive: il colore primario e' pieno, non sfumato.
             !isGlass -> SolidColor(PrimaryBlue)
             // Glass: vetro tinto di blu (i pulsanti "prominent" di iOS 26), un po' trasparente.
+            accent != AilaAccent.BLUE -> Brush.verticalGradient(listOf(PrimaryBlue.copy(alpha = 0.90f), lerpColor(PrimaryBlue, AccentDeep, 0.25f).copy(alpha = 0.85f)))
             isDarkMode -> Brush.verticalGradient(listOf(Color(0xE6418AF5), Color(0xCC2F6FE0)))
             else -> Brush.verticalGradient(listOf(Color(0xE63D8BFF), Color(0xD92F74F0)))
         }
 
     // Testo/superfici sopra HeroGradient (contrasto chiaro su sfondo scuro): uguali nei due temi,
     // perché il pannello è scuro in entrambi.
-    val OnHeroPrimary = Color(0xFFFFFFFF)
-    val OnHeroSecondary = Color(0xCCFFFFFF)
-    val OnHeroSurface = Color(0x2EFFFFFF)
-    val OnHeroBorder = Color(0x33FFFFFF)
+    // In Liquid Glass il pannello non e' piu' un blocco colorato ma vetro chiaro (piu' sobrio,
+    // come iOS): il testo sopra diventa scuro e i riquadri vetro bianco.
+    val OnHeroPrimary get() = if (isGlass) TextDark else Color(0xFFFFFFFF)
+    val OnHeroSecondary get() = if (isGlass) TextMuted else Color(0xCCFFFFFF)
+    val OnHeroSurface get() = if (isGlass) (if (isDarkMode) Color(0x1FFFFFFF) else Color(0x73FFFFFF)) else Color(0x2EFFFFFF)
+    val OnHeroBorder get() = if (isGlass) (if (isDarkMode) Color(0x40FFFFFF) else Color(0xE6FFFFFF)) else Color(0x33FFFFFF)
 
     // --- Tinte dei riquadri icona -------------------------------------------------------------
     // In tema scuro lo sfondo tenue diventa una velatura del colore e il segno si schiarisce,
     // altrimenti i riquadri chiarissimi sparerebbero luce in mezzo a una schermata scura.
     // Expressive: il blu e' il "primary container" di Material (piu' saturo del tenue di Glass).
-    val TintBlue get() = style(Color(0xFFE8F0FF), Color(0xFF1B2A4A), Color(0xFFDCE3FF), Color(0xFF223A7A))
-    val TintBlueInk get() = style(Color(0xFF1E40AF), Color(0xFF93C5FD), Color(0xFF0B1B45), Color(0xFFDCE3FF))
+    val TintBlue get() = if (accent != AilaAccent.BLUE) AccentContainer
+        else style(Color(0xFFE8F0FF), Color(0xFF1B2A4A), Color(0xFFDCE3FF), Color(0xFF223A7A))
+    val TintBlueInk get() = if (accent != AilaAccent.BLUE) OnAccentContainer
+        else style(Color(0xFF1E40AF), Color(0xFF93C5FD), Color(0xFF0B1B45), Color(0xFFDCE3FF))
     val TintViolet get() = if (isDarkMode) Color(0xFF261F4A) else Color(0xFFF5F3FF)
     val TintVioletInk get() = if (isDarkMode) Color(0xFFC4B5FD) else Color(0xFF5B21B6)
     val TintAmber get() = if (isDarkMode) Color(0xFF352A16) else Color(0xFFFFFBEB)
@@ -209,3 +257,11 @@ object AppTheme {
     val PollLightRed = Color(0xFFF87171)
     val PollDarkRed = Color(0xFFDC2626)
 }
+
+/** Interpolazione lineare tra due colori (usata per derivare i toni dall'accento scelto). */
+internal fun lerpColor(a: Color, b: Color, t: Float): Color = Color(
+    red = a.red + (b.red - a.red) * t,
+    green = a.green + (b.green - a.green) * t,
+    blue = a.blue + (b.blue - a.blue) * t,
+    alpha = a.alpha + (b.alpha - a.alpha) * t
+)

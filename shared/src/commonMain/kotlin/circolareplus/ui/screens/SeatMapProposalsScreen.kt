@@ -142,7 +142,7 @@ fun SeatMapProposalsScreen(
                         text = "LAVAGNA & CATTEDRA",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = AppTheme.OnHeroPrimary
                     )
                 }
             }

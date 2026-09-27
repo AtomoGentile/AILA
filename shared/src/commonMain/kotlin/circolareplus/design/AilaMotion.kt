@@ -507,9 +507,14 @@ fun Modifier.ailaContainerReveal(
             val bottom = lerp(o.bottom, size.height)
             val radius = lerp(origin.cornerRadiusPx, 0f)
             ailaRoundRectPathInto(clip, left, top, right - left, bottom - top, radius)
-            // Il contenuto compare quasi subito: prima si vedeva a lungo il contenitore vuoto.
-            val contentAlpha = ((p - 0.06f) / 0.3f).coerceIn(0f, 1f)
-            val fill = androidx.compose.ui.graphics.lerp(containerColor, pageColor, (p / 0.5f).coerceIn(0f, 1f))
+            // Il contenitore prende subito il colore della pagina (niente "flash" colorato) e il
+            // contenuto compare solo quando il contenitore e' gia' grande: durante il movimento si
+            // vede una forma pulita, non righe di testo tagliate. In chiusura e' l'inverso: il
+            // testo sparisce subito e resta la forma che rientra, riprendendo il colore della card
+            // solo all'ultimo, quando si appoggia sull'elemento.
+            val contentAlpha = ((p - 0.6f) / 0.3f).coerceIn(0f, 1f)
+            val colorT = (p / 0.25f).coerceIn(0f, 1f)
+            val fill = androidx.compose.ui.graphics.lerp(containerColor, pageColor, colorT * colorT * (3f - 2f * colorT))
             clipPath(clip) {
                 // Niente saveLayer (un buffer grande quanto lo schermo a ogni fotogramma, la causa
                 // principale degli scatti): si disegna il contenuto pieno e SOPRA il colore del

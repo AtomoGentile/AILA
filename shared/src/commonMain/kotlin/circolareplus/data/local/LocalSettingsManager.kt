@@ -34,6 +34,7 @@ class LocalSettingsManager(
         private const val KEY_SUBMITTED_POLLS = "submitted_polls"
         private const val KEY_DARK_MODE = "dark_mode"
         private const val KEY_UI_STYLE = "ui_style"
+        private const val KEY_ACCENT = "accent_color"
         private const val KEY_MUTED_NOTIFICATIONS = "muted_notification_kinds"
         private const val KEY_LAST_SEEN_CIRCULAR = "last_seen_circular_number"
         private const val KEY_LAST_SEEN_PROPOSAL = "last_seen_proposal_id"
@@ -180,6 +181,11 @@ class LocalSettingsManager(
     var uiStyleKey: String
         get() = settings.getString(KEY_UI_STYLE, "auto")
         set(value) = settings.putString(KEY_UI_STYLE, value)
+
+    /** Colore principale scelto dall'utente ("blue" = predefinito AILA). */
+    var accentKey: String
+        get() = settings.getString(KEY_ACCENT, "blue")
+        set(value) = settings.putString(KEY_ACCENT, value)
 
     // --- Filtri delle notifiche ----------------------------------------------------------------
 

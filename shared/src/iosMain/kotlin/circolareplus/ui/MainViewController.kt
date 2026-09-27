@@ -25,6 +25,7 @@ fun MainViewController(): UIViewController = ComposeUIViewController {
     // il bianco a chi usa il tema scuro.
     AppTheme.isDarkMode = AppContainer.settings.isDarkMode
     AppTheme.uiStyle = circolareplus.design.UiStyle.fromKey(AppContainer.settings.uiStyleKey)
+    AppTheme.accent = circolareplus.design.AilaAccent.fromKey(AppContainer.settings.accentKey)
     SyncWindowInterfaceStyle()
     AilaTheme {
         MainAppShell()
