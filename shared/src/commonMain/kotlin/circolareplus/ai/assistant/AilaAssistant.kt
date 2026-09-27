@@ -84,6 +84,10 @@ class AilaAssistant(
         history: List<AssistantMessage>,
         knowledge: AssistantKnowledge
     ): AssistantReply {
+        // Scadenze, pagamenti, "cosa ho questa settimana": l'elenco lo fa il codice, esatto e
+        // subito. Il modello sul telefono lo ricopiava storpiato (vedi [AssistantAgenda]).
+        AssistantAgenda.answer(knowledge, question)?.let { return it }
+
         val classifier = classifierFactory()
         val startedAt = currentTimeMillis()
 
