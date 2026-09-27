@@ -19,6 +19,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
@@ -793,6 +796,7 @@ fun MainAppShell(
     // LocalSettingsManager, che non è stato di Compose e da solo non farebbe ridisegnare nulla.
     var apiKeyRevision by remember { mutableStateOf(0) }
     var selectedCircularForDetail by remember { mutableStateOf<Circular?>(null) }
+    val lastDetailCircular = remember { arrayOf<Circular?>(null) }
 
     // --- Stato Scheda Classe (solo Rappresentante) ------------------------------------------
     var classRosterEntries by remember { mutableStateOf<List<RatingEntryDto>>(emptyList()) }
@@ -1828,104 +1832,33 @@ fun MainAppShell(
         )
     }
 
-    val circularForDetail = selectedCircularForDetail
-    if (circularForDetail != null) {
-        // Prima lo swipe/tasto indietro di sistema chiudeva l'app anche da qui: nessuna
-        // schermata a schermo intero intercettava il back di sistema, solo la freccia disegnata
-        // nella UI. Ora il back di sistema fa la stessa cosa della freccia.
-        circolareplus.platform.PlatformBackHandler { selectedCircularForDetail = null }
-        CircularDetailScreen(
-            circular = circularForDetail,
-            classification = classifications[circularForDetail.number],
-            isClassifying = circularForDetail.number in inFlightClassification,
-            isQueued = circularForDetail.number in queuedClassification,
-            isAwaitingServer = circularForDetail.number in awaitingServer,
-            analysisOnDevice = circularForDetail.number !in cloudClassification,
-            onStopAnalysis = { stopClassification(circularForDetail.number) },
-            calendarEvents = calendarEvents,
-            onBackClick = { selectedCircularForDetail = null },
-            onDownloadPdfClick = {
-                circularForDetail.downloadUrl?.let { uriHandler.openUri(it) }
-            },
-            // Allegati (colonna "Allegati" di Spaggiari): sia quelli in cache R2 sia i link
-            // esterni si aprono allo stesso modo del PDF principale, nel browser di sistema —
-            // niente anteprima inline per loro, solo per il documento principale.
-            onOpenAttachmentClick = { attachment ->
-                if (attachment.downloadUrl.isNotBlank()) {
-                    uriHandler.openUri(attachment.downloadUrl)
-                }
-            },
-            // Scaricare il PDF è già una cosa che l'app sa fare (serve alla classificazione AI):
-            // qui gli stessi byte alimentano l'anteprima interna, senza una seconda strada.
-            onLoadPdfBytes = {
-                AppContainer.circularsRepository.downloadPdfBytes(circularForDetail.r2PdfKey)
-            },
-            // Allegati PDF (colonna "Allegati" di Spaggiari): stessa rotta del documento
-            // principale, con la loro chiave R2 invece che quella della circolare.
-            onLoadAttachmentPdfBytes = { attachment ->
-                AppContainer.circularsRepository.downloadPdfBytes(
-                    attachment.pdfKey ?: error("Allegato \"${attachment.label}\" senza chiave PDF")
-                )
-            },
-            // La scadenza riconosciuta dall'AI diventa un evento vero. `isAiGenerated = true`
-            // esiste gia' nell'API: serve a distinguere in calendario cosa ha proposto l'AI da
-            // cosa ha inserito una persona.
-            onCreateCalendarEvent = { deadline ->
-                try {
-                    val category = try {
-                        circolareplus.domain.model.CalendarEventCategory.valueOf(deadline.category)
-                    } catch (e: IllegalArgumentException) {
-                        circolareplus.domain.model.CalendarEventCategory.ALTRO
-                    }
-                    val response = AppContainer.calendarRepository.createEvent(
-                        title = deadline.title,
-                        eventDate = deadline.dueDate,
-                        startTime = deadline.time,
-                        category = category,
-                        isAiGenerated = true
-                    )
-                    when {
-                        // Il server, sui possibili doppioni, avvisa invece di creare: l'evento
-                        // NON esiste, e dirlo e' l'unico modo perche' non si creda il contrario.
-                        response.warning != null ->
-                            "Non aggiunto: ${response.warning}"
-                        response.success -> {
-                            // Senza questo, l'evento veniva creato sul server ma restava invisibile
-                            // in Calendario/Home finché l'app non veniva riavviata: calendarEvents
-                            // si ricarica solo quando calendarRefreshTrigger cambia (vedi sopra),
-                            // e qui non veniva mai toccato.
-                            reloadCalendar()
-                            "Aggiunto al calendario."
-                        }
-                        else ->
-                            "Il server non ha creato l'evento."
-                    }
-                } catch (e: Exception) {
-                    "Non aggiunto: ${e.message ?: e::class.simpleName}"
-                }
-            },
-            // Un riassunto di Gemini non si rifà con l'AI del telefono: il risultato sarebbe
-            // peggiore e il server lo rifiuterebbe comunque.
-            onReanalyze = if (
-                classifications[circularForDetail.number]?.tier == 2 && AppContainer.isUsingLocalAiFirst()
-            ) {
-                null
-            } else {
-                {
-                    // Il risultato vecchio resta visibile finché non arriva quello nuovo (o finché
-                    // non si ferma l'analisi col tasto Stop).
-                    launchClassification(circularForDetail, forceReanalyze = true)
-                    Unit
+    // Il dettaglio circolare entra "alla iOS" sopra le tab, invece di sostituirle di colpo:
+    // scorre da destra con una molla mentre la schermata sotto scivola di un terzo a sinistra e
+    // si scurisce; indietro il contrario. Le tab restano composte sotto, quindi al ritorno la
+    // lista delle circolari e' ancora dove l'avevi lasciata.
+    val detailProgress = androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (selectedCircularForDetail != null) 1f else 0f,
+        animationSpec = circolareplus.design.iosNavigationSpring(),
+        label = "circularDetailPush"
+    )
+    // Durante l'uscita selectedCircularForDetail e' gia' null: si mostra l'ultima aperta.
+    selectedCircularForDetail?.let { lastDetailCircular[0] = it }
+    Box(modifier = Modifier.fillMaxSize()) {
+    Scaffold(
+        modifier = Modifier
+            .graphicsLayer {
+                translationX = -size.width / 3f * detailProgress.value
+            }
+            .drawWithContent {
+                drawContent()
+                // Velo scuro sulla schermata che resta sotto, come nel push di iOS.
+                if (detailProgress.value > 0f) {
+                    drawRect(Color.Black.copy(alpha = 0.18f * detailProgress.value))
                 }
             }
-        )
-        return
-    }
-
-    Scaffold(
-        // Lo "sblocco" di iOS: all'ingresso nell'app tutto arriva un po' ingrandito e si posa
-        // con un piccolo rimbalzo (una volta sola per avvio).
-        modifier = Modifier.iosUnlock(),
+            // Lo "sblocco" di iOS: all'ingresso nell'app tutto arriva un po' ingrandito e si
+            // posa con un piccolo rimbalzo (una volta sola per avvio).
+            .iosUnlock(),
         bottomBar = {
             if (!isInPollsScreen && !isInClassRosterScreen && !isInNotificationsScreen && !isInSearchScreen && !isInAssistantScreen && !isInSettingsScreen && editingSeatMapProposal == null && proposalOptions.isEmpty()) {
                 NavigationBar(
@@ -3388,6 +3321,111 @@ fun MainAppShell(
             }
                 }
             }
+        }
+    }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = selectedCircularForDetail != null,
+            enter = androidx.compose.animation.slideInHorizontally(circolareplus.design.iosNavigationSpring()) { it },
+            exit = androidx.compose.animation.slideOutHorizontally(circolareplus.design.iosNavigationSpring()) { it }
+        ) {
+        val circularForDetail = selectedCircularForDetail ?: lastDetailCircular[0]
+        // Il dettaglio sta sopra le tab: questo livello "prende" i tocchi, altrimenti quelli
+        // sulle zone senza pulsanti arriverebbero alla schermata sotto.
+        if (circularForDetail != null) Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
+        ) {
+        // Prima lo swipe/tasto indietro di sistema chiudeva l'app anche da qui: nessuna
+        // schermata a schermo intero intercettava il back di sistema, solo la freccia disegnata
+        // nella UI. Ora il back di sistema fa la stessa cosa della freccia.
+        circolareplus.platform.PlatformBackHandler(enabled = selectedCircularForDetail != null) { selectedCircularForDetail = null }
+        CircularDetailScreen(
+            circular = circularForDetail,
+            classification = classifications[circularForDetail.number],
+            isClassifying = circularForDetail.number in inFlightClassification,
+            isQueued = circularForDetail.number in queuedClassification,
+            isAwaitingServer = circularForDetail.number in awaitingServer,
+            analysisOnDevice = circularForDetail.number !in cloudClassification,
+            onStopAnalysis = { stopClassification(circularForDetail.number) },
+            calendarEvents = calendarEvents,
+            onBackClick = { selectedCircularForDetail = null },
+            onDownloadPdfClick = {
+                circularForDetail.downloadUrl?.let { uriHandler.openUri(it) }
+            },
+            // Allegati (colonna "Allegati" di Spaggiari): sia quelli in cache R2 sia i link
+            // esterni si aprono allo stesso modo del PDF principale, nel browser di sistema —
+            // niente anteprima inline per loro, solo per il documento principale.
+            onOpenAttachmentClick = { attachment ->
+                if (attachment.downloadUrl.isNotBlank()) {
+                    uriHandler.openUri(attachment.downloadUrl)
+                }
+            },
+            // Scaricare il PDF è già una cosa che l'app sa fare (serve alla classificazione AI):
+            // qui gli stessi byte alimentano l'anteprima interna, senza una seconda strada.
+            onLoadPdfBytes = {
+                AppContainer.circularsRepository.downloadPdfBytes(circularForDetail.r2PdfKey)
+            },
+            // Allegati PDF (colonna "Allegati" di Spaggiari): stessa rotta del documento
+            // principale, con la loro chiave R2 invece che quella della circolare.
+            onLoadAttachmentPdfBytes = { attachment ->
+                AppContainer.circularsRepository.downloadPdfBytes(
+                    attachment.pdfKey ?: error("Allegato \"${attachment.label}\" senza chiave PDF")
+                )
+            },
+            // La scadenza riconosciuta dall'AI diventa un evento vero. `isAiGenerated = true`
+            // esiste gia' nell'API: serve a distinguere in calendario cosa ha proposto l'AI da
+            // cosa ha inserito una persona.
+            onCreateCalendarEvent = { deadline ->
+                try {
+                    val category = try {
+                        circolareplus.domain.model.CalendarEventCategory.valueOf(deadline.category)
+                    } catch (e: IllegalArgumentException) {
+                        circolareplus.domain.model.CalendarEventCategory.ALTRO
+                    }
+                    val response = AppContainer.calendarRepository.createEvent(
+                        title = deadline.title,
+                        eventDate = deadline.dueDate,
+                        startTime = deadline.time,
+                        category = category,
+                        isAiGenerated = true
+                    )
+                    when {
+                        // Il server, sui possibili doppioni, avvisa invece di creare: l'evento
+                        // NON esiste, e dirlo e' l'unico modo perche' non si creda il contrario.
+                        response.warning != null ->
+                            "Non aggiunto: ${response.warning}"
+                        response.success -> {
+                            // Senza questo, l'evento veniva creato sul server ma restava invisibile
+                            // in Calendario/Home finché l'app non veniva riavviata: calendarEvents
+                            // si ricarica solo quando calendarRefreshTrigger cambia (vedi sopra),
+                            // e qui non veniva mai toccato.
+                            reloadCalendar()
+                            "Aggiunto al calendario."
+                        }
+                        else ->
+                            "Il server non ha creato l'evento."
+                    }
+                } catch (e: Exception) {
+                    "Non aggiunto: ${e.message ?: e::class.simpleName}"
+                }
+            },
+            // Un riassunto di Gemini non si rifà con l'AI del telefono: il risultato sarebbe
+            // peggiore e il server lo rifiuterebbe comunque.
+            onReanalyze = if (
+                classifications[circularForDetail.number]?.tier == 2 && AppContainer.isUsingLocalAiFirst()
+            ) {
+                null
+            } else {
+                {
+                    // Il risultato vecchio resta visibile finché non arriva quello nuovo (o finché
+                    // non si ferma l'analisi col tasto Stop).
+                    launchClassification(circularForDetail, forceReanalyze = true)
+                    Unit
+                }
+            }
+        )
+        }
         }
     }
 }
