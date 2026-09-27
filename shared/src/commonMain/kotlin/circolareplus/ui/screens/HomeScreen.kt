@@ -311,7 +311,12 @@ private fun EventRow(event: CalendarEvent, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         AilaIconTile(tint = AppTheme.TintBlue) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // Nel "biscotto" di Material i lobi in alto mangiano spazio: giorno e mese scendono di
+            // un filo per stare al centro della forma.
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.offset(y = if (AppTheme.isGlass) 0.dp else 3.dp)
+            ) {
                 Text(text = day, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = AppTheme.TintBlueInk)
                 Text(text = month, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = AppTheme.TintBlueInk)
             }
