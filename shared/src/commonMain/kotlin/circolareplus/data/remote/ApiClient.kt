@@ -25,12 +25,59 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import circolareplus.platform.OfflineStore
+import circolareplus.platform.currentTimeMillis
+import circolareplus.platform.readText
+import circolareplus.platform.writeText
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Eccezione applicativa per una risposta di errore del Worker (400/401/403/404/409/...).
  * [message] è il testo leggibile restituito dal backend (campo "error" del JSON), quando presente.
  */
 class ApiException(override val message: String, val statusCode: Int) : Exception(message)
+
+/** statusCode di [ApiException] quando il server non e' raggiungibile (niente rete). */
+const val OFFLINE_STATUS = 0
+
+/**
+ * Stato della connessione visto dalle chiamate al server, osservabile da Compose: la striscia
+ * "offline" in cima all'app compare e sparisce da sola seguendo questo, anche se la rete cade o
+ * torna a app gia' aperta.
+ */
+object ConnectivityState {
+    var isOffline by mutableStateOf(false)
+        internal set
+
+    /** Ultima volta che il server ha risposto (millisecondi epoch), 0 = mai in questa sessione. */
+    var lastOnlineMillis by mutableStateOf(0L)
+        internal set
+
+    internal var lastFailureMillis = 0L
+
+    /**
+     * Subito dopo un errore di rete si risponde dalla copia offline senza ritentare: a scuola il
+     * Wi-Fi senza Internet (o a pagamento) fa aspettare il timeout intero a ogni richiesta, e
+     * l'app sembrerebbe bloccata. Passata la finestra si riprova la rete.
+     */
+    internal fun shouldSkipNetwork(): Boolean =
+        isOffline && currentTimeMillis() - lastFailureMillis < 20_000L
+
+    @PublishedApi internal fun markOnline() {
+        if (isOffline) isOffline = false
+        lastOnlineMillis = currentTimeMillis()
+    }
+
+    @PublishedApi internal fun markOffline() {
+        lastFailureMillis = currentTimeMillis()
+        if (!isOffline) isOffline = true
+    }
+}
 
 val apiJson: Json = Json {
     ignoreUnknownKeys = true
@@ -77,49 +124,111 @@ class ApiClient(
         return text
     }
 
-    suspend inline fun <reified T> get(path: String, auth: Boolean = true): T {
-        val response = client.get(baseUrl + path) {
-            if (auth) authHeader()
-        }
-        val text = response.parsedOrThrow()
+    /**
+     * GET con copia offline: ogni risposta buona viene salvata su disco e, se poi il server non
+     * e' raggiungibile (niente rete, timeout, server giu'), si restituisce l'ultima copia salvata
+     * invece di fallire. Cosi' tutta l'app resta consultabile senza connessione con gli ultimi
+     * dati scaricati. [offlineCopy] = false per le richieste che devono per forza parlare col
+     * server (verifica della sessione, elenchi "novita' dopo X").
+     */
+    suspend inline fun <reified T> get(path: String, auth: Boolean = true, offlineCopy: Boolean = true): T {
+        val text = fetchText(path, auth, offlineCopy)
         return apiJson.decodeFromString(text)
     }
 
-    suspend inline fun <reified B, reified T> post(path: String, body: B, auth: Boolean = true): T {
-        val response = client.post(baseUrl + path) {
-            if (auth) authHeader()
-            contentType(ContentType.Application.Json)
-            setBody(body)
+    @PublishedApi internal fun offlineName(path: String, prefix: String): String {
+        val readable = path.replace(Regex("[^A-Za-z0-9]"), "_").take(80)
+        return "${prefix}_${readable}_${path.hashCode().toUInt().toString(16)}"
+    }
+
+    @PublishedApi internal suspend fun readOffline(name: String): String? =
+        withContext(Dispatchers.Default) { OfflineStore.readText(name) }
+
+    @PublishedApi internal suspend fun fetchText(path: String, auth: Boolean, offlineCopy: Boolean): String {
+        val name = offlineName(path, "j")
+        if (offlineCopy && ConnectivityState.shouldSkipNetwork()) {
+            readOffline(name)?.let { return it }
         }
-        val text = response.parsedOrThrow()
+        return try {
+            val response = client.get(baseUrl + path) {
+                if (auth) authHeader()
+            }
+            val text = response.parsedOrThrow()
+            ConnectivityState.markOnline()
+            if (offlineCopy) {
+                withContext(Dispatchers.Default) { OfflineStore.writeText(name, text) }
+                settings.lastOnlineSyncMillis = currentTimeMillis()
+            }
+            text
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: ApiException) {
+            // Il server ha risposto: la rete c'e'. Se pero' e' giu' (5xx) meglio i dati salvati
+            // di una schermata d'errore.
+            ConnectivityState.markOnline()
+            if (offlineCopy && e.statusCode >= 500) readOffline(name) ?: throw e else throw e
+        } catch (e: Exception) {
+            ConnectivityState.markOffline()
+            if (offlineCopy) readOffline(name) ?: throw e else throw e
+        }
+    }
+
+    /**
+     * Le modifiche (voti, messaggi, proposte...) richiedono il server: senza rete si ferma subito
+     * con un messaggio chiaro invece dell'eccezione tecnica di Ktor.
+     */
+    @PublishedApi internal suspend inline fun sendText(request: () -> HttpResponse): String {
+        val response = try {
+            request()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            ConnectivityState.markOffline()
+            throw ApiException("Sei offline: questa azione richiede la connessione. Riprova quando torni online.", OFFLINE_STATUS)
+        }
+        ConnectivityState.markOnline()
+        return response.parsedOrThrow()
+    }
+
+    suspend inline fun <reified B, reified T> post(path: String, body: B, auth: Boolean = true): T {
+        val text = sendText {
+            client.post(baseUrl + path) {
+                if (auth) authHeader()
+                contentType(ContentType.Application.Json)
+                setBody(body)
+            }
+        }
         return apiJson.decodeFromString(text)
     }
 
     suspend inline fun <reified B, reified T> put(path: String, body: B, auth: Boolean = true): T {
-        val response = client.put(baseUrl + path) {
-            if (auth) authHeader()
-            contentType(ContentType.Application.Json)
-            setBody(body)
+        val text = sendText {
+            client.put(baseUrl + path) {
+                if (auth) authHeader()
+                contentType(ContentType.Application.Json)
+                setBody(body)
+            }
         }
-        val text = response.parsedOrThrow()
         return apiJson.decodeFromString(text)
     }
 
     suspend inline fun <reified T> delete(path: String, auth: Boolean = true): T {
-        val response = client.delete(baseUrl + path) {
-            if (auth) authHeader()
+        val text = sendText {
+            client.delete(baseUrl + path) {
+                if (auth) authHeader()
+            }
         }
-        val text = response.parsedOrThrow()
         return apiJson.decodeFromString(text)
     }
 
     suspend inline fun <reified B, reified T> deleteWithBody(path: String, body: B, auth: Boolean = true): T {
-        val response = client.delete(baseUrl + path) {
-            if (auth) authHeader()
-            contentType(ContentType.Application.Json)
-            setBody(body)
+        val text = sendText {
+            client.delete(baseUrl + path) {
+                if (auth) authHeader()
+                contentType(ContentType.Application.Json)
+                setBody(body)
+            }
         }
-        val text = response.parsedOrThrow()
         return apiJson.decodeFromString(text)
     }
 
@@ -129,14 +238,31 @@ class ApiClient(
      * per alimentare l'estrazione testo PDF client-side.
      */
     suspend fun getBytes(path: String, auth: Boolean = true): ByteArray {
-        val response = client.get(baseUrl + path) {
-            if (auth) authHeader()
+        // I PDF non cambiano mai una volta pubblicati: se c'e' la copia su disco si usa quella,
+        // anche online (piu' veloce e senza consumare dati).
+        val name = offlineName(path, "b")
+        withContext(Dispatchers.Default) { OfflineStore.readBytes(name) }?.let { return it }
+        val response = try {
+            client.get(baseUrl + path) {
+                if (auth) authHeader()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            ConnectivityState.markOffline()
+            throw ApiException("Sei offline e questo file non e' ancora stato scaricato su questo dispositivo.", OFFLINE_STATUS)
         }
+        ConnectivityState.markOnline()
         if (!response.status.isSuccess()) {
             throw ApiException("Impossibile scaricare il file (${response.status.value})", response.status.value)
         }
-        return response.body()
+        val bytes: ByteArray = response.body()
+        withContext(Dispatchers.Default) { OfflineStore.writeBytes(name, bytes) }
+        return bytes
     }
+
+    /** true se il file e' gia' disponibile offline (senza scaricarlo). */
+    fun hasOfflineBytes(path: String): Boolean = OfflineStore.exists(offlineName(path, "b"))
 
     // Non privata: le funzioni inline reified sopra (get/post/put/delete) devono poterla
     // inlineare nel codice chiamante, cosa non permessa per membri "private".

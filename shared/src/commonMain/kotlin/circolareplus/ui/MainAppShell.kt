@@ -44,6 +44,7 @@ import circolareplus.algorithms.SeatMapOptimizer
 import circolareplus.algorithms.SeatMapProposal
 import circolareplus.domain.model.RepresentativeRating
 import circolareplus.data.AppContainer
+import circolareplus.data.remote.ConnectivityState
 import circolareplus.data.remote.dto.PollDetailDto
 import circolareplus.data.remote.dto.CreatePollSlotRequestDto
 import circolareplus.data.remote.dto.RatingEntryDto
@@ -765,6 +766,35 @@ fun MainAppShell(
                     currentProfile = null
                 }
                 else -> Unit // Ancora offline: si riprova al giro dopo.
+            }
+        }
+    }
+
+    // Rete caduta ad app gia' aperta (es. entrando a scuola): si comporta come un avvio offline,
+    // cioe' striscia in cima e ricontrollo periodico finche' il server torna a rispondere. Le
+    // schermate intanto mostrano le copie salvate (vedi ApiClient.get).
+    LaunchedEffect(ConnectivityState.isOffline) {
+        if (ConnectivityState.isOffline) startedOffline = true
+    }
+
+    // Copia offline dei PDF: con la rete si scaricano in sottofondo quelli delle circolari piu'
+    // recenti che non sono ancora sul telefono, cosi' si possono aprire anche senza connessione.
+    // Si parte dopo qualche secondo per non rubare banda al caricamento delle schermate.
+    LaunchedEffect(circulars, ConnectivityState.isOffline) {
+        if (ConnectivityState.isOffline || circulars.isEmpty()) return@LaunchedEffect
+        delay(4_000L)
+        val recent = circulars.sortedByDescending { it.number }.take(OFFLINE_PDF_PREFETCH)
+        for (circular in recent) {
+            val keys = listOf(circular.r2PdfKey) + circular.attachments.mapNotNull { it.pdfKey }
+            for (key in keys) {
+                if (key.isBlank() || AppContainer.circularsRepository.isPdfAvailableOffline(key)) continue
+                try {
+                    AppContainer.circularsRepository.downloadPdfBytes(key)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (ConnectivityState.isOffline) return@LaunchedEffect
+                }
             }
         }
     }
@@ -4945,13 +4975,13 @@ private fun OfflineBanner(
         Spacer(modifier = Modifier.width(AppTheme.Space12))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "Nessuna connessione",
+                text = "Sei offline",
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 color = AppTheme.TintAmberInk
             )
             Text(
-                text = "Sei entrato con gli ultimi dati salvati. Resti collegato al tuo account.",
+                text = offlineDataAgeLabel(),
                 fontSize = 11.sp,
                 color = AppTheme.TintAmberInk,
                 lineHeight = 15.sp
@@ -5044,6 +5074,23 @@ private fun OfflineGateScreen(
     }
 }
 
+
+/** Quante circolari recenti tenere sempre scaricate (PDF + allegati) per la consultazione offline. */
+private const val OFFLINE_PDF_PREFETCH = 20
+
+/** Testo della striscia offline: da quanto sono i dati che si stanno guardando. */
+private fun offlineDataAgeLabel(): String {
+    val last = AppContainer.settings.lastOnlineSyncMillis
+    if (last <= 0L) return "Stai consultando i dati salvati sul telefono. Voti e modifiche tornano con la rete."
+    val minutes = ((circolareplus.platform.currentTimeMillis() - last).coerceAtLeast(0L)) / 60_000L
+    val age = when {
+        minutes < 1 -> "adesso"
+        minutes < 60 -> "$minutes min fa"
+        minutes < 60 * 24 -> "${minutes / 60} h fa"
+        else -> "${minutes / (60 * 24)} g fa"
+    }
+    return "Dati salvati aggiornati $age. Puoi consultare tutto; voti e modifiche tornano con la rete."
+}
 
 /** Chiave dell'origine del container transform del dettaglio circolare. */
 private const val DETAIL_TRANSFORM_KEY = "circularDetail"

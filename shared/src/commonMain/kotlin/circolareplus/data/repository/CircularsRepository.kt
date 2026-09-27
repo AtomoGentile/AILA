@@ -34,7 +34,7 @@ class CircularsRepository(private val api: ApiClient) {
 
     /** Circolari con numero > [after], in ordine crescente (max 50). Solo numero, titolo, data. */
     suspend fun listNewerThan(after: Int): List<NewerCircularDto> {
-        val response: NewerCircularsResponseDto = api.get("/api/circulars/newer?after=$after")
+        val response: NewerCircularsResponseDto = api.get("/api/circulars/newer?after=$after", offlineCopy = false)
         return response.circulars
     }
 
@@ -48,6 +48,9 @@ class CircularsRepository(private val api: ApiClient) {
 
     /** Byte grezzi del PDF, usati per l'estrazione testo lato client (classificazione AI). */
     suspend fun downloadPdfBytes(pdfKey: String): ByteArray = api.getBytes("/api/circulars/pdf/$pdfKey")
+
+    /** Il PDF e' gia' salvato sul telefono (consultabile senza rete)? */
+    fun isPdfAvailableOffline(pdfKey: String): Boolean = api.hasOfflineBytes("/api/circulars/pdf/$pdfKey")
 
     /**
      * Analisi AI già in cache sul server, o `null` se nessuno l'ha ancora prodotta per questa

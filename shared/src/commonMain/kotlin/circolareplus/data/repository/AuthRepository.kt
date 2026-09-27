@@ -122,7 +122,8 @@ class AuthRepository(
     suspend fun restoreSession(): SessionRestore {
         if (!hasStoredSession()) return SessionRestore.NoSession
         return try {
-            val dto: UserDto = api.get("/api/users/me")
+            // Mai dalla copia offline: qui si verifica proprio se il server risponde.
+            val dto: UserDto = api.get("/api/users/me", offlineCopy = false)
             cacheUser(dto)
             val (user, profile) = dto.toDomain()
             SessionRestore.Online(user, profile)
@@ -197,6 +198,9 @@ class AuthRepository(
         settings.authToken = ""
         settings.currentUserId = ""
         settings.cachedUserJson = ""
+        // I dati offline sono dell'account appena uscito: non devono restare a chi entra dopo.
+        circolareplus.platform.OfflineStore.clear()
+        settings.lastOnlineSyncMillis = 0L
     }
 
     private fun persistSession(response: AuthResponseDto): Pair<User, StudentProfile> {

@@ -222,6 +222,44 @@ fun SettingsScreen(
                 }
             }
 
+            // --- Offline -----------------------------------------------------------------
+            item { AilaSectionTitle(text = "Uso offline") }
+            item {
+                // Letto una volta all'apertura (e dopo lo svuotamento), non a ogni ricomposizione:
+                // e' un giro sul disco.
+                var offlineBytes by remember { mutableStateOf(circolareplus.platform.OfflineStore.totalBytes()) }
+                AilaCard {
+                    Column(modifier = Modifier.padding(AppTheme.Space16)) {
+                        Text(
+                            text = "Dati salvati sul telefono",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = AppTheme.TextDark
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Senza rete puoi consultare circolari (con i PDF delle ultime), " +
+                                "calendario, sondaggi, bacheca e mappa posti come li hai visti l'ultima " +
+                                "volta. Voti e modifiche richiedono la connessione. " +
+                                "Spazio occupato: ${formatOfflineSize(offlineBytes)}.",
+                            fontSize = 12.sp,
+                            color = AppTheme.TextMuted,
+                            lineHeight = 16.sp
+                        )
+                        Spacer(modifier = Modifier.height(AppTheme.Space12))
+                        AilaSecondaryButton(
+                            text = "Svuota dati offline",
+                            onClick = {
+                                circolareplus.platform.OfflineStore.clear()
+                                offlineBytes = circolareplus.platform.OfflineStore.totalBytes()
+                            },
+                            compact = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+
             // --- Notifiche ----------------------------------------------------------------
             item { AilaSectionTitle(text = "Notifiche", modifier = Modifier.ailaAppear(2)) }
             item {
@@ -848,5 +886,13 @@ private fun AccentPicker(
                 }
             }
         }
+    }
+}
+
+private fun formatOfflineSize(bytes: Long): String = when {
+    bytes < 1024L * 1024L -> "${(bytes / 1024L).coerceAtLeast(if (bytes > 0) 1L else 0L)} KB"
+    else -> {
+        val tenths = bytes * 10L / (1024L * 1024L)
+        "${tenths / 10},${tenths % 10} MB"
     }
 }
