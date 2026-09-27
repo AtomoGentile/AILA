@@ -2938,7 +2938,7 @@ fun MainAppShell(
                         localModels = remember {
                             circolareplus.ai.LocalAiCatalog.selectableFor(circolareplus.ai.totalDeviceRamMb())
                         },
-                        selectedLocalModelId = AppContainer.selectedLocalModel().id,
+                        selectedLocalModelId = remember { AppContainer.selectedLocalModel().id },
                         onSelectLocalModel = { model ->
                             AppContainer.settings.localAiModelId = model.id
                             // Il motore tiene in memoria il modello caricato in precedenza: se
@@ -2965,7 +2965,9 @@ fun MainAppShell(
                             AppContainer.localLlm.unload()
                             AppContainer.localModelStore.delete(model)
                         },
-                        orphanModelBytes = AppContainer.localModelStore.orphanBytes(),
+                        // Una volta sola all'apertura: scorre la cartella dei modelli sul disco, e
+                        // prima lo faceva a ogni ridisegno delle Impostazioni (stuttering).
+                        orphanModelBytes = remember { AppContainer.localModelStore.orphanBytes() },
                         onDeleteOrphanModels = { AppContainer.localModelStore.deleteOrphans() },
                         onTestLocalModel = {
                             val model = AppContainer.selectedLocalModel()
