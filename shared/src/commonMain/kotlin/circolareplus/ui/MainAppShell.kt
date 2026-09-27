@@ -55,10 +55,10 @@ import circolareplus.design.MaxFormWidth
 // Estensione (non richiamabile per nome qualificato come le altre composable di
 // circolareplus.design usate in questo file): va importata per poterla usare come Modifier.ailaPressable(...).
 import circolareplus.design.ailaPressable
-import circolareplus.design.iosBouncySpring
-import circolareplus.design.iosPushTransition
-import circolareplus.design.iosSelectionPop
-import circolareplus.design.iosUnlock
+import circolareplus.design.ailaSpatialSpring
+import circolareplus.design.ailaPushTransition
+import circolareplus.design.ailaSelectionPop
+import circolareplus.design.ailaUnlock
 import circolareplus.domain.model.CalendarEvent
 import circolareplus.domain.model.CalendarEventCategory
 import circolareplus.domain.model.Circular
@@ -127,6 +127,7 @@ const val NOTIFICATION_CATEGORY_SEATMAP_PREFERENCES = "seatmap_preferences"
  */
 const val NOTIFICATION_CATEGORY_RANKING_POLLS = "ranking_polls"
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MainAppShell(
     initialUser: User? = null,
@@ -1855,7 +1856,7 @@ fun MainAppShell(
     }
     val shellProgress = androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (shellRoute != ShellRoute.TABS) 1f else 0f,
-        animationSpec = circolareplus.design.iosNavigationSpring(),
+        animationSpec = circolareplus.design.ailaNavigationSpring(),
         label = "shellPush"
     )
 
@@ -1865,7 +1866,7 @@ fun MainAppShell(
     // lista delle circolari e' ancora dove l'avevi lasciata.
     val detailProgress = androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (selectedCircularForDetail != null) 1f else 0f,
-        animationSpec = circolareplus.design.iosNavigationSpring(),
+        animationSpec = circolareplus.design.ailaNavigationSpring(),
         label = "circularDetailPush"
     )
     // Durante l'uscita selectedCircularForDetail e' gia' null: si mostra l'ultima aperta.
@@ -1874,25 +1875,24 @@ fun MainAppShell(
     Scaffold(
         modifier = Modifier
             .graphicsLayer {
-                translationX = -size.width / 3f * maxOf(shellProgress.value, detailProgress.value)
+                translationX = -size.width * circolareplus.design.ailaUnderlayShift * maxOf(shellProgress.value, detailProgress.value)
             }
             .drawWithContent {
                 drawContent()
                 // Velo scuro sulla schermata che resta sotto, come nel push di iOS.
                 val covered = maxOf(shellProgress.value, detailProgress.value)
                 if (covered > 0f) {
-                    drawRect(Color.Black.copy(alpha = 0.18f * covered))
+                    drawRect(Color.Black.copy(alpha = circolareplus.design.ailaUnderlayDim * covered))
                 }
             }
             // Lo "sblocco" di iOS: all'ingresso nell'app tutto arriva un po' ingrandito e si
             // posa con un piccolo rimbalzo (una volta sola per avvio).
-            .iosUnlock(),
+            .ailaUnlock(),
         // Lo spazio attorno alla pillola della barra ha lo stesso fondo delle schermate.
         containerColor = AppTheme.BackgroundLight,
-        bottomBar = {
-            // Sempre presente: le schermate "sopra" le scorrono sopra e la coprono (vedi shellRoute).
-            FloatingTabBar(selectedTab = selectedTab, onSelect = { selectedTab = it })
-        }
+        // Niente margine in basso: il contenuto arriva fino al fondo dello schermo e scorre sotto
+        // la barra flottante, che sta sopra (vedi FloatingTabBar piu' giu').
+        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
     ) { innerPadding ->
         Surface(
             modifier = Modifier
@@ -1923,7 +1923,14 @@ fun MainAppShell(
                 // Il contenuto prende l'altezza che resta: senza weight, i figli con
                 // fillMaxSize prenderebbero tutta l'altezza della Column e la striscia offline
                 // spingerebbe la barra inferiore fuori dallo schermo.
+                // Altezza occupata dalla barra flottante (pillola + margini + barra di sistema):
+                // le schermate delle tab la lasciano libera in fondo alle liste.
+                val bottomBarPadding = 84.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                val imeVisible = WindowInsets.isImeVisible
                 Box(modifier = Modifier.weight(1f)) {
+                androidx.compose.runtime.CompositionLocalProvider(
+                    circolareplus.design.LocalBottomBarPadding provides bottomBarPadding
+                ) {
                     // Da qualunque tab diversa da Home, il back di sistema torna a Home invece di
                     // chiudere l'app subito — comportamento standard delle bottom bar Android. Da
                     // Home il back non viene intercettato: lì si comporta come sempre (chiude
@@ -1943,16 +1950,9 @@ fun MainAppShell(
                     // lo dava solo la cascata degli elementi, che ora si vede solo la prima volta.
                     androidx.compose.animation.AnimatedContent(
                         targetState = selectedTab,
-                        transitionSpec = {
-                            val dir = if (targetState.ordinal > initialState.ordinal) 1 else -1
-                            // Molle "alla iOS": la schermata nuova arriva di lato e si assesta con
-                            // un filo di rimbalzo, e cresce appena (dal 97%) mentre compare.
-                            (androidx.compose.animation.fadeIn(tween(durationMillis = 200, delayMillis = 40)) +
-                                androidx.compose.animation.scaleIn(iosBouncySpring(), initialScale = 0.97f) +
-                                androidx.compose.animation.slideInHorizontally(iosBouncySpring()) { width -> dir * width / 8 }) togetherWith
-                                (androidx.compose.animation.fadeOut(tween(durationMillis = 120)) +
-                                    androidx.compose.animation.slideOutHorizontally(tween(durationMillis = 200)) { width -> -dir * width / 14 })
-                        },
+                        // Glass: dissolvenza rapida come le tab bar di iOS; Expressive: "fade
+                        // through" di Material (vedi ailaTabTransition).
+                        transitionSpec = { circolareplus.design.ailaTabTransition() },
                         label = "mainTab",
                         modifier = Modifier.fillMaxSize()
                     ) { tab ->
@@ -2218,25 +2218,6 @@ fun MainAppShell(
                                                 onClick = { isInClassRosterScreen = true }
                                             ) { tint -> AppIcons.People(modifier = Modifier.size(20.dp), color = tint) }
                                         }
-                                        // "Nuova proposta" sta qui, sulla riga dell'intestazione come il
-                                        // "+" del Calendario: prima era su una riga a parte dentro la
-                                        // Bacheca, piu' in basso e non allineato con nient'altro.
-                                        androidx.compose.animation.AnimatedVisibility(
-                                            visible = classSection == ClassSection.BOARD,
-                                            enter = androidx.compose.animation.fadeIn(tween(180)) +
-                                                androidx.compose.animation.scaleIn(tween(180), initialScale = 0.8f),
-                                            exit = androidx.compose.animation.fadeOut(tween(120)) +
-                                                androidx.compose.animation.scaleOut(tween(120), targetScale = 0.8f)
-                                        ) {
-                                            Row {
-                                                Spacer(modifier = Modifier.width(AppTheme.Space8))
-                                                circolareplus.design.AilaIconButton(
-                                                    contentDescription = "Nuova proposta",
-                                                    onClick = { showAddProposalDialog = true },
-                                                    primary = true
-                                                ) { tint -> AppIcons.Plus(modifier = Modifier.size(18.dp), color = tint) }
-                                            }
-                                        }
                                     }
                                     HorizontalDivider(color = AppTheme.Hairline)
                                 }
@@ -2408,6 +2389,17 @@ fun MainAppShell(
                     }
                     }
                 }
+                // Sempre presente: le schermate "sopra" le scorrono sopra e la coprono (vedi
+                // shellRoute). Si nasconde quando c'e' la tastiera, per non galleggiarci sopra.
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = !imeVisible,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    enter = androidx.compose.animation.slideInVertically { it } + androidx.compose.animation.fadeIn(),
+                    exit = androidx.compose.animation.slideOutVertically { it } + androidx.compose.animation.fadeOut()
+                ) {
+                    FloatingTabBar(selectedTab = selectedTab, onSelect = { selectedTab = it })
+                }
+                }
             }
         }
     }
@@ -2415,12 +2407,12 @@ fun MainAppShell(
         // apre da qui (Ricerca, Notifiche) anche questo livello fa il passo indietro.
         Box(
             modifier = Modifier.fillMaxSize().graphicsLayer {
-                translationX = -size.width / 3f * detailProgress.value
+                translationX = -size.width * circolareplus.design.ailaUnderlayShift * detailProgress.value
             }
         ) {
             androidx.compose.animation.AnimatedContent(
                 targetState = shellRoute,
-                transitionSpec = { iosPushTransition(forward = targetState.depth > initialState.depth) },
+                transitionSpec = { ailaPushTransition(forward = targetState.depth > initialState.depth) },
                 label = "shellRoute",
                 modifier = Modifier.fillMaxSize()
             ) { route ->
@@ -2468,6 +2460,11 @@ fun MainAppShell(
                         onDarkModeChange = { enabled ->
                             AppTheme.isDarkMode = enabled
                             AppContainer.settings.isDarkMode = enabled
+                        },
+                        uiStyle = AppTheme.uiStyle,
+                        onUiStyleChange = { style ->
+                            AppTheme.uiStyle = style
+                            AppContainer.settings.uiStyleKey = style.key
                         },
                         isNotificationKindEnabled = { kind ->
                             AppContainer.settings.isNotificationKindEnabled(kind.key)
@@ -3270,8 +3267,8 @@ fun MainAppShell(
         }
         androidx.compose.animation.AnimatedVisibility(
             visible = selectedCircularForDetail != null,
-            enter = androidx.compose.animation.slideInHorizontally(circolareplus.design.iosNavigationSpring()) { it },
-            exit = androidx.compose.animation.slideOutHorizontally(circolareplus.design.iosNavigationSpring()) { it }
+            enter = circolareplus.design.ailaPushEnter(),
+            exit = circolareplus.design.ailaPushExit()
         ) {
         val circularForDetail = selectedCircularForDetail ?: lastDetailCircular[0]
         // Il dettaglio sta sopra le tab: questo livello "prende" i tocchi, altrimenti quelli
@@ -4931,10 +4928,32 @@ private fun FloatingTabBar(selectedTab: MainTab, onSelect: (MainTab) -> Unit) {
                 .widthIn(max = 520.dp)
                 .fillMaxWidth()
                 .height(64.dp)
-                .shadow(elevation = 16.dp, shape = shape, ambientColor = Color(0x331B2E7A), spotColor = Color(0x401B2E7A))
-                .clip(shape)
-                .background(AppTheme.SurfaceWhite)
-                .border(1.dp, AppTheme.Hairline, shape)
+                .then(
+                    if (AppTheme.isGlass) {
+                        // Liquid Glass: vetro traslucido (il contenuto che scorre sotto si
+                        // intravede), ombra appena accennata e un filo di luce sul bordo, piu'
+                        // chiaro in alto come un riflesso.
+                        Modifier
+                            .shadow(elevation = 10.dp, shape = shape, ambientColor = Color(0x1A1B2E7A), spotColor = Color(0x261B2E7A))
+                            .clip(shape)
+                            .background(if (AppTheme.isDarkMode) Color(0xA6202430) else Color(0xB8FFFFFF))
+                            .border(
+                                1.dp,
+                                androidx.compose.ui.graphics.Brush.verticalGradient(
+                                    if (AppTheme.isDarkMode) listOf(Color(0x40FFFFFF), Color(0x0DFFFFFF))
+                                    else listOf(Color(0xFFFFFFFF), Color(0x66FFFFFF))
+                                ),
+                                shape
+                            )
+                    } else {
+                        // Material Expressive: pillola piena "surface container", senza bordo,
+                        // con l'ombra bassa delle barre flottanti di M3.
+                        Modifier
+                            .shadow(elevation = 6.dp, shape = shape)
+                            .clip(shape)
+                            .background(if (AppTheme.isDarkMode) Color(0xFF22252C) else Color(0xFFECEDF7))
+                    }
+                )
                 .padding(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -4955,15 +4974,22 @@ private fun RowScope.FloatingTabItem(tab: MainTab, selected: Boolean, onClick: (
     // elastica supera appena 1 e ci torna, da qui il piccolo "rimbalzo" della pillola.
     val progress by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (selected) 1f else 0f,
-        animationSpec = iosBouncySpring(),
+        animationSpec = ailaSpatialSpring(),
         label = "tabItemProgress"
     )
+    // Glass: la voce attiva e' una capsula di vetro grigio con icona e nome in blu, come la tab
+    // bar di iOS 26. Expressive: l'indicatore "secondary container" di Material, pieno.
+    val activeInk = if (AppTheme.isGlass) AppTheme.PrimaryBlue else AppTheme.OnSelection
     val iconColor by androidx.compose.animation.animateColorAsState(
-        targetValue = if (selected) AppTheme.PrimaryBlue else AppTheme.TextFaint,
+        targetValue = if (selected) activeInk else if (AppTheme.isGlass) AppTheme.TextFaint else AppTheme.TextMuted,
         animationSpec = androidx.compose.animation.core.tween(200),
         label = "tabItemIcon"
     )
-    val tint = AppTheme.TintBlue
+    val tint = if (AppTheme.isGlass) {
+        if (AppTheme.isDarkMode) Color(0x33FFFFFF) else Color(0x1A767680)
+    } else {
+        if (AppTheme.isDarkMode) Color(0xFF34457A) else Color(0xFFD9E2FF)
+    }
     Row(
         modifier = Modifier
             .weight(1f + 1.8f * progress.coerceAtLeast(0f))
@@ -4985,7 +5011,7 @@ private fun RowScope.FloatingTabItem(tab: MainTab, selected: Boolean, onClick: (
         verticalAlignment = Alignment.CenterVertically
     ) {
         // L'icona toccata fa un piccolo "pop" elastico quando diventa attiva.
-        val iconModifier = Modifier.size(22.dp).iosSelectionPop(selected)
+        val iconModifier = Modifier.size(22.dp).ailaSelectionPop(selected)
         when (tab) {
             MainTab.HOME -> AppIcons.Home(modifier = iconModifier, color = iconColor)
             MainTab.CALENDAR -> AppIcons.Calendar(modifier = iconModifier, color = iconColor)
@@ -4996,7 +5022,7 @@ private fun RowScope.FloatingTabItem(tab: MainTab, selected: Boolean, onClick: (
         androidx.compose.animation.AnimatedVisibility(
             visible = selected,
             enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(180, delayMillis = 60)) +
-                androidx.compose.animation.expandHorizontally(iosBouncySpring()),
+                androidx.compose.animation.expandHorizontally(ailaSpatialSpring()),
             exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(90)) +
                 androidx.compose.animation.shrinkHorizontally(androidx.compose.animation.core.tween(160))
         ) {
@@ -5006,7 +5032,7 @@ private fun RowScope.FloatingTabItem(tab: MainTab, selected: Boolean, onClick: (
                     text = tab.title,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    color = AppTheme.PrimaryBlue,
+                    color = activeInk,
                     maxLines = 1,
                     softWrap = false,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis

@@ -48,3 +48,11 @@ fun Modifier.appContentWidth(max: Dp = MaxContentWidth): Modifier =
         .wrapContentWidth(Alignment.CenterHorizontally)
         .widthIn(max = max)
         .fillMaxWidth()
+
+/**
+ * Spazio da lasciare in fondo alle schermate delle tab perche' l'ultimo elemento non finisca
+ * sotto la barra flottante: il contenuto scorre SOTTO la pillola (in Glass si intravede
+ * attraverso il vetro), ma a fine lista deve potersi fermare sopra. Lo fornisce MainAppShell;
+ * fuori dalle tab vale 0.
+ */
+val LocalBottomBarPadding = androidx.compose.runtime.compositionLocalOf { 0.dp }

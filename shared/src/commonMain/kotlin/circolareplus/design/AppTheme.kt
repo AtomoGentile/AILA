@@ -5,7 +5,29 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+
+/**
+ * I due linguaggi grafici dell'app, scelti dalle Impostazioni.
+ *
+ * - [GLASS] "Liquid Glass" (iOS 26): superfici chiare e traslucide con un filo di luce sul bordo,
+ *   capsule, selezioni bianche "in rilievo", molle morbide, push di navigazione da destra.
+ * - [EXPRESSIVE] "Material 3 Expressive" (Android 16): superfici piene a toni (surface
+ *   container), niente ombre, colore primario pieno invece del gradiente, forme che si
+ *   deformano alla pressione, molle piu' rimbalzanti, transizioni "shared axis" e "fade through".
+ * - [AUTO] quello della piattaforma: Glass su iPhone/iPad, Expressive su Android.
+ */
+enum class UiStyle(val key: String, val label: String) {
+    AUTO("auto", "Automatico"),
+    GLASS("glass", "Liquid Glass"),
+    EXPRESSIVE("expressive", "Material");
+
+    companion object {
+        fun fromKey(key: String?): UiStyle = entries.firstOrNull { it.key == key } ?: AUTO
+    }
+}
 
 /**
  * Design System AILA: palette, raggi e spaziatura dal brand kit.
@@ -18,10 +40,11 @@ import androidx.compose.ui.unit.dp
  * cambiando l'interruttore tutta l'interfaccia si ridisegna da sola senza che nessuna schermata
  * debba saperlo.
  *
- * **Non esiste più uno "stile iOS".** C'era un secondo linguaggio grafico attivabile da
- * Impostazioni — card in vetro sfocato, barra di navigazione traslucida, selettori data/ora a
- * rotellina — costruito con componenti Material: restava un'imitazione di Cupertino ed è stato
- * rimosso. Material 3 vale ora su tutte le piattaforme.
+ * **Due stili, [UiStyle].** Oltre a chiaro/scuro c'e' lo stile grafico: Liquid Glass o Material
+ * Expressive. Funziona come il tema scuro: [uiStyle] e' stato di Compose e i valori che cambiano
+ * fra i due stili sono `get()`, quindi le schermate non devono sapere quale e' attivo. I
+ * componenti condivisi (card, pulsanti, barra, selettori) leggono [isGlass] dove anche la forma o
+ * il movimento cambiano, non solo il colore.
  *
  * I nomi restano quelli originali anche quando in tema scuro il valore non è più "bianco":
  * rinominarli avrebbe voluto dire toccare ogni schermata per un guadagno solo estetico.
@@ -31,12 +54,35 @@ object AppTheme {
     /** Tema scuro attivo. Lo imposta la schermata Impostazioni; persiste in LocalSettingsManager. */
     var isDarkMode by mutableStateOf(false)
 
-    // --- Dimensioni e raggi ------------------------------------------------------------------
-    val CardCornerRadius = 20.dp
-    val ButtonCornerRadius = 14.dp
-    val SmallElementRadius = 12.dp
+    /** Stile grafico scelto (Impostazioni); persiste in LocalSettingsManager. */
+    var uiStyle by mutableStateOf(UiStyle.AUTO)
 
-    val CardElevation = 3.dp
+    /** true = Liquid Glass, false = Material Expressive (con AUTO decide la piattaforma). */
+    val isGlass: Boolean
+        get() = when (uiStyle) {
+            UiStyle.GLASS -> true
+            UiStyle.EXPRESSIVE -> false
+            UiStyle.AUTO -> circolareplus.platform.isIos()
+        }
+
+    /** Sceglie fra quattro varianti: Glass chiaro/scuro, Expressive chiaro/scuro. */
+    private fun <T> style(glassLight: T, glassDark: T, expLight: T, expDark: T): T =
+        if (isGlass) { if (isDarkMode) glassDark else glassLight }
+        else { if (isDarkMode) expDark else expLight }
+
+    // --- Dimensioni e raggi ------------------------------------------------------------------
+    // Glass: angoli ampi e "continui" come le card di iOS. Expressive: la scala di forme di M3E,
+    // card "extra large" (28) ed elementi piccoli a 16.
+    val CardCornerRadius: Dp get() = if (isGlass) 24.dp else 28.dp
+    /** Capsula in entrambi gli stili (in Expressive si deforma alla pressione, vedi i pulsanti). */
+    val ButtonCornerRadius: Dp get() = 100.dp
+    val SmallElementRadius: Dp get() = if (isGlass) 14.dp else 16.dp
+
+    /**
+     * Nessuna ombra Material in entrambi gli stili: in Glass sotto una superficie traslucida si
+     * vedrebbe attraverso, in Expressive la profondita' la danno i toni delle superfici.
+     */
+    val CardElevation: Dp get() = 0.dp
     val CardElevationPressed = 8.dp
 
     // Griglia modulare a base 4dp
@@ -49,18 +95,43 @@ object AppTheme {
     val Space32 = 32.dp
     val Space48 = 48.dp
 
-    // --- Colori brand (uguali nei due temi: sono l'identità) ---------------------------------
-    val PrimaryBlue get() = if (isDarkMode) Color(0xFF5A9BFF) else Color(0xFF3B82F6)
+    // --- Colori brand -------------------------------------------------------------------------
+    // Expressive usa il "tono 40" del blu AILA (piu' profondo, come i primari di Material) in
+    // chiaro; in scuro resta il blu luminoso, che regge il testo bianco sopra.
+    val PrimaryBlue get() = style(Color(0xFF3B82F6), Color(0xFF5A9BFF), Color(0xFF2F5BD3), Color(0xFF5A8CFF))
     val SecondaryIndigo get() = if (isDarkMode) Color(0xFFA78BFA) else Color(0xFF8B5CF6)
     val AccentCyan = Color(0xFF06B6D4)
 
     // --- Superfici e testo -------------------------------------------------------------------
-    val BackgroundLight get() = if (isDarkMode) Color(0xFF0B1020) else Color(0xFFF6F8FE)
-    val SurfaceWhite get() = if (isDarkMode) Color(0xFF161D31) else Color(0xFFFFFFFF)
-    val TextDark get() = if (isDarkMode) Color(0xFFFAFBFC) else Color(0xFF0F172A)
-    val TextMuted get() = if (isDarkMode) Color(0xFFBFCAD9) else Color(0xFF64748B)
-    val TextFaint get() = if (isDarkMode) Color(0xFF9AABBD) else Color(0xFF94A3B8)
-    val Hairline get() = if (isDarkMode) Color(0xFF243049) else Color(0xFFE8EDF5)
+    // Glass: sfondo grigio-azzurro chiaro (nero quasi puro in scuro, come iOS), testi dai toni di
+    // "label" di Apple. Expressive: i ruoli "surface" di Material 3 generati dal blu AILA.
+    val BackgroundLight get() = style(Color(0xFFEEF1F8), Color(0xFF05070C), Color(0xFFF9F9FF), Color(0xFF111318))
+    /** Superfici opache: intestazioni, campi, dialoghi. */
+    val SurfaceWhite get() = style(Color(0xFFFFFFFF), Color(0xFF14171F), Color(0xFFFFFFFF), Color(0xFF1D2026))
+    val TextDark get() = style(Color(0xFF0B0D12), Color(0xFFFFFFFF), Color(0xFF1A1C22), Color(0xFFE2E2E9))
+    val TextMuted get() = style(Color(0xFF5F6470), Color(0xFFB8BCC8), Color(0xFF44474F), Color(0xFFC4C6D0))
+    val TextFaint get() = style(Color(0xFF8E929C), Color(0xFF7C8190), Color(0xFF74777F), Color(0xFF8E9099))
+    val Hairline get() = style(Color(0xFFE3E6EE), Color(0x1FFFFFFF), Color(0xFFDDE0EA), Color(0xFF3A3D45))
+
+    // --- Card -----------------------------------------------------------------------------------
+    /**
+     * Fondo delle card. Glass: vetro bianco traslucido (in scuro un velo bianco al 10%) sopra lo
+     * sfondo. Expressive: "surface container low", pieno e senza ombra.
+     */
+    val CardSurface get() = style(Color(0xD9FFFFFF), Color(0x1AFFFFFF), Color(0xFFF1F2FB), Color(0xFF1D2026))
+    /** Filo di luce sul bordo del vetro; in Expressive nessun bordo. */
+    val CardBorder get() = style(Color(0xFFFFFFFF), Color(0x24FFFFFF), Color.Transparent, Color.Transparent)
+
+    // --- Selezione (selettori a segmenti, chip, voce attiva della barra) ------------------------
+    /**
+     * Glass: la selezione e' una capsula bianca "in rilievo" con testo scuro, come i segmented
+     * control di iOS. Expressive: il "secondary container" di Material, pieno.
+     */
+    val SelectionFill: Brush
+        get() = SolidColor(style(Color(0xFFFFFFFF), Color(0xFF3A3F4D), Color(0xFFD9E2FF), Color(0xFF34457A)))
+    val OnSelection get() = style(Color(0xFF0B0D12), Color(0xFFFFFFFF), Color(0xFF0B1B45), Color(0xFFDCE3FF))
+    /** Fondo del binario su cui scorre la selezione. */
+    val TrackFill get() = style(Color(0x1F767680), Color(0x3D767680), Color(0xFFE6E8F3), Color(0xFF282B32))
 
     // --- Gradienti ----------------------------------------------------------------------------
     val HeroGradientTop get() = if (isDarkMode) Color(0xFF141C3A) else Color(0xFF1B2E7A)
@@ -76,11 +147,12 @@ object AppTheme {
         )
 
     /** Riempimento dei pulsanti primari: nel mockup non sono blu piatto ma sfumati. */
-    val PrimaryGradient
-        get() = if (isDarkMode) {
-            Brush.horizontalGradient(listOf(Color(0xFF3E7BE0), Color(0xFF6B57D6)))
-        } else {
-            Brush.horizontalGradient(listOf(Color(0xFF3B82F6), Color(0xFF6D5CE7)))
+    val PrimaryGradient: Brush
+        get() = when {
+            // Material Expressive: il colore primario e' pieno, non sfumato.
+            !isGlass -> SolidColor(PrimaryBlue)
+            isDarkMode -> Brush.horizontalGradient(listOf(Color(0xFF3E7BE0), Color(0xFF6B57D6)))
+            else -> Brush.horizontalGradient(listOf(Color(0xFF3B82F6), Color(0xFF6D5CE7)))
         }
 
     // Testo/superfici sopra HeroGradient (contrasto chiaro su sfondo scuro): uguali nei due temi,
@@ -93,8 +165,9 @@ object AppTheme {
     // --- Tinte dei riquadri icona -------------------------------------------------------------
     // In tema scuro lo sfondo tenue diventa una velatura del colore e il segno si schiarisce,
     // altrimenti i riquadri chiarissimi sparerebbero luce in mezzo a una schermata scura.
-    val TintBlue get() = if (isDarkMode) Color(0xFF1B2A4A) else Color(0xFFF0F7FF)
-    val TintBlueInk get() = if (isDarkMode) Color(0xFF93C5FD) else Color(0xFF1E40AF)
+    // Expressive: il blu e' il "primary container" di Material (piu' saturo del tenue di Glass).
+    val TintBlue get() = style(Color(0xFFE8F0FF), Color(0xFF1B2A4A), Color(0xFFDCE3FF), Color(0xFF223A7A))
+    val TintBlueInk get() = style(Color(0xFF1E40AF), Color(0xFF93C5FD), Color(0xFF0B1B45), Color(0xFFDCE3FF))
     val TintViolet get() = if (isDarkMode) Color(0xFF261F4A) else Color(0xFFF5F3FF)
     val TintVioletInk get() = if (isDarkMode) Color(0xFFC4B5FD) else Color(0xFF5B21B6)
     val TintAmber get() = if (isDarkMode) Color(0xFF352A16) else Color(0xFFFFFBEB)
@@ -103,7 +176,7 @@ object AppTheme {
     val TintGreenInk get() = if (isDarkMode) Color(0xFF86EFAC) else Color(0xFF166534)
     val TintRed get() = if (isDarkMode) Color(0xFF351A1D) else Color(0xFFFEF2F2)
     val TintRedInk get() = if (isDarkMode) Color(0xFFFCA5A5) else Color(0xFF991B1B)
-    val TintSlate get() = if (isDarkMode) Color(0xFF222B3F) else Color(0xFFF1F5F9)
+    val TintSlate get() = style(Color(0x1F767680), Color(0x3D767680), Color(0xFFE6E8F3), Color(0xFF282B32))
     val TintSlateInk get() = if (isDarkMode) Color(0xFFCBD5E1) else Color(0xFF475569)
 
     // --- Badge e indicatori --------------------------------------------------------------------

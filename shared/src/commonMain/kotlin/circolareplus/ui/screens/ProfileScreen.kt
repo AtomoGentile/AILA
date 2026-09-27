@@ -51,7 +51,8 @@ fun ProfileScreen(
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     val isRepresentative = user.role == UserRole.REPRESENTATIVE
-    val subtitle = buildString {
+    // Classe e anno: prima erano il sottotitolo dell'intestazione, ora stanno nella card identita'.
+    val classLine = buildString {
         if (profile.className.isNotBlank()) {
             append("Classe: ${profile.className}")
             if (profile.academicYear.isNotBlank()) {
@@ -69,8 +70,7 @@ fun ProfileScreen(
             .background(AppTheme.BackgroundLight)
     ) {
         AilaScreenHeader(
-            title = "Il mio Profilo",
-            subtitle = subtitle
+            title = "Il mio Profilo"
         )
 
         Column(
@@ -79,7 +79,7 @@ fun ProfileScreen(
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = AppTheme.Space16)
-                .padding(top = AppTheme.Space16, bottom = AppTheme.Space32)
+                .padding(top = AppTheme.Space16, bottom = AppTheme.Space32 + circolareplus.design.LocalBottomBarPadding.current)
         ) {
             // --- Card identità -------------------------------------------------------------
             // Rifatta: era un riquadro bianco con le iniziali in un cerchietto e due righe
@@ -126,6 +126,14 @@ fun ProfileScreen(
                         color = AppTheme.OnHeroSecondary,
                         maxLines = 1
                     )
+                    if (classLine != null) {
+                        Text(
+                            text = classLine,
+                            fontSize = 12.sp,
+                            color = AppTheme.OnHeroSecondary,
+                            maxLines = 1
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(AppTheme.Space12))
 

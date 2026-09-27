@@ -58,6 +58,8 @@ fun SettingsScreen(
     onTestApiKey: suspend (String) -> String,
     isDarkMode: Boolean,
     onDarkModeChange: (Boolean) -> Unit,
+    uiStyle: circolareplus.design.UiStyle = circolareplus.design.UiStyle.AUTO,
+    onUiStyleChange: (circolareplus.design.UiStyle) -> Unit = {},
     isNotificationKindEnabled: (NotificationKind) -> Boolean,
     onNotificationKindChange: (NotificationKind, Boolean) -> Unit,
     boardNotificationsEnabled: Boolean = true,
@@ -160,6 +162,35 @@ fun SettingsScreen(
                             selectedIndex = if (isDarkMode) 1 else 0,
                             onSelect = { index -> onDarkModeChange(index == 1) },
                             modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(AppTheme.Space16))
+                        Text(
+                            text = "Stile grafico",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = AppTheme.TextDark
+                        )
+                        Spacer(modifier = Modifier.height(AppTheme.Space8))
+                        val styles = circolareplus.design.UiStyle.entries
+                        AilaSegmentedTabs(
+                            labels = styles.map { it.label },
+                            selectedIndex = styles.indexOf(uiStyle),
+                            onSelect = { index -> onUiStyleChange(styles[index]) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = when (uiStyle) {
+                                circolareplus.design.UiStyle.AUTO ->
+                                    "Liquid Glass su iPhone e iPad, Material su Android."
+                                circolareplus.design.UiStyle.GLASS ->
+                                    "Superfici di vetro traslucide e movimenti morbidi, come iOS."
+                                circolareplus.design.UiStyle.EXPRESSIVE ->
+                                    "Colori pieni, forme che si deformano al tocco e movimenti vivaci, come Android."
+                            },
+                            fontSize = 12.sp,
+                            color = AppTheme.TextMuted,
+                            lineHeight = 16.sp
                         )
 
                     }

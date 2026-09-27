@@ -49,6 +49,7 @@ class MainActivity : ComponentActivity() {
         // aspettasse un LaunchedEffect, chi usa il tema scuro vedrebbe un lampo bianco a ogni
         // avvio dell'app.
         AppTheme.isDarkMode = AppContainer.settings.isDarkMode
+        AppTheme.uiStyle = circolareplus.design.UiStyle.fromKey(AppContainer.settings.uiStyleKey)
         applySystemBarStyle(AppTheme.isDarkMode)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

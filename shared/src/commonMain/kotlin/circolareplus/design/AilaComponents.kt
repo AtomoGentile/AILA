@@ -107,7 +107,7 @@ fun AilaScreenHeader(
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (showBrand) {
-                AilaBrandMark(size = 48.dp)
+                AilaBrandMark(size = 44.dp)
                 Spacer(modifier = Modifier.width(AppTheme.Space12))
             }
             Column(modifier = Modifier.weight(1f)) {
@@ -166,7 +166,7 @@ fun AilaBackBar(
             Box(
                 modifier = Modifier
                     .size(44.dp)
-                    .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                    .clip(CircleShape)
                     .background(AppTheme.TintSlate)
                     .ailaPressable(pressedScale = 0.9f) { onBackClick() },
                 contentAlignment = Alignment.Center
@@ -218,19 +218,19 @@ fun AilaSegmentedTabs(
     var rowHeightPx by remember { mutableStateOf(0) }
     val density = androidx.compose.ui.platform.LocalDensity.current
 
+    // Capsula in entrambi gli stili. Glass: binario grigio traslucido e selezione bianca in
+    // rilievo con testo scuro (segmented control di iOS). Expressive: binario tonale e selezione
+    // "secondary container", con la molla piu' vivace di Material.
     BoxWithConstraints(
         modifier = modifier
-            .clip(RoundedCornerShape(AppTheme.SmallElementRadius + 3.dp))
-            .background(AppTheme.TintSlate)
+            .clip(RoundedCornerShape(percent = 50))
+            .background(AppTheme.TrackFill)
             .padding(4.dp)
     ) {
         val segmentWidth = maxWidth / labels.size
         val indicatorOffset = animateDpAsState(
             targetValue = segmentWidth * selectedIndex,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioNoBouncy,
-                stiffness = Spring.StiffnessMediumLow
-            ),
+            animationSpec = ailaSpatialSpring(),
             label = "segmentedIndicatorOffset"
         )
 
@@ -241,8 +241,12 @@ fun AilaSegmentedTabs(
                     .offset { IntOffset(indicatorOffset.value.roundToPx(), 0) }
                     .width(segmentWidth)
                     .height(rowHeight)
-                    .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                    .background(AppTheme.PrimaryGradient)
+                    .then(
+                        if (AppTheme.isGlass) Modifier.shadow(3.dp, RoundedCornerShape(percent = 50))
+                        else Modifier
+                    )
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(AppTheme.SelectionFill)
             )
         }
 
@@ -267,7 +271,7 @@ fun AilaSegmentedTabs(
                         text = label,
                         fontSize = 13.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isSelected) Color.White else AppTheme.TextMuted,
+                        color = if (isSelected) AppTheme.OnSelection else AppTheme.TextMuted,
                         maxLines = 1
                     )
                 }
@@ -302,7 +306,7 @@ fun AilaSlidingChipRow(
     val scrollState = rememberScrollState()
 
     val target = chipBounds.getOrNull(selectedIndex)?.takeIf { it != Rect.Zero }
-    val indicatorSpec = spring<Dp>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
+    val indicatorSpec = ailaSpatialSpring<Dp>()
     val animatedLeft by animateDpAsState(
         targetValue = target?.let { with(density) { it.left.toDp() } } ?: 0.dp,
         animationSpec = indicatorSpec,
@@ -319,8 +323,8 @@ fun AilaSlidingChipRow(
             // Un'unica barra, come le tab segmentate — non più tante chip separate: prima ogni
             // chip da inattiva restava una sua piccola card bianca bordata, fluttuante nello
             // spazio invece che dentro un contenitore comune.
-            .clip(RoundedCornerShape(AppTheme.SmallElementRadius + 3.dp))
-            .background(AppTheme.TintSlate)
+            .clip(RoundedCornerShape(percent = 50))
+            .background(AppTheme.TrackFill)
             .padding(4.dp)
             .then(
                 if (scrollable) Modifier.horizontalScroll(scrollState) else Modifier
@@ -332,8 +336,12 @@ fun AilaSlidingChipRow(
                     .offset(x = animatedLeft, y = with(density) { target.top.toDp() })
                     .width(animatedWidth)
                     .height(with(density) { target.height.toDp() })
-                    .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                    .background(AppTheme.PrimaryGradient)
+                    .then(
+                        if (AppTheme.isGlass) Modifier.shadow(3.dp, RoundedCornerShape(percent = 50))
+                        else Modifier
+                    )
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(AppTheme.SelectionFill)
             )
         }
 
@@ -359,18 +367,21 @@ fun AilaSlidingChipRow(
     }
 }
 
-/** Card bianca con ombra morbida: la superficie base di tutte le liste. */
+/** La superficie base di tutte le liste; l'aspetto dipende dallo stile (Glass/Expressive). */
 @Composable
 fun AilaCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
-    containerColor: Color = AppTheme.SurfaceWhite,
+    containerColor: Color = AppTheme.CardSurface,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    // Glass: vetro traslucido con un filo di luce sul bordo. Expressive: superficie tonale piena,
+    // senza bordo ne' ombra (vedi AppTheme.CardSurface).
     Card(
         shape = RoundedCornerShape(AppTheme.CardCornerRadius),
         colors = CardDefaults.cardColors(containerColor = containerColor),
         elevation = CardDefaults.cardElevation(defaultElevation = AppTheme.CardElevation),
+        border = if (AppTheme.isGlass) androidx.compose.foundation.BorderStroke(1.dp, AppTheme.CardBorder) else null,
         modifier = modifier
             .fillMaxWidth()
             // Scala più contenuta delle righe: su una superficie grande il 3% si nota già.
@@ -477,7 +488,8 @@ fun AilaPrimaryButton(
     large: Boolean = false,
     icon: (@Composable (Color) -> Unit)? = null
 ) {
-    val shape = RoundedCornerShape(AppTheme.ButtonCornerRadius)
+    val interactionSource = remember { MutableInteractionSource() }
+    val shape = ailaMorphShape(interactionSource)
     Box(
         modifier = modifier
             .then(if (fillMaxWidth) Modifier.fillMaxWidth() else Modifier)
@@ -487,7 +499,13 @@ fun AilaPrimaryButton(
                 if (enabled) Modifier.background(AppTheme.PrimaryGradient)
                 else Modifier.background(AppTheme.TintSlate)
             )
-            .ailaGlassPressable(enabled = enabled, tint = Color.White) { onClick() }
+            .clickable(interactionSource = interactionSource, indication = null, enabled = enabled) { onClick() }
+            .then(
+                // Glass: la velatura di vetro che si accende dal punto del tocco. Expressive: il
+                // feedback e' la forma che si deforma (ailaMorphShape), niente velo.
+                if (AppTheme.isGlass) Modifier.ailaGlassOverlay(interactionSource, enabled = enabled, tint = Color.White)
+                else Modifier
+            )
             .padding(
                 horizontal = if (large) AppTheme.Space20 else if (compact) AppTheme.Space12 else AppTheme.Space16,
                 vertical = if (compact) 8.dp else 11.dp
@@ -508,6 +526,37 @@ fun AilaPrimaryButton(
                 maxLines = 1
             )
         }
+    }
+}
+
+/**
+ * Forma dei pulsanti: capsula a riposo. In Material Expressive, mentre lo si preme, il pulsante si
+ * "schiaccia" in un quadrato arrotondato e torna capsula al rilascio con una molla — il feedback
+ * tipico di M3 Expressive. In Glass resta capsula.
+ */
+@Composable
+fun ailaMorphShape(interactionSource: MutableInteractionSource, pressedPercent: Int = 22): RoundedCornerShape {
+    val pressed by interactionSource.collectIsPressedAsState()
+    val percent by animateFloatAsState(
+        targetValue = if (pressed && !AppTheme.isGlass) pressedPercent.toFloat() else 50f,
+        animationSpec = if (pressed) spring(stiffness = 1400f) else spring(dampingRatio = 0.5f, stiffness = 600f),
+        label = "ailaMorphShape"
+    )
+    return RoundedCornerShape(percent = percent.toInt().coerceIn(0, 50))
+}
+
+/** Scala alla pressione (Glass), letta nel graphicsLayer. */
+@Composable
+fun Modifier.ailaPressScale(interactionSource: MutableInteractionSource, pressedScale: Float): Modifier {
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale = animateFloatAsState(
+        targetValue = if (pressed) pressedScale else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessHigh),
+        label = "ailaPressScale"
+    )
+    return graphicsLayer {
+        scaleX = scale.value
+        scaleY = scale.value
     }
 }
 
@@ -793,7 +842,10 @@ fun AilaIconButton(
     size: Dp = 44.dp,
     icon: @Composable (Color) -> Unit
 ) {
-    val shape = RoundedCornerShape(AppTheme.SmallElementRadius)
+    // Glass: cerchio (i pulsanti tondi di iOS). Expressive: cerchio che alla pressione diventa un
+    // quadrato arrotondato, come gli icon button di M3 Expressive.
+    val interactionSource = remember { MutableInteractionSource() }
+    val shape = ailaMorphShape(interactionSource, pressedPercent = 28)
     val background = when {
         !enabled -> Modifier.background(AppTheme.TintSlate)
         primary -> Modifier.background(AppTheme.PrimaryGradient)
@@ -802,10 +854,11 @@ fun AilaIconButton(
     Box(
         modifier = modifier
             .size(size)
+            .then(if (AppTheme.isGlass) Modifier.ailaPressScale(interactionSource, 0.9f) else Modifier)
             .clip(shape)
             .then(background)
             .alpha(if (enabled) 1f else 0.6f)
-            .ailaPressable(enabled = enabled, pressedScale = 0.9f) { onClick() }
+            .clickable(interactionSource = interactionSource, indication = null, enabled = enabled) { onClick() }
             .semantics {
                 this.contentDescription = contentDescription
                 role = Role.Button
@@ -1031,3 +1084,50 @@ fun AilaSwitch(
     }
 }
 
+
+/**
+ * Pulsante d'azione flottante (es. "Nuova proposta" in Bacheca), in basso a destra sopra la
+ * barra delle tab. Prima il "+" stava nell'intestazione della tab Classe e, comparendo solo su
+ * Bacheca, faceva cambiare larghezza al selettore Circolari/Bacheca.
+ *
+ * Glass: cerchio col gradiente del brand e un'ombra morbida. Expressive: il FAB di Material,
+ * quadrato arrotondato "primary container" che si schiaccia alla pressione.
+ */
+@Composable
+fun AilaFab(
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: @Composable (Color) -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val glass = AppTheme.isGlass
+    val corner by animateFloatAsState(
+        targetValue = when {
+            glass -> 50f
+            pressed -> 20f
+            else -> 30f
+        },
+        animationSpec = if (pressed) spring(stiffness = 1400f) else spring(dampingRatio = 0.5f, stiffness = 600f),
+        label = "fabCorner"
+    )
+    val shape = RoundedCornerShape(percent = corner.toInt())
+    val ink = if (glass) Color.White else AppTheme.TintBlueInk
+    Box(
+        modifier = modifier
+            .size(56.dp)
+            .then(if (glass) Modifier.ailaPressScale(interactionSource, 0.9f) else Modifier)
+            .shadow(if (glass) 12.dp else 6.dp, shape)
+            .clip(shape)
+            .background(if (glass) AppTheme.PrimaryGradient else SolidColor(AppTheme.TintBlue))
+            .clickable(interactionSource = interactionSource, indication = null) { onClick() }
+            .semantics {
+                this.contentDescription = contentDescription
+                role = Role.Button
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        icon(ink)
+    }
+}
