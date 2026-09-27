@@ -1925,24 +1925,42 @@ fun MainAppShell(
     val previousShellRoute = remember { arrayOf(shellRoute) }
     // Container transform solo da elementi grandi (card, righe): da un avatar o un'icona di 44dp
     // la pagina che nasce da un puntino e ci rientra "lampeggia". Da li' si usa lo shared axis.
+    // Eccezione: i pulsanti in alto a destra della Home (ricerca, notifiche, avatar), che hanno il
+    // loro colore (buttonColor) e si aprono sempre alla Pixel, anche con l'interruttore spento.
     val minOriginWidthPx = with(androidx.compose.ui.platform.LocalDensity.current) { 120.dp.toPx() }
     fun largeOrigin(origin: circolareplus.design.AilaTransformOrigin?) =
-        origin?.takeIf { circolareplus.design.AILA_CONTAINER_TRANSFORM_ENABLED && it.bounds.width >= minOriginWidthPx }
+        origin?.takeIf {
+            it.buttonColor != null ||
+                (circolareplus.design.AILA_CONTAINER_TRANSFORM_ENABLED && it.bounds.width >= minOriginWidthPx)
+        }
     // Verso dell'ultima navigazione (avanti = si apre una schermata sopra): serve al push di
     // Liquid Glass, che anima da se' il contenuto (vedi glassSlide piu' sotto).
     val navForward = remember { arrayOf(true) }
+    // Material: l'ultima navigazione fra le tab e una schermata sopra e' un container transform
+    // (aperta o chiusa su un elemento). Allora le tab restano ferme e piene sotto la forma che si
+    // allarga, invece di svanire: e' la pagina a nascere dal pulsante, non la Home a sparire.
+    val shellContainer = remember { arrayOf(false) }
     if (previousShellRoute[0] != shellRoute) {
-        navForward[0] = shellRoute.depth > previousShellRoute[0].depth
-        if (shellRoute.depth > previousShellRoute[0].depth) {
+        val forward = shellRoute.depth > previousShellRoute[0].depth
+        navForward[0] = forward
+        if (forward) {
             circolareplus.design.AilaContainerTransform.assignFreshTo(shellRoute)
         } else {
             circolareplus.design.AilaContainerTransform.onBack()
+        }
+        val moving = if (forward) shellRoute else previousShellRoute[0]
+        if (forward && previousShellRoute[0] == ShellRoute.TABS || !forward && shellRoute == ShellRoute.TABS) {
+            shellContainer[0] = !AppTheme.isGlass &&
+                largeOrigin(circolareplus.design.AilaContainerTransform.originOf(moving)) != null
         }
         previousShellRoute[0] = shellRoute
     }
     val shellProgress = androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (shellRoute != ShellRoute.TABS) 1f else 0f,
-        animationSpec = circolareplus.design.ailaNavigationSpring(),
+        // In container transform la stessa molla della forma: le tab spariscono sotto solo quando
+        // la pagina le copre del tutto, e ricompaiono appena si comincia a tornare.
+        animationSpec = if (shellContainer[0]) circolareplus.design.ailaContainerFloatSpring()
+            else circolareplus.design.ailaNavigationSpring(),
         label = "shellPush"
     )
 
@@ -1980,7 +1998,11 @@ fun MainAppShell(
             .graphicsLayer {
                 val covered = maxOf(shellProgress.value, detailProgress.value)
                 translationX = -size.width * circolareplus.design.ailaUnderlayShift * covered
-                if (!AppTheme.isGlass) {
+                if (!AppTheme.isGlass && shellContainer[0] && detailProgress.value == 0f) {
+                    // Container transform: tab ferme e piene sotto la forma; nascoste solo a pagina
+                    // aperta del tutto, cosi' non si disegnano inutilmente sotto di lei.
+                    alpha = if (shellProgress.value >= 1f) 0f else 1f
+                } else if (!AppTheme.isGlass) {
                     // Material "fade through" anche per le tab: aprendo una schermata svaniscono,
                     // tornando (es. dalla lettura di una circolare) riemergono crescendo appena,
                     // invece di essere gia' li' ferme sotto la pagina che si chiude.
@@ -3007,7 +3029,12 @@ fun MainAppShell(
                             origin = containerOrigin,
                             containerColor = AppTheme.CardSurface,
                             pageColor = AppTheme.BackgroundLight
-                        ) else Modifier
+                        )
+                            // La pagina in un suo livello: a ogni fotogramma si ridisegna solo la
+                            // forma che cresce, il contenuto e' gia' pronto e si ricopia com'e'
+                            // (niente scatti su schermate pesanti come Impostazioni).
+                            .graphicsLayer {}
+                        else Modifier
                     )
                     // Material: fondo pieno, copre le tab sotto. Liquid Glass: pagina trasparente
                     // che scorre sullo sfondo fermo dell'app, mentre quella di prima esce dall'altro
