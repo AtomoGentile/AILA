@@ -20,3 +20,6 @@ expect fun isAndroid(): Boolean
  */
 @androidx.compose.runtime.Composable
 expect fun displayCornerRadius(): androidx.compose.ui.unit.Dp
+
+/** Versione dell'app installata come la mostra il sistema (es. "1.0.178 (854c8e4)"). */
+expect fun appVersionName(): String

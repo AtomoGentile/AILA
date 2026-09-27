@@ -13,3 +13,6 @@ actual fun displayCornerRadius(): androidx.compose.ui.unit.Dp = androidx.compose
     val value = platform.UIKit.UIScreen.mainScreen.valueForKey("_displayCornerRadius") as? platform.Foundation.NSNumber
     androidx.compose.ui.unit.Dp((value?.doubleValue ?: 0.0).toFloat())
 }
+
+actual fun appVersionName(): String =
+    (platform.Foundation.NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleShortVersionString") as? String) ?: "?"

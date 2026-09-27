@@ -26,3 +26,12 @@ actual fun displayCornerRadius(): androidx.compose.ui.unit.Dp {
     }
     return with(density) { radiusPx.intValue.toDp() }
 }
+
+actual fun appVersionName(): String {
+    val context = AndroidAppContext.getOrNull() ?: return "?"
+    return try {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "?"
+    } catch (e: Exception) {
+        "?"
+    }
+}
