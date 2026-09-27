@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -22,6 +23,7 @@ import circolareplus.design.AilaSectionTitle
 import circolareplus.design.ailaAppear
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
+import circolareplus.design.ailaGlassSurface
 import circolareplus.domain.model.StudentProfile
 import circolareplus.domain.model.User
 import circolareplus.domain.model.UserRole
@@ -91,8 +93,18 @@ fun ProfileScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(AppTheme.CardCornerRadius + 4.dp))
-                    .background(AppTheme.HeroGradient)
+                    .then(
+                        // Liquid Glass: pannello di vetro col suo bordo di luce e un velo piu'
+                        // presente del resto del vetro (col solo gradiente, ormai quasi a zero,
+                        // e senza bordo, il pannello spariva). Material: il gradiente pieno.
+                        if (AppTheme.isGlass) Modifier.ailaGlassSurface(
+                            RoundedCornerShape(AppTheme.CardCornerRadius + 4.dp),
+                            tint = if (AppTheme.isDarkMode) Color(0x1AFFFFFF) else Color(0x40FFFFFF)
+                        )
+                        else Modifier
+                            .clip(RoundedCornerShape(AppTheme.CardCornerRadius + 4.dp))
+                            .background(AppTheme.HeroGradient)
+                    )
                     .padding(AppTheme.Space20)
                     .ailaAppear(0)
             ) {
