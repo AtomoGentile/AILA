@@ -105,20 +105,24 @@ object AppTheme {
     // --- Superfici e testo -------------------------------------------------------------------
     // Glass: sfondo grigio-azzurro chiaro (nero quasi puro in scuro, come iOS), testi dai toni di
     // "label" di Apple. Expressive: i ruoli "surface" di Material 3 generati dal blu AILA.
-    val BackgroundLight get() = style(Color(0xFFEEF1F8), Color(0xFF05070C), Color(0xFFF9F9FF), Color(0xFF111318))
+    // Glass: trasparente — lo sfondo vero e' ailaGlassBackdrop (macchie di colore), dipinto una
+    // volta sola dietro a tutta l'app; le schermate lo lasciano vedere.
+    val BackgroundLight get() = style(Color.Transparent, Color.Transparent, Color(0xFFF9F9FF), Color(0xFF111318))
     /** Superfici opache: intestazioni, campi, dialoghi. */
     val SurfaceWhite get() = style(Color(0xFFFFFFFF), Color(0xFF14171F), Color(0xFFFFFFFF), Color(0xFF1D2026))
     val TextDark get() = style(Color(0xFF0B0D12), Color(0xFFFFFFFF), Color(0xFF1A1C22), Color(0xFFE2E2E9))
     val TextMuted get() = style(Color(0xFF5F6470), Color(0xFFB8BCC8), Color(0xFF44474F), Color(0xFFC4C6D0))
     val TextFaint get() = style(Color(0xFF8E929C), Color(0xFF7C8190), Color(0xFF74777F), Color(0xFF8E9099))
-    val Hairline get() = style(Color(0xFFE3E6EE), Color(0x1FFFFFFF), Color(0xFFDDE0EA), Color(0xFF3A3D45))
+    val Hairline get() = style(Color(0x1F0B1B45), Color(0x1FFFFFFF), Color(0xFFDDE0EA), Color(0xFF3A3D45))
+    /** Fondo dei campi di testo: vetro in Glass, pieno in Expressive. */
+    val FieldSurface get() = style(Color(0x99FFFFFF), Color(0x1FFFFFFF), Color(0xFFFFFFFF), Color(0xFF1D2026))
 
     // --- Card -----------------------------------------------------------------------------------
     /**
      * Fondo delle card. Glass: vetro bianco traslucido (in scuro un velo bianco al 10%) sopra lo
      * sfondo. Expressive: "surface container low", pieno e senza ombra.
      */
-    val CardSurface get() = style(Color(0xD9FFFFFF), Color(0x1AFFFFFF), Color(0xFFF1F2FB), Color(0xFF1D2026))
+    val CardSurface get() = style(Color(0x73FFFFFF), Color(0x1AFFFFFF), Color(0xFFF1F2FB), Color(0xFF1D2026))
     /** Filo di luce sul bordo del vetro; in Expressive nessun bordo. */
     val CardBorder get() = style(Color(0xFFFFFFFF), Color(0x24FFFFFF), Color.Transparent, Color.Transparent)
 
@@ -128,10 +132,10 @@ object AppTheme {
      * control di iOS. Expressive: il "secondary container" di Material, pieno.
      */
     val SelectionFill: Brush
-        get() = SolidColor(style(Color(0xFFFFFFFF), Color(0xFF3A3F4D), Color(0xFFD9E2FF), Color(0xFF34457A)))
+        get() = SolidColor(style(Color(0xF2FFFFFF), Color(0x47FFFFFF), Color(0xFFD9E2FF), Color(0xFF34457A)))
     val OnSelection get() = style(Color(0xFF0B0D12), Color(0xFFFFFFFF), Color(0xFF0B1B45), Color(0xFFDCE3FF))
     /** Fondo del binario su cui scorre la selezione. */
-    val TrackFill get() = style(Color(0x1F767680), Color(0x3D767680), Color(0xFFE6E8F3), Color(0xFF282B32))
+    val TrackFill get() = style(Color(0x80FFFFFF), Color(0x1FFFFFFF), Color(0xFFE6E8F3), Color(0xFF282B32))
 
     // --- Gradienti ----------------------------------------------------------------------------
     val HeroGradientTop get() = if (isDarkMode) Color(0xFF141C3A) else Color(0xFF1B2E7A)
@@ -139,7 +143,10 @@ object AppTheme {
     val HeroGradientBottom get() = if (isDarkMode) Color(0xFF4B3AA8) else Color(0xFF7B4FE3)
     val HeroGradient: Brush
         get() = if (isGlass) {
-            Brush.linearGradient(listOf(HeroGradientTop, HeroGradientMid, HeroGradientBottom))
+            // Vetro colorato: lo stesso gradiente, ma lascia intravedere lo sfondo.
+            Brush.linearGradient(
+                listOf(HeroGradientTop.copy(alpha = 0.82f), HeroGradientMid.copy(alpha = 0.78f), HeroGradientBottom.copy(alpha = 0.74f))
+            )
         } else {
             // Material Expressive: il pannello e' il primario "pieno" in due toni vicini, senza la
             // virata al viola del gradiente di Glass.
@@ -183,7 +190,8 @@ object AppTheme {
     val TintGreenInk get() = if (isDarkMode) Color(0xFF86EFAC) else Color(0xFF166534)
     val TintRed get() = if (isDarkMode) Color(0xFF351A1D) else Color(0xFFFEF2F2)
     val TintRedInk get() = if (isDarkMode) Color(0xFFFCA5A5) else Color(0xFF991B1B)
-    val TintSlate get() = style(Color(0x1F767680), Color(0x3D767680), Color(0xFFE6E8F3), Color(0xFF282B32))
+    // Glass: velo bianco smerigliato (i riempimenti neutri di iOS sopra uno sfondo colorato).
+    val TintSlate get() = style(Color(0x80FFFFFF), Color(0x1FFFFFFF), Color(0xFFE6E8F3), Color(0xFF282B32))
     val TintSlateInk get() = if (isDarkMode) Color(0xFFCBD5E1) else Color(0xFF475569)
 
     // --- Badge e indicatori --------------------------------------------------------------------
