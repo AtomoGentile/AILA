@@ -1937,7 +1937,9 @@ fun MainAppShell(
                 // Altezza occupata dalla barra flottante (pillola + margini + barra di sistema):
                 // le schermate delle tab la lasciano libera in fondo alle liste.
                 val bottomBarPadding = 84.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-                val imeVisible = WindowInsets.isImeVisible
+                // Tastiera aperta = il suo inset in basso e' > 0. (`isImeVisible` esiste solo su
+                // Android: su iOS non compilava.)
+                val imeVisible = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
                 // Sorgente della sfocatura della barra (Liquid Glass): il contenuto delle tab.
                 val hazeState = dev.chrisbanes.haze.rememberHazeState()
                 Box(modifier = Modifier.weight(1f)) {
