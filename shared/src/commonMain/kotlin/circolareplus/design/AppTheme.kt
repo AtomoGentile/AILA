@@ -119,14 +119,14 @@ object AppTheme {
     /** Bordo dei campi di testo (Material: "outline variant", visibile anche dove Hairline non c'e'). */
     val FieldOutline get() = style(Color(0x1F0B1B45), Color(0x1FFFFFFF), Color(0xFFC4C6D0), Color(0xFF44474F))
     /** Fondo dei campi di testo: vetro in Glass, pieno in Expressive. */
-    val FieldSurface get() = style(Color(0x99FFFFFF), Color(0x1FFFFFFF), Color(0xFFFFFFFF), Color(0xFF1D2026))
+    val FieldSurface get() = style(Color(0x66FFFFFF), Color(0x1AFFFFFF), Color(0xFFFFFFFF), Color(0xFF1D2026))
 
     // --- Card -----------------------------------------------------------------------------------
     /**
      * Fondo delle card. Glass: vetro bianco traslucido (in scuro un velo bianco al 10%) sopra lo
      * sfondo. Expressive: "surface container low", pieno e senza ombra.
      */
-    val CardSurface get() = style(Color(0x73FFFFFF), Color(0x1AFFFFFF), Color(0xFFF1F2FB), Color(0xFF1D2026))
+    val CardSurface get() = style(Color(0x4DFFFFFF), Color(0x14FFFFFF), Color(0xFFF1F2FB), Color(0xFF1D2026))
     /** Filo di luce sul bordo del vetro; in Expressive nessun bordo. */
     val CardBorder get() = style(Color(0xFFFFFFFF), Color(0x24FFFFFF), Color.Transparent, Color.Transparent)
 
@@ -139,7 +139,7 @@ object AppTheme {
         get() = SolidColor(style(Color(0xF2FFFFFF), Color(0x47FFFFFF), Color(0xFFD9E2FF), Color(0xFF34457A)))
     val OnSelection get() = style(Color(0xFF0B0D12), Color(0xFFFFFFFF), Color(0xFF0B1B45), Color(0xFFDCE3FF))
     /** Fondo del binario su cui scorre la selezione. */
-    val TrackFill get() = style(Color(0x80FFFFFF), Color(0x1FFFFFFF), Color(0xFFE6E8F3), Color(0xFF282B32))
+    val TrackFill get() = style(Color(0x4DFFFFFF), Color(0x1AFFFFFF), Color(0xFFE6E8F3), Color(0xFF282B32))
 
     // --- Gradienti ----------------------------------------------------------------------------
     val HeroGradientTop get() = if (isDarkMode) Color(0xFF141C3A) else Color(0xFF1B2E7A)
@@ -149,7 +149,7 @@ object AppTheme {
         get() = if (isGlass) {
             // Vetro colorato: lo stesso gradiente, ma lascia intravedere lo sfondo.
             Brush.linearGradient(
-                listOf(HeroGradientTop.copy(alpha = 0.82f), HeroGradientMid.copy(alpha = 0.78f), HeroGradientBottom.copy(alpha = 0.74f))
+                listOf(HeroGradientTop.copy(alpha = 0.62f), HeroGradientMid.copy(alpha = 0.55f), HeroGradientBottom.copy(alpha = 0.5f))
             )
         } else {
             // Material Expressive: il pannello e' il primario "pieno" in due toni vicini, senza la
@@ -169,8 +169,9 @@ object AppTheme {
         get() = when {
             // Material Expressive: il colore primario e' pieno, non sfumato.
             !isGlass -> SolidColor(PrimaryBlue)
-            isDarkMode -> Brush.horizontalGradient(listOf(Color(0xFF3E7BE0), Color(0xFF6B57D6)))
-            else -> Brush.horizontalGradient(listOf(Color(0xFF3B82F6), Color(0xFF6D5CE7)))
+            // Glass: vetro tinto di blu (i pulsanti "prominent" di iOS 26), un po' trasparente.
+            isDarkMode -> Brush.verticalGradient(listOf(Color(0xE6418AF5), Color(0xCC2F6FE0)))
+            else -> Brush.verticalGradient(listOf(Color(0xE63D8BFF), Color(0xD92F74F0)))
         }
 
     // Testo/superfici sopra HeroGradient (contrasto chiaro su sfondo scuro): uguali nei due temi,
@@ -195,7 +196,7 @@ object AppTheme {
     val TintRed get() = if (isDarkMode) Color(0xFF351A1D) else Color(0xFFFEF2F2)
     val TintRedInk get() = if (isDarkMode) Color(0xFFFCA5A5) else Color(0xFF991B1B)
     // Glass: velo bianco smerigliato (i riempimenti neutri di iOS sopra uno sfondo colorato).
-    val TintSlate get() = style(Color(0x80FFFFFF), Color(0x1FFFFFFF), Color(0xFFE6E8F3), Color(0xFF282B32))
+    val TintSlate get() = style(Color(0x59FFFFFF), Color(0x1AFFFFFF), Color(0xFFE6E8F3), Color(0xFF282B32))
     val TintSlateInk get() = if (isDarkMode) Color(0xFFCBD5E1) else Color(0xFF475569)
 
     // --- Badge e indicatori --------------------------------------------------------------------

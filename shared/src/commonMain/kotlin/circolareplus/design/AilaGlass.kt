@@ -27,8 +27,9 @@ val AppTheme.GlassBase: Color
     get() = if (isDarkMode) Color(0xFF05070D) else Color(0xFFE9EEFA)
 
 /**
- * Sfondo dell'app in Liquid Glass: colore di base piu' tre grandi macchie sfumate (blu in alto a
- * sinistra, viola a destra, rosa/acqua in basso), come uno sfondo di iOS visto attraverso il vetro.
+ * Sfondo dell'app in Liquid Glass: colore di base piu' quattro grandi macchie sfumate, come uno
+ * sfondo di iOS. Piu' vivaci della prima versione: il vetro, ora molto piu' trasparente, prende
+ * il colore da quello che ha dietro.
  */
 fun Modifier.ailaGlassBackdrop(): Modifier = drawBehind {
     val dark = AppTheme.isDarkMode
@@ -43,43 +44,70 @@ fun Modifier.ailaGlassBackdrop(): Modifier = drawBehind {
         )
     }
     if (dark) {
-        blob(Offset(w * 0.1f, h * 0.08f), w * 0.95f, Color(0x8C1E3A8A))
-        blob(Offset(w * 0.95f, h * 0.45f), w * 0.85f, Color(0x734C1D95))
-        blob(Offset(w * 0.2f, h * 0.92f), w * 0.9f, Color(0x590E7490))
+        blob(Offset(w * 0.05f, h * 0.05f), w * 1.0f, Color(0xA61E40AF))
+        blob(Offset(w * 1.0f, h * 0.38f), w * 0.9f, Color(0x8C6D28D9))
+        blob(Offset(w * 0.15f, h * 0.72f), w * 0.85f, Color(0x730E7490))
+        blob(Offset(w * 0.9f, h * 0.98f), w * 0.8f, Color(0x66BE185D))
     } else {
-        blob(Offset(w * 0.1f, h * 0.08f), w * 0.95f, Color(0x999EC1FF))
-        blob(Offset(w * 0.95f, h * 0.45f), w * 0.85f, Color(0x80C9B5FF))
-        blob(Offset(w * 0.2f, h * 0.92f), w * 0.9f, Color(0x66FFC7E0))
+        blob(Offset(w * 0.05f, h * 0.05f), w * 1.0f, Color(0xB38FB8FF))
+        blob(Offset(w * 1.0f, h * 0.38f), w * 0.9f, Color(0x99C4A8FF))
+        blob(Offset(w * 0.15f, h * 0.72f), w * 0.85f, Color(0x8099E6F0))
+        blob(Offset(w * 0.9f, h * 0.98f), w * 0.8f, Color(0x80FFB8D9))
     }
 }
 
-/** Riempimento del vetro: piu' chiaro in alto (il riflesso), piu' trasparente in basso. */
+/**
+ * Riempimento del vetro: quasi trasparente, appena piu' chiaro in alto. Il vetro di iOS 26 non
+ * "colora" quello che copre: lo schiarisce un poco e lo lascia vedere.
+ */
 val AppTheme.GlassFill: Brush
     get() = if (isDarkMode) {
-        Brush.verticalGradient(listOf(Color(0x2EFFFFFF), Color(0x12FFFFFF)))
+        Brush.verticalGradient(listOf(Color(0x24FFFFFF), Color(0x0AFFFFFF)))
     } else {
-        Brush.verticalGradient(listOf(Color(0xA6FFFFFF), Color(0x61FFFFFF)))
+        Brush.verticalGradient(listOf(Color(0x66FFFFFF), Color(0x2EFFFFFF)))
     }
 
-/** Filo di luce sul bordo del vetro: forte in alto, quasi sparito in basso. */
+/**
+ * Bordo "speculare" del vetro: la luce arriva dall'alto a sinistra, quindi il bordo e' brillante
+ * in quell'angolo, si spegne lungo i lati e si riaccende appena in basso a destra (il riflesso
+ * interno), come i controlli di iOS 26. Non piu' un filo uniforme.
+ */
 val AppTheme.GlassEdge: Brush
     get() = if (isDarkMode) {
-        Brush.verticalGradient(listOf(Color(0x59FFFFFF), Color(0x0FFFFFFF)))
+        Brush.linearGradient(
+            0f to Color(0x8CFFFFFF), 0.35f to Color(0x14FFFFFF), 0.7f to Color(0x0AFFFFFF), 1f to Color(0x40FFFFFF),
+            start = Offset.Zero, end = Offset.Infinite
+        )
     } else {
-        Brush.verticalGradient(listOf(Color(0xF2FFFFFF), Color(0x40FFFFFF)))
+        Brush.linearGradient(
+            0f to Color(0xFFFFFFFF), 0.35f to Color(0x59FFFFFF), 0.7f to Color(0x26FFFFFF), 1f to Color(0xB3FFFFFF),
+            start = Offset.Zero, end = Offset.Infinite
+        )
     }
 
-/** Una superficie di vetro: riempimento traslucido, riflesso in alto e filo di luce sul bordo. */
+/**
+ * Una superficie di vetro: velo quasi trasparente, bagliore morbido lungo il bordo alto (la luce
+ * che entra nel vetro) e bordo speculare.
+ */
 fun Modifier.ailaGlassSurface(shape: Shape, tint: Color? = null, edge: Dp = 1.dp): Modifier =
     this
         .clip(shape)
         .background(AppTheme.GlassFill)
         .then(if (tint != null) Modifier.background(tint) else Modifier)
+        .drawBehind {
+            // Bagliore interno in alto: la luce che attraversa lo spessore del vetro.
+            drawRect(
+                Brush.verticalGradient(
+                    listOf(Color.White.copy(alpha = if (AppTheme.isDarkMode) 0.10f else 0.35f), Color.Transparent),
+                    endY = size.height * 0.35f
+                )
+            )
+        }
         .border(edge, AppTheme.GlassEdge, shape)
 
-/** Riflesso "bagnato" sopra un riempimento pieno (pulsanti primari in vetro colorato). */
+/** Riflesso "bagnato" sopra un riempimento colorato (pulsanti in vetro tinto). */
 val AppTheme.GlassGloss: Brush
-    get() = Brush.verticalGradient(listOf(Color(0x59FFFFFF), Color(0x00FFFFFF), Color(0x14FFFFFF)))
+    get() = Brush.verticalGradient(listOf(Color(0x66FFFFFF), Color(0x0DFFFFFF), Color(0x00FFFFFF), Color(0x1FFFFFFF)))
 
 /**
  * Forme "ondulate" di Material 3 Expressive (cookie, sunny, clover...): un cerchio il cui raggio
