@@ -5352,7 +5352,7 @@ private fun FloatingTabBar(
                                         // Piu' trasparente: il contenuto sotto si vede sfocato
                                         // ma riconoscibile, come la tab bar di iOS 26.
                                         tint = dev.chrisbanes.haze.HazeTint(
-                                            if (AppTheme.isDarkMode) Color(0x06202430) else Color(0x04FFFFFF)
+                                            if (AppTheme.isDarkMode) Color(0x01202430) else Color(0x01FFFFFF)
                                         ),
                                         blurRadius = 32.dp,
                                         noiseFactor = 0f

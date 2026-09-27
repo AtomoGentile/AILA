@@ -158,14 +158,14 @@ object AppTheme {
     /** Bordo dei campi di testo (Material: "outline variant", visibile anche dove Hairline non c'e'). */
     val FieldOutline get() = style(Color(0x1F0B1B45), Color(0x1FFFFFFF), Color(0xFFC4C6D0), Color(0xFF44474F))
     /** Fondo dei campi di testo: vetro in Glass, pieno in Expressive. */
-    val FieldSurface get() = style(Color(0x0BFFFFFF), Color(0x03FFFFFF), Color(0xFFFFFFFF), Color(0xFF1D2026))
+    val FieldSurface get() = style(Color(0x02FFFFFF), Color(0x01FFFFFF), Color(0xFFFFFFFF), Color(0xFF1D2026))
 
     // --- Card -----------------------------------------------------------------------------------
     /**
      * Fondo delle card. Glass: vetro bianco traslucido (in scuro un velo bianco al 10%) sopra lo
      * sfondo. Expressive: "surface container low", pieno e senza ombra.
      */
-    val CardSurface get() = style(Color(0x08FFFFFF), Color(0x02FFFFFF), Color(0xFFF1F2FB), Color(0xFF1D2026))
+    val CardSurface get() = style(Color(0x02FFFFFF), Color(0x01FFFFFF), Color(0xFFF1F2FB), Color(0xFF1D2026))
     /** Filo di luce sul bordo del vetro; in Expressive nessun bordo. */
     val CardBorder get() = style(Color(0xFFFFFFFF), Color(0x24FFFFFF), Color.Transparent, Color.Transparent)
 
@@ -180,7 +180,7 @@ object AppTheme {
     val OnSelection get() = if (!isGlass && accent != AilaAccent.BLUE) OnAccentContainer
         else style(Color(0xFF0B0D12), Color(0xFFFFFFFF), Color(0xFF0B1B45), Color(0xFFDCE3FF))
     /** Fondo del binario su cui scorre la selezione. */
-    val TrackFill get() = style(Color(0x08FFFFFF), Color(0x03FFFFFF), Color(0xFFE6E8F3), Color(0xFF282B32))
+    val TrackFill get() = style(Color(0x02FFFFFF), Color(0x01FFFFFF), Color(0xFFE6E8F3), Color(0xFF282B32))
 
     // --- Gradienti ----------------------------------------------------------------------------
     val HeroGradientTop get() = if (isDarkMode) Color(0xFF141C3A) else Color(0xFF1B2E7A)
@@ -190,8 +190,8 @@ object AppTheme {
         get() = if (isGlass) {
             // Vetro chiaro, non un pannello colorato: il colore lo da' lo sfondo dietro. Il
             // gradiente blu-viola pieno faceva l'app "giocattolo".
-            if (isDarkMode) Brush.verticalGradient(listOf(Color(0x0EFFFFFF), Color(0x05FFFFFF)))
-            else Brush.verticalGradient(listOf(Color(0x2BFFFFFF), Color(0x15FFFFFF)))
+            if (isDarkMode) Brush.verticalGradient(listOf(Color(0x03FFFFFF), Color(0x01FFFFFF)))
+            else Brush.verticalGradient(listOf(Color(0x09FFFFFF), Color(0x04FFFFFF)))
         } else {
             // Material Expressive: il pannello e' il primario "pieno" in due toni vicini, senza la
             // virata al viola del gradiente di Glass.
@@ -223,7 +223,7 @@ object AppTheme {
     // come iOS): il testo sopra diventa scuro e i riquadri vetro bianco.
     val OnHeroPrimary get() = if (isGlass) TextDark else Color(0xFFFFFFFF)
     val OnHeroSecondary get() = if (isGlass) TextMuted else Color(0xCCFFFFFF)
-    val OnHeroSurface get() = if (isGlass) (if (isDarkMode) Color(0x0AFFFFFF) else Color(0x26FFFFFF)) else Color(0x2EFFFFFF)
+    val OnHeroSurface get() = if (isGlass) (if (isDarkMode) Color(0x02FFFFFF) else Color(0x08FFFFFF)) else Color(0x2EFFFFFF)
     val OnHeroBorder get() = if (isGlass) (if (isDarkMode) Color(0x40FFFFFF) else Color(0xE6FFFFFF)) else Color(0x33FFFFFF)
 
     // --- Tinte dei riquadri icona -------------------------------------------------------------
@@ -243,7 +243,7 @@ object AppTheme {
     val TintRed get() = if (isDarkMode) Color(0xFF351A1D) else Color(0xFFFEF2F2)
     val TintRedInk get() = if (isDarkMode) Color(0xFFFCA5A5) else Color(0xFF991B1B)
     // Glass: velo bianco smerigliato (i riempimenti neutri di iOS sopra uno sfondo colorato).
-    val TintSlate get() = style(Color(0x1EFFFFFF), Color(0x09FFFFFF), Color(0xFFE6E8F3), Color(0xFF282B32))
+    val TintSlate get() = style(Color(0x06FFFFFF), Color(0x02FFFFFF), Color(0xFFE6E8F3), Color(0xFF282B32))
     val TintSlateInk get() = if (isDarkMode) Color(0xFFCBD5E1) else Color(0xFF475569)
 
     // --- Badge e indicatori --------------------------------------------------------------------

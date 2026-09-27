@@ -113,13 +113,13 @@ fun DrawScope.drawAilaGlassBackdrop() {
 /**
  * Riempimento del vetro: quasi trasparente, appena piu' chiaro in alto. Il vetro di iOS 26 non
  * "colora" quello che copre: lo schiarisce un poco e lo lascia vedere. (Tre volte piu'
- * trasparente di prima, richiesta di Simone: la forma la danno i bordi, non il velo.)
+ * trasparente, poi altre cinque, richiesta di Simone: la forma la danno i bordi, non il velo.)
  */
 val AppTheme.GlassFill: Brush
     get() = if (isDarkMode) {
-        Brush.verticalGradient(listOf(Color(0x04FFFFFF), Color(0x01FFFFFF)))
+        Brush.verticalGradient(listOf(Color(0x01FFFFFF), Color(0x00FFFFFF)))
     } else {
-        Brush.verticalGradient(listOf(Color(0x0BFFFFFF), Color(0x04FFFFFF)))
+        Brush.verticalGradient(listOf(Color(0x02FFFFFF), Color(0x01FFFFFF)))
     }
 
 /**
@@ -155,7 +155,7 @@ fun Modifier.ailaGlassSurface(shape: Shape, tint: Color? = null, edge: Dp = 1.dp
             // Bagliore interno in alto: la luce che attraversa lo spessore del vetro.
             drawRect(
                 Brush.verticalGradient(
-                    listOf(Color.White.copy(alpha = if (AppTheme.isDarkMode) 0.03f else 0.05f), Color.Transparent),
+                    listOf(Color.White.copy(alpha = if (AppTheme.isDarkMode) 0.006f else 0.01f), Color.Transparent),
                     endY = size.height * 0.35f
                 )
             )
