@@ -1978,10 +1978,13 @@ fun MainAppShell(
     val tabBarDrag = remember { mutableStateOf<Float?>(null) }
     val shellProgress = androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (shellRoute != ShellRoute.TABS) 1f else 0f,
-        // In container transform la stessa molla della forma: le tab spariscono sotto solo quando
-        // la pagina le copre del tutto, e ricompaiono appena si comincia a tornare.
-        animationSpec = if (shellContainer[0]) circolareplus.design.ailaContainerFloatSpring()
-            else circolareplus.design.ailaNavigationSpring(),
+        // In container transform la stessa curva della forma (molla aprendo, durata fissa
+        // chiudendo): le tab spariscono sotto solo quando la pagina le copre del tutto.
+        animationSpec = when {
+            !shellContainer[0] -> circolareplus.design.ailaNavigationSpring()
+            navForward[0] -> circolareplus.design.ailaContainerFloatSpring()
+            else -> circolareplus.design.ailaContainerCloseSpec()
+        },
         label = "shellPush"
     )
 
@@ -2022,7 +2025,10 @@ fun MainAppShell(
                 if (!AppTheme.isGlass && shellContainer[0] && detailProgress.value == 0f) {
                     // Container transform: tab ferme e piene sotto la forma; nascoste solo a pagina
                     // aperta del tutto, cosi' non si disegnano inutilmente sotto di lei.
-                    alpha = if (shellProgress.value >= 1f) 0f else 1f
+                    // Tornando alle tab la Home ricompare subito, sotto la pagina ancora intera: si
+                    // disegna durante l'attesa iniziale della chiusura, non nel primo fotogramma in cui
+                    // la forma si stringe.
+                    alpha = if (shellProgress.value >= 1f && shellRoute != ShellRoute.TABS) 0f else 1f
                 } else if (!AppTheme.isGlass) {
                     // Material "fade through" anche per le tab: aprendo una schermata svaniscono,
                     // tornando (es. dalla lettura di una circolare) riemergono crescendo appena,
@@ -3035,7 +3041,11 @@ fun MainAppShell(
             val containerOrigin = if (AppTheme.isGlass || route == ShellRoute.TABS) null
                 else largeOrigin(circolareplus.design.AilaContainerTransform.originOf(route))
             val containerProgress = transition.animateFloat(
-                transitionSpec = { circolareplus.design.ailaContainerFloatSpring() },
+                // Aprendo la molla, chiudendo la curva a durata fissa (vedi ailaContainerCloseSpec).
+                transitionSpec = {
+                    if (targetState == androidx.compose.animation.EnterExitState.PostExit) circolareplus.design.ailaContainerCloseSpec()
+                    else circolareplus.design.ailaContainerFloatSpring()
+                },
                 label = "containerTransform"
             ) { state -> if (state == androidx.compose.animation.EnterExitState.Visible) 1f else 0f }
             // Si espande solo entrando "in avanti" e si richiude solo tornando indietro da lei;

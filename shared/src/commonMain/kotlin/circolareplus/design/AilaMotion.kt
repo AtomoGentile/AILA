@@ -518,6 +518,19 @@ fun <T> ailaContainerSpring(): SpringSpec<T> = spring(dampingRatio = 1f, stiffne
 fun ailaContainerFloatSpring(): SpringSpec<Float> = spring(dampingRatio = 1f, stiffness = 450f, visibilityThreshold = 0.0005f)
 
 /**
+ * Chiusura del container transform (la pagina che rientra nel pulsante). Non la molla
+ * dell'apertura: la molla parte subito veloce, e al tocco "indietro" il primo fotogramma e' lungo
+ * (si ricompone mezza app), quindi la forma saltava avanti ("troppo veloce, lagga"). Qui una curva
+ * a durata fissa che aspetta un paio di fotogrammi prima di partire, si stringe senza strappi e
+ * rallenta a lungo prima di posarsi sul pulsante (l'"emphasized" di Material).
+ */
+fun ailaContainerCloseSpec(): androidx.compose.animation.core.FiniteAnimationSpec<Float> = tween(
+    durationMillis = 520,
+    delayMillis = 40,
+    easing = androidx.compose.animation.core.CubicBezierEasing(0.3f, 0f, 0f, 1f)
+)
+
+/**
  * Disegna il contenuto dentro un "contenitore" che cresce dall'origine fino a tutto lo schermo
  * mentre [progress] va da 0 a 1: prima si vede il fondo del contenitore (come se la card si
  * allungasse), poi il contenuto della pagina compare in dissolvenza.
