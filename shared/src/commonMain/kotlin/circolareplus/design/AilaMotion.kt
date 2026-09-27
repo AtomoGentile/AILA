@@ -512,8 +512,11 @@ fun Modifier.ailaTransformOrigin(
  */
 fun <T> ailaContainerSpring(): SpringSpec<T> = spring(dampingRatio = 1f, stiffness = 520f)
 
-/** Come [ailaContainerSpring], per i Float, con la soglia di arrivo stretta. */
-fun ailaContainerFloatSpring(): SpringSpec<Float> = spring(dampingRatio = 1f, stiffness = 620f, visibilityThreshold = 0.0005f)
+/**
+ * Come [ailaContainerSpring], per i Float, con la soglia di arrivo stretta. Un filo piu' lenta di
+ * prima (620): a quella velocita' la forma che si allargava risultava troppo brusca.
+ */
+fun ailaContainerFloatSpring(): SpringSpec<Float> = spring(dampingRatio = 1f, stiffness = 450f, visibilityThreshold = 0.0005f)
 
 /**
  * Disegna il contenuto dentro un "contenitore" che cresce dall'origine fino a tutto lo schermo
@@ -557,14 +560,17 @@ fun Modifier.ailaContainerReveal(
             // forma si schiarisce nel fondo della pagina e il contenuto arriva un po' prima che
             // dalle card, perche' da un pulsante piccolo la corsa e' piu' lunga. Al ritorno lo
             // stesso al contrario: si richiude nel colore del pulsante e ci si posa sopra.
+            // Meno abbagliante: il colore passa dal pulsante al fondo della pagina lungo quasi
+            // tutta la corsa (non piu' un lampo chiaro subito all'inizio), l'icona si dissolve con
+            // calma e il contenuto arriva in una dissolvenza piu' lunga.
             val fromButton = origin.buttonColor != null
-            val contentAlpha = if (fromButton) ((p - 0.55f) / 0.3f).coerceIn(0f, 1f)
+            val contentAlpha = if (fromButton) ((p - 0.5f) / 0.42f).coerceIn(0f, 1f)
                 else ((p - 0.72f) / 0.23f).coerceIn(0f, 1f)
-            val colorT = (p / (if (fromButton) 0.4f else 0.3f)).coerceIn(0f, 1f)
+            val colorT = (p / (if (fromButton) 0.75f else 0.3f)).coerceIn(0f, 1f)
             val fill = androidx.compose.ui.graphics.lerp(
                 origin.buttonColor ?: containerColor, pageColor, colorT * colorT * (3f - 2f * colorT)
             )
-            val edgeT = (p / (if (fromButton) 0.05f else 0.22f)).coerceIn(0f, 1f)
+            val edgeT = (p / (if (fromButton) 0.12f else 0.22f)).coerceIn(0f, 1f)
             val shapeAlpha = edgeT * edgeT * (3f - 2f * edgeT)
             clipPath(clip) {
                 // Niente saveLayer (un buffer grande quanto lo schermo a ogni fotogramma, la causa
