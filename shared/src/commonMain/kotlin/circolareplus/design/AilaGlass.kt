@@ -113,9 +113,9 @@ fun DrawScope.drawAilaGlassBackdrop() {
  */
 val AppTheme.GlassFill: Brush
     get() = if (isDarkMode) {
-        Brush.verticalGradient(listOf(Color(0x24FFFFFF), Color(0x0AFFFFFF)))
+        Brush.verticalGradient(listOf(Color(0x19FFFFFF), Color(0x06FFFFFF)))
     } else {
-        Brush.verticalGradient(listOf(Color(0x66FFFFFF), Color(0x2EFFFFFF)))
+        Brush.verticalGradient(listOf(Color(0x45FFFFFF), Color(0x1CFFFFFF)))
     }
 
 /**
@@ -149,7 +149,7 @@ fun Modifier.ailaGlassSurface(shape: Shape, tint: Color? = null, edge: Dp = 1.dp
             // Bagliore interno in alto: la luce che attraversa lo spessore del vetro.
             drawRect(
                 Brush.verticalGradient(
-                    listOf(Color.White.copy(alpha = if (AppTheme.isDarkMode) 0.10f else 0.35f), Color.Transparent),
+                    listOf(Color.White.copy(alpha = if (AppTheme.isDarkMode) 0.07f else 0.24f), Color.Transparent),
                     endY = size.height * 0.35f
                 )
             )
