@@ -262,11 +262,10 @@ fun AnimatedContentTransitionScope<*>.ailaPushTransition(forward: Boolean): Cont
                 slideOutHorizontally(ailaNavigationSpring()) { it }
         }
     } else {
-        val dir = if (forward) 1 else -1
-        (slideInHorizontally(ailaNavigationSpring()) { dir * it / 10 } +
-            fadeIn(tween(durationMillis = 210, delayMillis = 60))) togetherWith
-            (slideOutHorizontally(ailaNavigationSpring()) { -dir * it / 10 } +
-                fadeOut(tween(durationMillis = 90)))
+        // Material: "fade through", la stessa del cambio di tab (quella della Mappa posti, che
+        // Simone trovava la migliore): la vecchia svanisce in fretta, la nuova emerge crescendo
+        // appena. Niente scorrimento ne' pagina che si allarga da un elemento.
+        materialFadeThroughEnter() togetherWith materialFadeThroughExit()
     }
     return transform.apply {
         targetContentZIndex = if (forward) 1f else -1f
@@ -282,19 +281,32 @@ fun AnimatedContentTransitionScope<*>.ailaTabTransition(): ContentTransform =
     if (AppTheme.isGlass) {
         fadeIn(tween(durationMillis = 140)) togetherWith fadeOut(tween(durationMillis = 90))
     } else {
-        (fadeIn(tween(durationMillis = 210, delayMillis = 70)) +
-            scaleIn(tween(durationMillis = 210, delayMillis = 70), initialScale = 0.94f)) togetherWith
-            fadeOut(tween(durationMillis = 70))
+        materialFadeThroughEnter() togetherWith materialFadeThroughExit()
     }
+
+/** Material "fade through": ingresso (dissolvenza + leggera crescita, dopo l'uscita). */
+fun materialFadeThroughEnter(): EnterTransition =
+    fadeIn(tween(durationMillis = 210, delayMillis = 70)) +
+        scaleIn(tween(durationMillis = 210, delayMillis = 70), initialScale = 0.94f)
+
+/** Material "fade through": uscita rapida. */
+fun materialFadeThroughExit(): ExitTransition = fadeOut(tween(durationMillis = 70))
+
+/**
+ * Container transform (la pagina che si allarga dalla card toccata, stile Pixel). Spento: la
+ * "fade through" risultava piu' pulita su Android (niente sagome che si allargano, niente righe
+ * a meta'). Il codice resta, basta rimettere true per riaverlo.
+ */
+const val AILA_CONTAINER_TRANSFORM_ENABLED = false
 
 /** Ingresso/uscita di un livello "push" mostrato con AnimatedVisibility (dettaglio circolare). */
 fun ailaPushEnter(): EnterTransition =
     if (AppTheme.isGlass) slideInHorizontally(ailaNavigationSpring()) { it }
-    else slideInHorizontally(ailaNavigationSpring()) { it / 10 } + fadeIn(tween(210, delayMillis = 60))
+    else materialFadeThroughEnter()
 
 fun ailaPushExit(): ExitTransition =
     if (AppTheme.isGlass) slideOutHorizontally(ailaNavigationSpring()) { it }
-    else slideOutHorizontally(ailaNavigationSpring()) { it / 10 } + fadeOut(tween(90))
+    else materialFadeThroughExit()
 
 /**
  * Quanto si sposta e si scurisce la schermata che resta sotto un push (0..1 = coperta del tutto).
@@ -304,7 +316,7 @@ fun ailaPushExit(): ExitTransition =
 val ailaUnderlayShift: Float get() = if (AppTheme.isGlass) 1f / 3f else 0f
 // Material: velo leggero sotto al container transform (col 32% di prima l'animazione "lampeggiava"
 // di scuro all'apertura e alla chiusura).
-val ailaUnderlayDim: Float get() = if (AppTheme.isGlass) 0.18f else 0.12f
+val ailaUnderlayDim: Float get() = if (AppTheme.isGlass) 0.18f else 0f
 
 /** Si ricorda se lo "sblocco" e' gia' stato fatto in questo avvio dell'app. */
 private object AilaUnlockMemory {

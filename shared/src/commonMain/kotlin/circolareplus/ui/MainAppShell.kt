@@ -1926,7 +1926,7 @@ fun MainAppShell(
     // la pagina che nasce da un puntino e ci rientra "lampeggia". Da li' si usa lo shared axis.
     val minOriginWidthPx = with(androidx.compose.ui.platform.LocalDensity.current) { 120.dp.toPx() }
     fun largeOrigin(origin: circolareplus.design.AilaTransformOrigin?) =
-        origin?.takeIf { it.bounds.width >= minOriginWidthPx }
+        origin?.takeIf { circolareplus.design.AILA_CONTAINER_TRANSFORM_ENABLED && it.bounds.width >= minOriginWidthPx }
     // Verso dell'ultima navigazione (avanti = si apre una schermata sopra): serve al push di
     // Liquid Glass, che anima da se' il contenuto (vedi glassSlide piu' sotto).
     val navForward = remember { arrayOf(true) }
@@ -1965,7 +1965,7 @@ fun MainAppShell(
     detailWasOpen[0] = detailOpen
     // Al ritorno ci si richiude sulla card della stessa circolare che si vede adesso (es. nella
     // lista delle Circolari, se era stata aperta dalla Home); se non c'e', sul punto di partenza.
-    val detailOrigin = if (AppTheme.isGlass) null else {
+    val detailOrigin = if (AppTheme.isGlass || !circolareplus.design.AILA_CONTAINER_TRANSFORM_ENABLED) null else {
         val stored = circolareplus.design.AilaContainerTransform.originOf(DETAIL_TRANSFORM_KEY)
         val number = (selectedCircularForDetail ?: lastDetailCircular[0])?.number
         if (stored != null && number != null && !detailOpen) {
