@@ -5404,7 +5404,13 @@ private fun RowScope.FloatingTabItem(
             settle.snapTo(lastDrag[0])
             lastDrag[0] = -1f
         }
-        settle.animateTo(if (selected) 1f else 0f, ailaSpatialSpring())
+        // Material: molla un filo piu' lenta e meno elastica di quella generale, perche' la
+        // pillola che rimbalzava attraversando la barra risultava troppo vivace.
+        settle.animateTo(
+            if (selected) 1f else 0f,
+            if (AppTheme.isGlass) ailaSpatialSpring()
+            else androidx.compose.animation.core.spring(dampingRatio = 0.75f, stiffness = 520f)
+        )
     }
     val progress = dragProgress ?: if (lastDrag[0] >= 0f) lastDrag[0] else settle.value
     // Glass: la voce attiva e' una capsula di vetro grigio con icona e nome in blu, come la tab
