@@ -224,7 +224,7 @@ fun RowScope.SocialScoreButton(
     )
 
     val animatedBorderColor by animateColorAsState(
-        targetValue = if (isSelected) activeColor else AppTheme.Hairline,
+        targetValue = if (isSelected) activeColor else AppTheme.FieldOutline,
         animationSpec = tween(200),
         label = "socialBtnBorder"
     )

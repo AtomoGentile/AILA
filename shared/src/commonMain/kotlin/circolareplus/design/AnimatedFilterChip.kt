@@ -82,7 +82,7 @@ fun AnimatedFilterChip(
         targetValue = when {
             isSelected && drawSelectionBackground -> activeBackgroundColor
             !drawSelectionBackground -> Color.Transparent
-            else -> AppTheme.Hairline
+            else -> AppTheme.FieldOutline
         },
         animationSpec = tween(durationMillis = 220),
         label = "chipBorderColor"

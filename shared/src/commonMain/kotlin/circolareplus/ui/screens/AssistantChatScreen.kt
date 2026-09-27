@@ -21,6 +21,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -574,16 +576,16 @@ private fun ThinkingBubble() {
         }
     }
 
-    // Solo l'indicatore (al posto dell'icona) e la scritta, senza fumetto: il fumetto compare con
+    // Solo l'indicatore, al posto dell'icona: niente fumetto ne' scritta. Il fumetto compare con
     // la risposta. Material: la forma che cambia; Glass: i tre puntini.
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-        Box(modifier = Modifier.size(26.dp), contentAlignment = Alignment.Center) {
-            ThinkingIndicator(step)
-        }
-        Spacer(modifier = Modifier.width(AppTheme.Space8))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(text = "Sto cercando in AILA…", fontSize = 13.sp, color = AppTheme.TextMuted)
-        }
+    Box(
+        modifier = Modifier
+            .padding(top = 4.dp)
+            .size(26.dp)
+            .semantics { contentDescription = "AILA Assistant sta cercando" },
+        contentAlignment = Alignment.Center
+    ) {
+        ThinkingIndicator(step)
     }
 }
 

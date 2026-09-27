@@ -4067,7 +4067,7 @@ private fun AddCalendarEventDialog(
                             modifier = Modifier
                                 .weight(1.4f)
                                 .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                                .border(1.dp, AppTheme.Hairline, RoundedCornerShape(AppTheme.SmallElementRadius))
+                                .border(1.dp, AppTheme.FieldOutline, RoundedCornerShape(AppTheme.SmallElementRadius))
                                 .clickable { showDatePicker = true }
                                 .padding(horizontal = AppTheme.Space12, vertical = 13.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -4407,7 +4407,7 @@ private fun EventCreationOptionCard(
                 if (highlighted) Modifier.background(AppTheme.PrimaryGradient)
                 else Modifier
                     .background(AppTheme.SurfaceWhite)
-                    .border(1.dp, AppTheme.Hairline, RoundedCornerShape(AppTheme.CardCornerRadius))
+                    .border(1.dp, AppTheme.FieldOutline, RoundedCornerShape(AppTheme.CardCornerRadius))
             )
             .clickable { onClick() }
             .padding(AppTheme.Space16)

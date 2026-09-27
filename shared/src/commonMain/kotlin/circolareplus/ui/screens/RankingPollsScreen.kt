@@ -468,7 +468,7 @@ private fun MoveButton(up: Boolean, enabled: Boolean, onClick: () -> Unit) {
     ) {
         AppIcons.ChevronRight(
             modifier = Modifier.size(20.dp).rotate(if (up) -90f else 90f),
-            color = if (enabled) AppTheme.TextDark else AppTheme.Hairline
+            color = if (enabled) AppTheme.TextDark else AppTheme.FieldOutline
         )
     }
 }

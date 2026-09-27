@@ -507,7 +507,7 @@ private fun PreferencesProgressBlock(progress: circolareplus.data.remote.dto.Pre
             .then(
                 if (AppTheme.isGlass || progress.allVoted) Modifier.border(
                     1.dp,
-                    if (progress.allVoted) AppTheme.PollGreen else AppTheme.Hairline,
+                    if (progress.allVoted) AppTheme.PollGreen else AppTheme.FieldOutline,
                     RoundedCornerShape(AppTheme.SmallElementRadius)
                 ) else Modifier
             )
