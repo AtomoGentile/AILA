@@ -13,6 +13,8 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +46,12 @@ fun AilaBottomSheet(
         )
         return
     }
+    // Mentre il foglio e' aperto l'app dietro si sfoca (vedi AilaSheetBackdrop): e' questo, non
+    // il fondo del foglio, a tenere leggibile il testo con il vetro trasparente come il resto.
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        AilaSheetBackdrop.openSheets++
+        onDispose { AilaSheetBackdrop.openSheets-- }
+    }
     val inset = 8.dp
     // Angoli concentrici a quelli dello schermo (il foglio sta a [inset] dal bordo).
     val radius = maxOf(circolareplus.platform.displayCornerRadius() - inset, 28.dp)
@@ -56,20 +64,16 @@ fun AilaBottomSheet(
         shape = androidx.compose.ui.graphics.RectangleShape,
         containerColor = Color.Transparent,
         tonalElevation = 0.dp,
-        scrimColor = Color.Black.copy(alpha = if (AppTheme.isDarkMode) 0.45f else 0.25f),
+        // Velo leggero: la sfocatura fa gia' il grosso, il velo stacca un po' il foglio.
+        scrimColor = if (AppTheme.isDarkMode) Color.Black.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.2f),
         dragHandle = null
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = inset, end = inset, bottom = inset)
-                .ailaGlassSurface(
-                    shape,
-                    // Via di mezzo provata sul telefono: a 0x28 non si leggeva, a 0xF0 era un
-                    // pannello grigio senza niente di vetro. A circa 55% lo sfondo si vede
-                    // attraverso e il testo resta leggibile.
-                    tint = if (AppTheme.isDarkMode) Color(0x8C1C1C1E) else Color(0x8CF2F2F7)
-                ),
+                // Stessa trasparenza del resto del vetro (richiesta di Simone).
+                .ailaGlassSurface(shape),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Maniglia a capsula, come iOS.
@@ -83,4 +87,13 @@ fun AilaBottomSheet(
             Column(modifier = Modifier.fillMaxWidth(), content = content)
         }
     }
+}
+
+/**
+ * Quanti menu dal basso sono aperti in questo momento. La shell (MainAppShell) sfoca l'app dietro
+ * finche' ce n'e' almeno uno, come iOS dietro ai fogli: il foglio e' in una finestra sua, quindi
+ * la sfocatura non puo' farla lui.
+ */
+object AilaSheetBackdrop {
+    var openSheets by androidx.compose.runtime.mutableIntStateOf(0)
 }

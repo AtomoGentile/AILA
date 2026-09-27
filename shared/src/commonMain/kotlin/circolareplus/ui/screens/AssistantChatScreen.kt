@@ -368,13 +368,11 @@ private fun AssistantHistorySheet(
                             // Glass: le righe piene dei gruppi di iOS sul foglio (di vetro quasi
                             // invisibile non si leggevano). Material: il tono "container" sopra
                             // il foglio pieno (CardSurface in scuro e' uguale al foglio).
-                            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                            .background(
-                                // Traslucide, un po' piu' piene del foglio: si stacca la riga e
-                                // il testo resta leggibile.
-                                if (AppTheme.isGlass) {
-                                    if (AppTheme.isDarkMode) Color(0x803A3A3C) else Color(0x99FFFFFF)
-                                } else AppTheme.TrackFill
+                            // Glass: righe di vetro come il resto (dietro l'app e' sfocata, vedi
+                            // AilaSheetBackdrop). Material: il tono "container" sopra il foglio.
+                            .then(
+                                if (AppTheme.isGlass) Modifier.ailaGlassSurface(RoundedCornerShape(AppTheme.SmallElementRadius))
+                                else Modifier.clip(RoundedCornerShape(AppTheme.SmallElementRadius)).background(AppTheme.TrackFill)
                             )
                             .then(
                                 if (canOpen) {
