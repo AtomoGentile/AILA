@@ -1971,11 +1971,23 @@ fun MainAppShell(
             circolareplus.design.AilaContainerTransform.liveOf("circular:$number") ?: stored
         } else stored
     }
-    Box(modifier = Modifier.fillMaxSize()) {
+    // Material: fondo pieno dietro alle tab, perche' in "fade through" le tab stesse svaniscono.
+    Box(modifier = Modifier.fillMaxSize().then(if (AppTheme.isGlass) Modifier else Modifier.background(AppTheme.BackgroundLight))) {
     Scaffold(
         modifier = Modifier
             .graphicsLayer {
-                translationX = -size.width * circolareplus.design.ailaUnderlayShift * maxOf(shellProgress.value, detailProgress.value)
+                val covered = maxOf(shellProgress.value, detailProgress.value)
+                translationX = -size.width * circolareplus.design.ailaUnderlayShift * covered
+                if (!AppTheme.isGlass) {
+                    // Material "fade through" anche per le tab: aprendo una schermata svaniscono,
+                    // tornando (es. dalla lettura di una circolare) riemergono crescendo appena,
+                    // invece di essere gia' li' ferme sotto la pagina che si chiude.
+                    val c = covered.coerceIn(0f, 1f)
+                    alpha = 1f - c
+                    val scale = 1f - 0.06f * c
+                    scaleX = scale
+                    scaleY = scale
+                }
             }
             .drawWithContent {
                 drawContent()

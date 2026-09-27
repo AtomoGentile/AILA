@@ -273,8 +273,9 @@ fun AnimatedContentTransitionScope<*>.ailaPushTransition(forward: Boolean): Cont
         if (forward) {
             materialFadeThroughEnter() togetherWith fadeOut(tween(durationMillis = 60, delayMillis = 280))
         } else {
-            EnterTransition.None togetherWith
-                (fadeOut(tween(durationMillis = 160)) + scaleOut(tween(durationMillis = 160), targetScale = 0.96f))
+            // Indietro: fade through anche qui, la pagina che torna riemerge crescendo appena.
+            materialFadeThroughEnter() togetherWith
+                (fadeOut(tween(durationMillis = 90)) + scaleOut(tween(durationMillis = 90), targetScale = 0.96f))
         }
     }
     return transform.apply {
