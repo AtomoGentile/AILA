@@ -1,7 +1,5 @@
 package circolareplus.ui.screens
 
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
@@ -49,6 +47,10 @@ import circolareplus.design.MaxFormWidth
 // Estensione (non richiamabile per nome qualificato come le altre composable di
 // circolareplus.design usate in questo file): va importata per poterla usare come Modifier.ailaPressable(...).
 import circolareplus.design.ailaPressable
+import circolareplus.design.iosBouncySpring
+import circolareplus.design.iosPushTransition
+import circolareplus.design.iosSelectionPop
+import circolareplus.design.iosUnlock
 import circolareplus.domain.model.CalendarEvent
 import circolareplus.domain.model.CalendarEventCategory
 import circolareplus.domain.model.Circular
@@ -903,6 +905,7 @@ fun MainAppShell(
     // Disposizione in editing manuale (dopo aver scelto una delle 3 proposte) e copia originale
     // per il pulsante "Ripristina Proposta Algoritmo"; null quando l'editor non è aperto.
     var editingSeatMapProposal by remember { mutableStateOf<List<DeskAssignment>?>(null) }
+    val lastEditorAssignments = remember { arrayOf<List<DeskAssignment>>(emptyList()) }
     var originalSeatMapProposal by remember { mutableStateOf<List<DeskAssignment>?>(null) }
     // Input dell'ultimo calcolo dell'ottimizzatore, tenuti in stato per poter ricalcolare live il
     // punteggio nell'editor manuale senza rifare le chiamate di rete (ratings/matrice/storico).
@@ -1920,6 +1923,9 @@ fun MainAppShell(
     }
 
     Scaffold(
+        // Lo "sblocco" di iOS: all'ingresso nell'app tutto arriva un po' ingrandito e si posa
+        // con un piccolo rimbalzo (una volta sola per avvio).
+        modifier = Modifier.iosUnlock(),
         bottomBar = {
             if (!isInPollsScreen && !isInClassRosterScreen && !isInNotificationsScreen && !isInSearchScreen && !isInAssistantScreen && !isInSettingsScreen && editingSeatMapProposal == null && proposalOptions.isEmpty()) {
                 NavigationBar(
@@ -1944,10 +1950,9 @@ fun MainAppShell(
                         // ogni fotogramma del cambio tab.
                         val indicatorOffset = androidx.compose.animation.core.animateDpAsState(
                             targetValue = segmentWidth * selectedTabIndex,
-                            animationSpec = androidx.compose.animation.core.spring(
-                                dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
-                                stiffness = androidx.compose.animation.core.Spring.StiffnessMedium
-                            ),
+                            // Molla con un filo di rimbalzo: la pillola arriva, supera appena la
+                            // voce e ci torna, come l'indicatore delle tab bar di iOS.
+                            animationSpec = iosBouncySpring(),
                             label = "bottomNavIndicatorX"
                         )
                         val pillWidth = 64.dp
@@ -1981,12 +1986,14 @@ fun MainAppShell(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.Center
                                 ) {
+                                    // L'icona toccata fa un piccolo "pop" elastico quando diventa attiva.
+                                    val iconModifier = Modifier.size(24.dp).iosSelectionPop(isSelected)
                                     when (tab) {
-                                        MainTab.HOME -> AppIcons.Home(modifier = Modifier.size(24.dp), color = iconColor)
-                                        MainTab.CALENDAR -> AppIcons.Calendar(modifier = Modifier.size(24.dp), color = iconColor)
-                                        MainTab.CLASS -> AppIcons.Document(modifier = Modifier.size(24.dp), color = iconColor)
-                                        MainTab.SEATMAP -> AppIcons.Chair(modifier = Modifier.size(24.dp), color = iconColor)
-                                        MainTab.MORE -> AppIcons.Profile(modifier = Modifier.size(24.dp), color = iconColor)
+                                        MainTab.HOME -> AppIcons.Home(modifier = iconModifier, color = iconColor)
+                                        MainTab.CALENDAR -> AppIcons.Calendar(modifier = iconModifier, color = iconColor)
+                                        MainTab.CLASS -> AppIcons.Document(modifier = iconModifier, color = iconColor)
+                                        MainTab.SEATMAP -> AppIcons.Chair(modifier = iconModifier, color = iconColor)
+                                        MainTab.MORE -> AppIcons.Profile(modifier = iconModifier, color = iconColor)
                                     }
                                     Spacer(modifier = Modifier.height(4.dp))
                                     // Una riga sola: "Mappa posti" andava a capo su due righe e
@@ -2040,8 +2047,33 @@ fun MainAppShell(
                 // fillMaxSize prenderebbero tutta l'altezza della Column e la striscia offline
                 // spingerebbe la barra inferiore fuori dallo schermo.
                 Box(modifier = Modifier.weight(1f)) {
-            when {
-                isInSettingsScreen && isInBackgroundDebugScreen -> {
+            // Push/pop "alla iOS" fra le schermate a tutto schermo (Impostazioni, Sondaggi,
+            // Assistente, ...): la nuova entra da destra con una molla, quella sotto scivola un
+            // po' a sinistra e si scurisce; tornando indietro il movimento si inverte. Prima si
+            // passava da una all'altra con uno stacco secco.
+            val shellRoute = when {
+                isInSettingsScreen && isInBackgroundDebugScreen -> ShellRoute.BACKGROUND_DEBUG
+                isInSettingsScreen -> ShellRoute.SETTINGS
+                isInPollsScreen -> ShellRoute.POLLS
+                isInClassRosterScreen -> ShellRoute.CLASS_ROSTER
+                isInAssistantScreen -> ShellRoute.ASSISTANT
+                isInSearchScreen -> ShellRoute.SEARCH
+                isInNotificationsScreen -> ShellRoute.NOTIFICATIONS
+                proposalOptions.isNotEmpty() && editingSeatMapProposal == null -> ShellRoute.SEATMAP_PROPOSALS
+                editingSeatMapProposal != null -> ShellRoute.SEATMAP_EDITOR
+                else -> ShellRoute.TABS
+            }
+            androidx.compose.animation.AnimatedContent(
+                targetState = shellRoute,
+                transitionSpec = { iosPushTransition(forward = targetState.depth > initialState.depth) },
+                label = "shellRoute",
+                modifier = Modifier.fillMaxSize()
+            ) { route ->
+            // Fondo pieno: durante il push la schermata sopra non deve lasciar intravedere
+            // quella sotto.
+            Box(modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
+            when (route) {
+                ShellRoute.BACKGROUND_DEBUG -> {
                     circolareplus.platform.PlatformBackHandler { isInBackgroundDebugScreen = false }
                     BackgroundDebugScreen(
                         isSupported = circolareplus.platform.isBackgroundRefreshSupported(),
@@ -2053,7 +2085,7 @@ fun MainAppShell(
                         onBackClick = { isInBackgroundDebugScreen = false }
                     )
                 }
-                isInSettingsScreen -> {
+                ShellRoute.SETTINGS -> {
                     circolareplus.platform.PlatformBackHandler { isInSettingsScreen = false }
                     SettingsScreen(
                         apiKey = run {
@@ -2152,7 +2184,7 @@ fun MainAppShell(
                         onBackClick = { isInSettingsScreen = false }
                     )
                 }
-                isInPollsScreen -> {
+                ShellRoute.POLLS -> {
                     // Se si è nello storico, il back torna prima al sondaggio corrente (come la
                     // freccia in ScreenBackBar sotto), solo un secondo back chiude il flusso.
                     circolareplus.platform.PlatformBackHandler {
@@ -2515,7 +2547,7 @@ fun MainAppShell(
                         }
                     }
                 }
-                isInClassRosterScreen -> {
+                ShellRoute.CLASS_ROSTER -> {
                     circolareplus.platform.PlatformBackHandler { isInClassRosterScreen = false }
                     Column(modifier = Modifier.fillMaxSize()) {
                         ScreenBackBar(title = "Scheda Classe", onBackClick = { isInClassRosterScreen = false })
@@ -2641,7 +2673,7 @@ fun MainAppShell(
                         }
                     }
                 }
-                isInAssistantScreen -> {
+                ShellRoute.ASSISTANT -> {
                     circolareplus.platform.PlatformBackHandler { isInAssistantScreen = false }
                     AssistantChatScreen(
                         messages = assistantMessages,
@@ -2705,7 +2737,7 @@ fun MainAppShell(
                         }
                     )
                 }
-                isInSearchScreen -> {
+                ShellRoute.SEARCH -> {
                     circolareplus.platform.PlatformBackHandler { isInSearchScreen = false }
                     SearchScreen(
                         circulars = circulars,
@@ -2746,7 +2778,7 @@ fun MainAppShell(
                         }
                     )
                 }
-                isInNotificationsScreen -> {
+                ShellRoute.NOTIFICATIONS -> {
                     circolareplus.platform.PlatformBackHandler { isInNotificationsScreen = false }
                     Column(modifier = Modifier.fillMaxSize()) {
                         ScreenBackBar(title = "Notifiche", onBackClick = { isInNotificationsScreen = false })
@@ -2756,7 +2788,7 @@ fun MainAppShell(
                         )
                     }
                 }
-                proposalOptions.isNotEmpty() && editingSeatMapProposal == null -> {
+                ShellRoute.SEATMAP_PROPOSALS -> {
                     // Le tre proposte restano tutte disponibili finche' non se ne sceglie una:
                     // l'anteprima con l'occhio non ne scarta nessuna. Il back le abbandona.
                     circolareplus.platform.PlatformBackHandler { proposalOptions = emptyList() }
@@ -2784,8 +2816,11 @@ fun MainAppShell(
                         )
                     }
                 }
-                editingSeatMapProposal != null -> {
-                    val currentAssignments = editingSeatMapProposal!!
+                ShellRoute.SEATMAP_EDITOR -> {
+                    // Durante l'animazione di uscita dall'editor editingSeatMapProposal e' gia'
+                    // null: si continua a mostrare l'ultima disposizione invece di andare in crash.
+                    editingSeatMapProposal?.let { lastEditorAssignments[0] = it }
+                    val currentAssignments = editingSeatMapProposal ?: lastEditorAssignments[0]
                     // Il back torna alla schermata precedente (le proposte), non alla mappa.
                     circolareplus.platform.PlatformBackHandler {
                         editingSeatMapProposal = null
@@ -2863,7 +2898,7 @@ fun MainAppShell(
                         )
                     }
                 }
-                else -> {
+                ShellRoute.TABS -> {
                     // Da qualunque tab diversa da Home, il back di sistema torna a Home invece di
                     // chiudere l'app subito — comportamento standard delle bottom bar Android. Da
                     // Home il back non viene intercettato: lì si comporta come sempre (chiude
@@ -2885,12 +2920,13 @@ fun MainAppShell(
                         targetState = selectedTab,
                         transitionSpec = {
                             val dir = if (targetState.ordinal > initialState.ordinal) 1 else -1
-                            (androidx.compose.animation.fadeIn(tween(durationMillis = 220, delayMillis = 50)) +
-                                androidx.compose.animation.slideInHorizontally(
-                                    spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMediumLow)
-                                ) { width -> dir * width / 10 }) togetherWith
-                                (androidx.compose.animation.fadeOut(tween(durationMillis = 110)) +
-                                    androidx.compose.animation.slideOutHorizontally(tween(durationMillis = 180)) { width -> -dir * width / 16 })
+                            // Molle "alla iOS": la schermata nuova arriva di lato e si assesta con
+                            // un filo di rimbalzo, e cresce appena (dal 97%) mentre compare.
+                            (androidx.compose.animation.fadeIn(tween(durationMillis = 200, delayMillis = 40)) +
+                                androidx.compose.animation.scaleIn(iosBouncySpring(), initialScale = 0.97f) +
+                                androidx.compose.animation.slideInHorizontally(iosBouncySpring()) { width -> dir * width / 8 }) togetherWith
+                                (androidx.compose.animation.fadeOut(tween(durationMillis = 120)) +
+                                    androidx.compose.animation.slideOutHorizontally(tween(durationMillis = 200)) { width -> -dir * width / 14 })
                         },
                         label = "mainTab",
                         modifier = Modifier.fillMaxSize()
@@ -3347,6 +3383,8 @@ fun MainAppShell(
                     }
                     }
                 }
+            }
+            }
             }
                 }
             }
@@ -4867,4 +4905,19 @@ private fun OfflineGateScreen(
             )
         }
     }
+}
+
+
+/** Le schermate a tutto schermo della shell; `depth` decide il verso del push/pop. */
+private enum class ShellRoute(val depth: Int) {
+    TABS(0),
+    SETTINGS(1),
+    BACKGROUND_DEBUG(2),
+    POLLS(1),
+    CLASS_ROSTER(1),
+    ASSISTANT(1),
+    SEARCH(1),
+    NOTIFICATIONS(1),
+    SEATMAP_PROPOSALS(1),
+    SEATMAP_EDITOR(2)
 }
