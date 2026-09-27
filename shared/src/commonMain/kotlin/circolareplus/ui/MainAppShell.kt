@@ -1832,6 +1832,28 @@ fun MainAppShell(
         )
     }
 
+    // Push/pop "alla iOS" delle schermate a tutto schermo (Impostazioni, Sondaggi, Assistente,
+    // ...): vivono in un livello SOPRA lo Scaffold, cosi' scorrono sopra anche la barra in basso
+    // invece di farla sparire di colpo. La nuova entra da destra con una molla, le tab sotto
+    // scivolano di un terzo a sinistra e si scuriscono; indietro l'inverso.
+    val shellRoute = when {
+        isInSettingsScreen && isInBackgroundDebugScreen -> ShellRoute.BACKGROUND_DEBUG
+        isInSettingsScreen -> ShellRoute.SETTINGS
+        isInPollsScreen -> ShellRoute.POLLS
+        isInClassRosterScreen -> ShellRoute.CLASS_ROSTER
+        isInAssistantScreen -> ShellRoute.ASSISTANT
+        isInSearchScreen -> ShellRoute.SEARCH
+        isInNotificationsScreen -> ShellRoute.NOTIFICATIONS
+        proposalOptions.isNotEmpty() && editingSeatMapProposal == null -> ShellRoute.SEATMAP_PROPOSALS
+        editingSeatMapProposal != null -> ShellRoute.SEATMAP_EDITOR
+        else -> ShellRoute.TABS
+    }
+    val shellProgress = androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (shellRoute != ShellRoute.TABS) 1f else 0f,
+        animationSpec = circolareplus.design.iosNavigationSpring(),
+        label = "shellPush"
+    )
+
     // Il dettaglio circolare entra "alla iOS" sopra le tab, invece di sostituirle di colpo:
     // scorre da destra con una molla mentre la schermata sotto scivola di un terzo a sinistra e
     // si scurisce; indietro il contrario. Le tab restano composte sotto, quindi al ritorno la
@@ -1847,20 +1869,22 @@ fun MainAppShell(
     Scaffold(
         modifier = Modifier
             .graphicsLayer {
-                translationX = -size.width / 3f * detailProgress.value
+                translationX = -size.width / 3f * maxOf(shellProgress.value, detailProgress.value)
             }
             .drawWithContent {
                 drawContent()
                 // Velo scuro sulla schermata che resta sotto, come nel push di iOS.
-                if (detailProgress.value > 0f) {
-                    drawRect(Color.Black.copy(alpha = 0.18f * detailProgress.value))
+                val covered = maxOf(shellProgress.value, detailProgress.value)
+                if (covered > 0f) {
+                    drawRect(Color.Black.copy(alpha = 0.18f * covered))
                 }
             }
             // Lo "sblocco" di iOS: all'ingresso nell'app tutto arriva un po' ingrandito e si
             // posa con un piccolo rimbalzo (una volta sola per avvio).
             .iosUnlock(),
         bottomBar = {
-            if (!isInPollsScreen && !isInClassRosterScreen && !isInNotificationsScreen && !isInSearchScreen && !isInAssistantScreen && !isInSettingsScreen && editingSeatMapProposal == null && proposalOptions.isEmpty()) {
+            // Sempre presente: le schermate "sopra" le scorrono sopra e la coprono (vedi shellRoute).
+            run {
                 NavigationBar(
                     containerColor = AppTheme.SurfaceWhite,
                     tonalElevation = 0.dp
@@ -1980,22 +2004,500 @@ fun MainAppShell(
                 // fillMaxSize prenderebbero tutta l'altezza della Column e la striscia offline
                 // spingerebbe la barra inferiore fuori dallo schermo.
                 Box(modifier = Modifier.weight(1f)) {
-            // Push/pop "alla iOS" fra le schermate a tutto schermo (Impostazioni, Sondaggi,
-            // Assistente, ...): la nuova entra da destra con una molla, quella sotto scivola un
-            // po' a sinistra e si scurisce; tornando indietro il movimento si inverte. Prima si
-            // passava da una all'altra con uno stacco secco.
-            val shellRoute = when {
-                isInSettingsScreen && isInBackgroundDebugScreen -> ShellRoute.BACKGROUND_DEBUG
-                isInSettingsScreen -> ShellRoute.SETTINGS
-                isInPollsScreen -> ShellRoute.POLLS
-                isInClassRosterScreen -> ShellRoute.CLASS_ROSTER
-                isInAssistantScreen -> ShellRoute.ASSISTANT
-                isInSearchScreen -> ShellRoute.SEARCH
-                isInNotificationsScreen -> ShellRoute.NOTIFICATIONS
-                proposalOptions.isNotEmpty() && editingSeatMapProposal == null -> ShellRoute.SEATMAP_PROPOSALS
-                editingSeatMapProposal != null -> ShellRoute.SEATMAP_EDITOR
-                else -> ShellRoute.TABS
+                    // Da qualunque tab diversa da Home, il back di sistema torna a Home invece di
+                    // chiudere l'app subito — comportamento standard delle bottom bar Android. Da
+                    // Home il back non viene intercettato: lì si comporta come sempre (chiude
+                    // l'app), coerente con le altre app che usano una bottom bar. Caso speciale:
+                    // dentro "Preferenze Sociali" (sotto-schermata di Mappa Posti) il back torna
+                    // prima alla mappa, non subito a Home.
+                    circolareplus.platform.PlatformBackHandler(enabled = selectedTab != MainTab.HOME) {
+                        if (selectedTab == MainTab.SEATMAP && seatMapMode == "VOTE_PREFERENCES") {
+                            seatMapMode = "MAP"
+                        } else {
+                            selectedTab = MainTab.HOME
+                        }
+                    }
+                    // Transizione fra le tab: la nuova schermata entra scivolando di poco dal lato
+                    // della tab toccata (destra se e' piu' a destra nella barra, sinistra altrimenti)
+                    // mentre la vecchia sfuma via. Prima il cambio era uno stacco secco e il movimento
+                    // lo dava solo la cascata degli elementi, che ora si vede solo la prima volta.
+                    androidx.compose.animation.AnimatedContent(
+                        targetState = selectedTab,
+                        transitionSpec = {
+                            val dir = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                            // Molle "alla iOS": la schermata nuova arriva di lato e si assesta con
+                            // un filo di rimbalzo, e cresce appena (dal 97%) mentre compare.
+                            (androidx.compose.animation.fadeIn(tween(durationMillis = 200, delayMillis = 40)) +
+                                androidx.compose.animation.scaleIn(iosBouncySpring(), initialScale = 0.97f) +
+                                androidx.compose.animation.slideInHorizontally(iosBouncySpring()) { width -> dir * width / 8 }) togetherWith
+                                (androidx.compose.animation.fadeOut(tween(durationMillis = 120)) +
+                                    androidx.compose.animation.slideOutHorizontally(tween(durationMillis = 200)) { width -> -dir * width / 14 })
+                        },
+                        label = "mainTab",
+                        modifier = Modifier.fillMaxSize()
+                    ) { tab ->
+                    when (tab) {
+                        MainTab.HOME -> {
+                            HomeScreen(
+                                studentFirstName = user.firstName,
+                                circulars = circulars,
+                                calendarEvents = calendarEvents,
+                                openProposalsCount = proposals.size,
+                                onNavigateToCircularDetail = { number ->
+                                    selectedCircularForDetail = circulars.firstOrNull { it.number == number }
+                                    classSection = ClassSection.CIRCULARS
+                                    selectedTab = MainTab.CLASS
+                                },
+                                onNavigateToSeatMap = { selectedTab = MainTab.SEATMAP },
+                                onNavigateToBoard = {
+                                    classSection = ClassSection.BOARD
+                                    selectedTab = MainTab.CLASS
+                                },
+                                onNavigateToPolls = { isInPollsScreen = true },
+                                onNavigateToCalendar = { selectedTab = MainTab.CALENDAR },
+                                onNavigateToCirculars = {
+                                    classSection = ClassSection.CIRCULARS
+                                    selectedTab = MainTab.CLASS
+                                },
+                                onNavigateToNotifications = { isInNotificationsScreen = true },
+                                onNavigateToSearch = { isInSearchScreen = true },
+                                hasUnreadNotifications = hasUnreadNotifications
+                            )
+                        }
+                        MainTab.CALENDAR -> {
+                            LoadableContent(
+                                isLoading = isCalendarLoading,
+                                error = calendarError,
+                                onRetry = { reloadCalendar() }
+                            ) {
+                                CalendarScreen(
+                                    events = calendarEvents,
+                                    onAddEventClick = {
+                                        addEventInitialStep = EventCreationStep.MENU
+                                        addEventInitialDateIso = null
+                                        showAddEventDialog = true
+                                    },
+                                    onAddEventForDayClick = { dateIso ->
+                                        addEventInitialStep = EventCreationStep.MANUAL
+                                        addEventInitialDateIso = dateIso
+                                        showAddEventDialog = true
+                                    },
+                                    onEventClick = { event -> eventDetailToShow = event },
+                                    onDeleteEventClick = { event ->
+                                        coroutineScope.launch {
+                                            try {
+                                                AppContainer.calendarRepository.deleteEvent(event.id)
+                                                reloadCalendar()
+                                            } catch (e: Exception) {
+                                                calendarError = "Impossibile eliminare l'evento: ${e.message}"
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                        MainTab.SEATMAP -> {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                LoadableContent(
+                                    // Il caricamento dei compagni avviato dal calendario non deve
+                                    // coprire la mappa con lo spinner: ci pensa loadSeatMapData.
+                                    isLoading = isSeatMapLoading,
+                                    error = seatMapError,
+                                    onRetry = { seatMapRefreshTrigger++ }
+                                ) {
+                                    if (seatMapMode == "VOTE_PREFERENCES") {
+                                        Column(modifier = Modifier.fillMaxSize()) {
+                                            ScreenBackBar(
+                                                title = "Preferenze Sociali",
+                                                onBackClick = { seatMapMode = "MAP" }
+                                            )
+                                            SocialPreferencesVotingScreen(
+                                                classmates = classmates.filter { it.id != user.id },
+                                                currentVotes = socialVotes,
+                                                onVoteChanged = { targetId, score ->
+                                                    coroutineScope.launch {
+                                                        try {
+                                                            AppContainer.preferencesRepository.vote(targetId, score)
+                                                            socialVotes[targetId] = score
+                                                        } catch (e: Exception) {
+                                                            seatMapActionError = "Voto non registrato: ${e.message}"
+                                                        }
+                                                    }
+                                                },
+                                                onSubmitVotes = { seatMapMode = "MAP" }
+                                            )
+                                        }
+                                    } else {
+                                        Column(modifier = Modifier.fillMaxSize()) {
+                                            // Il banner per votare le preferenze compariva solo
+                                            // agli studenti NON rappresentanti: il rappresentante
+                                            // apriva la votazione e poi non aveva alcun modo di
+                                            // votare a sua volta, pur sedendo in classe come tutti.
+                                            if (isPreferencesOpen) {
+                                                PreferencesOpenBanner(onClick = { seatMapMode = "VOTE_PREFERENCES" })
+                                            }
+                                            val memoizedStudentsMap = remember(classmates, user) {
+                                                classmates.associateBy { it.id } + (user.id to user)
+                                            }
+                                            SeatMapScreen(
+                                                currentUserId = user.id,
+                                                isRepresentative = isRepresentative,
+                                                assignments = seatMapAssignments,
+                                                studentsMap = memoizedStudentsMap,
+                                                isPreferencesOpen = isPreferencesOpen,
+                                                preferencesProgress = preferencesProgress,
+                                                isExportingPdf = isExportingSeatMapPdf,
+                                                onExportPdf = {
+                                                    coroutineScope.launch {
+                                                        isExportingSeatMapPdf = true
+                                                        try {
+                                                            circolareplus.platform.exportSeatMapPdf(
+                                                                assignments = seatMapAssignments,
+                                                                studentsMap = memoizedStudentsMap
+                                                            )
+                                                        } catch (e: Exception) {
+                                                            seatMapActionError = "Impossibile generare il PDF: ${e.message}"
+                                                        } finally {
+                                                            isExportingSeatMapPdf = false
+                                                        }
+                                                    }
+                                                },
+                                                onTogglePreferencesWindow = { open ->
+                                                    // Subito, senza aspettare il server: prima il
+                                                    // tasto restava fermo per tutto l'invio delle
+                                                    // notifiche alla classe. Se la richiesta fallisce
+                                                    // si torna allo stato di prima.
+                                                    val previous = isPreferencesOpen
+                                                    isPreferencesOpen = open
+                                                    coroutineScope.launch {
+                                                        try {
+                                                            isPreferencesOpen = AppContainer.preferencesRepository.setPreferencesOpen(open).preferencesOpen
+                                                        } catch (e: CancellationException) {
+                                                            throw e
+                                                        } catch (e: Exception) {
+                                                            isPreferencesOpen = previous
+                                                            seatMapActionError = "Impossibile aggiornare la finestra preferenze: ${e.message}"
+                                                        }
+                                                    }
+                                                },
+                                                onGenerateProposals = { weights, seatsPerDesk ->
+                                                    coroutineScope.launch {
+                                                        isGeneratingProposals = true
+                                                        lastRequestedSeatsPerDesk = seatsPerDesk
+                                                        try {
+                                                            val disciplinePairsDeferred = async {
+                                                                // Un server senza la rotta nuova non deve impedire le proposte.
+                                                                try {
+                                                                    AppContainer.ratingsRepository.listDisciplinePairs()
+                                                                        .map { it.studentA to it.studentB }
+                                                                        .toSet()
+                                                                } catch (e: CancellationException) {
+                                                                    throw e
+                                                                } catch (e: Exception) {
+                                                                    emptySet()
+                                                                }
+                                                            }
+                                                            val (ratings, matrix, history) = coroutineScope {
+                                                                val ratingsDeferred = async { AppContainer.ratingsRepository.listRatings() }
+                                                                val matrixDeferred = async { AppContainer.preferencesRepository.matrixForAlgorithm().matrix }
+                                                                val historyDeferred = async { AppContainer.seatMapRepository.getHistoryForOptimizer() }
+                                                                Triple(ratingsDeferred.await(), matrixDeferred.await(), historyDeferred.await())
+                                                            }
+                                                            val disciplinePairs = disciplinePairsDeferred.await()
+                                                            val ratingsMap = ratings.associate { rating ->
+                                                                rating.studentId to circolareplus.domain.model.RepresentativeRating(
+                                                                    studentId = rating.studentId,
+                                                                    didactic = rating.didactic ?: 3,
+                                                                    behavior = rating.behavior ?: 3
+                                                                )
+                                                            }
+                                                            val profiles = ratings.associate { rating ->
+                                                                rating.studentId to StudentProfile(
+                                                                    userId = rating.studentId,
+                                                                    heightCm = (rating.heightCm ?: 175).let { h -> (h / 5) * 5 }.coerceIn(140, 210),
+                                                                    priorityPass = rating.priorityPass
+                                                                )
+                                                            }
+                                                            val socialMap = matrix.associate { entry ->
+                                                                (entry.from to entry.to) to SocialPreferenceScore.fromValue(entry.score)
+                                                            }
+                                                            // Tenuti in stato per il ricalcolo live nell'editor manuale (swap-by-tap),
+                                                            // che riusa questi stessi input invece di rifare le chiamate di rete.
+                                                            seatMapOptimizerProfiles = profiles
+                                                            seatMapOptimizerRatings = ratingsMap
+                                                            seatMapOptimizerDisciplinePairs = disciplinePairs
+                                                            seatMapOptimizerSocialMap = socialMap
+                                                            seatMapOptimizerHistory = history
+                                                            seatMapOptimizerWeights = weights
+                                                            seatMapOptimizerIsSmallClass = classmates.size < 22
+                                                            proposalOptions = withContext(Dispatchers.Default) {
+                                                                AppContainer.seatMapRepository.generateThreeProposals(
+                                                                    students = classmates,
+                                                                    profiles = profiles,
+                                                                    ratings = ratingsMap,
+                                                                    socialPreferences = socialMap,
+                                                                    history = history,
+                                                                    weights = weights,
+                                                                    seatsPerDesk = seatsPerDesk,
+                                                                    disciplinePairs = disciplinePairs
+                                                                )
+                                                            }
+                                                        } catch (e: Exception) {
+                                                            seatMapActionError = "Impossibile calcolare le proposte: ${e.message}"
+                                                        } finally {
+                                                            isGeneratingProposals = false
+                                                        }
+                                                    }
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        MainTab.CLASS -> {
+                            // "Classe" unisce quello che prima erano le tab separate "Circolari" e
+                            // "Bacheca" (design AILA): un selettore interno sostituisce le due tab.
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                // Intestazione della tab: prima Circolari e Bacheca erano due chip
+                                // identiche a quelle dei filtri di contenuto, quindi non si capiva
+                                // che cambiavano schermata invece di filtrare la lista. Ora sono un
+                                // selettore a segmenti su barra bianca, come nel mockup.
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(AppTheme.SurfaceWhite)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(
+                                                start = AppTheme.Space16,
+                                                end = AppTheme.Space16,
+                                                top = AppTheme.Space20,
+                                                bottom = AppTheme.Space12
+                                            ),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // Stesso marchio grande a sinistra delle altre intestazioni
+                                        // (AilaScreenHeader): qui al posto del titolo c'e' il selettore.
+                                        circolareplus.design.AilaBrandMark(size = 44.dp)
+                                        Spacer(modifier = Modifier.width(AppTheme.Space12))
+                                        circolareplus.design.AilaSegmentedTabs(
+                                            labels = listOf(ClassSection.CIRCULARS.title, ClassSection.BOARD.title),
+                                            selectedIndex = if (classSection == ClassSection.CIRCULARS) 0 else 1,
+                                            onSelect = { index ->
+                                                classSection = if (index == 0) ClassSection.CIRCULARS else ClassSection.BOARD
+                                            },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        if (isRepresentative) {
+                                            Spacer(modifier = Modifier.width(AppTheme.Space8))
+                                            circolareplus.design.AilaIconButton(
+                                                contentDescription = "Scheda della classe",
+                                                onClick = { isInClassRosterScreen = true }
+                                            ) { tint -> AppIcons.People(modifier = Modifier.size(20.dp), color = tint) }
+                                        }
+                                        // "Nuova proposta" sta qui, sulla riga dell'intestazione come il
+                                        // "+" del Calendario: prima era su una riga a parte dentro la
+                                        // Bacheca, piu' in basso e non allineato con nient'altro.
+                                        androidx.compose.animation.AnimatedVisibility(
+                                            visible = classSection == ClassSection.BOARD,
+                                            enter = androidx.compose.animation.fadeIn(tween(180)) +
+                                                androidx.compose.animation.scaleIn(tween(180), initialScale = 0.8f),
+                                            exit = androidx.compose.animation.fadeOut(tween(120)) +
+                                                androidx.compose.animation.scaleOut(tween(120), targetScale = 0.8f)
+                                        ) {
+                                            Row {
+                                                Spacer(modifier = Modifier.width(AppTheme.Space8))
+                                                circolareplus.design.AilaIconButton(
+                                                    contentDescription = "Nuova proposta",
+                                                    onClick = { showAddProposalDialog = true },
+                                                    primary = true
+                                                ) { tint -> AppIcons.Plus(modifier = Modifier.size(18.dp), color = tint) }
+                                            }
+                                        }
+                                    }
+                                    HorizontalDivider(color = AppTheme.Hairline)
+                                }
+                                // Dissolvenza tra le due sezioni: prima il contenuto veniva
+                                // sostituito di colpo, e con liste lunghe sembrava un salto.
+                                androidx.compose.animation.Crossfade(
+                                    targetState = classSection,
+                                    label = "classSection"
+                                ) { section ->
+                                when (section) {
+                                    ClassSection.CIRCULARS -> {
+                                        LoadableContent(
+                                            isLoading = isCircularsLoading,
+                                            error = circularsError,
+                                            onRetry = { circularsRefreshTrigger++ }
+                                        ) {
+                                            CircularsScreen(
+                                                circulars = circulars,
+                                                classifications = classifications,
+                                                analyzingNumbers = inFlightClassification,
+                                                onSelectCircular = { selectedCircularForDetail = it }
+                                            )
+                                        }
+                                    }
+                                    ClassSection.BOARD -> {
+                                        // Lo spinner a tutto schermo solo al primo caricamento: prima ogni
+                                        // ricarica (dopo un commento, un cambio di stato) smontava la
+                                        // bacheca, e con lei i commenti aperti e il voto appena dato.
+                                        LoadableContent(
+                                            isLoading = isProposalsLoading && proposals.isEmpty(),
+                                            error = proposalsError,
+                                            onRetry = { reloadProposals() }
+                                        ) {
+                                            BoardScreen(
+                                                proposals = proposals,
+                                                currentUserId = user.id,
+                                                isRepresentative = isRepresentative,
+                                                canModerateIdentity = canModerateIdentity,
+                                                unlockRequests = unlockRequests,
+                                                onVote = { proposalId, voteType ->
+                                                    coroutineScope.launch {
+                                                        try {
+                                                            AppContainer.proposalsRepository.vote(proposalId, voteType)
+                                                        } catch (e: Exception) {
+                                                            proposalsError = "Voto non riuscito: ${e.message}"
+                                                        }
+                                                    }
+                                                },
+                                                onChangeStatus = { proposalId, status, outcome ->
+                                                    coroutineScope.launch {
+                                                        try {
+                                                            AppContainer.proposalsRepository.changeStatus(proposalId, status, outcome)
+                                                            reloadProposals()
+                                                        } catch (e: Exception) {
+                                                            proposalsError = "Impossibile cambiare stato: ${e.message}"
+                                                        }
+                                                    }
+                                                },
+                                                onEdit = { proposalId, newTitle, newDescription ->
+                                                    coroutineScope.launch {
+                                                        try {
+                                                            AppContainer.proposalsRepository.updateProposal(
+                                                                proposalId = proposalId,
+                                                                title = newTitle,
+                                                                description = newDescription
+                                                            )
+                                                            reloadProposals()
+                                                        } catch (e: Exception) {
+                                                            proposalsError = "Modifica non riuscita: ${e.message}"
+                                                        }
+                                                    }
+                                                },
+                                                onCreateProposalClick = { showAddProposalDialog = true },
+                                                onLoadComments = { proposalId ->
+                                                    AppContainer.proposalsRepository.listComments(proposalId)
+                                                },
+                                                onAddComment = { proposalId, content, isAnonymous ->
+                                                    AppContainer.proposalsRepository.addComment(proposalId, content, isAnonymous)
+                                                    reloadProposals()
+                                                },
+                                                onRequestUnlock = { proposalId, commentId, reason ->
+                                                    // Niente try/catch: la finestra mostra l'errore e
+                                                    // lascia riprovare senza perdere il testo del motivo.
+                                                    AppContainer.proposalsRepository.requestUnlock(proposalId, reason, commentId)
+                                                    reloadProposals()
+                                                },
+                                                onApproveUnlock = { requestId ->
+                                                    coroutineScope.launch {
+                                                        try {
+                                                            AppContainer.proposalsRepository.approveUnlock(requestId)
+                                                            reloadProposals()
+                                                        } catch (e: Exception) {
+                                                            proposalsError = "Approvazione non riuscita: ${e.message}"
+                                                        }
+                                                    }
+                                                },
+                                                onRejectUnlock = { requestId ->
+                                                    coroutineScope.launch {
+                                                        try {
+                                                            AppContainer.proposalsRepository.rejectUnlock(requestId)
+                                                            reloadProposals()
+                                                        } catch (e: Exception) {
+                                                            proposalsError = "Operazione non riuscita: ${e.message}"
+                                                        }
+                                                    }
+                                                },
+                                                onDelete = { proposalId ->
+                                                    coroutineScope.launch {
+                                                        try {
+                                                            AppContainer.proposalsRepository.delete(proposalId)
+                                                            reloadProposals()
+                                                        } catch (e: Exception) {
+                                                            proposalsError = "Impossibile eliminare la proposta: ${e.message}"
+                                                        }
+                                                    }
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                                }
+                            }
+                        }
+                        MainTab.MORE -> {
+                            ProfileScreen(
+                                user = user,
+                                profile = profile,
+                                userAiApiKey = run {
+                                    apiKeyRevision // dipendenza esplicita: rilegge dopo un salvataggio
+                                    AppContainer.settings.userAiApiKey
+                                },
+                                onOpenSettings = {
+                                    isInBackgroundDebugScreen = false
+                                    isInSettingsScreen = true
+                                },
+                                onManageClassRoster = { isInClassRosterScreen = true },
+                                onLogoutClick = {
+                                    coroutineScope.launch {
+                                        try {
+                                            AppContainer.fcmRepository.clearTokens(currentPushPlatform())
+                                        } catch (e: Exception) {
+                                            // Non bloccante: il logout locale procede comunque.
+                                        }
+                                    }
+                                    AppContainer.authRepository.logout()
+                                    currentUser = null
+                                    currentProfile = null
+                                },
+                                onDeleteAccount = { password ->
+                                    try {
+                                        AppContainer.authRepository.deleteAccount(password)
+                                        // Il token push resta valido solo finche' esiste l'utente: il
+                                        // server lo ha gia' cancellato a cascata, qui basta uscire.
+                                        assistantMessages.clear()
+                                        assistantConversations = emptyList()
+                                        currentUser = null
+                                        currentProfile = null
+                                        null
+                                    } catch (e: CancellationException) {
+                                        throw e
+                                    } catch (e: circolareplus.data.remote.ApiException) {
+                                        e.message ?: "Eliminazione non riuscita."
+                                    } catch (e: Exception) {
+                                        "Impossibile eliminare l'account: controlla la connessione e riprova."
+                                    }
+                                }
+                            )
+                        }
+                    }
+                    }
+                }
             }
+        }
+    }
+        // Livello delle schermate "sopra" le tab (vedi shellRoute): se il dettaglio circolare si
+        // apre da qui (Ricerca, Notifiche) anche questo livello fa il passo indietro.
+        Box(
+            modifier = Modifier.fillMaxSize().graphicsLayer {
+                translationX = -size.width / 3f * detailProgress.value
+            }
+        ) {
             androidx.compose.animation.AnimatedContent(
                 targetState = shellRoute,
                 transitionSpec = { iosPushTransition(forward = targetState.depth > initialState.depth) },
@@ -2004,7 +2506,15 @@ fun MainAppShell(
             ) { route ->
             // Fondo pieno: durante il push la schermata sopra non deve lasciar intravedere
             // quella sotto.
-            Box(modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
+            Box(
+                modifier = if (route == ShellRoute.TABS) Modifier.fillMaxSize() else Modifier
+                    .fillMaxSize()
+                    .background(AppTheme.BackgroundLight)
+                    .appSafeDrawingPadding()
+                    // Prende i tocchi: sotto c'e' lo Scaffold con le tab, che non deve riceverli.
+                    .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
+            ) {
+            Box(modifier = Modifier.fillMaxHeight().appContentWidth()) {
             when (route) {
                 ShellRoute.BACKGROUND_DEBUG -> {
                     circolareplus.platform.PlatformBackHandler { isInBackgroundDebugScreen = false }
@@ -2831,498 +3341,13 @@ fun MainAppShell(
                         )
                     }
                 }
-                ShellRoute.TABS -> {
-                    // Da qualunque tab diversa da Home, il back di sistema torna a Home invece di
-                    // chiudere l'app subito — comportamento standard delle bottom bar Android. Da
-                    // Home il back non viene intercettato: lì si comporta come sempre (chiude
-                    // l'app), coerente con le altre app che usano una bottom bar. Caso speciale:
-                    // dentro "Preferenze Sociali" (sotto-schermata di Mappa Posti) il back torna
-                    // prima alla mappa, non subito a Home.
-                    circolareplus.platform.PlatformBackHandler(enabled = selectedTab != MainTab.HOME) {
-                        if (selectedTab == MainTab.SEATMAP && seatMapMode == "VOTE_PREFERENCES") {
-                            seatMapMode = "MAP"
-                        } else {
-                            selectedTab = MainTab.HOME
-                        }
-                    }
-                    // Transizione fra le tab: la nuova schermata entra scivolando di poco dal lato
-                    // della tab toccata (destra se e' piu' a destra nella barra, sinistra altrimenti)
-                    // mentre la vecchia sfuma via. Prima il cambio era uno stacco secco e il movimento
-                    // lo dava solo la cascata degli elementi, che ora si vede solo la prima volta.
-                    androidx.compose.animation.AnimatedContent(
-                        targetState = selectedTab,
-                        transitionSpec = {
-                            val dir = if (targetState.ordinal > initialState.ordinal) 1 else -1
-                            // Molle "alla iOS": la schermata nuova arriva di lato e si assesta con
-                            // un filo di rimbalzo, e cresce appena (dal 97%) mentre compare.
-                            (androidx.compose.animation.fadeIn(tween(durationMillis = 200, delayMillis = 40)) +
-                                androidx.compose.animation.scaleIn(iosBouncySpring(), initialScale = 0.97f) +
-                                androidx.compose.animation.slideInHorizontally(iosBouncySpring()) { width -> dir * width / 8 }) togetherWith
-                                (androidx.compose.animation.fadeOut(tween(durationMillis = 120)) +
-                                    androidx.compose.animation.slideOutHorizontally(tween(durationMillis = 200)) { width -> -dir * width / 14 })
-                        },
-                        label = "mainTab",
-                        modifier = Modifier.fillMaxSize()
-                    ) { tab ->
-                    when (tab) {
-                        MainTab.HOME -> {
-                            HomeScreen(
-                                studentFirstName = user.firstName,
-                                circulars = circulars,
-                                calendarEvents = calendarEvents,
-                                openProposalsCount = proposals.size,
-                                onNavigateToCircularDetail = { number ->
-                                    selectedCircularForDetail = circulars.firstOrNull { it.number == number }
-                                    classSection = ClassSection.CIRCULARS
-                                    selectedTab = MainTab.CLASS
-                                },
-                                onNavigateToSeatMap = { selectedTab = MainTab.SEATMAP },
-                                onNavigateToBoard = {
-                                    classSection = ClassSection.BOARD
-                                    selectedTab = MainTab.CLASS
-                                },
-                                onNavigateToPolls = { isInPollsScreen = true },
-                                onNavigateToCalendar = { selectedTab = MainTab.CALENDAR },
-                                onNavigateToCirculars = {
-                                    classSection = ClassSection.CIRCULARS
-                                    selectedTab = MainTab.CLASS
-                                },
-                                onNavigateToNotifications = { isInNotificationsScreen = true },
-                                onNavigateToSearch = { isInSearchScreen = true },
-                                hasUnreadNotifications = hasUnreadNotifications
-                            )
-                        }
-                        MainTab.CALENDAR -> {
-                            LoadableContent(
-                                isLoading = isCalendarLoading,
-                                error = calendarError,
-                                onRetry = { reloadCalendar() }
-                            ) {
-                                CalendarScreen(
-                                    events = calendarEvents,
-                                    onAddEventClick = {
-                                        addEventInitialStep = EventCreationStep.MENU
-                                        addEventInitialDateIso = null
-                                        showAddEventDialog = true
-                                    },
-                                    onAddEventForDayClick = { dateIso ->
-                                        addEventInitialStep = EventCreationStep.MANUAL
-                                        addEventInitialDateIso = dateIso
-                                        showAddEventDialog = true
-                                    },
-                                    onEventClick = { event -> eventDetailToShow = event },
-                                    onDeleteEventClick = { event ->
-                                        coroutineScope.launch {
-                                            try {
-                                                AppContainer.calendarRepository.deleteEvent(event.id)
-                                                reloadCalendar()
-                                            } catch (e: Exception) {
-                                                calendarError = "Impossibile eliminare l'evento: ${e.message}"
-                                            }
-                                        }
-                                    }
-                                )
-                            }
-                        }
-                        MainTab.SEATMAP -> {
-                            Column(modifier = Modifier.fillMaxSize()) {
-                                LoadableContent(
-                                    // Il caricamento dei compagni avviato dal calendario non deve
-                                    // coprire la mappa con lo spinner: ci pensa loadSeatMapData.
-                                    isLoading = isSeatMapLoading,
-                                    error = seatMapError,
-                                    onRetry = { seatMapRefreshTrigger++ }
-                                ) {
-                                    if (seatMapMode == "VOTE_PREFERENCES") {
-                                        Column(modifier = Modifier.fillMaxSize()) {
-                                            ScreenBackBar(
-                                                title = "Preferenze Sociali",
-                                                onBackClick = { seatMapMode = "MAP" }
-                                            )
-                                            SocialPreferencesVotingScreen(
-                                                classmates = classmates.filter { it.id != user.id },
-                                                currentVotes = socialVotes,
-                                                onVoteChanged = { targetId, score ->
-                                                    coroutineScope.launch {
-                                                        try {
-                                                            AppContainer.preferencesRepository.vote(targetId, score)
-                                                            socialVotes[targetId] = score
-                                                        } catch (e: Exception) {
-                                                            seatMapActionError = "Voto non registrato: ${e.message}"
-                                                        }
-                                                    }
-                                                },
-                                                onSubmitVotes = { seatMapMode = "MAP" }
-                                            )
-                                        }
-                                    } else {
-                                        Column(modifier = Modifier.fillMaxSize()) {
-                                            // Il banner per votare le preferenze compariva solo
-                                            // agli studenti NON rappresentanti: il rappresentante
-                                            // apriva la votazione e poi non aveva alcun modo di
-                                            // votare a sua volta, pur sedendo in classe come tutti.
-                                            if (isPreferencesOpen) {
-                                                PreferencesOpenBanner(onClick = { seatMapMode = "VOTE_PREFERENCES" })
-                                            }
-                                            val memoizedStudentsMap = remember(classmates, user) {
-                                                classmates.associateBy { it.id } + (user.id to user)
-                                            }
-                                            SeatMapScreen(
-                                                currentUserId = user.id,
-                                                isRepresentative = isRepresentative,
-                                                assignments = seatMapAssignments,
-                                                studentsMap = memoizedStudentsMap,
-                                                isPreferencesOpen = isPreferencesOpen,
-                                                preferencesProgress = preferencesProgress,
-                                                isExportingPdf = isExportingSeatMapPdf,
-                                                onExportPdf = {
-                                                    coroutineScope.launch {
-                                                        isExportingSeatMapPdf = true
-                                                        try {
-                                                            circolareplus.platform.exportSeatMapPdf(
-                                                                assignments = seatMapAssignments,
-                                                                studentsMap = memoizedStudentsMap
-                                                            )
-                                                        } catch (e: Exception) {
-                                                            seatMapActionError = "Impossibile generare il PDF: ${e.message}"
-                                                        } finally {
-                                                            isExportingSeatMapPdf = false
-                                                        }
-                                                    }
-                                                },
-                                                onTogglePreferencesWindow = { open ->
-                                                    // Subito, senza aspettare il server: prima il
-                                                    // tasto restava fermo per tutto l'invio delle
-                                                    // notifiche alla classe. Se la richiesta fallisce
-                                                    // si torna allo stato di prima.
-                                                    val previous = isPreferencesOpen
-                                                    isPreferencesOpen = open
-                                                    coroutineScope.launch {
-                                                        try {
-                                                            isPreferencesOpen = AppContainer.preferencesRepository.setPreferencesOpen(open).preferencesOpen
-                                                        } catch (e: CancellationException) {
-                                                            throw e
-                                                        } catch (e: Exception) {
-                                                            isPreferencesOpen = previous
-                                                            seatMapActionError = "Impossibile aggiornare la finestra preferenze: ${e.message}"
-                                                        }
-                                                    }
-                                                },
-                                                onGenerateProposals = { weights, seatsPerDesk ->
-                                                    coroutineScope.launch {
-                                                        isGeneratingProposals = true
-                                                        lastRequestedSeatsPerDesk = seatsPerDesk
-                                                        try {
-                                                            val disciplinePairsDeferred = async {
-                                                                // Un server senza la rotta nuova non deve impedire le proposte.
-                                                                try {
-                                                                    AppContainer.ratingsRepository.listDisciplinePairs()
-                                                                        .map { it.studentA to it.studentB }
-                                                                        .toSet()
-                                                                } catch (e: CancellationException) {
-                                                                    throw e
-                                                                } catch (e: Exception) {
-                                                                    emptySet()
-                                                                }
-                                                            }
-                                                            val (ratings, matrix, history) = coroutineScope {
-                                                                val ratingsDeferred = async { AppContainer.ratingsRepository.listRatings() }
-                                                                val matrixDeferred = async { AppContainer.preferencesRepository.matrixForAlgorithm().matrix }
-                                                                val historyDeferred = async { AppContainer.seatMapRepository.getHistoryForOptimizer() }
-                                                                Triple(ratingsDeferred.await(), matrixDeferred.await(), historyDeferred.await())
-                                                            }
-                                                            val disciplinePairs = disciplinePairsDeferred.await()
-                                                            val ratingsMap = ratings.associate { rating ->
-                                                                rating.studentId to circolareplus.domain.model.RepresentativeRating(
-                                                                    studentId = rating.studentId,
-                                                                    didactic = rating.didactic ?: 3,
-                                                                    behavior = rating.behavior ?: 3
-                                                                )
-                                                            }
-                                                            val profiles = ratings.associate { rating ->
-                                                                rating.studentId to StudentProfile(
-                                                                    userId = rating.studentId,
-                                                                    heightCm = (rating.heightCm ?: 175).let { h -> (h / 5) * 5 }.coerceIn(140, 210),
-                                                                    priorityPass = rating.priorityPass
-                                                                )
-                                                            }
-                                                            val socialMap = matrix.associate { entry ->
-                                                                (entry.from to entry.to) to SocialPreferenceScore.fromValue(entry.score)
-                                                            }
-                                                            // Tenuti in stato per il ricalcolo live nell'editor manuale (swap-by-tap),
-                                                            // che riusa questi stessi input invece di rifare le chiamate di rete.
-                                                            seatMapOptimizerProfiles = profiles
-                                                            seatMapOptimizerRatings = ratingsMap
-                                                            seatMapOptimizerDisciplinePairs = disciplinePairs
-                                                            seatMapOptimizerSocialMap = socialMap
-                                                            seatMapOptimizerHistory = history
-                                                            seatMapOptimizerWeights = weights
-                                                            seatMapOptimizerIsSmallClass = classmates.size < 22
-                                                            proposalOptions = withContext(Dispatchers.Default) {
-                                                                AppContainer.seatMapRepository.generateThreeProposals(
-                                                                    students = classmates,
-                                                                    profiles = profiles,
-                                                                    ratings = ratingsMap,
-                                                                    socialPreferences = socialMap,
-                                                                    history = history,
-                                                                    weights = weights,
-                                                                    seatsPerDesk = seatsPerDesk,
-                                                                    disciplinePairs = disciplinePairs
-                                                                )
-                                                            }
-                                                        } catch (e: Exception) {
-                                                            seatMapActionError = "Impossibile calcolare le proposte: ${e.message}"
-                                                        } finally {
-                                                            isGeneratingProposals = false
-                                                        }
-                                                    }
-                                                }
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        MainTab.CLASS -> {
-                            // "Classe" unisce quello che prima erano le tab separate "Circolari" e
-                            // "Bacheca" (design AILA): un selettore interno sostituisce le due tab.
-                            Column(modifier = Modifier.fillMaxSize()) {
-                                // Intestazione della tab: prima Circolari e Bacheca erano due chip
-                                // identiche a quelle dei filtri di contenuto, quindi non si capiva
-                                // che cambiavano schermata invece di filtrare la lista. Ora sono un
-                                // selettore a segmenti su barra bianca, come nel mockup.
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(AppTheme.SurfaceWhite)
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(
-                                                start = AppTheme.Space16,
-                                                end = AppTheme.Space16,
-                                                top = AppTheme.Space20,
-                                                bottom = AppTheme.Space12
-                                            ),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        // Stesso marchio grande a sinistra delle altre intestazioni
-                                        // (AilaScreenHeader): qui al posto del titolo c'e' il selettore.
-                                        circolareplus.design.AilaBrandMark(size = 44.dp)
-                                        Spacer(modifier = Modifier.width(AppTheme.Space12))
-                                        circolareplus.design.AilaSegmentedTabs(
-                                            labels = listOf(ClassSection.CIRCULARS.title, ClassSection.BOARD.title),
-                                            selectedIndex = if (classSection == ClassSection.CIRCULARS) 0 else 1,
-                                            onSelect = { index ->
-                                                classSection = if (index == 0) ClassSection.CIRCULARS else ClassSection.BOARD
-                                            },
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        if (isRepresentative) {
-                                            Spacer(modifier = Modifier.width(AppTheme.Space8))
-                                            circolareplus.design.AilaIconButton(
-                                                contentDescription = "Scheda della classe",
-                                                onClick = { isInClassRosterScreen = true }
-                                            ) { tint -> AppIcons.People(modifier = Modifier.size(20.dp), color = tint) }
-                                        }
-                                        // "Nuova proposta" sta qui, sulla riga dell'intestazione come il
-                                        // "+" del Calendario: prima era su una riga a parte dentro la
-                                        // Bacheca, piu' in basso e non allineato con nient'altro.
-                                        androidx.compose.animation.AnimatedVisibility(
-                                            visible = classSection == ClassSection.BOARD,
-                                            enter = androidx.compose.animation.fadeIn(tween(180)) +
-                                                androidx.compose.animation.scaleIn(tween(180), initialScale = 0.8f),
-                                            exit = androidx.compose.animation.fadeOut(tween(120)) +
-                                                androidx.compose.animation.scaleOut(tween(120), targetScale = 0.8f)
-                                        ) {
-                                            Row {
-                                                Spacer(modifier = Modifier.width(AppTheme.Space8))
-                                                circolareplus.design.AilaIconButton(
-                                                    contentDescription = "Nuova proposta",
-                                                    onClick = { showAddProposalDialog = true },
-                                                    primary = true
-                                                ) { tint -> AppIcons.Plus(modifier = Modifier.size(18.dp), color = tint) }
-                                            }
-                                        }
-                                    }
-                                    HorizontalDivider(color = AppTheme.Hairline)
-                                }
-                                // Dissolvenza tra le due sezioni: prima il contenuto veniva
-                                // sostituito di colpo, e con liste lunghe sembrava un salto.
-                                androidx.compose.animation.Crossfade(
-                                    targetState = classSection,
-                                    label = "classSection"
-                                ) { section ->
-                                when (section) {
-                                    ClassSection.CIRCULARS -> {
-                                        LoadableContent(
-                                            isLoading = isCircularsLoading,
-                                            error = circularsError,
-                                            onRetry = { circularsRefreshTrigger++ }
-                                        ) {
-                                            CircularsScreen(
-                                                circulars = circulars,
-                                                classifications = classifications,
-                                                analyzingNumbers = inFlightClassification,
-                                                onSelectCircular = { selectedCircularForDetail = it }
-                                            )
-                                        }
-                                    }
-                                    ClassSection.BOARD -> {
-                                        // Lo spinner a tutto schermo solo al primo caricamento: prima ogni
-                                        // ricarica (dopo un commento, un cambio di stato) smontava la
-                                        // bacheca, e con lei i commenti aperti e il voto appena dato.
-                                        LoadableContent(
-                                            isLoading = isProposalsLoading && proposals.isEmpty(),
-                                            error = proposalsError,
-                                            onRetry = { reloadProposals() }
-                                        ) {
-                                            BoardScreen(
-                                                proposals = proposals,
-                                                currentUserId = user.id,
-                                                isRepresentative = isRepresentative,
-                                                canModerateIdentity = canModerateIdentity,
-                                                unlockRequests = unlockRequests,
-                                                onVote = { proposalId, voteType ->
-                                                    coroutineScope.launch {
-                                                        try {
-                                                            AppContainer.proposalsRepository.vote(proposalId, voteType)
-                                                        } catch (e: Exception) {
-                                                            proposalsError = "Voto non riuscito: ${e.message}"
-                                                        }
-                                                    }
-                                                },
-                                                onChangeStatus = { proposalId, status, outcome ->
-                                                    coroutineScope.launch {
-                                                        try {
-                                                            AppContainer.proposalsRepository.changeStatus(proposalId, status, outcome)
-                                                            reloadProposals()
-                                                        } catch (e: Exception) {
-                                                            proposalsError = "Impossibile cambiare stato: ${e.message}"
-                                                        }
-                                                    }
-                                                },
-                                                onEdit = { proposalId, newTitle, newDescription ->
-                                                    coroutineScope.launch {
-                                                        try {
-                                                            AppContainer.proposalsRepository.updateProposal(
-                                                                proposalId = proposalId,
-                                                                title = newTitle,
-                                                                description = newDescription
-                                                            )
-                                                            reloadProposals()
-                                                        } catch (e: Exception) {
-                                                            proposalsError = "Modifica non riuscita: ${e.message}"
-                                                        }
-                                                    }
-                                                },
-                                                onCreateProposalClick = { showAddProposalDialog = true },
-                                                onLoadComments = { proposalId ->
-                                                    AppContainer.proposalsRepository.listComments(proposalId)
-                                                },
-                                                onAddComment = { proposalId, content, isAnonymous ->
-                                                    AppContainer.proposalsRepository.addComment(proposalId, content, isAnonymous)
-                                                    reloadProposals()
-                                                },
-                                                onRequestUnlock = { proposalId, commentId, reason ->
-                                                    // Niente try/catch: la finestra mostra l'errore e
-                                                    // lascia riprovare senza perdere il testo del motivo.
-                                                    AppContainer.proposalsRepository.requestUnlock(proposalId, reason, commentId)
-                                                    reloadProposals()
-                                                },
-                                                onApproveUnlock = { requestId ->
-                                                    coroutineScope.launch {
-                                                        try {
-                                                            AppContainer.proposalsRepository.approveUnlock(requestId)
-                                                            reloadProposals()
-                                                        } catch (e: Exception) {
-                                                            proposalsError = "Approvazione non riuscita: ${e.message}"
-                                                        }
-                                                    }
-                                                },
-                                                onRejectUnlock = { requestId ->
-                                                    coroutineScope.launch {
-                                                        try {
-                                                            AppContainer.proposalsRepository.rejectUnlock(requestId)
-                                                            reloadProposals()
-                                                        } catch (e: Exception) {
-                                                            proposalsError = "Operazione non riuscita: ${e.message}"
-                                                        }
-                                                    }
-                                                },
-                                                onDelete = { proposalId ->
-                                                    coroutineScope.launch {
-                                                        try {
-                                                            AppContainer.proposalsRepository.delete(proposalId)
-                                                            reloadProposals()
-                                                        } catch (e: Exception) {
-                                                            proposalsError = "Impossibile eliminare la proposta: ${e.message}"
-                                                        }
-                                                    }
-                                                }
-                                            )
-                                        }
-                                    }
-                                }
-                                }
-                            }
-                        }
-                        MainTab.MORE -> {
-                            ProfileScreen(
-                                user = user,
-                                profile = profile,
-                                userAiApiKey = run {
-                                    apiKeyRevision // dipendenza esplicita: rilegge dopo un salvataggio
-                                    AppContainer.settings.userAiApiKey
-                                },
-                                onOpenSettings = {
-                                    isInBackgroundDebugScreen = false
-                                    isInSettingsScreen = true
-                                },
-                                onManageClassRoster = { isInClassRosterScreen = true },
-                                onLogoutClick = {
-                                    coroutineScope.launch {
-                                        try {
-                                            AppContainer.fcmRepository.clearTokens(currentPushPlatform())
-                                        } catch (e: Exception) {
-                                            // Non bloccante: il logout locale procede comunque.
-                                        }
-                                    }
-                                    AppContainer.authRepository.logout()
-                                    currentUser = null
-                                    currentProfile = null
-                                },
-                                onDeleteAccount = { password ->
-                                    try {
-                                        AppContainer.authRepository.deleteAccount(password)
-                                        // Il token push resta valido solo finche' esiste l'utente: il
-                                        // server lo ha gia' cancellato a cascata, qui basta uscire.
-                                        assistantMessages.clear()
-                                        assistantConversations = emptyList()
-                                        currentUser = null
-                                        currentProfile = null
-                                        null
-                                    } catch (e: CancellationException) {
-                                        throw e
-                                    } catch (e: circolareplus.data.remote.ApiException) {
-                                        e.message ?: "Eliminazione non riuscita."
-                                    } catch (e: Exception) {
-                                        "Impossibile eliminare l'account: controlla la connessione e riprova."
-                                    }
-                                }
-                            )
-                        }
-                    }
-                    }
-                }
+                // Le tab stanno sotto, nello Scaffold: qui niente (livello trasparente).
+                ShellRoute.TABS -> {}
             }
             }
             }
-                }
             }
         }
-    }
         androidx.compose.animation.AnimatedVisibility(
             visible = selectedCircularForDetail != null,
             enter = androidx.compose.animation.slideInHorizontally(circolareplus.design.iosNavigationSpring()) { it },
