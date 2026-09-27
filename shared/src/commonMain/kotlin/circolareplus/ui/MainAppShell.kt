@@ -2016,7 +2016,25 @@ fun MainAppShell(
         } else stored
     }
     // Material: fondo pieno dietro alle tab, perche' in "fade through" le tab stesse svaniscono.
-    Box(modifier = Modifier.fillMaxSize().then(if (AppTheme.isGlass) Modifier else Modifier.background(AppTheme.BackgroundLight))) {
+    // Liquid Glass: con un menu dal basso aperto l'app dietro si sfoca, cosi' il foglio di vetro
+    // trasparente resta leggibile (vedi AilaBottomSheet).
+    // Letto solo nel livello grafico: l'animazione non ricompone la shell a ogni fotogramma.
+    val sheetBlur = androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (AppTheme.isGlass && circolareplus.design.AilaSheetBackdrop.openSheets > 0) 1f else 0f,
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 260),
+        label = "sheetBlur"
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .then(if (AppTheme.isGlass) Modifier else Modifier.background(AppTheme.BackgroundLight))
+            .graphicsLayer {
+                val radius = 20.dp.toPx() * sheetBlur.value
+                renderEffect = if (radius > 0.5f) {
+                    androidx.compose.ui.graphics.BlurEffect(radius, radius, androidx.compose.ui.graphics.TileMode.Clamp)
+                } else null
+            }
+    ) {
     Scaffold(
         modifier = Modifier
             .graphicsLayer {
