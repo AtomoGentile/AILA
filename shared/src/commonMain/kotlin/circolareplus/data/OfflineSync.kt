@@ -17,6 +17,8 @@ import kotlinx.coroutines.sync.withLock
  */
 object OfflineSync {
     private const val AUTO_INTERVAL_MILLIS = 30L * 60L * 1000L
+    /** Ad app chiusa basta un giro ogni ora circa (il sistema sveglia l'app ogni 15+ minuti). */
+    private const val BACKGROUND_INTERVAL_MILLIS = 55L * 60L * 1000L
     private const val PDF_COUNT = 30
     private const val POLL_DETAILS = 30
     private const val PROPOSAL_COMMENTS = 30
@@ -27,10 +29,13 @@ object OfflineSync {
     val isRunning: Boolean get() = mutex.isLocked
 
     /** Automatico: solo con rete e se l'ultimo giro completo e' abbastanza vecchio. */
-    suspend fun runIfDue() {
-        if (ConnectivityState.isOffline) return
+    suspend fun runIfDue(background: Boolean = false) {
+        if (!background && ConnectivityState.isOffline) return
+        // Senza sessione (logout) non c'e' niente da scaricare.
+        if (AppContainer.settings.authToken.isBlank()) return
         val last = AppContainer.settings.lastFullOfflineSyncMillis
-        if (currentTimeMillis() - last < AUTO_INTERVAL_MILLIS) return
+        val interval = if (background) BACKGROUND_INTERVAL_MILLIS else AUTO_INTERVAL_MILLIS
+        if (currentTimeMillis() - last < interval) return
         run()
     }
 
