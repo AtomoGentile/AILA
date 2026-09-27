@@ -165,7 +165,7 @@ fun AilaBackBar(
         ) {
             Box(
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(44.dp)
                     .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
                     .background(AppTheme.TintSlate)
                     .ailaPressable(pressedScale = 0.9f) { onBackClick() },
@@ -788,7 +788,9 @@ fun AilaIconButton(
     modifier: Modifier = Modifier,
     primary: Boolean = false,
     enabled: Boolean = true,
-    size: Dp = 38.dp,
+    // 44dp come i pulsanti della Home e il minimo di tocco consigliato: a 38dp, accanto al logo
+    // da 48 delle intestazioni, sembravano piu' piccoli e fuori asse rispetto al titolo.
+    size: Dp = 44.dp,
     icon: @Composable (Color) -> Unit
 ) {
     val shape = RoundedCornerShape(AppTheme.SmallElementRadius)

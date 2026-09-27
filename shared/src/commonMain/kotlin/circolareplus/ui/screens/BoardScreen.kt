@@ -64,27 +64,8 @@ fun BoardScreen(
             .padding(horizontal = AppTheme.Space16)
             .padding(top = AppTheme.Space16)
     ) {
-        // Come in CircolariScreen: niente titolo grande, lo dà già il selettore
-        // Circolari/Bacheca in cima alla tab "Classe". Resta la riga di contesto + l'azione.
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Iniziative & idee della classe",
-                fontSize = 12.sp,
-                color = AppTheme.TextFaint,
-                modifier = Modifier.weight(1f)
-            )
-
-            AilaIconButton(contentDescription = "Nuova proposta", onClick = onCreateProposalClick, primary = true) { tint ->
-                AppIcons.Plus(modifier = Modifier.size(18.dp), color = tint)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(AppTheme.Space12))
-
+        // Il "+" per una nuova proposta sta nell'intestazione della tab Classe (MainAppShell),
+        // allineato con il selettore Circolari/Bacheca come gli altri pulsanti delle intestazioni.
         // Colonne / Filtri per Stato: stesso pill scorrevole di Sondaggio/Storico, generalizzato a
         // chip di larghezza diversa (vedi AilaSlidingChipRow). "Chiuse" raccoglie sia le accettate
         // sia le rifiutate: l'esito si legge sulla card.

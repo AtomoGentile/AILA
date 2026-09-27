@@ -3157,6 +3157,25 @@ fun MainAppShell(
                                                 onClick = { isInClassRosterScreen = true }
                                             ) { tint -> AppIcons.People(modifier = Modifier.size(20.dp), color = tint) }
                                         }
+                                        // "Nuova proposta" sta qui, sulla riga dell'intestazione come il
+                                        // "+" del Calendario: prima era su una riga a parte dentro la
+                                        // Bacheca, piu' in basso e non allineato con nient'altro.
+                                        androidx.compose.animation.AnimatedVisibility(
+                                            visible = classSection == ClassSection.BOARD,
+                                            enter = androidx.compose.animation.fadeIn(tween(180)) +
+                                                androidx.compose.animation.scaleIn(tween(180), initialScale = 0.8f),
+                                            exit = androidx.compose.animation.fadeOut(tween(120)) +
+                                                androidx.compose.animation.scaleOut(tween(120), targetScale = 0.8f)
+                                        ) {
+                                            Row {
+                                                Spacer(modifier = Modifier.width(AppTheme.Space8))
+                                                circolareplus.design.AilaIconButton(
+                                                    contentDescription = "Nuova proposta",
+                                                    onClick = { showAddProposalDialog = true },
+                                                    primary = true
+                                                ) { tint -> AppIcons.Plus(modifier = Modifier.size(18.dp), color = tint) }
+                                            }
+                                        }
                                     }
                                     HorizontalDivider(color = AppTheme.Hairline)
                                 }
