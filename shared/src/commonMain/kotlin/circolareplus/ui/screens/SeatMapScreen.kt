@@ -67,7 +67,9 @@ fun SeatMapScreen(
     onTogglePreferencesWindow: (Boolean) -> Unit = {},
     onGenerateProposals: (OptimizerWeights, seatsPerDesk: Int) -> Unit = { _, _ -> },
     isExportingPdf: Boolean = false,
-    onExportPdf: () -> Unit = {}
+    onExportPdf: () -> Unit = {},
+    /** Proposte in calcolo: il pulsante mostra l'attesa e non si puo' ripremere. */
+    isGeneratingProposals: Boolean = false
 ) {
     var searchQuery by remember { mutableStateOf("") }
     // Chi evidenziare nella mappa: "Il mio posto" o il compagno cercato. Prima il tasto era solo
@@ -393,7 +395,23 @@ fun SeatMapScreen(
                     Spacer(modifier = Modifier.height(AppTheme.Space8))
 
                     AilaPrimaryButton(
-                        text = "Calcola 3 proposte",
+                        text = if (isGeneratingProposals) "Calcolo in corso…" else "Calcola 3 proposte",
+                        enabled = !isGeneratingProposals,
+                        // Mentre calcola: la forma che cambia (Material) o i puntini (Glass),
+                        // invece di un pulsante che non reagisce per qualche secondo.
+                        icon = if (isGeneratingProposals) {
+                            { _ ->
+                                if (AppTheme.isGlass) {
+                                    androidx.compose.material3.CircularProgressIndicator(
+                                        modifier = Modifier.size(14.dp),
+                                        strokeWidth = 2.dp,
+                                        color = AppTheme.PrimaryBlue
+                                    )
+                                } else {
+                                    circolareplus.design.AilaMorphingLoader(size = 18.dp, color = AppTheme.PrimaryBlue)
+                                }
+                            }
+                        } else null,
                         onClick = {
                             onGenerateProposals(
                                 OptimizerWeights(
