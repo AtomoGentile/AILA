@@ -1,22 +1,8 @@
 name: iOS Build
 
+# Solo a mano (Actions → iOS Build → Run workflow): i runner macOS restavano in coda per ore e
+# bloccavano le build a ogni push. Si riaccende quando lo decide Simone.
 on:
-  push:
-    paths:
-      - 'shared/**'
-      - 'iosApp/**'
-      - '.github/workflows/ios-build.yml'
-      - 'gradle/**'
-      - 'build.gradle.kts'
-      - 'settings.gradle.kts'
-  pull_request:
-    paths:
-      - 'shared/**'
-      - 'iosApp/**'
-      - '.github/workflows/ios-build.yml'
-      - 'gradle/**'
-      - 'build.gradle.kts'
-      - 'settings.gradle.kts'
   workflow_dispatch:
 
 jobs:

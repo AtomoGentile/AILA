@@ -1,18 +1,10 @@
 name: iOS IPA (SideStore)
 
 # IPA non firmata per SideStore: la firma la fa SideStore sul dispositivo con l'Apple ID gratuito.
+# Solo a mano (Actions → iOS IPA (SideStore) → Run workflow): i runner macOS restavano in coda
+# per ore a ogni push. Si riaccende quando lo decide Simone.
 on:
   workflow_dispatch:
-  push:
-    branches: [main, 'claude/**']
-    tags: ['v*']
-    paths:
-      - 'shared/**'
-      - 'iosApp/**'
-      - '.github/workflows/ios-ipa.yml'
-      - 'gradle/**'
-      - 'build.gradle.kts'
-      - 'settings.gradle.kts'
 
 permissions:
   contents: write # serve solo per allegare l'IPA alla release sui tag
