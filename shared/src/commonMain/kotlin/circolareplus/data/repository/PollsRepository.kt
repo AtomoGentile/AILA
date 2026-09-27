@@ -45,7 +45,7 @@ class PollsRepository(private val api: ApiClient) {
      * interrogare due volte lo stesso endpoint.
      */
     suspend fun getPollWithProgress(id: String): PollWithProgress {
-        val raw = api.getBytes("/api/polls/$id").decodeToString()
+        val raw = api.getText("/api/polls/$id")
         return PollWithProgress(
             detail = apiJson.decodeFromString(raw),
             progress = apiJson.decodeFromString(raw)

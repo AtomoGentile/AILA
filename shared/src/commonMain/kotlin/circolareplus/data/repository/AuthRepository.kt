@@ -201,6 +201,7 @@ class AuthRepository(
         // I dati offline sono dell'account appena uscito: non devono restare a chi entra dopo.
         circolareplus.platform.OfflineStore.clear()
         settings.lastOnlineSyncMillis = 0L
+        settings.lastFullOfflineSyncMillis = 0L
     }
 
     private fun persistSession(response: AuthResponseDto): Pair<User, StudentProfile> {

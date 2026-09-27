@@ -36,6 +36,7 @@ class LocalSettingsManager(
         private const val KEY_UI_STYLE = "ui_style"
         private const val KEY_ACCENT = "accent_color"
         private const val KEY_LAST_ONLINE_SYNC = "last_online_sync_millis"
+        private const val KEY_LAST_FULL_OFFLINE_SYNC = "last_full_offline_sync_millis"
         private const val KEY_MUTED_NOTIFICATIONS = "muted_notification_kinds"
         private const val KEY_LAST_SEEN_CIRCULAR = "last_seen_circular_number"
         private const val KEY_LAST_SEEN_PROPOSAL = "last_seen_proposal_id"
@@ -187,6 +188,11 @@ class LocalSettingsManager(
     var lastOnlineSyncMillis: Long
         get() = settings.getLong(KEY_LAST_ONLINE_SYNC, 0L)
         set(value) = settings.putLong(KEY_LAST_ONLINE_SYNC, value)
+
+    /** Ultimo "scarica tutto per l'uso offline" completato (vedi OfflineSync). */
+    var lastFullOfflineSyncMillis: Long
+        get() = settings.getLong(KEY_LAST_FULL_OFFLINE_SYNC, 0L)
+        set(value) = settings.putLong(KEY_LAST_FULL_OFFLINE_SYNC, value)
 
     /** Colore principale scelto dall'utente ("blue" = predefinito AILA). */
     var accentKey: String

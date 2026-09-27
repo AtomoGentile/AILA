@@ -777,25 +777,16 @@ fun MainAppShell(
         if (ConnectivityState.isOffline) startedOffline = true
     }
 
-    // Copia offline dei PDF: con la rete si scaricano in sottofondo quelli delle circolari piu'
-    // recenti che non sono ancora sul telefono, cosi' si possono aprire anche senza connessione.
-    // Si parte dopo qualche secondo per non rubare banda al caricamento delle schermate.
-    LaunchedEffect(circulars, ConnectivityState.isOffline) {
-        if (ConnectivityState.isOffline || circulars.isEmpty()) return@LaunchedEffect
-        delay(4_000L)
-        val recent = circulars.sortedByDescending { it.number }.take(OFFLINE_PDF_PREFETCH)
-        for (circular in recent) {
-            val keys = listOf(circular.r2PdfKey) + circular.attachments.mapNotNull { it.pdfKey }
-            for (key in keys) {
-                if (key.isBlank() || AppContainer.circularsRepository.isPdfAvailableOffline(key)) continue
-                try {
-                    AppContainer.circularsRepository.downloadPdfBytes(key)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    if (ConnectivityState.isOffline) return@LaunchedEffect
-                }
-            }
+    // Download automatico per l'uso offline: con la rete, in sottofondo, si scarica tutta l'app
+    // (anche le schermate mai aperte, i dettagli dei sondaggi, i commenti e i PDF delle circolari
+    // recenti). Riparte al ritorno della rete e comunque non piu' di una volta ogni mezz'ora.
+    // Si aspetta qualche secondo per non rubare banda al caricamento delle schermate.
+    LaunchedEffect(user.id, ConnectivityState.isOffline) {
+        if (ConnectivityState.isOffline) return@LaunchedEffect
+        delay(5_000L)
+        while (isActive) {
+            circolareplus.data.OfflineSync.runIfDue()
+            delay(10L * 60L * 1000L)
         }
     }
 
@@ -5074,9 +5065,6 @@ private fun OfflineGateScreen(
     }
 }
 
-
-/** Quante circolari recenti tenere sempre scaricate (PDF + allegati) per la consultazione offline. */
-private const val OFFLINE_PDF_PREFETCH = 20
 
 /** Testo della striscia offline: da quanto sono i dati che si stanno guardando. */
 private fun offlineDataAgeLabel(): String {

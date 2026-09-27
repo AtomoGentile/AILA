@@ -212,10 +212,9 @@ object AppTheme {
         get() = when {
             // Material Expressive: il colore primario e' pieno, non sfumato.
             !isGlass -> SolidColor(PrimaryBlue)
-            // Glass: vetro tinto di blu (i pulsanti "prominent" di iOS 26), un po' trasparente.
-            accent != AilaAccent.BLUE -> Brush.verticalGradient(listOf(PrimaryBlue.copy(alpha = 0.90f), lerpColor(PrimaryBlue, AccentDeep, 0.25f).copy(alpha = 0.85f)))
-            isDarkMode -> Brush.verticalGradient(listOf(Color(0xE6418AF5), Color(0xCC2F6FE0)))
-            else -> Brush.verticalGradient(listOf(Color(0xE63D8BFF), Color(0xD92F74F0)))
+            // Glass: tinta piena e piatta come i pulsanti "prominent" di iOS 26. Il gradiente
+            // lucido con riflesso e bordo bianco sembrava un giocattolo.
+            else -> SolidColor(PrimaryBlue)
         }
 
     // Testo/superfici sopra HeroGradient (contrasto chiaro su sfondo scuro): uguali nei due temi,

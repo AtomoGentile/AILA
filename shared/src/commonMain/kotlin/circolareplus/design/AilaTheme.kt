@@ -1,5 +1,7 @@
 package circolareplus.design
 
+import kotlinx.coroutines.launch
+
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -109,7 +111,14 @@ fun AilaTheme(content: @Composable () -> Unit) {
                 .fillMaxSize()
                 .then(if (AppTheme.isGlass) androidx.compose.ui.Modifier.ailaGlassBackdrop() else androidx.compose.ui.Modifier)
         ) {
-            content()
+            if (AppTheme.isGlass) {
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.foundation.LocalIndication provides AilaGlassHighlight,
+                    content = content
+                )
+            } else {
+                content()
+            }
         }
     }
 }
@@ -132,3 +141,53 @@ fun ailaFieldColors(): TextFieldColors = OutlinedTextFieldDefaults.colors(
     focusedPlaceholderColor = AppTheme.TextFaint,
     unfocusedPlaceholderColor = AppTheme.TextFaint
 )
+
+/**
+ * Liquid Glass: al tocco niente "onda" di Material (il ripple che si allarga dal dito, tipico di
+ * Android), ma l'evidenziazione di iOS: un velo che si accende subito alla pressione e si spegne
+ * con calma al rilascio. Vale per tutti i `clickable` che usano l'indicazione di default (righe
+ * degli eventi, liste, card).
+ */
+internal object AilaGlassHighlight : androidx.compose.foundation.IndicationNodeFactory {
+    override fun create(
+        interactionSource: androidx.compose.foundation.interaction.InteractionSource
+    ): androidx.compose.ui.node.DelegatableNode = GlassHighlightNode(interactionSource)
+
+    override fun equals(other: Any?): Boolean = other === this
+    override fun hashCode(): Int = 7
+}
+
+private class GlassHighlightNode(
+    private val interactionSource: androidx.compose.foundation.interaction.InteractionSource
+) : androidx.compose.ui.Modifier.Node(), androidx.compose.ui.node.DrawModifierNode {
+    private val level = androidx.compose.animation.core.Animatable(0f)
+
+    override fun onAttach() {
+        coroutineScope.launch {
+            var pressed = 0
+            interactionSource.interactions.collect { interaction ->
+                when (interaction) {
+                    is androidx.compose.foundation.interaction.PressInteraction.Press -> pressed++
+                    is androidx.compose.foundation.interaction.PressInteraction.Release -> pressed--
+                    is androidx.compose.foundation.interaction.PressInteraction.Cancel -> pressed--
+                }
+                val target = if (pressed > 0) 1f else 0f
+                launch {
+                    level.animateTo(
+                        target,
+                        androidx.compose.animation.core.tween(if (target > 0f) 60 else 280)
+                    ) { invalidateDraw() }
+                }
+            }
+        }
+    }
+
+    override fun androidx.compose.ui.graphics.drawscope.ContentDrawScope.draw() {
+        drawContent()
+        val value = level.value
+        if (value > 0f) {
+            val base = if (AppTheme.isDarkMode) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.06f)
+            drawRect(base.copy(alpha = base.alpha * value))
+        }
+    }
+}

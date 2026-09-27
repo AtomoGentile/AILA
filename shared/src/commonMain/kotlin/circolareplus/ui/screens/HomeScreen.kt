@@ -29,6 +29,7 @@ import circolareplus.design.AilaListRow
 import circolareplus.design.AilaSectionTitle
 import circolareplus.design.ailaAppear
 import circolareplus.design.ailaGlassOverlay
+import circolareplus.design.ailaGlassSurface
 import circolareplus.design.ailaGlassPressable
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
@@ -234,7 +235,10 @@ private fun HomeHeroPanel(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
-            .background(AppTheme.HeroGradient)
+            // Liquid Glass: nessun pannello. Come nelle app Apple il titolo grande sta
+            // direttamente sullo sfondo e solo i pulsanti sono di vetro: il riquadro colorato
+            // (anche velato) faceva sembrare la Home un giocattolo.
+            .then(if (AppTheme.isGlass) Modifier else Modifier.background(AppTheme.HeroGradient))
             .padding(horizontal = AppTheme.Space20)
             .padding(top = AppTheme.Space24, bottom = AppTheme.Space24)
     ) {
@@ -324,7 +328,7 @@ private fun EventRow(event: CalendarEvent, onClick: () -> Unit) {
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
                     color = AppTheme.TintBlueInk,
-                    modifier = Modifier.offset(y = if (AppTheme.isGlass) 0.dp else (-3).dp)
+                    modifier = Modifier.offset(y = if (AppTheme.isGlass) 0.dp else (-5.5).dp)
                 )
             }
         }
@@ -372,13 +376,6 @@ private fun parseDayMonth(isoDate: String): Pair<String, String> {
     return day to month
 }
 
-/**
- * Riempimento dei riquadri translucidi del pannello (tasti e icone rapide): non un bianco piatto
- * al 18%, che sul gradiente sembra una toppa grigia, ma un velo che scivola dall'alto al basso.
- */
-private val heroTileFill: Brush
-    get() = Brush.verticalGradient(listOf(Color(0x47FFFFFF), Color(0x1AFFFFFF)))
-
 /** Material: riempimento tonale dei pulsanti sul pannello, un tono piu' scuro del pannello. */
 private val heroTonalFill: Color
     get() = AppTheme.AccentDeep
@@ -406,9 +403,7 @@ private fun HeroIconButton(onClick: () -> Unit, icon: @Composable () -> Unit) {
     Box(
         modifier = Modifier
             .size(44.dp)
-            .clip(shape)
-            .background(heroTileFill)
-            .border(1.dp, AppTheme.OnHeroBorder, shape)
+            .ailaGlassSurface(shape)
             .ailaGlassPressable(tint = AppTheme.PrimaryBlue) { onClick() },
         contentAlignment = Alignment.Center
     ) {
@@ -450,8 +445,7 @@ private fun HomeQuickIcon(
                 .clip(shape)
                 .then(
                     if (glass) Modifier
-                        .background(heroTileFill)
-                        .border(1.dp, AppTheme.OnHeroBorder, shape)
+                        .ailaGlassSurface(shape)
                         .ailaGlassOverlay(interactionSource, tint = AppTheme.PrimaryBlue)
                     else Modifier.background(heroTonalFill)
                 ),
