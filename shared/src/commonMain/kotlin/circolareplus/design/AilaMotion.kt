@@ -302,7 +302,9 @@ fun ailaPushExit(): ExitTransition =
  * leggero (in "shared axis" la schermata sotto svanisce, non scivola).
  */
 val ailaUnderlayShift: Float get() = if (AppTheme.isGlass) 1f / 3f else 0f
-val ailaUnderlayDim: Float get() = if (AppTheme.isGlass) 0.18f else 0.32f
+// Material: velo leggero sotto al container transform (col 32% di prima l'animazione "lampeggiava"
+// di scuro all'apertura e alla chiusura).
+val ailaUnderlayDim: Float get() = if (AppTheme.isGlass) 0.18f else 0.12f
 
 /** Si ricorda se lo "sblocco" e' gia' stato fatto in questo avvio dell'app. */
 private object AilaUnlockMemory {
@@ -417,6 +419,18 @@ object AilaContainerTransform {
     }
 
     fun originOf(key: Any): AilaTransformOrigin? = origins[key]
+
+    /**
+     * Posizione aggiornata degli elementi con una chiave "logica" (es. la circolare n. 12),
+     * ovunque si trovino in questo momento. Serve al ritorno: se la circolare era stata aperta
+     * dalla Home ma ora sotto c'e' la lista delle Circolari, la pagina si richiude sulla card
+     * della lista, cioe' su quella che si vede, non sulla posizione della Home.
+     */
+    private val live = mutableMapOf<Any, AilaTransformOrigin>()
+
+    fun updateLive(key: Any, origin: AilaTransformOrigin) { live[key] = origin }
+    fun removeLive(key: Any, origin: AilaTransformOrigin?) { if (live[key] === origin) live.remove(key) }
+    fun liveOf(key: Any): AilaTransformOrigin? = live[key]
 }
 
 /**
@@ -424,12 +438,26 @@ object AilaContainerTransform {
  * del dito (senza consumare il tocco) ne salva posizione e angoli.
  */
 @Composable
-fun Modifier.ailaTransformOrigin(cornerRadius: androidx.compose.ui.unit.Dp): Modifier {
+fun Modifier.ailaTransformOrigin(cornerRadius: androidx.compose.ui.unit.Dp, liveKey: Any? = null): Modifier {
     val holder = remember { arrayOf<androidx.compose.ui.geometry.Rect?>(null) }
+    val liveHolder = remember { arrayOf<AilaTransformOrigin?>(null) }
     val density = androidx.compose.ui.platform.LocalDensity.current
     val radiusPx = with(density) { cornerRadius.toPx() }
+    if (liveKey != null) {
+        androidx.compose.runtime.DisposableEffect(liveKey) {
+            onDispose { AilaContainerTransform.removeLive(liveKey, liveHolder[0]) }
+        }
+    }
     return this
-        .onGloballyPositioned { holder[0] = it.boundsInRoot() }
+        .onGloballyPositioned {
+            val bounds = it.boundsInRoot()
+            holder[0] = bounds
+            if (liveKey != null) {
+                val origin = AilaTransformOrigin(bounds, radiusPx)
+                liveHolder[0] = origin
+                AilaContainerTransform.updateLive(liveKey, origin)
+            }
+        }
         .pointerInput(radiusPx) {
             awaitEachGesture {
                 awaitFirstDown(requireUnconsumed = false)
@@ -438,8 +466,15 @@ fun Modifier.ailaTransformOrigin(cornerRadius: androidx.compose.ui.unit.Dp): Mod
         }
 }
 
-/** Molla del container transform: veloce all'inizio, si posa senza rimbalzo sul bordo dello schermo. */
-fun <T> ailaContainerSpring(): SpringSpec<T> = spring(dampingRatio = 0.92f, stiffness = 320f)
+/**
+ * Molla del container transform: rapida e senza rimbalzo (smorzamento critico), con una soglia
+ * di arrivo minuscola, cosi' in chiusura la pagina arriva davvero sui bordi dell'elemento invece
+ * di sparire poco prima.
+ */
+fun <T> ailaContainerSpring(): SpringSpec<T> = spring(dampingRatio = 1f, stiffness = 520f)
+
+/** Come [ailaContainerSpring], per i Float, con la soglia di arrivo stretta. */
+fun ailaContainerFloatSpring(): SpringSpec<Float> = spring(dampingRatio = 1f, stiffness = 520f, visibilityThreshold = 0.0005f)
 
 /**
  * Disegna il contenuto dentro un "contenitore" che cresce dall'origine fino a tutto lo schermo
@@ -449,7 +484,9 @@ fun <T> ailaContainerSpring(): SpringSpec<T> = spring(dampingRatio = 0.92f, stif
 fun Modifier.ailaContainerReveal(
     progress: () -> Float,
     origin: AilaTransformOrigin,
-    containerColor: Color
+    containerColor: Color,
+    /** Colore della pagina a schermo intero: il contenitore passa dal colore della card a questo. */
+    pageColor: Color = containerColor
 ): Modifier {
     val selfOffset = arrayOf(Offset.Zero)
     return this
@@ -468,9 +505,14 @@ fun Modifier.ailaContainerReveal(
             val bottom = lerp(o.bottom, size.height)
             val radius = lerp(origin.cornerRadiusPx, 0f)
             val clip = ailaRoundRectPath(left, top, right - left, bottom - top, radius)
-            val contentAlpha = ((p - 0.3f) / 0.45f).coerceIn(0f, 1f)
+            // Il contenuto compare quasi subito: prima si vedeva a lungo il contenitore vuoto,
+            // che su schermo intero dava il "flash" bianco (o nero in tema scuro).
+            val contentAlpha = ((p - 0.06f) / 0.3f).coerceIn(0f, 1f)
+            // Il contenitore cambia colore dalla card alla pagina: nessuno stacco ne' all'inizio
+            // (e' del colore dell'elemento toccato) ne' alla fine (e' del colore della pagina).
+            val fill = androidx.compose.ui.graphics.lerp(containerColor, pageColor, (p / 0.5f).coerceIn(0f, 1f))
             clipPath(clip) {
-                drawRect(containerColor)
+                drawRect(fill)
                 if (contentAlpha > 0f) {
                     drawContext.canvas.saveLayer(
                         androidx.compose.ui.geometry.Rect(0f, 0f, size.width, size.height),

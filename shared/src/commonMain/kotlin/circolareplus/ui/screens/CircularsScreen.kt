@@ -183,7 +183,7 @@ fun CircularListItem(
         }
     }
 
-    AilaCard(onClick = onClick, modifier = modifier) {
+    AilaCard(onClick = onClick, modifier = modifier, transformKey = "circular:${circular.number}") {
         Column(modifier = Modifier.padding(AppTheme.Space16)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
