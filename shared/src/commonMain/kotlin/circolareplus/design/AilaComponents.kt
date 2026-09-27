@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Componenti condivisi del linguaggio grafico AILA.
@@ -225,6 +226,13 @@ fun AilaSegmentedTabs(
     // invece di restare alto quanto i tab.
     var rowHeightPx by remember { mutableStateOf(0) }
     val density = androidx.compose.ui.platform.LocalDensity.current
+    // La pillola si muove subito (stato locale); la schermata cambia contenuto un paio di
+    // fotogrammi dopo. Prima le due cose partivano nello stesso fotogramma: costruire la sezione
+    // nuova (es. Storico dei sondaggi) rubava il primo fotogramma all'animazione e la pillola
+    // "saltava" — il microscatto alla selezione.
+    var visualIndex by remember { mutableStateOf(selectedIndex) }
+    LaunchedEffect(selectedIndex) { visualIndex = selectedIndex }
+    val selectScope = androidx.compose.runtime.rememberCoroutineScope()
 
     // Capsula in entrambi gli stili. Glass: binario grigio traslucido e selezione bianca in
     // rilievo con testo scuro (segmented control di iOS). Expressive: binario tonale e selezione
@@ -237,7 +245,7 @@ fun AilaSegmentedTabs(
     ) {
         val segmentWidth = maxWidth / labels.size
         val indicatorOffset = animateDpAsState(
-            targetValue = segmentWidth * selectedIndex,
+            targetValue = segmentWidth * visualIndex,
             animationSpec = ailaSpatialSpring(),
             label = "segmentedIndicatorOffset"
         )
@@ -264,14 +272,23 @@ fun AilaSegmentedTabs(
                 .onSizeChanged { rowHeightPx = it.height }
         ) {
             labels.forEachIndexed { index, label ->
-                val isSelected = index == selectedIndex
+                val isSelected = index == visualIndex
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .clickable(
                             interactionSource = interactionSources[index],
                             indication = null
-                        ) { onSelect(index) }
+                        ) {
+                            if (index != visualIndex) {
+                                visualIndex = index
+                                selectScope.launch {
+                                    androidx.compose.runtime.withFrameNanos { }
+                                    androidx.compose.runtime.withFrameNanos { }
+                                    onSelect(index)
+                                }
+                            }
+                        }
                         .padding(vertical = 9.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -395,7 +412,10 @@ fun AilaCard(
             // Scala più contenuta delle righe: su una superficie grande il 3% si nota già.
             .then(
                 if (onClick != null) {
-                    Modifier.ailaPressable(pressedScale = 0.985f) { onClick() }
+                    // Origine del container transform: toccata, la card si allarga nella pagina.
+                    Modifier
+                        .ailaTransformOrigin(AppTheme.CardCornerRadius)
+                        .ailaPressable(pressedScale = 0.985f) { onClick() }
                 } else Modifier
             ),
         content = content
@@ -441,7 +461,9 @@ fun AilaListRow(
             .fillMaxWidth()
             .then(
                 if (onClick != null) {
-                    Modifier.ailaPressable(pressedScale = 0.98f) { onClick() }
+                    Modifier
+                        .ailaTransformOrigin(AppTheme.SmallElementRadius)
+                        .ailaPressable(pressedScale = 0.98f) { onClick() }
                 } else Modifier
             )
             .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12),
@@ -1159,6 +1181,7 @@ fun AilaProfileButton(entry: AilaProfileEntry, modifier: Modifier = Modifier, on
     Box(
         modifier = modifier
             .size(44.dp)
+            .ailaTransformOrigin(22.dp)
             .ailaPressScale(interactionSource, 0.9f)
             .clip(CircleShape)
             .background(if (onHero) AppTheme.OnHeroSurface else AppTheme.TintBlue)

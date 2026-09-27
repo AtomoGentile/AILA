@@ -18,6 +18,15 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -28,7 +37,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
@@ -293,8 +301,8 @@ fun ailaPushExit(): ExitTransition =
  * Glass: un terzo di larghezza e velo scuro, come iOS. Expressive: quasi ferma, solo un velo
  * leggero (in "shared axis" la schermata sotto svanisce, non scivola).
  */
-val ailaUnderlayShift: Float get() = if (AppTheme.isGlass) 1f / 3f else 0.06f
-val ailaUnderlayDim: Float get() = if (AppTheme.isGlass) 0.18f else 0.08f
+val ailaUnderlayShift: Float get() = if (AppTheme.isGlass) 1f / 3f else 0f
+val ailaUnderlayDim: Float get() = if (AppTheme.isGlass) 0.18f else 0.32f
 
 /** Si ricorda se lo "sblocco" e' gia' stato fatto in questo avvio dell'app. */
 private object AilaUnlockMemory {
@@ -351,4 +359,139 @@ fun Modifier.ailaSelectionPop(selected: Boolean): Modifier {
         scaleX = scale.value
         scaleY = scale.value
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Container transform (Material Expressive): l'elemento toccato — una card, una riga, l'avatar —
+// si allarga fino a diventare la pagina intera, con gli angoli che passano da tondi a squadrati;
+// tornando indietro la pagina si richiude dentro l'elemento da cui era partita. E' la transizione
+// dei Pixel (Meteo, Impostazioni, Contatti). In Liquid Glass resta il push da destra di iOS.
+// ---------------------------------------------------------------------------------------------
+
+/** Punto di partenza di un container transform: rettangolo nello schermo e raggio degli angoli. */
+class AilaTransformOrigin(val bounds: androidx.compose.ui.geometry.Rect, val cornerRadiusPx: Float)
+
+/**
+ * Memoria delle origini. Al tocco un elemento registra dove si trova ([recordTap]); quando la
+ * navigazione cambia davvero schermata, l'origine appena toccata viene assegnata alla schermata
+ * che si apre ([assignFreshTo]) e resta legata a lei, cosi' al ritorno si sa dove richiuderla.
+ */
+object AilaContainerTransform {
+    private var fresh: AilaTransformOrigin? = null
+    private var freshMark: kotlin.time.TimeMark? = null
+    private val origins = mutableMapOf<Any, AilaTransformOrigin>()
+
+    /** Chiave dell'ultima schermata aperta "in avanti": solo lei si espande entrando. */
+    var lastForwardKey: Any? = null
+        private set
+
+    fun recordTap(origin: AilaTransformOrigin) {
+        fresh = origin
+        freshMark = kotlin.time.TimeSource.Monotonic.markNow()
+    }
+
+    /** Assegna l'origine toccata da poco (meno di un secondo fa) alla schermata [key]. */
+    fun assignFreshTo(key: Any) {
+        val mark = freshMark
+        val origin = fresh
+        fresh = null
+        freshMark = null
+        lastForwardKey = key
+        if (origin != null && mark != null && mark.elapsedNow().inWholeMilliseconds < 1000) {
+            origins[key] = origin
+        } else {
+            origins.remove(key)
+        }
+    }
+
+    fun onBack() {
+        lastForwardKey = null
+    }
+
+    fun originOf(key: Any): AilaTransformOrigin? = origins[key]
+}
+
+/**
+ * Registra questo elemento come possibile origine di un container transform: al primo contatto
+ * del dito (senza consumare il tocco) ne salva posizione e angoli.
+ */
+@Composable
+fun Modifier.ailaTransformOrigin(cornerRadius: androidx.compose.ui.unit.Dp): Modifier {
+    val holder = remember { arrayOf<androidx.compose.ui.geometry.Rect?>(null) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val radiusPx = with(density) { cornerRadius.toPx() }
+    return this
+        .onGloballyPositioned { holder[0] = it.boundsInRoot() }
+        .pointerInput(radiusPx) {
+            awaitEachGesture {
+                awaitFirstDown(requireUnconsumed = false)
+                holder[0]?.let { AilaContainerTransform.recordTap(AilaTransformOrigin(it, radiusPx)) }
+            }
+        }
+}
+
+/** Molla del container transform: veloce all'inizio, si posa senza rimbalzo sul bordo dello schermo. */
+fun <T> ailaContainerSpring(): SpringSpec<T> = spring(dampingRatio = 0.92f, stiffness = 320f)
+
+/**
+ * Disegna il contenuto dentro un "contenitore" che cresce dall'origine fino a tutto lo schermo
+ * mentre [progress] va da 0 a 1: prima si vede il fondo del contenitore (come se la card si
+ * allungasse), poi il contenuto della pagina compare in dissolvenza.
+ */
+fun Modifier.ailaContainerReveal(
+    progress: () -> Float,
+    origin: AilaTransformOrigin,
+    containerColor: Color
+): Modifier {
+    val selfOffset = arrayOf(Offset.Zero)
+    return this
+        .onGloballyPositioned { selfOffset[0] = it.positionInRoot() }
+        .drawWithContent {
+            val p = progress().coerceIn(0f, 1f)
+            if (p >= 0.999f) {
+                drawContent()
+                return@drawWithContent
+            }
+            val o = origin.bounds.translate(-selfOffset[0])
+            fun lerp(a: Float, b: Float) = a + (b - a) * p
+            val left = lerp(o.left, 0f)
+            val top = lerp(o.top, 0f)
+            val right = lerp(o.right, size.width)
+            val bottom = lerp(o.bottom, size.height)
+            val radius = lerp(origin.cornerRadiusPx, 0f)
+            val clip = ailaRoundRectPath(left, top, right - left, bottom - top, radius)
+            val contentAlpha = ((p - 0.3f) / 0.45f).coerceIn(0f, 1f)
+            clipPath(clip) {
+                drawRect(containerColor)
+                if (contentAlpha > 0f) {
+                    drawContext.canvas.saveLayer(
+                        androidx.compose.ui.geometry.Rect(0f, 0f, size.width, size.height),
+                        androidx.compose.ui.graphics.Paint().apply { alpha = contentAlpha }
+                    )
+                    this@drawWithContent.drawContent()
+                    drawContext.canvas.restore()
+                }
+            }
+        }
+}
+
+/**
+ * Rettangolo ad angoli tondi fatto di curve di Bezier: niente addRoundRect/archi, che su Android
+ * in KMP possono crashare (vedi la nota in AppIcons).
+ */
+fun ailaRoundRectPath(left: Float, top: Float, w: Float, h: Float, radius: Float): Path = Path().apply {
+    val r = radius.coerceIn(0f, minOf(w, h) / 2f)
+    val k = r * 0.5523f
+    val right = left + w
+    val bottom = top + h
+    moveTo(left + r, top)
+    lineTo(right - r, top)
+    cubicTo(right - r + k, top, right, top + r - k, right, top + r)
+    lineTo(right, bottom - r)
+    cubicTo(right, bottom - r + k, right - r + k, bottom, right - r, bottom)
+    lineTo(left + r, bottom)
+    cubicTo(left + r - k, bottom, left, bottom - r + k, left, bottom - r)
+    lineTo(left, top + r)
+    cubicTo(left, top + r - k, left + r - k, top, left + r, top)
+    close()
 }

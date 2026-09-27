@@ -60,6 +60,8 @@ import circolareplus.design.ailaPressable
 import circolareplus.design.ailaSpatialSpring
 import circolareplus.design.ailaPushTransition
 import circolareplus.design.ailaTabTransition
+import circolareplus.design.ailaContainerReveal
+import androidx.compose.animation.core.animateFloat
 import circolareplus.design.ailaSelectionPop
 import circolareplus.design.ailaUnlock
 import circolareplus.domain.model.CalendarEvent
@@ -135,7 +137,7 @@ const val NOTIFICATION_CATEGORY_SEATMAP_PREFERENCES = "seatmap_preferences"
  */
 const val NOTIFICATION_CATEGORY_RANKING_POLLS = "ranking_polls"
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, androidx.compose.animation.ExperimentalAnimationApi::class)
 @Composable
 fun MainAppShell(
     initialUser: User? = null,
@@ -1865,6 +1867,18 @@ fun MainAppShell(
         editingSeatMapProposal != null -> ShellRoute.SEATMAP_EDITOR
         else -> ShellRoute.TABS
     }
+    // Container transform (Material): a ogni cambio di schermata si annota da dove parte la
+    // nuova (l'elemento appena toccato) o che si sta tornando indietro. Fatto qui, durante la
+    // composizione e prima dell'AnimatedContent, cosi' la transizione lo trova gia' pronto.
+    val previousShellRoute = remember { arrayOf(shellRoute) }
+    if (previousShellRoute[0] != shellRoute) {
+        if (shellRoute.depth > previousShellRoute[0].depth) {
+            circolareplus.design.AilaContainerTransform.assignFreshTo(shellRoute)
+        } else {
+            circolareplus.design.AilaContainerTransform.onBack()
+        }
+        previousShellRoute[0] = shellRoute
+    }
     val shellProgress = androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (shellRoute != ShellRoute.TABS) 1f else 0f,
         animationSpec = circolareplus.design.ailaNavigationSpring(),
@@ -1882,6 +1896,15 @@ fun MainAppShell(
     )
     // Durante l'uscita selectedCircularForDetail e' gia' null: si mostra l'ultima aperta.
     selectedCircularForDetail?.let { lastDetailCircular[0] = it }
+    // Container transform del dettaglio (Material): all'apertura si prende l'elemento toccato.
+    val detailOpen = selectedCircularForDetail != null
+    val detailWasOpen = remember { arrayOf(false) }
+    if (detailOpen && !detailWasOpen[0]) {
+        circolareplus.design.AilaContainerTransform.assignFreshTo(DETAIL_TRANSFORM_KEY)
+    }
+    detailWasOpen[0] = detailOpen
+    val detailOrigin = if (AppTheme.isGlass) null
+        else circolareplus.design.AilaContainerTransform.originOf(DETAIL_TRANSFORM_KEY)
     Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         modifier = Modifier
@@ -2754,15 +2777,47 @@ fun MainAppShell(
         ) {
             androidx.compose.animation.AnimatedContent(
                 targetState = shellRoute,
-                transitionSpec = { ailaPushTransition(forward = targetState.depth > initialState.depth) },
+                transitionSpec = {
+                    val forward = targetState.depth > initialState.depth
+                    // Material con un'origine: container transform, disegnato dalla schermata
+                    // stessa (ailaContainerReveal). Qui solo chi sta sopra e quanto dura.
+                    val containerKey = if (forward) targetState else initialState
+                    if (!AppTheme.isGlass && circolareplus.design.AilaContainerTransform.originOf(containerKey) != null) {
+                        (androidx.compose.animation.EnterTransition.None togetherWith
+                            androidx.compose.animation.ExitTransition.None).apply {
+                            targetContentZIndex = if (forward) 1f else -1f
+                        }
+                    } else {
+                        ailaPushTransition(forward = forward)
+                    }
+                },
                 label = "shellRoute",
                 modifier = Modifier.fillMaxSize()
             ) { route ->
+            // Avanzamento del container transform di questa schermata: 0 = chiusa nell'elemento
+            // di partenza, 1 = a tutto schermo. Legato alla transizione, che aspetta la fine.
+            val containerOrigin = if (AppTheme.isGlass || route == ShellRoute.TABS) null
+                else circolareplus.design.AilaContainerTransform.originOf(route)
+            val containerProgress = transition.animateFloat(
+                transitionSpec = { circolareplus.design.ailaContainerSpring() },
+                label = "containerTransform"
+            ) { state -> if (state == androidx.compose.animation.EnterExitState.Visible) 1f else 0f }
+            // Si espande solo entrando "in avanti" e si richiude solo tornando indietro da lei;
+            // negli altri casi (es. resta sotto mentre se ne apre un'altra) resta intera.
+            val revealing = route == circolareplus.design.AilaContainerTransform.lastForwardKey ||
+                shellRoute.depth < route.depth
             // Fondo pieno: durante il push la schermata sopra non deve lasciar intravedere
             // quella sotto.
             Box(
                 modifier = if (route == ShellRoute.TABS) Modifier.fillMaxSize() else Modifier
                     .fillMaxSize()
+                    .then(
+                        if (containerOrigin != null) Modifier.ailaContainerReveal(
+                            progress = { if (revealing) containerProgress.value else 1f },
+                            origin = containerOrigin,
+                            containerColor = AppTheme.CardSurface
+                        ) else Modifier
+                    )
                     .background(AppTheme.BackgroundLight)
                     .appSafeDrawingPadding()
                     // Prende i tocchi: sotto c'e' lo Scaffold con le tab, che non deve riceverli.
@@ -2834,12 +2889,15 @@ fun MainAppShell(
                         onAiProviderChange = { provider ->
                             AppContainer.settings.aiProvider = provider
                         },
-                        localAiUnavailableReason = circolareplus.ai.onDeviceAiUnavailableReason(),
-                        showLocalAiSection = circolareplus.ai.isOnDeviceAiOfferedHere(),
-                        deviceRamMb = circolareplus.ai.totalDeviceRamMb(),
-                        localModels = circolareplus.ai.LocalAiCatalog.selectableFor(
-                            circolareplus.ai.totalDeviceRamMb()
-                        ),
+                        // Calcolati una volta sola: prima si rileggevano (memoria del telefono,
+                        // AICore di sistema, catalogo) a ogni ridisegno delle Impostazioni, anche
+                        // durante l'animazione d'ingresso e lo scorrimento: da qui lo stuttering.
+                        localAiUnavailableReason = remember { circolareplus.ai.onDeviceAiUnavailableReason() },
+                        showLocalAiSection = remember { circolareplus.ai.isOnDeviceAiOfferedHere() },
+                        deviceRamMb = remember { circolareplus.ai.totalDeviceRamMb() },
+                        localModels = remember {
+                            circolareplus.ai.LocalAiCatalog.selectableFor(circolareplus.ai.totalDeviceRamMb())
+                        },
                         selectedLocalModelId = AppContainer.selectedLocalModel().id,
                         onSelectLocalModel = { model ->
                             AppContainer.settings.localAiModelId = model.id
@@ -3298,15 +3356,26 @@ fun MainAppShell(
         }
         androidx.compose.animation.AnimatedVisibility(
             visible = selectedCircularForDetail != null,
-            enter = circolareplus.design.ailaPushEnter(),
-            exit = circolareplus.design.ailaPushExit()
+            enter = if (detailOrigin != null) androidx.compose.animation.EnterTransition.None else circolareplus.design.ailaPushEnter(),
+            exit = if (detailOrigin != null) androidx.compose.animation.ExitTransition.None else circolareplus.design.ailaPushExit()
         ) {
         val circularForDetail = selectedCircularForDetail ?: lastDetailCircular[0]
+        val detailProgressLocal = transition.animateFloat(
+            transitionSpec = { circolareplus.design.ailaContainerSpring() },
+            label = "detailContainerTransform"
+        ) { state -> if (state == androidx.compose.animation.EnterExitState.Visible) 1f else 0f }
         // Il dettaglio sta sopra le tab: questo livello "prende" i tocchi, altrimenti quelli
         // sulle zone senza pulsanti arriverebbero alla schermata sotto.
         if (circularForDetail != null) Box(
             modifier = Modifier
                 .fillMaxSize()
+                .then(
+                    if (detailOrigin != null) Modifier.ailaContainerReveal(
+                        progress = { detailProgressLocal.value },
+                        origin = detailOrigin,
+                        containerColor = AppTheme.CardSurface
+                    ) else Modifier
+                )
                 .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
         ) {
         // Prima lo swipe/tasto indietro di sistema chiudeva l'app anche da qui: nessuna
@@ -4918,6 +4987,9 @@ private fun OfflineGateScreen(
     }
 }
 
+
+/** Chiave dell'origine del container transform del dettaglio circolare. */
+private const val DETAIL_TRANSFORM_KEY = "circularDetail"
 
 /** Le schermate a tutto schermo della shell; `depth` decide il verso del push/pop. */
 private enum class ShellRoute(val depth: Int) {
