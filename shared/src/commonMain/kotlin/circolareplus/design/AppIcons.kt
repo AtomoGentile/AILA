@@ -967,6 +967,22 @@ object AppIcons {
         }
     }
 
+    /** Freccia verso l'alto con l'asta: il "manda" dei messaggi (ruotata di 90° in Material). */
+    @Composable
+    fun ArrowUp(modifier: Modifier = Modifier.size(24.dp), color: Color = Color(0xFF1E293B)) {
+        Canvas(modifier = modifier) {
+            val w = size.width; val h = size.height; val stroke = w * 0.11f
+            val path = Path().apply {
+                moveTo(w * 0.5f, h * 0.8f)
+                lineTo(w * 0.5f, h * 0.22f)
+                moveTo(w * 0.26f, h * 0.44f)
+                lineTo(w * 0.5f, h * 0.2f)
+                lineTo(w * 0.74f, h * 0.44f)
+            }
+            drawPath(path, color, style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        }
+    }
+
     @Composable
     fun ChevronLeft(modifier: Modifier = Modifier.size(24.dp), color: Color = Color(0xFF1E293B)) {
         Canvas(modifier = modifier) {

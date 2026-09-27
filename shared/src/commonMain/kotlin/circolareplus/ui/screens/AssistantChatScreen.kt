@@ -13,7 +13,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedTextField
@@ -26,6 +25,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -45,7 +49,8 @@ import circolareplus.design.AilaIconButton
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
 import circolareplus.design.ailaAppear
-import circolareplus.design.ailaFieldColors
+import circolareplus.design.ailaGlassSurface
+import circolareplus.design.ailaMorphShape
 import circolareplus.design.ailaPressable
 import kotlinx.coroutines.delay
 
@@ -158,16 +163,22 @@ fun AssistantChatScreen(
             }
         }
 
-        HorizontalDivider(color = AppTheme.Hairline)
-
+        // Barra per scrivere. Glass: niente fascia piena ne' riga divisoria, solo una capsula di
+        // vetro che galleggia sullo sfondo e il tondo blu per mandare, come Messaggi su iOS 26.
+        // Material: nessun divisore (la separazione la danno i toni), campo "pillola" pieno e
+        // pulsante di invio che si deforma alla pressione, come gli altri pulsanti Expressive.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(AppTheme.SurfaceWhite)
-                .padding(AppTheme.Space12)
+                .padding(horizontal = AppTheme.Space12)
+                .padding(top = AppTheme.Space8, bottom = AppTheme.Space12)
         ) {
             if (thinkingAvailable) Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = AppTheme.Space8),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = AppTheme.Space8)
+                    .chatSurface(RoundedCornerShape(AppTheme.SmallElementRadius))
+                    .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -194,43 +205,46 @@ fun AssistantChatScreen(
                 )
             }
 
+            val canSend = draft.trim().isNotEmpty() && !isThinking
+            val send = {
+                val question = draft.trim()
+                draft = ""
+                onSend(question)
+            }
             Row(verticalAlignment = Alignment.Bottom) {
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = { draft = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("Chiedi qualsiasi cosa…", fontSize = 14.sp) },
-                    maxLines = 4,
-                    shape = RoundedCornerShape(AppTheme.CardCornerRadius),
-                    colors = ailaFieldColors()
-                )
-                Spacer(modifier = Modifier.width(AppTheme.Space8))
-
-                val canSend = draft.trim().isNotEmpty() && !isThinking
+                val fieldShape = RoundedCornerShape(24.dp)
                 Box(
                     modifier = Modifier
-                        .padding(bottom = 4.dp)
-                        .size(46.dp)
-                        .clip(CircleShape)
-                        .background(if (canSend) AppTheme.PrimaryBlue else AppTheme.TintSlate)
+                        .weight(1f)
                         .then(
-                            if (canSend) {
-                                Modifier.ailaPressable(pressedScale = 0.9f) {
-                                    val question = draft.trim()
-                                    draft = ""
-                                    onSend(question)
-                                }
-                            } else {
-                                Modifier
-                            }
-                        ),
-                    contentAlignment = Alignment.Center
+                            if (AppTheme.isGlass) Modifier.ailaGlassSurface(fieldShape)
+                            else Modifier.clip(fieldShape).background(AppTheme.TrackFill)
+                        )
                 ) {
-                    AppIcons.ChevronRight(
-                        modifier = Modifier.size(20.dp),
-                        color = if (canSend) Color.White else AppTheme.TextFaint
+                    OutlinedTextField(
+                        value = draft,
+                        onValueChange = { draft = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Chiedi qualsiasi cosa…", fontSize = 14.sp) },
+                        maxLines = 4,
+                        shape = fieldShape,
+                        // Il fondo lo da' il contenitore (vetro o pillola tonale): il campo e'
+                        // trasparente e senza contorno.
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedBorderColor = Color.Transparent,
+                            cursorColor = AppTheme.PrimaryBlue,
+                            focusedTextColor = AppTheme.TextDark,
+                            unfocusedTextColor = AppTheme.TextDark,
+                            focusedPlaceholderColor = AppTheme.TextFaint,
+                            unfocusedPlaceholderColor = AppTheme.TextFaint
+                        )
                     )
                 }
+                Spacer(modifier = Modifier.width(AppTheme.Space8))
+                SendButton(enabled = canSend, onClick = send)
             }
 
             Spacer(modifier = Modifier.height(6.dp))
@@ -238,7 +252,8 @@ fun AssistantChatScreen(
                 text = "Usa i dati di AILA per la scuola e le sue conoscenze per il resto. Può " +
                     "sbagliare: per le cose importanti apri la circolare.",
                 fontSize = 10.sp,
-                color = AppTheme.TextFaint
+                color = AppTheme.TextFaint,
+                modifier = Modifier.padding(horizontal = AppTheme.Space8)
             )
         }
     }
@@ -253,6 +268,47 @@ fun AssistantChatScreen(
             },
             onDelete = onDeleteConversation,
             onDismiss = { isHistoryOpen = false }
+        )
+    }
+}
+
+/**
+ * Fondo delle superfici della chat (fumetti dell'assistente, domande suggerite, riquadro del
+ * ragionamento): vetro in Liquid Glass, superficie tonale in Material. Prima erano superfici
+ * piene bianche (o grigio scuro), che in Glass sembravano un pezzo di un'altra app.
+ */
+private fun Modifier.chatSurface(shape: Shape): Modifier =
+    if (AppTheme.isGlass) ailaGlassSurface(shape) else clip(shape).background(AppTheme.CardSurface)
+
+/**
+ * Pulsante di invio. Glass: tondo blu con la freccia in su, come Messaggi di iOS; spento e' un
+ * tondo di vetro. Material: primario pieno, tondo che alla pressione si squadra, freccia a destra.
+ */
+@Composable
+private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val glass = AppTheme.isGlass
+    val shape = if (glass) CircleShape else ailaMorphShape(interactionSource)
+    Box(
+        modifier = Modifier
+            .padding(bottom = 4.dp)
+            .size(48.dp)
+            .then(
+                when {
+                    enabled -> Modifier.clip(shape).background(AppTheme.PrimaryBlue)
+                    glass -> Modifier.ailaGlassSurface(shape)
+                    else -> Modifier.clip(shape).background(AppTheme.TrackFill)
+                }
+            )
+            .clickable(interactionSource = interactionSource, indication = null, enabled = enabled) { onClick() }
+            .semantics { contentDescription = "Invia" },
+        contentAlignment = Alignment.Center
+    ) {
+        AppIcons.ArrowUp(
+            modifier = Modifier
+                .size(22.dp)
+                .graphicsLayer { rotationZ = if (glass) 0f else 90f },
+            color = if (enabled) Color.White else AppTheme.TextFaint
         )
     }
 }
@@ -312,7 +368,13 @@ private fun AssistantHistorySheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                            .background(AppTheme.TintSlate)
+                            // Sul foglio pieno il velo di vetro non si vedrebbe: Glass usa il
+                            // riempimento grigio dei gruppi di iOS, Material la superficie tonale.
+                            .background(
+                                if (AppTheme.isGlass) {
+                                    if (AppTheme.isDarkMode) Color(0xFF2C2C2E) else Color(0xFFF2F2F7)
+                                } else AppTheme.CardSurface
+                            )
                             .then(
                                 if (canOpen) {
                                     Modifier.ailaPressable(pressedScale = 0.98f) { onPick(conversation) }
@@ -408,8 +470,7 @@ private fun AssistantWelcome(onPick: (String) -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = AppTheme.Space8)
-                    .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                    .background(AppTheme.SurfaceWhite)
+                    .chatSurface(RoundedCornerShape(AppTheme.SmallElementRadius))
                     .ailaPressable(pressedScale = 0.98f) { onPick(question) }
                     .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space12)
                     .ailaAppear(index),
@@ -423,6 +484,10 @@ private fun AssistantWelcome(onPick: (String) -> Unit) {
     }
 }
 
+/** Angoli dei fumetti: tondi, con l'angolo verso chi parla appena accennato. */
+private val BubbleRadius = 20.dp
+private val BubbleTail get() = if (AppTheme.isGlass) 6.dp else 4.dp
+
 @Composable
 private fun UserBubble(text: String) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -431,16 +496,23 @@ private fun UserBubble(text: String) {
                 .widthIn(max = 300.dp)
                 .clip(
                     RoundedCornerShape(
-                        topStart = AppTheme.CardCornerRadius,
-                        topEnd = AppTheme.CardCornerRadius,
-                        bottomStart = AppTheme.CardCornerRadius,
-                        bottomEnd = 6.dp
+                        topStart = BubbleRadius,
+                        topEnd = BubbleRadius,
+                        bottomStart = BubbleRadius,
+                        bottomEnd = BubbleTail
                     )
                 )
-                .background(AppTheme.PrimaryBlue)
+                // Glass: blu pieno come i fumetti di Messaggi. Material: "primary container",
+                // tonale, come le chat di Android (il blu pieno e' riservato al pulsante di invio).
+                .background(if (AppTheme.isGlass) AppTheme.PrimaryBlue else AppTheme.TintBlue)
                 .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12)
         ) {
-            Text(text = text, fontSize = 14.sp, color = Color.White, lineHeight = 20.sp)
+            Text(
+                text = text,
+                fontSize = 14.sp,
+                color = if (AppTheme.isGlass) Color.White else AppTheme.TintBlueInk,
+                lineHeight = 20.sp
+            )
         }
     }
 }
@@ -492,15 +564,14 @@ private fun AssistantBubble(
         Column(modifier = Modifier.fillMaxWidth()) {
             Box(
                 modifier = Modifier
-                    .clip(
+                    .chatSurface(
                         RoundedCornerShape(
-                            topStart = 6.dp,
-                            topEnd = AppTheme.CardCornerRadius,
-                            bottomStart = AppTheme.CardCornerRadius,
-                            bottomEnd = AppTheme.CardCornerRadius
+                            topStart = BubbleTail,
+                            topEnd = BubbleRadius,
+                            bottomStart = BubbleRadius,
+                            bottomEnd = BubbleRadius
                         )
                     )
-                    .background(AppTheme.SurfaceWhite)
                     .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12)
             ) {
                 Text(
@@ -543,7 +614,7 @@ private fun AssistantErrorBubble(text: String) {
         Column(modifier = Modifier.weight(1f)) {
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(AppTheme.CardCornerRadius))
+                    .clip(RoundedCornerShape(BubbleRadius))
                     .background(AppTheme.TintRed)
                     .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12)
             ) {
