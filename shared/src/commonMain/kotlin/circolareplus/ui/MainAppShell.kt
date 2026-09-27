@@ -1957,6 +1957,9 @@ fun MainAppShell(
     // (aperta o chiusa su un elemento). Allora le tab restano ferme e piene sotto la forma che si
     // allarga, invece di svanire: e' la pagina a nascere dal pulsante, non la Home a sparire.
     val shellContainer = remember { arrayOf(false) }
+    // true quando la pagina aperta col container transform ha finito di allargarsi: solo allora
+    // le tab sotto smettono di essere disegnate (vedi il graphicsLayer dello Scaffold).
+    val shellRevealDone = remember { mutableStateOf(true) }
     if (previousShellRoute[0] != shellRoute) {
         val forward = shellRoute.depth > previousShellRoute[0].depth
         navForward[0] = forward
@@ -1969,6 +1972,7 @@ fun MainAppShell(
         if (forward && previousShellRoute[0] == ShellRoute.TABS || !forward && shellRoute == ShellRoute.TABS) {
             shellContainer[0] = !AppTheme.isGlass &&
                 largeOrigin(circolareplus.design.AilaContainerTransform.originOf(moving)) != null
+            if (forward && shellContainer[0]) shellRevealDone.value = false
         }
         previousShellRoute[0] = shellRoute
     }
@@ -2018,18 +2022,15 @@ fun MainAppShell(
     // Material: fondo pieno dietro alle tab, perche' in "fade through" le tab stesse svaniscono.
     // Liquid Glass: con un menu dal basso aperto l'app dietro si sfoca, cosi' il foglio di vetro
     // trasparente resta leggibile (vedi AilaBottomSheet).
-    // Letto solo nel livello grafico: l'animazione non ricompone la shell a ogni fotogramma.
-    val sheetBlur = androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (AppTheme.isGlass && circolareplus.design.AilaSheetBackdrop.openSheets > 0) 1f else 0f,
-        animationSpec = androidx.compose.animation.core.tween(durationMillis = 260),
-        label = "sheetBlur"
-    )
+    // Sfocatura accesa di colpo, non animata: animarla voleva dire ricalcolare a ogni fotogramma
+    // una sfocatura a tutto schermo mentre il foglio sale (poco reattivo). Il passaggio lo
+    // ammorbidisce il velo del foglio, che si dissolve da se'. Letta solo nel livello grafico.
     Box(
         modifier = Modifier
             .fillMaxSize()
             .then(if (AppTheme.isGlass) Modifier else Modifier.background(AppTheme.BackgroundLight))
             .graphicsLayer {
-                val radius = 20.dp.toPx() * sheetBlur.value
+                val radius = if (AppTheme.isGlass && circolareplus.design.AilaSheetBackdrop.openSheets > 0) 20.dp.toPx() else 0f
                 renderEffect = if (radius > 0.5f) {
                     androidx.compose.ui.graphics.BlurEffect(radius, radius, androidx.compose.ui.graphics.TileMode.Clamp)
                 } else null
@@ -2046,7 +2047,7 @@ fun MainAppShell(
                     // Tornando alle tab la Home ricompare subito, sotto la pagina ancora intera: si
                     // disegna durante l'attesa iniziale della chiusura, non nel primo fotogramma in cui
                     // la forma si stringe.
-                    alpha = if (shellProgress.value >= 1f && shellRoute != ShellRoute.TABS) 0f else 1f
+                    alpha = if (shellRevealDone.value && shellRoute != ShellRoute.TABS) 0f else 1f
                 } else if (!AppTheme.isGlass) {
                     // Material "fade through" anche per le tab: aprendo una schermata svaniscono,
                     // tornando (es. dalla lettura di una circolare) riemergono crescendo appena,
@@ -3070,6 +3071,24 @@ fun MainAppShell(
             // negli altri casi (es. resta sotto mentre se ne apre un'altra) resta intera.
             val revealing = route == circolareplus.design.AilaContainerTransform.lastForwardKey ||
                 shellRoute.depth < route.depth
+            // Apertura: parte solo dopo i primi due fotogrammi della pagina nuova. La prima volta
+            // che una schermata si apre, comporla e disegnarla richiede un fotogramma lungo; se la
+            // molla fosse gia' partita, la forma salterebbe avanti (il lag della prima apertura).
+            // Cosi' quel lavoro si fa con la forma ancora ferma sul pulsante.
+            val openProgress = remember {
+                androidx.compose.animation.core.Animatable(
+                    if (containerOrigin != null && transition.currentState == androidx.compose.animation.EnterExitState.PreEnter) 0f else 1f
+                )
+            }
+            LaunchedEffect(Unit) {
+                if (openProgress.value < 1f) {
+                    androidx.compose.runtime.withFrameNanos { }
+                    androidx.compose.runtime.withFrameNanos { }
+                    openProgress.animateTo(1f, circolareplus.design.ailaContainerFloatSpring())
+                    // Solo se la pagina e' ancora quella aperta (non si e' gia' tornati indietro).
+                    if (transition.targetState == androidx.compose.animation.EnterExitState.Visible) shellRevealDone.value = true
+                }
+            }
             // Liquid Glass, push alla iOS: posizione del contenuto in frazioni di larghezza
             // (0 = al suo posto, 1 = fuori a destra, -1/3 = scivolato sotto quella nuova). Lo
             // sfondo a macchie invece resta fermo e allineato a quello sotto: prima scorreva
@@ -3092,7 +3111,10 @@ fun MainAppShell(
                     .fillMaxSize()
                     .then(
                         if (containerOrigin != null) Modifier.ailaContainerReveal(
-                            progress = { if (revealing) containerProgress.value else 1f },
+                            // Il minimo dei due: aprendo comanda openProgress (in ritardo di due
+                            // fotogrammi), chiudendo la curva della transizione, senza salti se si
+                            // torna indietro a meta' apertura.
+                            progress = { if (revealing) minOf(openProgress.value, containerProgress.value) else 1f },
                             origin = containerOrigin,
                             containerColor = AppTheme.CardSurface,
                             pageColor = AppTheme.BackgroundLight
@@ -5382,11 +5404,11 @@ private fun FloatingTabBar(
                                         // Piu' trasparente: il contenuto sotto si vede sfocato
                                         // ma riconoscibile, come la tab bar di iOS 26.
                                         tint = dev.chrisbanes.haze.HazeTint(
-                                            if (AppTheme.isDarkMode) Color(0x01202430) else Color(0x01FFFFFF)
+                                            if (AppTheme.isDarkMode) Color(0x14202430) else Color(0x14FFFFFF)
                                         ),
                                         // Sfocatura leggera: a 32dp la barra sembrava opaca;
                                         // cosi' il contenuto sotto si riconosce, semitrasparente.
-                                        blurRadius = 12.dp,
+                                        blurRadius = 18.dp,
                                         noiseFactor = 0f
                                     )
                                 ) else Modifier.background(
