@@ -58,7 +58,10 @@ fun CalendarScreen(
     onAddEventClick: () -> Unit = {},
     onAddEventForDayClick: (String) -> Unit = {},
     onEventClick: (CalendarEvent) -> Unit = {},
-    onDeleteEventClick: (CalendarEvent) -> Unit = {}
+    onDeleteEventClick: (CalendarEvent) -> Unit = {},
+    /** Giorno da mostrare subito ("AAAA-MM-GG"), es. toccando un evento nella Home. */
+    focusDateIso: String? = null,
+    onFocusConsumed: () -> Unit = {}
 ) {
     val todayDate = remember { today() }
 
@@ -85,6 +88,14 @@ fun CalendarScreen(
     val daysCount = daysInMonth(visibleYear, visibleMonth)
     val leadingBlanks = firstWeekdayOfMonth(visibleYear, visibleMonth)
     val selectedEvents = eventsByDay[selectedDay].orEmpty()
+    // Arrivando da un evento della Home si apre il suo mese con quel giorno selezionato.
+    LaunchedEffect(focusDateIso) {
+        val focus = focusDateIso?.let { circolareplus.util.parseIsoDate(it) } ?: return@LaunchedEffect
+        visibleYear = focus.year
+        visibleMonth = focus.month
+        selectedDay = focus.day
+        onFocusConsumed()
+    }
     val selectedDateIso = remember(visibleYear, visibleMonth, selectedDay) {
         CivilDate(visibleYear, visibleMonth, selectedDay).toIso()
     }

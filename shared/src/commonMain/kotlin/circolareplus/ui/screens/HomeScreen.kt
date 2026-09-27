@@ -59,6 +59,8 @@ fun HomeScreen(
     onNavigateToBoard: () -> Unit = {},
     onNavigateToPolls: () -> Unit = {},
     onNavigateToCalendar: () -> Unit = {},
+    /** Evento toccato in "Prossimi eventi": apre il calendario su quel giorno. */
+    onEventClick: (CalendarEvent) -> Unit = { onNavigateToCalendar() },
     onNavigateToCirculars: () -> Unit = {},
     onNavigateToNotifications: () -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
@@ -123,6 +125,7 @@ fun HomeScreen(
             NextEventsCard(
                 nextEvents = nextEvents,
                 onNavigateToCalendar = onNavigateToCalendar,
+                onEventClick = onEventClick,
                 modifier = Modifier.ailaAppear(2)
             )
         }
@@ -190,6 +193,7 @@ private fun LatestCircularCard(
 private fun NextEventsCard(
     nextEvents: List<CalendarEvent>,
     onNavigateToCalendar: () -> Unit,
+    onEventClick: (CalendarEvent) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (nextEvents.isEmpty()) {
@@ -207,7 +211,7 @@ private fun NextEventsCard(
     } else {
         AilaCard(modifier = modifier) {
             nextEvents.forEachIndexed { index, event ->
-                EventRow(event = event, onClick = onNavigateToCalendar)
+                EventRow(event = event, onClick = { onEventClick(event) })
                 if (index != nextEvents.lastIndex) {
                     HorizontalDivider(
                         color = AppTheme.Hairline,
@@ -243,6 +247,9 @@ private fun HomeHeroPanel(
                     .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
                     .background(AppTheme.HeroGradient)
             )
+            // Il pannello passa sotto la barra di stato (ora, Wi-Fi): prima sopra restava una
+            // striscia del colore di fondo, staccata dal pannello.
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
             .padding(horizontal = AppTheme.Space20)
             .padding(top = AppTheme.Space24, bottom = AppTheme.Space24)
     ) {
