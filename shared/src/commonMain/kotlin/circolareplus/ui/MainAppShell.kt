@@ -4114,10 +4114,9 @@ private fun AddCalendarEventDialog(
         }
     }
 
-    ModalBottomSheet(
+    circolareplus.design.AilaBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = AppTheme.SurfaceWhite
+        sheetState = sheetState
     ) {
         Column(
             modifier = Modifier
@@ -4513,10 +4512,9 @@ private fun EventDetailDialog(
         }
     }
 
-    ModalBottomSheet(
+    circolareplus.design.AilaBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = AppTheme.SurfaceWhite
+        sheetState = sheetState
     ) {
         Column(
             modifier = Modifier
@@ -4780,10 +4778,9 @@ private fun CreatePollDialog(
         }
     }
 
-    ModalBottomSheet(
+    circolareplus.design.AilaBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = AppTheme.SurfaceWhite
+        sheetState = sheetState
     ) {
         Column(
             modifier = Modifier
@@ -4955,10 +4952,9 @@ private fun CreateRankingPollDialog(
     val canSubmit = !isSubmitting && question.isNotBlank() && filled.size >= 2 && !hasDuplicates &&
         audience?.isEmpty() != true
 
-    ModalBottomSheet(
+    circolareplus.design.AilaBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = AppTheme.SurfaceWhite
+        sheetState = sheetState
     ) {
         Column(
             modifier = Modifier
@@ -5063,10 +5059,9 @@ private fun AddProposalDialog(
     var description by remember { mutableStateOf("") }
     var isAnonymous by remember { mutableStateOf(false) }
 
-    ModalBottomSheet(
+    circolareplus.design.AilaBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = AppTheme.SurfaceWhite
+        sheetState = sheetState
     ) {
         Column(
             modifier = Modifier
