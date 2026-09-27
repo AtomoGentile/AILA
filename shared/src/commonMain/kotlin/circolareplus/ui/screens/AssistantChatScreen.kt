@@ -2,6 +2,7 @@ package circolareplus.ui.screens
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -79,6 +80,17 @@ fun AssistantChatScreen(
 
     // Ogni messaggio nuovo (e l'indicatore "sto pensando") porta la lista in fondo: in una chat
     // la riga che conta e' sempre l'ultima.
+    // Risposta appena arrivata: quando l'attesa finisce, l'ultimo messaggio dell'assistente entra
+    // con l'animazione (vedi AssistantBubble). Deciso qui, nella stessa composizione in cui sparisce
+    // l'indicatore, cosi' non c'e' un fotogramma col messaggio gia' fermo.
+    val wasThinking = remember { arrayOf(isThinking) }
+    val arrivalHolder = remember { arrayOf<String?>(null) }
+    if (wasThinking[0] && !isThinking) {
+        arrivalHolder[0] = messages.lastOrNull()
+            ?.takeIf { it.author != AssistantAuthor.USER && !it.isError }?.id
+    }
+    wasThinking[0] = isThinking
+
     LaunchedEffect(messages.size, isThinking) {
         // Il benvenuto occupa la lista solo quando non c'e' nient'altro, quindi quando c'e'
         // qualcosa da scorrere gli elementi sono esattamente i messaggi piu' l'indicatore.
@@ -128,7 +140,14 @@ fun AssistantChatScreen(
                 when {
                     message.author == AssistantAuthor.USER -> UserBubble(message.text)
                     message.isError -> AssistantErrorBubble(message.text)
-                    else -> AssistantBubble(message = message, onOpenSource = onOpenSource)
+                    else -> AssistantBubble(
+                        message = message,
+                        onOpenSource = onOpenSource,
+                        // La risposta appena arrivata "nasce" dall'indicatore di attesa: la
+                        // forma che cambia diventa l'icona di AILA Assistant e il messaggio compare.
+                        animateArrival = message.id == arrivalHolder[0],
+                        onArrived = { if (arrivalHolder[0] == message.id) arrivalHolder[0] = null }
+                    )
                 }
             }
 
@@ -425,11 +444,50 @@ private fun UserBubble(text: String) {
 }
 
 @Composable
-private fun AssistantBubble(message: AssistantMessage, onOpenSource: (AssistantSource) -> Unit) {
+private fun AssistantBubble(
+    message: AssistantMessage,
+    onOpenSource: (AssistantSource) -> Unit,
+    animateArrival: Boolean = false,
+    onArrived: () -> Unit = {}
+) {
+    // Arrivo: si parte dall'indicatore di attesa al posto dell'icona; subito dopo l'indicatore si
+    // trasforma nell'icona di AILA Assistant (rimpicciolendo e sfumando mentre l'icona cresce) e
+    // il fumetto con la risposta si apre sotto.
+    var revealed by remember(message.id) { mutableStateOf(!animateArrival) }
+    if (animateArrival) {
+        LaunchedEffect(message.id) {
+            delay(60)
+            revealed = true
+            onArrived()
+        }
+    }
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        AilaAssistantMark(size = 26.dp, modifier = Modifier.padding(top = 4.dp))
+        androidx.compose.animation.AnimatedContent(
+            targetState = revealed,
+            transitionSpec = {
+                (androidx.compose.animation.fadeIn(tween(220)) +
+                    androidx.compose.animation.scaleIn(circolareplus.design.ailaSpatialSpring(), initialScale = 0.4f)) togetherWith
+                    (androidx.compose.animation.fadeOut(tween(160)) +
+                        androidx.compose.animation.scaleOut(tween(200), targetScale = 1.4f))
+            },
+            label = "assistantArrivalIcon",
+            modifier = Modifier.padding(top = 4.dp).size(26.dp)
+        ) { shown ->
+            Box(modifier = Modifier.size(26.dp), contentAlignment = Alignment.Center) {
+                if (shown) AilaAssistantMark(size = 26.dp) else ThinkingIndicator(step = 0)
+            }
+        }
         Spacer(modifier = Modifier.width(AppTheme.Space8))
-        Column(modifier = Modifier.weight(1f)) {
+        androidx.compose.animation.AnimatedVisibility(
+            visible = revealed,
+            enter = androidx.compose.animation.fadeIn(tween(260, delayMillis = 90)) +
+                androidx.compose.animation.expandVertically(
+                    circolareplus.design.ailaSpatialSpring(),
+                    expandFrom = Alignment.Top
+                ),
+            modifier = Modifier.weight(1f)
+        ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Box(
                 modifier = Modifier
                     .clip(
@@ -467,6 +525,7 @@ private fun AssistantBubble(message: AssistantMessage, onOpenSource: (AssistantS
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(text = label, fontSize = 10.sp, color = AppTheme.TextFaint)
             }
+        }
         }
     }
 }
@@ -515,37 +574,41 @@ private fun ThinkingBubble() {
         }
     }
 
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        AilaAssistantMark(size = 26.dp)
+    // Solo l'indicatore (al posto dell'icona) e la scritta, senza fumetto: il fumetto compare con
+    // la risposta. Material: la forma che cambia; Glass: i tre puntini.
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+        Box(modifier = Modifier.size(26.dp), contentAlignment = Alignment.Center) {
+            ThinkingIndicator(step)
+        }
         Spacer(modifier = Modifier.width(AppTheme.Space8))
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(AppTheme.CardCornerRadius))
-                .background(AppTheme.SurfaceWhite)
-                .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Material Expressive: la forma che ruota e cambia sagoma (il loading indicator di
-            // M3E). Liquid Glass: i tre puntini, come i messaggi in arrivo di iOS.
-            if (!AppTheme.isGlass) {
-                circolareplus.design.AilaMorphingLoader(size = 22.dp)
-            } else repeat(3) { index ->
-                val alpha by animateFloatAsState(
-                    targetValue = if (index == step) 1f else 0.25f,
-                    animationSpec = tween(400),
-                    label = "assistantDot$index"
-                )
-                Box(
-                    modifier = Modifier
-                        .padding(end = if (index < 2) 5.dp else 0.dp)
-                        .size(7.dp)
-                        .alpha(alpha)
-                        .clip(CircleShape)
-                        .background(AppTheme.PrimaryBlue)
-                )
-            }
-            Spacer(modifier = Modifier.width(AppTheme.Space12))
-            Text(text = "Sto cercando in AILA…", fontSize = 12.sp, color = AppTheme.TextMuted)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(text = "Sto cercando in AILA…", fontSize = 13.sp, color = AppTheme.TextMuted)
+        }
+    }
+}
+
+/** Indicatore di attesa: forma che cambia (Material) o tre puntini che respirano (Glass). */
+@Composable
+private fun ThinkingIndicator(step: Int) {
+    if (!AppTheme.isGlass) {
+        circolareplus.design.AilaMorphingLoader(size = 24.dp)
+        return
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        repeat(3) { index ->
+            val alpha by animateFloatAsState(
+                targetValue = if (index == step) 1f else 0.25f,
+                animationSpec = tween(400),
+                label = "assistantDot$index"
+            )
+            Box(
+                modifier = Modifier
+                    .padding(end = if (index < 2) 3.dp else 0.dp)
+                    .size(6.dp)
+                    .alpha(alpha)
+                    .clip(CircleShape)
+                    .background(AppTheme.PrimaryBlue)
+            )
         }
     }
 }
