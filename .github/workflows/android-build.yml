@@ -3,7 +3,8 @@ name: Android Build
 # Compila il codice Kotlin di :shared e :androidApp per Android. Nessun test a schermo: serve a
 # scoprire subito un errore di compilazione, dato che non tutti gli ambienti di sviluppo
 # riescono a scaricare le dipendenze da Google Maven.
-# Produce anche AILA.apk (debug) come artifact, e lo allega alla release sui tag v*.
+# Produce anche AILA.apk (release firmato con la chiave debug) come artifact, e lo allega alla
+# release sui tag v*.
 
 on:
   push:
@@ -94,10 +95,12 @@ jobs:
             echo "::warning::Secret ANDROID_DEBUG_KEYSTORE assente: chiave di firma diversa a ogni build"
           fi
 
-      - name: Build APK (debug)
+      # Release (non debuggabile) firmato con la chiave debug qui sopra: stessa firma delle build
+      # di prima, si aggiorna sopra l'app installata, ma gira molto piu' fluido del debug.
+      - name: Build APK (release firmato con chiave debug)
         run: |
-          ./gradlew --no-daemon :androidApp:assembleDebug
-          cp androidApp/build/outputs/apk/debug/androidApp-debug.apk AILA.apk
+          ./gradlew --no-daemon :androidApp:assembleRelease
+          cp androidApp/build/outputs/apk/release/androidApp-release.apk AILA.apk
           ls -lh AILA.apk
 
       - name: Upload APK artifact
