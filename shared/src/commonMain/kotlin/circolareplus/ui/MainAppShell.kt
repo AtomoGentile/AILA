@@ -18,6 +18,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
@@ -1882,96 +1887,11 @@ fun MainAppShell(
             // Lo "sblocco" di iOS: all'ingresso nell'app tutto arriva un po' ingrandito e si
             // posa con un piccolo rimbalzo (una volta sola per avvio).
             .iosUnlock(),
+        // Lo spazio attorno alla pillola della barra ha lo stesso fondo delle schermate.
+        containerColor = AppTheme.BackgroundLight,
         bottomBar = {
             // Sempre presente: le schermate "sopra" le scorrono sopra e la coprono (vedi shellRoute).
-            run {
-                NavigationBar(
-                    containerColor = AppTheme.SurfaceWhite,
-                    tonalElevation = 0.dp
-                ) {
-                    // Stesso aspetto di sempre (stesse icone/etichette, stessa altezza), ma non
-                    // sono più NavigationBarItem: quelli portano il proprio ripple grigio di
-                    // Material e la propria animazione dell'indicatore, che scattava PRIMA e
-                    // indipendentemente dalla nostra pillola condivisa — risultato: un lampo grigio
-                    // al tocco, poi un vuoto, e solo dopo la pillola iniziava a scivolare. Con una
-                    // colonna scritta a mano e `indication = null` il tocco muove la pillola subito,
-                    // senza il doppio effetto.
-                    // Stessa larghezza massima del contenuto: su tablet e iPad le cinque voci non
-                    // restano sparse ai bordi di uno schermo largo.
-                    BoxWithConstraints(modifier = Modifier.appContentWidth().height(80.dp)) {
-                        val tabs = MainTab.entries
-                        val segmentWidth = maxWidth / tabs.size
-                        val selectedTabIndex = tabs.indexOf(selectedTab).coerceAtLeast(0)
-                        // State letto nel lambda di offset (fase di layout): prima l'offset
-                        // animato si leggeva in composizione e tutta la barra si ricomponeva a
-                        // ogni fotogramma del cambio tab.
-                        val indicatorOffset = androidx.compose.animation.core.animateDpAsState(
-                            targetValue = segmentWidth * selectedTabIndex,
-                            // Molla con un filo di rimbalzo: la pillola arriva, supera appena la
-                            // voce e ci torna, come l'indicatore delle tab bar di iOS.
-                            animationSpec = iosBouncySpring(),
-                            label = "bottomNavIndicatorX"
-                        )
-                        val pillWidth = 64.dp
-                        Box(
-                            modifier = Modifier
-                                .offset {
-                                    androidx.compose.ui.unit.IntOffset(
-                                        (indicatorOffset.value + (segmentWidth - pillWidth) / 2).roundToPx(),
-                                        12.dp.roundToPx()
-                                    )
-                                }
-                                .width(pillWidth)
-                                .height(32.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(AppTheme.TintBlue)
-                        )
-
-                        Row(modifier = Modifier.fillMaxSize()) {
-                            tabs.forEach { tab ->
-                                val isSelected = selectedTab == tab
-                                val iconColor = if (isSelected) AppTheme.PrimaryBlue else AppTheme.TextFaint
-
-                                Column(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight()
-                                        .clickable(
-                                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                                            indication = null
-                                        ) { selectedTab = tab },
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    // L'icona toccata fa un piccolo "pop" elastico quando diventa attiva.
-                                    val iconModifier = Modifier.size(24.dp).iosSelectionPop(isSelected)
-                                    when (tab) {
-                                        MainTab.HOME -> AppIcons.Home(modifier = iconModifier, color = iconColor)
-                                        MainTab.CALENDAR -> AppIcons.Calendar(modifier = iconModifier, color = iconColor)
-                                        MainTab.CLASS -> AppIcons.Document(modifier = iconModifier, color = iconColor)
-                                        MainTab.SEATMAP -> AppIcons.Chair(modifier = iconModifier, color = iconColor)
-                                        MainTab.MORE -> AppIcons.Profile(modifier = iconModifier, color = iconColor)
-                                    }
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    // Una riga sola: "Mappa posti" andava a capo su due righe e
-                                    // sballava l'altezza della barra rispetto alle altre voci.
-                                    // Ellissi: su un telefono stretto (64dp per voce a 320dp) col
-                                    // testo di sistema ingrandito l'etichetta veniva tagliata a meta'.
-                                    Text(
-                                        text = tab.title,
-                                        fontSize = 10.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                        color = iconColor,
-                                        maxLines = 1,
-                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                        modifier = Modifier.padding(horizontal = 2.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            FloatingTabBar(selectedTab = selectedTab, onSelect = { selectedTab = it })
         }
     ) { innerPadding ->
         Surface(
@@ -4983,4 +4903,115 @@ private enum class ShellRoute(val depth: Int) {
     NOTIFICATIONS(1),
     SEATMAP_PROPOSALS(1),
     SEATMAP_EDITOR(2)
+}
+
+
+/**
+ * Barra delle tab "flottante": una pillola staccata dai bordi, con ombra morbida, al posto della
+ * barra fissa a tutta larghezza. Le voci non selezionate mostrano solo l'icona; quella attiva si
+ * allarga in una pillola blu con icona e nome. Cambiando tab la pillola si sposta con una molla
+ * leggermente elastica: la voce nuova si allarga e mostra il nome, la vecchia si richiude.
+ *
+ * Solo icone per le voci spente perche' cinque etichette in una pillola stretta andavano
+ * accorciate ("Calend.", "Mappa"); il nome della sezione in cui ci si trova resta sempre scritto.
+ */
+@Composable
+private fun FloatingTabBar(selectedTab: MainTab, onSelect: (MainTab) -> Unit) {
+    val shape = RoundedCornerShape(32.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = AppTheme.Space16, vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            modifier = Modifier
+                // Su tablet e iPad la pillola non si allunga per tutto lo schermo.
+                .widthIn(max = 520.dp)
+                .fillMaxWidth()
+                .height(64.dp)
+                .shadow(elevation = 16.dp, shape = shape, ambientColor = Color(0x331B2E7A), spotColor = Color(0x401B2E7A))
+                .clip(shape)
+                .background(AppTheme.SurfaceWhite)
+                .border(1.dp, AppTheme.Hairline, shape)
+                .padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            MainTab.entries.forEach { tab ->
+                FloatingTabItem(
+                    tab = tab,
+                    selected = tab == selectedTab,
+                    onClick = { onSelect(tab) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RowScope.FloatingTabItem(tab: MainTab, selected: Boolean, onClick: () -> Unit) {
+    // Un solo valore guida larghezza e fondo della voce: 0 spenta, 1 attiva. Con la molla
+    // elastica supera appena 1 e ci torna, da qui il piccolo "rimbalzo" della pillola.
+    val progress by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (selected) 1f else 0f,
+        animationSpec = iosBouncySpring(),
+        label = "tabItemProgress"
+    )
+    val iconColor by androidx.compose.animation.animateColorAsState(
+        targetValue = if (selected) AppTheme.PrimaryBlue else AppTheme.TextFaint,
+        animationSpec = androidx.compose.animation.core.tween(200),
+        label = "tabItemIcon"
+    )
+    val tint = AppTheme.TintBlue
+    Row(
+        modifier = Modifier
+            .weight(1f + 1.8f * progress.coerceAtLeast(0f))
+            .fillMaxHeight()
+            .clip(RoundedCornerShape(24.dp))
+            .drawBehind { drawRect(tint, alpha = progress.coerceIn(0f, 1f)) }
+            .clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .semantics {
+                contentDescription = tab.title
+                role = Role.Tab
+                this.selected = selected
+            }
+            .padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // L'icona toccata fa un piccolo "pop" elastico quando diventa attiva.
+        val iconModifier = Modifier.size(22.dp).iosSelectionPop(selected)
+        when (tab) {
+            MainTab.HOME -> AppIcons.Home(modifier = iconModifier, color = iconColor)
+            MainTab.CALENDAR -> AppIcons.Calendar(modifier = iconModifier, color = iconColor)
+            MainTab.CLASS -> AppIcons.Document(modifier = iconModifier, color = iconColor)
+            MainTab.SEATMAP -> AppIcons.Chair(modifier = iconModifier, color = iconColor)
+            MainTab.MORE -> AppIcons.Profile(modifier = iconModifier, color = iconColor)
+        }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = selected,
+            enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(180, delayMillis = 60)) +
+                androidx.compose.animation.expandHorizontally(iosBouncySpring()),
+            exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(90)) +
+                androidx.compose.animation.shrinkHorizontally(androidx.compose.animation.core.tween(160))
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = tab.title,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AppTheme.PrimaryBlue,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
 }
