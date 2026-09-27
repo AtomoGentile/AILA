@@ -1,5 +1,9 @@
 package circolareplus.ui.screens
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -2873,7 +2877,25 @@ fun MainAppShell(
                             selectedTab = MainTab.HOME
                         }
                     }
-                    when (selectedTab) {
+                    // Transizione fra le tab: la nuova schermata entra scivolando di poco dal lato
+                    // della tab toccata (destra se e' piu' a destra nella barra, sinistra altrimenti)
+                    // mentre la vecchia sfuma via. Prima il cambio era uno stacco secco e il movimento
+                    // lo dava solo la cascata degli elementi, che ora si vede solo la prima volta.
+                    androidx.compose.animation.AnimatedContent(
+                        targetState = selectedTab,
+                        transitionSpec = {
+                            val dir = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                            (androidx.compose.animation.fadeIn(tween(durationMillis = 220, delayMillis = 50)) +
+                                androidx.compose.animation.slideInHorizontally(
+                                    spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMediumLow)
+                                ) { width -> dir * width / 10 }) togetherWith
+                                (androidx.compose.animation.fadeOut(tween(durationMillis = 110)) +
+                                    androidx.compose.animation.slideOutHorizontally(tween(durationMillis = 180)) { width -> -dir * width / 16 })
+                        },
+                        label = "mainTab",
+                        modifier = Modifier.fillMaxSize()
+                    ) { tab ->
+                    when (tab) {
                         MainTab.HOME -> {
                             HomeScreen(
                                 studentFirstName = user.firstName,
@@ -3303,6 +3325,7 @@ fun MainAppShell(
                                 }
                             )
                         }
+                    }
                     }
                 }
             }

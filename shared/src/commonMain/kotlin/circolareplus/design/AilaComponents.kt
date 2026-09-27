@@ -84,8 +84,7 @@ fun AilaBrandMark(size: Dp = 26.dp, modifier: Modifier = Modifier) {
  * e il titolo sotto: tre righe per dire una cosa, e il logo si perdeva. Ora il logo fa da
  * "avatar" della schermata e il titolo gli sta accanto, in un'unica fascia più compatta.
  *
- * Entra con una breve dissolvenza + scivolamento del titolo, così cambiare tab non è uno stacco
- * secco (i valori si leggono nel graphicsLayer: nessuna ricomposizione per fotogramma).
+ * Nessuna animazione propria: il movimento al cambio di tab lo da' la transizione in MainAppShell.
  */
 @Composable
 fun AilaScreenHeader(
@@ -95,24 +94,6 @@ fun AilaScreenHeader(
     showBrand: Boolean = true,
     action: (@Composable () -> Unit)? = null
 ) {
-    var entered by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { entered = true }
-    val textAlpha = animateFloatAsState(
-        targetValue = if (entered) 1f else 0f,
-        animationSpec = tween(durationMillis = 260),
-        label = "headerTextAlpha"
-    )
-    val textShift = animateFloatAsState(
-        targetValue = if (entered) 0f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
-        label = "headerTextShift"
-    )
-    val logoScale = animateFloatAsState(
-        targetValue = if (entered) 1f else 0.82f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
-        label = "headerLogoScale"
-    )
-
     Column(modifier = modifier.fillMaxWidth().background(AppTheme.SurfaceWhite)) {
         Row(
             modifier = Modifier
@@ -126,23 +107,10 @@ fun AilaScreenHeader(
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (showBrand) {
-                AilaBrandMark(
-                    size = 48.dp,
-                    modifier = Modifier.graphicsLayer {
-                        scaleX = logoScale.value
-                        scaleY = logoScale.value
-                    }
-                )
+                AilaBrandMark(size = 48.dp)
                 Spacer(modifier = Modifier.width(AppTheme.Space12))
             }
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .graphicsLayer {
-                        alpha = textAlpha.value
-                        translationX = textShift.value * 12.dp.toPx()
-                    }
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
                     fontSize = 22.sp,
