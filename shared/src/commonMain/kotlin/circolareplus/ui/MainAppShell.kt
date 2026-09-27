@@ -1637,8 +1637,11 @@ fun MainAppShell(
 
     // Espande/carica i risultati (assegnazioni) di un sondaggio dello storico: li calcola al volo
     // con l'algoritmo già esistente (`assignments/run`) invece di richiedere un passaggio separato.
+    // Scaricati appena si apre la tab Sondaggi, non solo passando a "Ordinamento": prima il primo
+    // passaggio mostrava la rotellina finche' la lista non arrivava (il "micro periodo di attesa").
+    // Tornando su "Ordinamento" si ricarica in silenzio, con i dati gia' a schermo.
     LaunchedEffect(isInPollsScreen, pollsSection, rankingRefreshTrigger) {
-        if (isInPollsScreen && pollsSection == 1) {
+        if (isInPollsScreen) {
             // Lo spinner solo alla prima lettura: dopo un invio o una chiusura si ricarica in
             // silenzio, senza far sparire le card sotto il dito.
             isRankingLoading = rankingPolls.isEmpty()
