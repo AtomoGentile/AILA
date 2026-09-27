@@ -354,12 +354,12 @@ private fun AskAilaButton(query: String, onClick: () -> Unit) {
             modifier = Modifier
                 .size(38.dp)
                 .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                .background(AppTheme.OnHeroSurface),
+                .background(Color(0x2EFFFFFF)),
             contentAlignment = Alignment.Center
         ) {
             AilaAssistantMark(
                 size = 22.dp,
-                brush = SolidColor(AppTheme.OnHeroPrimary)
+                brush = SolidColor(Color.White)
             )
         }
         Spacer(modifier = Modifier.width(AppTheme.Space12))
@@ -368,7 +368,7 @@ private fun AskAilaButton(query: String, onClick: () -> Unit) {
                 text = if (hasQuery) "Chiedi ad AILA Assistant: «$query»" else "Chiedi ad AILA Assistant",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                color = AppTheme.OnHeroPrimary,
+                color = Color.White,
                 maxLines = 1
             )
             Text(
@@ -378,12 +378,12 @@ private fun AskAilaButton(query: String, onClick: () -> Unit) {
                     "Circolari, calendario, bacheca e altro"
                 },
                 fontSize = 11.sp,
-                color = AppTheme.OnHeroSecondary,
+                color = Color(0xCCFFFFFF),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
         Spacer(modifier = Modifier.width(AppTheme.Space8))
-        AppIcons.ChevronRight(modifier = Modifier.size(17.dp), color = AppTheme.OnHeroPrimary)
+        AppIcons.ChevronRight(modifier = Modifier.size(17.dp), color = Color.White)
     }
 }

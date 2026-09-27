@@ -318,7 +318,14 @@ private fun EventRow(event: CalendarEvent, onClick: () -> Unit) {
                 modifier = Modifier.offset(y = if (AppTheme.isGlass) 0.dp else 3.dp)
             ) {
                 Text(text = day, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = AppTheme.TintBlueInk)
-                Text(text = month, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = AppTheme.TintBlueInk)
+                // Material: il mese sale un poco (verso il giorno), il giorno resta dov'e'.
+                Text(
+                    text = month,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AppTheme.TintBlueInk,
+                    modifier = Modifier.offset(y = if (AppTheme.isGlass) 0.dp else (-3).dp)
+                )
             }
         }
         Spacer(modifier = Modifier.width(AppTheme.Space12))
@@ -374,7 +381,7 @@ private val heroTileFill: Brush
 
 /** Material: riempimento tonale dei pulsanti sul pannello, un tono piu' scuro del pannello. */
 private val heroTonalFill: Color
-    get() = if (AppTheme.isDarkMode) Color(0xFF14245A) else Color(0xFF1C3C9A)
+    get() = AppTheme.AccentDeep
 
 /** Tasto quadrato translucido nel pannello a gradiente (ricerca, notifiche). */
 @Composable

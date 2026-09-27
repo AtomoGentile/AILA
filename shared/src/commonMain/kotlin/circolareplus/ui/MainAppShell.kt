@@ -23,6 +23,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.layout.layout
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import androidx.compose.ui.draw.clip
@@ -64,6 +65,7 @@ import circolareplus.design.ailaContainerReveal
 import circolareplus.design.ailaGlassBackdrop
 import circolareplus.design.GlassBase
 import circolareplus.design.GlassEdge
+import circolareplus.design.ailaGlassSurface
 import androidx.compose.animation.core.animateFloat
 import circolareplus.design.ailaSelectionPop
 import circolareplus.design.ailaUnlock
@@ -2904,6 +2906,11 @@ fun MainAppShell(
                             AppTheme.uiStyle = style
                             AppContainer.settings.uiStyleKey = style.key
                         },
+                        accent = AppTheme.accent,
+                        onAccentChange = { accent ->
+                            AppTheme.accent = accent
+                            AppContainer.settings.accentKey = accent.key
+                        },
                         isNotificationKindEnabled = { kind ->
                             AppContainer.settings.isNotificationKindEnabled(kind.key)
                         },
@@ -4439,7 +4446,12 @@ private fun EventCreationOptionCard(
         modifier = modifier
             .clip(RoundedCornerShape(AppTheme.CardCornerRadius))
             .then(
-                if (highlighted) Modifier.background(AppTheme.PrimaryGradient)
+                // Glass: niente blocco colorato, vetro con una velatura blu appena accennata.
+                if (AppTheme.isGlass) Modifier.ailaGlassSurface(
+                    RoundedCornerShape(AppTheme.CardCornerRadius),
+                    tint = if (highlighted) AppTheme.PrimaryBlue.copy(alpha = 0.12f) else null
+                )
+                else if (highlighted) Modifier.background(AppTheme.PrimaryGradient)
                 else Modifier
                     .background(AppTheme.SurfaceWhite)
                     .border(1.dp, AppTheme.FieldOutline, RoundedCornerShape(AppTheme.CardCornerRadius))
@@ -4454,20 +4466,20 @@ private fun EventCreationOptionCard(
                 .background(if (highlighted) Color.White.copy(alpha = 0.2f) else AppTheme.TintViolet),
             contentAlignment = Alignment.Center
         ) {
-            icon(if (highlighted) Color.White else AppTheme.TintVioletInk)
+            icon(if (highlighted && !AppTheme.isGlass) Color.White else if (highlighted) AppTheme.PrimaryBlue else AppTheme.TintVioletInk)
         }
         Spacer(modifier = Modifier.height(AppTheme.Space12))
         Text(
             text = title,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
-            color = if (highlighted) Color.White else AppTheme.TextDark
+            color = if (highlighted && !AppTheme.isGlass) Color.White else AppTheme.TextDark
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = subtitle,
             fontSize = 11.sp,
-            color = if (highlighted) AppTheme.OnHeroSecondary else AppTheme.TextMuted,
+            color = if (highlighted && !AppTheme.isGlass) AppTheme.OnHeroSecondary else AppTheme.TextMuted,
             lineHeight = 14.sp
         )
     }
@@ -5121,12 +5133,16 @@ private fun FloatingTabBar(
                 .padding(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            MainTab.entries.forEach { tab ->
-                FloatingTabItem(
-                    tab = tab,
-                    selected = tab == selectedTab,
-                    onClick = { onSelect(tab) }
-                )
+            if (AppTheme.isGlass) {
+                GlassTabBarContent(selectedTab = selectedTab, onSelect = onSelect)
+            } else {
+                MainTab.entries.forEach { tab ->
+                    FloatingTabItem(
+                        tab = tab,
+                        selected = tab == selectedTab,
+                        onClick = { onSelect(tab) }
+                    )
+                }
             }
         }
     }
@@ -5152,7 +5168,8 @@ private fun RowScope.FloatingTabItem(tab: MainTab, selected: Boolean, onClick: (
     val tint = if (AppTheme.isGlass) {
         if (AppTheme.isDarkMode) Color(0x33FFFFFF) else Color(0x1A767680)
     } else {
-        if (AppTheme.isDarkMode) Color(0xFF34457A) else Color(0xFFD9E2FF)
+        if (AppTheme.accent != circolareplus.design.AilaAccent.BLUE) AppTheme.AccentContainer
+        else if (AppTheme.isDarkMode) Color(0xFF34457A) else Color(0xFFD9E2FF)
     }
     Row(
         modifier = Modifier
@@ -5201,6 +5218,99 @@ private fun RowScope.FloatingTabItem(tab: MainTab, selected: Boolean, onClick: (
                     softWrap = false,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
+            }
+        }
+    }
+}
+
+
+/**
+ * Barra delle tab in Liquid Glass, come iOS 26: cinque voci uguali con icona e nome sotto, e una
+ * "lente" di vetro dietro la voce attiva. Cambiando tab la lente si stira come una goccia fra le
+ * due voci (il bordo davanti arriva prima, quello dietro lo segue) e si ricompatta, senza i
+ * rimbalzi elastici di Material.
+ */
+@Composable
+private fun RowScope.GlassTabBarContent(selectedTab: MainTab, onSelect: (MainTab) -> Unit) {
+    val tabs = MainTab.entries
+    BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxHeight()) {
+        val itemWidth = maxWidth / tabs.size
+        val index = tabs.indexOf(selectedTab)
+        val movingRight = remember { arrayOf(true) }
+        val lastIndex = remember { arrayOf(index) }
+        if (lastIndex[0] != index) {
+            movingRight[0] = index > lastIndex[0]
+            lastIndex[0] = index
+        }
+        val fast = androidx.compose.animation.core.spring<androidx.compose.ui.unit.Dp>(dampingRatio = 1f, stiffness = 700f)
+        val slow = androidx.compose.animation.core.spring<androidx.compose.ui.unit.Dp>(dampingRatio = 1f, stiffness = 260f)
+        val left = androidx.compose.animation.core.animateDpAsState(
+            targetValue = itemWidth * index,
+            animationSpec = if (movingRight[0]) slow else fast,
+            label = "glassLensLeft"
+        )
+        val right = androidx.compose.animation.core.animateDpAsState(
+            targetValue = itemWidth * (index + 1),
+            animationSpec = if (movingRight[0]) fast else slow,
+            label = "glassLensRight"
+        )
+        // La lente: vetro un po' piu' chiaro della barra, col suo bordo speculare.
+        Box(
+            modifier = Modifier
+                .offset { androidx.compose.ui.unit.IntOffset(left.value.roundToPx(), 0) }
+                .layout { measurable, constraints ->
+                    val w = (right.value - left.value).roundToPx().coerceAtLeast(0)
+                    val placeable = measurable.measure(
+                        androidx.compose.ui.unit.Constraints.fixed(w, constraints.maxHeight)
+                    )
+                    layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                }
+                .ailaGlassSurface(
+                    RoundedCornerShape(percent = 50),
+                    tint = if (AppTheme.isDarkMode) Color(0x1FFFFFFF) else Color(0x59FFFFFF)
+                )
+        )
+        Row(modifier = Modifier.fillMaxSize()) {
+            tabs.forEach { tab ->
+                val selected = tab == selectedTab
+                val ink by androidx.compose.animation.animateColorAsState(
+                    targetValue = if (selected) AppTheme.PrimaryBlue else AppTheme.TextDark.copy(alpha = 0.75f),
+                    animationSpec = androidx.compose.animation.core.tween(180),
+                    label = "glassTabInk"
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null
+                        ) { onSelect(tab) }
+                        .semantics {
+                            contentDescription = tab.title
+                            role = Role.Tab
+                            this.selected = selected
+                        },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    val iconModifier = Modifier.size(22.dp)
+                    when (tab) {
+                        MainTab.HOME -> AppIcons.Home(modifier = iconModifier, color = ink)
+                        MainTab.CALENDAR -> AppIcons.Calendar(modifier = iconModifier, color = ink)
+                        MainTab.CLASS -> AppIcons.Document(modifier = iconModifier, color = ink)
+                        MainTab.SEATMAP -> AppIcons.Chair(modifier = iconModifier, color = ink)
+                        MainTab.POLLS -> AppIcons.Poll(modifier = iconModifier, color = ink)
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = if (tab == MainTab.SEATMAP) "Posti" else tab.title,
+                        fontSize = 10.sp,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                        color = ink,
+                        maxLines = 1
+                    )
+                }
             }
         }
     }
