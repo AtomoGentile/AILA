@@ -61,14 +61,22 @@ class AssistantAgendaTest {
         assertEquals(
             listOf(
                 "• giovedì 8 ottobre — Adesione progetti (pagamento)",
-                "• venerdì 9 ottobre, ore 14:00 — Buono libri: termine domanda · circolare n. 41",
-                "• martedì 20 ottobre — Scadenza pagamento erogazione liberale (classi prime) (pagamento) · circolare n. 40"
+                "• venerdì 9 ottobre, ore 14:00 — Buono libri: termine domanda · circolare n. 41"
             ),
             lines
         )
+        // Il 20 ottobre e' oltre i 15 giorni di "in arrivo".
+        assertFalse(reply.text.contains("erogazione"))
         assertFalse(reply.text.contains("Vacanze"))
         assertFalse(reply.text.contains("Assemblee"))
         assertTrue(reply.sources.any { it.circularNumber == 41 })
+    }
+
+    @Test
+    fun seNeiQuindiciGiorniNonCeNienteMostraLeProssime() {
+        val reply = assertNotNull(AssistantAgenda.answer(knowledge.copy(todayIso = "2026-09-01"), "Ci sono pagamenti in arrivo?"))
+        assertTrue(reply.text.startsWith("Non trovo pagamenti nei prossimi 15 giorni. Le prossime:"))
+        assertTrue(reply.text.contains("giovedì 8 ottobre — Adesione progetti"))
     }
 
     @Test
