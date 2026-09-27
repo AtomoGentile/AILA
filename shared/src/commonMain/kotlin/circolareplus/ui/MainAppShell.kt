@@ -28,6 +28,7 @@ import dev.chrisbanes.haze.hazeEffect
 import circolareplus.design.ailaGlassBackdrop
 import dev.chrisbanes.haze.hazeSource
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -120,8 +121,8 @@ enum class MainTab(val title: String) {
     CALENDAR("Calendario"),
     CLASS("Classe"),
     HOME("Home"),
-    SEATMAP("Mappa posti"),
-    POLLS("Sondaggi")
+    POLLS("Sondaggi"),
+    SEATMAP("Mappa posti")
 }
 
 /** Sotto-sezione mostrata dentro la tab "Classe" (Circolari e Bacheca condividono la stessa tab). */
@@ -1955,6 +1956,10 @@ fun MainAppShell(
         }
         previousShellRoute[0] = shellRoute
     }
+    // Posizione delle pagine mentre le si trascina col dito (es. 2.4 = fra la terza e la quarta),
+    // null quando non si trascina. La barra in basso la segue fotogramma per fotogramma; si legge
+    // solo dentro la barra, cosi' lo scorrimento non ricompone tutta la shell.
+    val tabBarDrag = remember { mutableStateOf<Float?>(null) }
     val shellProgress = androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (shellRoute != ShellRoute.TABS) 1f else 0f,
         // In container transform la stessa molla della forma: le tab spariscono sotto solo quando
@@ -2131,6 +2136,19 @@ fun MainAppShell(
                                 val tab = MainTab.entries[page]
                                 if (selectedTab != tab) selectedTab = tab
                             }
+                    }
+                    // Pagine -> barra, continuo: mentre si trascina (e mentre la pagina si posa
+                    // dopo il rilascio) la barra non sceglie una voce a meta' strada ma segue la
+                    // posizione esatta delle pagine, cosi' fermandosi a meta' non va avanti e
+                    // indietro. Il cambio da tocco (con la dissolvenza) resta alla molla.
+                    LaunchedEffect(tabPager) {
+                        androidx.compose.runtime.snapshotFlow {
+                            val following = tabPager.isScrollInProgress && tabFade.value >= 1f
+                            if (following) {
+                                (tabPager.currentPage + tabPager.currentPageOffsetFraction)
+                                    .coerceIn(0f, (MainTab.entries.size - 1).toFloat())
+                            } else null
+                        }.collect { tabBarDrag.value = it }
                     }
                     LaunchedEffect(tabPager) {
                         androidx.compose.runtime.snapshotFlow { tabPager.settledPage }.collect { page ->
@@ -2957,7 +2975,12 @@ fun MainAppShell(
                     enter = androidx.compose.animation.slideInVertically { it } + androidx.compose.animation.fadeIn(),
                     exit = androidx.compose.animation.slideOutVertically { it } + androidx.compose.animation.fadeOut()
                 ) {
-                    FloatingTabBar(selectedTab = selectedTab, onSelect = { selectedTab = it }, hazeState = hazeState)
+                    FloatingTabBar(
+                        selectedTab = selectedTab,
+                        onSelect = { selectedTab = it },
+                        dragPosition = tabBarDrag,
+                        hazeState = hazeState
+                    )
                 }
                 }
             }
@@ -5282,6 +5305,8 @@ private enum class ShellRoute(val depth: Int) {
 private fun FloatingTabBar(
     selectedTab: MainTab,
     onSelect: (MainTab) -> Unit,
+    /** Posizione delle pagine mentre si trascina (vedi tabBarDrag), null altrimenti. */
+    dragPosition: androidx.compose.runtime.State<Float?>,
     hazeState: dev.chrisbanes.haze.HazeState? = null
 ) {
     val shape = RoundedCornerShape(32.dp)
@@ -5340,12 +5365,16 @@ private fun FloatingTabBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (AppTheme.isGlass) {
-                GlassTabBarContent(selectedTab = selectedTab, onSelect = onSelect)
+                GlassTabBarContent(selectedTab = selectedTab, onSelect = onSelect, dragPosition = dragPosition.value)
             } else {
-                MainTab.entries.forEach { tab ->
+                val drag = dragPosition.value
+                MainTab.entries.forEachIndexed { index, tab ->
                     FloatingTabItem(
                         tab = tab,
                         selected = tab == selectedTab,
+                        // Trascinando: quanto questa voce e' "attiva" dipende da quanto la sua
+                        // pagina e' vicina (1 = sua pagina piena, 0 = a una pagina o piu').
+                        dragProgress = drag?.let { (1f - kotlin.math.abs(it - index)).coerceIn(0f, 1f) },
                         onClick = { onSelect(tab) }
                     )
                 }
@@ -5355,21 +5384,36 @@ private fun FloatingTabBar(
 }
 
 @Composable
-private fun RowScope.FloatingTabItem(tab: MainTab, selected: Boolean, onClick: () -> Unit) {
-    // Un solo valore guida larghezza e fondo della voce: 0 spenta, 1 attiva. Con la molla
-    // elastica supera appena 1 e ci torna, da qui il piccolo "rimbalzo" della pillola.
-    val progress by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (selected) 1f else 0f,
-        animationSpec = ailaSpatialSpring(),
-        label = "tabItemProgress"
-    )
+private fun RowScope.FloatingTabItem(
+    tab: MainTab,
+    selected: Boolean,
+    dragProgress: Float?,
+    onClick: () -> Unit
+) {
+    // Un solo valore guida larghezza, fondo, colore e nome della voce: 0 spenta, 1 attiva. Al
+    // tocco va con la molla elastica (supera appena 1 e ci torna: il piccolo "rimbalzo" della
+    // pillola); trascinando le pagine segue il dito ([dragProgress]) e al rilascio la molla
+    // riparte esattamente da dove il dito l'aveva lasciata, senza salti.
+    val settle = remember { androidx.compose.animation.core.Animatable(if (selected) 1f else 0f) }
+    val lastDrag = remember { floatArrayOf(-1f) }
+    if (dragProgress != null) lastDrag[0] = dragProgress
+    val following = dragProgress != null
+    LaunchedEffect(selected, following) {
+        if (following) return@LaunchedEffect
+        if (lastDrag[0] >= 0f) {
+            settle.snapTo(lastDrag[0])
+            lastDrag[0] = -1f
+        }
+        settle.animateTo(if (selected) 1f else 0f, ailaSpatialSpring())
+    }
+    val progress = dragProgress ?: if (lastDrag[0] >= 0f) lastDrag[0] else settle.value
     // Glass: la voce attiva e' una capsula di vetro grigio con icona e nome in blu, come la tab
     // bar di iOS 26. Expressive: l'indicatore "secondary container" di Material, pieno.
     val activeInk = if (AppTheme.isGlass) AppTheme.PrimaryBlue else AppTheme.OnSelection
-    val iconColor by androidx.compose.animation.animateColorAsState(
-        targetValue = if (selected) activeInk else if (AppTheme.isGlass) AppTheme.TextFaint else AppTheme.TextMuted,
-        animationSpec = androidx.compose.animation.core.tween(200),
-        label = "tabItemIcon"
+    val iconColor = androidx.compose.ui.graphics.lerp(
+        if (AppTheme.isGlass) AppTheme.TextFaint else AppTheme.TextMuted,
+        activeInk,
+        progress.coerceIn(0f, 1f)
     )
     val tint = if (AppTheme.isGlass) {
         if (AppTheme.isDarkMode) Color(0x33FFFFFF) else Color(0x1A767680)
@@ -5397,8 +5441,9 @@ private fun RowScope.FloatingTabItem(tab: MainTab, selected: Boolean, onClick: (
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // L'icona toccata fa un piccolo "pop" elastico quando diventa attiva.
-        val iconModifier = Modifier.size(22.dp).ailaSelectionPop(selected)
+        // L'icona toccata fa un piccolo "pop" elastico quando diventa attiva (trascinando no:
+        // passando a meta' avanti e indietro rimbalzerebbe a ogni passaggio).
+        val iconModifier = Modifier.size(22.dp).ailaSelectionPop(selected && !following)
         when (tab) {
             MainTab.HOME -> AppIcons.Home(modifier = iconModifier, color = iconColor)
             MainTab.CALENDAR -> AppIcons.Calendar(modifier = iconModifier, color = iconColor)
@@ -5406,14 +5451,21 @@ private fun RowScope.FloatingTabItem(tab: MainTab, selected: Boolean, onClick: (
             MainTab.SEATMAP -> AppIcons.Chair(modifier = iconModifier, color = iconColor)
             MainTab.POLLS -> AppIcons.Poll(modifier = iconModifier, color = iconColor)
         }
-        androidx.compose.animation.AnimatedVisibility(
-            visible = selected,
-            enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(180, delayMillis = 60)) +
-                androidx.compose.animation.expandHorizontally(ailaSpatialSpring()),
-            exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(90)) +
-                androidx.compose.animation.shrinkHorizontally(androidx.compose.animation.core.tween(160))
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        // Il nome si apre e si chiude con lo stesso valore della pillola (larghezza e dissolvenza),
+        // invece di un'animazione sua che partiva solo quando la voce cambiava.
+        val labelT = progress.coerceIn(0f, 1f)
+        if (labelT > 0.001f) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clipToBounds()
+                    .layout { measurable, constraints ->
+                        val placeable = measurable.measure(constraints.copy(minWidth = 0))
+                        val w = (placeable.width * labelT + 0.5f).toInt()
+                        layout(w, placeable.height) { placeable.placeRelative(0, 0) }
+                    }
+                    .graphicsLayer { alpha = ((labelT - 0.35f) / 0.65f).coerceIn(0f, 1f) }
+            ) {
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = tab.title,
@@ -5437,7 +5489,7 @@ private fun RowScope.FloatingTabItem(tab: MainTab, selected: Boolean, onClick: (
  * rimbalzi elastici di Material.
  */
 @Composable
-private fun RowScope.GlassTabBarContent(selectedTab: MainTab, onSelect: (MainTab) -> Unit) {
+private fun RowScope.GlassTabBarContent(selectedTab: MainTab, onSelect: (MainTab) -> Unit, dragPosition: Float?) {
     val tabs = MainTab.entries
     BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxHeight()) {
         val itemWidth = maxWidth / tabs.size
@@ -5448,18 +5500,31 @@ private fun RowScope.GlassTabBarContent(selectedTab: MainTab, onSelect: (MainTab
             movingRight[0] = index > lastIndex[0]
             lastIndex[0] = index
         }
-        val fast = androidx.compose.animation.core.spring<androidx.compose.ui.unit.Dp>(dampingRatio = 1f, stiffness = 700f)
-        val slow = androidx.compose.animation.core.spring<androidx.compose.ui.unit.Dp>(dampingRatio = 1f, stiffness = 260f)
-        val left = androidx.compose.animation.core.animateDpAsState(
-            targetValue = itemWidth * index,
-            animationSpec = if (movingRight[0]) slow else fast,
-            label = "glassLensLeft"
-        )
-        val right = androidx.compose.animation.core.animateDpAsState(
-            targetValue = itemWidth * (index + 1),
-            animationSpec = if (movingRight[0]) fast else slow,
-            label = "glassLensRight"
-        )
+        // Bordi della lente in "voci" (0 = inizio della prima). Al tocco si stirano con due molle
+        // diverse; trascinando le pagine la lente segue il dito, compatta, e al rilascio le molle
+        // ripartono da li'.
+        val leftAnim = remember { androidx.compose.animation.core.Animatable(index.toFloat()) }
+        val rightAnim = remember { androidx.compose.animation.core.Animatable(index + 1f) }
+        val lastDrag = remember { floatArrayOf(-1f) }
+        if (dragPosition != null) lastDrag[0] = dragPosition
+        val following = dragPosition != null
+        LaunchedEffect(index, following) {
+            if (following) return@LaunchedEffect
+            if (lastDrag[0] >= 0f) {
+                leftAnim.snapTo(lastDrag[0])
+                rightAnim.snapTo(lastDrag[0] + 1f)
+                lastDrag[0] = -1f
+            }
+            val fast = androidx.compose.animation.core.spring<Float>(dampingRatio = 1f, stiffness = 700f)
+            val slow = androidx.compose.animation.core.spring<Float>(dampingRatio = 1f, stiffness = 260f)
+            launch { leftAnim.animateTo(index.toFloat(), if (movingRight[0]) slow else fast) }
+            rightAnim.animateTo(index + 1f, if (movingRight[0]) fast else slow)
+        }
+        val pendingDrag = if (lastDrag[0] >= 0f) lastDrag[0] else null
+        val lensLeft = dragPosition ?: pendingDrag ?: leftAnim.value
+        val lensRight = dragPosition?.plus(1f) ?: pendingDrag?.plus(1f) ?: rightAnim.value
+        val left = androidx.compose.runtime.rememberUpdatedState(itemWidth * lensLeft)
+        val right = androidx.compose.runtime.rememberUpdatedState(itemWidth * lensRight)
         // La lente: vetro un po' piu' chiaro della barra, col suo bordo speculare.
         Box(
             modifier = Modifier
@@ -5479,11 +5544,19 @@ private fun RowScope.GlassTabBarContent(selectedTab: MainTab, onSelect: (MainTab
         Row(modifier = Modifier.fillMaxSize()) {
             tabs.forEach { tab ->
                 val selected = tab == selectedTab
-                val ink by androidx.compose.animation.animateColorAsState(
+                val animatedInk by androidx.compose.animation.animateColorAsState(
                     targetValue = if (selected) AppTheme.PrimaryBlue else AppTheme.TextDark.copy(alpha = 0.75f),
                     animationSpec = androidx.compose.animation.core.tween(180),
                     label = "glassTabInk"
                 )
+                // Trascinando il colore segue la lente invece di scattare a meta' strada.
+                val ink = dragPosition?.let {
+                    androidx.compose.ui.graphics.lerp(
+                        AppTheme.TextDark.copy(alpha = 0.75f),
+                        AppTheme.PrimaryBlue,
+                        (1f - kotlin.math.abs(it - tabs.indexOf(tab))).coerceIn(0f, 1f)
+                    )
+                } ?: animatedInk
                 Column(
                     modifier = Modifier
                         .weight(1f)
