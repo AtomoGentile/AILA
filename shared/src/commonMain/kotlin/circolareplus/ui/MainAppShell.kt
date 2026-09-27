@@ -1114,6 +1114,22 @@ fun MainAppShell(
                         .load(currentUser?.role ?: UserRole.STUDENT)
                         .also { assistantDynamic = it }
 
+                // La bacheca si carica solo entrando in Classe (o dalla Home se vuota): se in chat
+                // si chiede delle proposte prima che sia arrivata, la si legge adesso. Senza, il
+                // modello leggeva "nessuna proposta" e rispondeva che non risulta niente.
+                var boardUnavailable: String? = null
+                val boardProposals = proposals.ifEmpty {
+                    try {
+                        AppContainer.proposalsRepository.listProposals().also { proposals = it }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        boardUnavailable = "${circolareplus.ai.assistant.AssistantBoard.UNAVAILABLE_LABEL}: " +
+                            "non caricata (${e.message ?: e::class.simpleName})"
+                        emptyList()
+                    }
+                }
+
                 val reply = AppContainer.newAssistant().ask(
                     question = trimmed,
                     history = history,
@@ -1125,8 +1141,8 @@ fun MainAppShell(
                         circulars = circulars,
                         classifications = classifications.toMap(),
                         calendarEvents = calendarEvents,
-                        proposals = proposals,
-                        dynamic = dynamic
+                        proposals = boardProposals,
+                        dynamic = boardUnavailable?.let { dynamic.copy(unavailable = dynamic.unavailable + it) } ?: dynamic
                     )
                 )
 
