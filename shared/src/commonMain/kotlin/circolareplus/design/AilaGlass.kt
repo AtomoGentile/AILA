@@ -113,13 +113,13 @@ fun DrawScope.drawAilaGlassBackdrop() {
 /**
  * Riempimento del vetro: quasi trasparente, appena piu' chiaro in alto. Il vetro di iOS 26 non
  * "colora" quello che copre: lo schiarisce un poco e lo lascia vedere. (Tre volte piu'
- * trasparente, poi altre cinque, richiesta di Simone: la forma la danno i bordi, non il velo.)
+ * trasparente, poi altre cinque e altre due, richiesta di Simone: la forma la danno i bordi.)
  */
 val AppTheme.GlassFill: Brush
     get() = if (isDarkMode) {
-        Brush.verticalGradient(listOf(Color(0x01FFFFFF), Color(0x00FFFFFF)))
+        Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.002f), Color.Transparent))
     } else {
-        Brush.verticalGradient(listOf(Color(0x02FFFFFF), Color(0x01FFFFFF)))
+        Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.004f), Color.White.copy(alpha = 0.002f)))
     }
 
 /**
@@ -132,12 +132,12 @@ val AppTheme.GlassEdge: Brush
         // iPhone in scuro: riflesso netto nell'angolo in alto a sinistra e il suo ritorno in basso
         // a destra, quasi spento lungo i lati. E' questo filo a disegnare il vetro sul nero.
         Brush.linearGradient(
-            0f to Color(0xB3FFFFFF), 0.3f to Color(0x1FFFFFFF), 0.7f to Color(0x0DFFFFFF), 1f to Color(0x66FFFFFF),
+            0f to Color(0x5AFFFFFF), 0.3f to Color(0x10FFFFFF), 0.7f to Color(0x07FFFFFF), 1f to Color(0x33FFFFFF),
             start = Offset.Zero, end = Offset.Infinite
         )
     } else {
         Brush.linearGradient(
-            0f to Color(0xFFFFFFFF), 0.35f to Color(0x59FFFFFF), 0.7f to Color(0x26FFFFFF), 1f to Color(0xB3FFFFFF),
+            0f to Color(0x80FFFFFF), 0.35f to Color(0x2DFFFFFF), 0.7f to Color(0x13FFFFFF), 1f to Color(0x5AFFFFFF),
             start = Offset.Zero, end = Offset.Infinite
         )
     }
@@ -155,7 +155,7 @@ fun Modifier.ailaGlassSurface(shape: Shape, tint: Color? = null, edge: Dp = 1.dp
             // Bagliore interno in alto: la luce che attraversa lo spessore del vetro.
             drawRect(
                 Brush.verticalGradient(
-                    listOf(Color.White.copy(alpha = if (AppTheme.isDarkMode) 0.006f else 0.01f), Color.Transparent),
+                    listOf(Color.White.copy(alpha = if (AppTheme.isDarkMode) 0.003f else 0.005f), Color.Transparent),
                     endY = size.height * 0.35f
                 )
             )

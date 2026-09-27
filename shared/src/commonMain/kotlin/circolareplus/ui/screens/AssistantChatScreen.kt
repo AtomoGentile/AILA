@@ -365,11 +365,14 @@ private fun AssistantHistorySheet(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            // Glass: righe di vetro sul foglio di vetro. Material: il tono "container"
-                            // sopra il foglio pieno (CardSurface in scuro e' uguale al foglio).
-                            .then(
-                                if (AppTheme.isGlass) Modifier.ailaGlassSurface(RoundedCornerShape(AppTheme.SmallElementRadius))
-                                else Modifier.clip(RoundedCornerShape(AppTheme.SmallElementRadius)).background(AppTheme.TrackFill)
+                            // Glass: le righe piene dei gruppi di iOS sul foglio (di vetro quasi
+                            // invisibile non si leggevano). Material: il tono "container" sopra
+                            // il foglio pieno (CardSurface in scuro e' uguale al foglio).
+                            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                            .background(
+                                if (AppTheme.isGlass) {
+                                    if (AppTheme.isDarkMode) Color(0xFF2C2C2E) else Color(0xFFFFFFFF)
+                                } else AppTheme.TrackFill
                             )
                             .then(
                                 if (canOpen) {

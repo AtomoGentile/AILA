@@ -56,10 +56,7 @@ fun AilaBottomSheet(
         shape = androidx.compose.ui.graphics.RectangleShape,
         containerColor = Color.Transparent,
         tonalElevation = 0.dp,
-        // Il foglio e' molto trasparente: a tenere leggibili le scritte e' il velo sulla
-        // schermata dietro, scuro in scuro e chiaro in chiaro (con un velo nero, in chiaro il
-        // testo scuro finirebbe su fondo scuro).
-        scrimColor = if (AppTheme.isDarkMode) Color.Black.copy(alpha = 0.62f) else Color.White.copy(alpha = 0.6f),
+        scrimColor = Color.Black.copy(alpha = if (AppTheme.isDarkMode) 0.45f else 0.25f),
         dragHandle = null
     ) {
         Column(
@@ -68,9 +65,10 @@ fun AilaBottomSheet(
                 .padding(start = inset, end = inset, bottom = inset)
                 .ailaGlassSurface(
                     shape,
-                    // Cinque volte piu' trasparente di prima (0xC7 -> 0x28): la leggibilita' la da'
-                    // il velo sulla schermata dietro (scrimColor), non il fondo del foglio.
-                    tint = if (AppTheme.isDarkMode) Color(0x28141418) else Color(0x28F4F5FA)
+                    // Il foglio resta quasi pieno, come i fogli di iOS: trasparente come il resto
+                    // del vetro, senza sfocatura dietro, il testo sopra la schermata sotto era
+                    // praticamente illeggibile (provato: 0x28 non si leggeva).
+                    tint = if (AppTheme.isDarkMode) Color(0xF01C1C1E) else Color(0xF0F2F2F7)
                 ),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
