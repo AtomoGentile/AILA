@@ -23,6 +23,8 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
@@ -1936,6 +1938,8 @@ fun MainAppShell(
                 // le schermate delle tab la lasciano libera in fondo alle liste.
                 val bottomBarPadding = 84.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 val imeVisible = WindowInsets.isImeVisible
+                // Sorgente della sfocatura della barra (Liquid Glass): il contenuto delle tab.
+                val hazeState = dev.chrisbanes.haze.rememberHazeState()
                 Box(modifier = Modifier.weight(1f)) {
                 val profileEntry = remember(user.firstName, user.lastName) {
                     circolareplus.design.AilaProfileEntry(
@@ -1970,7 +1974,9 @@ fun MainAppShell(
                         // through" di Material (vedi ailaTabTransition).
                         transitionSpec = { ailaTabTransition() },
                         label = "mainTab",
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize().then(
+                            if (AppTheme.isGlass) Modifier.hazeSource(hazeState) else Modifier
+                        )
                     ) { tab ->
                     when (tab) {
                         MainTab.HOME -> {
@@ -2732,7 +2738,7 @@ fun MainAppShell(
                     enter = androidx.compose.animation.slideInVertically { it } + androidx.compose.animation.fadeIn(),
                     exit = androidx.compose.animation.slideOutVertically { it } + androidx.compose.animation.fadeOut()
                 ) {
-                    FloatingTabBar(selectedTab = selectedTab, onSelect = { selectedTab = it })
+                    FloatingTabBar(selectedTab = selectedTab, onSelect = { selectedTab = it }, hazeState = hazeState)
                 }
                 }
             }
@@ -4937,7 +4943,11 @@ private enum class ShellRoute(val depth: Int) {
  * accorciate ("Calend.", "Mappa"); il nome della sezione in cui ci si trova resta sempre scritto.
  */
 @Composable
-private fun FloatingTabBar(selectedTab: MainTab, onSelect: (MainTab) -> Unit) {
+private fun FloatingTabBar(
+    selectedTab: MainTab,
+    onSelect: (MainTab) -> Unit,
+    hazeState: dev.chrisbanes.haze.HazeState? = null
+) {
     val shape = RoundedCornerShape(32.dp)
     Box(
         modifier = Modifier
@@ -4960,7 +4970,23 @@ private fun FloatingTabBar(selectedTab: MainTab, onSelect: (MainTab) -> Unit) {
                         Modifier
                             .shadow(elevation = 10.dp, shape = shape, ambientColor = Color(0x1A1B2E7A), spotColor = Color(0x261B2E7A))
                             .clip(shape)
-                            .background(if (AppTheme.isDarkMode) Color(0xA6202430) else Color(0xB8FFFFFF))
+                            // Sfocatura vera di quello che scorre sotto (Haze), con un velo
+                            // bianco (o scuro) sopra: il "vetro smerigliato" di iOS.
+                            .then(
+                                if (hazeState != null) Modifier.hazeEffect(
+                                    state = hazeState,
+                                    style = dev.chrisbanes.haze.HazeStyle(
+                                        backgroundColor = AppTheme.BackgroundLight,
+                                        tint = dev.chrisbanes.haze.HazeTint(
+                                            if (AppTheme.isDarkMode) Color(0x8C202430) else Color(0x99FFFFFF)
+                                        ),
+                                        blurRadius = 22.dp,
+                                        noiseFactor = 0f
+                                    )
+                                ) else Modifier.background(
+                                    if (AppTheme.isDarkMode) Color(0xA6202430) else Color(0xB8FFFFFF)
+                                )
+                            )
                             .border(
                                 1.dp,
                                 androidx.compose.ui.graphics.Brush.verticalGradient(

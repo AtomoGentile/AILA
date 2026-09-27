@@ -54,6 +54,7 @@ kotlin {
             implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.ktor.client.logging)
             implementation(libs.multiplatform.settings)
+            implementation(libs.haze)
             implementation(libs.multiplatform.settings.no.arg)
         }
         val androidMain by getting {
