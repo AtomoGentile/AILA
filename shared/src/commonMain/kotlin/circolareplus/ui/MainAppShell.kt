@@ -2081,14 +2081,35 @@ fun MainAppShell(
                     val tabPager = androidx.compose.foundation.pager.rememberPagerState(
                         initialPage = MainTab.entries.indexOf(selectedTab)
                     ) { MainTab.entries.size }
-                    // Barra -> pagine: toccando una tab la si raggiunge scorrendo.
+                    // Dissolvenza del cambio di tab toccando la barra: la pagina non scorre attraverso
+                    // quelle in mezzo, ma svanisce e la nuova emerge (fade through, come prima).
+                    val tabFade = remember { androidx.compose.animation.core.Animatable(1f) }
+                    // Barra -> pagine. Se la pagina giusta e' gia' quella verso cui si sta
+                    // scorrendo col dito non si fa nulla; altrimenti (tocco sulla barra) si salta
+                    // alla pagina con la dissolvenza.
                     LaunchedEffect(selectedTab) {
                         val target = MainTab.entries.indexOf(selectedTab)
-                        if (tabPager.currentPage != target || tabPager.currentPageOffsetFraction != 0f) {
-                            tabPager.animateScrollToPage(target)
+                        val alreadyThere = (tabPager.targetPage == target && tabPager.isScrollInProgress) ||
+                            (tabPager.currentPage == target && tabPager.currentPageOffsetFraction == 0f)
+                        if (alreadyThere) {
+                            // Un tocco rapido annullato a meta' non deve lasciare la pagina sbiadita.
+                            if (tabFade.value < 1f) tabFade.animateTo(1f, androidx.compose.animation.core.tween(140))
+                            return@LaunchedEffect
                         }
+                        tabFade.animateTo(0f, androidx.compose.animation.core.tween(if (AppTheme.isGlass) 90 else 70))
+                        tabPager.scrollToPage(target)
+                        tabFade.animateTo(1f, androidx.compose.animation.core.tween(if (AppTheme.isGlass) 140 else 210))
                     }
-                    // Pagine -> barra: finito lo scorrimento col dito si aggiorna la tab scelta.
+                    // Pagine -> barra, in tempo reale: mentre si scorre col dito la barra segue la
+                    // pagina verso cui si sta andando (non solo a scorrimento finito).
+                    LaunchedEffect(tabPager) {
+                        androidx.compose.runtime.snapshotFlow { tabPager.targetPage to tabPager.isScrollInProgress }
+                            .collect { (page, scrolling) ->
+                                if (!scrolling || tabFade.value < 1f) return@collect
+                                val tab = MainTab.entries[page]
+                                if (selectedTab != tab) selectedTab = tab
+                            }
+                    }
                     LaunchedEffect(tabPager) {
                         androidx.compose.runtime.snapshotFlow { tabPager.settledPage }.collect { page ->
                             val tab = MainTab.entries[page]
@@ -2099,7 +2120,17 @@ fun MainAppShell(
                         state = tabPager,
                         beyondViewportPageCount = 1,
                         key = { it },
-                        modifier = Modifier.fillMaxSize().then(
+                        modifier = Modifier.fillMaxSize()
+                            .graphicsLayer {
+                                val f = tabFade.value
+                                alpha = f
+                                if (!AppTheme.isGlass) {
+                                    val scale = 0.94f + 0.06f * f
+                                    scaleX = scale
+                                    scaleY = scale
+                                }
+                            }
+                            .then(
                             // Lo sfondo a macchie e' fermo sullo schermo: le pagine trasparenti ci
                             // scorrono sopra. Qui se ne ridisegna una copia identica, spostata al
                             // contrario delle tab che escono (cosi' resta ferma), solo perche' la
