@@ -765,21 +765,7 @@ private fun DownloadProgressBar(downloadedBytes: Long, totalBytes: Long) {
         0f
     }
     Column(modifier = Modifier.fillMaxWidth()) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(AppTheme.TintSlate)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(fraction)
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(AppTheme.PrimaryBlue)
-            )
-        }
+        circolareplus.design.AilaProgressBar(progress = fraction)
         Spacer(modifier = Modifier.height(AppTheme.Space4))
         Text(
             text = "${formatBytes(downloadedBytes)} di ${formatBytes(totalBytes)} " +
