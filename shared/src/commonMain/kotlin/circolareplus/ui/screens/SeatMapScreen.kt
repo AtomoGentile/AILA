@@ -190,10 +190,18 @@ fun SeatMapScreen(
                     // Mentre si scrive c'è la X per svuotare; a campo vuoto, "Il mio posto".
                     AnimatedContent(
                         targetState = searchQuery.isNotEmpty(),
+                        // Prima il contenitore si ridimensionava (pillola larga -> X piccola)
+                        // tagliando i due elementi a meta' della dissolvenza. Ora non si ritaglia,
+                        // la misura segue una molla e i due si scambiano con scala + dissolvenza.
                         transitionSpec = {
-                            (fadeIn(tween(160)) + scaleIn(tween(160), initialScale = 0.85f)) togetherWith
-                                (fadeOut(tween(120)) + scaleOut(tween(120), targetScale = 0.85f))
+                            (fadeIn(tween(180, delayMillis = 60)) +
+                                scaleIn(circolareplus.design.ailaSpatialSpring(), initialScale = 0.6f)) togetherWith
+                                (fadeOut(tween(90)) + scaleOut(tween(120), targetScale = 0.6f)) using
+                                androidx.compose.animation.SizeTransform(clip = false) { _, _ ->
+                                    circolareplus.design.ailaSpatialSpring()
+                                }
                         },
+                        contentAlignment = Alignment.CenterEnd,
                         label = "searchTrailing"
                     ) { typing ->
                         when {
@@ -237,8 +245,11 @@ fun SeatMapScreen(
             // L'esito compare e scompare con un'animazione invece di spingere di colpo la mappa.
             AnimatedVisibility(
                 visible = status != null,
-                enter = fadeIn(tween(180)) + expandVertically(tween(220)),
-                exit = fadeOut(tween(120)) + shrinkVertically(tween(180))
+                // Si apre con la molla dello stile e il testo compare quando c'e' gia' spazio,
+                // invece di sovrapporsi all'apertura.
+                enter = expandVertically(circolareplus.design.ailaSpatialSpring()) +
+                    fadeIn(tween(200, delayMillis = 80)),
+                exit = fadeOut(tween(100)) + shrinkVertically(circolareplus.design.ailaSpatialSpring())
             ) {
                 Row(
                     modifier = Modifier.padding(top = AppTheme.Space8),
@@ -249,12 +260,22 @@ fun SeatMapScreen(
                         color = if (found) AppTheme.TintAmberInk else AppTheme.TextFaint
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = lastStatus[0],
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (found) AppTheme.TextDark else AppTheme.TextMuted
-                    )
+                    // Cambiando compagno cercato il testo scorre al nuovo invece di cambiare di colpo.
+                    AnimatedContent(
+                        targetState = lastStatus[0],
+                        transitionSpec = {
+                            (fadeIn(tween(180)) + slideInVertically(circolareplus.design.ailaSpatialSpring()) { it / 2 }) togetherWith
+                                (fadeOut(tween(100)) + slideOutVertically(tween(140)) { -it / 2 })
+                        },
+                        label = "seatStatusText"
+                    ) { text ->
+                        Text(
+                            text = text,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (!text.startsWith("Nessun")) AppTheme.TextDark else AppTheme.TextMuted
+                        )
+                    }
                 }
             }
         }

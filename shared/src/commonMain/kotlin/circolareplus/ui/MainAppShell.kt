@@ -2079,7 +2079,20 @@ fun MainAppShell(
                                     error = seatMapError,
                                     onRetry = { seatMapRefreshTrigger++ }
                                 ) {
-                                    if (seatMapMode == "VOTE_PREFERENCES") {
+                                    // Mappa <-> voto delle preferenze: stessa transizione delle altre
+                                    // schermate aperte "sopra" (push iOS in Glass, shared axis in
+                                    // Material) invece dello stacco secco.
+                                    androidx.compose.animation.AnimatedContent(
+                                        targetState = seatMapMode == "VOTE_PREFERENCES",
+                                        transitionSpec = { ailaPushTransition(forward = targetState) },
+                                        label = "seatMapMode",
+                                        modifier = Modifier.fillMaxSize()
+                                    ) { votingPreferences ->
+                                    Box(modifier = Modifier.fillMaxSize().then(
+                                        // Fondo pieno: durante lo scorrimento le due schermate non si sovrappongono.
+                                        if (AppTheme.isGlass) Modifier.ailaGlassBackdrop() else Modifier.background(AppTheme.BackgroundLight)
+                                    )) {
+                                    if (votingPreferences) {
                                         Column(modifier = Modifier.fillMaxSize()) {
                                             ScreenBackBar(
                                                 title = "Preferenze Sociali",
@@ -2225,6 +2238,8 @@ fun MainAppShell(
                                                 }
                                             )
                                         }
+                                    }
+                                    }
                                     }
                                 }
                             }
