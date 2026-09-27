@@ -233,7 +233,7 @@ fun CircularListItem(
 
             if (classification?.personalSummary != null) {
                 Spacer(modifier = Modifier.height(AppTheme.Space8))
-                AilaCard(containerColor = AppTheme.TintSlate) {
+                val summaryContent: @Composable () -> Unit = {
                     Column(modifier = Modifier.padding(AppTheme.Space12)) {
                         AilaAssistantBadge(text = "Analisi AILA Assistant")
                         Spacer(modifier = Modifier.height(6.dp))
@@ -244,6 +244,18 @@ fun CircularListItem(
                             lineHeight = 18.sp
                         )
                     }
+                }
+                if (AppTheme.isGlass) {
+                    // Liquid Glass: niente vetro dentro al vetro (veniva un pannello grigio con
+                    // bordi lucidi). Solo un incavo appena piu' scuro/chiaro, senza bordo ne' riflesso.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(AppTheme.SmallElementRadius + 4.dp))
+                            .background(if (AppTheme.isDarkMode) Color(0x1F000000) else Color(0x33FFFFFF))
+                    ) { summaryContent() }
+                } else {
+                    AilaCard(containerColor = AppTheme.TintSlate) { summaryContent() }
                 }
             }
         }
