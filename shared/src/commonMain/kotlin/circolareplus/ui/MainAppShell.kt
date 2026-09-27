@@ -848,6 +848,8 @@ fun MainAppShell(
     }
 
     var selectedTab by rememberSaveable { mutableStateOf(MainTab.HOME) }
+    // Giorno da aprire nel calendario (evento toccato nella Home), consumato dal calendario.
+    var calendarFocusDateIso by remember { mutableStateOf<String?>(null) }
     // I Sondaggi sono ora una tab: "essere nei sondaggi" vuol dire avere quella tab selezionata.
     val isInPollsScreen = selectedTab == MainTab.POLLS
     var isInProfileScreen by rememberSaveable { mutableStateOf(false) }
@@ -2004,7 +2006,9 @@ fun MainAppShell(
         containerColor = AppTheme.BackgroundLight,
         // Niente margine in basso: il contenuto arriva fino al fondo dello schermo e scorre sotto
         // la barra flottante, che sta sopra (vedi FloatingTabBar piu' giu').
-        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+        // In alto niente margine: la Home fa arrivare il suo pannello sotto la barra di stato (ora,
+        // Wi-Fi), le altre tab e la striscia offline se lo aggiungono da se' (vedi sotto).
+        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
     ) { innerPadding ->
         Surface(
             modifier = Modifier
@@ -2021,7 +2025,8 @@ fun MainAppShell(
                 // Striscia "sei offline": compare solo se l'avvio è avvenuto senza rete, e si
                 // può chiudere. Prima, in quel caso, non compariva niente perché l'app aveva
                 // già fatto uscire dall'account.
-                if (startedOffline && !offlineBannerDismissed) {
+                val offlineBannerShown = startedOffline && !offlineBannerDismissed
+                if (offlineBannerShown) Box(modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))) {
                     OfflineBanner(
                         onRetry = {
                             startedOffline = false
@@ -2071,12 +2076,29 @@ fun MainAppShell(
                     // della tab toccata (destra se e' piu' a destra nella barra, sinistra altrimenti)
                     // mentre la vecchia sfuma via. Prima il cambio era uno stacco secco e il movimento
                     // lo dava solo la cascata degli elementi, che ora si vede solo la prima volta.
-                    androidx.compose.animation.AnimatedContent(
-                        targetState = selectedTab,
-                        // Glass: dissolvenza rapida come le tab bar di iOS; Expressive: "fade
-                        // through" di Material (vedi ailaTabTransition).
-                        transitionSpec = { ailaTabTransition() },
-                        label = "mainTab",
+                    // Le tab sono pagine affiancate: si passa dall'una all'altra anche scorrendo
+                    // col dito a destra e sinistra (oltre che toccando la barra in basso).
+                    val tabPager = androidx.compose.foundation.pager.rememberPagerState(
+                        initialPage = MainTab.entries.indexOf(selectedTab)
+                    ) { MainTab.entries.size }
+                    // Barra -> pagine: toccando una tab la si raggiunge scorrendo.
+                    LaunchedEffect(selectedTab) {
+                        val target = MainTab.entries.indexOf(selectedTab)
+                        if (tabPager.currentPage != target || tabPager.currentPageOffsetFraction != 0f) {
+                            tabPager.animateScrollToPage(target)
+                        }
+                    }
+                    // Pagine -> barra: finito lo scorrimento col dito si aggiorna la tab scelta.
+                    LaunchedEffect(tabPager) {
+                        androidx.compose.runtime.snapshotFlow { tabPager.settledPage }.collect { page ->
+                            val tab = MainTab.entries[page]
+                            if (selectedTab != tab && !tabPager.isScrollInProgress) selectedTab = tab
+                        }
+                    }
+                    androidx.compose.foundation.pager.HorizontalPager(
+                        state = tabPager,
+                        beyondViewportPageCount = 1,
+                        key = { it },
                         modifier = Modifier.fillMaxSize().then(
                             // Lo sfondo a macchie e' fermo sullo schermo: le pagine trasparenti ci
                             // scorrono sopra. Qui se ne ridisegna una copia identica, spostata al
@@ -2086,7 +2108,14 @@ fun MainAppShell(
                                 circolareplus.design.ailaUnderlayShift * maxOf(shellProgress.value, detailProgress.value)
                             } else Modifier
                         )
-                    ) { tab ->
+                    ) { page ->
+                    val tab = MainTab.entries[page]
+                    // Margine della barra di stato per ogni tab tranne la Home (che ci fa passare
+                    // sotto il suo pannello) e salvo quando c'e' gia' la striscia offline in cima.
+                    Box(modifier = Modifier.fillMaxSize().then(
+                        if (tab != MainTab.HOME && !offlineBannerShown) Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+                        else Modifier
+                    )) {
                     when (tab) {
                         MainTab.HOME -> {
                             HomeScreen(
@@ -2106,6 +2135,10 @@ fun MainAppShell(
                                 },
                                 onNavigateToPolls = { selectedTab = MainTab.POLLS },
                                 onNavigateToCalendar = { selectedTab = MainTab.CALENDAR },
+                                onEventClick = { event ->
+                                    calendarFocusDateIso = event.date
+                                    selectedTab = MainTab.CALENDAR
+                                },
                                 onNavigateToCirculars = {
                                     classSection = ClassSection.CIRCULARS
                                     selectedTab = MainTab.CLASS
@@ -2134,6 +2167,8 @@ fun MainAppShell(
                                         showAddEventDialog = true
                                     },
                                     onEventClick = { event -> eventDetailToShow = event },
+                                    focusDateIso = calendarFocusDateIso,
+                                    onFocusConsumed = { calendarFocusDateIso = null },
                                     onDeleteEventClick = { event ->
                                         coroutineScope.launch {
                                             try {
@@ -2857,6 +2892,7 @@ fun MainAppShell(
                                 }
                             }
                         }
+                    }
                     }
                     }
                 }
@@ -5222,7 +5258,7 @@ private fun FloatingTabBar(
                                         // Piu' trasparente: il contenuto sotto si vede sfocato
                                         // ma riconoscibile, come la tab bar di iOS 26.
                                         tint = dev.chrisbanes.haze.HazeTint(
-                                            if (AppTheme.isDarkMode) Color(0x24202430) else Color(0x1AFFFFFF)
+                                            if (AppTheme.isDarkMode) Color(0x1A202430) else Color(0x12FFFFFF)
                                         ),
                                         blurRadius = 32.dp,
                                         noiseFactor = 0f
