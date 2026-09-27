@@ -8,6 +8,7 @@ import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -265,7 +266,16 @@ fun AnimatedContentTransitionScope<*>.ailaPushTransition(forward: Boolean): Cont
         // Material: "fade through", la stessa del cambio di tab (quella della Mappa posti, che
         // Simone trovava la migliore): la vecchia svanisce in fretta, la nuova emerge crescendo
         // appena. Niente scorrimento ne' pagina che si allarga da un elemento.
-        materialFadeThroughEnter() togetherWith materialFadeThroughExit()
+        // Fra due schermate sovrapposte (es. Profilo -> Impostazioni) quella che resta sotto non
+        // deve sparire prima che l'altra sia comparsa: per un attimo si vedeva la Home in mezzo
+        // (il "glitch"). Avanti: la vecchia resta piena finche' la nuova e' arrivata. Indietro:
+        // quella sotto c'e' gia', e' la pagina che si chiude a svanire sopra.
+        if (forward) {
+            materialFadeThroughEnter() togetherWith fadeOut(tween(durationMillis = 60, delayMillis = 280))
+        } else {
+            EnterTransition.None togetherWith
+                (fadeOut(tween(durationMillis = 160)) + scaleOut(tween(durationMillis = 160), targetScale = 0.96f))
+        }
     }
     return transform.apply {
         targetContentZIndex = if (forward) 1f else -1f
