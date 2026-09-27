@@ -22,6 +22,10 @@ litertlm = "0.17.0"
 # versione più recente prima della build. Vedi AiCoreEngine.kt per lo stato dell'integrazione.
 aicore = "0.0.1-exp02"
 androidxWork = "2.10.0"
+# Installa i profili di compilazione (baseline profile) che Compose e le altre librerie AndroidX
+# portano con se': senza, un APK installato a mano (non da Play) esegue Compose interpretato e le
+# animazioni scattano per i primi giorni. Con questo li compila al primo avvio.
+profileinstaller = "1.4.1"
 # API ufficiale di splash screen (androidx.core.splashscreen): senza, sotto Android 12+ il
 # sistema genera da sé uno splash di default ingrandendo l'icona dell'app, con bordi sfocati —
 # il difetto segnalato da Simone. Con questa libreria lo splash è quello disegnato da noi
@@ -29,6 +33,7 @@ androidxWork = "2.10.0"
 androidxSplashscreen = "1.0.1"
 
 [libraries]
+androidx-profileinstaller = { module = "androidx.profileinstaller:profileinstaller", version.ref = "profileinstaller" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }

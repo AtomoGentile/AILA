@@ -489,6 +489,8 @@ fun Modifier.ailaContainerReveal(
     pageColor: Color = containerColor
 ): Modifier {
     val selfOffset = arrayOf(Offset.Zero)
+    // Un solo Path riusato a ogni fotogramma: niente allocazioni durante l'animazione.
+    val clip = Path()
     return this
         .onGloballyPositioned { selfOffset[0] = it.positionInRoot() }
         .drawWithContent {
@@ -504,32 +506,31 @@ fun Modifier.ailaContainerReveal(
             val right = lerp(o.right, size.width)
             val bottom = lerp(o.bottom, size.height)
             val radius = lerp(origin.cornerRadiusPx, 0f)
-            val clip = ailaRoundRectPath(left, top, right - left, bottom - top, radius)
-            // Il contenuto compare quasi subito: prima si vedeva a lungo il contenitore vuoto,
-            // che su schermo intero dava il "flash" bianco (o nero in tema scuro).
+            ailaRoundRectPathInto(clip, left, top, right - left, bottom - top, radius)
+            // Il contenuto compare quasi subito: prima si vedeva a lungo il contenitore vuoto.
             val contentAlpha = ((p - 0.06f) / 0.3f).coerceIn(0f, 1f)
-            // Il contenitore cambia colore dalla card alla pagina: nessuno stacco ne' all'inizio
-            // (e' del colore dell'elemento toccato) ne' alla fine (e' del colore della pagina).
             val fill = androidx.compose.ui.graphics.lerp(containerColor, pageColor, (p / 0.5f).coerceIn(0f, 1f))
             clipPath(clip) {
-                drawRect(fill)
-                if (contentAlpha > 0f) {
-                    drawContext.canvas.saveLayer(
-                        androidx.compose.ui.geometry.Rect(0f, 0f, size.width, size.height),
-                        androidx.compose.ui.graphics.Paint().apply { alpha = contentAlpha }
-                    )
-                    this@drawWithContent.drawContent()
-                    drawContext.canvas.restore()
-                }
+                // Niente saveLayer (un buffer grande quanto lo schermo a ogni fotogramma, la causa
+                // principale degli scatti): si disegna il contenuto pieno e SOPRA il colore del
+                // contenitore che svanisce. A vedersi e' la stessa dissolvenza.
+                this@drawWithContent.drawContent()
+                if (contentAlpha < 1f) drawRect(fill, alpha = 1f - contentAlpha)
             }
         }
 }
+
 
 /**
  * Rettangolo ad angoli tondi fatto di curve di Bezier: niente addRoundRect/archi, che su Android
  * in KMP possono crashare (vedi la nota in AppIcons).
  */
-fun ailaRoundRectPath(left: Float, top: Float, w: Float, h: Float, radius: Float): Path = Path().apply {
+fun ailaRoundRectPath(left: Float, top: Float, w: Float, h: Float, radius: Float): Path =
+    Path().also { ailaRoundRectPathInto(it, left, top, w, h, radius) }
+
+/** Come [ailaRoundRectPath], ma riempie un Path esistente (per le animazioni). */
+fun ailaRoundRectPathInto(path: Path, left: Float, top: Float, w: Float, h: Float, radius: Float): Unit = with(path) {
+    reset()
     val r = radius.coerceIn(0f, minOf(w, h) / 2f)
     val k = r * 0.5523f
     val right = left + w

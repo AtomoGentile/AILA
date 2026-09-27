@@ -38,6 +38,7 @@ kotlin {
                 // Splash screen disegnato da noi invece di quello generato da Android a partire
                 // dall'icona dell'app (vedi ic_launcher_foreground.xml e res/values/themes.xml).
                 implementation(libs.androidx.core.splashscreen)
+                implementation(libs.androidx.profileinstaller)
                 // Necessario qui (non solo in :shared, dove è "implementation" e quindi non
                 // transitivo) perché CircolareMessagingService, che deve stare in questo modulo
                 // per essere dichiarato nell'AndroidManifest di :androidApp, estende
@@ -87,5 +88,29 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    lint {
+        // assembleRelease esegue anche il lint "vital": qui non deve bloccare la build (prima,
+        // col solo debug, non girava affatto).
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
+
+    buildTypes {
+        // L'APK distribuito era il "debug": con Compose e' molto piu' lento (codice non
+        // ottimizzato, controlli di debug attivi), da qui gran parte degli scatti nelle
+        // animazioni. Il "release" non e' debuggabile e gira a piena velocita'.
+        //
+        // Firmato con la stessa chiave debug della CI (secret ANDROID_DEBUG_KEYSTORE): stesso
+        // applicationId e stessa firma, quindi si installa sopra l'app gia' presente senza
+        // disinstallarla. Niente R8/minify per ora: Ktor, serializzazione e Firebase usano la
+        // riflessione e andrebbero scritte le regole di ProGuard prima di accenderlo.
+        getByName("release") {
+            isMinifyEnabled = false
+            isShrinkResources = false
+            isDebuggable = false
+            signingConfig = signingConfigs.getByName("debug")
+        }
     }
 }
