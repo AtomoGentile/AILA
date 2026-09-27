@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.layout
 import dev.chrisbanes.haze.hazeEffect
+import circolareplus.design.ailaGlassBackdrop
 import dev.chrisbanes.haze.hazeSource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
@@ -63,8 +64,6 @@ import circolareplus.design.ailaSpatialSpring
 import circolareplus.design.ailaPushTransition
 import circolareplus.design.ailaTabTransition
 import circolareplus.design.ailaContainerReveal
-import circolareplus.design.ailaGlassBackdrop
-import circolareplus.design.ailaGlassPushBackdrop
 import circolareplus.design.GlassBase
 import circolareplus.design.GlassEdge
 import circolareplus.design.ailaGlassSurface
@@ -2067,10 +2066,10 @@ fun MainAppShell(
                         transitionSpec = { ailaTabTransition() },
                         label = "mainTab",
                         modifier = Modifier.fillMaxSize().then(
-                            // Lo sfondo a macchie fa parte della sorgente: la barra lo sfoca insieme
-                            // al contenuto, invece di sfocare il solo contenuto su un colore piatto.
-                            // Si sposta al contrario della pagina che scivola sotto un push, cosi'
-                            // sullo schermo resta fermo (vedi ailaGlassPushBackdrop).
+                            // Lo sfondo a macchie e' fermo sullo schermo: le pagine trasparenti ci
+                            // scorrono sopra. Qui se ne ridisegna una copia identica, spostata al
+                            // contrario delle tab che escono (cosi' resta ferma), solo perche' la
+                            // barra in basso lo sfochi insieme al contenuto.
                             if (AppTheme.isGlass) Modifier.hazeSource(hazeState).ailaGlassBackdrop {
                                 circolareplus.design.ailaUnderlayShift * maxOf(shellProgress.value, detailProgress.value)
                             } else Modifier
@@ -2931,24 +2930,10 @@ fun MainAppShell(
                             pageColor = AppTheme.BackgroundLight
                         ) else Modifier
                     )
-                    // Coprente: in Glass BackgroundLight e' trasparente, quindi qui si ridipinge
-                    // lo sfondo a macchie per nascondere le tab che stanno sotto, fermo e solo
-                    // dove la pagina e' gia' arrivata.
-                    // Velo scuro sulla pagina coperta da quella nuova, come nel push di iOS.
-                    .then(
-                        if (glassSlide != null) Modifier.drawWithContent {
-                            drawContent()
-                            val covered = (-glassSlide.value / circolareplus.design.ailaUnderlayShift).coerceIn(0f, 1f)
-                            if (covered > 0f) drawRect(Color.Black.copy(alpha = circolareplus.design.ailaUnderlayDim * covered))
-                        } else Modifier
-                    )
-                    .then(
-                        if (AppTheme.isGlass) Modifier.ailaGlassPushBackdrop(
-                            offset = { glassSlide?.value ?: 0f },
-                            shift = { circolareplus.design.ailaUnderlayShift * detailProgress.value }
-                        )
-                        else Modifier.background(AppTheme.BackgroundLight)
-                    )
+                    // Material: fondo pieno, copre le tab sotto. Liquid Glass: pagina trasparente
+                    // che scorre sullo sfondo fermo dell'app, mentre quella di prima esce dall'altro
+                    // lato (vedi glassSlide e ailaUnderlayShift).
+                    .then(if (AppTheme.isGlass) Modifier else Modifier.background(AppTheme.BackgroundLight))
                     .then(
                         if (glassSlide != null) Modifier.graphicsLayer {
                             translationX = glassSlide.value * size.width
@@ -3526,7 +3511,6 @@ fun MainAppShell(
                 )
                 .then(
                     if (detailGlassSlide != null) Modifier
-                        .ailaGlassPushBackdrop(offset = { detailGlassSlide.value })
                         .graphicsLayer { translationX = detailGlassSlide.value * size.width }
                     else Modifier
                 )

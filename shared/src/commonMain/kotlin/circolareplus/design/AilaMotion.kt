@@ -323,10 +323,12 @@ fun ailaPushExit(): ExitTransition =
  * Glass: un terzo di larghezza e velo scuro, come iOS. Expressive: quasi ferma, solo un velo
  * leggero (in "shared axis" la schermata sotto svanisce, non scivola).
  */
-val ailaUnderlayShift: Float get() = if (AppTheme.isGlass) 1f / 3f else 0f
+// Glass: le pagine sono trasparenti e scorrono sullo sfondo fermo, quindi quella vecchia esce
+// del tutto (con un terzo si sarebbero viste sovrapposte).
+val ailaUnderlayShift: Float get() = if (AppTheme.isGlass) 1f else 0f
 // Material: velo leggero sotto al container transform (col 32% di prima l'animazione "lampeggiava"
 // di scuro all'apertura e alla chiusura).
-val ailaUnderlayDim: Float get() = if (AppTheme.isGlass) 0.18f else 0f
+val ailaUnderlayDim: Float get() = 0f
 
 /** Si ricorda se lo "sblocco" e' gia' stato fatto in questo avvio dell'app. */
 private object AilaUnlockMemory {

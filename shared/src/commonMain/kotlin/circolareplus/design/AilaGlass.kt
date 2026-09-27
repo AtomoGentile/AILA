@@ -80,20 +80,18 @@ fun DrawScope.drawAilaGlassBackdrop() {
     }
     // Il colore principale scelto entra nello sfondo (prima macchia, la piu' grande).
     val accent = AppTheme.PrimaryBlue
+    // Colori vicini fra loro (accento, viola, azzurro, un filo di rosa): varieta' senza
+    // contrasti. Sei macchie di colori opposti (verde, rosso, arancio) facevano un arlecchino.
     if (dark) {
-        blob(0.0f, 0.02f, 1.05f, accent.copy(alpha = 0.60f))
-        blob(1.05f, 0.22f, 0.8f, Color(0x996D28D9))
-        blob(0.1f, 0.45f, 0.7f, Color(0x800E7490))
-        blob(0.95f, 0.62f, 0.75f, Color(0x73BE185D))
-        blob(0.2f, 0.9f, 0.8f, Color(0x80047857))
-        blob(0.85f, 1.02f, 0.7f, Color(0x66B45309))
+        blob(0.0f, 0.0f, 1.1f, accent.copy(alpha = 0.42f))
+        blob(1.05f, 0.35f, 0.95f, Color(0x594C1D95))
+        blob(0.05f, 0.75f, 0.9f, Color(0x33155E75))
+        blob(0.95f, 1.05f, 0.85f, Color(0x2E831843))
     } else {
-        blob(0.0f, 0.02f, 1.05f, accent.copy(alpha = 0.42f))
-        blob(1.05f, 0.22f, 0.8f, Color(0xA6C4A8FF))
-        blob(0.1f, 0.45f, 0.7f, Color(0x9966E0F0))
-        blob(0.95f, 0.62f, 0.75f, Color(0x99FFA8CF))
-        blob(0.2f, 0.9f, 0.8f, Color(0x8C8EF0C0))
-        blob(0.85f, 1.02f, 0.7f, Color(0x8CFFD29A))
+        blob(0.0f, 0.0f, 1.1f, accent.copy(alpha = 0.30f))
+        blob(1.05f, 0.35f, 0.95f, Color(0x73C4B5FD))
+        blob(0.05f, 0.75f, 0.9f, Color(0x5CA5E8F5))
+        blob(0.95f, 1.05f, 0.85f, Color(0x52FBCFE8))
     }
 }
 
