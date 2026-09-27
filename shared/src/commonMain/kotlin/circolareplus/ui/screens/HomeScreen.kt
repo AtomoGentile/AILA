@@ -235,14 +235,22 @@ private fun HomeHeroPanel(
             .padding(horizontal = AppTheme.Space20)
             .padding(top = AppTheme.Space24, bottom = AppTheme.Space24)
     ) {
-        // Prima riga: marchio a sinistra, azioni a destra. Sotto, il saluto a tutta larghezza:
-        // accanto al logo e a tre pulsanti il nome non ci stava e andava a capo.
+        // Saluto a sinistra, azioni a destra (ricerca, notifiche, avatar). Il logo qui non
+        // c'e': sul pannello della Home era di troppo (richiesta di Simone).
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            circolareplus.design.AilaBrandMark(size = 48.dp)
-            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = "Ciao, $studentFirstName",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = AppTheme.OnHeroPrimary,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(modifier = Modifier.width(AppTheme.Space12))
             // Lente e campanella: la ricerca globale prima non aveva alcun punto d'ingresso.
             Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
                 HeroIconButton(onClick = onNavigateToSearch) {
@@ -261,17 +269,6 @@ private fun HomeHeroPanel(
                 }
             }
         }
-
-        Spacer(modifier = Modifier.height(AppTheme.Space20))
-
-        Text(
-            text = "Ciao, $studentFirstName",
-            fontSize = 30.sp,
-            fontWeight = FontWeight.Bold,
-            color = AppTheme.OnHeroPrimary,
-            maxLines = 1,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-        )
 
         Spacer(modifier = Modifier.height(AppTheme.Space24))
 

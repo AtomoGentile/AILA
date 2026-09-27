@@ -122,6 +122,12 @@ fun SettingsScreen(
     // di Compose. Senza questo contatore la scheda continuerebbe a mostrare "Scarica" anche
     // dopo un download finito, finché non si esce e si rientra nella schermata.
     var modelsRevision by remember { mutableStateOf(0) }
+    // "Installato?" letto una volta per modello e per revisione, non a ogni ridisegno: il
+    // controllo tocca il disco e, per il modello di sistema, AICore — faceva scattare lo
+    // scorrimento delle Impostazioni.
+    val installedCache = remember(modelsRevision) { mutableMapOf<String, Boolean>() }
+    fun isInstalledCached(model: LocalAiModel): Boolean =
+        installedCache.getOrPut(model.id) { isLocalModelInstalled(model) }
     var selectedModelIdState by remember { mutableStateOf(selectedLocalModelId) }
     var orphansCleared by remember { mutableStateOf(false) }
     val activeModel = remember(selectedModelIdState, localModels) {
@@ -440,7 +446,7 @@ fun SettingsScreen(
                                 LocalModelRow(
                                     model = model,
                                     isSelected = model.id == activeModel?.id,
-                                    isInstalled = isLocalModelInstalled(model),
+                                    isInstalled = isInstalledCached(model),
                                     isRecommended = model.id == localModels.firstOrNull()?.id,
                                     fits = model.fitsComfortablyIn(deviceRamMb),
                                     supportsActions = model.supportsActions,
@@ -511,7 +517,7 @@ fun SettingsScreen(
 
                             Spacer(modifier = Modifier.height(AppTheme.Space12))
 
-                            val installed = activeModel != null && isLocalModelInstalled(activeModel)
+                            val installed = activeModel != null && isInstalledCached(activeModel)
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
