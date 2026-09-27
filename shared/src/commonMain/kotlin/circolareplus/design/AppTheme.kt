@@ -158,14 +158,14 @@ object AppTheme {
     /** Bordo dei campi di testo (Material: "outline variant", visibile anche dove Hairline non c'e'). */
     val FieldOutline get() = style(Color(0x1F0B1B45), Color(0x1FFFFFFF), Color(0xFFC4C6D0), Color(0xFF44474F))
     /** Fondo dei campi di testo: vetro in Glass, pieno in Expressive. */
-    val FieldSurface get() = style(Color(0x66FFFFFF), Color(0x1AFFFFFF), Color(0xFFFFFFFF), Color(0xFF1D2026))
+    val FieldSurface get() = style(Color(0x45FFFFFF), Color(0x12FFFFFF), Color(0xFFFFFFFF), Color(0xFF1D2026))
 
     // --- Card -----------------------------------------------------------------------------------
     /**
      * Fondo delle card. Glass: vetro bianco traslucido (in scuro un velo bianco al 10%) sopra lo
      * sfondo. Expressive: "surface container low", pieno e senza ombra.
      */
-    val CardSurface get() = style(Color(0x4DFFFFFF), Color(0x14FFFFFF), Color(0xFFF1F2FB), Color(0xFF1D2026))
+    val CardSurface get() = style(Color(0x33FFFFFF), Color(0x0DFFFFFF), Color(0xFFF1F2FB), Color(0xFF1D2026))
     /** Filo di luce sul bordo del vetro; in Expressive nessun bordo. */
     val CardBorder get() = style(Color(0xFFFFFFFF), Color(0x24FFFFFF), Color.Transparent, Color.Transparent)
 
@@ -180,7 +180,7 @@ object AppTheme {
     val OnSelection get() = if (!isGlass && accent != AilaAccent.BLUE) OnAccentContainer
         else style(Color(0xFF0B0D12), Color(0xFFFFFFFF), Color(0xFF0B1B45), Color(0xFFDCE3FF))
     /** Fondo del binario su cui scorre la selezione. */
-    val TrackFill get() = style(Color(0x4DFFFFFF), Color(0x1AFFFFFF), Color(0xFFE6E8F3), Color(0xFF282B32))
+    val TrackFill get() = style(Color(0x33FFFFFF), Color(0x12FFFFFF), Color(0xFFE6E8F3), Color(0xFF282B32))
 
     // --- Gradienti ----------------------------------------------------------------------------
     val HeroGradientTop get() = if (isDarkMode) Color(0xFF141C3A) else Color(0xFF1B2E7A)
