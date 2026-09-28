@@ -2334,6 +2334,16 @@ fun MainAppShell(
                         // orizzontale lo prendono le pagine (il PDF accanto alla lista, le card).
                         userScrollEnabled = !useRail,
                         key = { it },
+                        // Al rilascio la pagina si posa con una molla. Pixel: appena elastica, come
+                        // le spatial spring di M3 Expressive. Glass: morbida e senza rimbalzo, come iOS.
+                        flingBehavior = androidx.compose.foundation.pager.PagerDefaults.flingBehavior(
+                            state = tabPager,
+                            snapAnimationSpec = if (AppTheme.isGlass) {
+                                androidx.compose.animation.core.spring(dampingRatio = 1f, stiffness = 300f)
+                            } else {
+                                androidx.compose.animation.core.spring(dampingRatio = 0.82f, stiffness = 380f)
+                            }
+                        ),
                         modifier = Modifier.fillMaxSize()
                             .graphicsLayer {
                                 val f = tabFade.value
@@ -2358,6 +2368,23 @@ fun MainAppShell(
                     // Margine della barra di stato per ogni tab tranne la Home (che ci fa passare
                     // sotto il suo pannello) e salvo quando c'e' gia' la striscia offline in cima.
                     Box(modifier = Modifier.fillMaxSize().then(
+                        // Scorrendo col dito fra le tab, ogni stile ha il suo movimento. Pixel: le
+                        // pagine si comportano come carte, quella che esce si rimpicciolisce e
+                        // sbiadisce, quella che entra si ingrandisce fino a piena misura, con un
+                        // piccolo stacco fra le due. Liquid Glass: piu' sobrio, come iOS, la pagina
+                        // si allontana appena e si vela sopra lo sfondo che resta fermo. Niente
+                        // parallasse: le pagine sono trasparenti e sovrapposte si mescolerebbero.
+                        // Il salto dalla barra in basso resta la dissolvenza qui sopra.
+                        Modifier.graphicsLayer {
+                            val offset = (tabPager.currentPage - page) + tabPager.currentPageOffsetFraction
+                            val d = kotlin.math.abs(offset).coerceIn(0f, 1f)
+                            val glass = AppTheme.isGlass
+                            val scale = 1f - (if (glass) 0.05f else 0.1f) * d
+                            scaleX = scale
+                            scaleY = scale
+                            alpha = 1f - (if (glass) 0.35f else 0.5f) * d
+                        }
+                    ).then(
                         if (tab != MainTab.HOME && !offlineBannerShown) Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
                         else Modifier
                     ).then(
