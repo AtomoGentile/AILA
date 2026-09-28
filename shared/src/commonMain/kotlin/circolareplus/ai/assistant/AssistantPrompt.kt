@@ -370,8 +370,15 @@ Rispondi SOLO con questo oggetto JSON, senza altro testo:
      */
     internal fun lenientParse(raw: String): ParsedAnswer {
         val text = cleanPlainText(raw)
-        val answer = lenientStringField(text, "answer")
+        val field = lenientStringField(text, "answer")
             ?: return ParsedAnswer(tidyAnswer(text), emptyList(), emptyList())
+        // JSON aperto e mai chiuso: il modello si e' fermato a meta' (tetto di token, risposta
+        // spezzata). Va detto, o il messaggio sembra completo e finisce con "...direttamente:".
+        val answer = if (text.trimStart().startsWith("{") && extractJsonObject(text) == null) {
+            field.trimEnd() + "…\n\n(Risposta interrotta dal modello: riprova la domanda.)"
+        } else {
+            field
+        }
 
         val sourcesStart = text.indexOf("\"sources\"").takeIf { it >= 0 }
         val sources = if (sourcesStart == null) {
@@ -407,7 +414,11 @@ Rispondi SOLO con questo oggetto JSON, senza altro testo:
         val end = nextKey?.range?.first
             ?: text.lastIndexOf('"').takeIf { it >= start }
             ?: text.length
-        val slice = text.substring(start, end)
+        // Un taglio a meta' di una sequenza di escape ("...direttamente:\") lascerebbe una
+        // barra rovesciata orfana: il JSON non si decodifica e la barra finisce in chat.
+        val rawSlice = text.substring(start, end)
+        val danglingBackslashes = rawSlice.length - rawSlice.trimEnd('\\').length
+        val slice = if (danglingBackslashes % 2 == 1) rawSlice.dropLast(1) else rawSlice
         val decoded = try {
             json.parseToJsonElement("\"$slice\"").jsonPrimitive.content
         } catch (e: Exception) {
