@@ -22,6 +22,11 @@ internal object PassageSelector {
 
     private const val GAP = "\n[...]\n"
 
+    /** Oltre queste righe una parola non e' piu' rara, e l'elenco diventerebbe un doppione. */
+    private const val MAX_KEY_LINES = 8
+    private const val MAX_KEY_LINE_CHARS = 200
+    private const val KEY_LINES_TITLE = "Righe del documento con le parole della domanda:\n"
+
     fun select(text: String, question: String, maxChars: Int): String {
         if (text.length <= maxChars) return text
         val stems = AssistantContext.tokenize(question).map { AssistantContext.stemOf(it) }.distinct()
@@ -39,9 +44,20 @@ internal object PassageSelector {
         val found = chunks.map { chunk -> stemsIn(chunk, stems) }
         if (found.all { it.isEmpty() }) return text.take(maxChars)
 
+        // Le righe con le parole rare della domanda, messe in fila subito dopo l'intestazione.
+        // Una tabella spezzata fra due blocchi arrivava a pezzi, e un modello piccolo (visto con
+        // Gemini Nano) rispondeva con la prima riga trovata: "scienze il lunedi'" e basta, anche
+        // se la tabella diceva anche martedi' e mercoledi'. Le righe una sotto l'altra le vede
+        // tutte insieme.
+        val keyLines = keyLines(text, stems)
+        val keyBlock = if (keyLines.isEmpty()) "" else
+            KEY_LINES_TITLE + keyLines.joinToString("\n") { "- $it" }
+        val keepKeyBlock = keyBlock.isNotEmpty() && keyBlock.length <= maxChars / 3
+
         val chosen = mutableSetOf<Int>()
         val covered = mutableSetOf<String>()
-        var used = if (keepHeader) header.length + GAP.length else 0
+        var used = (if (keepHeader) header.length + GAP.length else 0) +
+            (if (keepKeyBlock) keyBlock.length + GAP.length else 0)
 
         fun fits(index: Int) = used + chunks[index].length + GAP.length <= maxChars
 
@@ -83,10 +99,16 @@ internal object PassageSelector {
 
         return buildString {
             if (keepHeader) append(header)
+            if (keepKeyBlock) {
+                if (isNotEmpty()) append("\n\n")
+                append(keyBlock)
+                append("\n\n")
+            }
             var previous = -1
             for (index in chosen.sorted()) {
-                // Il primo blocco del corpo segue l'intestazione senza salti.
-                val adjacent = if (previous < 0) index == 0 && keepHeader else index == previous + 1
+                // Il primo blocco del corpo segue l'intestazione senza salti (se in mezzo non ci
+                // sono le righe chiave).
+                val adjacent = if (previous < 0) index == 0 && keepHeader && !keepKeyBlock else index == previous + 1
                 when {
                     isEmpty() -> if (index > 0) append("[...]\n")
                     adjacent -> append('\n')
@@ -123,6 +145,22 @@ internal object PassageSelector {
         }
         if (current.isNotBlank()) result += current.toString()
         return result.filter { it.isNotBlank() }
+    }
+
+    /**
+     * Le righe del documento che contengono una parola rara della domanda: una che compare in
+     * al massimo [MAX_KEY_LINES] righe. "sportell" in una circolare sugli sportelli sta in
+     * decine di righe e non e' rara; "scienz" sta nelle tre righe della tabella e in una frase.
+     */
+    internal fun keyLines(text: String, stems: List<String>): List<String> {
+        val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        val normalized = lines.map { AssistantContext.normalize(it) }
+        val rare = stems.filter { stem -> normalized.count { stem in it } in 1..MAX_KEY_LINES }
+        if (rare.isEmpty()) return emptyList()
+        return lines.filterIndexed { index, _ -> rare.any { it in normalized[index] } }
+            .distinct()
+            .take(MAX_KEY_LINES)
+            .map { if (it.length <= MAX_KEY_LINE_CHARS) it else it.take(MAX_KEY_LINE_CHARS - 1) + "…" }
     }
 
     /** Per ogni parola della domanda trovata nel blocco, quante volte compare. */
