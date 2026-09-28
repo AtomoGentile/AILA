@@ -62,4 +62,14 @@ class AssistantPromptParseTest {
         assertEquals("Ciao! Come posso aiutarti?", parsed.answer)
         assertTrue(parsed.sources.isEmpty())
     }
+
+    /** Il caso dello screenshot: JSON tagliato subito dopo la barra di un "\n". */
+    @Test
+    fun rispostaTagliataNonLasciaLaBarraEDichiaraIlTaglio() {
+        val raw = "{\"answer\": \"Ecco il riassunto delle circolari che ti riguardano direttamente:\\"
+        val parsed = AssistantPrompt.parse(raw)
+        assertFalse(parsed.answer.contains("\\"), parsed.answer)
+        assertTrue(parsed.answer.startsWith("Ecco il riassunto"), parsed.answer)
+        assertTrue(parsed.answer.contains("interrotta"), parsed.answer)
+    }
 }

@@ -289,10 +289,15 @@ internal object AiCoreEngine {
         )
     }
 
+    /**
+     * Tutto il testo del primo candidato. Prima si partiva da `response.text`, che e' solo la
+     * PRIMA parte: con una risposta in piu' parti l'assistente riceveva l'inizio del JSON e
+     * mostrava una frase tagliata. Si uniscono le parti e `response.text` resta il ripiego.
+     */
     private fun textOf(response: GenerateContentResponse): String =
-        response.text?.takeIf { it.isNotBlank() }
-            ?: response.candidates
-                .flatMap { it.content.parts }
-                .filterIsInstance<TextPart>()
-                .joinToString("") { it.text }
+        response.candidates.firstOrNull()?.content?.parts
+            ?.filterIsInstance<TextPart>()
+            ?.joinToString("") { it.text }
+            ?.takeIf { it.isNotBlank() }
+            ?: response.text.orEmpty()
 }
