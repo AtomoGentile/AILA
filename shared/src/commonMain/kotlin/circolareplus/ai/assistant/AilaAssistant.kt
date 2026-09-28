@@ -234,10 +234,20 @@ class AilaAssistant(
         // In parallelo e con un tetto di tempo: prima si scaricavano uno dopo l'altro, e due PDF
         // con allegati su una rete lenta mangiavano da soli meta' dell'attesa. Allo scadere si
         // usa quello che e' arrivato; il resto lo chiede il modello, se gli serve davvero.
+        //
+        // "Quello che e' arrivato" e' il testo letto finora per circolare, aggiornato dopo il PDF
+        // principale e dopo ogni allegato. Prima arrivava solo a lettura finita: se allo scadere del tempo
+        // mancava ancora un allegato si perdeva anche il PDF principale gia' letto, e il modello
+        // rispondeva dal solo riassunto (visto con la circolare 8 degli sportelli: stessa risposta
+        // sbagliata sia da Gemini sia dal modello sul telefono).
         val downloaded = arrayOfNulls<String>(toDownload.size)
+        val complete = BooleanArray(toDownload.size)
         coroutineScope {
             val jobs = toDownload.mapIndexed { index, circular ->
-                launch { downloaded[index] = downloadCircularText(circular) }
+                launch {
+                    downloadCircularText(circular) { text -> downloaded[index] = text }
+                    complete[index] = true
+                }
             }
             withTimeoutOrNull(budgetMs) { jobs.joinAll() }
             jobs.forEach { it.cancel() }
@@ -246,16 +256,22 @@ class AilaAssistant(
         toDownload.forEachIndexed { index, circular ->
             val text = downloaded[index] ?: return@forEachIndexed
             result[circular.number] = text
-            textCache[circular.number] = text
+            // In cache solo il testo completo: uno parziale lascerebbe fuori gli allegati per
+            // sempre, anche dalle domande successive che avrebbero il tempo di leggerli.
+            if (complete[index]) textCache[circular.number] = text
         }
         return result
     }
 
-    /** Testo del PDF di una circolare con i suoi allegati, o `null` se non si lascia leggere. */
-    private suspend fun downloadCircularText(circular: Circular): String? {
-        return try {
+    /**
+     * Legge il PDF di una circolare e poi i suoi allegati, passando a [onText] il testo letto
+     * finora dopo ogni documento. Una circolare che non si lascia leggere non chiama [onText].
+     */
+    private suspend fun downloadCircularText(circular: Circular, onText: (String) -> Unit) {
+        try {
             val bytes = circularsRepository.downloadPdfBytes(circular.r2PdfKey)
             var text = pdfTextExtractor.extractText(bytes)
+            if (text.isNotBlank()) onText(text.take(MAX_PDF_CHARS_PER_CIRCULAR))
 
             for (attachment in circular.attachments) {
                 val pdfKey = attachment.pdfKey ?: continue
@@ -265,6 +281,7 @@ class AilaAssistant(
                     val attachmentText = pdfTextExtractor.extractText(attachmentBytes)
                     if (attachmentText.isNotBlank()) {
                         text += "\n\n--- Allegato: ${attachment.label} ---\n\n$attachmentText"
+                        onText(text.take(MAX_PDF_CHARS_PER_CIRCULAR))
                     }
                 } catch (e: CancellationException) {
                     throw e
@@ -272,12 +289,10 @@ class AilaAssistant(
                     // Ignorato di proposito: vedi commento sopra.
                 }
             }
-            text.takeIf { it.isNotBlank() }?.take(MAX_PDF_CHARS_PER_CIRCULAR)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             // Ignorato di proposito: vedi commento sopra.
-            null
         }
     }
 
