@@ -60,6 +60,12 @@ class AilaAssistant(
         /** Sotto questo margine il secondo giro (PDF richiesti + nuova chiamata) non si tenta. */
         private const val MIN_SECOND_ROUND_MS = 7_000L
 
+        /**
+         * Attesa massima per le frasi in cima all'elenco delle circolari. Con Gemini o Nano sono
+         * uno o due secondi; un modello su CPU che ci mette di piu' non fa aspettare l'elenco.
+         */
+        private const val INTRO_BUDGET_MS = 12_000L
+
         /** Circolari lette per intero prima di chiedere al modello: le due piu' attinenti. */
         private const val PREFETCHED_CIRCULARS = 2
 
@@ -89,6 +95,9 @@ class AilaAssistant(
         AssistantAgenda.answer(knowledge, question)?.let { return it }
         // Stessa cosa per "quali proposte sono aperte?": vedi [AssistantBoard].
         AssistantBoard.answer(knowledge, question)?.let { return it }
+        // "Riassumimi le ultime circolari": elenco e riassunti dal codice, al modello solo le
+        // frasi in cima (vedi [AssistantCirculars]).
+        AssistantCirculars.answer(knowledge, question)?.let { return withIntro(it, knowledge) }
 
         val classifier = classifierFactory()
         val startedAt = currentTimeMillis()
@@ -169,6 +178,30 @@ class AilaAssistant(
                 knowledge.circulars
             ),
             modelLabel = secondResult.modelLabel
+        )
+    }
+
+    /**
+     * L'elenco delle circolari con, in cima, le frasi del modello su cosa e' piu' urgente.
+     *
+     * Le frasi sono un di piu': se il modello non risponde entro [INTRO_BUDGET_MS], fallisce o
+     * scrive qualcosa che non torna con i dati (vedi [AssistantCirculars.acceptIntro]), si
+     * mostra l'elenco da solo, che e' gia' una risposta completa.
+     */
+    private suspend fun withIntro(listing: AssistantCirculars.Listing, knowledge: AssistantKnowledge): AssistantReply {
+        val prompt = listing.introPrompt ?: return listing.reply
+        val result = try {
+            withTimeoutOrNull(INTRO_BUDGET_MS) { classifierFactory().generateAnswer(prompt) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+        val success = result as? AiTextResult.Success ?: return listing.reply
+        val intro = AssistantCirculars.acceptIntro(success.text, listing.shown, knowledge) ?: return listing.reply
+        return listing.reply.copy(
+            text = intro + "\n\n" + listing.reply.text,
+            modelLabel = "${success.modelLabel} · elenco dalle circolari di AILA"
         )
     }
 
