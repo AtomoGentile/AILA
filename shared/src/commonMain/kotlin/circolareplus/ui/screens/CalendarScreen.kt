@@ -116,14 +116,7 @@ fun CalendarScreen(
             }
         )
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = AppTheme.Space16)
-                .padding(top = AppTheme.Space16, bottom = AppTheme.Space32 + circolareplus.design.LocalBottomBarPadding.current)
-        ) {
+        val monthSection: @Composable () -> Unit = {
             AilaCard(modifier = Modifier.ailaAppear(0)) {
                 Column(modifier = Modifier.padding(AppTheme.Space12)) {
                     MonthNavigator(
@@ -170,9 +163,8 @@ fun CalendarScreen(
                     )
                 }
             }
-
-            Spacer(modifier = Modifier.height(AppTheme.Space20))
-
+        }
+        val filtersSection: @Composable () -> Unit = {
             // Filtri categoria: senza emoji, con l'icona della categoria. Pill scorrevole condiviso
             // (AilaSlidingChipRow) invece del cross-fade di colore su ogni singola chip; scorrevole
             // perché con 4 chip il contenuto non ci sta su schermi stretti.
@@ -214,9 +206,8 @@ fun CalendarScreen(
                     modifier = chipModifier(3)
                 )
             }
-
-            Spacer(modifier = Modifier.height(AppTheme.Space20))
-
+        }
+        val daySection: @Composable () -> Unit = {
             AilaSectionTitle(
                 text = "${selectedDay} ${ITALIAN_MONTHS.getOrElse(visibleMonth) { "" }}",
                 modifier = Modifier.ailaAppear(2),
@@ -251,6 +242,53 @@ fun CalendarScreen(
                         Spacer(modifier = Modifier.height(AppTheme.Space12))
                     }
                 }
+            }
+        }
+        val listPadding = Modifier
+            .padding(horizontal = AppTheme.Space16)
+            .padding(top = AppTheme.Space16, bottom = AppTheme.Space32 + circolareplus.design.LocalBottomBarPadding.current)
+        if (circolareplus.design.LocalWideLayout.current) {
+            // Tablet e iPad larghi: il mese a sinistra, i filtri e gli eventi del giorno scelto a
+            // destra, ognuno col suo scorrimento: toccando un giorno i suoi eventi compaiono
+            // accanto invece che sotto al mese.
+            Row(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(AppTheme.Space4)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState())
+                        .then(listPadding)
+                ) {
+                    monthSection()
+                }
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState())
+                        .then(listPadding)
+                ) {
+                    filtersSection()
+                    Spacer(modifier = Modifier.height(AppTheme.Space20))
+                    daySection()
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .then(listPadding)
+            ) {
+                monthSection()
+                Spacer(modifier = Modifier.height(AppTheme.Space20))
+                filtersSection()
+                Spacer(modifier = Modifier.height(AppTheme.Space20))
+                daySection()
             }
         }
     }

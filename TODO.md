@@ -15,6 +15,11 @@ Fatto:
   evidenziata. Ruotando, la circolare aperta passa dal pannello alla schermata sopra le tab e
   viceversa. Da Ricerca, Notifiche e Assistente si apre sempre sopra, come prima.
 - **Bacheca su due colonne** da 840dp (`LazyVerticalStaggeredGrid`), larga al massimo 1160dp.
+- **Home e Calendario su due colonne** da 840dp: Home con circolare in evidenza e scorciatoie
+  a sinistra e prossimi eventi a destra; Calendario col mese a sinistra ed eventi del giorno a
+  destra, ognuno col suo scorrimento. Home, Calendario e Bacheca arrivano a 1160dp, le altre
+  pagine restano a 840dp (Sondaggi e Mappa posti a una colonna: la mappa ha le tre file
+  dell'aula). Menu dal basso (max 640dp, default di Material) e dialoghi (560dp) gia' limitati.
 - **Android**: `configChanges` sull'activity, cosi' ruotare un tablet non ricrea l'app (prima
   si perdevano tab e circolare aperta a ogni rotazione).
 

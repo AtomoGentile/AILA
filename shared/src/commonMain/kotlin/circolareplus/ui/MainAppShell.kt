@@ -2358,12 +2358,15 @@ fun MainAppShell(
                         else Modifier
                     ).then(
                         // Barra laterale: la pagina parte alla sua destra, in una colonna centrata;
-                        // la tab Classe con le circolari affiancate prende tutta la larghezza.
+                        // la tab Classe con le circolari affiancate prende tutta la larghezza, e
+                        // le pagine che su schermi larghi vanno su due colonne (Home, Calendario,
+                        // Bacheca) arrivano fino a MaxWideContentWidth. Sondaggi e Mappa posti
+                        // restano a una colonna: la mappa ha tre file di banchi come l'aula.
                         if (!useRail) Modifier
                         else Modifier.padding(start = RailInset).then(
                             when {
                                 tab == MainTab.CLASS && circularsPane -> Modifier
-                                tab == MainTab.CLASS && twoPane ->
+                                twoPane && tab in WideTabs ->
                                     Modifier.appContentWidth(circolareplus.design.MaxWideContentWidth)
                                 else -> Modifier.appContentWidth()
                             }
@@ -5546,6 +5549,9 @@ private fun Modifier.tabBarSurface(
 
 /** Spazio a sinistra occupato dalla barra laterale (margine + barra + distacco dal contenuto). */
 private val RailInset = 104.dp
+
+/** Le tab che su schermi larghi si dispongono su due colonne (vedi LocalWideLayout). */
+private val WideTabs = setOf(MainTab.HOME, MainTab.CALENDAR, MainTab.CLASS)
 
 /** Larghezza della lista delle circolari quando la circolare aperta le sta accanto. */
 private val CircularsListPaneWidth = 400.dp
