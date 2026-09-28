@@ -274,6 +274,40 @@ fun CalendarScreen(
                     filtersSection()
                     Spacer(modifier = Modifier.height(AppTheme.Space20))
                     daySection()
+                    // Sotto al giorno scelto, i prossimi eventi (con il filtro attivo): la colonna
+                    // resta piena e si vede cosa arriva senza toccare un giorno dopo l'altro.
+                    val upcoming = remember(events, selectedCategoryFilter, visibleYear, visibleMonth, selectedDay) {
+                        upcomingEvents(
+                            events.filter { selectedCategoryFilter == null || it.category == selectedCategoryFilter },
+                            limit = 12
+                        ).filter { event ->
+                            val date = parseIsoDate(event.date.take(10).trim())
+                            date == null || date.year != visibleYear || date.month != visibleMonth || date.day != selectedDay
+                        }.take(6)
+                    }
+                    if (upcoming.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(AppTheme.Space24))
+                        AilaSectionTitle(text = "In arrivo")
+                        Spacer(modifier = Modifier.height(AppTheme.Space12))
+                        upcoming.forEachIndexed { index, event ->
+                            CalendarEventCard(
+                                event = event,
+                                onClick = {
+                                    // Tocco su un evento in arrivo: il mese e il giorno vanno su di lui.
+                                    parseIsoDate(event.date)?.let {
+                                        visibleYear = it.year
+                                        visibleMonth = it.month
+                                        selectedDay = it.day
+                                    }
+                                },
+                                onDeleteClick = { onDeleteEventClick(event) },
+                                showDate = true
+                            )
+                            if (index != upcoming.lastIndex) {
+                                Spacer(modifier = Modifier.height(AppTheme.Space12))
+                            }
+                        }
+                    }
                 }
             }
         } else {
@@ -439,7 +473,9 @@ fun CalendarEventCard(
     event: CalendarEvent,
     onClick: () -> Unit,
     onDeleteClick: () -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Scrive anche il giorno accanto all'ora (elenco "In arrivo", fuori dal giorno scelto). */
+    showDate: Boolean = false
 ) {
     AilaCard(onClick = onClick, modifier = modifier) {
         Row(
@@ -481,8 +517,11 @@ fun CalendarEventCard(
                     maxLines = 2
                 )
                 Spacer(modifier = Modifier.height(2.dp))
+                val dayLabel = if (showDate) {
+                    parseIsoDate(event.date.take(10).trim())?.let { "${it.day} ${ITALIAN_MONTHS.getOrElse(it.month) { "" }}" }
+                } else null
                 Text(
-                    text = event.time ?: "Tutto il giorno",
+                    text = listOfNotNull(dayLabel, event.time ?: "Tutto il giorno").joinToString(" \u00B7 "),
                     fontSize = 13.sp,
                     color = AppTheme.TextMuted
                 )

@@ -76,7 +76,13 @@ fun HomeScreen(
     // generati dall'AI) risultava "maggiore" di "2026-09-20" e una verifica di settembre restava
     // per mesi fra i prossimi eventi. Ora la data si legge davvero, e un evento di oggi la cui ora
     // e' gia' passata non e' piu' "prossimo".
-    val nextEvents = remember(calendarEvents) { upcomingEvents(calendarEvents, limit = 3) }
+    // Tablet e iPad larghi: c'e' spazio per piu' eventi e per le ultime circolari, invece di
+    // lasciare meta' schermo vuoto sotto le tre righe del telefono.
+    val wide = circolareplus.design.LocalWideLayout.current
+    val nextEvents = remember(calendarEvents, wide) { upcomingEvents(calendarEvents, limit = if (wide) 6 else 3) }
+    val recentCirculars = remember(circulars, wide) {
+        if (wide) circulars.sortedByDescending { it.number }.take(5) else emptyList()
+    }
 
     // Circolare più recente in evidenza. Tipo esplicito sulla callback: un lambda scritto dentro
     // un "if" come argomento nullable è ambiguo da leggere e da inferire.
@@ -157,23 +163,65 @@ fun HomeScreen(
             }
         }
         val bottomPadding = AppTheme.Space24 + circolareplus.design.LocalBottomBarPadding.current
-        if (circolareplus.design.LocalWideLayout.current) {
-            // Tablet e iPad larghi: circolare in evidenza e scorciatoie a sinistra, prossimi
-            // eventi a destra, invece di una colonna sola che lascia vuoti i lati.
-            Row(
+        if (wide) {
+            // Tablet e iPad larghi: ultime circolari a sinistra e prossimi eventi a destra, poi le
+            // scorciatoie affiancate su tutta la larghezza.
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = AppTheme.Space16)
                     .padding(top = AppTheme.Space20, bottom = bottomPadding),
-                horizontalArrangement = Arrangement.spacedBy(AppTheme.Space20)
+                verticalArrangement = Arrangement.spacedBy(AppTheme.Space24)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    latestSection()
-                    Spacer(modifier = Modifier.height(AppTheme.Space24))
-                    shortcutsSection()
+                Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space20)) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        AilaSectionTitle(
+                            text = "Ultime circolari",
+                            actionText = "Vedi tutte",
+                            onActionClick = onNavigateToCirculars,
+                            modifier = Modifier.ailaAppear(0)
+                        )
+                        Spacer(modifier = Modifier.height(AppTheme.Space12))
+                        RecentCircularsCard(
+                            circulars = recentCirculars,
+                            onCircularClick = onNavigateToCircularDetail,
+                            modifier = Modifier.ailaAppear(1)
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        eventsSection()
+                    }
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    eventsSection()
+                Column {
+                    AilaSectionTitle(text = "Scorciatoie", modifier = Modifier.ailaAppear(3))
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space20)) {
+                        AilaCard(modifier = Modifier.weight(1f).ailaAppear(4)) {
+                            AilaListRow(
+                                title = "Sondaggi",
+                                subtitle = "Date delle interrogazioni e opzioni da mettere in ordine",
+                                tint = AppTheme.TintAmber,
+                                onClick = onNavigateToPolls,
+                                icon = {
+                                    AppIcons.Poll(modifier = Modifier.size(21.dp), color = AppTheme.TintAmberInk)
+                                }
+                            )
+                        }
+                        AilaCard(modifier = Modifier.weight(1f).ailaAppear(5)) {
+                            AilaListRow(
+                                title = "Bacheca della classe",
+                                subtitle = if (openProposalsCount > 0)
+                                    "$openProposalsCount proposte da leggere e votare"
+                                else
+                                    "Proponi un'idea e falla votare ai compagni",
+                                tint = AppTheme.TintViolet,
+                                onClick = onNavigateToBoard,
+                                icon = {
+                                    AppIcons.ChatBubble(modifier = Modifier.size(21.dp), color = AppTheme.TintVioletInk)
+                                }
+                            )
+                        }
+                    }
                 }
             }
         } else {
@@ -216,6 +264,35 @@ private fun LatestCircularCard(
                 AppIcons.Document(modifier = Modifier.size(21.dp), color = AppTheme.TintBlueInk)
             }
         )
+    }
+}
+
+/** Le ultime circolari arrivate, una per riga (Home su schermi larghi). */
+@Composable
+private fun RecentCircularsCard(
+    circulars: List<Circular>,
+    onCircularClick: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (circulars.isEmpty()) {
+        LatestCircularCard(latestCircular = null, onClick = null, modifier = modifier)
+        return
+    }
+    AilaCard(modifier = modifier) {
+        circulars.forEachIndexed { index, circular ->
+            AilaListRow(
+                title = "Circolare n. ${circular.number}",
+                subtitle = circular.title,
+                tint = AppTheme.TintBlue,
+                onClick = { onCircularClick(circular.number) },
+                icon = {
+                    AppIcons.Document(modifier = Modifier.size(21.dp), color = AppTheme.TintBlueInk)
+                }
+            )
+            if (index != circulars.lastIndex) {
+                HorizontalDivider(color = AppTheme.Hairline, modifier = Modifier.padding(start = 72.dp))
+            }
+        }
     }
 }
 
