@@ -9,13 +9,10 @@ import type { Classification } from './types';
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const DEFAULT_MODEL = 'gemini-flash-latest';
-const MODEL_LADDER = [
-  'gemini-flash-latest',
-  'gemini-flash-lite-latest',
-  'gemini-2.5-flash',
-  'gemini-2.5-flash-lite',
-  'gemini-2.5-pro',
-];
+// Solo alias -latest: i nomi con la versione invecchiano (i gemini-2.5-* rispondono ormai 404
+// "no longer available to new users"). Niente ricerca automatica nell'elenco di Google, che
+// sceglieva proprio gemini-2.5-flash.
+const MODEL_LADDER = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest'];
 const MAX_PDF_CHARS = 24_000;
 const REQUEST_TIMEOUT_MS = 120_000;
 const MAX_RETRIES = 3;
@@ -54,27 +51,6 @@ export function isModelUnavailable(status: number, body: string): boolean {
   const lower = body.toLowerCase();
   return ['not found', 'is not supported', 'does not exist', 'has been deprecated', 'unavailable', 'overloaded', 'high demand']
     .some((s) => lower.includes(s));
-}
-
-// Chiede a Google quali modelli vanno con questa chiave; preferisce un flash stabile.
-async function discoverUsableModel(apiKey: string): Promise<string | null> {
-  try {
-    const res = await fetch(`${API_BASE}?pageSize=200`, { headers: { 'x-goog-api-key': apiKey } });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { models?: { name?: string; supportedGenerationMethods?: string[] }[] };
-    const models = (data.models ?? [])
-      .filter((m) => m.name && m.supportedGenerationMethods?.includes('generateContent'))
-      .map((m) => m.name!.replace(/^models\//, ''))
-      .filter((n) => !['embedding', 'vision', 'tts', 'live', 'image', 'aqa'].some((x) => n.toLowerCase().includes(x)));
-    return (
-      models.find((n) => n.includes('flash') && !n.includes('preview')) ??
-      models.find((n) => !n.includes('preview')) ??
-      models[0] ??
-      null
-    );
-  } catch {
-    return null;
-  }
 }
 
 export function buildPrompt(number: number, title: string, pdfText: string, studentContext: string): string {
@@ -173,29 +149,20 @@ export async function classifyCircular(
 
   try {
     const prompt = buildPrompt(number, title, pdfText, studentContext);
-    let lastFailure = 'nessun modello disponibile';
-    const tryModel = async (model: string, label = ''): Promise<ParseResult | null> => {
+    // Tutti i fallimenti, non solo l'ultimo: l'ultimo modello nascondeva perché i primi non andavano.
+    const failures: string[] = [];
+    for (const model of candidates()) {
       const res = await postGenerate(apiKey, model, prompt);
       const body = await res.text();
       if (res.ok) {
         resolvedModel = model;
-        return parseGeminiResponse(number, body, model);
+        const r = parseGeminiResponse(number, body, model);
+        return r.ok ? r.value : classifyHeuristic(number, title, pdfText, r.reason);
       }
-      lastFailure = `HTTP ${res.status} con il modello ${model}${label}: ${body.slice(0, 200)}`;
-      return isModelUnavailable(res.status, body) ? null : { ok: false, reason: lastFailure };
-    };
-
-    for (const model of candidates()) {
-      const r = await tryModel(model);
-      if (r) return r.ok ? r.value : classifyHeuristic(number, title, pdfText, r.reason);
+      failures.push(`HTTP ${res.status} con ${model}: ${body.slice(0, 200)}`);
+      if (!isModelUnavailable(res.status, body)) break;
     }
-    const discovered = await discoverUsableModel(apiKey);
-    if (discovered) {
-      const r = await tryModel(discovered, ' (rilevato automaticamente)');
-      if (r?.ok) return r.value;
-      if (r) lastFailure = r.reason;
-    }
-    return classifyHeuristic(number, title, pdfText, lastFailure);
+    return classifyHeuristic(number, title, pdfText, failures.join('; ') || 'nessun modello disponibile');
   } catch (e) {
     const err = e as Error;
     return classifyHeuristic(number, title, pdfText, `eccezione ${err.name}: ${err.message || 'nessun dettaglio'}`);
@@ -221,7 +188,5 @@ export async function testKey(apiKey: string): Promise<string> {
     lastFailure = `HTTP ${res.status} (${model}): ${body.slice(0, 240)}`;
     if (!isModelUnavailable(res.status, body)) return `La chiave è stata rifiutata. Risposta di Google: ${lastFailure}`;
   }
-  const discovered = await discoverUsableModel(apiKey);
-  if (discovered) return `Chiave valida, ma nessuno dei modelli previsti è disponibile. Ne userò uno rilevato automaticamente: ${discovered}.`;
   return `Nessun modello utilizzabile con questa chiave. Ultimo errore: ${lastFailure ?? 'sconosciuto'}`;
 }
