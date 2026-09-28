@@ -64,6 +64,32 @@ class PassageSelectorTest {
         assertTrue("martedi' dalle 14:30" in selected, selected)
     }
 
+    // La tabella vera della circolare 8: tre righe di scienze in tre giorni diversi, in mezzo alle
+    // altre materie. Gemini Nano rispondeva solo "lunedi'".
+    private val tabellaSportelli = buildString {
+        appendLine("Oggetto: Sportelli didattici permanenti a.s. 2026/27")
+        repeat(30) { appendLine("Lo sportello si prenota dalla piattaforma, riga $it del regolamento.") }
+        appendLine("DISCIPLINA GIORNO ORARIO AULA")
+        appendLine("GRECO E LATINO LUNEDI 13,30 - 15,00 0-036-B")
+        appendLine("SCIENZE LUNEDI 13,30 - 15,00 0-020-B")
+        repeat(6) { appendLine("MATEMATICA E FISICA MARTEDI 13,30 - 15,00 0-037-B riga $it") }
+        appendLine("SCIENZE MARTEDI 13,30 - 15,00 0-036-B")
+        repeat(6) { appendLine("INGLESE MERCOLEDI 13,30 - 15,00 0-021-B riga $it") }
+        appendLine("SCIENZE MERCOLEDI 13,30 - 15,00 0-020-B")
+        appendLine("Al momento non sono previsti sportelli di discipline sportive, scienze motorie, diritto ed economia dello sport.")
+        repeat(30) { appendLine("Tutorial della piattaforma, passo $it: apri la pagina degli sportelli e scegli la data.") }
+    }
+
+    @Test
+    fun leRigheConLaParolaRaraArrivanoTutte() {
+        val selected = PassageSelector.select(tabellaSportelli, "Quando gli sportelli di scienze?", 2_000)
+        assertTrue(selected.length <= 2_000)
+        assertTrue("SCIENZE LUNEDI 13,30 - 15,00 0-020-B" in selected, selected)
+        assertTrue("SCIENZE MARTEDI 13,30 - 15,00 0-036-B" in selected, selected)
+        assertTrue("SCIENZE MERCOLEDI 13,30 - 15,00 0-020-B" in selected, selected)
+        assertTrue("Righe del documento con le parole della domanda" in selected, selected)
+    }
+
     @Test
     fun leRigheLunghissimeSiSpezzano() {
         val chunks = PassageSelector.chunk("x".repeat(2_000))
