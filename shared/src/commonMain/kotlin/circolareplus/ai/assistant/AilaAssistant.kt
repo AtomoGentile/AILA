@@ -60,44 +60,14 @@ class AilaAssistant(
         /** Sotto questo margine il secondo giro (PDF richiesti + nuova chiamata) non si tenta. */
         private const val MIN_SECOND_ROUND_MS = 7_000L
 
-        /**
-         * Attesa massima per le frasi in cima all'elenco delle circolari. Con Gemini o Nano sono
-         * uno o due secondi; un modello su CPU che ci mette di piu' non fa aspettare l'elenco.
-         */
-        private const val INTRO_BUDGET_MS = 12_000L
-
         /** Circolari lette per intero prima di chiedere al modello: le due piu' attinenti. */
         private const val PREFETCHED_CIRCULARS = 2
 
         /**
-         * Circolari recenti in cui cercare le parole della domanda **dentro il testo**. Il titolo
-         * e il riassunto non bastano: "quando inizia il corso di teatro?" sta spesso in una
-         * circolare intitolata "Attivita' pomeridiane a.s. 2026/27", e cercando solo li'
-         * l'assistente rispondeva che il corso non esiste.
+         * Testo gia' estratto per circolare: la stessa domanda riformulata, o la domanda dopo,
+         * non riscarica e non rilegge lo stesso PDF.
          */
-        private const val SEARCHED_CIRCULARS = 15
-    }
-
-    /**
-     * Il testo integrale delle circolari che c'entrano con la domanda, scelte in due modi:
-     * la migliore per titolo e riassunto, poi le migliori per contenuto del PDF (vedi
-     * [AssistantContext.rankByText]). I PDF gia' letti (dall'analisi o da una domanda
-     * precedente) non si riscaricano; gli altri si scaricano in parallelo entro
-     * [PREFETCH_BUDGET_MS] e, se non arrivano in tempo, si usa quello che c'e'.
-     */
-    private suspend fun relevantCircularTexts(knowledge: AssistantKnowledge, question: String): Map<Int, String> {
-        val byTitle = AssistantContext.mostRelevantCirculars(knowledge, question, PREFETCHED_CIRCULARS)
-        if (!AssistantContext.wantsTextSearch(knowledge, question)) {
-            return fetchCircularTexts(byTitle, knowledge.circulars, budgetMs = PREFETCH_BUDGET_MS)
-        }
-        val recent = knowledge.circulars
-            .sortedWith(compareByDescending<Circular> { it.publishDate.take(10) }.thenByDescending { it.number })
-            .take(SEARCHED_CIRCULARS)
-            .map { it.number }
-        val texts = fetchCircularTexts((byTitle + recent).distinct(), knowledge.circulars, budgetMs = PREFETCH_BUDGET_MS)
-        val byText = AssistantContext.rankByText(texts, question)
-        val chosen = (byTitle.take(1) + byText + byTitle).distinct().take(PREFETCHED_CIRCULARS)
-        return texts.filterKeys { it in chosen }
+        private val textCache = mutableMapOf<Int, String>()
     }
 
     /**
@@ -119,9 +89,6 @@ class AilaAssistant(
         AssistantAgenda.answer(knowledge, question)?.let { return it }
         // Stessa cosa per "quali proposte sono aperte?": vedi [AssistantBoard].
         AssistantBoard.answer(knowledge, question)?.let { return it }
-        // "Riassumimi le ultime circolari": elenco e riassunti dal codice, al modello solo le
-        // frasi in cima (vedi [AssistantCirculars]).
-        AssistantCirculars.answer(knowledge, question)?.let { return withIntro(it, knowledge) }
 
         val classifier = classifierFactory()
         val startedAt = currentTimeMillis()
@@ -130,7 +97,11 @@ class AilaAssistant(
         // aspettare che sia il modello a chiederlo: i modelli sul telefono non lo chiedono quasi
         // mai e rispondevano col solo riassunto, dove dettagli come "scienze il martedi'" non
         // ci sono. Per saluti e domande generali la lista e' vuota e non si scarica niente.
-        val prefetched = relevantCircularTexts(knowledge, question)
+        val prefetched = fetchCircularTexts(
+            AssistantContext.mostRelevantCirculars(knowledge, question, PREFETCHED_CIRCULARS),
+            knowledge.circulars,
+            budgetMs = PREFETCH_BUDGET_MS
+        )
 
         val firstRaw = when (
             val result = classifier.generateAnswer(
@@ -146,7 +117,7 @@ class AilaAssistant(
 
         val firstAnswer = AssistantPrompt.parse(firstRaw.text)
         val firstReply = AssistantReply(
-            text = withEvidence(firstAnswer.answer, question, prefetched),
+            text = firstAnswer.answer,
             sources = checkedSources(firstAnswer, question, prefetched.keys, knowledge),
             modelLabel = firstRaw.modelLabel
         )
@@ -189,7 +160,7 @@ class AilaAssistant(
 
         val secondAnswer = AssistantPrompt.parse(secondResult.text)
         return AssistantReply(
-            text = withEvidence(secondAnswer.answer, question, deepTexts),
+            text = secondAnswer.answer,
             // Le circolari richieste e lette per intero entrano fra le fonti anche se il modello
             // si dimentica di citarle: sono quelle su cui la risposta si regge davvero.
             sources = mergeSources(
@@ -198,51 +169,6 @@ class AilaAssistant(
                 knowledge.circulars
             ),
             modelLabel = secondResult.modelLabel
-        )
-    }
-
-    /**
-     * Rete di sicurezza contro il "non esiste" sbagliato: se il modello risponde che una cosa
-     * non c'e' ma nel testo di una circolare letta c'e' una riga con le parole della domanda,
-     * la riga si mostra sotto, citata dal PDF. Visto con Gemini Nano: "Gli sportelli di scienze
-     * non sono previsti", citando proprio la circolare "Sportelli didattici permanenti".
-     * Nessuna generazione in piu': e' solo una ricerca nel testo gia' scaricato.
-     */
-    private fun withEvidence(answer: String, question: String, texts: Map<Int, String>): String {
-        if (texts.isEmpty() || !NEGATIVE_ANSWER.containsMatchIn(AssistantContext.normalize(answer))) return answer
-        for ((number, text) in texts) {
-            val snippet = PassageSelector.bestSnippet(text, question) ?: continue
-            return "$answer\n\nPero' nella circolare n. $number c'e' scritto: «$snippet»\nAprila per controllare."
-        }
-        return answer
-    }
-
-    private val NEGATIVE_ANSWER = Regex(
-        "\\bnon (e |sono |viene |vengono )?(previst|indicat|menzionat|specificat)|\\bnon risult|\\bnon esist|" +
-            "\\bnon (ci sono|c e)\\b|\\bnon (trovo|ho trovato)|\\bnon ho (informazion|dati|notizi)|\\bnessun[ao]? (informazion|corso|sportell|dato)"
-    )
-
-    /**
-     * L'elenco delle circolari con, in cima, le frasi del modello su cosa e' piu' urgente.
-     *
-     * Le frasi sono un di piu': se il modello non risponde entro [INTRO_BUDGET_MS], fallisce o
-     * scrive qualcosa che non torna con i dati (vedi [AssistantCirculars.acceptIntro]), si
-     * mostra l'elenco da solo, che e' gia' una risposta completa.
-     */
-    private suspend fun withIntro(listing: AssistantCirculars.Listing, knowledge: AssistantKnowledge): AssistantReply {
-        val prompt = listing.introPrompt ?: return listing.reply
-        val result = try {
-            withTimeoutOrNull(INTRO_BUDGET_MS) { classifierFactory().generateAnswer(prompt) }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            null
-        }
-        val success = result as? AiTextResult.Success ?: return listing.reply
-        val intro = AssistantCirculars.acceptIntro(success.text, listing.shown, knowledge) ?: return listing.reply
-        return listing.reply.copy(
-            text = intro + "\n\n" + listing.reply.text,
-            modelLabel = "${success.modelLabel} · elenco dalle circolari di AILA"
         )
     }
 
@@ -295,7 +221,7 @@ class AilaAssistant(
     ): Map<Int, String> {
         val result = mutableMapOf<Int, String>()
         val toDownload = numbers.mapNotNull { number ->
-            val cached = CircularTextCache.get(number)
+            val cached = textCache[number]
             if (cached != null) {
                 result[number] = cached
                 null
@@ -320,7 +246,7 @@ class AilaAssistant(
         toDownload.forEachIndexed { index, circular ->
             val text = downloaded[index] ?: return@forEachIndexed
             result[circular.number] = text
-            CircularTextCache.put(circular.number, text)
+            textCache[circular.number] = text
         }
         return result
     }

@@ -109,13 +109,7 @@ class ChainedAiClassifier(
         // misura che regge. E' quello che rende la riserva una riserva vera anche quando il
         // primario e' il cloud con il suo contesto largo.
         val second = secondary.generateAnswer(prompt)
-        if (second is AiTextResult.Success) {
-            // Il motivo per cui ha risposto la riserva va mostrato: senza, chi ha scelto Google
-            // vedeva rispondere Gemini Nano e non aveva modo di sapere perche' (quota finita,
-            // chiave, rete, modello sovraccarico).
-            val why = HeuristicClassification.shortenReason((first as AiTextResult.Failure).reason)
-            return second.copy(modelLabel = "${second.modelLabel} · di riserva, perche' il primo non ha risposto: $why")
-        }
+        if (second is AiTextResult.Success) return second
 
         val firstReason = (first as AiTextResult.Failure).reason
         val secondReason = (second as AiTextResult.Failure).reason
