@@ -82,6 +82,22 @@ internal object TimeScopeParser {
         if (lastWeek) add(monday.plusDays(-7), monday.plusDays(-1), "la settimana scorsa")
         if (thisWeek) add(monday, monday.plusDays(6), "questa settimana")
 
+        // "tra due settimane", "fra 3 giorni": la settimana (lunedi'-domenica) che cade N
+        // settimane dopo questa, o il giorno N giorni dopo oggi. Prima non si riconoscevano, e
+        // "a che evento devo partecipare tra due settimane?" diventava una ricerca per parole
+        // ("evento", "due") che pescava una circolare a caso.
+        Regex("""\b(?:tra|fra)\s+(\w+)\s+(settimane|settimana|giorni|giorno)\b""")
+            .findAll(words)
+            .forEach { match ->
+                val count = numberWord(match.groupValues[1]) ?: return@forEach
+                if (match.groupValues[2].startsWith("settiman")) {
+                    val start = monday.plusDays(7 * count)
+                    add(start, start.plusDays(6), "tra ${match.groupValues[1]} ${match.groupValues[2]}")
+                } else {
+                    today.plusDays(count).let { add(it, it, "tra ${match.groupValues[1]} ${match.groupValues[2]}") }
+                }
+            }
+
         if (has("questo mese") || has("mese corrente")) {
             add(
                 CivilDate(today.year, today.month, 1),
@@ -100,5 +116,20 @@ internal object TimeScopeParser {
             to = found.maxOf { it.to },
             label = found.joinToString(" + ") { it.label }
         )
+    }
+
+    /** "due" -> 2, "3" -> 3, "una" -> 1; `null` per tutto il resto. */
+    private fun numberWord(word: String): Int? = word.toIntOrNull()?.takeIf { it in 1..52 } ?: when (word) {
+        "un", "una", "uno" -> 1
+        "due" -> 2
+        "tre" -> 3
+        "quattro" -> 4
+        "cinque" -> 5
+        "sei" -> 6
+        "sette" -> 7
+        "otto" -> 8
+        "nove" -> 9
+        "dieci" -> 10
+        else -> null
     }
 }
