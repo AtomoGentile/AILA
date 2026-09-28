@@ -144,470 +144,259 @@ fun SettingsScreen(
     Column(modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
         AilaBackBar(title = "Impostazioni", onBackClick = onBackClick)
 
-        LazyColumn(
-            contentPadding = PaddingValues(
-                start = AppTheme.Space16,
-                end = AppTheme.Space16,
-                top = AppTheme.Space16,
-                bottom = AppTheme.Space32
-            ),
-            verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)
-        ) {
+        // Ogni sezione (titolo + card) e' un elemento: su tablet e iPad larghi le sezioni si
+        // dispongono su due colonne (vedi AilaAdaptiveCardList), sul telefono una sotto l'altra.
+        val sections = buildList<@Composable () -> Unit> {
             // --- Aspetto ------------------------------------------------------------------
-            item { AilaSectionTitle(text = "Aspetto", modifier = Modifier.ailaAppear(0)) }
-            item {
-                AilaCard(modifier = Modifier.ailaAppear(1)) {
-                    Column(modifier = Modifier.padding(AppTheme.Space16)) {
-                        Text(
-                            text = "Tema",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = AppTheme.TextDark
-                        )
-                        Spacer(modifier = Modifier.height(AppTheme.Space8))
-                        AilaSegmentedTabs(
-                            labels = listOf("Chiaro", "Scuro"),
-                            selectedIndex = if (isDarkMode) 1 else 0,
-                            onSelect = { index -> onDarkModeChange(index == 1) },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(AppTheme.Space16))
-                        Text(
-                            text = "Stile grafico",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = AppTheme.TextDark
-                        )
-                        Spacer(modifier = Modifier.height(AppTheme.Space8))
-                        val styles = circolareplus.design.UiStyle.entries
-                        AilaSegmentedTabs(
-                            labels = styles.map { it.label },
-                            selectedIndex = styles.indexOf(uiStyle),
-                            onSelect = { index -> onUiStyleChange(styles[index]) },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = when (uiStyle) {
-                                circolareplus.design.UiStyle.AUTO ->
-                                    "Liquid Glass su iPhone e iPad, Material su Android."
-                                circolareplus.design.UiStyle.GLASS ->
-                                    "Superfici di vetro traslucide e movimenti morbidi, come iOS."
-                                circolareplus.design.UiStyle.EXPRESSIVE ->
-                                    "Colori pieni, forme che si deformano al tocco e movimenti vivaci, come Android."
-                            },
-                            fontSize = 12.sp,
-                            color = AppTheme.TextMuted,
-                            lineHeight = 16.sp
-                        )
-                        Spacer(modifier = Modifier.height(AppTheme.Space16))
-                        Text(
-                            text = "Colore principale",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = AppTheme.TextDark
-                        )
-                        Spacer(modifier = Modifier.height(AppTheme.Space8))
-                        AccentPicker(selected = accent, onSelect = onAccentChange)
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = if (accent == circolareplus.design.AilaAccent.Default)
-                                "${accent.label} (predefinito)"
-                            else "${accent.label} \u2022 tocca il primo per tornare al predefinito",
-                            fontSize = 12.sp,
-                            color = AppTheme.TextMuted,
-                            lineHeight = 16.sp
-                        )
-                    }
-                }
-            }
-
-            // --- Offline -----------------------------------------------------------------
-            item { AilaSectionTitle(text = "Uso offline") }
-            item {
-                // Letto una volta all'apertura (e dopo lo svuotamento), non a ogni ricomposizione:
-                // e' un giro sul disco.
-                var offlineBytes by remember { mutableStateOf(circolareplus.platform.OfflineStore.totalBytes()) }
-                var syncProgress by remember { mutableStateOf<Float?>(null) }
-                var syncMessage by remember { mutableStateOf<String?>(null) }
-                var lastFullSync by remember { mutableStateOf(circolareplus.data.AppContainer.settings.lastFullOfflineSyncMillis) }
-                AilaCard {
-                    Column(modifier = Modifier.padding(AppTheme.Space16)) {
-                        Text(
-                            text = "Dati salvati sul telefono",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = AppTheme.TextDark
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Senza rete puoi consultare circolari (con i PDF delle ultime), " +
-                                "calendario, sondaggi, bacheca e mappa posti come li hai visti l'ultima " +
-                                "volta. L'app si aggiorna da sola, anche chiusa: non devi ricordarti di niente. " +
-                                "Voti e modifiche richiedono la connessione.\n" +
-                                "Ultimo download completo: ${offlineAgeLabel(lastFullSync)} \u2022 " +
-                                "Spazio occupato: ${formatOfflineSize(offlineBytes)}.",
-                            fontSize = 12.sp,
-                            color = AppTheme.TextMuted,
-                            lineHeight = 16.sp
-                        )
-                        Spacer(modifier = Modifier.height(AppTheme.Space12))
-                        val progress = syncProgress
-                        if (progress != null) {
-                            circolareplus.design.AilaProgressBar(
-                                progress = progress,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Spacer(modifier = Modifier.height(AppTheme.Space8))
-                        }
-                        syncMessage?.let { message ->
-                            Text(text = message, fontSize = 12.sp, color = AppTheme.TextMuted)
-                            Spacer(modifier = Modifier.height(AppTheme.Space8))
-                        }
-                        AilaPrimaryButton(
-                            text = if (progress != null) "Scarico\u2026 ${(progress * 100).toInt()}%" else "Aggiorna adesso",
-                            onClick = {
-                                if (syncProgress == null) {
-                                    syncProgress = 0f
-                                    syncMessage = null
-                                    scope.launch {
-                                        val ok = circolareplus.data.OfflineSync.run { syncProgress = it }
-                                        syncProgress = null
-                                        offlineBytes = circolareplus.platform.OfflineStore.totalBytes()
-                                        lastFullSync = circolareplus.data.AppContainer.settings.lastFullOfflineSyncMillis
-                                        syncMessage = when {
-                                            ok -> "Fatto: l'app \u00e8 pronta per l'uso senza rete."
-                                            circolareplus.data.remote.ConnectivityState.isOffline -> "Sei offline: riprova quando torni in rete."
-                                            else -> "Un download \u00e8 gi\u00e0 in corso in sottofondo, riprova tra poco."
-                                        }
-                                    }
-                                }
-                            },
-                            fillMaxWidth = true,
-                            enabled = syncProgress == null
-                        )
-                        Spacer(modifier = Modifier.height(AppTheme.Space8))
-                        AilaSecondaryButton(
-                            text = "Svuota dati offline",
-                            onClick = {
-                                circolareplus.platform.OfflineStore.clear()
-                                circolareplus.data.AppContainer.settings.lastFullOfflineSyncMillis = 0L
-                                lastFullSync = 0L
-                                offlineBytes = circolareplus.platform.OfflineStore.totalBytes()
-                            },
-                            compact = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            }
-
-            // --- Notifiche ----------------------------------------------------------------
-            item { AilaSectionTitle(text = "Notifiche", modifier = Modifier.ailaAppear(2)) }
-            item {
-                AilaCard(modifier = Modifier.ailaAppear(3)) {
-                    NotificationKind.entries.forEachIndexed { index, kind ->
-                        AilaListRow(
-                            title = kind.label,
-                            subtitle = kind.description,
-                            tint = AppTheme.TintBlue,
-                            icon = { AppIcons.Bell(modifier = Modifier.size(19.dp), color = AppTheme.TintBlueInk) },
-                            trailing = {
-                                AilaSwitch(
-                                    checked = run {
-                                        notificationRevision
-                                        isNotificationKindEnabled(kind)
-                                    },
-                                    onCheckedChange = {
-                                        onNotificationKindChange(kind, it)
-                                        notificationRevision++
-                                    }
-                                )
-                            }
-                        )
-                        HorizontalDivider(color = AppTheme.Hairline, modifier = Modifier.padding(start = 72.dp))
-                    }
-                    AilaListRow(
-                        title = "Bacheca",
-                        subtitle = "Avvisi per le nuove proposte create",
-                        tint = AppTheme.TintBlue,
-                        icon = { AppIcons.Bell(modifier = Modifier.size(19.dp), color = AppTheme.TintBlueInk) },
-                        trailing = {
-                            AilaSwitch(
-                                checked = boardNotificationsEnabled,
-                                onCheckedChange = { onToggleBoardNotifications(it) }
-                            )
-                        }
-                    )
-                    HorizontalDivider(color = AppTheme.Hairline, modifier = Modifier.padding(start = 72.dp))
-                    AilaListRow(
-                        title = "Notifiche di sistema",
-                        subtitle = "Mostra notifiche nel pannello del dispositivo",
-                        tint = AppTheme.TintBlue,
-                        icon = { AppIcons.Bell(modifier = Modifier.size(19.dp), color = AppTheme.TintBlueInk) },
-                        trailing = {
-                            AilaSwitch(
-                                checked = systemNotificationsEnabled,
-                                onCheckedChange = { onToggleSystemNotifications(it) }
-                            )
-                        }
-                    )
-                }
-            }
-
-            // --- AI ------------------------------------------------------------------------
-            item { AilaSectionTitle(text = "Chiave AI di AILA Assistant", modifier = Modifier.ailaAppear(4)) }
-            item {
-                AilaCard(modifier = Modifier.ailaAppear(5)) {
-                    Column(modifier = Modifier.padding(AppTheme.Space16)) {
-                        Text(
-                            text = "La chiave resta su questo dispositivo e serve ad analizzare le " +
-                                "circolari in riservatezza. Se ne ottiene una gratuita, senza carta " +
-                                "di credito, da Google AI Studio: aistudio.google.com/apikey",
-                            fontSize = 12.sp,
-                            color = AppTheme.TextMuted,
-                            lineHeight = 17.sp
-                        )
-
-                        Spacer(modifier = Modifier.height(AppTheme.Space12))
-
-                        OutlinedTextField(
-                            value = apiKeyInput,
-                            onValueChange = {
-                                apiKeyInput = it
-                                apiKeyStatus = null
-                            },
-                            placeholder = { Text("AIzaSy…", fontSize = 13.sp) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(
-                                capitalization = KeyboardCapitalization.None,
-                                autoCorrectEnabled = false
-            ),
-                            shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
-                            colors = ailaFieldColors(),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        if (apiKeyStatus != null) {
-                            Spacer(modifier = Modifier.height(AppTheme.Space8))
+            add {
+                Column {
+                    AilaSectionTitle(text = "Aspetto", modifier = Modifier.ailaAppear(0))
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    AilaCard(modifier = Modifier.ailaAppear(1)) {
+                        Column(modifier = Modifier.padding(AppTheme.Space16)) {
                             Text(
-                                text = apiKeyStatus!!,
-                                fontSize = 12.sp,
-                                color = AppTheme.TextMuted,
-                                lineHeight = 17.sp
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(AppTheme.Space12))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // "Prova la chiave" è la risposta al non poter capire perché l'AI non
-                            // rispondeva: fa una chiamata minima e riporta la risposta di Google
-                            // per esteso, invece di lasciare indovinare.
-                            AilaSecondaryButton(
-                                text = if (isTesting) "Provo…" else "Prova la chiave",
-                                onClick = {
-                                    if (!isTesting) {
-                                        isTesting = true
-                                        apiKeyStatus = null
-                                        scope.launch {
-                                            apiKeyStatus = onTestApiKey(apiKeyInput.trim())
-                                            isTesting = false
-                                        }
-                                    }
-                                }
-                            )
-                            Spacer(modifier = Modifier.weight(1f))
-                            AilaPrimaryButton(
-                                text = "Salva",
-                                onClick = {
-                                    val trimmed = apiKeyInput.trim()
-                                    onSaveApiKey(trimmed)
-                                    apiKeyInput = trimmed
-                                    // Prima il tasto non dava alcun segno: la chiave veniva salvata
-                                    // ma sembrava che non fosse successo niente.
-                                    apiKeyStatus = if (trimmed.isEmpty()) {
-                                        "Chiave rimossa da questo dispositivo."
-                                    } else {
-                                        "Chiave salvata. Usa \"Prova la chiave\" per verificare che funzioni."
-                                    }
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-
-            // --- AI locale sul telefono -------------------------------------------------
-            // Nascosta dove non potrà mai funzionare (iPhone con iOS < 26 o non idoneo).
-            if (showLocalAiSection) item { AilaSectionTitle(text = "AI locale (sul telefono)", modifier = Modifier.ailaAppear(6)) }
-            if (showLocalAiSection) item {
-                AilaCard(modifier = Modifier.ailaAppear(7)) {
-                    Column(modifier = Modifier.padding(AppTheme.Space16)) {
-                        if (localAiUnavailableReason != null) {
-                            // Su iPhone (e sugli emulatori non ARM) non c'è motore di inferenza:
-                            // si dice perché, invece di mostrare un pulsante che non farebbe nulla.
-                            Text(
-                                text = "Non disponibile su questo dispositivo",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = AppTheme.TextDark
-                            )
-                            Spacer(modifier = Modifier.height(AppTheme.Space8))
-                            Text(
-                                text = localAiUnavailableReason,
-                                fontSize = 12.sp,
-                                color = AppTheme.TextMuted,
-                                lineHeight = 17.sp
-                            )
-                        } else {
-                            Text(
-                                text = "Provider",
+                                text = "Tema",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = AppTheme.TextDark
                             )
                             Spacer(modifier = Modifier.height(AppTheme.Space8))
                             AilaSegmentedTabs(
-                                labels = listOf("Google AI", "AI locale (Beta)"),
-                                selectedIndex = if (selectedAiProvider == "ON_DEVICE") 1 else 0,
-                                onSelect = { index ->
-                                    selectedAiProvider = if (index == 1) "ON_DEVICE" else "GOOGLE_AI_STUDIO"
-                                    onAiProviderChange(selectedAiProvider)
-                                },
+                                labels = listOf("Chiaro", "Scuro"),
+                                selectedIndex = if (isDarkMode) 1 else 0,
+                                onSelect = { index -> onDarkModeChange(index == 1) },
                                 modifier = Modifier.fillMaxWidth()
                             )
-                            Spacer(modifier = Modifier.height(AppTheme.Space8))
-                            if (selectedAiProvider == "ON_DEVICE") {
-                                Text(
-                                    text = "L'AI sul telefono e' in beta: su molti telefoni e' " +
-                                        "lenta. I riassunti delle circolari arrivano comunque " +
-                                        "dal server appena pronti e fermano l'analisi sul telefono.",
-                                    fontSize = 11.sp,
-                                    color = AppTheme.TextMuted,
-                                    lineHeight = 15.sp
-                                )
-                                Spacer(modifier = Modifier.height(AppTheme.Space4))
-                            }
-                            Text(
-                                text = "Qualunque sia la scelta, se il provider principale non " +
-                                    "risponde l'app prova in automatico con l'altro.",
-                                fontSize = 11.sp,
-                                color = AppTheme.TextFaint,
-                                lineHeight = 15.sp
-                            )
-
                             Spacer(modifier = Modifier.height(AppTheme.Space16))
-                            HorizontalDivider(color = AppTheme.Hairline)
-                            Spacer(modifier = Modifier.height(AppTheme.Space16))
-
                             Text(
-                                text = "Modello",
+                                text = "Stile grafico",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = AppTheme.TextDark
                             )
-                            // Memoria e fascia servono a scegliere fra modelli da scaricare: con
-                            // i soli modelli di sistema (oggi iOS, solo Apple Intelligence) la riga
-                            // non dice nulla di utile. Ricompare da sola quando MLX tornera' nel
-                            // catalogo iOS (LocalAiModels.ios.kt).
-                            if (localModels.any { !it.isSystemModel }) {
-                                Spacer(modifier = Modifier.height(AppTheme.Space4))
-                                Text(
-                                    text = if (deviceRamMb > 0) {
-                                        "Memoria rilevata: ${formatRam(deviceRamMb)} — fascia " +
-                                            deviceTierForRam(deviceRamMb).label
-                                    } else {
-                                        "Memoria del dispositivo non rilevata."
-                                    },
-                                    fontSize = 11.sp,
-                                    color = AppTheme.TextFaint,
-                                    lineHeight = 15.sp
+                            Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            val styles = circolareplus.design.UiStyle.entries
+                            AilaSegmentedTabs(
+                                labels = styles.map { it.label },
+                                selectedIndex = styles.indexOf(uiStyle),
+                                onSelect = { index -> onUiStyleChange(styles[index]) },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = when (uiStyle) {
+                                    circolareplus.design.UiStyle.AUTO ->
+                                        "Liquid Glass su iPhone e iPad, Material su Android."
+                                    circolareplus.design.UiStyle.GLASS ->
+                                        "Superfici di vetro traslucide e movimenti morbidi, come iOS."
+                                    circolareplus.design.UiStyle.EXPRESSIVE ->
+                                        "Colori pieni, forme che si deformano al tocco e movimenti vivaci, come Android."
+                                },
+                                fontSize = 12.sp,
+                                color = AppTheme.TextMuted,
+                                lineHeight = 16.sp
+                            )
+                            Spacer(modifier = Modifier.height(AppTheme.Space16))
+                            Text(
+                                text = "Colore principale",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = AppTheme.TextDark
+                            )
+                            Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            AccentPicker(selected = accent, onSelect = onAccentChange)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = if (accent == circolareplus.design.AilaAccent.Default)
+                                    "${accent.label} (predefinito)"
+                                else "${accent.label} \u2022 tocca il primo per tornare al predefinito",
+                                fontSize = 12.sp,
+                                color = AppTheme.TextMuted,
+                                lineHeight = 16.sp
+                            )
+                        }
+                    }
+            
+                }
+            }
+            // --- Offline -----------------------------------------------------------------
+            add {
+                Column {
+                    AilaSectionTitle(text = "Uso offline")
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    // Letto una volta all'apertura (e dopo lo svuotamento), non a ogni ricomposizione:
+                    // e' un giro sul disco.
+                    var offlineBytes by remember { mutableStateOf(circolareplus.platform.OfflineStore.totalBytes()) }
+                    var syncProgress by remember { mutableStateOf<Float?>(null) }
+                    var syncMessage by remember { mutableStateOf<String?>(null) }
+                    var lastFullSync by remember { mutableStateOf(circolareplus.data.AppContainer.settings.lastFullOfflineSyncMillis) }
+                    AilaCard {
+                        Column(modifier = Modifier.padding(AppTheme.Space16)) {
+                            Text(
+                                text = "Dati salvati sul telefono",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = AppTheme.TextDark
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Senza rete puoi consultare circolari (con i PDF delle ultime), " +
+                                    "calendario, sondaggi, bacheca e mappa posti come li hai visti l'ultima " +
+                                    "volta. L'app si aggiorna da sola, anche chiusa: non devi ricordarti di niente. " +
+                                    "Voti e modifiche richiedono la connessione.\n" +
+                                    "Ultimo download completo: ${offlineAgeLabel(lastFullSync)} \u2022 " +
+                                    "Spazio occupato: ${formatOfflineSize(offlineBytes)}.",
+                                fontSize = 12.sp,
+                                color = AppTheme.TextMuted,
+                                lineHeight = 16.sp
+                            )
+                            Spacer(modifier = Modifier.height(AppTheme.Space12))
+                            val progress = syncProgress
+                            if (progress != null) {
+                                circolareplus.design.AilaProgressBar(
+                                    progress = progress,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            }
+                            syncMessage?.let { message ->
+                                Text(text = message, fontSize = 12.sp, color = AppTheme.TextMuted)
+                                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            }
+                            AilaPrimaryButton(
+                                text = if (progress != null) "Scarico\u2026 ${(progress * 100).toInt()}%" else "Aggiorna adesso",
+                                onClick = {
+                                    if (syncProgress == null) {
+                                        syncProgress = 0f
+                                        syncMessage = null
+                                        scope.launch {
+                                            val ok = circolareplus.data.OfflineSync.run { syncProgress = it }
+                                            syncProgress = null
+                                            offlineBytes = circolareplus.platform.OfflineStore.totalBytes()
+                                            lastFullSync = circolareplus.data.AppContainer.settings.lastFullOfflineSyncMillis
+                                            syncMessage = when {
+                                                ok -> "Fatto: l'app \u00e8 pronta per l'uso senza rete."
+                                                circolareplus.data.remote.ConnectivityState.isOffline -> "Sei offline: riprova quando torni in rete."
+                                                else -> "Un download \u00e8 gi\u00e0 in corso in sottofondo, riprova tra poco."
+                                            }
+                                        }
+                                    }
+                                },
+                                fillMaxWidth = true,
+                                enabled = syncProgress == null
+                            )
+                            Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            AilaSecondaryButton(
+                                text = "Svuota dati offline",
+                                onClick = {
+                                    circolareplus.platform.OfflineStore.clear()
+                                    circolareplus.data.AppContainer.settings.lastFullOfflineSyncMillis = 0L
+                                    lastFullSync = 0L
+                                    offlineBytes = circolareplus.platform.OfflineStore.totalBytes()
+                                },
+                                compact = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+            
+                }
+            }
+            // --- Notifiche ----------------------------------------------------------------
+            add {
+                Column {
+                    AilaSectionTitle(text = "Notifiche", modifier = Modifier.ailaAppear(2))
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    AilaCard(modifier = Modifier.ailaAppear(3)) {
+                        NotificationKind.entries.forEachIndexed { index, kind ->
+                            AilaListRow(
+                                title = kind.label,
+                                subtitle = kind.description,
+                                tint = AppTheme.TintBlue,
+                                icon = { AppIcons.Bell(modifier = Modifier.size(19.dp), color = AppTheme.TintBlueInk) },
+                                trailing = {
+                                    AilaSwitch(
+                                        checked = run {
+                                            notificationRevision
+                                            isNotificationKindEnabled(kind)
+                                        },
+                                        onCheckedChange = {
+                                            onNotificationKindChange(kind, it)
+                                            notificationRevision++
+                                        }
+                                    )
+                                }
+                            )
+                            HorizontalDivider(color = AppTheme.Hairline, modifier = Modifier.padding(start = 72.dp))
+                        }
+                        AilaListRow(
+                            title = "Bacheca",
+                            subtitle = "Avvisi per le nuove proposte create",
+                            tint = AppTheme.TintBlue,
+                            icon = { AppIcons.Bell(modifier = Modifier.size(19.dp), color = AppTheme.TintBlueInk) },
+                            trailing = {
+                                AilaSwitch(
+                                    checked = boardNotificationsEnabled,
+                                    onCheckedChange = { onToggleBoardNotifications(it) }
                                 )
                             }
+                        )
+                        HorizontalDivider(color = AppTheme.Hairline, modifier = Modifier.padding(start = 72.dp))
+                        AilaListRow(
+                            title = "Notifiche di sistema",
+                            subtitle = "Mostra notifiche nel pannello del dispositivo",
+                            tint = AppTheme.TintBlue,
+                            icon = { AppIcons.Bell(modifier = Modifier.size(19.dp), color = AppTheme.TintBlueInk) },
+                            trailing = {
+                                AilaSwitch(
+                                    checked = systemNotificationsEnabled,
+                                    onCheckedChange = { onToggleSystemNotifications(it) }
+                                )
+                            }
+                        )
+                    }
+            
+                }
+            }
+            // --- AI ------------------------------------------------------------------------
+            add {
+                Column {
+                    AilaSectionTitle(text = "Chiave AI di AILA Assistant", modifier = Modifier.ailaAppear(4))
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    AilaCard(modifier = Modifier.ailaAppear(5)) {
+                        Column(modifier = Modifier.padding(AppTheme.Space16)) {
+                            Text(
+                                text = "La chiave resta su questo dispositivo e serve ad analizzare le " +
+                                    "circolari in riservatezza. Se ne ottiene una gratuita, senza carta " +
+                                    "di credito, da Google AI Studio: aistudio.google.com/apikey",
+                                fontSize = 12.sp,
+                                color = AppTheme.TextMuted,
+                                lineHeight = 17.sp
+                            )
 
                             Spacer(modifier = Modifier.height(AppTheme.Space12))
 
-                            // Stesso elenco su entrambe le piattaforme. Su iOS il catalogo contiene solo
-                            // Apple Intelligence (modello di sistema, nessun download), su Android i modelli
-                            // scaricabili piu' AICore: la UI non deve distinguere, lo fa il catalogo.
-                            // --- Android: elenco di modelli scaricabili ---
-                            // Solo il modello scelto, con la possibilità di aprire l'elenco
-                            // completo: mostrare cinque schede tutte insieme renderebbe la
-                            // pagina illeggibile, e nella pratica si sceglie una volta sola.
-                            modelsRevision // rilegge lo stato su disco dopo download/eliminazione
-                            val shownModels = if (showAllModels) localModels else listOfNotNull(activeModel)
-                            shownModels.forEach { model ->
-                                LocalModelRow(
-                                    model = model,
-                                    isSelected = model.id == activeModel?.id,
-                                    isInstalled = isInstalledCached(model),
-                                    isRecommended = model.id == localModels.firstOrNull()?.id,
-                                    fits = model.fitsComfortablyIn(deviceRamMb),
-                                    supportsActions = model.supportsActions,
-                                    onClick = {
-                                        if (model.id != activeModel?.id) {
-                                            selectedModelIdState = model.id
-                                            onSelectLocalModel(model)
-                                            downloadStatus = null
-                                            downloadedBytes = 0L
-                                            downloadTotalBytes = 0L
-                                        }
-                                        showAllModels = false
-                                    }
-                                )
-                                Spacer(modifier = Modifier.height(AppTheme.Space8))
-                            }
+                            OutlinedTextField(
+                                value = apiKeyInput,
+                                onValueChange = {
+                                    apiKeyInput = it
+                                    apiKeyStatus = null
+                                },
+                                placeholder = { Text("AIzaSy…", fontSize = 13.sp) },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.None,
+                                    autoCorrectEnabled = false
+                ),
+                                shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
+                                colors = ailaFieldColors(),
+                                modifier = Modifier.fillMaxWidth()
+                            )
 
-                            if (orphanModelBytes > 0 && !orphansCleared) {
+                            if (apiKeyStatus != null) {
                                 Spacer(modifier = Modifier.height(AppTheme.Space8))
                                 Text(
-                                    text = "Ci sono ${formatBytes(orphanModelBytes)} di modelli " +
-                                        "non piu' usati. Libera spazio",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = AppTheme.TintRedInk,
-                                    lineHeight = 16.sp,
-                                    modifier = Modifier
-                                        .clickable {
-                                            val freed = onDeleteOrphanModels()
-                                            orphansCleared = true
-                                            downloadStatus = "Liberati ${formatBytes(freed)}."
-                                        }
-                                        .padding(vertical = AppTheme.Space4)
-                                )
-                            }
-
-                            if (localModels.size > 1) {
-                                Text(
-                                    text = if (showAllModels) "Chiudi l'elenco" else "Scegli un altro modello",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = AppTheme.PrimaryBlue,
-                                    modifier = Modifier
-                                        .clickable { showAllModels = !showAllModels }
-                                        .padding(vertical = AppTheme.Space4)
-                                )
-                            }
-
-                            if (isDownloading) {
-                                Spacer(modifier = Modifier.height(AppTheme.Space12))
-                                DownloadProgressBar(
-                                    downloadedBytes = downloadedBytes,
-                                    totalBytes = downloadTotalBytes
-                                )
-                            }
-
-                            // Esito di "Prova il modello", download, eliminazione: prima su iOS era
-                            // nascosto, quindi il tasto "Prova il modello" non mostrava mai nulla.
-                            if (downloadStatus != null) {
-                                Spacer(modifier = Modifier.height(AppTheme.Space8))
-                                Text(
-                                    text = downloadStatus!!,
+                                    text = apiKeyStatus!!,
                                     fontSize = 12.sp,
                                     color = AppTheme.TextMuted,
                                     lineHeight = 17.sp
@@ -616,134 +405,368 @@ fun SettingsScreen(
 
                             Spacer(modifier = Modifier.height(AppTheme.Space12))
 
-                            val installed = activeModel != null && isInstalledCached(activeModel)
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                if (installed) {
-                                    AilaSecondaryButton(
-                                        text = if (isTestingLocal) "Provo…" else "Prova il modello",
-                                        onClick = {
-                                            if (!isTestingLocal) {
-                                                isTestingLocal = true
-                                                downloadStatus = null
-                                                scope.launch {
-                                                    downloadStatus = onTestLocalModel()
-                                                    isTestingLocal = false
-                                                }
+                                // "Prova la chiave" è la risposta al non poter capire perché l'AI non
+                                // rispondeva: fa una chiamata minima e riporta la risposta di Google
+                                // per esteso, invece di lasciare indovinare.
+                                AilaSecondaryButton(
+                                    text = if (isTesting) "Provo…" else "Prova la chiave",
+                                    onClick = {
+                                        if (!isTesting) {
+                                            isTesting = true
+                                            apiKeyStatus = null
+                                            scope.launch {
+                                                apiKeyStatus = onTestApiKey(apiKeyInput.trim())
+                                                isTesting = false
                                             }
                                         }
-                                    )
-                                    Spacer(modifier = Modifier.weight(1f))
-                                    // I modelli di sistema (Apple Intelligence, AICore) non sono file
-                                    // dell'app: non c'e' niente da eliminare, e il pulsante dichiarava
-                                    // "hai liberato 0 MB" senza fare nulla.
-                                    if (activeModel?.isSystemModel != true) {
-                                        AilaIconButton(
-                                            contentDescription = "Elimina il modello dal telefono",
-                                            onClick = {
-                                                activeModel?.let(onDeleteLocalModel)
-                                                downloadStatus = "Modello eliminato: hai liberato " +
-                                                    "${activeModel?.readableSize ?: ""}."
-                                                modelsRevision++
-                                            }
-                                        ) { tint -> AppIcons.Trash(modifier = Modifier.size(19.dp), color = tint) }
                                     }
-                                } else if (isDownloading && activeModel != null) {
-                                    // Il download va fermato da qui, non solo dalla notifica: chi
-                                    // si accorge di essere sotto rete dati o di aver scelto il
-                                    // modello sbagliato non deve aspettare qualche giga.
-                                    Spacer(modifier = Modifier.weight(1f))
-                                    AilaSecondaryButton(
-                                        text = "Interrompi download",
-                                        onClick = {
-                                            downloadJob?.cancel()
-                                            downloadJob = null
-                                            onCancelLocalModelDownload(activeModel)
-                                            isDownloading = false
-                                            downloadStatus = "Download interrotto. Quello che era già " +
-                                                "arrivato resta: se riprovi riparte da lì."
-                                            modelsRevision++
+                                )
+                                Spacer(modifier = Modifier.weight(1f))
+                                AilaPrimaryButton(
+                                    text = "Salva",
+                                    onClick = {
+                                        val trimmed = apiKeyInput.trim()
+                                        onSaveApiKey(trimmed)
+                                        apiKeyInput = trimmed
+                                        // Prima il tasto non dava alcun segno: la chiave veniva salvata
+                                        // ma sembrava che non fosse successo niente.
+                                        apiKeyStatus = if (trimmed.isEmpty()) {
+                                            "Chiave rimossa da questo dispositivo."
+                                        } else {
+                                            "Chiave salvata. Usa \"Prova la chiave\" per verificare che funzioni."
                                         }
-                                    )
-                                } else {
-                                    Spacer(modifier = Modifier.weight(1f))
-                                    AilaPrimaryButton(
-                                        text = when {
-                                            activeModel == null -> "Scarica"
-                                            activeModel.isSystemModel -> "Attiva"
-                                            else -> "Scarica (${activeModel.readableSize})"
-                                        },
-                                        enabled = !isDownloading && activeModel != null,
-                                        onClick = {
-                                            val model = activeModel ?: return@AilaPrimaryButton
-                                            if (isDownloading) return@AilaPrimaryButton
-                                            isDownloading = true
-                                            downloadStatus = null
-                                            downloadedBytes = 0L
-                                            downloadTotalBytes = model.approxSizeBytes
-                                            downloadJob = scope.launch {
-                                                val message = downloadLocalModel(model) { done, total ->
-                                                    downloadedBytes = done
-                                                    downloadTotalBytes = total
-                                                }
-                                                // Interrotto a mano: il messaggio l'ha gia' scritto il
-                                                // pulsante, "Download annullato." dal Worker lo coprirebbe.
-                                                if (isDownloading) downloadStatus = message
-                                                isDownloading = false
-                                                downloadJob = null
-                                                modelsRevision++
-                                            }
-                                        }
-                                    )
-                                }
-                            }
-
-                            if (!installed && activeModel?.isSystemModel != true) {
-                                Spacer(modifier = Modifier.height(AppTheme.Space8))
-                                Text(
-                                    text = "Scarica con il Wi-Fi. Se il download si interrompe " +
-                                        "riprende da dove era arrivato, non da capo.",
-                                    fontSize = 11.sp,
-                                    color = AppTheme.TextFaint,
-                                    lineHeight = 15.sp
+                                    }
                                 )
                             }
                         }
                     }
+            
                 }
             }
+            // --- AI locale sul telefono -------------------------------------------------
+            // Nascosta dove non potrà mai funzionare (iPhone con iOS < 26 o non idoneo).
+            if (showLocalAiSection) add {
+                Column {
+                    AilaSectionTitle(text = "AI locale (sul telefono)", modifier = Modifier.ailaAppear(6))
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    AilaCard(modifier = Modifier.ailaAppear(7)) {
+                        Column(modifier = Modifier.padding(AppTheme.Space16)) {
+                            if (localAiUnavailableReason != null) {
+                                // Su iPhone (e sugli emulatori non ARM) non c'è motore di inferenza:
+                                // si dice perché, invece di mostrare un pulsante che non farebbe nulla.
+                                Text(
+                                    text = "Non disponibile su questo dispositivo",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AppTheme.TextDark
+                                )
+                                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                                Text(
+                                    text = localAiUnavailableReason,
+                                    fontSize = 12.sp,
+                                    color = AppTheme.TextMuted,
+                                    lineHeight = 17.sp
+                                )
+                            } else {
+                                Text(
+                                    text = "Provider",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AppTheme.TextDark
+                                )
+                                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                                AilaSegmentedTabs(
+                                    labels = listOf("Google AI", "AI locale (Beta)"),
+                                    selectedIndex = if (selectedAiProvider == "ON_DEVICE") 1 else 0,
+                                    onSelect = { index ->
+                                        selectedAiProvider = if (index == 1) "ON_DEVICE" else "GOOGLE_AI_STUDIO"
+                                        onAiProviderChange(selectedAiProvider)
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                                if (selectedAiProvider == "ON_DEVICE") {
+                                    Text(
+                                        text = "L'AI sul telefono e' in beta: su molti telefoni e' " +
+                                            "lenta. I riassunti delle circolari arrivano comunque " +
+                                            "dal server appena pronti e fermano l'analisi sul telefono.",
+                                        fontSize = 11.sp,
+                                        color = AppTheme.TextMuted,
+                                        lineHeight = 15.sp
+                                    )
+                                    Spacer(modifier = Modifier.height(AppTheme.Space4))
+                                }
+                                Text(
+                                    text = "Qualunque sia la scelta, se il provider principale non " +
+                                        "risponde l'app prova in automatico con l'altro.",
+                                    fontSize = 11.sp,
+                                    color = AppTheme.TextFaint,
+                                    lineHeight = 15.sp
+                                )
 
-            // --- Info ----------------------------------------------------------------------
-            item { AilaSectionTitle(text = "Informazioni", modifier = Modifier.ailaAppear(8)) }
-            item {
-                AilaCard(modifier = Modifier.ailaAppear(7)) {
-                    AilaListRow(
-                        title = "AILA",
-                        subtitle = "Versione $appVersion",
-                        tint = AppTheme.TintSlate,
-                        showChevron = false,
-                        // Opzione nascosta: 7 tocchi sbloccano la diagnostica.
-                        onClick = {
-                            versionTaps++
-                            if (versionTaps >= 7 && !showDebugMenu) onUnlockDebugMenu()
-                        },
-                        icon = { AppIcons.Sparkle(modifier = Modifier.size(19.dp), color = AppTheme.TintSlateInk) }
-                    )
-                    if (showDebugMenu) {
-                        AilaListRow(
-                            title = "Diagnostica background",
-                            subtitle = "Log dei risvegli e simulazione",
-                            tint = AppTheme.TintSlate,
-                            onClick = onOpenBackgroundDebug,
-                            icon = { AppIcons.Refresh(modifier = Modifier.size(19.dp), color = AppTheme.TintSlateInk) }
-                        )
+                                Spacer(modifier = Modifier.height(AppTheme.Space16))
+                                HorizontalDivider(color = AppTheme.Hairline)
+                                Spacer(modifier = Modifier.height(AppTheme.Space16))
+
+                                Text(
+                                    text = "Modello",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AppTheme.TextDark
+                                )
+                                // Memoria e fascia servono a scegliere fra modelli da scaricare: con
+                                // i soli modelli di sistema (oggi iOS, solo Apple Intelligence) la riga
+                                // non dice nulla di utile. Ricompare da sola quando MLX tornera' nel
+                                // catalogo iOS (LocalAiModels.ios.kt).
+                                if (localModels.any { !it.isSystemModel }) {
+                                    Spacer(modifier = Modifier.height(AppTheme.Space4))
+                                    Text(
+                                        text = if (deviceRamMb > 0) {
+                                            "Memoria rilevata: ${formatRam(deviceRamMb)} — fascia " +
+                                                deviceTierForRam(deviceRamMb).label
+                                        } else {
+                                            "Memoria del dispositivo non rilevata."
+                                        },
+                                        fontSize = 11.sp,
+                                        color = AppTheme.TextFaint,
+                                        lineHeight = 15.sp
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(AppTheme.Space12))
+
+                                // Stesso elenco su entrambe le piattaforme. Su iOS il catalogo contiene solo
+                                // Apple Intelligence (modello di sistema, nessun download), su Android i modelli
+                                // scaricabili piu' AICore: la UI non deve distinguere, lo fa il catalogo.
+                                // --- Android: elenco di modelli scaricabili ---
+                                // Solo il modello scelto, con la possibilità di aprire l'elenco
+                                // completo: mostrare cinque schede tutte insieme renderebbe la
+                                // pagina illeggibile, e nella pratica si sceglie una volta sola.
+                                modelsRevision // rilegge lo stato su disco dopo download/eliminazione
+                                val shownModels = if (showAllModels) localModels else listOfNotNull(activeModel)
+                                shownModels.forEach { model ->
+                                    LocalModelRow(
+                                        model = model,
+                                        isSelected = model.id == activeModel?.id,
+                                        isInstalled = isInstalledCached(model),
+                                        isRecommended = model.id == localModels.firstOrNull()?.id,
+                                        fits = model.fitsComfortablyIn(deviceRamMb),
+                                        supportsActions = model.supportsActions,
+                                        onClick = {
+                                            if (model.id != activeModel?.id) {
+                                                selectedModelIdState = model.id
+                                                onSelectLocalModel(model)
+                                                downloadStatus = null
+                                                downloadedBytes = 0L
+                                                downloadTotalBytes = 0L
+                                            }
+                                            showAllModels = false
+                                        }
+                                    )
+                                    Spacer(modifier = Modifier.height(AppTheme.Space8))
+                                }
+
+                                if (orphanModelBytes > 0 && !orphansCleared) {
+                                    Spacer(modifier = Modifier.height(AppTheme.Space8))
+                                    Text(
+                                        text = "Ci sono ${formatBytes(orphanModelBytes)} di modelli " +
+                                            "non piu' usati. Libera spazio",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = AppTheme.TintRedInk,
+                                        lineHeight = 16.sp,
+                                        modifier = Modifier
+                                            .clickable {
+                                                val freed = onDeleteOrphanModels()
+                                                orphansCleared = true
+                                                downloadStatus = "Liberati ${formatBytes(freed)}."
+                                            }
+                                            .padding(vertical = AppTheme.Space4)
+                                    )
+                                }
+
+                                if (localModels.size > 1) {
+                                    Text(
+                                        text = if (showAllModels) "Chiudi l'elenco" else "Scegli un altro modello",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = AppTheme.PrimaryBlue,
+                                        modifier = Modifier
+                                            .clickable { showAllModels = !showAllModels }
+                                            .padding(vertical = AppTheme.Space4)
+                                    )
+                                }
+
+                                if (isDownloading) {
+                                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                                    DownloadProgressBar(
+                                        downloadedBytes = downloadedBytes,
+                                        totalBytes = downloadTotalBytes
+                                    )
+                                }
+
+                                // Esito di "Prova il modello", download, eliminazione: prima su iOS era
+                                // nascosto, quindi il tasto "Prova il modello" non mostrava mai nulla.
+                                if (downloadStatus != null) {
+                                    Spacer(modifier = Modifier.height(AppTheme.Space8))
+                                    Text(
+                                        text = downloadStatus!!,
+                                        fontSize = 12.sp,
+                                        color = AppTheme.TextMuted,
+                                        lineHeight = 17.sp
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(AppTheme.Space12))
+
+                                val installed = activeModel != null && isInstalledCached(activeModel)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (installed) {
+                                        AilaSecondaryButton(
+                                            text = if (isTestingLocal) "Provo…" else "Prova il modello",
+                                            onClick = {
+                                                if (!isTestingLocal) {
+                                                    isTestingLocal = true
+                                                    downloadStatus = null
+                                                    scope.launch {
+                                                        downloadStatus = onTestLocalModel()
+                                                        isTestingLocal = false
+                                                    }
+                                                }
+                                            }
+                                        )
+                                        Spacer(modifier = Modifier.weight(1f))
+                                        // I modelli di sistema (Apple Intelligence, AICore) non sono file
+                                        // dell'app: non c'e' niente da eliminare, e il pulsante dichiarava
+                                        // "hai liberato 0 MB" senza fare nulla.
+                                        if (activeModel?.isSystemModel != true) {
+                                            AilaIconButton(
+                                                contentDescription = "Elimina il modello dal telefono",
+                                                onClick = {
+                                                    activeModel?.let(onDeleteLocalModel)
+                                                    downloadStatus = "Modello eliminato: hai liberato " +
+                                                        "${activeModel?.readableSize ?: ""}."
+                                                    modelsRevision++
+                                                }
+                                            ) { tint -> AppIcons.Trash(modifier = Modifier.size(19.dp), color = tint) }
+                                        }
+                                    } else if (isDownloading && activeModel != null) {
+                                        // Il download va fermato da qui, non solo dalla notifica: chi
+                                        // si accorge di essere sotto rete dati o di aver scelto il
+                                        // modello sbagliato non deve aspettare qualche giga.
+                                        Spacer(modifier = Modifier.weight(1f))
+                                        AilaSecondaryButton(
+                                            text = "Interrompi download",
+                                            onClick = {
+                                                downloadJob?.cancel()
+                                                downloadJob = null
+                                                onCancelLocalModelDownload(activeModel)
+                                                isDownloading = false
+                                                downloadStatus = "Download interrotto. Quello che era già " +
+                                                    "arrivato resta: se riprovi riparte da lì."
+                                                modelsRevision++
+                                            }
+                                        )
+                                    } else {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                        AilaPrimaryButton(
+                                            text = when {
+                                                activeModel == null -> "Scarica"
+                                                activeModel.isSystemModel -> "Attiva"
+                                                else -> "Scarica (${activeModel.readableSize})"
+                                            },
+                                            enabled = !isDownloading && activeModel != null,
+                                            onClick = {
+                                                val model = activeModel ?: return@AilaPrimaryButton
+                                                if (isDownloading) return@AilaPrimaryButton
+                                                isDownloading = true
+                                                downloadStatus = null
+                                                downloadedBytes = 0L
+                                                downloadTotalBytes = model.approxSizeBytes
+                                                downloadJob = scope.launch {
+                                                    val message = downloadLocalModel(model) { done, total ->
+                                                        downloadedBytes = done
+                                                        downloadTotalBytes = total
+                                                    }
+                                                    // Interrotto a mano: il messaggio l'ha gia' scritto il
+                                                    // pulsante, "Download annullato." dal Worker lo coprirebbe.
+                                                    if (isDownloading) downloadStatus = message
+                                                    isDownloading = false
+                                                    downloadJob = null
+                                                    modelsRevision++
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+
+                                if (!installed && activeModel?.isSystemModel != true) {
+                                    Spacer(modifier = Modifier.height(AppTheme.Space8))
+                                    Text(
+                                        text = "Scarica con il Wi-Fi. Se il download si interrompe " +
+                                            "riprende da dove era arrivato, non da capo.",
+                                        fontSize = 11.sp,
+                                        color = AppTheme.TextFaint,
+                                        lineHeight = 15.sp
+                                    )
+                                }
+                            }
+                        }
                     }
+            
+                }
+            }
+            // --- Info ----------------------------------------------------------------------
+            add {
+                Column {
+                    AilaSectionTitle(text = "Informazioni", modifier = Modifier.ailaAppear(8))
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    AilaCard(modifier = Modifier.ailaAppear(7)) {
+                        AilaListRow(
+                            title = "AILA",
+                            subtitle = "Versione $appVersion",
+                            tint = AppTheme.TintSlate,
+                            showChevron = false,
+                            // Opzione nascosta: 7 tocchi sbloccano la diagnostica.
+                            onClick = {
+                                versionTaps++
+                                if (versionTaps >= 7 && !showDebugMenu) onUnlockDebugMenu()
+                            },
+                            icon = { AppIcons.Sparkle(modifier = Modifier.size(19.dp), color = AppTheme.TintSlateInk) }
+                        )
+                        if (showDebugMenu) {
+                            AilaListRow(
+                                title = "Diagnostica background",
+                                subtitle = "Log dei risvegli e simulazione",
+                                tint = AppTheme.TintSlate,
+                                onClick = onOpenBackgroundDebug,
+                                icon = { AppIcons.Refresh(modifier = Modifier.size(19.dp), color = AppTheme.TintSlateInk) }
+                            )
+                        }
+                    }
+            
                 }
             }
         }
+        circolareplus.design.AilaAdaptiveCardList(
+            items = sections,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = AppTheme.Space16,
+                end = AppTheme.Space16,
+                top = AppTheme.Space16,
+                bottom = AppTheme.Space32
+            )
+        ) { _, section -> section() }
     }
 }
 

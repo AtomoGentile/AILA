@@ -85,30 +85,28 @@ fun ClassRosterScreen(
                 )
             }
         } else {
-            LazyColumn(
+            circolareplus.design.AilaAdaptiveCardList(
+                items = entries,
+                key = { it.studentId },
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = AppTheme.Space16, vertical = AppTheme.Space8)
-            ) {
-                item(key = "discipline-pairs") {
+                contentPadding = PaddingValues(horizontal = AppTheme.Space16, vertical = AppTheme.Space8),
+                header = {
                     DisciplinePairsCard(
                         entries = entries,
                         pairs = disciplinePairs,
                         onAdd = onAddDisciplinePair,
                         onRemove = onRemoveDisciplinePair
                     )
-                    Spacer(modifier = Modifier.height(AppTheme.Space12))
                 }
-                items(entries, key = { it.studentId }) { entry ->
-                    ClassRosterRow(
-                        entry = entry,
-                        isSelf = entry.studentId == currentUserId,
-                        onDidacticChange = { onDidacticChange(entry.studentId, it) },
-                        onBehaviorChange = { onBehaviorChange(entry.studentId, it) },
-                        onPriorityPassChange = { onPriorityPassChange(entry.studentId, it) },
-                        onSecurityGuardChange = { onSecurityGuardChange(entry.studentId, it) }
-                    )
-                    Spacer(modifier = Modifier.height(AppTheme.Space12))
-                }
+            ) { _, entry ->
+                ClassRosterRow(
+                    entry = entry,
+                    isSelf = entry.studentId == currentUserId,
+                    onDidacticChange = { onDidacticChange(entry.studentId, it) },
+                    onBehaviorChange = { onBehaviorChange(entry.studentId, it) },
+                    onPriorityPassChange = { onPriorityPassChange(entry.studentId, it) },
+                    onSecurityGuardChange = { onSecurityGuardChange(entry.studentId, it) }
+                )
             }
         }
     }

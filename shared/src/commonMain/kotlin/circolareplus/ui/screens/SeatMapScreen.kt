@@ -16,6 +16,8 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -149,20 +151,7 @@ fun SeatMapScreen(
         // Tutto dentro un'unica griglia scorrevole: prima intestazione, ricerca, pannello e
         // cattedra stavano in una Column fissa e solo i banchi scorrevano, quindi con il pannello
         // del rappresentante aperto il fondo della schermata veniva tagliato via.
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
-            horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12),
-            verticalArrangement = Arrangement.spacedBy(AppTheme.Space12),
-            contentPadding = PaddingValues(
-                start = AppTheme.Space16,
-                end = AppTheme.Space16,
-                top = AppTheme.Space16,
-                bottom = AppTheme.Space32 + circolareplus.design.LocalBottomBarPadding.current
-            ),
-            state = gridState,
-            modifier = Modifier.fillMaxSize()
-        ) {
-        fullRow {
+        val searchBlock: @Composable () -> Unit = {
 
         // Ricerca compagno: evidenzia il suo banco e ci scorre sopra. "Il mio posto" sta dentro
         // la barra, a destra: prima era un pulsante grande su una riga a sé, che occupava spazio
@@ -282,10 +271,7 @@ fun SeatMapScreen(
             }
         }
         }
-
-        // Pannello Admin per il Rappresentante (Slider & Finestra Votazione)
-        if (isRepresentative) {
-        fullRow {
+        val adminPanel: @Composable () -> Unit = {
             AilaCard(containerColor = AppTheme.TintSlate, modifier = Modifier.ailaAppear(1)) {
                 // animateContentSize: quando arriva il conteggio dei voti il pannello cresce
                 // morbido invece di spingere giu' la mappa di scatto.
@@ -427,6 +413,43 @@ fun SeatMapScreen(
                 }
             }
         }
+        // Tablet e iPad larghi: ricerca e pannello del Rappresentante in una colonna a sinistra,
+        // la mappa dell'aula a destra, sempre in vista mentre si regolano i pesi o si cerca.
+        val wide = circolareplus.design.LocalWideLayout.current
+        Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
+        if (wide) {
+            Column(
+                modifier = Modifier
+                    .width(360.dp)
+                    .fillMaxHeight()
+                    .verticalScroll(rememberScrollState())
+                    .padding(
+                        start = AppTheme.Space16,
+                        top = AppTheme.Space16,
+                        bottom = AppTheme.Space32 + circolareplus.design.LocalBottomBarPadding.current
+                    ),
+                verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)
+            ) {
+                searchBlock()
+                if (isRepresentative) adminPanel()
+            }
+        }
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
+            horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12),
+            verticalArrangement = Arrangement.spacedBy(AppTheme.Space12),
+            contentPadding = PaddingValues(
+                start = AppTheme.Space16,
+                end = AppTheme.Space16,
+                top = AppTheme.Space16,
+                bottom = AppTheme.Space32 + circolareplus.design.LocalBottomBarPadding.current
+            ),
+            state = gridState,
+            modifier = Modifier.weight(1f).fillMaxHeight()
+        ) {
+        if (!wide) {
+            fullRow { searchBlock() }
+            if (isRepresentative) fullRow { adminPanel() }
         }
 
         // Cattedra & Lavagna
@@ -477,6 +500,7 @@ fun SeatMapScreen(
                     focusedStudentId = highlightedId
                 )
             }
+        }
         }
     }
 }
