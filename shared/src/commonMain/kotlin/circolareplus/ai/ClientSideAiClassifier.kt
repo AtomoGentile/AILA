@@ -449,24 +449,12 @@ class ClientSideAiClassifier(
         return AiTextResult.Failure(lastFailure)
     }
 
-    /**
-     * Il testo del primo candidato di una risposta generateContent, o `null` se non c'e'.
-     *
-     * Si uniscono **tutte** le parti, saltando quelle di ragionamento (`"thought": true`). Prima
-     * si leggeva solo `parts[0]`: quando Gemini spezzava la risposta in piu' parti, in chat
-     * arrivava solo l'inizio del JSON e il messaggio si fermava a meta' — "...direttamente:\".
-     */
+    /** Il testo del primo candidato di una risposta generateContent, o `null` se non c'e'. */
     private fun extractGeneratedText(raw: String): String? = try {
         json.parseToJsonElement(raw).jsonObject["candidates"]?.jsonArray?.getOrNull(0)
             ?.jsonObject?.get("content")?.jsonObject
-            ?.get("parts")?.jsonArray
-            ?.mapNotNull { part ->
-                val obj = part as? JsonObject ?: return@mapNotNull null
-                if (obj["thought"]?.jsonPrimitive?.contentOrNull == "true") return@mapNotNull null
-                obj["text"]?.jsonPrimitive?.contentOrNull
-            }
-            ?.joinToString("")
-            ?.takeIf { it.isNotBlank() }
+            ?.get("parts")?.jsonArray?.getOrNull(0)
+            ?.jsonObject?.get("text")?.jsonPrimitive?.content
     } catch (e: Exception) {
         null
     }

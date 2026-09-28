@@ -84,39 +84,6 @@ internal object PassageSelector {
         }.take(maxChars)
     }
 
-    /**
-     * La riga del testo che c'entra di piu' con la domanda, da citare cosi' com'e' (con la riga
-     * dopo se e' corta: in una tabella il titolo e i valori stanno spesso su due righe).
-     *
-     * Contano soprattutto le parole **specifiche**, quelle che stanno in poche righe: in una
-     * circolare sugli sportelli "sportelli" e' ovunque e non distingue niente, "scienze" indica
-     * la riga giusta. `null` se nessuna riga contiene una parola specifica della domanda.
-     */
-    fun bestSnippet(text: String, question: String, maxChars: Int = 300): String? {
-        val stems = AssistantContext.tokenize(question).map { AssistantContext.stemOf(it) }.distinct()
-        if (stems.isEmpty()) return null
-        val lines = text.split('\n').flatMap { line ->
-            if (line.length <= maxChars) listOf(line) else line.split(Regex("(?<=[.;])\\s+"))
-        }.map { it.trim() }.filter { it.isNotEmpty() }
-        if (lines.isEmpty()) return null
-        val normalized = lines.map { AssistantContext.normalize(it) }
-        val specific = stems.filter { stem ->
-            val found = normalized.count { it.contains(stem) }
-            found in 1..maxOf(2, lines.size / 5)
-        }
-        if (specific.isEmpty()) return null
-        val best = lines.indices
-            .map { index -> Triple(index, specific.count { normalized[index].contains(it) }, stems.count { normalized[index].contains(it) }) }
-            .filter { it.second > 0 }
-            .maxWithOrNull(compareBy<Triple<Int, Int, Int>> { it.second }.thenBy { it.third }.thenByDescending { it.first })
-            ?.first ?: return null
-        val line = lines[best]
-        val withNext = lines.getOrNull(best + 1)
-            ?.takeIf { line.length < 80 && line.length + it.length + 1 <= maxChars }
-            ?.let { "$line $it" } ?: line
-        return if (withNext.length <= maxChars) withNext else withNext.take(maxChars).trimEnd() + "…"
-    }
-
     /** Blocchi di circa [CHUNK_CHARS] caratteri, spezzati a fine riga quando possibile. */
     internal fun chunk(text: String): List<String> {
         val result = mutableListOf<String>()
