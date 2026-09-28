@@ -72,4 +72,28 @@ class AssistantPromptParseTest {
         assertTrue(parsed.answer.startsWith("Ecco il riassunto"), parsed.answer)
         assertTrue(parsed.answer.contains("interrotta"), parsed.answer)
     }
+
+    @Test
+    fun formatoTestoSempliceDeiModelliSulTelefono() {
+        val raw = "Hai due circolari:\n- Circolare n. 7 — elezioni\n- Circolare n. 4 — bar\n\nFONTI: 7, 4\nTESTO: nessuno\n"
+        val parsed = AssistantPrompt.parse(raw)
+        assertEquals("Hai due circolari:\n- Circolare n. 7 — elezioni\n- Circolare n. 4 — bar", parsed.answer)
+        assertEquals(listOf(7, 4), parsed.sources.map { it.circularNumber })
+        assertEquals(emptyList(), parsed.needsCircularText)
+    }
+
+    @Test
+    fun righeDiChiusuraConAsterischiERichiestaDiTesto() {
+        val parsed = AssistantPrompt.parse("Non risulta dai dati.\n**FONTI:** nessuna\n**TESTO:** 12")
+        assertEquals("Non risulta dai dati.", parsed.answer)
+        assertTrue(parsed.sources.isEmpty())
+        assertEquals(listOf(12), parsed.needsCircularText)
+    }
+
+    @Test
+    fun fermaLaGenerazioneSoloARigheDiChiusuraFinite() {
+        assertFalse(AssistantPrompt.isCompleteAnswer("Ciao\nFONTI: 7\nTESTO: nes"))
+        assertTrue(AssistantPrompt.isCompleteAnswer("Ciao\nFONTI: 7\nTESTO: nessuno\n"))
+        assertTrue(AssistantPrompt.isCompleteAnswer("{\"answer\":\"ok\"}"))
+    }
 }

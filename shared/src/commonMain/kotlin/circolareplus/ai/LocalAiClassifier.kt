@@ -48,6 +48,19 @@ class LocalAiClassifier(
         /** Testo di PDF dell'ultimo tentativo, solo se il motore dice che il prompt e' troppo lungo. */
         const val SHRUNK_PDF_CHARS = 2_500
 
+        /**
+         * Frazione del prompt concessa ai telefoni lenti (vedi [lightPromptFactor]).
+         *
+         * Su CPU la lettura del prompt ("prefill") e' la parte piu' lunga dell'attesa ed e'
+         * proporzionale ai caratteri: su un processore di fascia bassa 4000 token sono quasi un
+         * minuto prima della prima parola. Col 60% del contesto la risposta regge ancora (il
+         * contesto si accorcia partendo da quello che c'entra meno) e l'attesa cala in proporzione.
+         */
+        const val LIGHT_PROMPT_FACTOR = 0.6
+
+        /** Sotto questa soglia il contesto non basta piu' a rispondere: non si scende oltre. */
+        const val MIN_LIGHT_PROMPT_CHARS = 3_000
+
         /** Modelli che hanno bisogno del prompt compatto (scoperto in questa sessione). */
         val compactPromptModels = mutableSetOf<String>()
     }
@@ -69,7 +82,7 @@ class LocalAiClassifier(
         // Se il modello rifiuta il prompt (troppo lungo, o risposta vuota come AICore quando non
         // digerisce il testo) si riprova una volta con meno PDF: la stessa idea del mezzo budget
         // in generateAnswer. Un tentativo solo, ogni giro e' un'altra generazione.
-        var pdfLimit = CircularClassificationPrompt.MAX_PDF_CHARS
+        var pdfLimit = (CircularClassificationPrompt.MAX_PDF_CHARS * lightPromptFactor(model)).toInt()
         // AICore risponde vuoto al prompt completo e funziona con quello compatto: una volta
         // scoperto, si parte direttamente da li' invece di sprecare ogni volta una generazione.
         val startedCompact = model.id in compactPromptModels
@@ -212,13 +225,27 @@ class LocalAiClassifier(
             )
         }
 
-        val firstAttempt = runGeneration(prompt, model, path, model.maxPromptChars)
+        val promptChars = (model.maxPromptChars * lightPromptFactor(model)).toInt()
+            .coerceAtLeast(minOf(MIN_LIGHT_PROMPT_CHARS, model.maxPromptChars))
+        val firstAttempt = runGeneration(prompt, model, path, promptChars)
         if (firstAttempt is AiTextResult.Success) return firstAttempt
 
         val reason = (firstAttempt as AiTextResult.Failure).reason
         if (!isPromptTooLong(reason)) return firstAttempt
 
-        return runGeneration(prompt, model, path, model.maxPromptChars / 2)
+        return runGeneration(prompt, model, path, promptChars / 2)
+    }
+
+    /**
+     * 1.0 sui telefoni che reggono il prompt intero, [LIGHT_PROMPT_FACTOR] su quelli lenti:
+     * modello che gira su CPU (GPU assente o non partita) oppure telefono di fascia bassa per RAM.
+     * I modelli di sistema (Gemini Nano, Apple Intelligence) girano sull'NPU e non si toccano.
+     */
+    private fun lightPromptFactor(model: LocalAiModel): Double {
+        if (model.isSystemModel) return 1.0
+        val onCpu = llm.backendLabel().startsWith("CPU")
+        val lowEnd = deviceTierForRam(totalDeviceRamMb()) == DeviceTier.LOW
+        return if (onCpu || lowEnd) LIGHT_PROMPT_FACTOR else 1.0
     }
 
     /** Una singola generazione con un prompt costruito su [maxPromptChars]. */
