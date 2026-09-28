@@ -77,14 +77,7 @@ fun ProfileScreen(
             AilaScreenHeader(title = "Il mio Profilo")
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = AppTheme.Space16)
-                .padding(top = AppTheme.Space16, bottom = AppTheme.Space32 + circolareplus.design.LocalBottomBarPadding.current)
-        ) {
+        val identitySection: @Composable () -> Unit = {
             // --- Card identità -------------------------------------------------------------
             // Rifatta: era un riquadro bianco con le iniziali in un cerchietto e due righe
             // "etichetta: valore" allineate a destra, indistinguibile dalle card di impostazioni
@@ -190,9 +183,8 @@ fun ProfileScreen(
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(AppTheme.Space24))
-
+        }
+        val restSection: @Composable () -> Unit = {
             // --- Sezione: gestione classe (solo Rappresentante) -----------------------------
             if (isRepresentative) {
                 AilaSectionTitle(text = "Gestione classe")
@@ -257,6 +249,35 @@ fun ProfileScreen(
                     }
                 )
             }
+        }
+        if (circolareplus.design.LocalWideLayout.current) {
+            // Tablet e iPad larghi: la scheda della persona a sinistra, classe, impostazioni e
+            // uscita a destra.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = AppTheme.Space16)
+                    .padding(top = AppTheme.Space16, bottom = AppTheme.Space32 + circolareplus.design.LocalBottomBarPadding.current),
+                horizontalArrangement = Arrangement.spacedBy(AppTheme.Space20)
+            ) {
+                Column(modifier = Modifier.weight(1f)) { identitySection() }
+                Column(modifier = Modifier.weight(1f)) { restSection() }
+            }
+        } else {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = AppTheme.Space16)
+                .padding(top = AppTheme.Space16, bottom = AppTheme.Space32 + circolareplus.design.LocalBottomBarPadding.current)
+        ) {
+            identitySection()
+            Spacer(modifier = Modifier.height(AppTheme.Space24))
+            restSection()
+        }
         }
     }
 

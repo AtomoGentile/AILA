@@ -174,7 +174,7 @@ fun CircularDetailScreen(
             .fillMaxSize()
             .background(AppTheme.BackgroundLight)
             .appSafeDrawingPadding()
-            .appContentWidth()
+            .appContentWidth(circolareplus.design.MaxWideContentWidth)
     ) {
         AilaBackBar(
             title = "Circolare n. ${circular.number}",
@@ -186,16 +186,7 @@ fun CircularDetailScreen(
             }
         )
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = AppTheme.Space16,
-                end = AppTheme.Space16,
-                top = AppTheme.Space16,
-                bottom = AppTheme.Space32
-            ),
-            verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)
-        ) {
+        val infoItems: androidx.compose.foundation.lazy.LazyListScope.() -> Unit = {
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth().ailaAppear(0),
@@ -385,7 +376,8 @@ fun CircularDetailScreen(
                     }
                 }
             }
-
+        }
+        val documentItems: androidx.compose.foundation.lazy.LazyListScope.() -> Unit = {
             // --- Documento ----------------------------------------------------------------
             // Include le pagine di eventuali allegati PDF, disegnate in coda alle pagine del
             // documento principale (vedi [DocumentSection] e la funzione renderInto sopra).
@@ -508,6 +500,49 @@ fun CircularDetailScreen(
                             AilaPrimaryButton(text = "Apri il PDF", onClick = onDownloadPdfClick)
                         }
                     }
+                }
+            }
+        }
+        // Schermo largo (circolare aperta a tutto schermo su tablet e iPad in orizzontale):
+        // riassunto, scadenze e allegati a sinistra, il documento a destra, ognuno col suo
+        // scorrimento. Nel pannello accanto alla lista, piu' stretto, resta una colonna sola.
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            if (maxWidth >= 900.dp) {
+                Row(modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(
+            modifier = Modifier.weight(1f).fillMaxHeight(),
+            contentPadding = PaddingValues(
+                start = AppTheme.Space16,
+                end = AppTheme.Space16,
+                top = AppTheme.Space16,
+                bottom = AppTheme.Space32
+            ),
+            verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)
+        ) { infoItems() }
+                    LazyColumn(
+            modifier = Modifier.weight(1f).fillMaxHeight(),
+            contentPadding = PaddingValues(
+                start = AppTheme.Space16,
+                end = AppTheme.Space16,
+                top = AppTheme.Space16,
+                bottom = AppTheme.Space32
+            ),
+            verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)
+        ) { documentItems() }
+                }
+            } else {
+                LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = AppTheme.Space16,
+                end = AppTheme.Space16,
+                top = AppTheme.Space16,
+                bottom = AppTheme.Space32
+            ),
+            verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)
+        ) {
+                    infoItems()
+                    documentItems()
                 }
             }
         }

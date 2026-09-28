@@ -103,80 +103,80 @@ fun SocialPreferencesVotingScreen(
 
         Spacer(modifier = Modifier.height(AppTheme.Space16))
 
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(AppTheme.Space12),
+        circolareplus.design.AilaAdaptiveCardList(
+            items = classmates,
+            key = { it.id },
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth()
-        ) {
-            items(classmates) { classmate ->
-                // null = non ancora votato: nessun pulsante selezionato.
-                val currentScore = currentVotes[classmate.id]
+                .fillMaxWidth(),
+            contentPadding = PaddingValues()
+        ) { _, classmate ->
+            // null = non ancora votato: nessun pulsante selezionato.
+            val currentScore = currentVotes[classmate.id]
 
-                Card(
-                    shape = RoundedCornerShape(AppTheme.CardCornerRadius),
-                    colors = CardDefaults.cardColors(containerColor = AppTheme.SurfaceWhite),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(AppTheme.Space12)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+            Card(
+                shape = RoundedCornerShape(AppTheme.CardCornerRadius),
+                colors = CardDefaults.cardColors(containerColor = AppTheme.SurfaceWhite),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(AppTheme.Space12)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "${classmate.firstName} ${classmate.lastName}",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = AppTheme.TextDark,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (currentScore == null) {
                             Text(
-                                text = "${classmate.firstName} ${classmate.lastName}",
-                                fontSize = 15.sp,
+                                text = "Da votare",
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = AppTheme.TextDark,
-                                modifier = Modifier.weight(1f)
-                            )
-                            if (currentScore == null) {
-                                Text(
-                                    text = "Da votare",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = AppTheme.PollDarkRed
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(AppTheme.Space8))
-
-                        // Bottoni per i 5 valori (+2, +1, 0, -1, -2)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            SocialScoreButton(
-                                label = "+2",
-                                isSelected = currentScore == SocialPreferenceScore.STRONG_AFFINITY,
-                                enabled = currentScore == SocialPreferenceScore.STRONG_AFFINITY || plusTwoCount < 2,
-                                activeColor = Color(0xFF22C55E),
-                                onClick = { onVoteChanged(classmate.id, SocialPreferenceScore.STRONG_AFFINITY) }
-                            )
-                            SocialScoreButton(
-                                label = "+1",
-                                isSelected = currentScore == SocialPreferenceScore.MEDIUM_AFFINITY,
-                                activeColor = Color(0xFF86EFAC),
-                                onClick = { onVoteChanged(classmate.id, SocialPreferenceScore.MEDIUM_AFFINITY) }
-                            )
-                            SocialScoreButton(
-                                label = "0",
-                                isSelected = currentScore == SocialPreferenceScore.NEUTRAL,
-                                activeColor = Color(0xFFCBD5E1),
-                                onClick = { onVoteChanged(classmate.id, SocialPreferenceScore.NEUTRAL) }
-                            )
-                            SocialScoreButton(
-                                label = "-1",
-                                isSelected = currentScore == SocialPreferenceScore.MILD_REJECTION,
-                                activeColor = Color(0xFFFCA5A5),
-                                onClick = { onVoteChanged(classmate.id, SocialPreferenceScore.MILD_REJECTION) }
-                            )
-                            SocialScoreButton(
-                                label = "-2",
-                                isSelected = currentScore == SocialPreferenceScore.STRONG_REJECTION,
-                                enabled = currentScore == SocialPreferenceScore.STRONG_REJECTION || minusTwoCount < 2,
-                                activeColor = Color(0xFFEF4444),
-                                onClick = { onVoteChanged(classmate.id, SocialPreferenceScore.STRONG_REJECTION) }
+                                color = AppTheme.PollDarkRed
                             )
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(AppTheme.Space8))
+
+                    // Bottoni per i 5 valori (+2, +1, 0, -1, -2)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        SocialScoreButton(
+                            label = "+2",
+                            isSelected = currentScore == SocialPreferenceScore.STRONG_AFFINITY,
+                            enabled = currentScore == SocialPreferenceScore.STRONG_AFFINITY || plusTwoCount < 2,
+                            activeColor = Color(0xFF22C55E),
+                            onClick = { onVoteChanged(classmate.id, SocialPreferenceScore.STRONG_AFFINITY) }
+                        )
+                        SocialScoreButton(
+                            label = "+1",
+                            isSelected = currentScore == SocialPreferenceScore.MEDIUM_AFFINITY,
+                            activeColor = Color(0xFF86EFAC),
+                            onClick = { onVoteChanged(classmate.id, SocialPreferenceScore.MEDIUM_AFFINITY) }
+                        )
+                        SocialScoreButton(
+                            label = "0",
+                            isSelected = currentScore == SocialPreferenceScore.NEUTRAL,
+                            activeColor = Color(0xFFCBD5E1),
+                            onClick = { onVoteChanged(classmate.id, SocialPreferenceScore.NEUTRAL) }
+                        )
+                        SocialScoreButton(
+                            label = "-1",
+                            isSelected = currentScore == SocialPreferenceScore.MILD_REJECTION,
+                            activeColor = Color(0xFFFCA5A5),
+                            onClick = { onVoteChanged(classmate.id, SocialPreferenceScore.MILD_REJECTION) }
+                        )
+                        SocialScoreButton(
+                            label = "-2",
+                            isSelected = currentScore == SocialPreferenceScore.STRONG_REJECTION,
+                            enabled = currentScore == SocialPreferenceScore.STRONG_REJECTION || minusTwoCount < 2,
+                            activeColor = Color(0xFFEF4444),
+                            onClick = { onVoteChanged(classmate.id, SocialPreferenceScore.STRONG_REJECTION) }
+                        )
                     }
                 }
             }
