@@ -29,7 +29,12 @@ actual class PdfTextExtractor actual constructor() {
     actual suspend fun extractText(pdfBytes: ByteArray): String = withContext(Dispatchers.Default) {
         try {
             PDDocument.load(pdfBytes).use { document ->
-                PDFTextStripper().getText(document)
+                // In ordine di posizione sulla pagina, non di scrittura nel file: le tabelle fatte
+                // con Word altrimenti uscivano a pezzi, con la materia da una parte e giorno, ora
+                // e aula dall'altra. Nella circolare 8 degli sportelli "SCIENZE" non stava sulla
+                // stessa riga di "LUNEDI' 13,30 - 15,00 0-020-B", e nessun modello (Gemini
+                // compreso) riusciva a dire quando c'era lo sportello di scienze.
+                PDFTextStripper().apply { sortByPosition = true }.getText(document)
             }
         } catch (e: Exception) {
             // PDF scansionato senza testo, non ancora inizializzato PdfBoxInit, file corrotto, ecc.
