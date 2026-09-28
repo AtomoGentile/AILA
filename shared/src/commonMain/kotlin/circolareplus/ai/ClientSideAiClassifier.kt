@@ -45,8 +45,8 @@ private data class GeminiThinkingConfig(val thinkingBudget: Int)
 
 @Serializable
 private data class GeminiGenerationConfig(
-    val temperature: Double? = 0.2,
-    val responseMimeType: String? = "application/json",
+    val temperature: Double = 0.2,
+    val responseMimeType: String = "application/json",
     /** Solo per la chat: `thinkingBudget = 0` spegne il ragionamento, che da solo costa secondi. */
     val thinkingConfig: GeminiThinkingConfig? = null
 )
@@ -74,12 +74,7 @@ class ClientSideAiClassifier(
     private val userApiKey: String,
     private val model: String = DEFAULT_MODEL,
     private val httpClient: HttpClient = HttpClient {
-        // encodeDefaults: senza, temperatura, responseMimeType e tetto ai token (valori di default
-        // dei DTO) non venivano mai spediti — Google non riceveva nemmeno la richiesta di JSON.
-        // explicitNulls = false: il thinkingConfig assente resta assente, non `null`.
-        install(ContentNegotiation) {
-            json(Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false })
-        }
+        install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
         // Senza questo blocco valgono i tempi di default del motore HTTP di Android (OkHttp):
         // dieci secondi di lettura. Una generateContent con il testo di una circolare intera ne
         // impiega regolarmente di piu', e la chiamata moriva con
@@ -180,9 +175,6 @@ class ClientSideAiClassifier(
 
         /** Modelli che hanno rifiutato `thinkingConfig` (es. i "pro", dove non si spegne). */
         private val rejectsThinkingConfig = mutableSetOf<String>()
-
-        /** Modelli che hanno rifiutato temperatura/formato JSON: con loro la richiesta minima. */
-        private val rejectsFullConfig = mutableSetOf<String>()
 
         /**
          * Tempo totale per una risposta in chat, scaletta compresa. Con i ~4 s concessi ai PDF
@@ -560,44 +552,13 @@ class ClientSideAiClassifier(
         return response
     }
 
-    /**
-     * Una chiamata generateContent al modello indicato.
-     *
-     * Se il modello rifiuta la configurazione (HTTP 400 INVALID_ARGUMENT, visto sul campo con
-     * gemini-flash-lite-latest appena si e' cominciato a spedire davvero temperatura e formato
-     * JSON) si riprova subito con la richiesta minima di prima, e il modello si ricorda: una
-     * risposta con meno impostazioni vale piu' di un errore in chat.
-     */
+    /** Una singola chiamata generateContent al modello indicato. */
     private suspend fun postGenerate(
         modelName: String,
         prompt: String,
         thinking: GeminiThinkingConfig? = null,
         timeoutMs: Long? = null,
         allowRetries: Boolean = true
-    ): HttpResponse {
-        if (modelName in rejectsFullConfig) {
-            return postGenerateOnce(modelName, prompt, thinking, timeoutMs, allowRetries, minimal = true)
-        }
-        val response = postGenerateOnce(modelName, prompt, thinking, timeoutMs, allowRetries, minimal = false)
-        if (response.status.value != 400) return response
-        val body = try { response.bodyAsText() } catch (e: Exception) { "" }
-        // Il 400 sul ragionamento lo gestisce gia' postChat, togliendo solo quello.
-        if (body.contains("thinking", ignoreCase = true)) return response
-        // Un solo nuovo tentativo, gia' con tutto tolto (anche il ragionamento spento, che puo'
-        // essere l'argomento rifiutato senza che Google lo nomini): chi aspetta in chat non deve
-        // pagare una prova per ogni impostazione. Il modello si ricorda, quindi capita una volta.
-        rejectsFullConfig += modelName
-        if (thinking != null) rejectsThinkingConfig += modelName
-        return postGenerateOnce(modelName, prompt, null, timeoutMs, allowRetries, minimal = true)
-    }
-
-    private suspend fun postGenerateOnce(
-        modelName: String,
-        prompt: String,
-        thinking: GeminiThinkingConfig?,
-        timeoutMs: Long?,
-        allowRetries: Boolean,
-        minimal: Boolean
     ): HttpResponse =
         httpClient.post("$API_BASE/$modelName:generateContent") {
             timeoutMs?.let { ms -> timeout { requestTimeoutMillis = ms; socketTimeoutMillis = ms } }
@@ -612,8 +573,8 @@ class ClientSideAiClassifier(
             setBody(
                 GeminiRequest(
                     contents = listOf(GeminiContent(parts = listOf(GeminiPart(prompt)))),
-                    generationConfig = if (minimal) {
-                        GeminiGenerationConfig(temperature = null, responseMimeType = null, thinkingConfig = thinking)
+                    generationConfig = if (thinking == null) {
+                        GeminiGenerationConfig()
                     } else {
                         GeminiGenerationConfig(thinkingConfig = thinking)
                     }
