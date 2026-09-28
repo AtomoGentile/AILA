@@ -146,7 +146,7 @@ class AilaAssistant(
 
         val firstAnswer = AssistantPrompt.parse(firstRaw.text)
         val firstReply = AssistantReply(
-            text = firstAnswer.answer,
+            text = withEvidence(firstAnswer.answer, question, prefetched),
             sources = checkedSources(firstAnswer, question, prefetched.keys, knowledge),
             modelLabel = firstRaw.modelLabel
         )
@@ -189,7 +189,7 @@ class AilaAssistant(
 
         val secondAnswer = AssistantPrompt.parse(secondResult.text)
         return AssistantReply(
-            text = secondAnswer.answer,
+            text = withEvidence(secondAnswer.answer, question, deepTexts),
             // Le circolari richieste e lette per intero entrano fra le fonti anche se il modello
             // si dimentica di citarle: sono quelle su cui la risposta si regge davvero.
             sources = mergeSources(
@@ -200,6 +200,27 @@ class AilaAssistant(
             modelLabel = secondResult.modelLabel
         )
     }
+
+    /**
+     * Rete di sicurezza contro il "non esiste" sbagliato: se il modello risponde che una cosa
+     * non c'e' ma nel testo di una circolare letta c'e' una riga con le parole della domanda,
+     * la riga si mostra sotto, citata dal PDF. Visto con Gemini Nano: "Gli sportelli di scienze
+     * non sono previsti", citando proprio la circolare "Sportelli didattici permanenti".
+     * Nessuna generazione in piu': e' solo una ricerca nel testo gia' scaricato.
+     */
+    private fun withEvidence(answer: String, question: String, texts: Map<Int, String>): String {
+        if (texts.isEmpty() || !NEGATIVE_ANSWER.containsMatchIn(AssistantContext.normalize(answer))) return answer
+        for ((number, text) in texts) {
+            val snippet = PassageSelector.bestSnippet(text, question) ?: continue
+            return "$answer\n\nPero' nella circolare n. $number c'e' scritto: «$snippet»\nAprila per controllare."
+        }
+        return answer
+    }
+
+    private val NEGATIVE_ANSWER = Regex(
+        "\\bnon (e |sono |viene |vengono )?(previst|indicat|menzionat|specificat)|\\bnon risult|\\bnon esist|" +
+            "\\bnon (ci sono|c e)\\b|\\bnon (trovo|ho trovato)|\\bnon ho (informazion|dati|notizi)|\\bnessun[ao]? (informazion|corso|sportell|dato)"
+    )
 
     /**
      * L'elenco delle circolari con, in cima, le frasi del modello su cosa e' piu' urgente.
