@@ -6,6 +6,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
+import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -95,67 +99,108 @@ fun BoardScreen(
             proposals.filter { selectedStatusFilter == null || it.status == selectedStatusFilter }
         }
 
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(AppTheme.Space12),
-            contentPadding = PaddingValues(bottom = AppTheme.Space24 + 72.dp + circolareplus.design.LocalBottomBarPadding.current),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            if (canModerateIdentity && unlockRequests.isNotEmpty()) {
-                item(key = "unlock-requests") {
-                    UnlockRequestsPanel(
-                        requests = unlockRequests,
-                        onApprove = onApproveUnlock,
-                        onReject = onRejectUnlock
+        val contentPadding = PaddingValues(bottom = AppTheme.Space24 + 72.dp + circolareplus.design.LocalBottomBarPadding.current)
+        val unlockPanel: @Composable () -> Unit = {
+            UnlockRequestsPanel(
+                requests = unlockRequests,
+                onApprove = onApproveUnlock,
+                onReject = onRejectUnlock
+            )
+        }
+        val emptyState: @Composable () -> Unit = {
+            AilaEmptyState(
+                title = if (proposals.isEmpty()) "Bacheca vuota" else "Nessuna proposta qui",
+                message = if (proposals.isEmpty())
+                    "Hai un'idea per la classe? Proponila: i compagni possono votarla e commentarla."
+                else
+                    "Nessuna proposta in questo stato. Prova a togliere il filtro.",
+                actionLabel = if (proposals.isEmpty()) "+ Proponi qualcosa" else null,
+                onAction = if (proposals.isEmpty()) onCreateProposalClick else null,
+                icon = { AppIcons.ChatBubble(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
+            )
+        }
+        val proposalCard: @Composable (Proposal, Modifier) -> Unit = { proposal, modifier ->
+            ProposalCardItem(
+                modifier = modifier,
+                proposal = proposal,
+                currentUserId = currentUserId,
+                canDelete = isRepresentative || proposal.authorId == currentUserId,
+                // Chi può modificare: l'autore la propria proposta, il Rappresentante
+                // qualunque. Prima era riservata al Rappresentante anche sulle proprie, e
+                // per correggere un refuso bisognava cancellare e riscrivere, perdendo voti
+                // e commenti già raccolti.
+                canEdit = isRepresentative || proposal.authorId == currentUserId,
+                isRepresentative = isRepresentative,
+                canModerateIdentity = canModerateIdentity,
+                onVote = onVote,
+                onEdit = onEdit,
+                onChangeStatus = onChangeStatus,
+                onLoadComments = onLoadComments,
+                onAddComment = onAddComment,
+                onDelete = onDelete,
+                onRequestUnlock = onRequestUnlock
+            )
+        }
+
+        // La chiave è l'id: senza, lo stato locale di ogni card (voto, commenti aperti) restava
+        // legato alla POSIZIONE e passava alla proposta che le subentrava quando una si
+        // spostava di filtro — da qui i voti "doppi" dopo aver cambiato stato a una proposta.
+        // contentType: la lista riusa le card già composte invece di ricostruirle da zero
+        // mentre si scorre. animateItem: cambiando filtro le card scivolano al loro posto
+        // invece di teletrasportarsi.
+        if (circolareplus.design.LocalWideLayout.current) {
+            // Tablet e iPad larghi: due colonne "a mattoncini", ogni card alta quanto serve
+            // (aprendo i commenti si allunga solo la sua colonna).
+            LazyVerticalStaggeredGrid(
+                columns = StaggeredGridCells.Fixed(2),
+                verticalItemSpacing = AppTheme.Space12,
+                horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12),
+                contentPadding = contentPadding,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                if (canModerateIdentity && unlockRequests.isNotEmpty()) {
+                    item(key = "unlock-requests", span = StaggeredGridItemSpan.FullLine) { unlockPanel() }
+                }
+                if (filtered.isEmpty()) {
+                    item(key = "empty", span = StaggeredGridItemSpan.FullLine) { emptyState() }
+                }
+                itemsIndexed(
+                    filtered,
+                    key = { _, proposal -> proposal.id },
+                    contentType = { _, _ -> "proposal" }
+                ) { index, proposal ->
+                    proposalCard(
+                        proposal,
+                        Modifier
+                            .animateItem(fadeInSpec = null, fadeOutSpec = null)
+                            .ailaAppear(index)
                     )
                 }
             }
-            if (filtered.isEmpty()) {
-                item(key = "empty") {
-                    AilaEmptyState(
-                        title = if (proposals.isEmpty()) "Bacheca vuota" else "Nessuna proposta qui",
-                        message = if (proposals.isEmpty())
-                            "Hai un'idea per la classe? Proponila: i compagni possono votarla e commentarla."
-                        else
-                            "Nessuna proposta in questo stato. Prova a togliere il filtro.",
-                        actionLabel = if (proposals.isEmpty()) "+ Proponi qualcosa" else null,
-                        onAction = if (proposals.isEmpty()) onCreateProposalClick else null,
-                        icon = { AppIcons.ChatBubble(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
+        } else {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(AppTheme.Space12),
+                contentPadding = contentPadding,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                if (canModerateIdentity && unlockRequests.isNotEmpty()) {
+                    item(key = "unlock-requests") { unlockPanel() }
+                }
+                if (filtered.isEmpty()) {
+                    item(key = "empty") { emptyState() }
+                }
+                itemsIndexed(
+                    filtered,
+                    key = { _, proposal -> proposal.id },
+                    contentType = { _, _ -> "proposal" }
+                ) { index, proposal ->
+                    proposalCard(
+                        proposal,
+                        Modifier
+                            .animateItem(fadeInSpec = null, fadeOutSpec = null)
+                            .ailaAppear(index)
                     )
                 }
-            }
-            // La chiave è l'id: senza, lo stato locale di ogni card (voto, commenti aperti) restava
-            // legato alla POSIZIONE e passava alla proposta che le subentrava quando una si
-            // spostava di filtro — da qui i voti "doppi" dopo aver cambiato stato a una proposta.
-            // contentType: la lista riusa le card già composte invece di ricostruirle da zero
-            // mentre si scorre. animateItem: cambiando filtro le card scivolano al loro posto
-            // invece di teletrasportarsi.
-            itemsIndexed(
-                filtered,
-                key = { _, proposal -> proposal.id },
-                contentType = { _, _ -> "proposal" }
-            ) { index, proposal ->
-                ProposalCardItem(
-                    modifier = Modifier
-                        .animateItem(fadeInSpec = null, fadeOutSpec = null)
-                        .ailaAppear(index),
-                    proposal = proposal,
-                    currentUserId = currentUserId,
-                    canDelete = isRepresentative || proposal.authorId == currentUserId,
-                    // Chi può modificare: l'autore la propria proposta, il Rappresentante
-                    // qualunque. Prima era riservata al Rappresentante anche sulle proprie, e
-                    // per correggere un refuso bisognava cancellare e riscrivere, perdendo voti
-                    // e commenti già raccolti.
-                    canEdit = isRepresentative || proposal.authorId == currentUserId,
-                    isRepresentative = isRepresentative,
-                    canModerateIdentity = canModerateIdentity,
-                    onVote = onVote,
-                    onEdit = onEdit,
-                    onChangeStatus = onChangeStatus,
-                    onLoadComments = onLoadComments,
-                    onAddComment = onAddComment,
-                    onDelete = onDelete,
-                    onRequestUnlock = onRequestUnlock
-                )
             }
         }
     }

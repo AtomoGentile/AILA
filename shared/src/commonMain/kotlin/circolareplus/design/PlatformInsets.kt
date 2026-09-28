@@ -39,6 +39,27 @@ val MaxFormWidth = 520.dp
 val MaxDialogWidth = 560.dp
 
 /**
+ * Da questa larghezza (e con almeno [RailMinHeight] di altezza) la barra delle tab in basso
+ * diventa una barra laterale a sinistra: tablet Android e iPad, in verticale e in orizzontale.
+ */
+val RailMinWidth = 600.dp
+
+/** Altezza minima per la barra laterale: sotto (finestre basse, multi-finestra) resta in basso. */
+val RailMinHeight = 480.dp
+
+/**
+ * Da questa larghezza le circolari si aprono accanto alla lista (due pannelli) e la bacheca va
+ * su due colonne: iPad in orizzontale, iPad grandi e tablet Android larghi.
+ */
+val TwoPaneMinWidth = 840.dp
+
+/** Larghezza massima del contenuto a due colonne (bacheca su schermi larghi). */
+val MaxWideContentWidth = 1160.dp
+
+/** true quando la finestra e' larga abbastanza per due pannelli (vedi [TwoPaneMinWidth]). */
+val LocalWideLayout = androidx.compose.runtime.compositionLocalOf { false }
+
+/**
  * Colonna centrata larga al massimo [max]: sui telefoni non cambia nulla (sono piu' stretti), su
  * tablet e iPad evita card e righe lunghe quanto lo schermo, difficili da leggere. Lo sfondo va
  * applicato PRIMA di questo modificatore, cosi' resta a tutta larghezza.

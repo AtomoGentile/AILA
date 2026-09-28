@@ -864,6 +864,9 @@ fun MainAppShell(
     // LocalSettingsManager, che non è stato di Compose e da solo non farebbe ridisegnare nulla.
     var apiKeyRevision by remember { mutableStateOf(0) }
     var selectedCircularForDetail by remember { mutableStateOf<Circular?>(null) }
+    // Su schermi larghi (iPad in orizzontale, tablet) la circolare si apre accanto alla lista,
+    // nella tab Classe, invece che sopra a tutto: e' questa, non selectedCircularForDetail.
+    var paneCircular by remember { mutableStateOf<Circular?>(null) }
     val lastDetailCircular = remember { arrayOf<Circular?>(null) }
 
     // --- Stato Scheda Classe (solo Rappresentante) ------------------------------------------
@@ -1462,8 +1465,8 @@ fun MainAppShell(
     // Apertura del dettaglio di una circolare non ancora classificata: la classifica subito
     // (con priorità sul ciclo in background qui sotto, che nel frattempo potrebbe già essere al
     // lavoro su di lei — classifyCircularIfNeeded evita il doppio lavoro).
-    LaunchedEffect(selectedCircularForDetail) {
-        val circular = selectedCircularForDetail
+    LaunchedEffect(selectedCircularForDetail ?: paneCircular) {
+        val circular = selectedCircularForDetail ?: paneCircular
         if (circular != null && !classifications.containsKey(circular.number)) {
             // Fuori dallo scope di questo effetto: l'effetto viene cancellato appena si esce dal
             // dettaglio, e con lui l'analisi (minuti di lavoro sul telefono buttati). Cosi'
@@ -1479,8 +1482,8 @@ fun MainAppShell(
     // come "da aggiungere" scadenze che ci sono gia' (evento doppio). Il calendario si caricava
     // solo aprendo la sua tab, e dopo un'aggiunta non si ricaricava se si era altrove: si rilegge
     // ad ogni apertura del dettaglio e ad ogni aggiunta (calendarRefreshTrigger).
-    LaunchedEffect(selectedCircularForDetail?.number, calendarRefreshTrigger) {
-        if (selectedCircularForDetail != null) {
+    LaunchedEffect((selectedCircularForDetail ?: paneCircular)?.number, calendarRefreshTrigger) {
+        if (selectedCircularForDetail != null || paneCircular != null) {
             try {
                 calendarEvents = AppContainer.calendarRepository.listEvents()
             } catch (e: CancellationException) {
@@ -2019,13 +2022,102 @@ fun MainAppShell(
             circolareplus.design.AilaContainerTransform.liveOf("circular:$number") ?: stored
         } else stored
     }
+    // Il dettaglio di una circolare, lo stesso sopra le tab (telefono) e nel pannello accanto
+    // alla lista (schermi larghi, vedi paneCircular).
+    val circularDetailContent: @Composable (Circular, () -> Unit) -> Unit = { circular, onClose ->
+        CircularDetailScreen(
+            circular = circular,
+            classification = classifications[circular.number],
+            isClassifying = circular.number in inFlightClassification,
+            isQueued = circular.number in queuedClassification,
+            isAwaitingServer = circular.number in awaitingServer,
+            analysisOnDevice = circular.number !in cloudClassification,
+            onStopAnalysis = { stopClassification(circular.number) },
+            calendarEvents = calendarEvents,
+            onBackClick = onClose,
+            onDownloadPdfClick = {
+                circular.downloadUrl?.let { uriHandler.openUri(it) }
+            },
+            // Allegati (colonna "Allegati" di Spaggiari): sia quelli in cache R2 sia i link
+            // esterni si aprono allo stesso modo del PDF principale, nel browser di sistema —
+            // niente anteprima inline per loro, solo per il documento principale.
+            onOpenAttachmentClick = { attachment ->
+                if (attachment.downloadUrl.isNotBlank()) {
+                    uriHandler.openUri(attachment.downloadUrl)
+                }
+            },
+            // Scaricare il PDF è già una cosa che l'app sa fare (serve alla classificazione AI):
+            // qui gli stessi byte alimentano l'anteprima interna, senza una seconda strada.
+            onLoadPdfBytes = {
+                AppContainer.circularsRepository.downloadPdfBytes(circular.r2PdfKey)
+            },
+            // Allegati PDF (colonna "Allegati" di Spaggiari): stessa rotta del documento
+            // principale, con la loro chiave R2 invece che quella della circolare.
+            onLoadAttachmentPdfBytes = { attachment ->
+                AppContainer.circularsRepository.downloadPdfBytes(
+                    attachment.pdfKey ?: error("Allegato \"${attachment.label}\" senza chiave PDF")
+                )
+            },
+            // La scadenza riconosciuta dall'AI diventa un evento vero. `isAiGenerated = true`
+            // esiste gia' nell'API: serve a distinguere in calendario cosa ha proposto l'AI da
+            // cosa ha inserito una persona.
+            onCreateCalendarEvent = { deadline ->
+                try {
+                    val category = try {
+                        circolareplus.domain.model.CalendarEventCategory.valueOf(deadline.category)
+                    } catch (e: IllegalArgumentException) {
+                        circolareplus.domain.model.CalendarEventCategory.ALTRO
+                    }
+                    val response = AppContainer.calendarRepository.createEvent(
+                        title = deadline.title,
+                        eventDate = deadline.dueDate,
+                        startTime = deadline.time,
+                        category = category,
+                        isAiGenerated = true
+                    )
+                    when {
+                        // Il server, sui possibili doppioni, avvisa invece di creare: l'evento
+                        // NON esiste, e dirlo e' l'unico modo perche' non si creda il contrario.
+                        response.warning != null ->
+                            "Non aggiunto: ${response.warning}"
+                        response.success -> {
+                            // Senza questo, l'evento veniva creato sul server ma restava invisibile
+                            // in Calendario/Home finché l'app non veniva riavviata: calendarEvents
+                            // si ricarica solo quando calendarRefreshTrigger cambia (vedi sopra),
+                            // e qui non veniva mai toccato.
+                            reloadCalendar()
+                            "Aggiunto al calendario."
+                        }
+                        else ->
+                            "Il server non ha creato l'evento."
+                    }
+                } catch (e: Exception) {
+                    "Non aggiunto: ${e.message ?: e::class.simpleName}"
+                }
+            },
+            // Un riassunto di Gemini non si rifà con l'AI del telefono: il risultato sarebbe
+            // peggiore e il server lo rifiuterebbe comunque.
+            onReanalyze = if (
+                classifications[circular.number]?.tier == 2 && AppContainer.isUsingLocalAiFirst()
+            ) {
+                null
+            } else {
+                {
+                    // Il risultato vecchio resta visibile finché non arriva quello nuovo (o finché
+                    // non si ferma l'analisi col tasto Stop).
+                    launchClassification(circular, forceReanalyze = true)
+                    Unit
+                }
+            }
+        )
+    }
     // Material: fondo pieno dietro alle tab, perche' in "fade through" le tab stesse svaniscono.
     // Liquid Glass: con un menu dal basso aperto l'app dietro si sfoca, cosi' il foglio di vetro
     // trasparente resta leggibile (vedi AilaBottomSheet).
     // Sfocatura accesa di colpo, non animata: animarla voleva dire ricalcolare a ogni fotogramma
     // una sfocatura a tutto schermo mentre il foglio sale (poco reattivo). Il passaggio lo
     // ammorbidisce il velo del foglio, che si dissolve da se'. Letta solo nel livello grafico.
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .then(if (AppTheme.isGlass) Modifier else Modifier.background(AppTheme.BackgroundLight))
@@ -2036,6 +2128,36 @@ fun MainAppShell(
                 } else null
             }
     ) {
+    // Tablet e iPad: barra delle tab a sinistra invece che in basso e, sugli schermi piu' larghi,
+    // circolari aperte accanto alla lista e bacheca su due colonne (vedi PlatformInsets.kt).
+    val useRail = maxWidth >= circolareplus.design.RailMinWidth && maxHeight >= circolareplus.design.RailMinHeight
+    val twoPane = useRail && maxWidth >= circolareplus.design.TwoPaneMinWidth
+    // Circolari e dettaglio affiancati: solo nella sezione Circolari della tab Classe.
+    val circularsPane = twoPane && classSection == ClassSection.CIRCULARS
+    // Ruotando l'iPad (o ridimensionando la finestra) la circolare aperta resta aperta: passa dal
+    // pannello accanto alla lista alla schermata sopra le tab, e viceversa.
+    LaunchedEffect(twoPane) {
+        val inClassCirculars = shellRoute == ShellRoute.TABS &&
+            selectedTab == MainTab.CLASS && classSection == ClassSection.CIRCULARS
+        if (twoPane) {
+            val open = selectedCircularForDetail
+            if (open != null && inClassCirculars) {
+                paneCircular = open
+                selectedCircularForDetail = null
+            }
+        } else {
+            val open = paneCircular
+            if (open != null) {
+                paneCircular = null
+                if (inClassCirculars && selectedCircularForDetail == null) selectedCircularForDetail = open
+            }
+        }
+    }
+    // Apre una circolare dalla lista o dalla Home: accanto alla lista se c'e' posto, sopra le tab
+    // altrimenti. Da Ricerca, Notifiche e Assistente resta sempre sopra (sono schermate intere).
+    val openCircularInClass: (Circular?) -> Unit = { circular ->
+        if (twoPane) paneCircular = circular else selectedCircularForDetail = circular
+    }
     Scaffold(
         modifier = Modifier
             .graphicsLayer {
@@ -2088,8 +2210,9 @@ fun MainAppShell(
                 .appImePadding(),
             color = AppTheme.BackgroundLight
         ) {
-            // Su tablet e iPad il contenuto resta una colonna centrata (vedi appContentWidth).
-            Column(modifier = Modifier.fillMaxHeight().appContentWidth()) {
+            // Su tablet e iPad il contenuto resta una colonna centrata (vedi appContentWidth). Con
+            // la barra laterale la colonna la centra ogni pagina da se', a destra della barra.
+            Column(modifier = if (useRail) Modifier.fillMaxSize() else Modifier.fillMaxHeight().appContentWidth()) {
                 // Striscia "sei offline": compare solo se l'avvio è avvenuto senza rete, e si
                 // può chiudere. Prima, in quel caso, non compariva niente perché l'app aveva
                 // già fatto uscire dall'account.
@@ -2110,7 +2233,9 @@ fun MainAppShell(
                 // spingerebbe la barra inferiore fuori dallo schermo.
                 // Altezza occupata dalla barra flottante (pillola + margini + barra di sistema):
                 // le schermate delle tab la lasciano libera in fondo alle liste.
-                val bottomBarPadding = 84.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                // Con la barra laterale in fondo resta solo la barra di sistema.
+                val bottomBarPadding = (if (useRail) 0.dp else 84.dp) +
+                    WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 // Tastiera aperta = il suo inset in basso e' > 0. (`isImeVisible` esiste solo su
                 // Android: su iOS non compilava.)
                 val imeVisible = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
@@ -2125,7 +2250,8 @@ fun MainAppShell(
                 }
                 androidx.compose.runtime.CompositionLocalProvider(
                     circolareplus.design.LocalBottomBarPadding provides bottomBarPadding,
-                    circolareplus.design.LocalProfileEntry provides profileEntry
+                    circolareplus.design.LocalProfileEntry provides profileEntry,
+                    circolareplus.design.LocalWideLayout provides twoPane
                 ) {
                     // Da qualunque tab diversa da Home, il back di sistema torna a Home invece di
                     // chiudere l'app subito — comportamento standard delle bottom bar Android. Da
@@ -2200,6 +2326,9 @@ fun MainAppShell(
                     androidx.compose.foundation.pager.HorizontalPager(
                         state = tabPager,
                         beyondViewportPageCount = 1,
+                        // Su tablet e iPad si cambia tab dalla barra laterale: lo scorrimento
+                        // orizzontale lo prendono le pagine (il PDF accanto alla lista, le card).
+                        userScrollEnabled = !useRail,
                         key = { it },
                         modifier = Modifier.fillMaxSize()
                             .graphicsLayer {
@@ -2227,6 +2356,18 @@ fun MainAppShell(
                     Box(modifier = Modifier.fillMaxSize().then(
                         if (tab != MainTab.HOME && !offlineBannerShown) Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
                         else Modifier
+                    ).then(
+                        // Barra laterale: la pagina parte alla sua destra, in una colonna centrata;
+                        // la tab Classe con le circolari affiancate prende tutta la larghezza.
+                        if (!useRail) Modifier
+                        else Modifier.padding(start = RailInset).then(
+                            when {
+                                tab == MainTab.CLASS && circularsPane -> Modifier
+                                tab == MainTab.CLASS && twoPane ->
+                                    Modifier.appContentWidth(circolareplus.design.MaxWideContentWidth)
+                                else -> Modifier.appContentWidth()
+                            }
+                        )
                     )) {
                     when (tab) {
                         MainTab.HOME -> {
@@ -2236,7 +2377,7 @@ fun MainAppShell(
                                 calendarEvents = calendarEvents,
                                 openProposalsCount = proposals.size,
                                 onNavigateToCircularDetail = { number ->
-                                    selectedCircularForDetail = circulars.firstOrNull { it.number == number }
+                                    openCircularInClass(circulars.firstOrNull { it.number == number })
                                     classSection = ClassSection.CIRCULARS
                                     selectedTab = MainTab.CLASS
                                 },
@@ -2478,7 +2619,13 @@ fun MainAppShell(
                         MainTab.CLASS -> {
                             // "Classe" unisce quello che prima erano le tab separate "Circolari" e
                             // "Bacheca" (design AILA): un selettore interno sostituisce le due tab.
-                            Column(modifier = Modifier.fillMaxSize()) {
+                            // Schermi larghi: lista delle circolari a sinistra, circolare aperta a
+                            // destra (come Mail su iPad).
+                            Row(modifier = Modifier.fillMaxSize()) {
+                            Column(
+                                modifier = if (circularsPane) Modifier.fillMaxHeight().width(CircularsListPaneWidth)
+                                else Modifier.fillMaxSize()
+                            ) {
                                 // Intestazione della tab: prima Circolari e Bacheca erano due chip
                                 // identiche a quelle dei filtri di contenuto, quindi non si capiva
                                 // che cambiavano schermata invece di filtrare la lista. Ora sono un
@@ -2541,7 +2688,8 @@ fun MainAppShell(
                                                 circulars = circulars,
                                                 classifications = classifications,
                                                 analyzingNumbers = inFlightClassification,
-                                                onSelectCircular = { selectedCircularForDetail = it }
+                                                onSelectCircular = { openCircularInClass(it) },
+                                                selectedNumber = if (circularsPane) paneCircular?.number else null
                                             )
                                         }
                                     }
@@ -2642,6 +2790,18 @@ fun MainAppShell(
                                     }
                                 }
                                 }
+                            }
+                            if (circularsPane) {
+                                CircularDetailPane(
+                                    circular = paneCircular,
+                                    modifier = Modifier.weight(1f).fillMaxHeight()
+                                ) { circular ->
+                                    // Il back di sistema chiude la circolare nel pannello prima di
+                                    // tornare alla Home (vedi il back delle tab qui sopra).
+                                    circolareplus.platform.PlatformBackHandler(enabled = selectedTab == MainTab.CLASS) { paneCircular = null }
+                                    circularDetailContent(circular) { paneCircular = null }
+                                }
+                            }
                             }
                         }
                         MainTab.POLLS -> {
@@ -3010,7 +3170,17 @@ fun MainAppShell(
                 }
                 // Sempre presente: le schermate "sopra" le scorrono sopra e la coprono (vedi
                 // shellRoute). Si nasconde quando c'e' la tastiera, per non galleggiarci sopra.
-                androidx.compose.animation.AnimatedVisibility(
+                // Tablet e iPad: barra laterale a sinistra, sempre visibile (la tastiera non la
+                // copre).
+                if (useRail) {
+                    FloatingTabRail(
+                        selectedTab = selectedTab,
+                        onSelect = { selectedTab = it },
+                        hazeState = hazeState,
+                        modifier = Modifier.align(Alignment.CenterStart)
+                    )
+                }
+                if (!useRail) androidx.compose.animation.AnimatedVisibility(
                     visible = !imeVisible,
                     modifier = Modifier.align(Alignment.BottomCenter),
                     enter = androidx.compose.animation.slideInVertically { it } + androidx.compose.animation.fadeIn(),
@@ -3717,91 +3887,7 @@ fun MainAppShell(
         // schermata a schermo intero intercettava il back di sistema, solo la freccia disegnata
         // nella UI. Ora il back di sistema fa la stessa cosa della freccia.
         circolareplus.platform.PlatformBackHandler(enabled = selectedCircularForDetail != null) { selectedCircularForDetail = null }
-        CircularDetailScreen(
-            circular = circularForDetail,
-            classification = classifications[circularForDetail.number],
-            isClassifying = circularForDetail.number in inFlightClassification,
-            isQueued = circularForDetail.number in queuedClassification,
-            isAwaitingServer = circularForDetail.number in awaitingServer,
-            analysisOnDevice = circularForDetail.number !in cloudClassification,
-            onStopAnalysis = { stopClassification(circularForDetail.number) },
-            calendarEvents = calendarEvents,
-            onBackClick = { selectedCircularForDetail = null },
-            onDownloadPdfClick = {
-                circularForDetail.downloadUrl?.let { uriHandler.openUri(it) }
-            },
-            // Allegati (colonna "Allegati" di Spaggiari): sia quelli in cache R2 sia i link
-            // esterni si aprono allo stesso modo del PDF principale, nel browser di sistema —
-            // niente anteprima inline per loro, solo per il documento principale.
-            onOpenAttachmentClick = { attachment ->
-                if (attachment.downloadUrl.isNotBlank()) {
-                    uriHandler.openUri(attachment.downloadUrl)
-                }
-            },
-            // Scaricare il PDF è già una cosa che l'app sa fare (serve alla classificazione AI):
-            // qui gli stessi byte alimentano l'anteprima interna, senza una seconda strada.
-            onLoadPdfBytes = {
-                AppContainer.circularsRepository.downloadPdfBytes(circularForDetail.r2PdfKey)
-            },
-            // Allegati PDF (colonna "Allegati" di Spaggiari): stessa rotta del documento
-            // principale, con la loro chiave R2 invece che quella della circolare.
-            onLoadAttachmentPdfBytes = { attachment ->
-                AppContainer.circularsRepository.downloadPdfBytes(
-                    attachment.pdfKey ?: error("Allegato \"${attachment.label}\" senza chiave PDF")
-                )
-            },
-            // La scadenza riconosciuta dall'AI diventa un evento vero. `isAiGenerated = true`
-            // esiste gia' nell'API: serve a distinguere in calendario cosa ha proposto l'AI da
-            // cosa ha inserito una persona.
-            onCreateCalendarEvent = { deadline ->
-                try {
-                    val category = try {
-                        circolareplus.domain.model.CalendarEventCategory.valueOf(deadline.category)
-                    } catch (e: IllegalArgumentException) {
-                        circolareplus.domain.model.CalendarEventCategory.ALTRO
-                    }
-                    val response = AppContainer.calendarRepository.createEvent(
-                        title = deadline.title,
-                        eventDate = deadline.dueDate,
-                        startTime = deadline.time,
-                        category = category,
-                        isAiGenerated = true
-                    )
-                    when {
-                        // Il server, sui possibili doppioni, avvisa invece di creare: l'evento
-                        // NON esiste, e dirlo e' l'unico modo perche' non si creda il contrario.
-                        response.warning != null ->
-                            "Non aggiunto: ${response.warning}"
-                        response.success -> {
-                            // Senza questo, l'evento veniva creato sul server ma restava invisibile
-                            // in Calendario/Home finché l'app non veniva riavviata: calendarEvents
-                            // si ricarica solo quando calendarRefreshTrigger cambia (vedi sopra),
-                            // e qui non veniva mai toccato.
-                            reloadCalendar()
-                            "Aggiunto al calendario."
-                        }
-                        else ->
-                            "Il server non ha creato l'evento."
-                    }
-                } catch (e: Exception) {
-                    "Non aggiunto: ${e.message ?: e::class.simpleName}"
-                }
-            },
-            // Un riassunto di Gemini non si rifà con l'AI del telefono: il risultato sarebbe
-            // peggiore e il server lo rifiuterebbe comunque.
-            onReanalyze = if (
-                classifications[circularForDetail.number]?.tier == 2 && AppContainer.isUsingLocalAiFirst()
-            ) {
-                null
-            } else {
-                {
-                    // Il risultato vecchio resta visibile finché non arriva quello nuovo (o finché
-                    // non si ferma l'analisi col tasto Stop).
-                    launchClassification(circularForDetail, forceReanalyze = true)
-                    Unit
-                }
-            }
-        )
+        circularDetailContent(circularForDetail) { selectedCircularForDetail = null }
         }
         }
     }
@@ -5386,46 +5472,7 @@ private fun FloatingTabBar(
                 .widthIn(max = 520.dp)
                 .fillMaxWidth()
                 .height(64.dp)
-                .then(
-                    if (AppTheme.isGlass) {
-                        // Liquid Glass: vetro traslucido (il contenuto che scorre sotto si
-                        // intravede), ombra appena accennata e un filo di luce sul bordo, piu'
-                        // chiaro in alto come un riflesso.
-                        Modifier
-                            .shadow(elevation = 10.dp, shape = shape, ambientColor = Color(0x1A1B2E7A), spotColor = Color(0x261B2E7A))
-                            .clip(shape)
-                            // Sfocatura vera di quello che scorre sotto (Haze), con un velo
-                            // bianco (o scuro) sopra: il "vetro smerigliato" di iOS.
-                            .then(
-                                if (hazeState != null) Modifier.hazeEffect(
-                                    state = hazeState,
-                                    style = dev.chrisbanes.haze.HazeStyle(
-                                        backgroundColor = AppTheme.GlassBase,
-                                        // Piu' trasparente: il contenuto sotto si vede sfocato
-                                        // ma riconoscibile, come la tab bar di iOS 26.
-                                        tint = dev.chrisbanes.haze.HazeTint(
-                                            if (AppTheme.isDarkMode) Color(0x14202430) else Color(0x14FFFFFF)
-                                        ),
-                                        // Sfocatura leggera: a 32dp la barra sembrava opaca;
-                                        // cosi' il contenuto sotto si riconosce, semitrasparente.
-                                        blurRadius = 18.dp,
-                                        noiseFactor = 0f
-                                    )
-                                ) else Modifier.background(
-                                    if (AppTheme.isDarkMode) Color(0xA6202430) else Color(0xB8FFFFFF)
-                                )
-                            )
-                            // Bordo speculare come gli altri vetri (luce dall'alto a sinistra).
-                            .border(1.dp, AppTheme.GlassEdge, shape)
-                    } else {
-                        // Material Expressive: pillola piena "surface container", senza bordo,
-                        // con l'ombra bassa delle barre flottanti di M3.
-                        Modifier
-                            .shadow(elevation = 6.dp, shape = shape)
-                            .clip(shape)
-                            .background(if (AppTheme.isDarkMode) Color(0xFF22252C) else Color(0xFFECEDF7))
-                    }
-                )
+                .tabBarSurface(shape, hazeState)
                 .padding(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -5443,6 +5490,195 @@ private fun FloatingTabBar(
                         onClick = { onSelect(tab) }
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Fondo della barra delle tab, in basso (telefono) o laterale (tablet e iPad): vetro sfocato in
+ * Liquid Glass, pillola piena con ombra in Material.
+ */
+@Composable
+private fun Modifier.tabBarSurface(
+    shape: androidx.compose.ui.graphics.Shape,
+    hazeState: dev.chrisbanes.haze.HazeState?
+): Modifier = this.then(
+    if (AppTheme.isGlass) {
+        // Liquid Glass: vetro traslucido (il contenuto che scorre sotto si
+        // intravede), ombra appena accennata e un filo di luce sul bordo, piu'
+        // chiaro in alto come un riflesso.
+        Modifier
+            .shadow(elevation = 10.dp, shape = shape, ambientColor = Color(0x1A1B2E7A), spotColor = Color(0x261B2E7A))
+            .clip(shape)
+            // Sfocatura vera di quello che scorre sotto (Haze), con un velo
+            // bianco (o scuro) sopra: il "vetro smerigliato" di iOS.
+            .then(
+                if (hazeState != null) Modifier.hazeEffect(
+                    state = hazeState,
+                    style = dev.chrisbanes.haze.HazeStyle(
+                        backgroundColor = AppTheme.GlassBase,
+                        // Piu' trasparente: il contenuto sotto si vede sfocato
+                        // ma riconoscibile, come la tab bar di iOS 26.
+                        tint = dev.chrisbanes.haze.HazeTint(
+                            if (AppTheme.isDarkMode) Color(0x14202430) else Color(0x14FFFFFF)
+                        ),
+                        // Sfocatura leggera: a 32dp la barra sembrava opaca;
+                        // cosi' il contenuto sotto si riconosce, semitrasparente.
+                        blurRadius = 18.dp,
+                        noiseFactor = 0f
+                    )
+                ) else Modifier.background(
+                    if (AppTheme.isDarkMode) Color(0xA6202430) else Color(0xB8FFFFFF)
+                )
+            )
+            // Bordo speculare come gli altri vetri (luce dall'alto a sinistra).
+            .border(1.dp, AppTheme.GlassEdge, shape)
+    } else {
+        // Material Expressive: pillola piena "surface container", senza bordo,
+        // con l'ombra bassa delle barre flottanti di M3.
+        Modifier
+            .shadow(elevation = 6.dp, shape = shape)
+            .clip(shape)
+            .background(if (AppTheme.isDarkMode) Color(0xFF22252C) else Color(0xFFECEDF7))
+    }
+)
+
+/** Spazio a sinistra occupato dalla barra laterale (margine + barra + distacco dal contenuto). */
+private val RailInset = 104.dp
+
+/** Larghezza della lista delle circolari quando la circolare aperta le sta accanto. */
+private val CircularsListPaneWidth = 400.dp
+
+/**
+ * La barra delle tab su tablet e iPad: una colonna di vetro (o pillola Material) staccata dal
+ * bordo sinistro, con icona e nome per ogni voce, come la barra laterale di iPadOS e la
+ * navigation rail di Material. Stesso fondo della barra in basso (vedi [tabBarSurface]).
+ */
+@Composable
+private fun FloatingTabRail(
+    selectedTab: MainTab,
+    onSelect: (MainTab) -> Unit,
+    hazeState: dev.chrisbanes.haze.HazeState?,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .padding(start = 12.dp)
+            .width(80.dp)
+            .tabBarSurface(RoundedCornerShape(36.dp), hazeState)
+            .padding(vertical = 10.dp, horizontal = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        MainTab.entries.forEach { tab ->
+            FloatingRailItem(tab = tab, selected = tab == selectedTab, onClick = { onSelect(tab) })
+        }
+    }
+}
+
+@Composable
+private fun FloatingRailItem(tab: MainTab, selected: Boolean, onClick: () -> Unit) {
+    val progress by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (selected) 1f else 0f,
+        animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 520f),
+        label = "railItem"
+    )
+    // Stessi colori delle voci della barra in basso (vedi FloatingTabItem).
+    val activeInk = if (AppTheme.isGlass) AppTheme.PrimaryBlue else AppTheme.OnSelection
+    val ink = androidx.compose.ui.graphics.lerp(
+        if (AppTheme.isGlass) AppTheme.TextDark.copy(alpha = 0.75f) else AppTheme.TextMuted,
+        activeInk,
+        progress.coerceIn(0f, 1f)
+    )
+    val tint = if (AppTheme.isGlass) {
+        if (AppTheme.isDarkMode) Color(0x33FFFFFF) else Color(0x1A767680)
+    } else {
+        if (AppTheme.accent != circolareplus.design.AilaAccent.BLUE) AppTheme.AccentContainer
+        else if (AppTheme.isDarkMode) Color(0xFF34457A) else Color(0xFFD9E2FF)
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .semantics {
+                contentDescription = tab.title
+                role = Role.Tab
+                this.selected = selected
+            }
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // L'indicatore della voce attiva sta dietro l'icona, come nella navigation rail di M3.
+        Box(
+            modifier = Modifier
+                .size(width = 56.dp, height = 32.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .drawBehind { drawRect(tint, alpha = progress.coerceIn(0f, 1f)) },
+            contentAlignment = Alignment.Center
+        ) {
+            val iconModifier = Modifier.size(22.dp).ailaSelectionPop(selected)
+            when (tab) {
+                MainTab.HOME -> AppIcons.Home(modifier = iconModifier, color = ink)
+                MainTab.CALENDAR -> AppIcons.Calendar(modifier = iconModifier, color = ink)
+                MainTab.CLASS -> AppIcons.Document(modifier = iconModifier, color = ink)
+                MainTab.SEATMAP -> AppIcons.Chair(modifier = iconModifier, color = ink)
+                MainTab.POLLS -> AppIcons.Poll(modifier = iconModifier, color = ink)
+            }
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = if (tab == MainTab.SEATMAP) "Posti" else tab.title,
+            fontSize = 11.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            color = ink,
+            maxLines = 1,
+            softWrap = false,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
+    }
+}
+
+/**
+ * Pannello a destra della lista delle circolari sugli schermi larghi: la circolare aperta, oppure
+ * un invito a sceglierne una. Cambiando circolare la vecchia sfuma nella nuova.
+ */
+@Composable
+private fun CircularDetailPane(
+    circular: Circular?,
+    modifier: Modifier = Modifier,
+    content: @Composable (Circular) -> Unit
+) {
+    Row(modifier = modifier) {
+        // Filo di separazione fra lista e circolare.
+        Box(modifier = Modifier.fillMaxHeight().width(1.dp).background(AppTheme.Hairline))
+        // Per numero: se la stessa circolare arriva aggiornata dal server non si ridisegna da capo
+        // (il PDF gia' mostrato resterebbe da rifare).
+        val latest = androidx.compose.runtime.rememberUpdatedState(circular)
+        androidx.compose.animation.Crossfade(
+            targetState = circular?.number,
+            modifier = Modifier.weight(1f).fillMaxHeight(),
+            label = "circularDetailPane"
+        ) { number ->
+            val shown = remember(number) { latest.value?.takeIf { it.number == number } }
+            val current = latest.value?.takeIf { it.number == number } ?: shown
+            if (current == null) {
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(AppTheme.Space24),
+                    contentAlignment = Alignment.Center
+                ) {
+                    circolareplus.design.AilaEmptyState(
+                        title = "Nessuna circolare aperta",
+                        message = "Scegli una circolare dalla lista: la leggi qui, accanto alle altre."
+                    )
+                }
+            } else {
+                content(current)
             }
         }
     }

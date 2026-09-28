@@ -46,11 +46,15 @@
         <uses-native-library android:name="libOpenCL-car.so" android:required="false" />
         <uses-native-library android:name="libOpenCL-pixel.so" android:required="false" />
         <uses-native-library android:name="libvndksupport.so" android:required="false" />
+        <!-- configChanges: ruotando un tablet o ridimensionando la finestra (multi-finestra) l'app
+             non viene ricreata: Compose si ridisegna da se' e tab, circolare aperta e sessione
+             restano dove sono. Prima ogni rotazione ripartiva da zero. -->
         <activity
             android:name=".MainActivity"
             android:theme="@style/Theme.App.Starting"
             android:exported="true"
             android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
