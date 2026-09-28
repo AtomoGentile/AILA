@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.border
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -36,7 +37,9 @@ fun CircularsScreen(
     classifications: Map<Int, CircularAiClassification>,
     onSelectCircular: (Circular) -> Unit,
     /** Numeri delle circolari la cui analisi e' in corso adesso (anche se non si e' nel dettaglio). */
-    analyzingNumbers: List<Int> = emptyList()
+    analyzingNumbers: List<Int> = emptyList(),
+    /** Circolare aperta accanto alla lista (tablet e iPad): la sua card e' evidenziata. */
+    selectedNumber: Int? = null
 ) {
     var selectedFilter by remember { mutableStateOf<CircularRelevanceBadge?>(null) }
     var searchQuery by remember { mutableStateOf("") }
@@ -156,7 +159,13 @@ fun CircularsScreen(
                     classification = classification,
                     isAnalyzing = circ.number in analyzingNumbers,
                     onClick = { onSelectCircular(circ) },
-                    modifier = Modifier.ailaAppear(index)
+                    modifier = Modifier.ailaAppear(index).then(
+                        if (circ.number == selectedNumber) Modifier.border(
+                            2.dp,
+                            AppTheme.PrimaryBlue,
+                            androidx.compose.foundation.shape.RoundedCornerShape(AppTheme.CardCornerRadius)
+                        ) else Modifier
+                    )
                 )
             }
         }

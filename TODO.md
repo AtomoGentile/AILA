@@ -3,6 +3,26 @@
 Elenco vivo dei problemi aperti e del lavoro ancora mancante, aggiornato mano a mano.
 Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esistente.
 
+## 28/9: tablet e iPad (branch `claude/ipad-android-tablet-status-5vedo6`)
+
+Fatto:
+- **Barra laterale** al posto di quella in basso da 600dp di larghezza (e 480dp di altezza):
+  `FloatingTabRail` in `MainAppShell.kt`, stesso fondo (vetro o Material) della barra in basso.
+  Le pagine partono alla sua destra, in colonna centrata; lo scorrimento fra tab col dito e'
+  spento (si cambia tab dalla barra, e i gesti orizzontali restano alle pagine).
+- **Circolari su due pannelli** da 840dp (iPad in orizzontale, iPad grandi, tablet larghi):
+  lista a sinistra (400dp), circolare aperta a destra (`CircularDetailPane`), card aperta
+  evidenziata. Ruotando, la circolare aperta passa dal pannello alla schermata sopra le tab e
+  viceversa. Da Ricerca, Notifiche e Assistente si apre sempre sopra, come prima.
+- **Bacheca su due colonne** da 840dp (`LazyVerticalStaggeredGrid`), larga al massimo 1160dp.
+- **Android**: `configChanges` sull'activity, cosi' ruotare un tablet non ricrea l'app (prima
+  si perdevano tab e circolare aperta a ogni rotazione).
+
+Da provare a schermo (nessun dispositivo qui, compilato solo dalla CI Android):
+- iPad in verticale (barra laterale, una colonna) e in orizzontale (due pannelli), Split View
+  e Stage Manager; tablet Android in entrambi i versi.
+- Back di sistema Android con una circolare nel pannello: la chiude prima di tornare alla Home.
+
 ## 25/9: unione dei branch aperti (branch `claude/aila-public-cleanup-179v93`)
 
 **Non compilato** (Gradle senza dipendenze in questa sessione; il backend passa `tsc`). Da provare
