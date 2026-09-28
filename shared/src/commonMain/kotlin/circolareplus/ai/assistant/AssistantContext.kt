@@ -345,6 +345,44 @@ internal object AssistantContext {
     }
 
     /**
+     * `true` se vale la pena cercare le parole della domanda nel testo dei PDF: c'e' almeno una
+     * parola utile, non e' una domanda su un periodo (quelle si reggono su calendario e
+     * scadenze) e non cita gia' una circolare per numero.
+     */
+    fun wantsTextSearch(knowledge: AssistantKnowledge, question: String): Boolean =
+        tokenize(question).isNotEmpty() &&
+            circularNumbersIn(question).isEmpty() &&
+            TimeScopeParser.parse(question, knowledge.todayIso) == null
+
+    /**
+     * Le circolari ordinate per quanto il loro **testo** c'entra con la domanda.
+     *
+     * Ogni parola della domanda pesa di piu' quanto piu' e' rara fra i testi: "corso" o
+     * "studenti" compaiono quasi ovunque e da sole non dicono niente, "teatro" o "robotica"
+     * indicano la circolare giusta. Una circolare entra solo se contiene almeno una parola
+     * che non sta in piu' della meta' dei testi: le parole comuni da sole non bastano.
+     */
+    fun rankByText(texts: Map<Int, String>, question: String): List<Int> {
+        val stems = tokenize(question).map { stemOf(it) }.filter { it.length >= 3 }.distinct()
+        if (stems.isEmpty() || texts.isEmpty()) return emptyList()
+        val normalized = texts.mapValues { (_, text) -> normalize(text) }
+        val total = normalized.size
+        val weights = stems.associateWith { stem ->
+            val found = normalized.values.count { it.contains(stem) }
+            if (found == 0) 0.0 else kotlin.math.ln((total + 1.0) / found)
+        }
+        val minWeight = kotlin.math.ln((total + 1.0) / ((total + 1) / 2).coerceAtLeast(1))
+        return normalized
+            .mapNotNull { (number, text) ->
+                val present = stems.filter { text.contains(it) }
+                if (present.none { weights.getValue(it) >= minWeight }) return@mapNotNull null
+                number to present.sumOf { weights.getValue(it) }
+            }
+            .sortedWith(compareByDescending<Pair<Int, Double>> { it.second }.thenByDescending { it.first })
+            .map { it.first }
+    }
+
+    /**
      * `true` per un saluto o una domanda senza nessun aggancio ai dati ("ciao", "grazie").
      * Serve a non allegare fonti a una risposta che non ne ha: un modello piccolo altrimenti
      * cita la prima circolare che vede.
