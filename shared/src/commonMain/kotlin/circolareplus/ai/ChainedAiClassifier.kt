@@ -109,9 +109,16 @@ class ChainedAiClassifier(
         // misura che regge. E' quello che rende la riserva una riserva vera anche quando il
         // primario e' il cloud con il suo contesto largo.
         val second = secondary.generateAnswer(prompt)
-        if (second is AiTextResult.Success) return second
-
         val firstReason = (first as AiTextResult.Failure).reason
+        if (second is AiTextResult.Success) {
+            // Sotto la risposta della riserva si vede perche' il primo non ha risposto: senza,
+            // una risposta dell'AI locale al posto di Gemini non diceva nulla sul guasto, e l'unico
+            // indizio era la sigla del modello.
+            return second.copy(
+                modelLabel = "${second.modelLabel} — il primo non ha risposto: ${firstReason.take(200)}"
+            )
+        }
+
         val secondReason = (second as AiTextResult.Failure).reason
         return AiTextResult.Failure("$firstReason\nRiserva: $secondReason")
     }

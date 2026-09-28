@@ -1,5 +1,7 @@
 package circolareplus.ai.assistant
 
+import kotlin.math.ln
+
 /**
  * Sceglie, dal testo di una circolare, i passaggi che c'entrano con la domanda.
  *
@@ -43,14 +45,27 @@ internal object PassageSelector {
 
         fun fits(index: Int) = used + chunks[index].length + GAP.length <= maxChars
 
-        // Scelta golosa: ogni volta il blocco che aggiunge piu' parole della domanda non ancora
-        // coperte, poi quello con piu' occorrenze. Cosi' "scienze" e "orari" non finiscono tutti
-        // sulla stessa parola ripetuta in venti blocchi uguali.
+        // Peso di ogni parola della domanda: alto se compare in pochi blocchi. In una circolare
+        // sugli sportelli "sportell" sta in quasi tutti i blocchi e non distingue niente, mentre
+        // "scienz" indica proprio i blocchi che servono. Senza pesi, dopo il primo blocco si
+        // prendevano quelli con piu' "sportelli", e a un modello con poco spazio (quello sul
+        // telefono) arrivava solo la frase "non sono previsti sportelli di ... scienze motorie".
+        val weight = stems.associateWith { stem ->
+            val df = found.count { stem in it }
+            if (df == 0) 0.0 else ln(1.0 + chunks.size.toDouble() / df)
+        }
+        fun score(index: Int, onlyNew: Boolean) =
+            found[index].keys.filter { !onlyNew || it !in covered }.sumOf { weight[it] ?: 0.0 }
+
+        // Scelta golosa: ogni volta il blocco che aggiunge piu' peso di parole non ancora
+        // coperte, poi quello con le parole piu' rare in assoluto, poi quello con piu'
+        // occorrenze.
         while (true) {
             val best = chunks.indices
                 .filter { it !in chosen && found[it].isNotEmpty() && fits(it) }
                 .maxWithOrNull(
-                    compareBy<Int> { index -> found[index].keys.count { it !in covered } }
+                    compareBy<Int> { index -> score(index, onlyNew = true) }
+                        .thenBy { index -> score(index, onlyNew = false) }
                         .thenBy { index -> found[index].values.sum().coerceAtMost(found[index].size * 5) }
                         .thenByDescending { it }
                 ) ?: break
