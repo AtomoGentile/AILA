@@ -117,17 +117,20 @@ class ClientSideAiClassifier(
         const val DEFAULT_MODEL = "gemini-flash-latest"
 
         /**
-         * Scaletta di ripiego, provata in ordine se il modello predefinito viene rifiutato — utile
-         * se un giorno anche l'alias cambiasse nome. L'app prova le alternative da sola invece di
-         * restare muta finché qualcuno non tocca il codice.
+         * Scaletta di ripiego, provata in ordine se il modello predefinito viene rifiutato.
+         *
+         * Solo gli alias: i nomi con la versione invecchiano. I `gemini-2.5-*` che stavano qui
+         * rispondono ormai 404 "no longer available to new users", e la ricerca automatica
+         * sceglieva proprio gemini-2.5-flash — cosi' ogni analisi finiva con un 404. Oltre gli
+         * alias ci pensa [discoverUsableModels], che mette per primi i modelli piu' recenti.
          */
         private val MODEL_LADDER = listOf(
             "gemini-flash-latest",
-            "gemini-flash-lite-latest",
-            "gemini-2.5-flash",
-            "gemini-2.5-flash-lite",
-            "gemini-2.5-pro"
+            "gemini-flash-lite-latest"
         )
+
+        /** Quanti modelli trovati da [discoverUsableModels] si provano, al massimo. */
+        private const val MAX_DISCOVERED_ATTEMPTS = 3
 
         private const val API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -301,10 +304,9 @@ class ClientSideAiClassifier(
             addAll(MODEL_LADDER)
         }.distinct()
 
-        var lastFailure = "nessun modello disponibile"
-        // Il primo errore dice di piu' dell'ultimo: l'ultimo e' spesso un modello di ripiego
-        // che risponde in modo meno chiaro (es. 404 con corpo "{}").
-        var firstFailure: String? = null
+        // Tutti i fallimenti, non solo l'ultimo: l'ultimo era spesso un modello di ripiego
+        // (un 404 con corpo "{}") che nascondeva il motivo vero per cui i primi non andavano.
+        val failures = mutableListOf<String>()
         for (candidate in candidates) {
             val response = postGenerate(candidate, prompt)
             if (response.status.isSuccess()) {
@@ -312,29 +314,39 @@ class ClientSideAiClassifier(
                 return parseGeminiResponse(circularNumber, response.bodyAsText(), candidate)
             }
             val body = try { response.bodyAsText() } catch (e: Exception) { "" }
-            lastFailure = "HTTP ${response.status.value} con il modello $candidate: ${body.take(200)}"
-            if (firstFailure == null) firstFailure = lastFailure
+            failures += describeFailure(candidate, response.status.value, body)
             // Chiave non valida, quota esaurita, rete: inutile provare altri modelli.
-            if (!isModelUnavailable(response.status.value, body)) return GeminiCallResult.Failure(lastFailure)
+            if (!isModelUnavailable(response.status.value, body)) {
+                return GeminiCallResult.Failure(failures.joinToString("; "))
+            }
         }
 
         // Nessun nome noto accettato: si chiede direttamente a Google quali modelli sono
         // disponibili per questa chiave. Così l'app si ripara da sola anche fra un anno.
-        val discovered = discoverUsableModel()
-        if (discovered != null) {
+        for (discovered in discoverUsableModels(exclude = candidates.toSet()).take(MAX_DISCOVERED_ATTEMPTS)) {
             val response = postGenerate(discovered, prompt)
             if (response.status.isSuccess()) {
                 resolvedModel = discovered
                 return parseGeminiResponse(circularNumber, response.bodyAsText(), discovered)
             }
             val body = try { response.bodyAsText() } catch (e: Exception) { "" }
-            lastFailure = "HTTP ${response.status.value} con il modello $discovered (rilevato automaticamente): ${body.take(200)}"
+            failures += describeFailure("$discovered (rilevato automaticamente)", response.status.value, body)
+            if (!isModelUnavailable(response.status.value, body)) break
         }
 
-        if (firstFailure != null && firstFailure != lastFailure) {
-            lastFailure = "$lastFailure; primo tentativo: $firstFailure"
+        return GeminiCallResult.Failure(failures.joinToString("; ").ifEmpty { "nessun modello disponibile" })
+    }
+
+    /** Una riga per modello fallito: codice e l'inizio del messaggio di Google, senza JSON. */
+    private fun describeFailure(modelName: String, statusCode: Int, body: String): String {
+        val googleMessage: String? = try {
+            json.parseToJsonElement(body).jsonObject["error"]?.jsonObject
+                ?.get("message")?.jsonPrimitive?.contentOrNull
+        } catch (e: Exception) {
+            null
         }
-        return GeminiCallResult.Failure(lastFailure)
+        val message = googleMessage ?: body
+        return "HTTP $statusCode con $modelName: ${message.trim().take(140)}"
     }
 
     /** Implementazione di [AiClassifier.parseEventPrompt]: genera una bozza di evento dal testo. */
@@ -388,15 +400,21 @@ class ClientSideAiClassifier(
         val candidates = orderedCandidates()
         val deadline = currentTimeMillis() + CHAT_BUDGET_MS
 
-        var lastFailure = "nessun modello disponibile"
-        for ((index, candidate) in candidates.withIndex()) {
+        // Tutti i fallimenti in ordine: mostrare solo l'ultimo (es. il 404 di un modello di
+        // ripiego) nascondeva perche' i primi modelli non avevano risposto.
+        val failures = mutableListOf<String>()
+        fun failure(): AiTextResult.Failure =
+            AiTextResult.Failure(failures.joinToString("\n").ifEmpty { "nessun modello disponibile" })
+
+        for (candidate in candidates) {
             val remaining = deadline - currentTimeMillis()
             if (remaining < CHAT_MIN_ATTEMPT_MS) {
-                lastFailure = "Google non ha risposto in tempo ($lastFailure)"
+                failures += "Google non ha risposto in tempo."
                 break
             }
-            val isLast = index == candidates.lastIndex
-            val attemptMs = if (isLast) remaining else minOf(remaining, CHAT_ATTEMPT_MS)
+            // Mai tutto il tempo a un solo modello, nemmeno all'ultimo della scaletta: dopo ci sono
+            // ancora quelli trovati da discoverUsableModels.
+            val attemptMs = minOf(remaining, CHAT_ATTEMPT_MS)
             val response = try {
                 postChat(candidate, text, attemptMs)
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -408,7 +426,7 @@ class ClientSideAiClassifier(
                 // socket ha una classe diversa per piattaforma, da cui il controllo sul nome.)
                 if (e is HttpRequestTimeoutException || e::class.simpleName.orEmpty().contains("Timeout")) {
                     markBusy(candidate)
-                    lastFailure = "il modello $candidate non ha risposto in tempo"
+                    failures += "$candidate non ha risposto in tempo"
                     continue
                 }
                 return AiTextResult.Failure(
@@ -424,36 +442,40 @@ class ClientSideAiClassifier(
                 return AiTextResult.Success(answer, "Google Gemini ($candidate)")
             }
             val body = try { response.bodyAsText() } catch (e: Exception) { "" }
-            lastFailure = "HTTP ${response.status.value} con il modello $candidate: ${body.take(200)}"
+            val code = response.status.value
+            failures += describeFailure(candidate, code, body)
             // In chat anche il 429 fa passare al modello dopo: nel piano gratuito la quota e' per
             // modello, e flash-lite ha la sua anche quando quella di flash e' finita.
-            val code = response.status.value
-            if (code != 429 && !isModelUnavailable(code, body)) return AiTextResult.Failure(lastFailure)
+            if (code != 429 && !isModelUnavailable(code, body)) return failure()
             // Un modello che ha appena risposto 503 non va piu' tenuto come "risolto" e per
             // qualche minuto passa in fondo alla fila: la prossima domanda parte da uno che va.
             markBusy(candidate)
         }
 
-        val leftForDiscovery = deadline - currentTimeMillis()
-        if (leftForDiscovery < CHAT_MIN_ATTEMPT_MS * 2) return AiTextResult.Failure(lastFailure)
-        val discovered = discoverUsableModel()
-        if (discovered != null) {
+        if (deadline - currentTimeMillis() < CHAT_MIN_ATTEMPT_MS * 2) return failure()
+        val discovered = discoverUsableModels(exclude = candidates.toSet()).take(MAX_DISCOVERED_ATTEMPTS)
+        for (candidate in discovered) {
             val left = deadline - currentTimeMillis()
-            if (left < CHAT_MIN_ATTEMPT_MS) return AiTextResult.Failure(lastFailure)
+            if (left < CHAT_MIN_ATTEMPT_MS) break
             val response = try {
-                postChat(discovered, text, left)
+                postChat(candidate, text, minOf(left, CHAT_ATTEMPT_MS))
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                return AiTextResult.Failure(lastFailure)
+                failures += "$candidate (rilevato automaticamente) non ha risposto in tempo"
+                continue
             }
             if (response.status.isSuccess()) {
-                resolvedModel = discovered
+                resolvedModel = candidate
                 val answer = extractGeneratedText(response.bodyAsText())
-                if (answer != null) return AiTextResult.Success(answer, "Google Gemini ($discovered)")
+                if (answer != null) return AiTextResult.Success(answer, "Google Gemini ($candidate)")
+                failures += "$candidate ha risposto senza contenuto utilizzabile"
+                continue
             }
+            val body = try { response.bodyAsText() } catch (e: Exception) { "" }
+            failures += describeFailure("$candidate (rilevato automaticamente)", response.status.value, body)
         }
-        return AiTextResult.Failure(lastFailure)
+        return failure()
     }
 
     /** Il testo del primo candidato di una risposta generateContent, o `null` se non c'e'. */
@@ -510,10 +532,20 @@ class ClientSideAiClassifier(
             }
         }
 
-        val discovered = discoverUsableModel()
-        if (discovered != null) {
-            return "Chiave valida, ma nessuno dei modelli previsti è disponibile. " +
-                "Ne userò uno rilevato automaticamente: $discovered."
+        // Un modello nell'elenco di Google non e' per forza utilizzabile (i gemini-2.5 compaiono
+        // ancora ma rispondono 404 ai nuovi utenti): si prova davvero prima di dire che va.
+        for (discovered in discoverUsableModels(exclude = candidates.toSet()).take(MAX_DISCOVERED_ATTEMPTS)) {
+            val response = try {
+                postGenerate(discovered, "Rispondi solo con: ok")
+            } catch (e: Exception) {
+                continue
+            }
+            if (response.status.isSuccess()) {
+                resolvedModel = discovered
+                return "Chiave valida. Modello in uso (rilevato automaticamente): $discovered."
+            }
+            val body = try { response.bodyAsText() } catch (e: Exception) { "" }
+            lastFailure = describeFailure(discovered, response.status.value, body)
         }
         return "Nessun modello utilizzabile con questa chiave. Ultimo errore: " +
             "${lastFailure ?: "sconosciuto"}"
@@ -586,18 +618,46 @@ class ClientSideAiClassifier(
         }
 
     /**
-     * Chiede a Google l'elenco dei modelli utilizzabili con questa chiave e ne sceglie uno adatto:
-     * deve supportare `generateContent` e si preferisce un "flash" stabile (più veloce e con
-     * quota gratuita più generosa), scartando anteprime e modelli specializzati.
+     * Chiede a Google l'elenco dei modelli che supportano `generateContent` con questa chiave e
+     * li ordina dal piu' adatto: versione piu' recente prima, poi flash, flash-lite e il resto;
+     * a parita', lo stabile prima dell'anteprima. Scarta i modelli specializzati e quelli in
+     * [exclude] (gia' provati).
+     *
+     * Prima si prendeva il primo "flash" non in anteprima dell'elenco, che era gemini-2.5-flash:
+     * Google lo elenca ancora ma ai nuovi utenti risponde 404, mentre i modelli nuovi (Gemini 3)
+     * esistono soprattutto in anteprima e venivano messi in fondo.
      */
-    private suspend fun discoverUsableModel(): String? {
+    private suspend fun discoverUsableModels(exclude: Set<String>): List<String> {
+        val names = listModelNames() ?: return emptyList()
+        val versionRegex = Regex("""gemini-(\d+(?:\.\d+)?)""")
+        fun version(name: String): Double =
+            versionRegex.find(name)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+        fun family(name: String): Int = when {
+            name.contains("flash-lite") -> 1
+            name.contains("flash") -> 0
+            else -> 2
+        }
+        // Generazione (3, 2...) prima di tutto; dentro la stessa, flash prima di pro anche se il
+        // pro ha un numero piu' alto (3.1-pro): e' lento e non lascia spegnere il ragionamento.
+        return names
+            .filter { it !in exclude && it.startsWith("gemini") }
+            .sortedWith(
+                compareByDescending<String> { version(it).toInt() }
+                    .thenBy { family(it) }
+                    .thenByDescending { version(it) }
+                    .thenBy { if (it.contains("preview") || it.contains("exp")) 1 else 0 }
+            )
+    }
+
+    /** I nomi dei modelli per `generateContent` elencati da Google, o `null` se la chiamata fallisce. */
+    private suspend fun listModelNames(): List<String>? {
         return try {
             val response = httpClient.get(API_BASE) {
                 header("x-goog-api-key", userApiKey)
                 parameter("pageSize", "200")
             }
             if (!response.status.isSuccess()) return null
-            val models = json.parseToJsonElement(response.bodyAsText())
+            json.parseToJsonElement(response.bodyAsText())
                 .jsonObject["models"]?.jsonArray.orEmpty()
                 .mapNotNull { element ->
                     val obj = element as? JsonObject ?: return@mapNotNull null
@@ -609,12 +669,11 @@ class ClientSideAiClassifier(
                 }
                 .filter { name ->
                     val lower = name.lowercase()
-                    listOf("embedding", "vision", "tts", "live", "image", "aqa")
-                        .none { lower.contains(it) }
+                    listOf(
+                        "embedding", "vision", "tts", "live", "image", "aqa",
+                        "audio", "computer-use", "robotics", "latest"
+                    ).none { lower.contains(it) }
                 }
-            models.firstOrNull { it.contains("flash") && !it.contains("preview") }
-                ?: models.firstOrNull { !it.contains("preview") }
-                ?: models.firstOrNull()
         } catch (e: Exception) {
             null
         }
