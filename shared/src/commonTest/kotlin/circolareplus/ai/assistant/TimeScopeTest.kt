@@ -33,6 +33,15 @@ class TimeScopeTest {
     }
 
     @Test
+    fun traNSettimaneETraNGiorni() {
+        // Domanda vista in app, con il refuso: "all'uktima ora tra due settimane".
+        assertEquals("2026-10-05" to "2026-10-11", range("a che evento devo partecipare all'uktima ora tra due settimane?"))
+        assertEquals("2026-09-28" to "2026-10-04", range("cosa c'e' fra una settimana?"))
+        assertEquals("2026-09-24" to "2026-09-24", range("e tra 3 giorni?"))
+        assertNull(range("tra le due classi chi vince?"))
+    }
+
+    @Test
     fun questaSettimanaVaDaLunediADomenica() {
         assertEquals("2026-09-21" to "2026-09-27", range("Cosa devo fare questa settimana?"))
         // Stessa settimana anche se oggi e' mercoledi o domenica.

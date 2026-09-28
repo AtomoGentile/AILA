@@ -92,20 +92,22 @@ class AilaAssistant(
 
         val classifier = classifierFactory()
         val startedAt = currentTimeMillis()
+        // "e dei genitori?": si cerca insieme alla domanda prima, vedi AssistantContext.searchQuery.
+        val searchQuery = AssistantContext.searchQuery(question, history)
 
         // Le circolari che c'entrano davvero con la domanda si leggono per intero subito, senza
         // aspettare che sia il modello a chiederlo: i modelli sul telefono non lo chiedono quasi
         // mai e rispondevano col solo riassunto, dove dettagli come "scienze il martedi'" non
         // ci sono. Per saluti e domande generali la lista e' vuota e non si scarica niente.
         val prefetched = fetchCircularTexts(
-            AssistantContext.mostRelevantCirculars(knowledge, question, PREFETCHED_CIRCULARS),
+            AssistantContext.mostRelevantCirculars(knowledge, searchQuery, PREFETCHED_CIRCULARS),
             knowledge.circulars,
             budgetMs = PREFETCH_BUDGET_MS
         )
 
         val firstRaw = when (
             val result = classifier.generateAnswer(
-                AssistantPrompt.builderFor(knowledge, history, question, prefetched)
+                AssistantPrompt.builderFor(knowledge, history, question, prefetched, searchQuery)
             )
         ) {
             is AiTextResult.Failure -> return AssistantReply(
@@ -118,7 +120,7 @@ class AilaAssistant(
         val firstAnswer = AssistantPrompt.parse(firstRaw.text)
         val firstReply = AssistantReply(
             text = firstAnswer.answer,
-            sources = checkedSources(firstAnswer, question, prefetched.keys, knowledge),
+            sources = checkedSources(firstAnswer, searchQuery, prefetched.keys, knowledge),
             modelLabel = firstRaw.modelLabel
         )
         val requested = firstAnswer.needsCircularText.filter { it !in prefetched }
@@ -144,7 +146,7 @@ class AilaAssistant(
             return firstReply
         }
 
-        val secondPrompt = AssistantPrompt.builderFor(knowledge, history, question, deepTexts)
+        val secondPrompt = AssistantPrompt.builderFor(knowledge, history, question, deepTexts, searchQuery)
         val secondResult = if (isCloud) {
             val left = TARGET_REPLY_MS - (currentTimeMillis() - startedAt)
             if (left <= 0) return firstReply
@@ -164,7 +166,7 @@ class AilaAssistant(
             // Le circolari richieste e lette per intero entrano fra le fonti anche se il modello
             // si dimentica di citarle: sono quelle su cui la risposta si regge davvero.
             sources = mergeSources(
-                checkedSources(secondAnswer, question, deepTexts.keys, knowledge),
+                checkedSources(secondAnswer, searchQuery, deepTexts.keys, knowledge),
                 requested.filter { it in deepTexts }.toSet(),
                 knowledge.circulars
             ),

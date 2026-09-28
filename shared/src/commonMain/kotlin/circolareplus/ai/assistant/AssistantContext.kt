@@ -80,11 +80,13 @@ internal object AssistantContext {
         knowledge: AssistantKnowledge,
         question: String,
         deepTexts: Map<Int, String> = emptyMap(),
-        maxChars: Int = 28_000
+        maxChars: Int = 28_000,
+        /** Le parole con cui cercare nei dati: vedi [searchQuery]. Il periodo resta quello di [question]. */
+        searchQuery: String = question
     ): String {
         val budget = Budget(maxChars)
-        val terms = tokenize(question)
-        val explicitNumbers = circularNumbersIn(question)
+        val terms = tokenize(searchQuery)
+        val explicitNumbers = circularNumbersIn(searchQuery)
         // "questa settimana", "domani"...: il filtro lo fa il codice (vedi TimeScope).
         val scope = TimeScopeParser.parse(question, knowledge.todayIso)
         val builder = StringBuilder()
@@ -133,7 +135,7 @@ internal object AssistantContext {
         // "non risulta".
         val aboutBoard = terms.any { it.startsWith("propost") || it.startsWith("bacheca") }
         if (aboutBoard) renderBoard(builder, knowledge, terms, budget)
-        renderCirculars(builder, knowledge, question, terms, explicitNumbers, deepTexts, budget, scope)
+        renderCirculars(builder, knowledge, searchQuery, terms, explicitNumbers, deepTexts, budget, scope)
         renderCalendar(builder, knowledge, terms, budget, scope)
         if (!aboutBoard) renderBoard(builder, knowledge, terms, budget)
         if (budget.includePolls) renderPolls(builder, knowledge, scope)
@@ -343,6 +345,23 @@ internal object AssistantContext {
             .take(limit)
             .map { (circular, _) -> circular.number }
     }
+
+    /**
+     * La domanda con cui cercare circolari e passaggi.
+     *
+     * Una domanda di seguito come "e dei genitori?" ha una parola sola: cercata da sola trovava
+     * la circolare giusta ma nessun passaggio sulle elezioni, e il modello ripeteva data e ora
+     * della risposta prima. Se la domanda ha al massimo [FOLLOW_UP_MAX_TERMS] parole utili, si
+     * cerca insieme alla domanda precedente dell'utente. [history] non contiene la domanda
+     * attuale.
+     */
+    fun searchQuery(question: String, history: List<AssistantMessage>): String {
+        if (tokenize(question).size > FOLLOW_UP_MAX_TERMS) return question
+        val previous = history.lastOrNull { it.author == AssistantAuthor.USER }?.text ?: return question
+        return "$question $previous"
+    }
+
+    private const val FOLLOW_UP_MAX_TERMS = 2
 
     /**
      * `true` per un saluto o una domanda senza nessun aggancio ai dati ("ciao", "grazie").
