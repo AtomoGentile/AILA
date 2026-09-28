@@ -20,6 +20,10 @@ Fatto:
   destra, ognuno col suo scorrimento. Home, Calendario e Bacheca arrivano a 1160dp, le altre
   pagine restano a 840dp (Sondaggi e Mappa posti a una colonna: la mappa ha le tre file
   dell'aula). Menu dal basso (max 640dp, default di Material) e dialoghi (560dp) gia' limitati.
+- **Meno vuoto sugli schermi larghi**: la Home mostra le ultime 5 circolari e 6 prossimi eventi
+  (3 e una sola circolare su telefono) e le scorciatoie affiancate; il Calendario aggiunge "In
+  arrivo" sotto agli eventi del giorno; nei Sondaggi spiegazione e bonus stanno a sinistra e le
+  date da votare a destra.
 - **Android**: `configChanges` sull'activity, cosi' ruotare un tablet non ricrea l'app (prima
   si perdevano tab e circolare aperta a ogni rotazione).
 
