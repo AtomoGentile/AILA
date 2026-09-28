@@ -2379,10 +2379,10 @@ fun MainAppShell(
                             val offset = (tabPager.currentPage - page) + tabPager.currentPageOffsetFraction
                             val d = kotlin.math.abs(offset).coerceIn(0f, 1f)
                             val glass = AppTheme.isGlass
-                            val scale = 1f - (if (glass) 0.05f else 0.1f) * d
+                            val scale = 1f - (if (glass) 0.07f else 0.13f) * d
                             scaleX = scale
                             scaleY = scale
-                            alpha = 1f - (if (glass) 0.35f else 0.5f) * d
+                            alpha = 1f - (if (glass) 0.45f else 0.6f) * d
                         }
                     ).then(
                         if (tab != MainTab.HOME && !offlineBannerShown) Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
