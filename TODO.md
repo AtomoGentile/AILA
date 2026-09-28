@@ -24,6 +24,11 @@ Fatto:
   (3 e una sola circolare su telefono) e le scorciatoie affiancate; il Calendario aggiunge "In
   arrivo" sotto agli eventi del giorno; nei Sondaggi spiegazione e bonus stanno a sinistra e le
   date da votare a destra.
+- **Tutte le schermate sugli schermi larghi** (fino a 1160dp): Mappa posti con ricerca e pannello
+  del Rappresentante a sinistra e l'aula a destra; Profilo con la scheda a sinistra e le sezioni
+  a destra; Impostazioni, Sondaggi a ordinamento, Storico, Notifiche, Ricerca, Scheda classe e
+  Preferenze sociali su due colonne (`AilaAdaptiveCardList`); circolare a tutto schermo con
+  riassunto a sinistra e documento a destra (da 900dp). L'Assistente resta una chat a colonna.
 - **Android**: `configChanges` sull'activity, cosi' ruotare un tablet non ricrea l'app (prima
   si perdevano tab e circolare aperta a ogni rotazione).
 

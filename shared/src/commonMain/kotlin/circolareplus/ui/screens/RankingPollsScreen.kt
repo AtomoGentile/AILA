@@ -122,28 +122,28 @@ fun RankingPollsScreen(
         return
     }
 
-    LazyColumn(
+    // Su tablet e iPad larghi i sondaggi vanno su due colonne (vedi AilaAdaptiveCardList).
+    circolareplus.design.AilaAdaptiveCardList(
+        items = polls,
+        key = { poll -> poll.id },
         modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight),
         contentPadding = PaddingValues(
             start = AppTheme.Space16,
             end = AppTheme.Space16,
             top = AppTheme.Space16,
             bottom = AppTheme.Space16 + circolareplus.design.LocalBottomBarPadding.current
-        ),
-        verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)
-    ) {
-        itemsIndexed(polls, key = { _, poll -> poll.id }) { index, poll ->
-            RankingPollCard(
-                poll = poll,
-                totalStudents = poll.totalStudents ?: totalStudents,
-                isRepresentative = isRepresentative,
-                isSubmitting = submittingPollId == poll.id,
-                onSubmit = { order -> onSubmitRanking(poll.id, order) },
-                onClose = { pendingCloseId = poll.id },
-                onDelete = { pendingDeleteId = poll.id },
-                modifier = Modifier.ailaAppear(index)
-            )
-        }
+        )
+    ) { index, poll ->
+        RankingPollCard(
+            poll = poll,
+            totalStudents = poll.totalStudents ?: totalStudents,
+            isRepresentative = isRepresentative,
+            isSubmitting = submittingPollId == poll.id,
+            onSubmit = { order -> onSubmitRanking(poll.id, order) },
+            onClose = { pendingCloseId = poll.id },
+            onDelete = { pendingDeleteId = poll.id },
+            modifier = Modifier.ailaAppear(index)
+        )
     }
 }
 

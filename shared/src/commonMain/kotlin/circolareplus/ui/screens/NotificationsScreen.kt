@@ -56,20 +56,20 @@ fun NotificationsScreen(
         return
     }
 
-    LazyColumn(
+    circolareplus.design.AilaAdaptiveCardList(
+        items = notifications,
+        key = { it.id },
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = AppTheme.Space16, vertical = AppTheme.Space12),
-        verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
-    ) {
-        items(notifications, key = { it.id }) { entry ->
-            NotificationCard(
-                entry = entry,
-                onClick = {
-                    if (entry.category.isBlank()) selectedForDetail = entry
-                    else onNotificationClick(entry)
-                }
-            )
-        }
+        spacing = AppTheme.Space8
+    ) { _, entry ->
+        NotificationCard(
+            entry = entry,
+            onClick = {
+                if (entry.category.isBlank()) selectedForDetail = entry
+                else onNotificationClick(entry)
+            }
+        )
     }
 }
 
