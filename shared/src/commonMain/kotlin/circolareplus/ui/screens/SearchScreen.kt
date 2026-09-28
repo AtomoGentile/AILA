@@ -213,32 +213,30 @@ fun SearchScreen(
                 icon = { AppIcons.Search(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
             )
 
-            else -> LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(AppTheme.Space12),
+            else -> circolareplus.design.AilaAdaptiveCardList(
+                items = hits,
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     start = AppTheme.Space16,
                     end = AppTheme.Space16,
                     bottom = AppTheme.Space24
                 ),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                item {
+                header = {
                     Text(
                         text = if (hits.size == 1) "1 risultato" else "${hits.size} risultati",
                         fontSize = 12.sp,
                         color = AppTheme.TextFaint
                     )
                 }
-                itemsIndexed(hits) { index, hit ->
-                    AilaCard(onClick = hit.onOpen, modifier = Modifier.ailaAppear(index)) {
-                        AilaListRow(
-                            title = hit.title,
-                            subtitle = hit.subtitle,
-                            tint = hit.kind.tint(),
-                            onClick = hit.onOpen,
-                            icon = { hit.kind.Icon() }
-                        )
-                    }
+            ) { index, hit ->
+                AilaCard(onClick = hit.onOpen, modifier = Modifier.ailaAppear(index)) {
+                    AilaListRow(
+                        title = hit.title,
+                        subtitle = hit.subtitle,
+                        tint = hit.kind.tint(),
+                        onClick = hit.onOpen,
+                        icon = { hit.kind.Icon() }
+                    )
                 }
             }
         }

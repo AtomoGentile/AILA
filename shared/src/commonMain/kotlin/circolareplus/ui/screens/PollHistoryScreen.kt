@@ -81,114 +81,114 @@ fun PollHistoryScreen(
                 )
             }
         } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(AppTheme.Space12),
+            circolareplus.design.AilaAdaptiveCardList(
+                items = completedPolls,
+                key = { poll -> poll.id },
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     start = AppTheme.Space16,
                     end = AppTheme.Space16,
                     top = AppTheme.Space16,
                     bottom = AppTheme.Space16 + circolareplus.design.LocalBottomBarPadding.current
-                ),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                itemsIndexed(completedPolls, key = { _, poll -> poll.id }) { index, poll ->
-                    val isExpanded = expandedPollId == poll.id
-                    AilaCard(modifier = Modifier.ailaAppear(index)) {
-                        Column(modifier = Modifier.padding(AppTheme.Space16)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                    AilaIconTile(tint = AppTheme.TintBlue, size = 44.dp) {
-                                        AppIcons.Check(modifier = Modifier.size(20.dp), color = AppTheme.TintBlueInk)
-                                    }
-                                    Spacer(modifier = Modifier.width(AppTheme.Space12))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            poll.subject,
-                                            fontSize = 15.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = AppTheme.TextDark,
-                                            maxLines = 1
-                                        )
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            StatusPill(
-                                                text = if (poll.isPublished) "Pubblicato" else "Non pubblicato",
-                                                tint = if (poll.isPublished) AppTheme.TintGreen else AppTheme.TintSlate,
-                                                ink = if (poll.isPublished) AppTheme.TintGreenInk else AppTheme.TextFaint
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            StatusPill(
-                                                text = "${poll.totalStudents} student${if (poll.totalStudents == 1) "e" else "i"}",
-                                                tint = AppTheme.TintSlate,
-                                                ink = AppTheme.TintSlateInk
-                                            )
-                                        }
-                                    }
+                )
+            ) { index, poll ->
+                val isExpanded = expandedPollId == poll.id
+                AilaCard(modifier = Modifier.ailaAppear(index)) {
+                    Column(modifier = Modifier.padding(AppTheme.Space16)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                AilaIconTile(tint = AppTheme.TintBlue, size = 44.dp) {
+                                    AppIcons.Check(modifier = Modifier.size(20.dp), color = AppTheme.TintBlueInk)
                                 }
-                                IconButton(onClick = { pendingDeleteId = poll.id }, modifier = Modifier.size(36.dp)) {
-                                    AppIcons.Trash(modifier = Modifier.size(16.dp), color = AppTheme.TintRedInk)
+                                Spacer(modifier = Modifier.width(AppTheme.Space12))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        poll.subject,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = AppTheme.TextDark,
+                                        maxLines = 1
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        StatusPill(
+                                            text = if (poll.isPublished) "Pubblicato" else "Non pubblicato",
+                                            tint = if (poll.isPublished) AppTheme.TintGreen else AppTheme.TintSlate,
+                                            ink = if (poll.isPublished) AppTheme.TintGreenInk else AppTheme.TextFaint
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        StatusPill(
+                                            text = "${poll.totalStudents} student${if (poll.totalStudents == 1) "e" else "i"}",
+                                            tint = AppTheme.TintSlate,
+                                            ink = AppTheme.TintSlateInk
+                                        )
+                                    }
                                 }
                             }
+                            IconButton(onClick = { pendingDeleteId = poll.id }, modifier = Modifier.size(36.dp)) {
+                                AppIcons.Trash(modifier = Modifier.size(16.dp), color = AppTheme.TintRedInk)
+                            }
+                        }
 
+                        Spacer(modifier = Modifier.height(AppTheme.Space12))
+                        TextButton(
+                            onClick = { onToggleResults(poll.id) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(if (isExpanded) "Chiudi risultati" else "Vedi risultati")
+                            Spacer(modifier = Modifier.width(6.dp))
+                            AppIcons.ChevronRight(
+                                modifier = Modifier.size(14.dp).rotate(if (isExpanded) 90f else 0f),
+                                color = AppTheme.PrimaryBlue
+                            )
+                        }
+
+                        if (isExpanded) {
+                            Spacer(modifier = Modifier.height(AppTheme.Space4))
+                            HorizontalDivider(color = AppTheme.Hairline)
                             Spacer(modifier = Modifier.height(AppTheme.Space12))
-                            TextButton(
-                                onClick = { onToggleResults(poll.id) },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(if (isExpanded) "Chiudi risultati" else "Vedi risultati")
-                                Spacer(modifier = Modifier.width(6.dp))
-                                AppIcons.ChevronRight(
-                                    modifier = Modifier.size(14.dp).rotate(if (isExpanded) 90f else 0f),
-                                    color = AppTheme.PrimaryBlue
+                            when {
+                                isLoadingResults -> Text(
+                                    "Calcolo risultati…",
+                                    fontSize = 12.sp,
+                                    color = AppTheme.TextFaint
                                 )
-                            }
-
-                            if (isExpanded) {
-                                Spacer(modifier = Modifier.height(AppTheme.Space4))
-                                HorizontalDivider(color = AppTheme.Hairline)
-                                Spacer(modifier = Modifier.height(AppTheme.Space12))
-                                when {
-                                    isLoadingResults -> Text(
-                                        "Calcolo risultati…",
-                                        fontSize = 12.sp,
-                                        color = AppTheme.TextFaint
-                                    )
-                                    resultsError != null -> Text(
-                                        resultsError,
-                                        fontSize = 12.sp,
-                                        color = AppTheme.TintRedInk
-                                    )
-                                    assignments.isEmpty() -> Text(
-                                        "Nessuna assegnazione (nessun voto ricevuto ancora).",
-                                        fontSize = 12.sp,
-                                        color = AppTheme.TextFaint
-                                    )
-                                    else -> Column {
-                                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            assignments.forEach { a ->
-                                                AssignmentRow(a)
-                                            }
+                                resultsError != null -> Text(
+                                    resultsError,
+                                    fontSize = 12.sp,
+                                    color = AppTheme.TintRedInk
+                                )
+                                assignments.isEmpty() -> Text(
+                                    "Nessuna assegnazione (nessun voto ricevuto ancora).",
+                                    fontSize = 12.sp,
+                                    color = AppTheme.TextFaint
+                                )
+                                else -> Column {
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        assignments.forEach { a ->
+                                            AssignmentRow(a)
                                         }
-
-                                        Spacer(modifier = Modifier.height(AppTheme.Space16))
-                                        HorizontalDivider(color = AppTheme.Hairline)
-                                        Spacer(modifier = Modifier.height(AppTheme.Space12))
-                                        CalendarSyncAction(
-                                            isLoading = isAddingToCalendar,
-                                            message = calendarAddMessage,
-                                            isError = calendarAddIsError,
-                                            onClick = { onAddToCalendar(poll, assignments) }
-                                        )
                                     }
+
+                                    Spacer(modifier = Modifier.height(AppTheme.Space16))
+                                    HorizontalDivider(color = AppTheme.Hairline)
+                                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                                    CalendarSyncAction(
+                                        isLoading = isAddingToCalendar,
+                                        message = calendarAddMessage,
+                                        isError = calendarAddIsError,
+                                        onClick = { onAddToCalendar(poll, assignments) }
+                                    )
                                 }
                             }
                         }
                     }
                 }
+
             }
         }
     }

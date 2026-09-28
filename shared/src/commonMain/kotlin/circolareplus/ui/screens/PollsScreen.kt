@@ -11,6 +11,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -136,100 +138,151 @@ fun PollsScreen(
             isExpired = isExpired
         )
 
+        val managementCard: @Composable () -> Unit = {
+            PollManagementCard(
+                onClose = { pendingAction = "close" },
+                onDelete = { pendingAction = "delete" }
+            )
+        }
+        val notForYouCard: @Composable () -> Unit = {
+            AilaCard(containerColor = AppTheme.TintSlate) {
+                Text(
+                    text = "Questo sondaggio non è rivolto a te: puoi seguirne l'avanzamento, ma non votare.",
+                    fontSize = 13.sp,
+                    color = AppTheme.TextMuted,
+                    lineHeight = 18.sp,
+                    modifier = Modifier.padding(AppTheme.Space16)
+                )
+            }
+        }
+        val howItWorksCard: @Composable () -> Unit = {
+            AilaCard(modifier = Modifier.ailaAppear(0)) {
+                Column(modifier = Modifier.padding(AppTheme.Space16)) {
+                    Text(
+                        text = "Come funziona",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AppTheme.TextDark
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Per ogni data dici quanto ti va bene. Chi accetta le date che " +
+                            "gli altri rifiutano guadagna un bonus per i sondaggi futuri. " +
+                            "I \"meglio di no\" contano pieni fino a un terzo delle date: " +
+                            "se ne metti di più ognuno pesa meno, e vale meno bonus.",
+                        fontSize = 13.sp,
+                        color = AppTheme.TextMuted,
+                        lineHeight = 18.sp
+                    )
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    VoteLegend(darkRedLeft = MAX_DARK_RED - darkRedCount)
+                }
+            }
+        }
+        val bonusCard: @Composable () -> Unit = {
+            AilaCard(containerColor = AppTheme.TintAmber, modifier = Modifier.ailaAppear(1)) {
+                Row(
+                    modifier = Modifier.padding(AppTheme.Space16),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AilaIconTile(tint = Color(0x33FFFFFF)) {
+                        AppIcons.Star(modifier = Modifier.size(20.dp), color = AppTheme.TintAmberInk)
+                    }
+                    Spacer(modifier = Modifier.width(AppTheme.Space12))
+                    Column {
+                        Text(
+                            text = "Bonus sacrificio attivo",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = AppTheme.TintAmberInk
+                        )
+                        Text(
+                            text = "Hai accettato date che gli altri rifiutavano: il tuo \"ci sto\" pesa di più.",
+                            fontSize = 12.sp,
+                            color = AppTheme.TintAmberInk,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+            }
+        }
+        val emptyState: @Composable () -> Unit = {
+            AilaEmptyState(
+                title = "Nessuna data proposta",
+                message = "Il sondaggio è aperto ma non ci sono ancora date su cui votare.",
+                icon = { AppIcons.Calendar(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
+            )
+        }
+        val listBottom = AppTheme.Space16 + circolareplus.design.LocalBottomBarPadding.current
+        if (circolareplus.design.LocalWideLayout.current) {
+            // Tablet e iPad larghi: spiegazione, bonus e gestione a sinistra, le date da votare
+            // a destra; si vota senza far scorrere via la legenda dei colori.
+            Row(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(AppTheme.Space4)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(0.42f)
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState())
+                        .padding(start = AppTheme.Space16, end = AppTheme.Space4, top = AppTheme.Space12, bottom = listBottom),
+                    verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+                ) {
+                    if (isRepresentative) managementCard()
+                    if (!canVote) notForYouCard()
+                    howItWorksCard()
+                    if (sacrificeBonus > 0) bonusCard()
+                }
+                LazyColumn(
+                    modifier = Modifier.weight(0.58f).fillMaxHeight(),
+                    contentPadding = PaddingValues(
+                        start = AppTheme.Space4,
+                        end = AppTheme.Space16,
+                        top = AppTheme.Space12,
+                        bottom = listBottom
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+                ) {
+                    if (slots.isEmpty()) {
+                        item { emptyState() }
+                    }
+                    itemsIndexed(slots, key = { _, slot -> slot.slotId }) { index, slot ->
+                        SlotRowItem(
+                            slot = slot,
+                            darkRedLeft = MAX_DARK_RED - darkRedCount,
+                            enabled = !isSubmitted && canVote,
+                            onSelectVote = { voteType -> onCastVote(slot.slotId, voteType) },
+                            modifier = Modifier.ailaAppear(index + 2)
+                        )
+                    }
+                }
+            }
+        } else {
         LazyColumn(
             modifier = Modifier.fillMaxWidth().weight(1f),
             contentPadding = PaddingValues(
                 start = AppTheme.Space16,
                 end = AppTheme.Space16,
                 top = AppTheme.Space12,
-                bottom = AppTheme.Space16 + circolareplus.design.LocalBottomBarPadding.current
+                bottom = listBottom
             ),
             verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
         ) {
             if (isRepresentative) {
-                item {
-                    PollManagementCard(
-                        onClose = { pendingAction = "close" },
-                        onDelete = { pendingAction = "delete" }
-                    )
-                }
+                item { managementCard() }
             }
             if (!canVote) {
-                item {
-                    AilaCard(containerColor = AppTheme.TintSlate) {
-                        Text(
-                            text = "Questo sondaggio non è rivolto a te: puoi seguirne l'avanzamento, ma non votare.",
-                            fontSize = 13.sp,
-                            color = AppTheme.TextMuted,
-                            lineHeight = 18.sp,
-                            modifier = Modifier.padding(AppTheme.Space16)
-                        )
-                    }
-                }
+                item { notForYouCard() }
             }
-            item {
-                AilaCard(modifier = Modifier.ailaAppear(0)) {
-                    Column(modifier = Modifier.padding(AppTheme.Space16)) {
-                        Text(
-                            text = "Come funziona",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = AppTheme.TextDark
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Per ogni data dici quanto ti va bene. Chi accetta le date che " +
-                                "gli altri rifiutano guadagna un bonus per i sondaggi futuri. " +
-                                "I \"meglio di no\" contano pieni fino a un terzo delle date: " +
-                                "se ne metti di più ognuno pesa meno, e vale meno bonus.",
-                            fontSize = 13.sp,
-                            color = AppTheme.TextMuted,
-                            lineHeight = 18.sp
-                        )
-                        Spacer(modifier = Modifier.height(AppTheme.Space12))
-                        VoteLegend(darkRedLeft = MAX_DARK_RED - darkRedCount)
-                    }
-                }
-            }
+            item { howItWorksCard() }
 
             if (sacrificeBonus > 0) {
-                item {
-                    AilaCard(containerColor = AppTheme.TintAmber, modifier = Modifier.ailaAppear(1)) {
-                        Row(
-                            modifier = Modifier.padding(AppTheme.Space16),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            AilaIconTile(tint = Color(0x33FFFFFF)) {
-                                AppIcons.Star(modifier = Modifier.size(20.dp), color = AppTheme.TintAmberInk)
-                            }
-                            Spacer(modifier = Modifier.width(AppTheme.Space12))
-                            Column {
-                                Text(
-                                    text = "Bonus sacrificio attivo",
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = AppTheme.TintAmberInk
-                                )
-                                Text(
-                                    text = "Hai accettato date che gli altri rifiutavano: il tuo \"ci sto\" pesa di più.",
-                                    fontSize = 12.sp,
-                                    color = AppTheme.TintAmberInk,
-                                    lineHeight = 16.sp
-                                )
-                            }
-                        }
-                    }
-                }
+                item { bonusCard() }
             }
 
             if (slots.isEmpty()) {
-                item {
-                    AilaEmptyState(
-                        title = "Nessuna data proposta",
-                        message = "Il sondaggio è aperto ma non ci sono ancora date su cui votare.",
-                        icon = { AppIcons.Calendar(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
-                    )
-                }
+                item { emptyState() }
             }
 
             itemsIndexed(slots, key = { _, slot -> slot.slotId }) { index, slot ->
@@ -241,6 +294,7 @@ fun PollsScreen(
                     modifier = Modifier.ailaAppear(index + 2)
                 )
             }
+        }
         }
 
         if (canVote) PollSubmitBar(

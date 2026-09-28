@@ -15,6 +15,20 @@ Fatto:
   evidenziata. Ruotando, la circolare aperta passa dal pannello alla schermata sopra le tab e
   viceversa. Da Ricerca, Notifiche e Assistente si apre sempre sopra, come prima.
 - **Bacheca su due colonne** da 840dp (`LazyVerticalStaggeredGrid`), larga al massimo 1160dp.
+- **Home e Calendario su due colonne** da 840dp: Home con circolare in evidenza e scorciatoie
+  a sinistra e prossimi eventi a destra; Calendario col mese a sinistra ed eventi del giorno a
+  destra, ognuno col suo scorrimento. Home, Calendario e Bacheca arrivano a 1160dp, le altre
+  pagine restano a 840dp (Sondaggi e Mappa posti a una colonna: la mappa ha le tre file
+  dell'aula). Menu dal basso (max 640dp, default di Material) e dialoghi (560dp) gia' limitati.
+- **Meno vuoto sugli schermi larghi**: la Home mostra le ultime 5 circolari e 6 prossimi eventi
+  (3 e una sola circolare su telefono) e le scorciatoie affiancate; il Calendario aggiunge "In
+  arrivo" sotto agli eventi del giorno; nei Sondaggi spiegazione e bonus stanno a sinistra e le
+  date da votare a destra.
+- **Tutte le schermate sugli schermi larghi** (fino a 1160dp): Mappa posti con ricerca e pannello
+  del Rappresentante a sinistra e l'aula a destra; Profilo con la scheda a sinistra e le sezioni
+  a destra; Impostazioni, Sondaggi a ordinamento, Storico, Notifiche, Ricerca, Scheda classe e
+  Preferenze sociali su due colonne (`AilaAdaptiveCardList`); circolare a tutto schermo con
+  riassunto a sinistra e documento a destra (da 900dp). L'Assistente resta una chat a colonna.
 - **Android**: `configChanges` sull'activity, cosi' ruotare un tablet non ricrea l'app (prima
   si perdevano tab e circolare aperta a ogni rotazione).
 

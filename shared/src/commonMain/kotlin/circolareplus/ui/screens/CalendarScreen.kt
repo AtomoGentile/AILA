@@ -116,14 +116,7 @@ fun CalendarScreen(
             }
         )
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = AppTheme.Space16)
-                .padding(top = AppTheme.Space16, bottom = AppTheme.Space32 + circolareplus.design.LocalBottomBarPadding.current)
-        ) {
+        val monthSection: @Composable () -> Unit = {
             AilaCard(modifier = Modifier.ailaAppear(0)) {
                 Column(modifier = Modifier.padding(AppTheme.Space12)) {
                     MonthNavigator(
@@ -170,9 +163,8 @@ fun CalendarScreen(
                     )
                 }
             }
-
-            Spacer(modifier = Modifier.height(AppTheme.Space20))
-
+        }
+        val filtersSection: @Composable () -> Unit = {
             // Filtri categoria: senza emoji, con l'icona della categoria. Pill scorrevole condiviso
             // (AilaSlidingChipRow) invece del cross-fade di colore su ogni singola chip; scorrevole
             // perché con 4 chip il contenuto non ci sta su schermi stretti.
@@ -214,9 +206,8 @@ fun CalendarScreen(
                     modifier = chipModifier(3)
                 )
             }
-
-            Spacer(modifier = Modifier.height(AppTheme.Space20))
-
+        }
+        val daySection: @Composable () -> Unit = {
             AilaSectionTitle(
                 text = "${selectedDay} ${ITALIAN_MONTHS.getOrElse(visibleMonth) { "" }}",
                 modifier = Modifier.ailaAppear(2),
@@ -251,6 +242,87 @@ fun CalendarScreen(
                         Spacer(modifier = Modifier.height(AppTheme.Space12))
                     }
                 }
+            }
+        }
+        val listPadding = Modifier
+            .padding(horizontal = AppTheme.Space16)
+            .padding(top = AppTheme.Space16, bottom = AppTheme.Space32 + circolareplus.design.LocalBottomBarPadding.current)
+        if (circolareplus.design.LocalWideLayout.current) {
+            // Tablet e iPad larghi: il mese a sinistra, i filtri e gli eventi del giorno scelto a
+            // destra, ognuno col suo scorrimento: toccando un giorno i suoi eventi compaiono
+            // accanto invece che sotto al mese.
+            Row(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(AppTheme.Space4)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState())
+                        .then(listPadding)
+                ) {
+                    monthSection()
+                }
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState())
+                        .then(listPadding)
+                ) {
+                    filtersSection()
+                    Spacer(modifier = Modifier.height(AppTheme.Space20))
+                    daySection()
+                    // Sotto al giorno scelto, i prossimi eventi (con il filtro attivo): la colonna
+                    // resta piena e si vede cosa arriva senza toccare un giorno dopo l'altro.
+                    val upcoming = remember(events, selectedCategoryFilter, visibleYear, visibleMonth, selectedDay) {
+                        upcomingEvents(
+                            events.filter { selectedCategoryFilter == null || it.category == selectedCategoryFilter },
+                            limit = 12
+                        ).filter { event ->
+                            val date = parseIsoDate(event.date.take(10).trim())
+                            date == null || date.year != visibleYear || date.month != visibleMonth || date.day != selectedDay
+                        }.take(6)
+                    }
+                    if (upcoming.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(AppTheme.Space24))
+                        AilaSectionTitle(text = "In arrivo")
+                        Spacer(modifier = Modifier.height(AppTheme.Space12))
+                        upcoming.forEachIndexed { index, event ->
+                            CalendarEventCard(
+                                event = event,
+                                onClick = {
+                                    // Tocco su un evento in arrivo: il mese e il giorno vanno su di lui.
+                                    parseIsoDate(event.date)?.let {
+                                        visibleYear = it.year
+                                        visibleMonth = it.month
+                                        selectedDay = it.day
+                                    }
+                                },
+                                onDeleteClick = { onDeleteEventClick(event) },
+                                showDate = true
+                            )
+                            if (index != upcoming.lastIndex) {
+                                Spacer(modifier = Modifier.height(AppTheme.Space12))
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .then(listPadding)
+            ) {
+                monthSection()
+                Spacer(modifier = Modifier.height(AppTheme.Space20))
+                filtersSection()
+                Spacer(modifier = Modifier.height(AppTheme.Space20))
+                daySection()
             }
         }
     }
@@ -401,7 +473,9 @@ fun CalendarEventCard(
     event: CalendarEvent,
     onClick: () -> Unit,
     onDeleteClick: () -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Scrive anche il giorno accanto all'ora (elenco "In arrivo", fuori dal giorno scelto). */
+    showDate: Boolean = false
 ) {
     AilaCard(onClick = onClick, modifier = modifier) {
         Row(
@@ -443,8 +517,11 @@ fun CalendarEventCard(
                     maxLines = 2
                 )
                 Spacer(modifier = Modifier.height(2.dp))
+                val dayLabel = if (showDate) {
+                    parseIsoDate(event.date.take(10).trim())?.let { "${it.day} ${ITALIAN_MONTHS.getOrElse(it.month) { "" }}" }
+                } else null
                 Text(
-                    text = event.time ?: "Tutto il giorno",
+                    text = listOfNotNull(dayLabel, event.time ?: "Tutto il giorno").joinToString(" \u00B7 "),
                     fontSize = 13.sp,
                     color = AppTheme.TextMuted
                 )
