@@ -51,4 +51,24 @@ class PassageSelectorTest {
         assertTrue(chunks.all { it.length <= 450 })
         assertFalse(chunks.isEmpty())
     }
+
+    @Test
+    fun snippetTrovaLaRigaDiScienzeInUnaTabellaDiSportelli() {
+        val text = """
+            Oggetto: Sportelli didattici permanenti - 2026/27
+            Gli sportelli didattici permanenti partono dal 12 ottobre.
+            Matematica - prof. Rossi - lunedi' 14:00-15:00 - aula 12
+            Scienze - prof.ssa Bianchi - martedi' 14:00-15:00 - laboratorio
+            Inglese - prof. Verdi - giovedi' 14:00-15:00 - aula 3
+            Per iscriversi agli sportelli usare il modulo online.
+        """.trimIndent()
+        val snippet = PassageSelector.bestSnippet(text, "Quando iniziano gli sportelli di scienze?")
+        assertTrue(snippet != null && snippet.startsWith("Scienze - prof.ssa Bianchi"), snippet)
+    }
+
+    @Test
+    fun snippetNienteSeLaParolaSpecificaNonCE() {
+        val text = "Sportelli di matematica.\nSportelli di inglese.\nSportelli di storia.\nOrari in segreteria."
+        assertEquals(null, PassageSelector.bestSnippet(text, "Quando iniziano gli sportelli di scienze?"))
+    }
 }
