@@ -45,10 +45,8 @@ private data class GeminiThinkingConfig(val thinkingBudget: Int)
 
 @Serializable
 private data class GeminiGenerationConfig(
-    val temperature: Double = 0.2,
-    val responseMimeType: String = "application/json",
-    /** Tetto esplicito: senza, alcuni modelli chiudono la risposta dell'assistente troppo presto. */
-    val maxOutputTokens: Int = 8192,
+    val temperature: Double? = 0.2,
+    val responseMimeType: String? = "application/json",
     /** Solo per la chat: `thinkingBudget = 0` spegne il ragionamento, che da solo costa secondi. */
     val thinkingConfig: GeminiThinkingConfig? = null
 )
@@ -182,6 +180,9 @@ class ClientSideAiClassifier(
 
         /** Modelli che hanno rifiutato `thinkingConfig` (es. i "pro", dove non si spegne). */
         private val rejectsThinkingConfig = mutableSetOf<String>()
+
+        /** Modelli che hanno rifiutato temperatura/formato JSON: con loro la richiesta minima. */
+        private val rejectsFullConfig = mutableSetOf<String>()
 
         /**
          * Tempo totale per una risposta in chat, scaletta compresa. Con i ~4 s concessi ai PDF
@@ -389,9 +390,6 @@ class ClientSideAiClassifier(
         val deadline = currentTimeMillis() + CHAT_BUDGET_MS
 
         var lastFailure = "nessun modello disponibile"
-        // Una risposta arrivata ma tagliata (JSON non chiuso) si tiene da parte e si prova il
-        // modello dopo: se nessuno fa meglio, meglio mostrare quella che un errore.
-        var truncated: AiTextResult.Success? = null
         for ((index, candidate) in candidates.withIndex()) {
             val remaining = deadline - currentTimeMillis()
             if (remaining < CHAT_MIN_ATTEMPT_MS) {
@@ -414,7 +412,7 @@ class ClientSideAiClassifier(
                     lastFailure = "il modello $candidate non ha risposto in tempo"
                     continue
                 }
-                return truncated ?: AiTextResult.Failure(
+                return AiTextResult.Failure(
                     "non sono riuscito a raggiungere Google: ${e::class.simpleName}: " +
                         "${e.message ?: "nessun dettaglio"}"
                 )
@@ -423,26 +421,20 @@ class ClientSideAiClassifier(
                 resolvedModel = candidate
                 busyUntil.remove(candidate)
                 val answer = extractGeneratedText(response.bodyAsText())
-                    ?: return truncated ?: AiTextResult.Failure("Google ha risposto senza contenuto utilizzabile.")
-                val result = AiTextResult.Success(answer, "Google Gemini ($candidate)")
-                val opensJson = answer.trimStart().removePrefix("```json").trimStart().startsWith("{")
-                if (!opensJson || circolareplus.ai.assistant.AssistantPrompt.isCompleteAnswer(answer)) return result
-                truncated = truncated ?: result
-                lastFailure = "risposta interrotta dal modello $candidate"
-                continue
+                    ?: return AiTextResult.Failure("Google ha risposto senza contenuto utilizzabile.")
+                return AiTextResult.Success(answer, "Google Gemini ($candidate)")
             }
             val body = try { response.bodyAsText() } catch (e: Exception) { "" }
             lastFailure = "HTTP ${response.status.value} con il modello $candidate: ${body.take(200)}"
             // In chat anche il 429 fa passare al modello dopo: nel piano gratuito la quota e' per
             // modello, e flash-lite ha la sua anche quando quella di flash e' finita.
             val code = response.status.value
-            if (code != 429 && !isModelUnavailable(code, body)) return truncated ?: AiTextResult.Failure(lastFailure)
+            if (code != 429 && !isModelUnavailable(code, body)) return AiTextResult.Failure(lastFailure)
             // Un modello che ha appena risposto 503 non va piu' tenuto come "risolto" e per
             // qualche minuto passa in fondo alla fila: la prossima domanda parte da uno che va.
             markBusy(candidate)
         }
 
-        truncated?.let { return it }
         val leftForDiscovery = deadline - currentTimeMillis()
         if (leftForDiscovery < CHAT_MIN_ATTEMPT_MS * 2) return AiTextResult.Failure(lastFailure)
         val discovered = discoverUsableModel()
@@ -568,13 +560,44 @@ class ClientSideAiClassifier(
         return response
     }
 
-    /** Una singola chiamata generateContent al modello indicato. */
+    /**
+     * Una chiamata generateContent al modello indicato.
+     *
+     * Se il modello rifiuta la configurazione (HTTP 400 INVALID_ARGUMENT, visto sul campo con
+     * gemini-flash-lite-latest appena si e' cominciato a spedire davvero temperatura e formato
+     * JSON) si riprova subito con la richiesta minima di prima, e il modello si ricorda: una
+     * risposta con meno impostazioni vale piu' di un errore in chat.
+     */
     private suspend fun postGenerate(
         modelName: String,
         prompt: String,
         thinking: GeminiThinkingConfig? = null,
         timeoutMs: Long? = null,
         allowRetries: Boolean = true
+    ): HttpResponse {
+        if (modelName in rejectsFullConfig) {
+            return postGenerateOnce(modelName, prompt, thinking, timeoutMs, allowRetries, minimal = true)
+        }
+        val response = postGenerateOnce(modelName, prompt, thinking, timeoutMs, allowRetries, minimal = false)
+        if (response.status.value != 400) return response
+        val body = try { response.bodyAsText() } catch (e: Exception) { "" }
+        // Il 400 sul ragionamento lo gestisce gia' postChat, togliendo solo quello.
+        if (body.contains("thinking", ignoreCase = true)) return response
+        // Un solo nuovo tentativo, gia' con tutto tolto (anche il ragionamento spento, che puo'
+        // essere l'argomento rifiutato senza che Google lo nomini): chi aspetta in chat non deve
+        // pagare una prova per ogni impostazione. Il modello si ricorda, quindi capita una volta.
+        rejectsFullConfig += modelName
+        if (thinking != null) rejectsThinkingConfig += modelName
+        return postGenerateOnce(modelName, prompt, null, timeoutMs, allowRetries, minimal = true)
+    }
+
+    private suspend fun postGenerateOnce(
+        modelName: String,
+        prompt: String,
+        thinking: GeminiThinkingConfig?,
+        timeoutMs: Long?,
+        allowRetries: Boolean,
+        minimal: Boolean
     ): HttpResponse =
         httpClient.post("$API_BASE/$modelName:generateContent") {
             timeoutMs?.let { ms -> timeout { requestTimeoutMillis = ms; socketTimeoutMillis = ms } }
@@ -589,8 +612,8 @@ class ClientSideAiClassifier(
             setBody(
                 GeminiRequest(
                     contents = listOf(GeminiContent(parts = listOf(GeminiPart(prompt)))),
-                    generationConfig = if (thinking == null) {
-                        GeminiGenerationConfig()
+                    generationConfig = if (minimal) {
+                        GeminiGenerationConfig(temperature = null, responseMimeType = null, thinkingConfig = thinking)
                     } else {
                         GeminiGenerationConfig(thinkingConfig = thinking)
                     }
