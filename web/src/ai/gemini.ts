@@ -27,12 +27,18 @@ function candidates(): string[] {
   return [...new Set([...(resolvedModel ? [resolvedModel] : []), DEFAULT_MODEL, ...MODEL_LADDER])];
 }
 
+// Solo la prima chiave, senza spazi o a capo: due chiavi incollate una dopo l'altra rendevano
+// l'header non valido (vedi cleanGeminiApiKey nell'app).
+export function cleanGeminiApiKey(raw: string): string {
+  return raw.split(/\s+/).find((s) => s.length > 0) ?? '';
+}
+
 // Una generateContent, con i tentativi su 429 e 5xx (503 escluso: lo gestisce la scaletta).
 async function postGenerate(apiKey: string, model: string, prompt: string): Promise<Response> {
   for (let attempt = 0; ; attempt++) {
     const res = await fetch(`${API_BASE}/${model}:generateContent`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': cleanGeminiApiKey(apiKey) },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },

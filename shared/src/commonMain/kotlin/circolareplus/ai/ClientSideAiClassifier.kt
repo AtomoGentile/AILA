@@ -56,6 +56,15 @@ private data class GeminiRequest(
 )
 
 /**
+ * La chiave cosi' come va mandata a Google: senza spazi o a capo, e solo la prima se nel campo
+ * ne sono finite due. Due chiavi incollate una dopo l'altra, separate da un a capo, facevano
+ * fallire ogni chiamata: l'a capo non e' ammesso in un header HTTP (IllegalHeaderValueException),
+ * e prima, quando la chiave viaggiava anche nell'URL, Google rispondeva 404 con corpo "{}".
+ */
+fun cleanGeminiApiKey(raw: String): String =
+    raw.split(Regex("\\s+")).firstOrNull { it.isNotEmpty() }.orEmpty()
+
+/**
  * Motore di classificazione AI client-side per l'app dello studente.
  *
  * Usa l'API Key personale dell'utente (Google AI Studio — https://aistudio.google.com/apikey),
@@ -69,7 +78,7 @@ private data class GeminiRequest(
  * utilizzabile anche senza configurare nulla.
  */
 class ClientSideAiClassifier(
-    private val userApiKey: String,
+    userApiKey: String,
     private val model: String = DEFAULT_MODEL,
     private val httpClient: HttpClient = HttpClient {
         install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
@@ -202,6 +211,9 @@ class ClientSideAiClassifier(
         val (busy, ready) = all.partition { (busyUntil[it] ?: 0L) > now }
         return ready + busy
     }
+
+    /** La chiave ripulita: vedi [cleanGeminiApiKey]. */
+    private val userApiKey = cleanGeminiApiKey(userApiKey)
 
     private fun markBusy(modelName: String) {
         busyUntil[modelName] = currentTimeMillis() + BUSY_COOLDOWN_MS

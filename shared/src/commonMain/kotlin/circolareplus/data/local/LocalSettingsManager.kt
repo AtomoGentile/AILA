@@ -1,6 +1,7 @@
 package circolareplus.data.local
 
 import circolareplus.ai.assistant.AssistantConversation
+import circolareplus.ai.cleanGeminiApiKey
 import circolareplus.domain.model.CircularAiClassification
 import circolareplus.domain.model.NotificationLogEntry
 import circolareplus.platform.currentTimeMillis
@@ -78,9 +79,10 @@ class LocalSettingsManager(
         get() = settings.getString(KEY_API_BASE_URL, "")
         set(value) = settings.putString(KEY_API_BASE_URL, value)
 
+    /** Ripulita sia in scrittura sia in lettura, cosi' si sistema anche una chiave gia' salvata. */
     var userAiApiKey: String
-        get() = settings.getString(KEY_USER_AI_API_KEY, "")
-        set(value) = settings.putString(KEY_USER_AI_API_KEY, value)
+        get() = cleanGeminiApiKey(settings.getString(KEY_USER_AI_API_KEY, ""))
+        set(value) = settings.putString(KEY_USER_AI_API_KEY, cleanGeminiApiKey(value))
 
     /**
      * Provider AI scelto: uno degli `id` di [circolareplus.ai.AiProvider].
