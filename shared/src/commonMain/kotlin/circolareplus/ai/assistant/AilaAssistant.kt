@@ -89,6 +89,8 @@ class AilaAssistant(
         AssistantAgenda.answer(knowledge, question)?.let { return it }
         // Stessa cosa per "quali proposte sono aperte?": vedi [AssistantBoard].
         AssistantBoard.answer(knowledge, question)?.let { return it }
+        // "Puoi creare un sondaggio?": dove si fa nell'app, vedi [AssistantCapabilities].
+        AssistantCapabilities.answer(knowledge, question)?.let { return it }
 
         val classifier = classifierFactory()
         val startedAt = currentTimeMillis()
