@@ -104,18 +104,14 @@ fun HomeScreen(
             onNavigateToSeatMap = onNavigateToSeatMap
         )
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = AppTheme.Space16)
-                .padding(top = AppTheme.Space20, bottom = AppTheme.Space24)
-        ) {
+        val latestSection: @Composable () -> Unit = {
             LatestCircularCard(
                 latestCircular = latestCircular,
                 onClick = openLatestCircular,
                 modifier = Modifier.ailaAppear(0)
             )
-            Spacer(modifier = Modifier.height(AppTheme.Space24))
+        }
+        val eventsSection: @Composable () -> Unit = {
             AilaSectionTitle(
                 text = "Prossimi eventi",
                 actionText = "Vedi tutti",
@@ -130,13 +126,7 @@ fun HomeScreen(
                 modifier = Modifier.ailaAppear(2)
             )
         }
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = AppTheme.Space16)
-                .padding(bottom = AppTheme.Space24 + circolareplus.design.LocalBottomBarPadding.current)
-        ) {
+        val shortcutsSection: @Composable () -> Unit = {
             AilaSectionTitle(text = "Scorciatoie", modifier = Modifier.ailaAppear(3))
 
             Spacer(modifier = Modifier.height(AppTheme.Space12))
@@ -164,6 +154,46 @@ fun HomeScreen(
                         AppIcons.ChatBubble(modifier = Modifier.size(21.dp), color = AppTheme.TintVioletInk)
                     }
                 )
+            }
+        }
+        val bottomPadding = AppTheme.Space24 + circolareplus.design.LocalBottomBarPadding.current
+        if (circolareplus.design.LocalWideLayout.current) {
+            // Tablet e iPad larghi: circolare in evidenza e scorciatoie a sinistra, prossimi
+            // eventi a destra, invece di una colonna sola che lascia vuoti i lati.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = AppTheme.Space16)
+                    .padding(top = AppTheme.Space20, bottom = bottomPadding),
+                horizontalArrangement = Arrangement.spacedBy(AppTheme.Space20)
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    latestSection()
+                    Spacer(modifier = Modifier.height(AppTheme.Space24))
+                    shortcutsSection()
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    eventsSection()
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = AppTheme.Space16)
+                    .padding(top = AppTheme.Space20, bottom = AppTheme.Space24)
+            ) {
+                latestSection()
+                Spacer(modifier = Modifier.height(AppTheme.Space24))
+                eventsSection()
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = AppTheme.Space16)
+                    .padding(bottom = bottomPadding)
+            ) {
+                shortcutsSection()
             }
         }
     }
