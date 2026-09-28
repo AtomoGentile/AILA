@@ -302,6 +302,9 @@ class ClientSideAiClassifier(
         }.distinct()
 
         var lastFailure = "nessun modello disponibile"
+        // Il primo errore dice di piu' dell'ultimo: l'ultimo e' spesso un modello di ripiego
+        // che risponde in modo meno chiaro (es. 404 con corpo "{}").
+        var firstFailure: String? = null
         for (candidate in candidates) {
             val response = postGenerate(candidate, prompt)
             if (response.status.isSuccess()) {
@@ -310,6 +313,7 @@ class ClientSideAiClassifier(
             }
             val body = try { response.bodyAsText() } catch (e: Exception) { "" }
             lastFailure = "HTTP ${response.status.value} con il modello $candidate: ${body.take(200)}"
+            if (firstFailure == null) firstFailure = lastFailure
             // Chiave non valida, quota esaurita, rete: inutile provare altri modelli.
             if (!isModelUnavailable(response.status.value, body)) return GeminiCallResult.Failure(lastFailure)
         }
@@ -327,6 +331,9 @@ class ClientSideAiClassifier(
             lastFailure = "HTTP ${response.status.value} con il modello $discovered (rilevato automaticamente): ${body.take(200)}"
         }
 
+        if (firstFailure != null && firstFailure != lastFailure) {
+            lastFailure = "$lastFailure; primo tentativo: $firstFailure"
+        }
         return GeminiCallResult.Failure(lastFailure)
     }
 
@@ -529,13 +536,20 @@ class ClientSideAiClassifier(
             timeoutMs = timeoutMs,
             allowRetries = false
         )
+        // Qualunque 400 con thinkingConfig fa riprovare senza, non solo quelli che nominano
+        // "thinking": gli alias -latest puntano ormai a modelli che rifiutano thinkingBudget = 0
+        // con il messaggio generico "Request contains an invalid argument.", e la chat si
+        // fermava li' con un errore invece di rispondere.
         if (withThinkingOff && response.status.value == 400) {
-            val body = try { response.bodyAsText() } catch (e: Exception) { "" }
-            if (body.contains("thinking", ignoreCase = true)) {
-                rejectsThinkingConfig += modelName
-                val left = (timeoutMs - (currentTimeMillis() - startedAt)).coerceAtLeast(1_000L)
-                return postGenerate(modelName, prompt, thinking = null, timeoutMs = left, allowRetries = false)
-            }
+            val retried = postGenerate(
+                modelName,
+                prompt,
+                thinking = null,
+                timeoutMs = (timeoutMs - (currentTimeMillis() - startedAt)).coerceAtLeast(1_000L),
+                allowRetries = false
+            )
+            if (retried.status.isSuccess()) rejectsThinkingConfig += modelName
+            return retried
         }
         return response
     }
@@ -553,10 +567,11 @@ class ClientSideAiClassifier(
             // In chat niente ritentativi automatici: un 429 aspettava fino a 20 s prima di
             // riprovare lo stesso modello, da solo oltre l'attesa accettabile per una risposta.
             if (!allowRetries) retry { noRetry() }
-            // Chiave sia in header (forma documentata da Google) sia come parametro: se una delle
-            // due venisse ignorata l'altra regge, e non costa nulla mandarle entrambe.
+            // Chiave solo in header, la forma documentata da Google e quella che usa la versione
+            // web. Mandarla anche come ?key= non aggiungeva nulla e raddoppiava le credenziali
+            // della richiesta: da escludere come causa dei 404 con corpo "{}" su modelli che
+            // l'elenco di Google da' per disponibili.
             header("x-goog-api-key", userApiKey)
-            parameter("key", userApiKey)
             contentType(ContentType.Application.Json)
             setBody(
                 GeminiRequest(
@@ -579,7 +594,6 @@ class ClientSideAiClassifier(
         return try {
             val response = httpClient.get(API_BASE) {
                 header("x-goog-api-key", userApiKey)
-                parameter("key", userApiKey)
                 parameter("pageSize", "200")
             }
             if (!response.status.isSuccess()) return null
