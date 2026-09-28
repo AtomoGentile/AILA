@@ -70,10 +70,34 @@ class AilaAssistant(
         private const val PREFETCHED_CIRCULARS = 2
 
         /**
-         * Testo gia' estratto per circolare: la stessa domanda riformulata, o la domanda dopo,
-         * non riscarica e non rilegge lo stesso PDF.
+         * Circolari recenti in cui cercare le parole della domanda **dentro il testo**. Il titolo
+         * e il riassunto non bastano: "quando inizia il corso di teatro?" sta spesso in una
+         * circolare intitolata "Attivita' pomeridiane a.s. 2026/27", e cercando solo li'
+         * l'assistente rispondeva che il corso non esiste.
          */
-        private val textCache = mutableMapOf<Int, String>()
+        private const val SEARCHED_CIRCULARS = 15
+    }
+
+    /**
+     * Il testo integrale delle circolari che c'entrano con la domanda, scelte in due modi:
+     * la migliore per titolo e riassunto, poi le migliori per contenuto del PDF (vedi
+     * [AssistantContext.rankByText]). I PDF gia' letti (dall'analisi o da una domanda
+     * precedente) non si riscaricano; gli altri si scaricano in parallelo entro
+     * [PREFETCH_BUDGET_MS] e, se non arrivano in tempo, si usa quello che c'e'.
+     */
+    private suspend fun relevantCircularTexts(knowledge: AssistantKnowledge, question: String): Map<Int, String> {
+        val byTitle = AssistantContext.mostRelevantCirculars(knowledge, question, PREFETCHED_CIRCULARS)
+        if (!AssistantContext.wantsTextSearch(knowledge, question)) {
+            return fetchCircularTexts(byTitle, knowledge.circulars, budgetMs = PREFETCH_BUDGET_MS)
+        }
+        val recent = knowledge.circulars
+            .sortedWith(compareByDescending<Circular> { it.publishDate.take(10) }.thenByDescending { it.number })
+            .take(SEARCHED_CIRCULARS)
+            .map { it.number }
+        val texts = fetchCircularTexts((byTitle + recent).distinct(), knowledge.circulars, budgetMs = PREFETCH_BUDGET_MS)
+        val byText = AssistantContext.rankByText(texts, question)
+        val chosen = (byTitle.take(1) + byText + byTitle).distinct().take(PREFETCHED_CIRCULARS)
+        return texts.filterKeys { it in chosen }
     }
 
     /**
@@ -106,11 +130,7 @@ class AilaAssistant(
         // aspettare che sia il modello a chiederlo: i modelli sul telefono non lo chiedono quasi
         // mai e rispondevano col solo riassunto, dove dettagli come "scienze il martedi'" non
         // ci sono. Per saluti e domande generali la lista e' vuota e non si scarica niente.
-        val prefetched = fetchCircularTexts(
-            AssistantContext.mostRelevantCirculars(knowledge, question, PREFETCHED_CIRCULARS),
-            knowledge.circulars,
-            budgetMs = PREFETCH_BUDGET_MS
-        )
+        val prefetched = relevantCircularTexts(knowledge, question)
 
         val firstRaw = when (
             val result = classifier.generateAnswer(
@@ -254,7 +274,7 @@ class AilaAssistant(
     ): Map<Int, String> {
         val result = mutableMapOf<Int, String>()
         val toDownload = numbers.mapNotNull { number ->
-            val cached = textCache[number]
+            val cached = CircularTextCache.get(number)
             if (cached != null) {
                 result[number] = cached
                 null
@@ -279,7 +299,7 @@ class AilaAssistant(
         toDownload.forEachIndexed { index, circular ->
             val text = downloaded[index] ?: return@forEachIndexed
             result[circular.number] = text
-            textCache[circular.number] = text
+            CircularTextCache.put(circular.number, text)
         }
         return result
     }

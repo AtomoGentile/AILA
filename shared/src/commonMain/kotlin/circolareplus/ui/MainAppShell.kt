@@ -293,6 +293,10 @@ fun MainAppShell(
             }
         }
 
+        // Lo stesso testo serve all'assistente per cercare dentro le circolari: cosi' non lo
+        // riscarica alla prima domanda.
+        circolareplus.ai.assistant.CircularTextCache.put(circular.number, pdfText)
+
         // Il modello sul telefono legge al massimo CircularClassificationPrompt.MAX_PDF_CHARS
         // caratteri (2-3 pagine): di una circolare da 30 pagine riassumerebbe solo l'inizio, dopo
         // minuti di calcolo, e il riassunto verrebbe comunque sostituito da quello del server.
