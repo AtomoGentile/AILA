@@ -260,7 +260,11 @@ internal object AiCoreEngine {
         // `response.text` e' solo la PRIMA parte di testo: se il modello risponde con piu' parti,
         // o con una prima parte vuota, sembra una risposta vuota anche quando non lo e'.
         val direct = textOf(response)
-        if (direct.isNotBlank()) return direct
+        if (direct.isNotBlank()) {
+            // finishReason 1 = MAX_TOKENS: il modello e' stato fermato a meta'. Si tiene fino
+            // all'ultima riga intera e lo si dichiara, invece di mostrare una frase monca.
+            return if (response.candidates.firstOrNull()?.finishReason == 1) cutAtLastLine(direct) else direct
+        }
 
         // Ultimo tentativo: la stessa richiesta in streaming, che passa da un altro percorso del
         // servizio di sistema. Costa una seconda generazione solo quando la prima e' vuota.
@@ -289,10 +293,21 @@ internal object AiCoreEngine {
         )
     }
 
+    private fun cutAtLastLine(text: String): String {
+        val lastBreak = text.trimEnd().lastIndexOf('\n')
+        val kept = if (lastBreak > text.length / 3) text.substring(0, lastBreak) else text
+        return kept.trimEnd() + "…\n\n(Risposta interrotta: Gemini Nano ha raggiunto il limite di lunghezza.)"
+    }
+
+    /**
+     * Tutto il testo del primo candidato. Prima si partiva da `response.text`, che e' solo la
+     * PRIMA parte: con una risposta in piu' parti l'assistente riceveva l'inizio del JSON e
+     * mostrava una frase tagliata. Si uniscono le parti e `response.text` resta il ripiego.
+     */
     private fun textOf(response: GenerateContentResponse): String =
-        response.text?.takeIf { it.isNotBlank() }
-            ?: response.candidates
-                .flatMap { it.content.parts }
-                .filterIsInstance<TextPart>()
-                .joinToString("") { it.text }
+        response.candidates.firstOrNull()?.content?.parts
+            ?.filterIsInstance<TextPart>()
+            ?.joinToString("") { it.text }
+            ?.takeIf { it.isNotBlank() }
+            ?: response.text.orEmpty()
 }

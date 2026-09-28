@@ -47,6 +47,8 @@ private data class GeminiThinkingConfig(val thinkingBudget: Int)
 private data class GeminiGenerationConfig(
     val temperature: Double = 0.2,
     val responseMimeType: String = "application/json",
+    /** Tetto esplicito: senza, alcuni modelli chiudono la risposta dell'assistente troppo presto. */
+    val maxOutputTokens: Int = 8192,
     /** Solo per la chat: `thinkingBudget = 0` spegne il ragionamento, che da solo costa secondi. */
     val thinkingConfig: GeminiThinkingConfig? = null
 )
@@ -74,7 +76,12 @@ class ClientSideAiClassifier(
     private val userApiKey: String,
     private val model: String = DEFAULT_MODEL,
     private val httpClient: HttpClient = HttpClient {
-        install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+        // encodeDefaults: senza, temperatura, responseMimeType e tetto ai token (valori di default
+        // dei DTO) non venivano mai spediti — Google non riceveva nemmeno la richiesta di JSON.
+        // explicitNulls = false: il thinkingConfig assente resta assente, non `null`.
+        install(ContentNegotiation) {
+            json(Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false })
+        }
         // Senza questo blocco valgono i tempi di default del motore HTTP di Android (OkHttp):
         // dieci secondi di lettura. Una generateContent con il testo di una circolare intera ne
         // impiega regolarmente di piu', e la chiamata moriva con
@@ -382,6 +389,9 @@ class ClientSideAiClassifier(
         val deadline = currentTimeMillis() + CHAT_BUDGET_MS
 
         var lastFailure = "nessun modello disponibile"
+        // Una risposta arrivata ma tagliata (JSON non chiuso) si tiene da parte e si prova il
+        // modello dopo: se nessuno fa meglio, meglio mostrare quella che un errore.
+        var truncated: AiTextResult.Success? = null
         for ((index, candidate) in candidates.withIndex()) {
             val remaining = deadline - currentTimeMillis()
             if (remaining < CHAT_MIN_ATTEMPT_MS) {
@@ -404,7 +414,7 @@ class ClientSideAiClassifier(
                     lastFailure = "il modello $candidate non ha risposto in tempo"
                     continue
                 }
-                return AiTextResult.Failure(
+                return truncated ?: AiTextResult.Failure(
                     "non sono riuscito a raggiungere Google: ${e::class.simpleName}: " +
                         "${e.message ?: "nessun dettaglio"}"
                 )
@@ -413,20 +423,26 @@ class ClientSideAiClassifier(
                 resolvedModel = candidate
                 busyUntil.remove(candidate)
                 val answer = extractGeneratedText(response.bodyAsText())
-                    ?: return AiTextResult.Failure("Google ha risposto senza contenuto utilizzabile.")
-                return AiTextResult.Success(answer, "Google Gemini ($candidate)")
+                    ?: return truncated ?: AiTextResult.Failure("Google ha risposto senza contenuto utilizzabile.")
+                val result = AiTextResult.Success(answer, "Google Gemini ($candidate)")
+                val opensJson = answer.trimStart().removePrefix("```json").trimStart().startsWith("{")
+                if (!opensJson || circolareplus.ai.assistant.AssistantPrompt.isCompleteAnswer(answer)) return result
+                truncated = truncated ?: result
+                lastFailure = "risposta interrotta dal modello $candidate"
+                continue
             }
             val body = try { response.bodyAsText() } catch (e: Exception) { "" }
             lastFailure = "HTTP ${response.status.value} con il modello $candidate: ${body.take(200)}"
             // In chat anche il 429 fa passare al modello dopo: nel piano gratuito la quota e' per
             // modello, e flash-lite ha la sua anche quando quella di flash e' finita.
             val code = response.status.value
-            if (code != 429 && !isModelUnavailable(code, body)) return AiTextResult.Failure(lastFailure)
+            if (code != 429 && !isModelUnavailable(code, body)) return truncated ?: AiTextResult.Failure(lastFailure)
             // Un modello che ha appena risposto 503 non va piu' tenuto come "risolto" e per
             // qualche minuto passa in fondo alla fila: la prossima domanda parte da uno che va.
             markBusy(candidate)
         }
 
+        truncated?.let { return it }
         val leftForDiscovery = deadline - currentTimeMillis()
         if (leftForDiscovery < CHAT_MIN_ATTEMPT_MS * 2) return AiTextResult.Failure(lastFailure)
         val discovered = discoverUsableModel()
@@ -449,12 +465,24 @@ class ClientSideAiClassifier(
         return AiTextResult.Failure(lastFailure)
     }
 
-    /** Il testo del primo candidato di una risposta generateContent, o `null` se non c'e'. */
+    /**
+     * Il testo del primo candidato di una risposta generateContent, o `null` se non c'e'.
+     *
+     * Si uniscono **tutte** le parti, saltando quelle di ragionamento (`"thought": true`). Prima
+     * si leggeva solo `parts[0]`: quando Gemini spezzava la risposta in piu' parti, in chat
+     * arrivava solo l'inizio del JSON e il messaggio si fermava a meta' — "...direttamente:\".
+     */
     private fun extractGeneratedText(raw: String): String? = try {
         json.parseToJsonElement(raw).jsonObject["candidates"]?.jsonArray?.getOrNull(0)
             ?.jsonObject?.get("content")?.jsonObject
-            ?.get("parts")?.jsonArray?.getOrNull(0)
-            ?.jsonObject?.get("text")?.jsonPrimitive?.content
+            ?.get("parts")?.jsonArray
+            ?.mapNotNull { part ->
+                val obj = part as? JsonObject ?: return@mapNotNull null
+                if (obj["thought"]?.jsonPrimitive?.contentOrNull == "true") return@mapNotNull null
+                obj["text"]?.jsonPrimitive?.contentOrNull
+            }
+            ?.joinToString("")
+            ?.takeIf { it.isNotBlank() }
     } catch (e: Exception) {
         null
     }

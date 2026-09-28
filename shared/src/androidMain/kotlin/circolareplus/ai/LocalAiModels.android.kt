@@ -42,6 +42,11 @@ actual object LocalAiCatalog {
         preferGpu = false,
         supportsActions = true,
         maxOutputTokens = 900,
+        // Stesso conto di Phi e Apple Intelligence: Gemini Nano ha una finestra di circa 4096
+        // token fra domanda E risposta. Con il default (4096 solo in ingresso) il prompt
+        // dell'assistente la riempiva quasi tutta e la risposta si fermava dopo una riga.
+        // Meno testo in ingresso vuol dire anche meno attesa prima della prima parola.
+        maxInputTokens = 2_800,
         description = "Gemini Nano, il modello che Android include gia': nessun download e " +
             "tutto resta sul telefono. Disponibile solo sui dispositivi compatibili."
     )
