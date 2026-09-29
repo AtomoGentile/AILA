@@ -891,6 +891,9 @@ fun MainAppShell(
     var calendarRefreshTrigger by remember { mutableStateOf(0) }
     var handledCalendarRefresh by remember { mutableStateOf(0) }
     var showAddEventDialog by remember { mutableStateOf(false) }
+    // Chiede al foglio "Nuovo evento" di chiudersi con la sua animazione (poi lui chiama onDismiss):
+    // togliendolo dalla composizione di colpo, come prima, spariva senza scendere.
+    var addEventCloseRequested by remember { mutableStateOf(false) }
     // Con quale passo si apre il foglio "Nuovo evento" e quale data preselezionare: impostati da
     // dove si tocca "+" (menu generico dall'header, scorciatoia AILA, o "+" sul giorno scelto nella
     // griglia, che prima non permetteva di creare un evento per quel giorno specifico).
@@ -1798,9 +1801,11 @@ fun MainAppShell(
         AddCalendarEventDialog(
             onDismiss = {
                 showAddEventDialog = false
+                addEventCloseRequested = false
                 addEventInitialStep = EventCreationStep.MENU
                 addEventInitialDateIso = null
             },
+            closeRequested = addEventCloseRequested,
             initialStep = addEventInitialStep,
             initialDateIso = addEventInitialDateIso,
             onConfirm = { title, date, time, category, visibleToUserIds, notes ->
@@ -1817,12 +1822,25 @@ fun MainAppShell(
                         if (response.warning != null) {
                             pendingDuplicateWarning = response.warning
                         } else {
-                            showAddEventDialog = false
-                            addEventInitialStep = EventCreationStep.MENU
-                            addEventInitialDateIso = null
-                            // Tornando al calendario si va sul giorno del nuovo evento, dove
-                            // compare con un'animazione: prima restava il mese di prima e
-                            // l'evento nuovo si vedeva solo cercandolo.
+                            // Il foglio scende con la sua animazione (poi chiama onDismiss). Intanto il
+                            // calendario va sul giorno del nuovo evento e l'evento c'e' gia': si
+                            // inserisce subito, senza aspettare la rilettura, cosi' la sua card entra
+                            // mentre il foglio finisce di scendere. La rilettura poi lo riallinea.
+                            addEventCloseRequested = true
+                            val newId = response.id
+                            if (newId != null && calendarEvents.none { it.id == newId }) {
+                                calendarEvents = calendarEvents + CalendarEvent(
+                                    id = newId,
+                                    title = circolareplus.util.compactClassLabels(title),
+                                    date = date,
+                                    time = time,
+                                    category = category,
+                                    isForAll = visibleToUserIds == null,
+                                    createdByUserId = user.id,
+                                    visibleToUserIds = visibleToUserIds,
+                                    notes = notes
+                                )
+                            }
                             calendarFocusDateIso = date
                             reloadCalendar()
                         }
@@ -1840,7 +1858,7 @@ fun MainAppShell(
             title = { Text("Possibile doppione") },
             text = { Text(pendingDuplicateWarning ?: "") },
             confirmButton = {
-                TextButton(onClick = { pendingDuplicateWarning = null; showAddEventDialog = false }) {
+                TextButton(onClick = { pendingDuplicateWarning = null; addEventCloseRequested = true }) {
                     Text("Ho capito")
                 }
             }
@@ -4277,7 +4295,9 @@ private fun AddCalendarEventDialog(
     onDismiss: () -> Unit,
     onConfirm: (String, String, String?, CalendarEventCategory, List<String>?, String?) -> Unit,
     initialStep: EventCreationStep = EventCreationStep.MENU,
-    initialDateIso: String? = null
+    initialDateIso: String? = null,
+    /** true quando il chiamante vuole chiudere il foglio (evento creato): scende e poi chiama [onDismiss]. */
+    closeRequested: Boolean = false
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var step by remember { mutableStateOf(initialStep) }
@@ -4339,6 +4359,20 @@ private fun AddCalendarEventDialog(
     }
 
     val scope = rememberCoroutineScope()
+    // Chiudere senza animazione toglieva il foglio di colpo (tasto X, evento creato): prima scende,
+    // poi lo si toglie. Scrim, trascinamento e indietro lo facevano gia' da soli.
+    fun closeAnimated() {
+        scope.launch {
+            sheetState.hide()
+            onDismiss()
+        }
+    }
+    LaunchedEffect(closeRequested) {
+        if (closeRequested) {
+            sheetState.hide()
+            onDismiss()
+        }
+    }
 
     val dateLabel = selectedDateMillis?.let { millis ->
         val civil = circolareplus.util.parseIsoDate(epochMillisToIsoDate(millis))
@@ -4465,7 +4499,7 @@ private fun AddCalendarEventDialog(
                         color = AppTheme.TextDark
                     )
                 }
-                EventSheetRoundButton(onClick = onDismiss) {
+                EventSheetRoundButton(onClick = { closeAnimated() }) {
                     AppIcons.Close(modifier = Modifier.size(16.dp), color = AppTheme.TextMuted)
                 }
             }

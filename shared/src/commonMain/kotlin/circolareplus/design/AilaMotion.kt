@@ -22,6 +22,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -345,8 +346,8 @@ private object AilaWarmUpMemory {
  * La prima volta che una pagina si apre l'app deve caricare le classi di Compose e di Material
  * che non ha ancora usato (il campo di testo, le liste, i testi), e lo fa tutto nel fotogramma
  * del tocco: il "lag delle prime aperture". Qui, a app ferma da un paio di secondi, ogni pagina
- * viene composta e misurata una volta, nascosta e senza alcun effetto (niente tocchi, niente
- * lettori di schermo, dimensione zero, mai disegnata), poi tolta: il lavoro si fa quando nessuno
+ * viene composta, misurata e disegnata una volta, nascosta e senza alcun effetto (niente tocchi,
+ * niente lettori di schermo, dimensione zero, ritagliata), poi tolta: il lavoro si fa quando nessuno
  * sta toccando, e all'apertura vera resta solo quello dei dati. Una pagina alla volta e una
  * volta sola per avvio.
  */
@@ -367,7 +368,9 @@ fun AilaWarmUp(pages: List<@Composable () -> Unit>) {
     val page = pages.getOrNull(index) ?: return
     androidx.compose.foundation.layout.Box(
         modifier = Modifier
-            .graphicsLayer { alpha = 0f }
+            // Quasi trasparente (e comunque ritagliato a 0x0 qui sotto): il contenuto si disegna
+            // davvero, cosi' si scaldano anche i testi e le forme, non solo la composizione.
+            .graphicsLayer { alpha = 0.01f }
             .clipToBounds()
             // Misura il contenuto con i vincoli del genitore ma occupa 0x0: fuori dai bordi
             // non riceve tocchi e non si vede.
@@ -658,6 +661,11 @@ fun Modifier.ailaContainerReveal(
                 drawContent()
                 if (contentAlpha < 1f) drawRect(fill, alpha = 1f - contentAlpha)
             } else {
+                // Il contenuto viene "disegnato" subito ma con un ritaglio vuoto: non si vede nulla,
+                // pero' la pagina si registra adesso, nei primi fotogrammi in cui la forma e' ancora
+                // piccola. Prima si registrava la prima volta che compariva, a meta' corsa, e proprio
+                // li' c'era lo scatto (a ogni apertura di ricerca, notifiche e profilo).
+                clipRect(0f, 0f, 0f, 0f) { this@drawWithContent.drawContent() }
                 drawRect(fill, alpha = shapeAlpha)
             }
         }
