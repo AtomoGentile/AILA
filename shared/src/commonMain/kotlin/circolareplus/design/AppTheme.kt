@@ -131,10 +131,12 @@ object AppTheme {
     val Space48 = 48.dp
 
     // --- Colori brand -------------------------------------------------------------------------
-    // Expressive usa il "tono 40" del blu AILA (piu' profondo, come i primari di Material) in
-    // chiaro; in scuro resta il blu luminoso, che regge il testo bianco sopra.
+    // Il blu AILA (tono 40, piu' profondo, come i primari di Material) vale in chiaro sia in
+    // Expressive sia in Glass: in Glass era un azzurro #3B82F6 diverso dal brand, e con lui
+    // sbagliavano icone, tinte e la macchia di colore dello sfondo. In scuro resta il blu
+    // luminoso, che regge il testo bianco sopra.
     val PrimaryBlue get() = if (accent == AilaAccent.BLUE) {
-        style(Color(0xFF3B82F6), Color(0xFF0A84FF), Color(0xFF2F5BD3), Color(0xFF5A8CFF))
+        style(Color(0xFF2F5BD3), Color(0xFF0A84FF), Color(0xFF2F5BD3), Color(0xFF5A8CFF))
     } else {
         Color(if (isDarkMode) accent.primaryDark else accent.primaryLight)
     }
