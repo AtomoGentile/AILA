@@ -21,7 +21,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
@@ -330,6 +333,53 @@ val ailaUnderlayShift: Float get() = if (AppTheme.isGlass) 1f else 0f
 // Material: velo leggero sotto al container transform (col 32% di prima l'animazione "lampeggiava"
 // di scuro all'apertura e alla chiusura).
 val ailaUnderlayDim: Float get() = 0f
+
+/** Si ricorda se il riscaldamento delle pagine e' gia' stato fatto in questo avvio dell'app. */
+private object AilaWarmUpMemory {
+    var done = false
+}
+
+/**
+ * Riscaldamento delle pagine che si aprono dai pulsanti (ricerca, notifiche, profilo).
+ *
+ * La prima volta che una pagina si apre l'app deve caricare le classi di Compose e di Material
+ * che non ha ancora usato (il campo di testo, le liste, i testi), e lo fa tutto nel fotogramma
+ * del tocco: il "lag delle prime aperture". Qui, a app ferma da un paio di secondi, ogni pagina
+ * viene composta e misurata una volta, nascosta e senza alcun effetto (niente tocchi, niente
+ * lettori di schermo, dimensione zero, mai disegnata), poi tolta: il lavoro si fa quando nessuno
+ * sta toccando, e all'apertura vera resta solo quello dei dati. Una pagina alla volta e una
+ * volta sola per avvio.
+ */
+@Composable
+fun AilaWarmUp(pages: List<@Composable () -> Unit>) {
+    if (AilaWarmUpMemory.done) return
+    var index by remember { mutableStateOf(-1) }
+    LaunchedEffect(Unit) {
+        delay(2500)
+        for (i in pages.indices) {
+            index = i
+            delay(600)
+            index = -1
+            delay(600)
+        }
+        AilaWarmUpMemory.done = true
+    }
+    val page = pages.getOrNull(index) ?: return
+    androidx.compose.foundation.layout.Box(
+        modifier = Modifier
+            .graphicsLayer { alpha = 0f }
+            .clipToBounds()
+            // Misura il contenuto con i vincoli del genitore ma occupa 0x0: fuori dai bordi
+            // non riceve tocchi e non si vede.
+            .layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                layout(0, 0) { placeable.place(0, 0) }
+            }
+            .clearAndSetSemantics { }
+    ) {
+        page()
+    }
+}
 
 /** Si ricorda se lo "sblocco" e' gia' stato fatto in questo avvio dell'app. */
 private object AilaUnlockMemory {

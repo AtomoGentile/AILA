@@ -2158,6 +2158,33 @@ fun MainAppShell(
     val openCircularInClass: (Circular?) -> Unit = { circular ->
         if (twoPane) paneCircular = circular else selectedCircularForDetail = circular
     }
+    // Le pagine dei pulsanti in alto (ricerca, notifiche, profilo) si compongono una volta,
+    // nascoste, a app ferma: cosi' la prima apertura vera non paga il caricamento delle classi.
+    circolareplus.design.AilaWarmUp(
+        listOf<@Composable () -> Unit>(
+            {
+                SearchScreen(
+                    circulars = circulars,
+                    calendarEvents = calendarEvents,
+                    proposals = proposals,
+                    recentSearches = recentSearches,
+                    onBackClick = {}
+                )
+            },
+            {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    ScreenBackBar(title = "Profilo", onBackClick = {})
+                    ProfileScreen(user = user, showHeader = false, profile = profile)
+                }
+            },
+            {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    ScreenBackBar(title = "Notifiche", onBackClick = {})
+                    NotificationsScreen(notifications = notificationLog)
+                }
+            }
+        )
+    )
     Scaffold(
         modifier = Modifier
             .graphicsLayer {
@@ -2696,7 +2723,8 @@ fun MainAppShell(
                                             Spacer(modifier = Modifier.width(AppTheme.Space8))
                                             circolareplus.design.AilaIconButton(
                                                 contentDescription = "Scheda della classe",
-                                                onClick = { isInClassRosterScreen = true }
+                                                onClick = { isInClassRosterScreen = true },
+                                                opensPage = true
                                             ) { tint -> AppIcons.People(modifier = Modifier.size(20.dp), color = tint) }
                                         }
                                         circolareplus.design.LocalProfileEntry.current?.let { entry ->
