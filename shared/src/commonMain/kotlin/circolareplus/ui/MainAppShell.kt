@@ -5433,12 +5433,17 @@ private fun EventCreationOptionCard(
         modifier = modifier
             .clip(RoundedCornerShape(AppTheme.CardCornerRadius))
             .then(
-                // Glass: niente blocco colorato, vetro con una velatura blu appena accennata.
-                if (AppTheme.isGlass) Modifier.ailaGlassSurface(
-                    RoundedCornerShape(AppTheme.CardCornerRadius),
-                    tint = if (highlighted) AppTheme.PrimaryBlue.copy(alpha = 0.12f) else null
-                )
-                else if (highlighted) Modifier.background(AppTheme.PrimaryGradient)
+                // La card evidenziata e' piena del blu primario in tutti e due gli stili, come il
+                // pulsante primario del passo dopo (in Glass era una velatura azzurra pallida,
+                // di un colore diverso dal resto). Quella normale: vetro in Glass, bianca col
+                // contorno in Material.
+                if (highlighted) Modifier
+                    .background(AppTheme.PrimaryGradient)
+                    .then(
+                        if (AppTheme.isGlass) Modifier.border(1.dp, AppTheme.GlassEdge, RoundedCornerShape(AppTheme.CardCornerRadius))
+                        else Modifier
+                    )
+                else if (AppTheme.isGlass) Modifier.ailaGlassSurface(RoundedCornerShape(AppTheme.CardCornerRadius))
                 else Modifier
                     .background(AppTheme.SurfaceWhite)
                     .border(1.dp, AppTheme.FieldOutline, RoundedCornerShape(AppTheme.CardCornerRadius))
@@ -5453,20 +5458,20 @@ private fun EventCreationOptionCard(
                 .background(if (highlighted) Color.White.copy(alpha = 0.2f) else AppTheme.TintViolet),
             contentAlignment = Alignment.Center
         ) {
-            icon(if (highlighted && !AppTheme.isGlass) Color.White else if (highlighted) AppTheme.PrimaryBlue else AppTheme.TintVioletInk)
+            icon(if (highlighted) Color.White else AppTheme.TintVioletInk)
         }
         Spacer(modifier = Modifier.height(AppTheme.Space12))
         Text(
             text = title,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
-            color = if (highlighted && !AppTheme.isGlass) Color.White else AppTheme.TextDark
+            color = if (highlighted) Color.White else AppTheme.TextDark
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = subtitle,
             fontSize = 11.sp,
-            color = if (highlighted && !AppTheme.isGlass) AppTheme.OnHeroSecondary else AppTheme.TextMuted,
+            color = if (highlighted) Color(0xCCFFFFFF) else AppTheme.TextMuted,
             lineHeight = 14.sp
         )
     }
