@@ -282,6 +282,8 @@ class LocalAiClassifier(
         return lower.contains("token ids are too long") ||
             lower.contains("maximum number of tokens") ||
             lower.contains("exceeding") ||
+            // AICore: "error code N-REQUEST_TOO_LARGE".
+            lower.contains("request_too_large") ||
             // AICore che non digerisce il prompt risponde "" invece di lanciare (AiCoreEngine).
             lower.contains("testo vuoto")
     }
