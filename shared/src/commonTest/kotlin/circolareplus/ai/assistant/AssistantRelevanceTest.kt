@@ -55,4 +55,48 @@ class AssistantRelevanceTest {
         val found = AssistantContext.mostRelevantCirculars(knowledge, "uscita didattica, sportelli e assemblea", 2)
         assertEquals(2, found.size)
     }
+
+    private fun msg(author: AssistantAuthor, text: String, sources: List<AssistantSource> = emptyList()) =
+        AssistantMessage("id-${text.hashCode()}", author, text, sources)
+
+    private val palestraHistory = listOf(
+        msg(AssistantAuthor.USER, "Cosa e' vietato fare in palestra?"),
+        msg(
+            AssistantAuthor.ASSISTANT,
+            "La palestra e' usabile da tre classi.",
+            listOf(AssistantSource(AssistantSourceKind.CIRCULAR, "Circolare n. 9", 9))
+        )
+    )
+
+    @Test
+    fun unSeguitoSenzaArgomentoRestaAgganciatoAllaDomandaPrecedente() {
+        val query = AssistantContext.searchQuery("dimmi qualcosa in piu'", palestraHistory)
+        assertTrue("palestra" in AssistantContext.tokenize(query))
+        assertEquals(setOf(9), AssistantContext.circularNumbersIn(query))
+    }
+
+    @Test
+    fun ilSeguitoDiApprofondimentoNonPerdeLaCircolare() {
+        // Prima "leggi", "intera" e "circolare" contavano come argomento: niente seguito, niente PDF.
+        val query = AssistantContext.searchQuery(
+            "leggi l'intera circolare e dimmi qualcosa in piu'",
+            palestraHistory + msg(AssistantAuthor.USER, "sulla palestra dicevo")
+        )
+        assertEquals(listOf(9), AssistantContext.mostRelevantCirculars(knowledge, query, 2))
+    }
+
+    @Test
+    fun unaDomandaConUnArgomentoNonSiMescolaAllaCronologia() {
+        val question = "quali sportelli di scienze e matematica ci sono?"
+        assertEquals(question, AssistantContext.searchQuery(question, palestraHistory))
+    }
+
+    @Test
+    fun vietatoTrovaIlDivietoDellaCircolare() {
+        val text = (List(30) { "Riga generica numero $it della capienza degli ambienti scolastici." } +
+            "E' fatto divieto di consumare cibi e bevande in palestra." +
+            List(30) { "Altra riga generica $it sulle aule." }).joinToString("\n")
+        val selected = PassageSelector.select(text, "Cosa e' vietato?", 700)
+        assertTrue("divieto" in selected)
+    }
 }
