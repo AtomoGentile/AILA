@@ -4544,19 +4544,13 @@ private fun AddCalendarEventDialog(
                 override fun isSelectableYear(year: Int): Boolean = year >= todayCivil.year
             }
         )
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    selectedDateMillis = datePickerState.selectedDateMillis
-                    showDatePicker = false
-                }) { Text("OK") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("Annulla") }
-            }
+        circolareplus.design.AilaDatePickerDialog(
+            state = datePickerState,
+            onDismiss = { showDatePicker = false },
+            confirmLabel = "OK"
         ) {
-            DatePicker(state = datePickerState)
+            selectedDateMillis = datePickerState.selectedDateMillis
+            showDatePicker = false
         }
     }
 
@@ -5567,21 +5561,15 @@ private fun CreatePollDialog(
 
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(initialSelectedDateMillis = pendingDateMillis)
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let { millis ->
-                        slots.add(PollSlotDraft(dateMillis = millis, capacity = 3, teacherMandatory = false))
-                    }
-                    showDatePicker = false
-                }) { Text("Aggiungi") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("Annulla") }
-            }
+        circolareplus.design.AilaDatePickerDialog(
+            state = datePickerState,
+            onDismiss = { showDatePicker = false },
+            confirmLabel = "Aggiungi"
         ) {
-            DatePicker(state = datePickerState)
+            datePickerState.selectedDateMillis?.let { millis ->
+                slots.add(PollSlotDraft(dateMillis = millis, capacity = 3, teacherMandatory = false))
+            }
+            showDatePicker = false
         }
     }
 

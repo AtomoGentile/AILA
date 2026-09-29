@@ -218,3 +218,49 @@ fun AilaContainerSheet(
         }
     }
 }
+
+/**
+ * Selettore data uguale in tutta l'app. Liquid Glass: la card non e' piu' il riquadro lilla
+ * pieno di Material ma vetro traslucido col filo di luce sul bordo, e l'app dietro si sfoca
+ * come sotto i fogli (vedi AilaSheetBackdrop). Negli altri stili resta il dialogo di Material.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AilaDatePickerDialog(
+    state: androidx.compose.material3.DatePickerState,
+    onDismiss: () -> Unit,
+    confirmLabel: String,
+    onConfirm: () -> Unit
+) {
+    val glass = AppTheme.isGlass
+    if (glass) {
+        androidx.compose.runtime.DisposableEffect(Unit) {
+            AilaSheetBackdrop.openSheets++
+            onDispose { AilaSheetBackdrop.openSheets-- }
+        }
+    }
+    val shape = RoundedCornerShape(if (glass) 32.dp else 28.dp)
+    val clear = androidx.compose.material3.DatePickerDefaults.colors(containerColor = Color.Transparent)
+    androidx.compose.material3.DatePickerDialog(
+        onDismissRequest = onDismiss,
+        modifier = if (glass) Modifier.ailaGlassSurface(shape) else Modifier,
+        shape = shape,
+        tonalElevation = if (glass) 0.dp else 6.dp,
+        colors = if (glass) clear else androidx.compose.material3.DatePickerDefaults.colors(),
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onConfirm) {
+                androidx.compose.material3.Text(confirmLabel)
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                androidx.compose.material3.Text("Annulla")
+            }
+        }
+    ) {
+        androidx.compose.material3.DatePicker(
+            state = state,
+            colors = if (glass) clear else androidx.compose.material3.DatePickerDefaults.colors()
+        )
+    }
+}
