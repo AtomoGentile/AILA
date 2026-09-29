@@ -65,6 +65,7 @@ import circolareplus.design.ailaSpatialSpring
 import circolareplus.design.ailaPushTransition
 import circolareplus.design.ailaTabTransition
 import circolareplus.design.ailaContainerReveal
+import circolareplus.design.ailaMorphClip
 import circolareplus.design.GlassBase
 import circolareplus.design.GlassEdge
 import circolareplus.design.ailaGlassSurface
@@ -611,6 +612,9 @@ fun MainAppShell(
             if (restored != null) {
                 currentUser = restored.first
                 currentProfile = restored.second
+                // Calendario, bacheca, compagni e sondaggi partono adesso, insieme alle circolari
+                // qui sotto, invece di aspettare la Home (vedi StartupPrefetch).
+                if (outcome is SessionRestore.Online) StartupPrefetch.begin()
 
                 // Budget di tempo volutamente breve: lo schermo di caricamento serve già a
                 // coprire il giro di rete del ripristino sessione, ma non deve trasformarsi in
@@ -1263,7 +1267,8 @@ fun MainAppShell(
             if (showSpinner) isCalendarLoading = true
             calendarError = null
             try {
-                calendarEvents = AppContainer.calendarRepository.listEvents()
+                calendarEvents = StartupPrefetch.take<List<CalendarEvent>>("calendar")
+                    ?: AppContainer.calendarRepository.listEvents()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1278,7 +1283,8 @@ fun MainAppShell(
         if (selectedTab == MainTab.CALENDAR && classmates.isEmpty() && !isClassmatesLoading) {
             isClassmatesLoading = true
             try {
-                classmates = AppContainer.usersRepository.listStudents()
+                classmates = StartupPrefetch.take<List<User>>("students")
+                    ?: AppContainer.usersRepository.listStudents()
             } catch (e: Exception) {
                 // Non bloccante: il calendario resta usabile, i nomi dei destinatari specifici
                 // ripiegano su un placeholder finché il caricamento non riesce.
@@ -1319,7 +1325,10 @@ fun MainAppShell(
                 // rete di listUnlockRequests() si sommava a quello di listProposals() invece di
                 // sovrapporsi, rallentando l'ingresso in bacheca di un'attesa che non serviva.
                 coroutineScope {
-                    val proposalsDeferred = async { AppContainer.proposalsRepository.listProposals() }
+                    val proposalsDeferred = async {
+                        StartupPrefetch.take<List<Proposal>>("proposals")
+                            ?: AppContainer.proposalsRepository.listProposals()
+                    }
                     // Un errore qui non deve far sparire la bacheca: le richieste sono un di più. Lo
                     // chiedono tutti, perché è la risposta a dire se si è la Guardia della classe.
                     val unlockDeferred = async {
@@ -1352,7 +1361,11 @@ fun MainAppShell(
     // piena schermata, il secondo abbondante che si vedeva entrando nella tab.
     suspend fun loadSeatMapData(reportErrors: Boolean = true): Unit = coroutineScope {
         val classmatesDeferred = if (classmates.isEmpty()) {
-            async { runCatching { AppContainer.usersRepository.listStudents() } }
+            async {
+                runCatching {
+                    StartupPrefetch.take<List<User>>("students") ?: AppContainer.usersRepository.listStudents()
+                }
+            }
         } else {
             null
         }
@@ -1406,7 +1419,7 @@ fun MainAppShell(
     // La mappa si legge anche in anticipo, pochi secondi dopo l'ingresso nell'app: cosi' la prima
     // apertura della tab la trova gia' pronta invece di aspettare la rete.
     LaunchedEffect(user.id) {
-        delay(2_000L)
+        delay(600L)
         if (!seatMapLoadedOnce) {
             try {
                 loadSeatMapData(reportErrors = false)
@@ -1650,7 +1663,8 @@ fun MainAppShell(
             isPollLoading = true
             pollError = null
             try {
-                val polls = AppContainer.pollsRepository.listPolls()
+                val polls = StartupPrefetch.take<List<circolareplus.data.remote.dto.PollSummaryDto>>("polls")
+                    ?: AppContainer.pollsRepository.listPolls()
                 allPolls = polls
 
                 // Notifica per nuovo sondaggio pubblicato
@@ -1714,7 +1728,8 @@ fun MainAppShell(
             isRankingLoading = rankingPolls.isEmpty()
             rankingError = null
             try {
-                val response = AppContainer.rankingPollsRepository.listPolls()
+                val response = StartupPrefetch.take<circolareplus.data.remote.dto.RankingPollsListResponseDto>("rankingPolls")
+                    ?: AppContainer.rankingPollsRepository.listPolls()
                 rankingPolls = response.polls
                 rankingTotalStudents = response.totalStudents
             } catch (e: Exception) {
@@ -1805,6 +1820,10 @@ fun MainAppShell(
                             showAddEventDialog = false
                             addEventInitialStep = EventCreationStep.MENU
                             addEventInitialDateIso = null
+                            // Tornando al calendario si va sul giorno del nuovo evento, dove
+                            // compare con un'animazione: prima restava il mese di prima e
+                            // l'evento nuovo si vedeva solo cercandolo.
+                            calendarFocusDateIso = date
                             reloadCalendar()
                         }
                     } catch (e: Exception) {
@@ -4079,6 +4098,49 @@ private fun eventCategoryIcon(category: CalendarEventCategory, modifier: Modifie
 }
 
 /** Passi del foglio di creazione evento: menu di scelta, AILA Assistant, compilazione manuale. */
+/**
+ * Letture avviate mentre si vede ancora la schermata di caricamento (vedi il ripristino della
+ * sessione in MainAppShell) e consumate dai caricamenti veri, che prima partivano solo dopo, quando
+ * la Home era gia' composta, o addirittura solo entrando nella tab. Ogni voce si consuma una volta
+ * sola e solo se e' fresca; se la lettura e' fallita o e' troppo vecchia, il chiamante fa la sua
+ * lettura come prima. Nessun cambio di comportamento se non il tempo risparmiato.
+ */
+private object StartupPrefetch {
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Default)
+    private class Entry(val deferred: kotlinx.coroutines.Deferred<Any?>, val startedAt: kotlin.time.TimeMark)
+    private val pending = mutableMapOf<String, Entry>()
+    private const val MAX_AGE_SECONDS = 60
+
+    private fun <T> start(key: String, block: suspend () -> T) {
+        pending[key] = Entry(scope.async { block() }, kotlin.time.TimeSource.Monotonic.markNow())
+    }
+
+    /** Fa partire in parallelo le letture che servono subito dopo l'ingresso. */
+    fun begin() {
+        start("calendar") { AppContainer.calendarRepository.listEvents() }
+        start("proposals") { AppContainer.proposalsRepository.listProposals() }
+        start("students") { AppContainer.usersRepository.listStudents() }
+        start("polls") { AppContainer.pollsRepository.listPolls() }
+        start("rankingPolls") { AppContainer.rankingPollsRepository.listPolls() }
+    }
+
+    /** Il risultato della lettura anticipata, o null se manca, e' fallita o e' troppo vecchia. */
+    @Suppress("UNCHECKED_CAST")
+    suspend fun <T> take(key: String): T? {
+        val entry = pending.remove(key) ?: return null
+        if (entry.startedAt.elapsedNow().inWholeSeconds >= MAX_AGE_SECONDS) return null
+        return try {
+            entry.deferred.await() as T?
+        } catch (e: CancellationException) {
+            // Annullata la mia coroutine: va propagato. Annullata la lettura: si rifa' da capo.
+            if (!kotlinx.coroutines.currentCoroutineContext().isActive) throw e
+            null
+        } catch (e: Exception) {
+            null
+        }
+    }
+}
+
 private enum class EventCreationStep { MENU, ASSISTANT, MANUAL }
 
 /** Bozza estratta dal testo libero scritto in AILA Assistant. */
@@ -4341,6 +4403,11 @@ private fun AddCalendarEventDialog(
         onDismissRequest = onDismiss,
         sheetState = sheetState
     ) {
+        // Indietro (gesto o tasto) dentro un passo torna al menu con la stessa animazione della
+        // freccia; dal menu chiude il foglio. Prima chiudeva sempre tutto.
+        circolareplus.platform.PlatformBackHandler(enabled = step != EventCreationStep.MENU) {
+            step = EventCreationStep.MENU
+        }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -4350,47 +4417,85 @@ private fun AddCalendarEventDialog(
                 .padding(bottom = AppTheme.Space32)
         ) {
             // Intestazione Material: freccia indietro (fuori dal menu iniziale) + titolo + chiudi.
+            // La freccia entra e esce, il titolo si dissolve da uno all'altro, e i pulsanti sono
+            // tondi e si schiacciano al tocco come quelli del resto dell'app.
             Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = AppTheme.Space16),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (step != EventCreationStep.MENU) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                            .background(AppTheme.TintSlate)
-                            .clickable { step = EventCreationStep.MENU },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        AppIcons.ChevronLeft(modifier = Modifier.size(16.dp), color = AppTheme.TextDark)
-                    }
-                    Spacer(modifier = Modifier.width(AppTheme.Space12))
-                }
-                Text(
-                    text = when (step) {
-                        EventCreationStep.MENU -> "Nuovo evento"
-                        EventCreationStep.ASSISTANT -> "AILA Assistant"
-                        EventCreationStep.MANUAL -> "Dettagli evento"
-                    },
-                    fontSize = 19.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = AppTheme.TextDark,
-                    modifier = Modifier.weight(1f)
-                )
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                        .background(AppTheme.TintSlate)
-                        .clickable { onDismiss() },
-                    contentAlignment = Alignment.Center
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = step != EventCreationStep.MENU,
+                    enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.expandHorizontally(),
+                    exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.shrinkHorizontally()
                 ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        EventSheetRoundButton(onClick = { step = EventCreationStep.MENU }) {
+                            AppIcons.ChevronLeft(modifier = Modifier.size(16.dp), color = AppTheme.TextDark)
+                        }
+                        Spacer(modifier = Modifier.width(AppTheme.Space12))
+                    }
+                }
+                androidx.compose.animation.AnimatedContent(
+                    targetState = step,
+                    modifier = Modifier.weight(1f),
+                    transitionSpec = {
+                        androidx.compose.animation.ContentTransform(
+                            targetContentEnter = androidx.compose.animation.fadeIn(
+                                androidx.compose.animation.core.tween(180, delayMillis = 60)
+                            ),
+                            initialContentExit = androidx.compose.animation.fadeOut(
+                                androidx.compose.animation.core.tween(100)
+                            )
+                        )
+                    },
+                    label = "eventSheetTitle"
+                ) { shownStep ->
+                    Text(
+                        text = when (shownStep) {
+                            EventCreationStep.MENU -> "Nuovo evento"
+                            EventCreationStep.ASSISTANT -> "AILA Assistant"
+                            EventCreationStep.MANUAL -> "Dettagli evento"
+                        },
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AppTheme.TextDark
+                    )
+                }
+                EventSheetRoundButton(onClick = onDismiss) {
                     AppIcons.Close(modifier = Modifier.size(16.dp), color = AppTheme.TextMuted)
                 }
             }
 
-            when (step) {
+            // Passi del foglio: avanti (Assistente, Manuale) il nuovo contenuto arriva da destra,
+            // indietro (verso il menu) da sinistra, e l'altezza del foglio segue con una molla
+            // invece di scattare da una misura all'altra.
+            androidx.compose.animation.AnimatedContent(
+                targetState = step,
+                modifier = Modifier.fillMaxWidth(),
+                transitionSpec = {
+                    val forward = targetState.ordinal > initialState.ordinal
+                    val slide = androidx.compose.animation.core.spring<androidx.compose.ui.unit.IntOffset>(
+                        dampingRatio = 0.85f, stiffness = 380f
+                    )
+                    androidx.compose.animation.ContentTransform(
+                        targetContentEnter = androidx.compose.animation.fadeIn(
+                            androidx.compose.animation.core.tween(200, delayMillis = 70)
+                        ) + androidx.compose.animation.slideInHorizontally(slide) { w -> if (forward) w / 3 else -w / 3 },
+                        initialContentExit = androidx.compose.animation.fadeOut(
+                            androidx.compose.animation.core.tween(110)
+                        ) + androidx.compose.animation.slideOutHorizontally(slide) { w -> if (forward) -w / 3 else w / 3 },
+                        sizeTransform = androidx.compose.animation.SizeTransform(clip = true) { _, _ ->
+                            androidx.compose.animation.core.spring<androidx.compose.ui.unit.IntSize>(
+                                dampingRatio = 0.9f, stiffness = 380f
+                            )
+                        }
+                    )
+                },
+                label = "eventCreationStep"
+            ) { shownStep ->
+            // Colonna propria: AnimatedContent impila i figli come una Box, senza questa si sovrapporrebbero.
+            Column(modifier = Modifier.fillMaxWidth()) {
+            when (shownStep) {
                 EventCreationStep.MENU -> {
                     Text(
                         text = "Come vuoi crearlo?",
@@ -4692,7 +4797,25 @@ private fun AddCalendarEventDialog(
                     )
                 }
             }
+            }
+            }
         }
+    }
+}
+
+/** Pulsante tondo del foglio "Nuovo evento" (indietro, chiudi): si schiaccia al tocco come gli altri. */
+@Composable
+private fun EventSheetRoundButton(onClick: () -> Unit, icon: @Composable () -> Unit) {
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .ailaMorphClip(interactionSource, pressedPercent = 28)
+            .background(AppTheme.TintSlate)
+            .clickable(interactionSource = interactionSource, indication = null) { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        icon()
     }
 }
 

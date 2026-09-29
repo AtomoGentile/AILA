@@ -1,5 +1,6 @@
 package circolareplus.ui.screens
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -84,6 +85,19 @@ fun CalendarScreen(
             .filter { (date, _) -> date.year == visibleYear && date.month == visibleMonth }
             .groupBy({ it.first.day }, { it.second })
     }
+
+    // Eventi comparsi dopo l'ultima lista (uno appena creato): entrano con un'animazione invece di
+    // spuntare di colpo. Alla prima lista niente e' "nuovo", quindi non si anima nulla all'apertura.
+    val previousEventIds = remember { arrayOf<Set<String>?>(null) }
+    val freshEventIds: Set<String> = remember(events) {
+        val now = events.map { it.id }.toSet()
+        val previous = previousEventIds[0]
+        previousEventIds[0] = now
+        // Il primo elenco (o il primo dopo uno vuoto: il caricamento) non ha nulla di "nuovo".
+        if (previous.isNullOrEmpty()) emptySet() else now - previous
+    }
+    // Ogni evento nuovo si anima una volta sola: tornando su quel giorno e' gia' "visto".
+    val consumedFreshIds = remember { mutableSetOf<String>() }
 
     val daysCount = daysInMonth(visibleYear, visibleMonth)
     val leadingBlanks = firstWeekdayOfMonth(visibleYear, visibleMonth)
@@ -220,26 +234,57 @@ fun CalendarScreen(
 
             Spacer(modifier = Modifier.height(AppTheme.Space12))
 
-            if (selectedEvents.isEmpty()) {
-                AilaCard(modifier = Modifier.ailaAppear(3)) {
-                    AilaEmptyState(
-                        title = "Nessun evento",
-                        message = "Niente in programma per questo giorno.",
-                        actionLabel = "Aggiungi evento",
-                        onAction = { onAddEventForDayClick(selectedDateIso) },
-                        icon = { AppIcons.Calendar(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
-                    )
-                }
-            } else {
-                selectedEvents.forEachIndexed { index, event ->
-                    CalendarEventCard(
-                        event = event,
-                        onClick = { onEventClick(event) },
-                        onDeleteClick = { onDeleteEventClick(event) },
-                        modifier = Modifier.ailaAppear(index + 3)
-                    )
-                    if (index != selectedEvents.lastIndex) {
-                        Spacer(modifier = Modifier.height(AppTheme.Space12))
+            // La molla sull'altezza: la card "Nessun evento" lascia il posto al nuovo evento, e le
+            // card sotto scendono, invece di saltare.
+            Column(
+                modifier = Modifier.fillMaxWidth().animateContentSize(
+                    androidx.compose.animation.core.spring(dampingRatio = 0.85f, stiffness = 380f)
+                )
+            ) {
+                if (selectedEvents.isEmpty()) {
+                    AilaCard(modifier = Modifier.ailaAppear(3)) {
+                        AilaEmptyState(
+                            title = "Nessun evento",
+                            message = "Niente in programma per questo giorno.",
+                            actionLabel = "Aggiungi evento",
+                            onAction = { onAddEventForDayClick(selectedDateIso) },
+                            icon = { AppIcons.Calendar(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
+                        )
+                    }
+                } else {
+                    selectedEvents.forEachIndexed { index, event ->
+                        key(event.id) {
+                            // Un evento appena creato parte nascosto e si apre con una molla;
+                            // gli altri sono gia' visibili (niente animazione cambiando giorno).
+                            val visibleState = remember {
+                                val animateIn = event.id in freshEventIds && consumedFreshIds.add(event.id)
+                                androidx.compose.animation.core.MutableTransitionState(!animateIn)
+                                    .apply { targetState = true }
+                            }
+                            androidx.compose.animation.AnimatedVisibility(
+                                visibleState = visibleState,
+                                enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220)) +
+                                    androidx.compose.animation.expandVertically(
+                                        androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 380f)
+                                    ) +
+                                    androidx.compose.animation.scaleIn(
+                                        androidx.compose.animation.core.spring(dampingRatio = 0.75f, stiffness = 420f),
+                                        initialScale = 0.9f
+                                    )
+                            ) {
+                                Column {
+                                    CalendarEventCard(
+                                        event = event,
+                                        onClick = { onEventClick(event) },
+                                        onDeleteClick = { onDeleteEventClick(event) },
+                                        modifier = Modifier.ailaAppear(index + 3)
+                                    )
+                                    if (index != selectedEvents.lastIndex) {
+                                        Spacer(modifier = Modifier.height(AppTheme.Space12))
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
