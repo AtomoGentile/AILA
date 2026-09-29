@@ -8,17 +8,16 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.withFrameNanos
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.boundsInParent
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Box
@@ -124,51 +123,48 @@ object AilaSheetBackdrop {
 }
 
 /**
- * Foglio dal basso di Material che nasce dal pulsante toccato e ci si richiude (container
- * transform), al posto del foglio di sistema che sale e scende da solo. Il livello e' a schermo
- * intero e il foglio sta in fondo: la forma cresce dal pulsante fino al rettangolo del foglio (mai
- * a tutto schermo), con lo scrim che si scurisce. Senza un'origine (aperto da un testo, non da un
- * pulsante) sale dal basso e scende allo stesso modo.
+ * Foglio che scende dall'alto (Material): un pannello agganciato al bordo superiore, sotto la barra
+ * di stato, che scende con lo scrim che si scurisce e risale chiudendosi. Sta dove sta il "+" che lo
+ * apre. L'altezza segue il contenuto (fino a quasi tutto lo schermo, sempre sopra la tastiera).
  *
  * Il contenuto riceve `requestClose`: chiude con l'animazione e, a fine corsa, chiama [onClosed].
- * Indietro di sistema e tocco sullo scrim fanno lo stesso; un contenuto con passi propri mette un
- * suo gestore di "indietro" (composto dopo questo, quindi ha la precedenza).
+ * Indietro di sistema e tocco sullo scrim fanno lo stesso (un tocco, non uno sfioramento: niente
+ * trascinamento); un contenuto con passi propri mette un suo gestore di "indietro" (composto dopo
+ * questo, quindi ha la precedenza).
  */
 @Composable
-fun AilaContainerSheet(
-    origin: AilaTransformOrigin?,
+fun AilaTopSheet(
     onClosed: () -> Unit,
     content: @Composable ColumnScope.(requestClose: () -> Unit) -> Unit
 ) {
     val progress = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val closing = remember { mutableStateOf(false) }
-    val topRadius = 28.dp
-    val topRadiusPx = with(LocalDensity.current) { topRadius.toPx() }
-    val sheetBounds = remember { mutableStateOf<Rect?>(null) }
+    val density = LocalDensity.current
+    val bottomRadius = 28.dp
     LaunchedEffect(Unit) {
-        // Parte dopo i primi due fotogrammi: comporre il contenuto la prima volta e' pesante, e la
-        // forma non deve saltare avanti.
+        // Parte dopo i primi due fotogrammi: comporre il contenuto la prima volta e' pesante, e il
+        // pannello non deve saltare avanti. Smorzamento critico: niente rimbalzo, che lascerebbe
+        // uno spazio vuoto sopra il pannello (e' agganciato al bordo).
         withFrameNanos { }
         withFrameNanos { }
-        progress.animateTo(
-            1f,
-            if (origin != null) ailaContainerFloatSpring() else spring(dampingRatio = 0.9f, stiffness = 400f)
-        )
+        progress.animateTo(1f, spring(dampingRatio = 1f, stiffness = 500f))
     }
     val requestClose: () -> Unit = {
         if (!closing.value) {
             closing.value = true
             scope.launch {
-                progress.animateTo(0f, if (origin != null) ailaContainerCloseSpec() else tween(240))
+                progress.animateTo(0f, tween(260, easing = androidx.compose.animation.core.FastOutLinearInEasing))
                 onClosed()
             }
         }
     }
     circolareplus.platform.PlatformBackHandler(enabled = true) { requestClose() }
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val maxSheetHeight = maxHeight * 0.92f
-        // Scrim: tocco fuori = chiudi (un tocco, non uno sfioramento: niente trascinamento).
+        // Sempre sopra la tastiera: con lei aperta il pannello si accorcia invece di finirci sotto.
+        val imeHeight = with(density) { WindowInsets.ime.getBottom(density).toDp() }
+        val maxSheetHeight = (maxHeight - imeHeight - 24.dp).coerceAtLeast(240.dp)
+        // Scrim: tocco fuori = chiudi.
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -176,45 +172,31 @@ fun AilaContainerSheet(
                 .background(Color.Black.copy(alpha = 0.32f))
                 .pointerInput(Unit) { detectTapGestures { requestClose() } }
         )
-        Box(
+        Column(
             modifier = Modifier
-                .fillMaxSize()
-                .then(
-                    if (origin != null) Modifier
-                        .ailaContainerReveal(
-                            progress = { progress.value },
-                            origin = origin,
-                            containerColor = AppTheme.PrimaryBlue,
-                            pageColor = AppTheme.SurfaceWhite,
-                            closing = { closing.value },
-                            // Il rettangolo del foglio, esteso sotto lo schermo di un raggio: gli
-                            // angoli bassi arrotondati durante la corsa non devono vedersi.
-                            targetRect = { sheetBounds.value?.let { Rect(it.left, it.top, it.right, it.bottom + topRadiusPx) } },
-                            targetRadiusPx = topRadiusPx
-                        )
-                        .graphicsLayer {}
-                    else Modifier
-                )
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .heightIn(max = maxSheetHeight)
+                .graphicsLayer { translationY = -(1f - progress.value) * size.height }
+                .clip(RoundedCornerShape(bottomStart = bottomRadius, bottomEnd = bottomRadius))
+                .background(AppTheme.SurfaceWhite)
+                // Il pannello prende i tocchi: senza, quelli sulle zone vuote arriverebbero allo
+                // scrim sotto e lo chiuderebbero.
+                .pointerInput(Unit) { detectTapGestures { } }
+                .statusBarsPadding()
         ) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .heightIn(max = maxSheetHeight)
-                    .then(
-                        if (origin == null) Modifier.graphicsLayer { translationY = (1f - progress.value) * size.height }
-                        else Modifier
-                    )
-                    .onGloballyPositioned { sheetBounds.value = it.boundsInParent() }
-                    .clip(RoundedCornerShape(topStart = topRadius, topEnd = topRadius))
-                    .background(AppTheme.SurfaceWhite)
-                    // Il foglio prende i tocchi: senza, quelli sulle zone vuote arriverebbero allo
-                    // scrim sotto e lo chiuderebbero.
-                    .pointerInput(Unit) { detectTapGestures { } }
-                    .navigationBarsPadding()
-            ) {
+            // Il contenuto scorre da solo se non ci sta; la maniglia sta sotto, fuori dallo scorrimento.
+            Column(modifier = Modifier.weight(1f, fill = false)) {
                 content(requestClose)
             }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(top = 4.dp, bottom = 10.dp)
+                    .size(width = 36.dp, height = 5.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(AppTheme.TextFaint.copy(alpha = 0.5f))
+            )
         }
     }
 }

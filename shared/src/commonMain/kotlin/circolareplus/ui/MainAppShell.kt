@@ -1802,7 +1802,7 @@ fun MainAppShell(
     }
 
     // Il foglio "Nuovo evento": in Glass e' il foglio di sistema (una finestra, si compone qui); in
-    // Material e' un livello dentro l'app che nasce dal "+" (vedi in fondo, sopra le schermate).
+    // Material e' un pannello dentro l'app che scende dall'alto (vedi in fondo, sopra le schermate).
     val addEventDialog: @Composable () -> Unit = {
     if (showAddEventDialog) {
         AddCalendarEventDialog(
@@ -4034,7 +4034,7 @@ fun MainAppShell(
         circularDetailContent(circularForDetail) { selectedCircularForDetail = null }
         }
         }
-        // Nuovo evento (Material): il foglio nasce dal "+" e ci si richiude. Sopra le tab e i
+        // Nuovo evento (Material): il foglio scende dall'alto. Sopra le tab e i
         // dettagli; in Glass e' il foglio di sistema (vedi addEventDialog).
         if (!AppTheme.isGlass) addEventDialog()
         // Dettaglio di un evento (Material): la card si allarga nella pagina e ci si richiude.
@@ -4464,18 +4464,11 @@ private fun AddCalendarEventDialog(
         stepTracker[1] = stepTracker[0]
         stepTracker[0] = step
     }
-    // Material: il foglio nasce dal pulsante "+" toccato (se e' da li' che si e' aperto) e ci si
-    // richiude; senza pulsante sale e scende dal basso. L'origine si prende una volta sola, alla
-    // prima composizione, cioe' nel fotogramma del tocco.
-    val sheetOrigin = remember {
-        if (AppTheme.isGlass) null else {
-            circolareplus.design.AilaContainerTransform.assignFreshTo(ADD_EVENT_KEY)
-            circolareplus.design.AilaContainerTransform.originOf(ADD_EVENT_KEY)
-        }
-    }
+    // Material: il foglio scende dall'alto (dove sta il "+") e risale chiudendosi; la chiusura la
+    // fa il foglio stesso (hostClose), la si chiede da qui.
     val hostClose = remember { arrayOf<(() -> Unit)?>(null) }
     // Chiudere senza animazione toglieva il foglio di colpo (tasto X, evento creato): prima si
-    // richiude (nel "+" in Material, scendendo in Glass), poi lo si toglie.
+    // risale (Material) o scende (Glass), poi lo si toglie.
     fun closeAnimated() {
         if (AppTheme.isGlass) {
             scope.launch {
@@ -5079,7 +5072,7 @@ private fun AddCalendarEventDialog(
             content = sheetContent
         )
     } else {
-        circolareplus.design.AilaContainerSheet(origin = sheetOrigin, onClosed = onDismiss) { requestClose ->
+        circolareplus.design.AilaTopSheet(onClosed = onDismiss) { requestClose ->
             hostClose[0] = requestClose
             sheetContent()
         }
@@ -6067,7 +6060,6 @@ private fun offlineDataAgeLabel(): String {
 /** Chiave dell'origine del container transform del dettaglio circolare. */
 private const val DETAIL_TRANSFORM_KEY = "circularDetail"
 private const val EVENT_DETAIL_KEY = "eventDetail"
-private const val ADD_EVENT_KEY = "addEventSheet"
 
 /** Le schermate a tutto schermo della shell; `depth` decide il verso del push/pop. */
 private enum class ShellRoute(val depth: Int) {
