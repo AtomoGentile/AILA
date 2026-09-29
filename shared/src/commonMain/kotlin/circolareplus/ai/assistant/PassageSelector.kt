@@ -29,7 +29,7 @@ internal object PassageSelector {
 
     fun select(text: String, question: String, maxChars: Int): String {
         if (text.length <= maxChars) return text
-        val stems = AssistantContext.tokenize(question).map { AssistantContext.stemOf(it) }.distinct()
+        val stems = withSynonyms(AssistantContext.tokenize(question).map { AssistantContext.stemOf(it) }.distinct())
         if (stems.isEmpty()) return text.take(maxChars)
 
         // L'intestazione e' un pezzo a parte, tagliato a fine riga, e si tiene se e' corta
@@ -119,6 +119,27 @@ internal object PassageSelector {
             }
             if (previous < chunks.size - 1) append(GAP.trimEnd())
         }.take(maxChars)
+    }
+
+    /**
+     * "Cosa e' vietato in palestra?" e la circolare scrive "e' fatto divieto di...": le radici
+     * "vieta" e "diviet" non coincidono, e i passaggi con le regole restavano fuori. Le parole
+     * che nelle circolari si dicono in piu' modi si cercano tutte.
+     */
+    private val SYNONYM_GROUPS = listOf(
+        listOf("vieta", "diviet", "proibi", "non e consentit", "non e permess"),
+        listOf("regol", "norm", "disposizion", "obbligo")
+    )
+
+    internal fun withSynonyms(stems: List<String>): List<String> {
+        val extra = SYNONYM_GROUPS.flatMap { group ->
+            if (stems.any { stem -> group.any { stem.startsWith(it) || it.startsWith(stem) && stem.length >= 4 } }) {
+                group.filter { it !in stems }
+            } else {
+                emptyList()
+            }
+        }
+        return (stems + extra).distinct()
     }
 
     /** Blocchi di circa [CHUNK_CHARS] caratteri, spezzati a fine riga quando possibile. */

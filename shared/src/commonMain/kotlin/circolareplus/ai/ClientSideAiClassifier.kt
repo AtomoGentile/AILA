@@ -163,7 +163,7 @@ class ClientSideAiClassifier(
          * una dietro l'altra — con un contesto da centomila caratteri bastano due o tre
          * domande per esaurirla e ritrovarsi con i 429 al posto delle risposte.
          */
-        private const val MAX_PROMPT_CHARS = 30_000
+        private const val MAX_PROMPT_CHARS = 60_000
 
         /**
          * Modello che ha funzionato in questa sessione: una volta trovato, le circolari successive

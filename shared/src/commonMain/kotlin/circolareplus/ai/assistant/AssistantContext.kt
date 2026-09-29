@@ -38,6 +38,9 @@ internal object AssistantContext {
      */
     private const val TIGHT_BUDGET_THRESHOLD = 14_000
 
+    /** Da qui in su il motore e' un cloud a finestra larga: i testi delle circolari entrano interi. */
+    private const val WIDE_BUDGET_THRESHOLD = 40_000
+
     /**
      * Le misure di ogni sezione, ricavate dallo spazio disponibile.
      *
@@ -64,7 +67,14 @@ internal object AssistantContext {
         val includeSeatMapHistory = !tight
         val includeRatings = !tight
         val includePolls = true
-        val deepTextChars = if (tight) 2_000 else 9_000
+        // Con Gemini (finestra larga) il testo di una circolare entra quasi sempre per intero:
+        // 9.000 caratteri tagliavano fuori i divieti e le regole scritti lontano dalla parola
+        // cercata ("palestra"), e la risposta si fermava alla sola capienza.
+        val deepTextChars = when {
+            tight -> 2_000
+            maxChars >= WIDE_BUDGET_THRESHOLD -> 22_000
+            else -> 9_000
+        }
         val classmatesInHeader = !tight
     }
 
@@ -357,11 +367,27 @@ internal object AssistantContext {
      */
     fun searchQuery(question: String, history: List<AssistantMessage>): String {
         if (tokenize(question).size > FOLLOW_UP_MAX_TERMS) return question
-        val previous = history.lastOrNull { it.author == AssistantAuthor.USER }?.text ?: return question
-        return "$question $previous"
+
+        // Le domande precedenti che hanno un argomento: "dimmi qualcosa in piu'" e "sulla palestra
+        // dicevo" non ne hanno, e prendere solo l'ultima faceva cercare "dimmi qualcosa in piu'"
+        // (la risposta sulla palestra non arrivava piu' e il modello ripeteva quella di prima).
+        val previous = history
+            .filter { it.author == AssistantAuthor.USER && tokenize(it.text).isNotEmpty() }
+            .takeLast(FOLLOW_UP_PREVIOUS_QUESTIONS)
+            .map { it.text }
+        // La circolare citata dall'ultima risposta e' quasi sempre quella di cui si continua a
+        // parlare: si porta in cima alla ricerca col numero, che vale piu' di qualunque parola.
+        val cited = history.lastOrNull { it.author == AssistantAuthor.ASSISTANT && !it.isError }
+            ?.sources.orEmpty()
+            .mapNotNull { it.circularNumber }
+            .distinct()
+            .take(2)
+            .joinToString(" ") { "circolare n. $it" }
+        return (listOf(question) + previous + cited).filter { it.isNotBlank() }.joinToString(" ")
     }
 
     private const val FOLLOW_UP_MAX_TERMS = 2
+    private const val FOLLOW_UP_PREVIOUS_QUESTIONS = 2
 
     /**
      * `true` per un saluto o una domanda senza nessun aggancio ai dati ("ciao", "grazie").
@@ -774,6 +800,15 @@ internal object AssistantContext {
         "mi", "ti", "si", "la", "le", "lo", "il", "un", "di", "da", "in", "su", "tra", "fra",
         // Saluti e verbi di contorno: non dicono niente su quale circolare serva.
         "buongiorno", "buonasera", "salve", "hey", "trovo", "trova", "trovare", "vorrei",
-        "sapere", "serve", "servono", "giorni", "giorno", "aiutarmi", "aiuto", "bene", "okay"
+        "sapere", "serve", "servono", "giorni", "giorno", "aiutarmi", "aiuto", "bene", "okay",
+        // Richieste di approfondimento ("leggi l'intera circolare e dimmi qualcosa in piu'",
+        // "sulla palestra dicevo"): chiedono di andare avanti, non dicono di cosa si parla. Se
+        // contassero come argomento la domanda non sarebbe piu' un seguito e non si ricollegherebbe
+        // alla conversazione.
+        "leggi", "leggere", "leggila", "leggimi", "intera", "intero", "interamente", "integrale",
+        "completa", "completo", "circolare", "circolari", "documento", "qualcosa", "altro",
+        "altri", "altre", "dicevo", "parlavo", "intendevo", "approfondisci", "approfondire",
+        "spiega", "spiegami", "dettagli", "dettaglio", "dettagliata", "ulteriori", "maggiori",
+        "informazioni", "info", "riguardo", "proposito", "parlami", "raccontami", "dici", "dire"
     )
 }
