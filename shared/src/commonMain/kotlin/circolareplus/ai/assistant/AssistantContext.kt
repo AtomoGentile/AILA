@@ -51,8 +51,16 @@ internal object AssistantContext {
      * calendario) e resta intero quello che serve quasi sempre (le scadenze in arrivo e le
      * circolari attinenti).
      */
-    private class Budget(val maxChars: Int) {
+    private class Budget(val maxChars: Int, deepTextsPresent: Boolean = false) {
         val tight = maxChars < TIGHT_BUDGET_THRESHOLD
+
+        /**
+         * Modalita' stretta con il testo di una circolare gia' letto: quel testo e' la parte che
+         * fa rispondere bene, e sul modello del telefono lo spazio e' tutto li'. Calendario a
+         * pochi eventi, niente sondaggi, mappa posti, dati di classe: la domanda e' su una
+         * circolare, e "non risulta" per un testo tagliato fuori e' peggio di un calendario corto.
+         */
+        val focused = tight && deepTextsPresent
 
         // Con il modello sul telefono meno circolari ma lette meglio: le due piu' attinenti
         // arrivano gia' col testo integrale (vedi [AilaAssistant]), e un terzo riassunto
@@ -60,13 +68,13 @@ internal object AssistantContext {
         val detailedCirculars = if (tight) 2 else 12
         val indexEntries = if (tight) 15 else 200
         val summaryChars = if (tight) 450 else 1_400
-        val futureEvents = if (tight) 15 else 60
+        val futureEvents = if (focused) 4 else if (tight) 15 else 60
         val pastEvents = if (tight) 0 else 40
         val proposals = if (tight) 5 else 25
         val proposalDescriptionChars = if (tight) 140 else 400
         val includeSeatMapHistory = !tight
         val includeRatings = !tight
-        val includePolls = true
+        val includePolls = !focused
         // Con Gemini (finestra larga) il testo di una circolare entra quasi sempre per intero:
         // 9.000 caratteri tagliavano fuori i divieti e le regole scritti lontano dalla parola
         // cercata ("palestra"), e la risposta si fermava alla sola capienza.
@@ -94,7 +102,7 @@ internal object AssistantContext {
         /** Le parole con cui cercare nei dati: vedi [searchQuery]. Il periodo resta quello di [question]. */
         searchQuery: String = question
     ): String {
-        val budget = Budget(maxChars)
+        val budget = Budget(maxChars, deepTextsPresent = deepTexts.isNotEmpty())
         val terms = tokenize(searchQuery)
         val explicitNumbers = circularNumbersIn(searchQuery)
         // "questa settimana", "domani"...: il filtro lo fa il codice (vedi TimeScope).
@@ -147,10 +155,12 @@ internal object AssistantContext {
         if (aboutBoard) renderBoard(builder, knowledge, terms, budget)
         renderCirculars(builder, knowledge, searchQuery, terms, explicitNumbers, deepTexts, budget, scope)
         renderCalendar(builder, knowledge, terms, budget, scope)
-        if (!aboutBoard) renderBoard(builder, knowledge, terms, budget)
+        if (!aboutBoard && !budget.focused) renderBoard(builder, knowledge, terms, budget)
         if (budget.includePolls) renderPolls(builder, knowledge, scope)
-        renderSeatMap(builder, knowledge, budget)
-        renderClassData(builder, knowledge, budget)
+        if (!budget.focused) {
+            renderSeatMap(builder, knowledge, budget)
+            renderClassData(builder, knowledge, budget)
+        }
 
         if (knowledge.dynamic.unavailable.isNotEmpty()) {
             builder.appendSection("SEZIONI CHE NON SI SONO CARICATE") {
@@ -161,6 +171,11 @@ internal object AssistantContext {
                 knowledge.dynamic.unavailable.forEach { appendLine("- $it") }
             }
         }
+
+        // Il testo integrale va per ultimo, con tutto lo spazio che resta: prima aveva una misura
+        // fissa (2.000 caratteri sul telefono) qualunque cosa ci fosse intorno, e una regola
+        // scritta in fondo al documento restava fuori mentre il calendario occupava il posto.
+        renderDeepTexts(builder, knowledge, searchQuery, deepTexts, budget)
 
         val text = builder.toString()
         return if (text.length <= maxChars) {
@@ -283,22 +298,35 @@ internal object AssistantContext {
                 }
             }
         }
+    }
 
-        if (deepTexts.isNotEmpty()) {
-            builder.appendSection("TESTO INTEGRALE DELLE CIRCOLARI PIU' ATTINENTI") {
-                appendLine(
-                    "Dei documenti lunghi ci sono solo l'inizio e i passaggi che c'entrano con la " +
-                        "domanda; \"[...]\" indica una parte saltata. Se la risposta non c'e', dillo."
-                )
-                deepTexts.forEach { (number, text) ->
-                    val circularTitle = knowledge.circulars.firstOrNull { it.number == number }?.title ?: ""
-                    appendLine("")
-                    appendLine("--- Testo della circolare n. $number: $circularTitle ---")
-                    appendLine(PassageSelector.select(text, question, budget.deepTextChars))
-                }
+    private fun renderDeepTexts(
+        builder: StringBuilder,
+        knowledge: AssistantKnowledge,
+        question: String,
+        deepTexts: Map<Int, String>,
+        budget: Budget
+    ) {
+        if (deepTexts.isEmpty()) return
+        val intro = "Dei documenti lunghi ci sono solo l'inizio e i passaggi che c'entrano con la " +
+            "domanda; \"[...]\" indica una parte saltata. Se la risposta non c'e', dillo."
+        // Cio' che resta dopo le altre sezioni, meno titoli e avviso di taglio, diviso fra i
+        // documenti. Mai sotto un minimo utile, mai sopra la misura per il motore.
+        val overhead = 260 + intro.length + deepTexts.size * 130
+        val share = ((budget.maxChars - builder.length - overhead) / deepTexts.size)
+            .coerceIn(MIN_DEEP_TEXT_CHARS, budget.deepTextChars)
+        builder.appendSection("TESTO INTEGRALE DELLE CIRCOLARI PIU' ATTINENTI") {
+            appendLine(intro)
+            deepTexts.forEach { (number, text) ->
+                val circularTitle = knowledge.circulars.firstOrNull { it.number == number }?.title ?: ""
+                appendLine("")
+                appendLine("--- Testo della circolare n. $number: $circularTitle ---")
+                appendLine(PassageSelector.select(text, question, share))
             }
         }
     }
+
+    private const val MIN_DEEP_TEXT_CHARS = 1_500
 
     /**
      * Quanto una circolare c'entra con la domanda.
