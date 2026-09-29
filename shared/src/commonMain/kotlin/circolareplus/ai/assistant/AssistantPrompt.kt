@@ -39,7 +39,9 @@ internal object AssistantPrompt {
 
     private const val MAX_QUESTION_CHARS = 1_500
     private const val MAX_HISTORY_MESSAGES = 8
-    private const val MAX_HISTORY_ANSWER_CHARS = 280
+    /** Risposte precedenti in cronologia: brevi sul telefono, piu' complete con Gemini. */
+    private const val MAX_HISTORY_ANSWER_CHARS_COMPACT = 280
+    private const val MAX_HISTORY_ANSWER_CHARS_WIDE = 800
 
     /** Spazio per le etichette di sezione del prompt utente ("CONTESTO", "DOMANDA...", ecc.). */
     private const val FRAME_OVERHEAD_CHARS = 220
@@ -190,7 +192,11 @@ Rispondi SOLO con questo oggetto JSON, senza altro testo:
     ): AiPrompt {
         val systemPrompt = if (maxChars < COMPACT_THRESHOLD) COMPACT_SYSTEM_PROMPT else SYSTEM_PROMPT
         val trimmedQuestion = question.take(MAX_QUESTION_CHARS)
-        val historyText = renderHistory(history, maxChars / HISTORY_BUDGET_DIVISOR)
+        val historyText = renderHistory(
+            history,
+            maxChars / HISTORY_BUDGET_DIVISOR,
+            if (maxChars < COMPACT_THRESHOLD) MAX_HISTORY_ANSWER_CHARS_COMPACT else MAX_HISTORY_ANSWER_CHARS_WIDE
+        )
 
         val contextBudget = (
             maxChars - systemPrompt.length - trimmedQuestion.length -
@@ -253,7 +259,7 @@ Rispondi SOLO con questo oggetto JSON, senza altro testo:
      * corrente e' quello appena prima, non quello di dieci messaggi fa. Il risultato resta poi
      * in ordine cronologico, che e' come il modello se lo aspetta.
      */
-    private fun renderHistory(history: List<AssistantMessage>, budget: Int): String {
+    private fun renderHistory(history: List<AssistantMessage>, budget: Int, answerChars: Int): String {
         if (history.isEmpty() || budget <= 0) return ""
 
         val lines = mutableListOf<String>()
@@ -263,8 +269,8 @@ Rispondi SOLO con questo oggetto JSON, senza altro testo:
             // Le risposte precedenti servono a capire di cosa si parla, non a essere rilette: a
             // lunghezza piena su una finestra da 8.000 caratteri toglievano posto al testo della
             // circolare, e il modello le ripeteva invece di aggiungere qualcosa.
-            val body = if (message.author == AssistantAuthor.ASSISTANT && message.text.length > MAX_HISTORY_ANSWER_CHARS) {
-                message.text.take(MAX_HISTORY_ANSWER_CHARS - 1).trimEnd() + "…"
+            val body = if (message.author == AssistantAuthor.ASSISTANT && message.text.length > answerChars) {
+                message.text.take(answerChars - 1).trimEnd() + "…"
             } else {
                 message.text
             }
