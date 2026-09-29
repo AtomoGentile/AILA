@@ -2183,10 +2183,15 @@ fun MainAppShell(
             }
             .drawWithContent {
                 drawContent()
-                // Velo scuro sulla schermata che resta sotto, come nel push di iOS.
-                val covered = maxOf(shellProgress.value, detailProgress.value)
-                if (covered > 0f) {
-                    drawRect(Color.Black.copy(alpha = circolareplus.design.ailaUnderlayDim * covered))
+                // Velo scuro sulla schermata che resta sotto, come nel push di iOS. Con velo a 0
+                // (oggi sempre) non si legge nemmeno l'avanzamento: leggerlo nella fase di disegno
+                // faceva ridisegnare da capo tutta la Home a ogni fotogramma dell'animazione di
+                // apertura e chiusura di ricerca, notifiche e profilo, per disegnare un rettangolo
+                // trasparente (micro-scatti).
+                val dim = circolareplus.design.ailaUnderlayDim
+                if (dim > 0f) {
+                    val covered = maxOf(shellProgress.value, detailProgress.value)
+                    if (covered > 0f) drawRect(Color.Black.copy(alpha = dim * covered))
                 }
             }
             // Lo "sblocco" di iOS: all'ingresso nell'app tutto arriva un po' ingrandito e si
