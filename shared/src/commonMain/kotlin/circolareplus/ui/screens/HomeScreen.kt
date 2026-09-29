@@ -31,6 +31,7 @@ import circolareplus.design.ailaAppear
 import circolareplus.design.ailaGlassOverlay
 import circolareplus.design.ailaGlassSurface
 import circolareplus.design.ailaGlassPressable
+import circolareplus.design.ailaMorphClip
 import circolareplus.design.ailaTransformOrigin
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
@@ -518,7 +519,7 @@ private fun HeroIconButton(onClick: () -> Unit, icon: @Composable () -> Unit) {
                 .size(44.dp)
                 // Toccato, la pagina (ricerca, notifiche) nasce da qui e ci rientra, come in Meteo.
                 .ailaTransformOrigin(22.dp, buttonColor = heroTonalFill)
-                .clip(circolareplus.design.ailaMorphShape(interactionSource, pressedPercent = 28))
+                .ailaMorphClip(interactionSource, pressedPercent = 28)
                 .background(heroTonalFill)
                 .clickable(interactionSource = interactionSource, indication = null) { onClick() },
             contentAlignment = Alignment.Center

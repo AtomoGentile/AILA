@@ -3316,7 +3316,8 @@ fun MainAppShell(
                             progress = { if (revealing) minOf(openProgress.value, containerProgress.value) else 1f },
                             origin = containerOrigin,
                             containerColor = AppTheme.CardSurface,
-                            pageColor = AppTheme.BackgroundLight
+                            pageColor = AppTheme.BackgroundLight,
+                            closing = { transition.targetState == androidx.compose.animation.EnterExitState.PostExit }
                         )
                             // La pagina in un suo livello: a ogni fotogramma si ridisegna solo la
                             // forma che cresce, il contenuto e' gia' pronto e si ricopia com'e'

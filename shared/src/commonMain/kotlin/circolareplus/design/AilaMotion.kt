@@ -541,7 +541,9 @@ fun Modifier.ailaContainerReveal(
     origin: AilaTransformOrigin,
     containerColor: Color,
     /** Colore della pagina a schermo intero: il contenitore passa dal colore della card a questo. */
-    pageColor: Color = containerColor
+    pageColor: Color = containerColor,
+    /** true mentre la pagina si richiude: da un pulsante la forma si stringe a cerchio in anticipo. */
+    closing: () -> Boolean = { false }
 ): Modifier {
     val selfOffset = arrayOf(Offset.Zero)
     return this
@@ -558,7 +560,16 @@ fun Modifier.ailaContainerReveal(
                 return@graphicsLayer
             }
             val o = origin.bounds.translate(-selfOffset[0])
-            fun lerp(a: Float, b: Float) = a + (b - a) * p
+            // Chiudendosi su un pulsante tondo la curva della chiusura passa quasi tutto il tempo
+            // negli ultimi punti percentuali: con la geometria lineare la forma restava un
+            // rettangolo alto per centinaia di millisecondi, e solo alla fine diventava il cerchio
+            // del pulsante. Sotto meta' corsa la geometria (non il colore) rallenta, cosi' la forma
+            // e' gia' un cerchio quando comincia a dissolversi. Oltre meta' e' identica a prima.
+            val g = if (origin.buttonColor != null && closing()) {
+                val t = (p / 0.5f).coerceIn(0f, 1f)
+                p * t * t * (3f - 2f * t)
+            } else p
+            fun lerp(a: Float, b: Float) = a + (b - a) * g
             val rect = androidx.compose.ui.geometry.Rect(
                 lerp(o.left, 0f), lerp(o.top, 0f), lerp(o.right, size.width), lerp(o.bottom, size.height)
             )
