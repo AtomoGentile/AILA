@@ -335,6 +335,26 @@ val ailaUnderlayShift: Float get() = if (AppTheme.isGlass) 1f else 0f
 // di scuro all'apertura e alla chiusura).
 val ailaUnderlayDim: Float get() = 0f
 
+/**
+ * Entrata a scaglioni degli elementi di un foglio (dettaglio evento, "Nuovo evento"): ognuno sale di
+ * pochi punti e si dissolve, con un ritardo crescente per [index]. Legge l'avanzamento solo nel
+ * livello grafico, quindi non sposta niente nel layout: l'altezza del foglio non cambia a ogni
+ * elemento che arriva.
+ */
+@Composable
+fun Modifier.ailaSheetReveal(index: Int): Modifier {
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        delay(40L + index * 45L)
+        progress.animateTo(1f, spring(dampingRatio = 0.85f, stiffness = 320f))
+    }
+    return graphicsLayer {
+        val p = progress.value
+        alpha = (p * 1.4f).coerceIn(0f, 1f)
+        translationY = (1f - p) * 18.dp.toPx()
+    }
+}
+
 /** Si ricorda se il riscaldamento delle pagine e' gia' stato fatto in questo avvio dell'app. */
 private object AilaWarmUpMemory {
     var done = false

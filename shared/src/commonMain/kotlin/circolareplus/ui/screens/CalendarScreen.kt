@@ -16,6 +16,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.Size
@@ -68,7 +69,9 @@ fun CalendarScreen(
     onDeleteEventClick: (CalendarEvent) -> Unit = {},
     /** Giorno da mostrare subito ("AAAA-MM-GG"), es. toccando un evento nella Home. */
     focusDateIso: String? = null,
-    onFocusConsumed: () -> Unit = {}
+    onFocusConsumed: () -> Unit = {},
+    /** Eventi in corso di eliminazione: la loro card esce con un'animazione prima di sparire. */
+    removingEventIds: Set<String> = emptySet()
 ) {
     val todayDate = remember { today() }
 
@@ -105,8 +108,6 @@ fun CalendarScreen(
     // Ogni evento nuovo si anima una volta sola: tornando su quel giorno e' gia' "visto".
     val consumedFreshIds = remember { mutableSetOf<String>() }
 
-    val daysCount = daysInMonth(visibleYear, visibleMonth)
-    val leadingBlanks = firstWeekdayOfMonth(visibleYear, visibleMonth)
     val selectedEvents = eventsByDay[selectedDay].orEmpty()
     // Arrivando da un evento della Home si apre il suo mese con quel giorno selezionato.
     LaunchedEffect(focusDateIso) {
@@ -119,6 +120,9 @@ fun CalendarScreen(
     val selectedDateIso = remember(visibleYear, visibleMonth, selectedDay) {
         CivilDate(visibleYear, visibleMonth, selectedDay).toIso()
     }
+    // Nei giorni gia' passati non si creano eventi: niente "+ Aggiungi" (le date sono "AAAA-MM-GG",
+    // quindi il confronto fra stringhe e' quello fra date).
+    val isPastDay = selectedDateIso < todayDate.toIso()
 
     Column(
         modifier = Modifier
@@ -173,14 +177,53 @@ fun CalendarScreen(
 
                     Spacer(modifier = Modifier.height(6.dp))
 
-                    MonthGrid(
-                        daysCount = daysCount,
-                        leadingBlanks = leadingBlanks,
-                        selectedDay = selectedDay,
-                        today = todayDate.takeIf { it.year == visibleYear && it.month == visibleMonth },
-                        daysWithEvents = eventsByDay.keys,
-                        onSelectDay = { selectedDay = it }
-                    )
+                    // Cambiando mese (frecce, o un evento appena creato in un altro mese) la griglia
+                    // scorre di lato e l'altezza segue con una molla: sei righe o cinque, senza
+                    // salti. Ogni griglia disegna il suo mese, anche mentre esce.
+                    androidx.compose.animation.AnimatedContent(
+                        targetState = visibleYear * 100 + visibleMonth,
+                        modifier = Modifier.fillMaxWidth().clipToBounds(),
+                        transitionSpec = {
+                            val forward = targetState > initialState
+                            androidx.compose.animation.ContentTransform(
+                                targetContentEnter = androidx.compose.animation.fadeIn(
+                                    androidx.compose.animation.core.tween(220, delayMillis = 60)
+                                ) + androidx.compose.animation.slideInHorizontally(
+                                    androidx.compose.animation.core.spring(dampingRatio = 0.9f, stiffness = 400f)
+                                ) { w -> if (forward) w / 4 else -w / 4 },
+                                initialContentExit = androidx.compose.animation.fadeOut(
+                                    androidx.compose.animation.core.tween(120)
+                                ) + androidx.compose.animation.slideOutHorizontally(
+                                    androidx.compose.animation.core.spring(dampingRatio = 0.9f, stiffness = 400f)
+                                ) { w -> if (forward) -w / 4 else w / 4 },
+                                sizeTransform = androidx.compose.animation.SizeTransform(clip = false) { _, _ ->
+                                    androidx.compose.animation.core.spring(dampingRatio = 0.9f, stiffness = 400f)
+                                }
+                            )
+                        },
+                        label = "monthGrid"
+                    ) { key ->
+                        val gridYear = key / 100
+                        val gridMonth = key % 100
+                        val gridDays = remember(gridYear, gridMonth) { daysInMonth(gridYear, gridMonth) }
+                        val gridBlanks = remember(gridYear, gridMonth) { firstWeekdayOfMonth(gridYear, gridMonth) }
+                        val gridDotDays = remember(events, gridYear, gridMonth, selectedCategoryFilter) {
+                            events
+                                .filter { selectedCategoryFilter == null || it.category == selectedCategoryFilter }
+                                .mapNotNull { event -> parseIsoDate(event.date) }
+                                .filter { it.year == gridYear && it.month == gridMonth }
+                                .map { it.day }
+                                .toSet()
+                        }
+                        MonthGrid(
+                            daysCount = gridDays,
+                            leadingBlanks = gridBlanks,
+                            selectedDay = selectedDay,
+                            today = todayDate.takeIf { it.year == gridYear && it.month == gridMonth },
+                            daysWithEvents = gridDotDays,
+                            onSelectDay = { selectedDay = it }
+                        )
+                    }
                 }
             }
         }
@@ -234,8 +277,8 @@ fun CalendarScreen(
                 // "+" per creare un evento legato proprio a questo giorno: prima l'unico modo di
                 // aggiungere un evento era il tasto "Aggiungi" in alto, che non sapeva quale giorno
                 // si stesse guardando e obbligava a riscegliere la data da zero.
-                actionText = "+ Aggiungi",
-                onActionClick = { onAddEventForDayClick(selectedDateIso) }
+                actionText = if (isPastDay) null else "+ Aggiungi",
+                onActionClick = if (isPastDay) null else ({ onAddEventForDayClick(selectedDateIso) })
             )
 
             Spacer(modifier = Modifier.height(AppTheme.Space12))
@@ -252,8 +295,8 @@ fun CalendarScreen(
                         AilaEmptyState(
                             title = "Nessun evento",
                             message = "Niente in programma per questo giorno.",
-                            actionLabel = "Aggiungi evento",
-                            onAction = { onAddEventForDayClick(selectedDateIso) },
+                            actionLabel = if (isPastDay) null else "Aggiungi evento",
+                            onAction = if (isPastDay) null else ({ onAddEventForDayClick(selectedDateIso) }),
                             icon = { AppIcons.Calendar(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
                         )
                     }
@@ -269,6 +312,19 @@ fun CalendarScreen(
                                 androidx.compose.animation.core.MutableTransitionState(!animateIn)
                             }
                             val highlight = remember { androidx.compose.animation.core.Animatable(if (animateIn) 1f else 0f) }
+                            // Eliminata (dal foglio o dal cestino): la card esce chiudendosi, poi il
+                            // chiamante la toglie davvero. Se l'eliminazione fallisce rientra.
+                            val removing = event.id in removingEventIds
+                            val wasRemoving = remember { arrayOf(false) }
+                            LaunchedEffect(removing) {
+                                if (removing) {
+                                    wasRemoving[0] = true
+                                    visibleState.targetState = false
+                                } else if (wasRemoving[0]) {
+                                    wasRemoving[0] = false
+                                    visibleState.targetState = true
+                                }
+                            }
                             LaunchedEffect(Unit) {
                                 if (animateIn) delay(240)
                                 visibleState.targetState = true
@@ -281,6 +337,14 @@ fun CalendarScreen(
                             val highlightRadius = AppTheme.CardCornerRadius
                             androidx.compose.animation.AnimatedVisibility(
                                 visibleState = visibleState,
+                                exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(180)) +
+                                    androidx.compose.animation.shrinkVertically(
+                                        androidx.compose.animation.core.spring(dampingRatio = 0.9f, stiffness = 420f)
+                                    ) +
+                                    androidx.compose.animation.scaleOut(
+                                        androidx.compose.animation.core.tween(220),
+                                        targetScale = 0.92f
+                                    ),
                                 enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220)) +
                                     androidx.compose.animation.expandVertically(
                                         androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 380f)
@@ -422,12 +486,27 @@ private fun MonthNavigator(
         MonthArrow(onClick = onPrevious) {
             AppIcons.ChevronLeft(modifier = Modifier.size(18.dp), color = AppTheme.TextDark)
         }
-        Text(
-            text = "${ITALIAN_MONTHS.getOrElse(month) { "" }} $year",
-            fontSize = 17.sp,
-            fontWeight = FontWeight.Bold,
-            color = AppTheme.TextDark
-        )
+        androidx.compose.animation.AnimatedContent(
+            targetState = year * 100 + month,
+            transitionSpec = {
+                androidx.compose.animation.ContentTransform(
+                    targetContentEnter = androidx.compose.animation.fadeIn(
+                        androidx.compose.animation.core.tween(200, delayMillis = 60)
+                    ),
+                    initialContentExit = androidx.compose.animation.fadeOut(
+                        androidx.compose.animation.core.tween(100)
+                    )
+                )
+            },
+            label = "monthTitle"
+        ) { key ->
+            Text(
+                text = "${ITALIAN_MONTHS.getOrElse(key % 100) { "" }} ${key / 100}",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = AppTheme.TextDark
+            )
+        }
         MonthArrow(onClick = onNext) {
             AppIcons.ChevronRight(modifier = Modifier.size(18.dp), color = AppTheme.TextDark)
         }
