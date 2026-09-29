@@ -11,6 +11,7 @@ import com.google.ai.edge.aicore.GenerativeModel
 import com.google.ai.edge.aicore.TextPart
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.Executors
@@ -57,6 +58,18 @@ internal object AiCoreEngine {
     // download (eventi rari e in ordine), un pool piccolo per il lavoro dell'engine.
     private val callbackExecutor = Executors.newSingleThreadExecutor()
     private val workerExecutor = Executors.newFixedThreadPool(2)
+
+    /** Pausa prima di ritentare un errore passeggero del servizio (vedi [generate]). */
+    private const val TRANSIENT_RETRY_DELAY_MS = 1_500L
+
+    /**
+     * Codici di errore AICore che riprovare subito non risolve. Confrontati per nome e non per
+     * numero: il messaggio dell'SDK e' "error code N-NOME", e i numeri non sono documentati.
+     */
+    private val PERMANENT_CODES = listOf(
+        "NOT_AVAILABLE", "REQUEST_TOO_LARGE", "REQUEST_TOO_SMALL", "QUOTA", "BACKGROUND",
+        "NEEDS_SYSTEM_UPDATE", "NOT_ENOUGH_DISK_SPACE", "PRIVATE_MODE"
+    )
 
     /** Tempo concesso alla generazione di prova durante "Attiva". */
     private const val PROBE_TIMEOUT_MS = 30_000L
@@ -232,11 +245,62 @@ internal object AiCoreEngine {
         if (model == null) prepare(maxOutputTokens) { _, _ -> }
         val activeModel = model ?: throw IllegalStateException(unavailableReason())
 
-        // Un solo tentativo: rimandare lo STESSO prompt dopo una risposta vuota non cambia niente
-        // quando la causa e' la lunghezza o un filtro sul contenuto (era il ritentativo di prima,
-        // con un promemoria sul formato). Chi chiama sa riprovare con meno testo: vedi
-        // LocalAiClassifier, che riconosce l'errore "testo vuoto" e ricostruisce il prompt.
-        return generateOnce(activeModel, systemPrompt, userPrompt, timeoutMillis)
+        // Rimandare lo STESSO prompt dopo una risposta vuota non cambia niente quando la causa e'
+        // la lunghezza o un filtro sul contenuto: chi chiama sa riprovare con meno testo (vedi
+        // LocalAiClassifier, che riconosce "testo vuoto"). Si ritenta invece, una volta e dopo
+        // una breve pausa, un errore del servizio che non dipende dal prompt: "error type
+        // 2-INFERENCE_ERROR" con BUSY, IPC_ERROR e simili compare ogni tanto in chat (segnalato
+        // in campo) e la stessa domanda subito dopo va. Con IPC il collegamento al servizio di
+        // sistema e' caduto: si ricrea il modello prima di riprovare.
+        return try {
+            generateOnce(activeModel, systemPrompt, userPrompt, timeoutMillis)
+        } catch (e: AiCoreServiceException) {
+            if (!isTransient(e.message.orEmpty())) throw IllegalStateException(e.message, e)
+            delay(TRANSIENT_RETRY_DELAY_MS)
+            val retryModel = if (e.message.orEmpty().contains("IPC", ignoreCase = true)) {
+                model = null
+                prepare(maxOutputTokens) { _, _ -> }
+                model ?: throw IllegalStateException(unavailableReason())
+            } else {
+                activeModel
+            }
+            try {
+                generateOnce(retryModel, systemPrompt, userPrompt, timeoutMillis)
+            } catch (again: AiCoreServiceException) {
+                throw IllegalStateException(readable(again.message.orEmpty()), again)
+            }
+        }
+    }
+
+    /** Errore del servizio AICore durante una generazione, distinto dai nostri. */
+    private class AiCoreServiceException(message: String, cause: Throwable) : Exception(message, cause)
+
+    /**
+     * `true` per gli errori che non dipendono dal prompt e che di solito spariscono da soli:
+     * servizio occupato da un'altra app, collegamento caduto, errore interno. Non lo sono il
+     * modello non disponibile, il prompt troppo lungo e i limiti imposti dal sistema (batteria,
+     * app in background), per cui riprovare subito darebbe lo stesso errore.
+     */
+    private fun isTransient(message: String): Boolean {
+        val upper = message.uppercase()
+        if (isFeatureMissing(message)) return false
+        return PERMANENT_CODES.none { upper.contains(it) }
+    }
+
+    /**
+     * Il messaggio da mostrare quando anche il secondo tentativo e' fallito: il codice grezzo
+     * ("error type 2-INFERENCE_ERROR and error code 9-BUSY") resta in coda per chi deve capire.
+     */
+    private fun readable(message: String): String {
+        val upper = message.uppercase()
+        val hint = when {
+            upper.contains("BUSY") -> "Gemini Nano e' occupato da un'altra app."
+            upper.contains("IPC") -> "Il collegamento con AICore si e' interrotto."
+            upper.contains("QUOTA") -> "Android ha limitato l'uso di Gemini Nano per risparmiare batteria."
+            upper.contains("BACKGROUND") -> "Gemini Nano funziona solo con l'app aperta in primo piano."
+            else -> "AICore ha avuto un errore interno."
+        }
+        return "$hint Riprova tra qualche secondo. ($message)"
     }
 
     private suspend fun generateOnce(
@@ -253,7 +317,7 @@ internal object AiCoreEngine {
                 val reason = describe(e)
                 forgetIfUnsupported(reason)
                 lastFailureReason = reason
-                throw IllegalStateException(reason, e)
+                throw AiCoreServiceException(reason, e)
             }
         } ?: throw IllegalStateException("AICore non ha risposto entro ${timeoutMillis / 1000} secondi.")
 
