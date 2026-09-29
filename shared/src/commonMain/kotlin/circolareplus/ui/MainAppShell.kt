@@ -66,6 +66,7 @@ import circolareplus.design.ailaPushTransition
 import circolareplus.design.ailaTabTransition
 import circolareplus.design.ailaContainerReveal
 import circolareplus.design.ailaMorphClip
+import circolareplus.design.ailaSheetReveal
 import circolareplus.design.GlassBase
 import circolareplus.design.GlassEdge
 import circolareplus.design.ailaGlassSurface
@@ -894,6 +895,8 @@ fun MainAppShell(
     // Chiede al foglio "Nuovo evento" di chiudersi con la sua animazione (poi lui chiama onDismiss):
     // togliendolo dalla composizione di colpo, come prima, spariva senza scendere.
     var addEventCloseRequested by remember { mutableStateOf(false) }
+    // Eventi che si stanno eliminando: la card esce con un'animazione prima di sparire.
+    var removingEventIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     // Con quale passo si apre il foglio "Nuovo evento" e quale data preselezionare: impostati da
     // dove si tocca "+" (menu generico dall'header, scorciatoia AILA, o "+" sul giorno scelto nella
     // griglia, che prima non permetteva di creare un evento per quel giorno specifico).
@@ -1865,22 +1868,38 @@ fun MainAppShell(
         )
     }
 
+    // Eliminare un evento: la sua card esce chiudendosi (vedi removingEventIds in CalendarScreen),
+    // poi parte la richiesta e la lista si aggiorna subito senza aspettare la rilettura. Se la
+    // richiesta fallisce la card rientra e si dice perche'.
+    fun deleteEventAnimated(event: CalendarEvent) {
+        coroutineScope.launch {
+            removingEventIds = removingEventIds + event.id
+            delay(360L)
+            try {
+                AppContainer.calendarRepository.deleteEvent(event.id)
+                calendarEvents = calendarEvents.filterNot { it.id == event.id }
+                reloadCalendar()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                calendarError = "Impossibile eliminare l'evento: ${e.message}"
+            } finally {
+                removingEventIds = removingEventIds - event.id
+            }
+        }
+    }
+
     eventDetailToShow?.let { event ->
         EventDetailDialog(
             event = event,
             classmates = classmates,
             currentUser = user,
             onDismiss = { eventDetailToShow = null },
+            // Il foglio e' gia' sceso quando arriva qui (vedi EventDetailDialog): si toglie e
+            // l'eliminazione parte con la card che esce dal calendario.
             onDelete = {
-                coroutineScope.launch {
-                    try {
-                        AppContainer.calendarRepository.deleteEvent(event.id)
-                        eventDetailToShow = null
-                        reloadCalendar()
-                    } catch (e: Exception) {
-                        calendarError = "Impossibile eliminare l'evento: ${e.message}"
-                    }
-                }
+                eventDetailToShow = null
+                deleteEventAnimated(event)
             }
         )
     }
@@ -2520,16 +2539,8 @@ fun MainAppShell(
                                     onEventClick = { event -> eventDetailToShow = event },
                                     focusDateIso = calendarFocusDateIso,
                                     onFocusConsumed = { calendarFocusDateIso = null },
-                                    onDeleteEventClick = { event ->
-                                        coroutineScope.launch {
-                                            try {
-                                                AppContainer.calendarRepository.deleteEvent(event.id)
-                                                reloadCalendar()
-                                            } catch (e: Exception) {
-                                                calendarError = "Impossibile eliminare l'evento: ${e.message}"
-                                            }
-                                        }
-                                    }
+                                    removingEventIds = removingEventIds,
+                                    onDeleteEventClick = { event -> deleteEventAnimated(event) }
                                 )
                             }
                         }
@@ -4307,12 +4318,19 @@ private fun AddCalendarEventDialog(
     var notes by remember { mutableStateOf("") }
     // Precompilata quando si tocca "+" su un giorno specifico della griglia: prima non c'era modo
     // di legare un nuovo evento a un giorno preciso, si doveva sempre riaprire il selettore data.
+    // Non si creano eventi nel passato: oggi e' la prima data ammessa (a mezzanotte UTC, come i
+    // millisecondi del selettore di data).
+    val todayCivil = remember { circolareplus.util.today() }
+    val todayMillis = remember { civilToEpochMillis(todayCivil.year, todayCivil.month, todayCivil.day) }
     var selectedDateMillis by remember {
         mutableStateOf(
             initialDateIso?.let { iso -> circolareplus.util.parseIsoDate(iso) }
                 ?.let { civil -> civilToEpochMillis(civil.year, civil.month, civil.day) }
+                ?.takeIf { it >= todayMillis }
         )
     }
+    // Anche una data arrivata dall'assistente (es. "la verifica di ieri") puo' essere passata.
+    val isPastDate = selectedDateMillis?.let { it < todayMillis } == true
     var showDatePicker by remember { mutableStateOf(false) }
     var time by remember { mutableStateOf("") }
     var category by remember { mutableStateOf(CalendarEventCategory.VERIFICA) }
@@ -4402,7 +4420,7 @@ private fun AddCalendarEventDialog(
     // il ramo Android solo dal pulsante in fondo — nessuna logica duplicata fra i due punti.
     fun submitManualEvent() {
         val date = selectedDateMillis?.let { epochMillisToIsoDate(it) }
-        if (title.isNotBlank() && date != null) {
+        if (title.isNotBlank() && date != null && !isPastDate) {
             val finalTitle = if (subject.isNotBlank()) "${subject.trim()}: ${title.trim()}" else title.trim()
             val visibleToUserIds = if (isForAllClass) null else selectedRecipientUserIds.ifEmpty { null }
             onConfirm(
@@ -4415,12 +4433,19 @@ private fun AddCalendarEventDialog(
             )
         }
     }
-    val canSubmitManualEvent = title.isNotBlank() && selectedDateMillis != null
+    val canSubmitManualEvent = title.isNotBlank() && selectedDateMillis != null && !isPastDate
 
     // Il DatePickerDialog Material a griglia resta solo per il ramo Android: in stile iOS
     // "Data" apre invece il wheel picker inline dentro il foglio (vedi più sotto).
     if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = selectedDateMillis)
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = selectedDateMillis,
+            // Nel selettore i giorni passati sono grigi e non si toccano.
+            selectableDates = object : androidx.compose.material3.SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis >= todayMillis
+                override fun isSelectableYear(year: Int): Boolean = year >= todayCivil.year
+            }
+        )
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
@@ -4518,11 +4543,11 @@ private fun AddCalendarEventDialog(
                     androidx.compose.animation.ContentTransform(
                         targetContentEnter = androidx.compose.animation.fadeIn(
                             androidx.compose.animation.core.tween(200, delayMillis = 70)
-                        ) + androidx.compose.animation.slideInHorizontally(slide) { w -> if (forward) w / 3 else -w / 3 },
+                        ) + androidx.compose.animation.slideInHorizontally(slide) { w -> if (forward) w / 8 else -w / 8 },
                         initialContentExit = androidx.compose.animation.fadeOut(
                             androidx.compose.animation.core.tween(110)
-                        ) + androidx.compose.animation.slideOutHorizontally(slide) { w -> if (forward) -w / 3 else w / 3 },
-                        sizeTransform = androidx.compose.animation.SizeTransform(clip = true) { _, _ ->
+                        ) + androidx.compose.animation.slideOutHorizontally(slide) { w -> if (forward) -w / 8 else w / 8 },
+                        sizeTransform = androidx.compose.animation.SizeTransform(clip = false) { _, _ ->
                             androidx.compose.animation.core.spring<androidx.compose.ui.unit.IntSize>(
                                 dampingRatio = 0.9f, stiffness = 380f
                             )
@@ -4539,7 +4564,7 @@ private fun AddCalendarEventDialog(
                         text = "Come vuoi crearlo?",
                         fontSize = 13.sp,
                         color = AppTheme.TextMuted,
-                        modifier = Modifier.padding(bottom = AppTheme.Space16)
+                        modifier = Modifier.ailaSheetReveal(0).padding(bottom = AppTheme.Space16)
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
                         EventCreationOptionCard(
@@ -4552,7 +4577,7 @@ private fun AddCalendarEventDialog(
                                     brush = androidx.compose.ui.graphics.SolidColor(color)
                                 )
                             },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).ailaSheetReveal(1),
                             onClick = { step = EventCreationStep.ASSISTANT }
                         )
                         EventCreationOptionCard(
@@ -4560,7 +4585,7 @@ private fun AddCalendarEventDialog(
                             subtitle = "Inserisci i dettagli da solo",
                             highlighted = false,
                             icon = { color -> AppIcons.Pencil(modifier = Modifier.size(20.dp), color = color) },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).ailaSheetReveal(2),
                             onClick = { step = EventCreationStep.MANUAL }
                         )
                     }
@@ -4571,7 +4596,7 @@ private fun AddCalendarEventDialog(
                         text = "Descrivi cosa vuoi inserire e AILA Assistant compila tutto per te.",
                         fontSize = 13.sp,
                         color = AppTheme.TextMuted,
-                        modifier = Modifier.padding(bottom = AppTheme.Space12)
+                        modifier = Modifier.ailaSheetReveal(0).padding(bottom = AppTheme.Space12)
                     )
                     OutlinedTextField(
                         value = aiPrompt,
@@ -4580,7 +4605,7 @@ private fun AddCalendarEventDialog(
                         minLines = 3,
                         colors = circolareplus.design.ailaFieldColors(),
                         shape = RoundedCornerShape(AppTheme.SmallElementRadius),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().ailaSheetReveal(1)
                     )
                     Spacer(modifier = Modifier.height(AppTheme.Space16))
                     Text(
@@ -4588,9 +4613,12 @@ private fun AddCalendarEventDialog(
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = AppTheme.TextMuted,
-                        modifier = Modifier.padding(bottom = AppTheme.Space8)
+                        modifier = Modifier.ailaSheetReveal(2).padding(bottom = AppTheme.Space8)
                     )
-                    Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                    Column(
+                        modifier = Modifier.ailaSheetReveal(3),
+                        verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+                    ) {
                         AI_PROMPT_EXAMPLES.forEach { example ->
                             Row(
                                 modifier = Modifier
@@ -4669,7 +4697,7 @@ private fun AddCalendarEventDialog(
                     if (aiFilled) {
                         circolareplus.design.AilaAssistantBadge(
                             text = "Generato da AILA Assistant",
-                            modifier = Modifier.padding(bottom = AppTheme.Space12)
+                            modifier = Modifier.ailaSheetReveal(0).padding(bottom = AppTheme.Space12)
                         )
                     }
                     if (aiFallbackNotice) {
@@ -4688,7 +4716,7 @@ private fun AddCalendarEventDialog(
                         singleLine = true,
                         colors = circolareplus.design.ailaFieldColors(),
                         shape = RoundedCornerShape(AppTheme.SmallElementRadius),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().ailaSheetReveal(1)
                     )
                     Spacer(modifier = Modifier.height(AppTheme.Space12))
                     OutlinedTextField(
@@ -4698,7 +4726,7 @@ private fun AddCalendarEventDialog(
                         singleLine = true,
                         colors = circolareplus.design.ailaFieldColors(),
                         shape = RoundedCornerShape(AppTheme.SmallElementRadius),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().ailaSheetReveal(2)
                     )
                     Spacer(modifier = Modifier.height(AppTheme.Space16))
                     Text(
@@ -4706,9 +4734,12 @@ private fun AddCalendarEventDialog(
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = AppTheme.TextMuted,
-                        modifier = Modifier.padding(bottom = AppTheme.Space8)
+                        modifier = Modifier.ailaSheetReveal(3).padding(bottom = AppTheme.Space8)
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                    Row(
+                        modifier = Modifier.ailaSheetReveal(3),
+                        horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+                    ) {
                         Row(
                             modifier = Modifier
                                 .weight(1.4f)
@@ -4738,17 +4769,26 @@ private fun AddCalendarEventDialog(
                             modifier = Modifier.weight(1f)
                         )
                     }
+                    if (isPastDate) {
+                        Text(
+                            text = "Questa data è già passata: scegli oggi o un giorno futuro.",
+                            fontSize = 12.sp,
+                            color = AppTheme.TintRedInk,
+                            modifier = Modifier.padding(top = AppTheme.Space8)
+                        )
+                    }
                     Spacer(modifier = Modifier.height(AppTheme.Space16))
                     Text(
                         text = "Tipo di evento",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = AppTheme.TextMuted,
-                        modifier = Modifier.padding(bottom = AppTheme.Space8)
+                        modifier = Modifier.ailaSheetReveal(4).padding(bottom = AppTheme.Space8)
                     )
                     // FlowRow invece di Row: con 6 categorie una singola riga non ci stava (venivano
                     // tagliate fuori dallo schermo su molti telefoni).
                     FlowRow(
+                        modifier = Modifier.ailaSheetReveal(4),
                         horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
                         verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
                     ) {
@@ -4767,7 +4807,7 @@ private fun AddCalendarEventDialog(
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = AppTheme.TextMuted,
-                        modifier = Modifier.padding(bottom = AppTheme.Space8)
+                        modifier = Modifier.ailaSheetReveal(5).padding(bottom = AppTheme.Space8)
                     )
                     OutlinedTextField(
                         value = notes,
@@ -4777,7 +4817,7 @@ private fun AddCalendarEventDialog(
                         maxLines = 3,
                         colors = circolareplus.design.ailaFieldColors(),
                         shape = RoundedCornerShape(AppTheme.SmallElementRadius),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().ailaSheetReveal(5)
                     )
                     Spacer(modifier = Modifier.height(AppTheme.Space16))
                     Text(
@@ -4785,10 +4825,10 @@ private fun AddCalendarEventDialog(
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = AppTheme.TextMuted,
-                        modifier = Modifier.padding(bottom = AppTheme.Space8)
+                        modifier = Modifier.ailaSheetReveal(6).padding(bottom = AppTheme.Space8)
                     )
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().ailaSheetReveal(6),
                         horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
                     ) {
                         circolareplus.design.AnimatedFilterChip(
@@ -4855,7 +4895,8 @@ private fun AddCalendarEventDialog(
                         text = "Aggiungi evento",
                         onClick = { submitManualEvent() },
                         enabled = canSubmitManualEvent,
-                        fillMaxWidth = true
+                        fillMaxWidth = true,
+                        modifier = Modifier.ailaSheetReveal(7)
                     )
                 }
             }
@@ -4898,6 +4939,15 @@ private fun EventDetailDialog(
     onDelete: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    // X ed elimina: il foglio scende con la sua animazione e solo dopo si agisce (prima spariva di
+    // colpo). Scrim, trascinamento e indietro scendono gia' da soli.
+    fun closeAnimated(after: () -> Unit) {
+        scope.launch {
+            sheetState.hide()
+            after()
+        }
+    }
 
     val dateLabel = remember(event.date) {
         val civil = circolareplus.util.parseIsoDate(event.date)
@@ -4933,7 +4983,7 @@ private fun EventDetailDialog(
                 .padding(bottom = AppTheme.Space32)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = AppTheme.Space16),
+                modifier = Modifier.fillMaxWidth().ailaSheetReveal(0).padding(bottom = AppTheme.Space16),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 circolareplus.design.AilaIconTile(tint = eventCategoryTint(event.category)) {
@@ -4953,14 +5003,7 @@ private fun EventDetailDialog(
                         color = AppTheme.TextMuted
                     )
                 }
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                        .background(AppTheme.TintSlate)
-                        .clickable { onDismiss() },
-                    contentAlignment = Alignment.Center
-                ) {
+                EventSheetRoundButton(onClick = { closeAnimated(onDismiss) }) {
                     AppIcons.Close(modifier = Modifier.size(16.dp), color = AppTheme.TextMuted)
                 }
             }
@@ -4968,13 +5011,14 @@ private fun EventDetailDialog(
             if (event.isAiGenerated) {
                 circolareplus.design.AilaAssistantBadge(
                     text = "Inserito da AILA Assistant",
-                    modifier = Modifier.padding(bottom = AppTheme.Space16)
+                    modifier = Modifier.ailaSheetReveal(1).padding(bottom = AppTheme.Space16)
                 )
             }
 
-            EventDetailRow(label = "Data", value = dateLabel)
-            EventDetailRow(label = "Ora", value = event.time ?: "Tutto il giorno")
+            EventDetailRow(label = "Data", value = dateLabel, modifier = Modifier.ailaSheetReveal(2))
+            EventDetailRow(label = "Ora", value = event.time ?: "Tutto il giorno", modifier = Modifier.ailaSheetReveal(3))
             EventDetailRow(
+                modifier = Modifier.ailaSheetReveal(4),
                 label = "Visibile a",
                 value = if (event.isForAll || recipientNames == null) {
                     "Tutta la classe"
@@ -4992,12 +5036,13 @@ private fun EventDetailDialog(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = AppTheme.TextMuted,
-                    modifier = Modifier.padding(bottom = AppTheme.Space4)
+                    modifier = Modifier.ailaSheetReveal(5).padding(bottom = AppTheme.Space4)
                 )
                 Text(
                     text = event.notes,
                     fontSize = 14.sp,
-                    color = AppTheme.TextDark
+                    color = AppTheme.TextDark,
+                    modifier = Modifier.ailaSheetReveal(5)
                 )
             }
 
@@ -5005,9 +5050,10 @@ private fun EventDetailDialog(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .ailaSheetReveal(6)
                     .clip(RoundedCornerShape(AppTheme.ButtonCornerRadius))
                     .background(AppTheme.TintRed)
-                    .clickable { onDelete() }
+                    .clickable { closeAnimated(onDelete) }
                     .padding(vertical = 14.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
@@ -5026,8 +5072,8 @@ private fun EventDetailDialog(
 }
 
 @Composable
-private fun EventDetailRow(label: String, value: String) {
-    Column(modifier = Modifier.padding(bottom = AppTheme.Space12)) {
+private fun EventDetailRow(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier.padding(bottom = AppTheme.Space12)) {
         Text(text = label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AppTheme.TextMuted)
         Spacer(modifier = Modifier.height(2.dp))
         Text(text = value, fontSize = 14.sp, color = AppTheme.TextDark)
