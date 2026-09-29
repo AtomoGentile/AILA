@@ -35,4 +35,12 @@ class AssistantContextBudgetTest {
         assertTrue("MAPPA" !in context.uppercase() || "POSTI" !in context.uppercase())
         assertTrue("SONDAGGI" !in context.uppercase())
     }
+
+    @Test
+    fun conIlTestoLettoIlPromptChiedeTuttiIPunti() {
+        val withText = AssistantPrompt.build(6_000, knowledge, emptyList(), "regole palestra", mapOf(15 to longText))
+        assertTrue("TUTTI i punti" in withText.userPrompt)
+        val without = AssistantPrompt.build(6_000, knowledge, emptyList(), "ciao", emptyMap())
+        assertTrue("TUTTI i punti" !in without.userPrompt)
+    }
 }
