@@ -39,6 +39,7 @@ internal object AssistantPrompt {
 
     private const val MAX_QUESTION_CHARS = 1_500
     private const val MAX_HISTORY_MESSAGES = 8
+    private const val MAX_HISTORY_ANSWER_CHARS = 280
 
     /** Spazio per le etichette di sezione del prompt utente ("CONTESTO", "DOMANDA...", ecc.). */
     private const val FRAME_OVERHEAD_CHARS = 220
@@ -238,7 +239,15 @@ Rispondi SOLO con questo oggetto JSON, senza altro testo:
         var used = 0
         for (message in history.takeLast(MAX_HISTORY_MESSAGES).reversed()) {
             val who = if (message.author == AssistantAuthor.USER) "STUDENTE" else "TU"
-            val line = "$who: ${message.text}"
+            // Le risposte precedenti servono a capire di cosa si parla, non a essere rilette: a
+            // lunghezza piena su una finestra da 8.000 caratteri toglievano posto al testo della
+            // circolare, e il modello le ripeteva invece di aggiungere qualcosa.
+            val body = if (message.author == AssistantAuthor.ASSISTANT && message.text.length > MAX_HISTORY_ANSWER_CHARS) {
+                message.text.take(MAX_HISTORY_ANSWER_CHARS - 1).trimEnd() + "…"
+            } else {
+                message.text
+            }
+            val line = "$who: $body"
             val room = (budget - used).coerceAtLeast(0)
             if (line.length > room && room < 20) break
             // Il taglio va dichiarato: un turno precedente troncato a meta' frase, letto come
