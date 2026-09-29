@@ -358,7 +358,11 @@ class ClientSideAiClassifier(
                 val response = postGenerate(candidate, prompt)
                 if (response.status.isSuccess()) {
                     resolvedModel = candidate
-                    val body = response.bodyAsText()
+                    // Il testo generato sta dentro la busta di Google (candidates[0].content.
+                    // parts[].text): passare a extractJsonObject il corpo intero leggeva la busta
+                    // al posto dell'evento, e la bozza usciva sempre vuota anche con Gemini che
+                    // rispondeva. Le parti "thought" (ragionamento) si saltano.
+                    val body = geminiGeneratedText(response.bodyAsText())
                     val jsonString = EventGenerationPrompt.extractJsonObject(body)
                     if (jsonString != null) {
                         EventGenerationPrompt.parse(jsonString)?.let { return it }
@@ -595,6 +599,23 @@ class ClientSideAiClassifier(
             lower.contains("unavailable") ||
             lower.contains("overloaded") ||
             lower.contains("high demand")
+    }
+
+    /** Il testo generato da una risposta generateContent, senza le parti di ragionamento. */
+    private fun geminiGeneratedText(raw: String): String {
+        val root = try {
+            json.parseToJsonElement(raw).jsonObject
+        } catch (e: Exception) {
+            return raw
+        }
+        val parts = root["candidates"]?.jsonArray?.getOrNull(0)
+            ?.jsonObject?.get("content")?.jsonObject
+            ?.get("parts")?.jsonArray ?: return ""
+        return parts.mapNotNull { part ->
+            val obj = part as? JsonObject ?: return@mapNotNull null
+            if (obj["thought"]?.jsonPrimitive?.contentOrNull == "true") return@mapNotNull null
+            obj["text"]?.jsonPrimitive?.contentOrNull
+        }.joinToString("")
     }
 
     /** Estrae badge, riassunto e scadenze dalla risposta di Gemini. */
