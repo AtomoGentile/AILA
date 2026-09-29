@@ -591,6 +591,28 @@ fun ailaMorphShape(interactionSource: MutableInteractionSource, pressedPercent: 
     return RoundedCornerShape(percent = percent.toInt().coerceIn(0, 50))
 }
 
+/**
+ * Come [ailaMorphShape] ma ritaglia nel livello grafico: la forma che si schiaccia e ritorna
+ * tonda si legge solo nella fase di disegno, quindi il pulsante non si ricompone a ogni
+ * fotogramma dell'animazione (era uno dei micro-scatti al tocco dei pulsanti della Home). A
+ * riposo e' sempre un cerchio pieno: la molla che rimbalza viene tagliata al 50%.
+ */
+@Composable
+fun Modifier.ailaMorphClip(interactionSource: MutableInteractionSource, pressedPercent: Int = 22): Modifier {
+    val pressed by interactionSource.collectIsPressedAsState()
+    val percent = remember { Animatable(50f) }
+    val squash = pressed && !AppTheme.isGlass
+    LaunchedEffect(squash) {
+        if (squash) percent.animateTo(pressedPercent.toFloat(), spring(stiffness = 1400f))
+        else percent.animateTo(50f, spring(dampingRatio = 0.5f, stiffness = 600f))
+    }
+    return graphicsLayer {
+        val corner = size.minDimension * percent.value.coerceIn(0f, 50f) / 100f
+        shape = RoundedCornerShape(androidx.compose.foundation.shape.CornerSize(corner))
+        clip = true
+    }
+}
+
 /** Scala alla pressione (Glass), letta nel graphicsLayer. */
 @Composable
 fun Modifier.ailaPressScale(interactionSource: MutableInteractionSource, pressedScale: Float): Modifier {
