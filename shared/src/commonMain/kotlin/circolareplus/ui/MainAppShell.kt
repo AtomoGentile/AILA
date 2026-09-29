@@ -4254,7 +4254,10 @@ private fun parseAiEventPrompt(raw: String): AiEventDraft {
     }
 
     return AiEventDraft(
-        title = text.replaceFirstChar { it.uppercase() },
+        title = text
+            .replace(Regex("^(inserisci|aggiungi|segna|metti|crea)(mi)?\\s+(un|una|uno|il|la|lo|l')?\\s*", RegexOption.IGNORE_CASE), "")
+            .ifBlank { text }
+            .replaceFirstChar { it.uppercase() },
         subject = subject,
         category = category,
         dateMillis = dateMillis,
@@ -4295,6 +4298,7 @@ private fun AddCalendarEventDialog(
     var category by remember { mutableStateOf(CalendarEventCategory.VERIFICA) }
     var aiPrompt by remember { mutableStateOf("") }
     var aiFilled by remember { mutableStateOf(false) }
+    var aiFallbackNotice by remember { mutableStateOf(false) }
     var isForAllClass by remember { mutableStateOf(true) }
     var selectedRecipientUserIds by remember { mutableStateOf<List<String>>(emptyList()) }
     // Elenco selezionabile per "Persone specifiche": prima non veniva caricato da nessuna parte,
@@ -4576,16 +4580,31 @@ private fun AddCalendarEventDialog(
                             scope.launch {
                                 isGeneratingEvent = true
                                 try {
-                                    val aiDraft = AppContainer.newAiClassifier()
-                                        .parseEventPrompt(aiPrompt)
-                                    val draft = aiEventDraftFromAi(aiDraft)
+                                    // Se l'AI non è disponibile (nessuna chiave, modello locale non
+                                    // scaricato, rete assente, timeout) parseEventPrompt torna una
+                                    // bozza vuota: prima il foglio passava comunque ai campi
+                                    // manuali, vuoti, come se non fosse successo niente.
+                                    val aiDraft = try {
+                                        AppContainer.newAiClassifier().parseEventPrompt(aiPrompt)
+                                    } catch (e: kotlinx.coroutines.CancellationException) {
+                                        throw e
+                                    } catch (e: Exception) {
+                                        null
+                                    }
+                                    val fromAi = aiDraft?.takeIf { it.title.isNotBlank() }
+                                    val draft = if (fromAi != null) {
+                                        aiEventDraftFromAi(fromAi)
+                                    } else {
+                                        parseAiEventPrompt(aiPrompt)
+                                    }
                                     title = draft.title
                                     subject = draft.subject
                                     category = draft.category
                                     selectedDateMillis = draft.dateMillis
                                     draft.time?.let { time = it }
                                     draft.notes?.let { notes = it }
-                                    aiFilled = true
+                                    aiFilled = fromAi != null
+                                    aiFallbackNotice = fromAi == null
                                     step = EventCreationStep.MANUAL
                                 } finally {
                                     isGeneratingEvent = false
@@ -4616,6 +4635,15 @@ private fun AddCalendarEventDialog(
                     if (aiFilled) {
                         circolareplus.design.AilaAssistantBadge(
                             text = "Generato da AILA Assistant",
+                            modifier = Modifier.padding(bottom = AppTheme.Space12)
+                        )
+                    }
+                    if (aiFallbackNotice) {
+                        Text(
+                            text = "L'AI non è disponibile ora (controlla la chiave o il modello nelle " +
+                                "Impostazioni): ho compilato i campi leggendo il testo, controllali prima di salvare.",
+                            fontSize = 12.sp,
+                            color = AppTheme.TextMuted,
                             modifier = Modifier.padding(bottom = AppTheme.Space12)
                         )
                     }
