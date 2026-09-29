@@ -65,6 +65,7 @@ import circolareplus.design.ailaSpatialSpring
 import circolareplus.design.ailaPushTransition
 import circolareplus.design.ailaTabTransition
 import circolareplus.design.ailaContainerReveal
+import androidx.compose.ui.layout.onGloballyPositioned
 import circolareplus.design.ailaMorphClip
 import circolareplus.design.ailaSheetReveal
 import circolareplus.design.GlassBase
@@ -1871,8 +1872,10 @@ fun MainAppShell(
     // Eliminare un evento: la sua card esce chiudendosi (vedi removingEventIds in CalendarScreen),
     // poi parte la richiesta e la lista si aggiorna subito senza aspettare la rilettura. Se la
     // richiesta fallisce la card rientra e si dice perche'.
-    fun deleteEventAnimated(event: CalendarEvent) {
+    fun deleteEventAnimated(event: CalendarEvent, startDelayMs: Long = 0L) {
         coroutineScope.launch {
+            // Dal dettaglio: prima la pagina si richiude nella card, poi la card esce.
+            if (startDelayMs > 0L) delay(startDelayMs)
             removingEventIds = removingEventIds + event.id
             delay(360L)
             try {
@@ -1889,7 +1892,9 @@ fun MainAppShell(
         }
     }
 
-    eventDetailToShow?.let { event ->
+    // Material: il dettaglio e' una pagina (vedi EventDetailPage, in fondo al livello delle
+    // schermate). Il foglio dal basso resta solo in Liquid Glass.
+    eventDetailToShow?.takeIf { AppTheme.isGlass }?.let { event ->
         EventDetailDialog(
             event = event,
             classmates = classmates,
@@ -2076,6 +2081,24 @@ fun MainAppShell(
         val number = (selectedCircularForDetail ?: lastDetailCircular[0])?.number
         if (stored != null && number != null && !detailOpen) {
             circolareplus.design.AilaContainerTransform.liveOf("circular:$number") ?: stored
+        } else stored
+    }
+    // Dettaglio di un evento del calendario (Material): come per le circolari, la card toccata si
+    // allarga nella pagina e ci si richiude tornando indietro (sulla stessa card, anche se nel
+    // frattempo la lista e' scorsa). In Glass resta il foglio dal basso.
+    val lastEventDetail = remember { arrayOf<CalendarEvent?>(null) }
+    eventDetailToShow?.let { lastEventDetail[0] = it }
+    val eventDetailOpen = eventDetailToShow != null
+    val eventDetailWasOpen = remember { arrayOf(false) }
+    if (eventDetailOpen && !eventDetailWasOpen[0]) {
+        circolareplus.design.AilaContainerTransform.assignFreshTo(EVENT_DETAIL_KEY)
+    }
+    eventDetailWasOpen[0] = eventDetailOpen
+    val eventDetailOrigin = if (AppTheme.isGlass) null else {
+        val stored = circolareplus.design.AilaContainerTransform.originOf(EVENT_DETAIL_KEY)
+        val id = (eventDetailToShow ?: lastEventDetail[0])?.id
+        if (stored != null && id != null && !eventDetailOpen) {
+            circolareplus.design.AilaContainerTransform.liveOf("event:$id") ?: stored
         } else stored
     }
     // Il dettaglio di una circolare, lo stesso sopra le tab (telefono) e nel pannello accanto
@@ -2539,8 +2562,7 @@ fun MainAppShell(
                                     onEventClick = { event -> eventDetailToShow = event },
                                     focusDateIso = calendarFocusDateIso,
                                     onFocusConsumed = { calendarFocusDateIso = null },
-                                    removingEventIds = removingEventIds,
-                                    onDeleteEventClick = { event -> deleteEventAnimated(event) }
+                                    removingEventIds = removingEventIds
                                 )
                             }
                         }
@@ -4007,6 +4029,54 @@ fun MainAppShell(
         circularDetailContent(circularForDetail) { selectedCircularForDetail = null }
         }
         }
+        // Dettaglio di un evento (Material): la card si allarga nella pagina e ci si richiude.
+        androidx.compose.animation.AnimatedVisibility(
+            visible = eventDetailToShow != null && !AppTheme.isGlass,
+            enter = if (eventDetailOrigin != null) androidx.compose.animation.EnterTransition.None else circolareplus.design.ailaPushEnter(),
+            exit = if (eventDetailOrigin != null) androidx.compose.animation.ExitTransition.None else circolareplus.design.ailaPushExit()
+        ) {
+            val eventForDetail = eventDetailToShow ?: lastEventDetail[0]
+            val eventProgress = transition.animateFloat(
+                transitionSpec = {
+                    if (targetState == androidx.compose.animation.EnterExitState.PostExit) circolareplus.design.ailaContainerCloseSpec()
+                    else circolareplus.design.ailaContainerFloatSpring()
+                },
+                label = "eventDetailContainer"
+            ) { state -> if (state == androidx.compose.animation.EnterExitState.Visible) 1f else 0f }
+            if (eventForDetail != null) Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (eventDetailOrigin != null) Modifier
+                            .ailaContainerReveal(
+                                progress = { eventProgress.value },
+                                origin = eventDetailOrigin,
+                                containerColor = AppTheme.CardSurface,
+                                pageColor = AppTheme.BackgroundLight
+                            )
+                            .graphicsLayer {}
+                        else Modifier
+                    )
+                    .background(AppTheme.BackgroundLight)
+                    .appSafeDrawingPadding()
+                    // Il dettaglio sta sopra le tab: prende i tocchi, altrimenti quelli sulle zone
+                    // senza pulsanti arriverebbero al calendario sotto.
+                    .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
+            ) {
+                circolareplus.platform.PlatformBackHandler(enabled = eventDetailToShow != null) { eventDetailToShow = null }
+                EventDetailPage(
+                    event = eventForDetail,
+                    classmates = classmates,
+                    currentUser = user,
+                    onBack = { eventDetailToShow = null },
+                    // La pagina si richiude nella card e poi la card esce (vedi deleteEventAnimated).
+                    onDelete = {
+                        eventDetailToShow = null
+                        deleteEventAnimated(eventForDetail, startDelayMs = 560L)
+                    }
+                )
+            }
+        }
     }
 }
 
@@ -4377,6 +4447,15 @@ private fun AddCalendarEventDialog(
     }
 
     val scope = rememberCoroutineScope()
+    // Container transform dei passi: da dove nasce ogni passo e dove si richiude (vedi sotto).
+    val transforms = remember { EventStepTransforms() }
+    // Passo attuale e quello di prima, per sapere in che direzione si sta andando anche mentre il
+    // vecchio contenuto sta ancora uscendo.
+    val stepTracker = remember { arrayOf(step, step) }
+    if (stepTracker[0] != step) {
+        stepTracker[1] = stepTracker[0]
+        stepTracker[0] = step
+    }
     // Chiudere senza animazione toglieva il foglio di colpo (tasto X, evento creato): prima scende,
     // poi lo si toglie. Scrim, trascinamento e indietro lo facevano gia' da soli.
     fun closeAnimated() {
@@ -4537,27 +4616,85 @@ private fun AddCalendarEventDialog(
                 modifier = Modifier.fillMaxWidth(),
                 transitionSpec = {
                     val forward = targetState.ordinal > initialState.ordinal
-                    val slide = androidx.compose.animation.core.spring<androidx.compose.ui.unit.IntOffset>(
-                        dampingRatio = 0.85f, stiffness = 380f
-                    )
-                    androidx.compose.animation.ContentTransform(
-                        targetContentEnter = androidx.compose.animation.fadeIn(
-                            androidx.compose.animation.core.tween(200, delayMillis = 70)
-                        ) + androidx.compose.animation.slideInHorizontally(slide) { w -> if (forward) w / 8 else -w / 8 },
-                        initialContentExit = androidx.compose.animation.fadeOut(
-                            androidx.compose.animation.core.tween(110)
-                        ) + androidx.compose.animation.slideOutHorizontally(slide) { w -> if (forward) -w / 8 else w / 8 },
-                        sizeTransform = androidx.compose.animation.SizeTransform(clip = false) { _, _ ->
-                            androidx.compose.animation.core.spring<androidx.compose.ui.unit.IntSize>(
-                                dampingRatio = 0.9f, stiffness = 380f
-                            )
-                        }
-                    )
+                    val lower = if (forward) initialState else targetState
+                    val higher = if (forward) targetState else initialState
+                    val hasOrigin = !AppTheme.isGlass && (
+                        if (forward) transforms.openRect(higher, lower) else transforms.closeRect(higher)
+                    ) != null
+                    val sizeSpring = androidx.compose.animation.SizeTransform(clip = false) { _, _ ->
+                        androidx.compose.animation.core.spring<androidx.compose.ui.unit.IntSize>(
+                            dampingRatio = 0.9f, stiffness = 380f
+                        )
+                    }
+                    if (hasOrigin) {
+                        // Material: il passo nasce dalla card (o dal pulsante) toccata e ci si
+                        // richiude tornando indietro. Le animazioni le fa il contenuto stesso
+                        // (ailaContainerReveal): qui solo chi sta sopra e l'altezza del foglio.
+                        androidx.compose.animation.ContentTransform(
+                            targetContentEnter = androidx.compose.animation.EnterTransition.None,
+                            initialContentExit = androidx.compose.animation.ExitTransition.None,
+                            targetContentZIndex = if (forward) 1f else -1f,
+                            sizeTransform = sizeSpring
+                        )
+                    } else {
+                        val slide = androidx.compose.animation.core.spring<androidx.compose.ui.unit.IntOffset>(
+                            dampingRatio = 0.85f, stiffness = 380f
+                        )
+                        androidx.compose.animation.ContentTransform(
+                            targetContentEnter = androidx.compose.animation.fadeIn(
+                                androidx.compose.animation.core.tween(200, delayMillis = 70)
+                            ) + androidx.compose.animation.slideInHorizontally(slide) { w -> if (forward) w / 8 else -w / 8 },
+                            initialContentExit = androidx.compose.animation.fadeOut(
+                                androidx.compose.animation.core.tween(110)
+                            ) + androidx.compose.animation.slideOutHorizontally(slide) { w -> if (forward) -w / 8 else w / 8 },
+                            sizeTransform = sizeSpring
+                        )
+                    }
                 },
                 label = "eventCreationStep"
             ) { shownStep ->
+            // Il passo piu' "profondo" fra i due (Assistente o Manuale rispetto al Menu) e' quello
+            // che cresce dalla card entrando e si richiude nella card uscendo; l'altro resta fermo.
+            val other = if (shownStep == step) stepTracker[1] else step
+            val closingNow = shownStep != step
+            val cardRadiusPx = with(androidx.compose.ui.platform.LocalDensity.current) { AppTheme.CardCornerRadius.toPx() }
+            val stepProgress = transition.animateFloat(
+                transitionSpec = {
+                    if (targetState == androidx.compose.animation.EnterExitState.PostExit) circolareplus.design.ailaContainerCloseSpec()
+                    else circolareplus.design.ailaContainerFloatSpring()
+                },
+                label = "eventStepContainer"
+            ) { state -> if (state == androidx.compose.animation.EnterExitState.Visible) 1f else 0f }
+            val revealRect = if (AppTheme.isGlass || shownStep.ordinal <= other.ordinal) null
+                else if (closingNow) transforms.closeRect(shownStep) else transforms.openRect(shownStep, other)
+            val revealColor = if (closingNow) transforms.cardColor(shownStep) else transforms.openColor(shownStep, other)
             // Colonna propria: AnimatedContent impila i figli come una Box, senza questa si sovrapporrebbero.
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onGloballyPositioned { coordinates ->
+                        when (shownStep) {
+                            EventCreationStep.MENU -> transforms.menuRoot = coordinates
+                            EventCreationStep.ASSISTANT -> transforms.assistantRoot = coordinates
+                            else -> {}
+                        }
+                    }
+                    .then(
+                        if (revealRect != null) Modifier
+                            .ailaContainerReveal(
+                                progress = { stepProgress.value },
+                                origin = circolareplus.design.AilaTransformOrigin(revealRect, cardRadiusPx),
+                                containerColor = revealColor,
+                                pageColor = AppTheme.SurfaceWhite,
+                                relative = true,
+                                // Una card bianca che cresce su un foglio bianco non si vedrebbe:
+                                // le si lascia il filo del suo contorno, che poi si dissolve.
+                                outlineColor = if (revealColor == AppTheme.SurfaceWhite) AppTheme.FieldOutline else Color.Unspecified
+                            )
+                            .graphicsLayer {}
+                        else Modifier
+                    )
+            ) {
             when (shownStep) {
                 EventCreationStep.MENU -> {
                     Text(
@@ -4566,7 +4703,12 @@ private fun AddCalendarEventDialog(
                         color = AppTheme.TextMuted,
                         modifier = Modifier.ailaSheetReveal(0).padding(bottom = AppTheme.Space16)
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
+                    // Le due card alla stessa altezza: quella con la descrizione piu' lunga decide, l'altra
+                    // si allunga (prima la seconda restava piu' bassa).
+                    Row(
+                        modifier = Modifier.height(androidx.compose.foundation.layout.IntrinsicSize.Max),
+                        horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12)
+                    ) {
                         EventCreationOptionCard(
                             title = "AILA Assistant",
                             subtitle = "Descrivi l'evento, l'AI lo inserisce per te",
@@ -4577,16 +4719,30 @@ private fun AddCalendarEventDialog(
                                     brush = androidx.compose.ui.graphics.SolidColor(color)
                                 )
                             },
-                            modifier = Modifier.weight(1f).ailaSheetReveal(1),
-                            onClick = { step = EventCreationStep.ASSISTANT }
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .onGloballyPositioned { transforms.cardCoords[EventCreationStep.ASSISTANT] = it }
+                                .ailaSheetReveal(1),
+                            onClick = {
+                                transforms.snapshotCards()
+                                step = EventCreationStep.ASSISTANT
+                            }
                         )
                         EventCreationOptionCard(
                             title = "Crea manualmente",
                             subtitle = "Inserisci i dettagli da solo",
                             highlighted = false,
                             icon = { color -> AppIcons.Pencil(modifier = Modifier.size(20.dp), color = color) },
-                            modifier = Modifier.weight(1f).ailaSheetReveal(2),
-                            onClick = { step = EventCreationStep.MANUAL }
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .onGloballyPositioned { transforms.cardCoords[EventCreationStep.MANUAL] = it }
+                                .ailaSheetReveal(2),
+                            onClick = {
+                                transforms.snapshotCards()
+                                step = EventCreationStep.MANUAL
+                            }
                         )
                     }
                 }
@@ -4667,6 +4823,7 @@ private fun AddCalendarEventDialog(
                                     draft.notes?.let { notes = it }
                                     aiFilled = fromAi != null
                                     aiFallbackNotice = fromAi == null
+                                    transforms.snapshotGenerate()
                                     step = EventCreationStep.MANUAL
                                 } finally {
                                     isGeneratingEvent = false
@@ -4675,6 +4832,7 @@ private fun AddCalendarEventDialog(
                         },
                         enabled = aiPrompt.isNotBlank() && !isGeneratingEvent,
                         fillMaxWidth = true,
+                        modifier = Modifier.onGloballyPositioned { transforms.generateCoords = it },
                         icon = { color -> AppIcons.Sparkle(modifier = Modifier.size(14.dp), color = color) }
                     )
                     if (isGeneratingEvent) {
@@ -4906,6 +5064,51 @@ private fun AddCalendarEventDialog(
     }
 }
 
+/**
+ * Memoria dei rettangoli per il container transform dei passi del foglio "Nuovo evento": dove stanno
+ * le due card del menu e il pulsante "Genera evento", nelle coordinate del contenuto di un passo
+ * (che e' lo stesso per tutti: i passi stanno sovrapposti nello stesso contenitore). Si fotografano
+ * al tocco, quando tutto e' fermo, cosi' non dipendono dal foglio che nel frattempo cresce o si
+ * abbassa.
+ */
+private class EventStepTransforms {
+    var menuRoot: androidx.compose.ui.layout.LayoutCoordinates? = null
+    var assistantRoot: androidx.compose.ui.layout.LayoutCoordinates? = null
+    val cardCoords = mutableMapOf<EventCreationStep, androidx.compose.ui.layout.LayoutCoordinates>()
+    var generateCoords: androidx.compose.ui.layout.LayoutCoordinates? = null
+    val cardRect = mutableMapOf<EventCreationStep, androidx.compose.ui.geometry.Rect>()
+    var generateRect: androidx.compose.ui.geometry.Rect? = null
+
+    fun snapshotCards() {
+        val root = menuRoot?.takeIf { it.isAttached } ?: return
+        for ((step, coordinates) in cardCoords) {
+            if (coordinates.isAttached) cardRect[step] = root.localBoundingBoxOf(coordinates, clipBounds = false)
+        }
+    }
+
+    fun snapshotGenerate() {
+        val root = assistantRoot?.takeIf { it.isAttached } ?: return
+        val button = generateCoords?.takeIf { it.isAttached } ?: return
+        generateRect = root.localBoundingBoxOf(button, clipBounds = false)
+    }
+
+    /** Da dove nasce [step] arrivando da [from]: la card del menu, o il pulsante "Genera evento". */
+    fun openRect(step: EventCreationStep, from: EventCreationStep) = when {
+        from == EventCreationStep.MENU -> cardRect[step]
+        from == EventCreationStep.ASSISTANT && step == EventCreationStep.MANUAL -> generateRect ?: cardRect[step]
+        else -> null
+    }
+
+    /** Dove si richiude [step] tornando al menu: nella sua card. */
+    fun closeRect(step: EventCreationStep) = cardRect[step] ?: generateRect
+
+    fun cardColor(step: EventCreationStep): Color =
+        if (step == EventCreationStep.ASSISTANT) AppTheme.PrimaryBlue else AppTheme.SurfaceWhite
+
+    fun openColor(step: EventCreationStep, from: EventCreationStep): Color =
+        if (from == EventCreationStep.ASSISTANT && step == EventCreationStep.MANUAL) AppTheme.PrimaryBlue else cardColor(step)
+}
+
 /** Pulsante tondo del foglio "Nuovo evento" (indietro, chiudi): si schiaccia al tocco come gli altri. */
 @Composable
 private fun EventSheetRoundButton(onClick: () -> Unit, icon: @Composable () -> Unit) {
@@ -5054,6 +5257,123 @@ private fun EventDetailDialog(
                     .clip(RoundedCornerShape(AppTheme.ButtonCornerRadius))
                     .background(AppTheme.TintRed)
                     .clickable { closeAnimated(onDelete) }
+                    .padding(vertical = 14.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AppIcons.Trash(modifier = Modifier.size(14.dp), color = AppTheme.TintRedInk)
+                Spacer(modifier = Modifier.width(AppTheme.Space8))
+                Text(
+                    text = "Elimina evento",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AppTheme.TintRedInk
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Dettaglio di un evento come pagina intera (Material): stessa informazione del foglio, ma nasce
+ * dalla card toccata e ci ritorna (container transform). Il foglio ([EventDetailDialog]) resta per
+ * Liquid Glass.
+ */
+@Composable
+private fun EventDetailPage(
+    event: CalendarEvent,
+    classmates: List<User>,
+    currentUser: User,
+    onBack: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val dateLabel = remember(event.date) {
+        val civil = circolareplus.util.parseIsoDate(event.date)
+        if (civil != null) {
+            val weekday = circolareplus.util.ITALIAN_WEEKDAYS.getOrNull(circolareplus.util.weekdayOf(civil)) ?: ""
+            val month = circolareplus.util.ITALIAN_MONTHS.getOrNull(civil.month)?.lowercase() ?: ""
+            "$weekday ${civil.day} $month ${civil.year}"
+        } else event.date
+    }
+    val peopleById = remember(classmates, currentUser) {
+        classmates.associateBy { it.id } + (currentUser.id to currentUser)
+    }
+    val recipientNames = remember(event.visibleToUserIds, peopleById) {
+        event.visibleToUserIds?.map { id ->
+            peopleById[id]?.let { "${it.firstName} ${it.lastName}".trim() } ?: "Utente rimosso"
+        }
+    }
+    Column(modifier = Modifier.fillMaxSize()) {
+        circolareplus.design.AilaBackBar(title = "Evento", onBackClick = onBack)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = AppTheme.Space16)
+                .padding(top = AppTheme.Space8, bottom = AppTheme.Space32)
+        ) {
+            circolareplus.design.AilaCard {
+                Column(modifier = Modifier.padding(AppTheme.Space16)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = AppTheme.Space16),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        circolareplus.design.AilaIconTile(tint = eventCategoryTint(event.category)) {
+                            eventCategoryIcon(event.category, Modifier.size(20.dp), eventCategoryInk(event.category))
+                        }
+                        Spacer(modifier = Modifier.width(AppTheme.Space12))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = event.title,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = AppTheme.TextDark
+                            )
+                            Text(
+                                text = eventCategoryLabel(event.category),
+                                fontSize = 12.sp,
+                                color = AppTheme.TextMuted
+                            )
+                        }
+                    }
+                    if (event.isAiGenerated) {
+                        circolareplus.design.AilaAssistantBadge(
+                            text = "Inserito da AILA Assistant",
+                            modifier = Modifier.padding(bottom = AppTheme.Space16)
+                        )
+                    }
+                    EventDetailRow(label = "Data", value = dateLabel)
+                    EventDetailRow(label = "Ora", value = event.time ?: "Tutto il giorno")
+                    EventDetailRow(
+                        label = "Visibile a",
+                        value = if (event.isForAll || recipientNames == null) {
+                            "Tutta la classe"
+                        } else if (recipientNames.isEmpty()) {
+                            "Nessuno (controlla la selezione)"
+                        } else {
+                            recipientNames.joinToString(", ")
+                        }
+                    )
+                    if (!event.notes.isNullOrBlank()) {
+                        Text(
+                            text = "Note",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = AppTheme.TextMuted,
+                            modifier = Modifier.padding(bottom = AppTheme.Space4)
+                        )
+                        Text(text = event.notes, fontSize = 14.sp, color = AppTheme.TextDark)
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(AppTheme.Space16))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(AppTheme.ButtonCornerRadius))
+                    .background(AppTheme.TintRed)
+                    .clickable { onDelete() }
                     .padding(vertical = 14.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
@@ -5725,6 +6045,7 @@ private fun offlineDataAgeLabel(): String {
 
 /** Chiave dell'origine del container transform del dettaglio circolare. */
 private const val DETAIL_TRANSFORM_KEY = "circularDetail"
+private const val EVENT_DETAIL_KEY = "eventDetail"
 
 /** Le schermate a tutto schermo della shell; `depth` decide il verso del push/pop. */
 private enum class ShellRoute(val depth: Int) {

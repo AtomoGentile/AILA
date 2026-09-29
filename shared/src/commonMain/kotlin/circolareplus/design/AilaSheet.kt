@@ -42,6 +42,10 @@ fun AilaBottomSheet(
             onDismissRequest = onDismissRequest,
             sheetState = sheetState,
             containerColor = AppTheme.SurfaceWhite,
+            // Niente chiusura trascinando: uno sfioramento del dito, o un gesto storto mentre si
+            // scorre il contenuto, chiudeva il foglio con quello che si stava scrivendo. Si chiude
+            // con la X, con indietro o toccando fuori.
+            sheetGesturesEnabled = false,
             content = content
         )
         return
@@ -64,6 +68,7 @@ fun AilaBottomSheet(
         shape = androidx.compose.ui.graphics.RectangleShape,
         containerColor = Color.Transparent,
         tonalElevation = 0.dp,
+        sheetGesturesEnabled = false,
         // Velo leggero: la sfocatura fa gia' il grosso, il velo stacca un po' il foglio.
         scrimColor = if (AppTheme.isDarkMode) Color.Black.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.2f),
         dragHandle = null
