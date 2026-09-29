@@ -1,6 +1,11 @@
 package circolareplus.ai
 
+import circolareplus.util.CivilDate
 import circolareplus.util.ITALIAN_WEEKDAYS
+import circolareplus.util.daysBetween
+import circolareplus.util.daysInMonth
+import circolareplus.util.parseIsoDate
+import circolareplus.util.plusDays
 import circolareplus.util.today
 import circolareplus.util.weekdayOf
 import kotlinx.serialization.json.Json
@@ -70,6 +75,10 @@ internal object EventGenerationPrompt {
               Obbligatorio.
             - "dateIso": la data in formato YYYY-MM-DD se presente o deducibile (es. "domani", "lunedì
               prossimo"), calcolata rispetto a oggi ($todayIso). Altrimenti null.
+              L'evento è sempre da oggi in poi, MAI in una data passata: con un giorno della settimana
+              ("venerdì") usa la prossima volta che cade a partire da oggi; con giorno e mese ("12
+              ottobre") usa l'anno di oggi (${civilToday.year}), oppure il successivo se quella data è già
+              passata.
             - "timeHm": l'ora in formato HH:MM 24 ore se presente nel testo (es. "alle 9" -> "09:00",
               "alle 14:30" -> "14:30"). Altrimenti null. Non inventare un orario se il testo non lo dice.
             - "notes": eventuali dettagli aggiuntivi del testo che non rientrano in titolo/materia/data/ora
@@ -91,7 +100,7 @@ internal object EventGenerationPrompt {
         return """
             Oggi e' $todayWeekday ${civilToday.toIso()}.
             Scrivi un oggetto JSON per l'evento "$userPrompt" con questi campi:
-            "title" (titolo breve), "subject" (materia o vuoto), "category" (una sola parola tra VERIFICA, INTERROGAZIONE, PAGAMENTO, USCITA_DIDATTICA, AVVISO, ALTRO), "dateIso" (AAAA-MM-GG oppure null), "timeHm" (HH:MM oppure null), "notes" (dettagli o vuoto).
+            "title" (titolo breve), "subject" (materia o vuoto), "category" (una sola parola tra VERIFICA, INTERROGAZIONE, PAGAMENTO, USCITA_DIDATTICA, AVVISO, ALTRO), "dateIso" (AAAA-MM-GG, oggi o futura, mai passata, oppure null), "timeHm" (HH:MM oppure null), "notes" (dettagli o vuoto).
             Rispondi solo con il JSON.
         """.trimIndent()
     }
@@ -132,8 +141,12 @@ internal object EventGenerationPrompt {
             ?.takeIf { it in VALID_CATEGORIES } ?: return null
 
         val subject = obj["subject"]?.jsonPrimitive?.contentOrNull ?: ""
+        // Anche se il prompt lo vieta, un modello piccolo sbaglia l'anno o il giorno e restituisce
+        // una data passata: la si riporta al futuro qui, cosi' chi usa l'assistente non deve
+        // correggerla a mano (vedi [futureEventDate]).
         val dateIso = obj["dateIso"]?.jsonPrimitive?.contentOrNull
             ?.takeIf { isIsoDate(it) }
+            ?.let { futureEventDate(it, today()) }
         val timeHm = obj["timeHm"]?.jsonPrimitive?.contentOrNull
             ?.takeIf { isClockTime(it) }
         val notes = obj["notes"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }
@@ -147,4 +160,25 @@ internal object EventGenerationPrompt {
             notes = notes?.take(500)
         )
     }
+}
+
+/**
+ * Riporta al futuro la data di un evento proposta dal modello. Gli eventi non si creano nel
+ * passato, e un modello piccolo sbaglia spesso proprio qui: un giorno della settimana calcolato
+ * male ("venerdi'" che cade ieri) o l'anno del suo addestramento invece di quello di oggi.
+ *
+ * - Passata da al piu' 14 giorni: e' un giorno della settimana sbagliato, si avanza a settimane
+ *   intere fino a oggi (stesso giorno della settimana, la prossima volta che cade).
+ * - Passata da piu' tempo: e' l'anno sbagliato, si tiene giorno e mese e si prende l'anno di oggi
+ *   (o il successivo se quella data e' gia' passata).
+ * - Oggi o futura: invariata.
+ */
+internal fun futureEventDate(dateIso: String, today: CivilDate): String {
+    val date = parseIsoDate(dateIso) ?: return dateIso
+    val daysAgo = daysBetween(date, today)
+    if (daysAgo <= 0) return dateIso
+    if (daysAgo <= 14) return date.plusDays(7 * ((daysAgo + 6) / 7)).toIso()
+    fun inYear(year: Int) = CivilDate(year, date.month, minOf(date.day, daysInMonth(year, date.month)))
+    val thisYear = inYear(today.year)
+    return (if (daysBetween(thisYear, today) > 0) inYear(today.year + 1) else thisYear).toIso()
 }

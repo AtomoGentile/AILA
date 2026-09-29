@@ -616,7 +616,14 @@ fun Modifier.ailaContainerReveal(
     /** Colore della pagina a schermo intero: il contenitore passa dal colore della card a questo. */
     pageColor: Color = containerColor,
     /** true mentre la pagina si richiude: da un pulsante la forma si stringe a cerchio in anticipo. */
-    closing: () -> Boolean = { false }
+    closing: () -> Boolean = { false },
+    /**
+     * true se [origin] e' gia' nelle coordinate di questo livello (un elemento dentro lo stesso
+     * contenitore, es. una card del menu di un foglio) invece che nella radice dello schermo.
+     */
+    relative: Boolean = false,
+    /** Filo intorno alla forma che cresce, per origini chiare sul chiaro (card bianca su foglio bianco). */
+    outlineColor: Color = Color.Unspecified
 ): Modifier {
     val selfOffset = arrayOf(Offset.Zero)
     return this
@@ -632,7 +639,7 @@ fun Modifier.ailaContainerReveal(
                 shape = androidx.compose.ui.graphics.RectangleShape
                 return@graphicsLayer
             }
-            val o = origin.bounds.translate(-selfOffset[0])
+            val o = if (relative) origin.bounds else origin.bounds.translate(-selfOffset[0])
             // Chiudendosi su un pulsante tondo la curva della chiusura passa quasi tutto il tempo
             // negli ultimi punti percentuali: con la geometria lineare la forma restava un
             // rettangolo alto per centinaia di millisecondi, e solo alla fine diventava il cerchio
@@ -687,6 +694,26 @@ fun Modifier.ailaContainerReveal(
                 // li' c'era lo scatto (a ogni apertura di ricerca, notifiche e profilo).
                 clipRect(0f, 0f, 0f, 0f) { this@drawWithContent.drawContent() }
                 drawRect(fill, alpha = shapeAlpha)
+            }
+            if (outlineColor != Color.Unspecified) {
+                val o = if (relative) origin.bounds else origin.bounds.translate(-selfOffset[0])
+                val rect = androidx.compose.ui.geometry.Rect(
+                    o.left + (0f - o.left) * p, o.top + (0f - o.top) * p,
+                    o.right + (size.width - o.right) * p, o.bottom + (size.height - o.bottom) * p
+                )
+                val radius = (origin.cornerRadiusPx * (1f - p)).coerceIn(0f, minOf(rect.width, rect.height) / 2f)
+                // Il filo si dissolve mentre la forma prende il colore della pagina.
+                val lineAlpha = (1f - p * 1.6f).coerceIn(0f, 1f) * shapeAlpha
+                if (lineAlpha > 0f) {
+                    val stroke = 1.dp.toPx()
+                    drawRoundRect(
+                        color = outlineColor.copy(alpha = outlineColor.alpha * lineAlpha),
+                        topLeft = androidx.compose.ui.geometry.Offset(rect.left + stroke / 2, rect.top + stroke / 2),
+                        size = androidx.compose.ui.geometry.Size(rect.width - stroke, rect.height - stroke),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(maxOf(radius - stroke / 2, 0f)),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke)
+                    )
+                }
             }
         }
 }
