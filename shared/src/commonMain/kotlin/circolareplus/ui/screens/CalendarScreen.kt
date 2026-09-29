@@ -16,6 +16,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import kotlinx.coroutines.delay
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -254,13 +260,25 @@ fun CalendarScreen(
                 } else {
                     selectedEvents.forEachIndexed { index, event ->
                         key(event.id) {
-                            // Un evento appena creato parte nascosto e si apre con una molla;
-                            // gli altri sono gia' visibili (niente animazione cambiando giorno).
+                            // Un evento appena creato parte nascosto, aspetta che il foglio
+                            // "Nuovo evento" finisca di scendere, poi si apre con una molla e
+                            // resta un attimo evidenziato da un contorno che sfuma. Gli altri
+                            // sono gia' visibili (niente animazione cambiando giorno).
+                            val animateIn = remember { event.id in freshEventIds && consumedFreshIds.add(event.id) }
                             val visibleState = remember {
-                                val animateIn = event.id in freshEventIds && consumedFreshIds.add(event.id)
                                 androidx.compose.animation.core.MutableTransitionState(!animateIn)
-                                    .apply { targetState = true }
                             }
+                            val highlight = remember { androidx.compose.animation.core.Animatable(if (animateIn) 1f else 0f) }
+                            LaunchedEffect(Unit) {
+                                if (animateIn) delay(240)
+                                visibleState.targetState = true
+                                if (animateIn) {
+                                    delay(300)
+                                    highlight.animateTo(0f, androidx.compose.animation.core.tween(1500))
+                                }
+                            }
+                            val highlightColor = AppTheme.PrimaryBlue
+                            val highlightRadius = AppTheme.CardCornerRadius
                             androidx.compose.animation.AnimatedVisibility(
                                 visibleState = visibleState,
                                 enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220)) +
@@ -277,7 +295,22 @@ fun CalendarScreen(
                                         event = event,
                                         onClick = { onEventClick(event) },
                                         onDeleteClick = { onDeleteEventClick(event) },
-                                        modifier = Modifier.ailaAppear(index + 3)
+                                        modifier = Modifier
+                                            .ailaAppear(index + 3)
+                                            .drawWithContent {
+                                                drawContent()
+                                                val a = highlight.value
+                                                if (a > 0f) {
+                                                    val stroke = 2.dp.toPx()
+                                                    drawRoundRect(
+                                                        color = highlightColor.copy(alpha = 0.7f * a),
+                                                        topLeft = Offset(stroke / 2, stroke / 2),
+                                                        size = Size(size.width - stroke, size.height - stroke),
+                                                        cornerRadius = CornerRadius(highlightRadius.toPx()),
+                                                        style = Stroke(width = stroke)
+                                                    )
+                                                }
+                                            }
                                     )
                                     if (index != selectedEvents.lastIndex) {
                                         Spacer(modifier = Modifier.height(AppTheme.Space12))
