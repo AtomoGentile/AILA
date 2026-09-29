@@ -66,7 +66,6 @@ fun CalendarScreen(
     onAddEventClick: () -> Unit = {},
     onAddEventForDayClick: (String) -> Unit = {},
     onEventClick: (CalendarEvent) -> Unit = {},
-    onDeleteEventClick: (CalendarEvent) -> Unit = {},
     /** Giorno da mostrare subito ("AAAA-MM-GG"), es. toccando un evento nella Home. */
     focusDateIso: String? = null,
     onFocusConsumed: () -> Unit = {},
@@ -358,7 +357,6 @@ fun CalendarScreen(
                                     CalendarEventCard(
                                         event = event,
                                         onClick = { onEventClick(event) },
-                                        onDeleteClick = { onDeleteEventClick(event) },
                                         modifier = Modifier
                                             .ailaAppear(index + 3)
                                             .drawWithContent {
@@ -442,7 +440,6 @@ fun CalendarScreen(
                                         selectedDay = it.day
                                     }
                                 },
-                                onDeleteClick = { onDeleteEventClick(event) },
                                 showDate = true
                             )
                             if (index != upcoming.lastIndex) {
@@ -629,12 +626,12 @@ private fun DayCell(
 fun CalendarEventCard(
     event: CalendarEvent,
     onClick: () -> Unit,
-    onDeleteClick: () -> Unit = {},
     modifier: Modifier = Modifier,
     /** Scrive anche il giorno accanto all'ora (elenco "In arrivo", fuori dal giorno scelto). */
     showDate: Boolean = false
 ) {
-    AilaCard(onClick = onClick, modifier = modifier) {
+    // transformKey: al ritorno il dettaglio si richiude su questa card, dove sta adesso.
+    AilaCard(onClick = onClick, modifier = modifier, transformKey = "event:${event.id}") {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -689,15 +686,6 @@ fun CalendarEventCard(
             }
 
             Spacer(modifier = Modifier.width(AppTheme.Space8))
-
-            Box(
-                modifier = Modifier
-                    .clickable(enabled = true) { onDeleteClick() }
-                    .padding(4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                AppIcons.Trash(modifier = Modifier.size(18.dp), color = AppTheme.TintRed)
-            }
 
             if (event.isForAll) {
                 Box(
