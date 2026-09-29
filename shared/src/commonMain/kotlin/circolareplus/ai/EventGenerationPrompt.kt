@@ -80,6 +80,22 @@ internal object EventGenerationPrompt {
         """.trimIndent()
     }
 
+    /**
+     * Versione corta per i modelli che non digeriscono quella completa: AICore (Gemini Nano)
+     * risponde a volte con testo vuoto a un prompt lungo pieno di regole, come gia' visto con le
+     * circolari (vedi [CircularClassificationPrompt.buildCompactUserPrompt]).
+     */
+    fun buildCompactUserPrompt(userPrompt: String): String {
+        val civilToday = today()
+        val todayWeekday = ITALIAN_WEEKDAYS.getOrElse(weekdayOf(civilToday)) { "" }
+        return """
+            Oggi e' $todayWeekday ${civilToday.toIso()}.
+            Scrivi un oggetto JSON per l'evento "$userPrompt" con questi campi:
+            "title" (titolo breve), "subject" (materia o vuoto), "category" (una sola parola tra VERIFICA, INTERROGAZIONE, PAGAMENTO, USCITA_DIDATTICA, AVVISO, ALTRO), "dateIso" (AAAA-MM-GG oppure null), "timeHm" (HH:MM oppure null), "notes" (dettagli o vuoto).
+            Rispondi solo con il JSON.
+        """.trimIndent()
+    }
+
     /** Ripulisce/ripara l'output prima di leggerlo come JSON. Vedi [ModelJsonExtractor]. */
     fun extractJsonObject(raw: String): String? = ModelJsonExtractor.extractJsonObject(raw)
 

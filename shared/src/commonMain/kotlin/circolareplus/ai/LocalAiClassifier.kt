@@ -163,28 +163,44 @@ class LocalAiClassifier(
             return EventDraft("", "", "ALTRO", null, null, null)
         }
 
-        return try {
-            val raw = llm.generate(
-                modelPath = path,
-                preferGpu = model.preferGpu,
-                maxOutputTokens = model.maxOutputTokens,
-                timeoutMillis = GENERATION_TIMEOUT_MILLIS,
-                stopWhen = { partial ->
-                    EventGenerationPrompt.extractJsonObject(partial) != null
-                },
-                systemPrompt = EventGenerationPrompt.SYSTEM_PROMPT,
-                userPrompt = EventGenerationPrompt.buildUserPrompt(userPrompt)
-            )
-
-            val jsonText = EventGenerationPrompt.extractJsonObject(raw)
-            if (jsonText != null) {
-                EventGenerationPrompt.parse(jsonText) ?: EventDraft("", "", "ALTRO", null, null, null)
-            } else {
-                EventDraft("", "", "ALTRO", null, null, null)
+        // Prompt completo, poi compatto: AICore risponde vuoto (o "troppo lungo") al primo e
+        // funziona con il secondo. Una volta scoperto, il modello parte subito dal compatto.
+        var compact = model.id in compactPromptModels
+        for (attempt in 0..1) {
+            try {
+                val raw = llm.generate(
+                    modelPath = path,
+                    preferGpu = model.preferGpu,
+                    maxOutputTokens = model.maxOutputTokens,
+                    timeoutMillis = GENERATION_TIMEOUT_MILLIS,
+                    stopWhen = { partial ->
+                        EventGenerationPrompt.extractJsonObject(partial) != null
+                    },
+                    systemPrompt = EventGenerationPrompt.SYSTEM_PROMPT,
+                    userPrompt = if (compact) {
+                        EventGenerationPrompt.buildCompactUserPrompt(userPrompt)
+                    } else {
+                        EventGenerationPrompt.buildUserPrompt(userPrompt)
+                    }
+                )
+                val draft = EventGenerationPrompt.extractJsonObject(raw)
+                    ?.let { EventGenerationPrompt.parse(it) }
+                if (draft != null) {
+                    if (compact) compactPromptModels += model.id
+                    return draft
+                }
+                // Risposta leggibile ma non un evento valido: un secondo giro con il prompt
+                // compatto puo' bastare, se non lo si e' gia' usato.
+                if (compact) break
+                compact = true
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (compact || !isPromptTooLong(e.message.orEmpty())) break
+                compact = true
             }
-        } catch (e: Exception) {
-            EventDraft("", "", "ALTRO", null, null, null)
         }
+        return EventDraft("", "", "ALTRO", null, null, null)
     }
 
     /**
