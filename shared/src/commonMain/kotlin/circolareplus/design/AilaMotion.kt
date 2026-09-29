@@ -623,7 +623,15 @@ fun Modifier.ailaContainerReveal(
      */
     relative: Boolean = false,
     /** Filo intorno alla forma che cresce, per origini chiare sul chiaro (card bianca su foglio bianco). */
-    outlineColor: Color = Color.Unspecified
+    outlineColor: Color = Color.Unspecified,
+    /**
+     * Dove arriva la forma a fine corsa, nelle coordinate di questo livello. Di norma tutto il
+     * livello; per un foglio dal basso (livello a schermo intero, foglio in fondo) e' il suo
+     * rettangolo, cosi' la card o il pulsante diventano il foglio e non tutto lo schermo.
+     */
+    targetRect: (() -> androidx.compose.ui.geometry.Rect?)? = null,
+    /** Raggio degli angoli a fine corsa (es. quelli alti del foglio); 0 = squadrati. */
+    targetRadiusPx: Float = 0f
 ): Modifier {
     val selfOffset = arrayOf(Offset.Zero)
     return this
@@ -650,10 +658,11 @@ fun Modifier.ailaContainerReveal(
                 p * t * t * (3f - 2f * t)
             } else p
             fun lerp(a: Float, b: Float) = a + (b - a) * g
+            val t = targetRect?.invoke() ?: androidx.compose.ui.geometry.Rect(0f, 0f, size.width, size.height)
             val rect = androidx.compose.ui.geometry.Rect(
-                lerp(o.left, 0f), lerp(o.top, 0f), lerp(o.right, size.width), lerp(o.bottom, size.height)
+                lerp(o.left, t.left), lerp(o.top, t.top), lerp(o.right, t.right), lerp(o.bottom, t.bottom)
             )
-            val radius = lerp(origin.cornerRadiusPx, 0f).coerceIn(0f, minOf(rect.width, rect.height) / 2f)
+            val radius = lerp(origin.cornerRadiusPx, targetRadiusPx).coerceIn(0f, minOf(rect.width, rect.height) / 2f)
             shape = AilaRevealShape(rect, radius)
             clip = true
         }
@@ -697,11 +706,13 @@ fun Modifier.ailaContainerReveal(
             }
             if (outlineColor != Color.Unspecified) {
                 val o = if (relative) origin.bounds else origin.bounds.translate(-selfOffset[0])
+                val t = targetRect?.invoke() ?: androidx.compose.ui.geometry.Rect(0f, 0f, size.width, size.height)
                 val rect = androidx.compose.ui.geometry.Rect(
-                    o.left + (0f - o.left) * p, o.top + (0f - o.top) * p,
-                    o.right + (size.width - o.right) * p, o.bottom + (size.height - o.bottom) * p
+                    o.left + (t.left - o.left) * p, o.top + (t.top - o.top) * p,
+                    o.right + (t.right - o.right) * p, o.bottom + (t.bottom - o.bottom) * p
                 )
-                val radius = (origin.cornerRadiusPx * (1f - p)).coerceIn(0f, minOf(rect.width, rect.height) / 2f)
+                val radius = (origin.cornerRadiusPx + (targetRadiusPx - origin.cornerRadiusPx) * p)
+                    .coerceIn(0f, minOf(rect.width, rect.height) / 2f)
                 // Il filo si dissolve mentre la forma prende il colore della pagina.
                 val lineAlpha = (1f - p * 1.6f).coerceIn(0f, 1f) * shapeAlpha
                 if (lineAlpha > 0f) {

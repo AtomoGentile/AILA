@@ -133,7 +133,7 @@ fun CalendarScreen(
             // Niente più tasto AI separato in header: "AILA Assistant" è già la prima scelta
             // dentro il foglio che si apre da "Aggiungi", un tasto in più qui era ridondante.
             action = {
-                AilaIconButton(contentDescription = "Aggiungi evento", onClick = onAddEventClick, primary = true) { tint ->
+                AilaIconButton(contentDescription = "Aggiungi evento", onClick = onAddEventClick, primary = true, opensPage = true) { tint ->
                     AppIcons.Plus(modifier = Modifier.size(18.dp), color = tint)
                 }
             }

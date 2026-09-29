@@ -936,8 +936,11 @@ fun AilaIconButton(
         modifier = modifier
             .size(size)
             .then(
-                if (opensPage && enabled && !primary && !AppTheme.isGlass)
-                    Modifier.ailaTransformOrigin(size / 2, buttonColor = AppTheme.TintSlate)
+                if (opensPage && enabled && !AppTheme.isGlass)
+                    Modifier.ailaTransformOrigin(
+                        size / 2,
+                        buttonColor = if (primary) AppTheme.PrimaryBlue else AppTheme.TintSlate
+                    )
                 else Modifier
             )
             .then(if (AppTheme.isGlass) Modifier.ailaPressScale(interactionSource, 0.9f) else Modifier)
