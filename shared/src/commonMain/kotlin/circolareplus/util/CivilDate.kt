@@ -59,6 +59,9 @@ private fun epochDaysOf(date: CivilDate): Long {
     return era * 146_097 + doe - 719_468
 }
 
+/** Giorni da [from] a [to]: positivo se [to] viene dopo. */
+fun daysBetween(from: CivilDate, to: CivilDate): Int = (epochDaysOf(to) - epochDaysOf(from)).toInt()
+
 /** La data [days] giorni dopo (o prima, se negativo). Gestisce mesi, anni e bisestili. */
 fun CivilDate.plusDays(days: Int): CivilDate =
     civilFromEpochMillis((epochDaysOf(this) + days) * 86_400_000L)
