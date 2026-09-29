@@ -916,12 +916,17 @@ fun AilaIconButton(
     // 44dp come i pulsanti della Home e il minimo di tocco consigliato: a 38dp, accanto al logo
     // da 48 delle intestazioni, sembravano piu' piccoli e fuori asse rispetto al titolo.
     size: Dp = 44.dp,
+    /**
+     * true se il pulsante apre una schermata intera: in Material la pagina nasce dal pulsante e ci
+     * rientra (stesso container transform di ricerca, notifiche e profilo sulla Home).
+     */
+    opensPage: Boolean = false,
     icon: @Composable (Color) -> Unit
 ) {
     // Glass: cerchio (i pulsanti tondi di iOS). Expressive: cerchio che alla pressione diventa un
     // quadrato arrotondato, come gli icon button di M3 Expressive.
     val interactionSource = remember { MutableInteractionSource() }
-    val shape = ailaMorphShape(interactionSource, pressedPercent = 28)
+    val shape = CircleShape
     val background = when {
         !enabled -> Modifier.background(AppTheme.TintSlate)
         primary -> Modifier.background(AppTheme.PrimaryGradient)
@@ -930,8 +935,16 @@ fun AilaIconButton(
     Box(
         modifier = modifier
             .size(size)
+            .then(
+                if (opensPage && enabled && !primary && !AppTheme.isGlass)
+                    Modifier.ailaTransformOrigin(size / 2, buttonColor = AppTheme.TintSlate)
+                else Modifier
+            )
             .then(if (AppTheme.isGlass) Modifier.ailaPressScale(interactionSource, 0.9f) else Modifier)
-            .clip(shape)
+            .then(
+                if (AppTheme.isGlass) Modifier.clip(shape)
+                else Modifier.ailaMorphClip(interactionSource, pressedPercent = 28)
+            )
             .then(background)
             .then(
                 if (AppTheme.isGlass) Modifier
@@ -1253,11 +1266,18 @@ val LocalProfileEntry = androidx.compose.runtime.compositionLocalOf<AilaProfileE
 @Composable
 fun AilaProfileButton(entry: AilaProfileEntry, modifier: Modifier = Modifier, onHero: Boolean = false) {
     val interactionSource = remember { MutableInteractionSource() }
+    val avatarFill = when {
+        onHero -> AppTheme.AccentDeep
+        AppTheme.accent != AilaAccent.BLUE -> AppTheme.AccentContainer
+        AppTheme.isDarkMode -> Color(0xFF34457A)
+        else -> Color(0xFFBFD0FF)
+    }
     Box(
         modifier = modifier
             .size(44.dp)
-            // Sulla Home (Material) il profilo si apre dall'avatar alla Pixel e ci rientra.
-            .ailaTransformOrigin(22.dp, buttonColor = if (onHero && !AppTheme.isGlass) AppTheme.AccentDeep else null)
+            // Material: il profilo si apre dall'avatar alla Pixel e ci rientra, dalla Home come
+            // dalle altre schermate (prima solo dalla Home).
+            .ailaTransformOrigin(22.dp, buttonColor = if (AppTheme.isGlass) null else avatarFill)
             .ailaPressScale(interactionSource, 0.9f)
             .clip(CircleShape)
             // Un tono piu' scuro di prima: sul pannello era un velo bianco che quasi spariva,
@@ -1266,14 +1286,7 @@ fun AilaProfileButton(entry: AilaProfileEntry, modifier: Modifier = Modifier, on
                 // Liquid Glass: avatar di vetro neutro, identico ai pulsanti tondi accanto (niente
                 // tinta colorata, che lo staccava dal resto della barra), iniziali in inchiostro.
                 if (AppTheme.isGlass) Modifier.ailaGlassSurface(CircleShape)
-                else Modifier.background(
-                    when {
-                        onHero -> AppTheme.AccentDeep
-                        AppTheme.accent != AilaAccent.BLUE -> AppTheme.AccentContainer
-                        AppTheme.isDarkMode -> Color(0xFF34457A)
-                        else -> Color(0xFFBFD0FF)
-                    }
-                )
+                else Modifier.background(avatarFill)
             )
             .clickable(interactionSource = interactionSource, indication = null) { entry.onClick() }
             .semantics {
