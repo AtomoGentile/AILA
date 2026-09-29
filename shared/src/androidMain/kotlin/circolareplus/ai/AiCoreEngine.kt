@@ -62,6 +62,9 @@ internal object AiCoreEngine {
     /** Pausa prima di ritentare un errore passeggero del servizio (vedi [generate]). */
     private const val TRANSIENT_RETRY_DELAY_MS = 1_500L
 
+    /** Tentativi in tutto per un errore passeggero: la pausa cresce a ogni giro (1,5 s, 3 s). */
+    private const val TRANSIENT_ATTEMPTS = 3
+
     /**
      * Codici di errore AICore che riprovare subito non risolve. Confrontati per nome e non per
      * numero: il messaggio dell'SDK e' "error code N-NOME", e i numeri non sono documentati.
@@ -213,8 +216,7 @@ internal object AiCoreEngine {
             // Motore pronto non vuol dire modello utilizzabile: su alcuni telefoni la
             // preparazione riesce e poi ogni generazione fallisce con NOT_AVAILABLE. Una prova
             // minuscola qui fa fallire subito "Attiva", con il motivo, invece di ogni analisi.
-            withTimeoutOrNull(PROBE_TIMEOUT_MS) { candidate.generateContent("Rispondi solo: OK") }
-                ?: throw IllegalStateException("AICore non ha risposto alla prova entro ${PROBE_TIMEOUT_MS / 1000} secondi.")
+            probe(candidate)
             model = candidate
             rememberPrepared(true)
             true
@@ -247,28 +249,53 @@ internal object AiCoreEngine {
 
         // Rimandare lo STESSO prompt dopo una risposta vuota non cambia niente quando la causa e'
         // la lunghezza o un filtro sul contenuto: chi chiama sa riprovare con meno testo (vedi
-        // LocalAiClassifier, che riconosce "testo vuoto"). Si ritenta invece, una volta e dopo
-        // una breve pausa, un errore del servizio che non dipende dal prompt: "error type
-        // 2-INFERENCE_ERROR" con BUSY, IPC_ERROR e simili compare ogni tanto in chat (segnalato
-        // in campo) e la stessa domanda subito dopo va. Con IPC il collegamento al servizio di
+        // LocalAiClassifier, che riconosce "testo vuoto"). Si ritenta invece, fino a
+        // [TRANSIENT_ATTEMPTS] volte e con una pausa, un errore del servizio che non dipende dal
+        // prompt: "error type 2-INFERENCE_ERROR" con 11-RESPONSE_PROCESSING_ERROR, BUSY e simili
+        // compare ogni tanto (segnalato in campo) e la stessa richiesta subito dopo va. Con IPC il collegamento al servizio di
         // sistema e' caduto: si ricrea il modello prima di riprovare.
-        return try {
-            generateOnce(activeModel, systemPrompt, userPrompt, timeoutMillis)
-        } catch (e: AiCoreServiceException) {
-            if (!isTransient(e.message.orEmpty())) throw IllegalStateException(e.message, e)
-            delay(TRANSIENT_RETRY_DELAY_MS)
-            val retryModel = if (e.message.orEmpty().contains("IPC", ignoreCase = true)) {
-                model = null
-                prepare(maxOutputTokens) { _, _ -> }
-                model ?: throw IllegalStateException(unavailableReason())
-            } else {
-                activeModel
-            }
+        var current = activeModel
+        for (attempt in 1..TRANSIENT_ATTEMPTS) {
             try {
-                generateOnce(retryModel, systemPrompt, userPrompt, timeoutMillis)
-            } catch (again: AiCoreServiceException) {
-                throw IllegalStateException(readable(again.message.orEmpty()), again)
+                return generateOnce(current, systemPrompt, userPrompt, timeoutMillis)
+            } catch (e: AiCoreServiceException) {
+                val message = e.message.orEmpty()
+                if (!isTransient(message)) throw IllegalStateException(message, e)
+                if (attempt == TRANSIENT_ATTEMPTS) throw IllegalStateException(readable(message), e)
+                delay(TRANSIENT_RETRY_DELAY_MS * attempt)
+                if (message.contains("IPC", ignoreCase = true)) {
+                    model = null
+                    prepare(maxOutputTokens) { _, _ -> }
+                    current = model ?: throw IllegalStateException(unavailableReason())
+                }
             }
+        }
+        error("irraggiungibile")
+    }
+
+    /**
+     * La generazione di prova di "Attiva", con gli stessi ritentativi di [generate].
+     *
+     * Serve solo a scoprire i telefoni dove AICore non offre Gemini Nano (NOT_AVAILABLE). Un
+     * errore passeggero come "11-RESPONSE_PROCESSING_ERROR" (visto in campo: "Attiva" falliva
+     * e toccandolo di nuovo andava) non dice niente del telefono: se resta anche dopo i
+     * ritentativi il modello si tiene lo stesso, e le generazioni vere hanno i loro ritentativi.
+     */
+    private suspend fun probe(candidate: GenerativeModel) {
+        for (attempt in 1..TRANSIENT_ATTEMPTS) {
+            val answered = try {
+                withTimeoutOrNull(PROBE_TIMEOUT_MS) { candidate.generateContent("Rispondi solo: OK") } != null
+            } catch (e: GenerativeAIException) {
+                val reason = describe(e)
+                if (!isTransient(reason)) throw IllegalStateException(reason, e)
+                if (attempt == TRANSIENT_ATTEMPTS) return
+                delay(TRANSIENT_RETRY_DELAY_MS * attempt)
+                continue
+            }
+            if (!answered) {
+                throw IllegalStateException("AICore non ha risposto alla prova entro ${PROBE_TIMEOUT_MS / 1000} secondi.")
+            }
+            return
         }
     }
 
@@ -298,6 +325,7 @@ internal object AiCoreEngine {
             upper.contains("IPC") -> "Il collegamento con AICore si e' interrotto."
             upper.contains("QUOTA") -> "Android ha limitato l'uso di Gemini Nano per risparmiare batteria."
             upper.contains("BACKGROUND") -> "Gemini Nano funziona solo con l'app aperta in primo piano."
+            upper.contains("RESPONSE_PROCESSING") -> "Gemini Nano non e' riuscito a completare la risposta."
             else -> "AICore ha avuto un errore interno."
         }
         return "$hint Riprova tra qualche secondo. ($message)"
