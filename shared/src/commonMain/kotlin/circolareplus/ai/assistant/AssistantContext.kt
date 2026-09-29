@@ -62,25 +62,34 @@ internal object AssistantContext {
          */
         val focused = tight && deepTextsPresent
 
+        /**
+         * Cloud con il testo di una circolare gia' letto: la domanda e' su quel documento, e
+         * dodici riassunti, sessanta eventi e venticinque proposte intorno non lo aiutano ma
+         * allungano il prompt di decine di migliaia di caratteri, cioe' secondi di attesa in
+         * chat (visto con la palestra: risposta giusta, ma lenta).
+         */
+        val lean = !tight && deepTextsPresent
+
         // Con il modello sul telefono meno circolari ma lette meglio: le due piu' attinenti
         // arrivano gia' col testo integrale (vedi [AilaAssistant]), e un terzo riassunto
         // toglierebbe spazio proprio a quel testo.
-        val detailedCirculars = if (tight) 2 else 12
-        val indexEntries = if (tight) 15 else 200
-        val summaryChars = if (tight) 450 else 1_400
-        val futureEvents = if (focused) 4 else if (tight) 15 else 60
-        val pastEvents = if (tight) 0 else 40
-        val proposals = if (tight) 5 else 25
-        val proposalDescriptionChars = if (tight) 140 else 400
-        val includeSeatMapHistory = !tight
-        val includeRatings = !tight
+        val detailedCirculars = if (tight) 2 else if (lean) 4 else 12
+        val indexEntries = if (tight) 15 else if (lean) 40 else 200
+        val summaryChars = if (tight) 450 else if (lean) 600 else 1_400
+        val futureEvents = if (focused) 4 else if (tight) 15 else if (lean) 20 else 60
+        val pastEvents = if (tight || lean) 0 else 40
+        val proposals = if (tight) 5 else if (lean) 6 else 25
+        val proposalDescriptionChars = if (tight) 140 else if (lean) 200 else 400
+        val includeSeatMapHistory = !tight && !lean
+        val includeRatings = !tight && !lean
         val includePolls = !focused
         // Con Gemini (finestra larga) il testo di una circolare entra quasi sempre per intero:
         // 9.000 caratteri tagliavano fuori i divieti e le regole scritti lontano dalla parola
-        // cercata ("palestra"), e la risposta si fermava alla sola capienza.
+        // cercata ("palestra"), e la risposta si fermava alla sola capienza. Oltre ~14.000
+        // caratteri per documento pero' si paga in tempo piu' di quanto si guadagni.
         val deepTextChars = when {
             tight -> 2_000
-            maxChars >= WIDE_BUDGET_THRESHOLD -> 22_000
+            maxChars >= WIDE_BUDGET_THRESHOLD -> 14_000
             else -> 9_000
         }
         val classmatesInHeader = !tight
