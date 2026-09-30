@@ -484,6 +484,23 @@ fun AuthScreen(
                 modifier = Modifier.padding(horizontal = AppTheme.Space16).ailaAppear(3)
             )
 
+            var showPrivacy by remember { mutableStateOf(false) }
+            Text(
+                text = if (showPrivacy) "Chiudi l'informativa" else "Informativa sulla privacy",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = AppTheme.TextMuted,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { showPrivacy = !showPrivacy }
+                    .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space8)
+                    .ailaAppear(3)
+            )
+            AnimatedVisibility(visible = showPrivacy) {
+                PrivacyPolicyContent(modifier = Modifier.padding(horizontal = AppTheme.Space16))
+            }
+
             Spacer(modifier = Modifier.height(AppTheme.Space24))
         }
     }

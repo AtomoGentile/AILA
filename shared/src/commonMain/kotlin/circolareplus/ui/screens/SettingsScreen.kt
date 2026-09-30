@@ -753,17 +753,7 @@ fun SettingsScreen(
                             icon = { AppIcons.Lock(modifier = Modifier.size(19.dp), color = AppTheme.TintSlateInk) }
                         )
                         if (showPrivacy) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(AppTheme.Space16),
-                                verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)
-                            ) {
-                                circolareplus.PrivacyPolicy.sections.forEach { (title, text) ->
-                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Text(text = title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AppTheme.TextDark)
-                                        Text(text = text, fontSize = 12.sp, lineHeight = 17.sp, color = AppTheme.TextMuted)
-                                    }
-                                }
-                            }
+                            PrivacyPolicyContent(modifier = Modifier.padding(AppTheme.Space16))
                         }
                         if (showDebugMenu) {
                             AilaListRow(
