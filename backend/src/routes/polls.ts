@@ -46,6 +46,18 @@ const FAIR_NEGATIVE_SHARE = 1 / 3;
 // credito tale da vincere qualunque data contro chiunque per il resto dell'anno.
 const MAX_SACRIFICE_BONUS = 500;
 
+/** Le assegnazioni di questa griglia sono gia' state calcolate (sondaggio chiuso)? */
+async function isGridCalculated(env: Env, gridId: string): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `SELECT 1 AS done FROM interrogation_assignments a
+     JOIN interrogation_slots s ON s.id = a.slot_id
+     WHERE s.grid_id = ? LIMIT 1`
+  ).bind(gridId).first<{ done: number }>();
+  return !!row;
+}
+
+const ALREADY_CALCULATED = 'Il sondaggio è già chiuso: il calendario delle interrogazioni è stato calcolato';
+
 /** Peso (0-1] dei voti negativi di uno studente che ne ha dati `negatives` su `slotCount` date. */
 function negativeVoteWeight(negatives: number, slotCount: number): number {
   if (negatives <= 0) return 1;
@@ -339,6 +351,10 @@ polls.post('/:id/vote', async (c) => {
     return c.json({ error: 'Il tempo per compilare questo sondaggio è scaduto' }, 403);
   }
 
+  if (await isGridCalculated(c.env, gridId)) {
+    return c.json({ error: ALREADY_CALCULATED }, 409);
+  }
+
   // Dopo l'invio le scelte si bloccano: chi vuole cambiarle deve prima ritirare l'invio
   // (DELETE /:id/submit). Senza questo controllo "Invia le mie scelte" non vorrebbe dire nulla.
   const submitted = await c.env.DB.prepare(
@@ -418,6 +434,10 @@ polls.post('/:id/submit', async (c) => {
     return c.json({ error: 'Questo sondaggio non è rivolto a te' }, 403);
   }
 
+  if (await isGridCalculated(c.env, gridId)) {
+    return c.json({ error: ALREADY_CALCULATED }, 409);
+  }
+
   await c.env.DB.prepare(
     `INSERT INTO interrogation_submissions (grid_id, student_id, submitted_at)
      VALUES (?, ?, CURRENT_TIMESTAMP)
@@ -468,6 +488,12 @@ polls.delete('/:id/submit', async (c) => {
   // aver visto il calendario che ne è uscito.
   if (grid.closes_at && new Date(grid.closes_at).getTime() <= Date.now()) {
     return c.json({ error: 'Il tempo per compilare questo sondaggio è scaduto' }, 403);
+  }
+
+  // Calcolato il calendario l'invio non si ritira piu': prima si poteva ritirare, cambiare i voti
+  // e reinviare, e il ricalcolo aggiungeva di nuovo il bonus sacrificio.
+  if (await isGridCalculated(c.env, gridId)) {
+    return c.json({ error: ALREADY_CALCULATED }, 409);
   }
 
   await c.env.DB.prepare(
@@ -686,6 +712,11 @@ polls.post('/:id/assignments/run', requireRole('REPRESENTATIVE'), async (c) => {
   ).bind(gridId, classId).first<{ id: string; subject: string; is_published: number; closes_at: string | null; audience_json: string | null }>();
   if (!grid) return c.json({ error: 'Griglia non trovata' }, 404);
   if (!grid.is_published) return c.json({ error: 'La griglia deve essere pubblicata prima di calcolare le assegnazioni' }, 400);
+  // Un calcolo solo per griglia: ogni ricalcolo riapplicava il bonus sacrificio (lo aggiungeva
+  // di nuovo a chi era finito su una data rossa, lo azzerava agli altri).
+  if (await isGridCalculated(c.env, gridId!)) {
+    return c.json({ error: ALREADY_CALCULATED }, 409);
+  }
 
   // L'algoritmo parte quando hanno inviato tutti oppure quando è scaduto il tempo.
   // `?force=1` lo lascia far partire comunque al Rappresentante: serve quando manca qualcuno

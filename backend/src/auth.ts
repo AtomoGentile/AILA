@@ -98,7 +98,52 @@ export async function hashPassword(password: string, salt?: string): Promise<{ h
 
 export async function verifyPassword(password: string, storedHash: string, salt: string): Promise<boolean> {
   const { hash } = await hashPassword(password, salt);
-  return hash === storedHash;
+  return timingSafeEqual(hash, storedHash ?? '');
+}
+
+/** Confronto a tempo costante: `===` si ferma al primo carattere diverso. */
+export function timingSafeEqual(a: string, b: string): boolean {
+  let diff = a.length ^ b.length;
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i++) diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  return diff === 0;
+}
+
+/** Hash e sale da salvare nella colonna password_hash ("hash:salt"). */
+export async function storedPasswordHash(password: string): Promise<string> {
+  const { hash, salt } = await hashPassword(password);
+  return `${hash}:${salt}`;
+}
+
+/**
+ * "Versione" della password messa nel token (`pv`): cambia quando cambia la password, cosi' i
+ * token emessi prima di un cambio o di un reset smettono di valere. E' un HMAC con il segreto
+ * del server, non un pezzo dell'hash: dal token non si ricava niente per indovinare la password.
+ */
+export async function passwordVersion(storedHash: string, secret: string): Promise<string> {
+  const key = await getHmacKey(secret);
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`pv:${storedHash}`));
+  return base64url.encode(sig).slice(0, 16);
+}
+
+/** SHA-256 esadecimale (codici monouso: si salva solo l'hash). */
+export async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Codice leggibile da dettare o scrivere: niente 0/O, 1/I/L. */
+export function randomCode(length: number): string {
+  const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const bytes = crypto.getRandomValues(new Uint8Array(length));
+  return [...bytes].map((b) => alphabet[b % alphabet.length]).join('');
+}
+
+/** Regole comuni per una password nuova (registrazione, cambio, reset). */
+export function passwordProblem(password: unknown): string | null {
+  if (typeof password !== 'string' || password.length < 8) return 'La password deve essere di almeno 8 caratteri';
+  if (password.length > 128) return 'La password può avere al massimo 128 caratteri';
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -123,9 +168,40 @@ export function authMiddleware() {
       return c.json({ error: 'Token non valido o scaduto' }, 401);
     }
 
-    c.set('jwtPayload', payload);
+    // Ruolo e classe si leggono dal database a ogni richiesta, non dal token: un token dura 30
+    // giorni e prima continuava a valere anche dopo l'eliminazione dell'account, un cambio di
+    // ruolo o un cambio di password.
+    const user = await c.env.DB.prepare('SELECT role, class_id, password_hash FROM users WHERE id = ?')
+      .bind(payload.sub)
+      .first<{ role: UserRole; class_id: string | null; password_hash: string }>();
+    if (!user) {
+      return c.json({ error: 'Account non trovato: accedi di nuovo' }, 401);
+    }
+    // I token senza `pv` sono di prima di questo controllo: valgono finché non scadono.
+    if (payload.pv && payload.pv !== (await passwordVersion(user.password_hash, c.env.JWT_SECRET))) {
+      return c.json({ error: 'La password è cambiata: accedi di nuovo' }, 401);
+    }
+
+    c.set('jwtPayload', { ...payload, role: user.role, classId: user.class_id || 'DEFAULT_CLASS' });
     await next();
   };
+}
+
+/** Token per un utente appena autenticato (login, registrazione, cambio/reset password). */
+export async function issueToken(
+  env: Env,
+  user: { id: string; username: string; role: UserRole; classId: string; passwordHash: string }
+): Promise<string> {
+  return signJWT(
+    {
+      sub: user.id,
+      username: user.username,
+      role: user.role,
+      classId: user.classId,
+      pv: await passwordVersion(user.passwordHash, env.JWT_SECRET),
+    },
+    env.JWT_SECRET
+  );
 }
 
 export function requireRole(...roles: UserRole[]) {

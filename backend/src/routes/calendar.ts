@@ -14,6 +14,19 @@ const VALID_CATEGORIES: EventCategory[] = [
   'VERIFICA', 'INTERROGAZIONE', 'PAGAMENTO', 'USCITA_DIDATTICA', 'AVVISO', 'ALTRO',
 ];
 
+const MAX_TITLE_LENGTH = 200;
+const MAX_NOTES_LENGTH = 2000;
+
+/** "Verifica di Matematica " e "verifica di matematica" sono lo stesso titolo. */
+export function normalizeTitle(title: string): string {
+  return title
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
 // ---------------------------------------------------------------------------
 // GET /api/calendar — Lista eventi (con filtri)
 // ---------------------------------------------------------------------------
@@ -25,8 +38,13 @@ calendar.get('/', async (c) => {
   // Filtro di classe: senza, il calendario mostrava gli eventi di tutte le classi mescolati.
   const classId = await resolveClassId(c);
 
-  let query = 'SELECT * FROM calendar_events WHERE class_id = ?';
-  const params: (string | number)[] = [classId];
+  // Gli eventi per "Persone specifiche" li vedono solo chi li ha creati e i destinatari: prima
+  // arrivavano a tutta la classe (li filtrava solo l'assistente).
+  const me = c.get('jwtPayload').sub;
+  let query = `SELECT * FROM calendar_events WHERE class_id = ?
+    AND (is_for_all = 1 OR visible_to_user_ids_json IS NULL OR created_by = ?
+         OR EXISTS (SELECT 1 FROM json_each(calendar_events.visible_to_user_ids_json) WHERE value = ?))`;
+  const params: (string | number)[] = [classId, me, me];
 
   if (category && VALID_CATEGORIES.includes(category)) {
     query += ' AND category = ?';
@@ -98,17 +116,21 @@ calendar.post('/', async (c) => {
     isAiGenerated?: boolean;
     visibleToUserIds?: string[];
     notes?: string;
+    // Inserisci anche se c'e' gia' un evento identico (l'utente ha visto l'avviso e conferma).
+    force?: boolean;
   }>();
 
-  const {
-    title, eventDate, startTime, category, isAiGenerated = false, visibleToUserIds, notes,
-  } = body;
+  const { eventDate, startTime, category, isAiGenerated = false, notes, force = false } = body;
+  const title = typeof body.title === 'string' ? body.title.trim() : '';
+  const visibleToUserIds = Array.isArray(body.visibleToUserIds)
+    ? [...new Set(body.visibleToUserIds.filter((id): id is string => typeof id === 'string'))]
+    : undefined;
   // Derivato da visibleToUserIds e non dal campo `isForAll` mandato dal client: prima l'app
   // mandava sempre `isForAll` implicito a true (default del repository) anche quando l'utente
   // aveva scelto "Persone specifiche", e l'evento risultava sempre "per tutta la classe".
   const isForAll = visibleToUserIds == null || visibleToUserIds.length === 0;
 
-  if (!title || !eventDate || !category) {
+  if (!title || typeof eventDate !== 'string' || !category) {
     return c.json({ error: 'title, eventDate e category sono obbligatori' }, 400);
   }
   if (!VALID_CATEGORIES.includes(category)) {
@@ -117,18 +139,36 @@ calendar.post('/', async (c) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
     return c.json({ error: 'eventDate deve essere nel formato yyyy-mm-dd' }, 400);
   }
+  if (startTime != null && !/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(startTime)) {
+    return c.json({ error: 'startTime deve essere nel formato HH:MM' }, 400);
+  }
+  if (title.length > MAX_TITLE_LENGTH || (notes ?? '').length > MAX_NOTES_LENGTH) {
+    return c.json({ error: 'Titolo o note troppo lunghi' }, 400);
+  }
 
   const classId = await resolveClassId(c);
 
-  // Duplicate detection: same category + date within ±3 days (for VERIFICA and INTERROGAZIONE)
-  if (category === 'VERIFICA' || category === 'INTERROGAZIONE') {
-    const dup = await c.env.DB.prepare(
-      `SELECT id FROM calendar_events
-       WHERE class_id = ? AND category = ? AND ABS(julianday(event_date) - julianday(?)) <= 3`
-    ).bind(classId, category, eventDate).first<{ id: string }>();
+  // I destinatari devono essere della classe.
+  if (visibleToUserIds && visibleToUserIds.length > 0) {
+    const members = await c.env.DB.prepare('SELECT id FROM users WHERE class_id = ?').bind(classId).all<{ id: string }>();
+    const memberIds = new Set(members.results.map((m) => m.id));
+    if (visibleToUserIds.some((id) => !memberIds.has(id))) {
+      return c.json({ error: 'Alcuni destinatari non fanno parte della classe' }, 400);
+    }
+  }
 
+  // Doppioni: solo lo stesso evento inserito due volte (stesso giorno, stessa categoria, stesso
+  // titolo). Prima bastava una VERIFICA o INTERROGAZIONE qualsiasi entro 3 giorni, di qualunque
+  // materia, per bloccare la seconda — e nella stessa settimana (o giorno) di verifiche ce ne
+  // sono spesso piu' d'una. L'avviso si puo' superare con `force`.
+  if (!force) {
+    const sameDay = await c.env.DB.prepare(
+      'SELECT id, title FROM calendar_events WHERE class_id = ? AND category = ? AND event_date = ?'
+    ).bind(classId, category, eventDate).all<{ id: string; title: string }>();
+    const wanted = normalizeTitle(title);
+    const dup = sameDay.results.find((e) => normalizeTitle(e.title) === wanted);
     if (dup) {
-      return c.json({ warning: 'Potrebbe esserci un evento simile già inserito per questo periodo', existingEventId: dup.id }, 200);
+      return c.json({ warning: `C'è già "${dup.title}" in questo giorno. Vuoi aggiungerlo lo stesso?`, existingEventId: dup.id }, 200);
     }
   }
 
@@ -172,25 +212,44 @@ calendar.put('/:id', async (c) => {
   const body = await c.req.json<{
     title?: string;
     eventDate?: string;
-    startTime?: string;
+    startTime?: string | null;
     category?: EventCategory;
-    isForAll?: boolean;
+    notes?: string | null;
   }>();
 
+  if (body.title !== undefined && (typeof body.title !== 'string' || !body.title.trim() || body.title.length > MAX_TITLE_LENGTH)) {
+    return c.json({ error: 'Titolo non valido' }, 400);
+  }
+  if (body.eventDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(body.eventDate)) {
+    return c.json({ error: 'eventDate deve essere nel formato yyyy-mm-dd' }, 400);
+  }
+  if (body.startTime != null && !/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(body.startTime)) {
+    return c.json({ error: 'startTime deve essere nel formato HH:MM' }, 400);
+  }
+  if (body.category !== undefined && !VALID_CATEGORIES.includes(body.category)) {
+    return c.json({ error: 'Categoria non valida' }, 400);
+  }
+  if (body.notes != null && (typeof body.notes !== 'string' || body.notes.length > MAX_NOTES_LENGTH)) {
+    return c.json({ error: 'Note non valide' }, 400);
+  }
+
+  // `startTime: null` e `notes: null` cancellano il valore; un campo assente resta com'e'.
   await c.env.DB.prepare(
     `UPDATE calendar_events SET
        title = COALESCE(?, title),
        event_date = COALESCE(?, event_date),
-       start_time = COALESCE(?, start_time),
+       start_time = CASE WHEN ? THEN ? ELSE start_time END,
        category = COALESCE(?, category),
-       is_for_all = COALESCE(?, is_for_all)
+       notes = CASE WHEN ? THEN ? ELSE notes END
      WHERE id = ?`
   ).bind(
-    body.title ?? null,
+    body.title?.trim() ?? null,
     body.eventDate ?? null,
+    'startTime' in body ? 1 : 0,
     body.startTime ?? null,
     body.category ?? null,
-    body.isForAll !== undefined ? (body.isForAll ? 1 : 0) : null,
+    'notes' in body ? 1 : 0,
+    body.notes ?? null,
     id
   ).run();
 

@@ -36,6 +36,8 @@ export interface JWTPayload {
   // in quel caso resolveClassId() la rilegge dal database invece di invalidare la sessione di
   // tutti (che significherebbe rifare il login a tutta la classe dopo un aggiornamento).
   classId?: string;
+  // Versione della password (vedi passwordVersion in auth.ts). Assente nei token di prima.
+  pv?: string;
   iat: number;
   exp: number;
 }

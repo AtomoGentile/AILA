@@ -10,6 +10,7 @@ import { logger } from 'hono/logger';
 import type { Env } from './types';
 import { syncSpaggiariCirculars } from './services/spaggiari';
 import { summarizePendingCirculars } from './services/summarizer';
+import { pruneAttempts } from './rateLimit';
 
 // Routes
 import authRoutes from './routes/auth';
@@ -80,6 +81,10 @@ app.notFound((c) => c.json({ error: 'Endpoint non trovato' }, 404));
 // Error handler
 // ---------------------------------------------------------------------------
 app.onError((err, c) => {
+  // Corpo della richiesta che non e' JSON: e' un errore di chi chiama, non del server.
+  if (err instanceof SyntaxError) {
+    return c.json({ error: 'Richiesta non valida' }, 400);
+  }
   console.error('[Worker Error]', err);
   return c.json({ error: 'Errore interno del server' }, 500);
 });
@@ -96,8 +101,12 @@ export default {
   // Cron handler — Spaggiari sync ogni 15 minuti
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     console.log(`[Cron] Avvio sync Spaggiari: ${new Date().toISOString()}`);
-    // Il recupero dei riassunti mancanti parte dopo la sync, così le circolari appena arrivate
-    // (già riassunte dentro la sync) non vengono prese due volte.
-    ctx.waitUntil(syncSpaggiariCirculars(env).then(() => summarizePendingCirculars(env)));
+    // I riassunti partono dopo la sync (e dopo la sua notifica): prima quelli delle circolari
+    // appena arrivate, poi quelli rimasti indietro, al massimo MAX_PER_RUN per giro.
+    ctx.waitUntil(
+      syncSpaggiariCirculars(env)
+        .then(() => summarizePendingCirculars(env))
+        .finally(() => pruneAttempts(env))
+    );
   },
 };

@@ -14,6 +14,9 @@ import { inBackground } from '../services/background';
 const QUORUM_REPRESENTATIVES = 2;
 const QUORUM_GUARDS = 1;
 
+const MAX_DESCRIPTION_LENGTH = 5000;
+const MAX_CATEGORY_LENGTH = 40;
+
 // Vero se l'utente (un solo segnaposto `?`) ha firmato uno svelamento andato a buon fine per
 // quel bersaglio. L'identità è visibile solo a chi ha firmato, non a tutta la classe: una volta
 // detta a voce non si richiama, quindi si tiene il cerchio il più stretto possibile.
@@ -181,6 +184,9 @@ proposals.post('/', async (c) => {
   if (title.length > 200) {
     return c.json({ error: 'Il titolo non può superare 200 caratteri' }, 400);
   }
+  if (description.length > MAX_DESCRIPTION_LENGTH || category.length > MAX_CATEGORY_LENGTH) {
+    return c.json({ error: `La descrizione non può superare ${MAX_DESCRIPTION_LENGTH} caratteri` }, 400);
+  }
 
   const id = newUUID();
   const classId = await resolveClassId(c);
@@ -270,6 +276,13 @@ proposals.put('/:id', async (c) => {
   const body = await c.req.json<{ title?: string; description?: string; category?: string }>();
   if (!body.title && !body.description && !body.category) {
     return c.json({ error: 'Nessuna modifica da salvare' }, 400);
+  }
+  if (
+    (body.title ?? '').length > 200 ||
+    (body.description ?? '').length > MAX_DESCRIPTION_LENGTH ||
+    (body.category ?? '').length > MAX_CATEGORY_LENGTH
+  ) {
+    return c.json({ error: 'Testo troppo lungo' }, 400);
   }
 
   // modified_by_rep si accende solo quando a modificare è il Rappresentante su una proposta non
@@ -568,6 +581,9 @@ proposals.post('/:id/unlock-requests', requireSigner, async (c) => {
 
   if (!reason || reason.trim().length < 10) {
     return c.json({ error: 'È necessario fornire una motivazione di almeno 10 caratteri' }, 400);
+  }
+  if (reason.length > 1000) {
+    return c.json({ error: 'La motivazione può avere al massimo 1000 caratteri' }, 400);
   }
 
   const proposal = await c.env.DB.prepare(

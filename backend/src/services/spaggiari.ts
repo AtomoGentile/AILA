@@ -3,7 +3,7 @@
 // Fetch the school circular board (HTML table) and sync to D1 + R2
 // =============================================================================
 
-import { summarizeCircular } from './summarizer';
+import { forgetPdfFailures, markServerSummaryPlanned } from './summarizer';
 import type { CircularAttachment, Env } from '../types';
 import { notifyClass } from './fcm';
 
@@ -174,6 +174,10 @@ async function resolveAttachments(
 // ---------------------------------------------------------------------------
 // Main sync function — called by cron trigger
 // ---------------------------------------------------------------------------
+
+/** Circolari recenti di cui si ricontrolla ogni giro che il PDF sia davvero su R2. */
+const PDF_RECHECK_WINDOW = 30;
+
 export async function syncSpaggiariCirculars(env: Env): Promise<void> {
   const baseUrl = env.SPAGGIARI_URL;
   if (!baseUrl) {
@@ -185,7 +189,7 @@ export async function syncSpaggiariCirculars(env: Env): Promise<void> {
 
   try {
     const res = await fetchWithTimeout(baseUrl, {
-      headers: { 'User-Agent': 'CircolarePlus/3.0 (+https://circolare.plus)' },
+      headers: { 'User-Agent': 'AILA/3.0 (app della classe; circolari)' },
     });
 
     if (!res.ok) {
@@ -201,91 +205,113 @@ export async function syncSpaggiariCirculars(env: Env): Promise<void> {
     return;
   }
 
+  const recent = new Set(
+    circulars.map((c) => c.number).sort((a, b) => b - a).slice(0, PDF_RECHECK_WINDOW)
+  );
+  const added: ScrapedCircular[] = [];
   for (const circ of circulars) {
     // Una circolare che fallisce (D1, R2, rete) non deve bloccare quelle dopo: prima l'errore
     // interrompeva il giro e, riproponendosi identico ad ogni cron, le nuove restavano indietro.
     try {
-      await syncOneCircular(env, circ);
+      if (await syncOneCircular(env, circ, recent.has(circ.number))) added.push(circ);
     } catch (err) {
       console.error(`[Spaggiari] Circolare ${circ.number}: errore, si passa alla prossima`, err);
     }
   }
+
+  // Una sola notifica per giro, anche con piu' circolari nuove: ogni notifica e' una richiesta
+  // per dispositivo, e sul piano Free un'esecuzione ne puo' fare al massimo 50 in tutto.
+  if (added.length > 0) {
+    added.sort((a, b) => b.number - a.number);
+    const newest = added[0];
+    const title = added.length === 1 ? 'Nuova Circolare' : `${added.length} nuove circolari`;
+    const body =
+      added.length === 1
+        ? `Circolare n. ${newest.number}: ${newest.title}`
+        : added.map((c) => `n. ${c.number}: ${c.title}`).join(' · ').slice(0, 500);
+    try {
+      await notifyClass(env, title, body, { action: 'new_circular', circular_number: String(newest.number) });
+    } catch (err) {
+      console.error('[Spaggiari] Push delle circolari nuove non inviata:', err);
+    }
+  }
 }
 
-async function syncOneCircular(env: Env, circ: ScrapedCircular): Promise<void> {
-  {
-    // 1. Deduplication check in D1
-    const existing = await env.DB.prepare('SELECT number, attachments_json FROM circulars WHERE number = ?')
-      .bind(circ.number)
-      .first<{ number: number; attachments_json: string }>();
-
-    if (existing) {
-      // Backfill: la colonna attachments_json è arrivata dopo che queste circolari erano già
-      // state salvate (lo scraper leggeva solo il PDF principale), quindi restano per sempre a
-      // "[]" — questo dedup le salta come "già note" prima ancora di guardare se Spaggiari ha
-      // allegati che non sono mai stati scaricati. Si aggiornano solo quelle che ne hanno
-      // davvero bisogno (JSON vuoto ma la pagina ne mostra), non si rifà il lavoro ad ogni giro.
-      const hasStoredAttachments = existing.attachments_json && existing.attachments_json !== '[]';
-      if (!hasStoredAttachments && circ.attachments.length > 0) {
-        const attachments = await resolveAttachments(env, circ.number, circ.attachments);
-        await env.DB.prepare('UPDATE circulars SET attachments_json = ? WHERE number = ?')
-          .bind(JSON.stringify(attachments), circ.number)
-          .run();
-        console.log(`[Spaggiari] Allegati recuperati per la circolare già nota ${circ.number}`);
-      }
-      return;
+/** Scarica il PDF principale su R2. `true` se ora c'e'. */
+async function cachePdf(env: Env, circ: { number: number; title: string; pdfUrl: string }, r2Key: string): Promise<boolean> {
+  try {
+    const pdfRes = await fetchWithTimeout(circ.pdfUrl);
+    if (pdfRes.ok && pdfRes.body) {
+      await env.CIRCULARS_BUCKET.put(r2Key, pdfRes.body, {
+        httpMetadata: { contentType: 'application/pdf' },
+        customMetadata: { circularNumber: String(circ.number), title: circ.title },
+      });
+      console.log(`[Spaggiari] PDF ${circ.number} salvato in R2: ${r2Key}`);
+      return true;
     }
-
-    // 2. Download PDF and cache in R2
-    const r2Key = `circulars/${circ.number}.pdf`;
-
-    try {
-      const pdfRes = await fetchWithTimeout(circ.pdfUrl);
-      if (pdfRes.ok && pdfRes.body) {
-        await env.CIRCULARS_BUCKET.put(r2Key, pdfRes.body, {
-          httpMetadata: { contentType: 'application/pdf' },
-          customMetadata: { circularNumber: String(circ.number), title: circ.title },
-        });
-        console.log(`[Spaggiari] PDF ${circ.number} salvato in R2: ${r2Key}`);
-      } else {
-        console.warn(`[Spaggiari] PDF ${circ.number} non scaricabile (HTTP ${pdfRes.status})`);
-      }
-    } catch (err) {
-      console.error(`[Spaggiari] Errore download PDF ${circ.number}:`, err);
-    }
-
-    // 3. Download & cache attachments (colonna "Allegati": zero, uno o più per circolare)
-    const attachments = await resolveAttachments(env, circ.number, circ.attachments);
-
-    // 4. Save metadata in D1
-    await env.DB.prepare(
-      'INSERT INTO circulars (number, title, publish_date, r2_pdf_key, original_url, attachments_json) VALUES (?, ?, ?, ?, ?, ?)'
-    )
-      .bind(circ.number, circ.title, circ.date, r2Key, circ.pdfUrl, JSON.stringify(attachments))
-      .run();
-
-    // 5. Push notification to class: subito dopo il salvataggio, senza aspettare Gemini (fino a
-    //    minuti fra timeout e modelli di ripiego). Se il riassunto non e' ancora pronto lo
-    //    recupera comunque summarizePendingCirculars, e l'app lo mostra appena c'e'.
-    try {
-      await notifyClass(
-        env,
-        'Nuova Circolare',
-        `Circolare n. ${circ.number}: ${circ.title}`,
-        { action: 'new_circular', circular_number: String(circ.number) }
-      );
-    } catch (err) {
-      console.error(`[Spaggiari] Push della circolare ${circ.number} non inviata:`, err);
-    }
-
-    // 6. Riassunto sul server (se c'è GEMINI_API_KEY).
-    await summarizeCircular(env, {
-      number: circ.number,
-      title: circ.title,
-      r2_pdf_key: r2Key,
-      attachments_json: JSON.stringify(attachments),
-    });
-
-    console.log(`[Spaggiari] Circolare ${circ.number} aggiunta e notificata`);
+    console.warn(`[Spaggiari] PDF ${circ.number} non scaricabile (HTTP ${pdfRes.status})`);
+  } catch (err) {
+    console.error(`[Spaggiari] Errore download PDF ${circ.number}:`, err);
   }
+  return false;
+}
+
+/** `true` se la circolare e' nuova ed e' stata aggiunta. */
+async function syncOneCircular(env: Env, circ: ScrapedCircular, isRecent: boolean): Promise<boolean> {
+  // 1. Deduplication check in D1
+  const existing = await env.DB.prepare('SELECT number, attachments_json, r2_pdf_key FROM circulars WHERE number = ?')
+    .bind(circ.number)
+    .first<{ number: number; attachments_json: string; r2_pdf_key: string }>();
+
+  if (existing) {
+    // PDF mancante (download fallito o in timeout la prima volta): prima la circolare restava
+    // "gia' nota" con il PDF assente per sempre. Per le recenti si ricontrolla a ogni giro.
+    if (isRecent && existing.r2_pdf_key && !(await env.CIRCULARS_BUCKET.head(existing.r2_pdf_key))) {
+      if (await cachePdf(env, circ, existing.r2_pdf_key)) {
+        await forgetPdfFailures(env, circ.number);
+        console.log(`[Spaggiari] PDF recuperato per la circolare già nota ${circ.number}`);
+      }
+    }
+
+    // Backfill: la colonna attachments_json è arrivata dopo che queste circolari erano già
+    // state salvate (lo scraper leggeva solo il PDF principale), quindi restano per sempre a
+    // "[]" — questo dedup le salta come "già note" prima ancora di guardare se Spaggiari ha
+    // allegati che non sono mai stati scaricati. Si aggiornano solo quelle che ne hanno
+    // davvero bisogno (JSON vuoto ma la pagina ne mostra), non si rifà il lavoro ad ogni giro.
+    const hasStoredAttachments = existing.attachments_json && existing.attachments_json !== '[]';
+    if (!hasStoredAttachments && circ.attachments.length > 0) {
+      const attachments = await resolveAttachments(env, circ.number, circ.attachments);
+      await env.DB.prepare('UPDATE circulars SET attachments_json = ? WHERE number = ?')
+        .bind(JSON.stringify(attachments), circ.number)
+        .run();
+      console.log(`[Spaggiari] Allegati recuperati per la circolare già nota ${circ.number}`);
+    }
+    return false;
+  }
+
+  // 2. Download PDF and cache in R2 (se fallisce si riprova ai giri successivi, vedi sopra)
+  const r2Key = `circulars/${circ.number}.pdf`;
+  await cachePdf(env, circ, r2Key);
+
+  // 3. Download & cache attachments (colonna "Allegati": zero, uno o più per circolare)
+  const attachments = await resolveAttachments(env, circ.number, circ.attachments);
+
+  // 4. Save metadata in D1
+  await env.DB.prepare(
+    'INSERT INTO circulars (number, title, publish_date, r2_pdf_key, original_url, attachments_json) VALUES (?, ?, ?, ?, ?, ?)'
+  )
+    .bind(circ.number, circ.title, circ.date, r2Key, circ.pdfUrl, JSON.stringify(attachments))
+    .run();
+
+  // 5. Il riassunto lo fa summarizePendingCirculars subito dopo questo giro (index.ts), dopo la
+  //    notifica. Intanto si segna che il server ci sta pensando: chi apre la circolare nel
+  //    frattempo non ne fa partire un secondo in parallelo.
+  try {
+    await markServerSummaryPlanned(env, circ.number);
+  } catch (err) {
+    console.error(`[Spaggiari] Circolare ${circ.number}: prenotazione del riassunto non riuscita`, err);
+  }
+
+  console.log(`[Spaggiari] Circolare ${circ.number} aggiunta`);
+  return true;
 }

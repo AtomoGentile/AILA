@@ -4,7 +4,19 @@
 
 import { Hono } from 'hono';
 import type { Env, JWTPayload } from '../types';
-import { authMiddleware, requireRole, resolveClassId, verifyPassword } from '../auth';
+import {
+  authMiddleware,
+  issueToken,
+  passwordProblem,
+  randomCode,
+  requireRole,
+  resolveClassId,
+  sha256Hex,
+  storedPasswordHash,
+  verifyPassword,
+} from '../auth';
+import { classInviteCode, regenerateClassInviteCode } from '../services/classInvites';
+import type { UserRole } from '../types';
 
 const users = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();
 
@@ -67,6 +79,93 @@ users.put('/me/notifications', async (c) => {
   ).bind(boardEnabled ? 1 : 0, payload.sub).run();
 
   return c.json({ success: true, notificationBoardEnabled: boardEnabled });
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/users/me/password — Cambia la propria password
+//
+// Risponde con un token nuovo: quelli emessi prima (altri telefoni, un token rubato) smettono
+// di valere, perche' la "versione" della password nel token non corrisponde piu'.
+// ---------------------------------------------------------------------------
+users.put('/me/password', async (c) => {
+  const payload = c.get('jwtPayload');
+  const body = await c.req.json<{ currentPassword?: string; newPassword?: string }>();
+  if (typeof body.currentPassword !== 'string' || !body.currentPassword) {
+    return c.json({ error: 'Scrivi la password attuale' }, 400);
+  }
+  const weakPassword = passwordProblem(body.newPassword);
+  if (weakPassword) return c.json({ error: weakPassword }, 400);
+
+  const user = await c.env.DB.prepare('SELECT id, username, role, class_id, password_hash FROM users WHERE id = ?')
+    .bind(payload.sub)
+    .first<{ id: string; username: string; role: UserRole; class_id: string | null; password_hash: string }>();
+  if (!user) return c.json({ error: 'Utente non trovato' }, 404);
+
+  const [storedHash, salt] = user.password_hash.split(':');
+  if (!(await verifyPassword(body.currentPassword, storedHash, salt))) {
+    return c.json({ error: 'La password attuale non è corretta' }, 403);
+  }
+
+  const passwordHash = await storedPasswordHash(body.newPassword as string);
+  await c.env.DB.prepare('UPDATE users SET password_hash = ? WHERE id = ?').bind(passwordHash, user.id).run();
+
+  const token = await issueToken(c.env, {
+    id: user.id,
+    username: user.username,
+    role: user.role,
+    classId: user.class_id || 'DEFAULT_CLASS',
+    passwordHash,
+  });
+  return c.json({ success: true, token });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/users/class-code — Codice per entrare nella classe (solo REPRESENTATIVE)
+// POST /api/users/class-code/regenerate — Nuovo codice (il vecchio smette di valere)
+// ---------------------------------------------------------------------------
+users.get('/class-code', requireRole('REPRESENTATIVE'), async (c) => {
+  const code = await classInviteCode(c.env, await resolveClassId(c), { createIfMissing: true });
+  if (!code) return c.json({ error: 'Codici classe non ancora attivi sul server (manca la migrazione 013)' }, 503);
+  return c.json({ code });
+});
+
+users.post('/class-code/regenerate', requireRole('REPRESENTATIVE'), async (c) => {
+  const code = await regenerateClassInviteCode(c.env, await resolveClassId(c));
+  if (!code) return c.json({ error: 'Codici classe non ancora attivi sul server (manca la migrazione 013)' }, 503);
+  return c.json({ code });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/users/:id/reset-code — Codice monouso per reimpostare la password di un compagno
+// (solo REPRESENTATIVE della stessa classe). Vale 24 ore; generarne un altro annulla il primo.
+// ---------------------------------------------------------------------------
+const RESET_CODE_TTL_SECONDS = 24 * 60 * 60;
+
+users.post('/:id/reset-code', requireRole('REPRESENTATIVE'), async (c) => {
+  const payload = c.get('jwtPayload');
+  const targetId = c.req.param('id');
+  if (targetId === payload.sub) {
+    return c.json({ error: 'Per la tua password usa "Cambia password" nel profilo' }, 400);
+  }
+  const target = await c.env.DB.prepare('SELECT id, username FROM users WHERE id = ? AND class_id = ?')
+    .bind(targetId, await resolveClassId(c))
+    .first<{ id: string; username: string }>();
+  if (!target) return c.json({ error: 'Compagno non trovato nella tua classe' }, 404);
+
+  const code = randomCode(8);
+  const expiresAt = Math.floor(Date.now() / 1000) + RESET_CODE_TTL_SECONDS;
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO password_reset_codes (user_id, code_hash, expires_at, created_by, created_at)
+       VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(user_id) DO UPDATE SET code_hash = excluded.code_hash, expires_at = excluded.expires_at,
+         created_by = excluded.created_by, created_at = excluded.created_at`
+    ).bind(target.id, await sha256Hex(code), expiresAt, payload.sub).run();
+  } catch {
+    return c.json({ error: 'Reset password non ancora attivo sul server (manca la migrazione 013)' }, 503);
+  }
+
+  return c.json({ code, username: target.username, expiresAt: new Date(expiresAt * 1000).toISOString() });
 });
 
 // ---------------------------------------------------------------------------
