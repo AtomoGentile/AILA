@@ -399,3 +399,31 @@ CREATE TABLE IF NOT EXISTS swap_requests (
     status TEXT NOT NULL CHECK(status IN ('PENDING', 'ACCEPTED', 'REJECTED')) DEFAULT 'PENDING',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 13. SICUREZZA (migrazione 013)
+-- Tentativi di login/registrazione/reset in una finestra di tempo (src/rateLimit.ts).
+CREATE TABLE IF NOT EXISTS auth_attempts (
+    key TEXT PRIMARY KEY,
+    count INTEGER NOT NULL DEFAULT 0,
+    window_start INTEGER NOT NULL
+);
+
+-- Codice per entrare in una classe che ha gia' iscritti (lo vede il Rappresentante).
+CREATE TABLE IF NOT EXISTS class_invites (
+    class_id TEXT PRIMARY KEY REFERENCES classes(id) ON DELETE CASCADE,
+    code TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Codice monouso per reimpostare la password (solo l'hash), generato dal Rappresentante.
+CREATE TABLE IF NOT EXISTS password_reset_codes (
+    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    code_hash TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    created_by TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_slots_grid ON interrogation_slots(grid_id);
+CREATE INDEX IF NOT EXISTS idx_comments_proposal ON proposal_comments(proposal_id);
+CREATE INDEX IF NOT EXISTS idx_fcm_token ON fcm_tokens(token);

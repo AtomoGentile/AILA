@@ -33,15 +33,16 @@ const circulars = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload 
 // `circulars.use('*', authMiddleware())` globale come prima: quel blanket copriva anche
 // `/pdf/:key`, la rotta aperta dal tasto "Apri/Scarica" nel browser di sistema del telefono
 // (LocalUriHandler), che non può allegare l'header Authorization — risultato: "chiede
-// l'autenticazione" ogni volta. La chiave R2 non è enumerabile/indovinabile, quindi lasciarla
-// senza JWT è un compromesso ragionevole (equivalente a un link "chiunque abbia il link").
+// l'autenticazione" ogni volta. Le chiavi R2 sono prevedibili ("circulars/123.pdf"), ma le
+// circolari sono gia' pubbliche sul sito della scuola: lasciarle senza JWT va bene, purche' la
+// rotta serva solo quelle (vedi il controllo sulla chiave piu' sotto).
 
 // ---------------------------------------------------------------------------
 // GET /api/circulars — Lista circolari paginata
 // ---------------------------------------------------------------------------
 circulars.get('/', authMiddleware(), async (c) => {
-  const limit = Math.min(parseInt(c.req.query('limit') ?? '50', 10), 100);
-  const offset = parseInt(c.req.query('offset') ?? '0', 10);
+  const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '50', 10) || 50, 1), 100);
+  const offset = Math.max(parseInt(c.req.query('offset') ?? '0', 10) || 0, 0);
 
   const rows = await c.env.DB.prepare(
     'SELECT number, title, publish_date, r2_pdf_key, original_url, attachments_json, created_at FROM circulars ORDER BY number DESC LIMIT ? OFFSET ?'
@@ -111,6 +112,9 @@ function analysisJson(row: AnalysisRow, classId: string) {
     updatedAt: row.updated_at,
   };
 }
+
+const MAX_SUMMARY_CHARS = 4000;
+const MAX_DEADLINES = 30;
 
 // Livello di qualità deciso dal server, non dal client: 0 ripiego euristico, 1 AI locale,
 // 2 Gemini. Vedi la migrazione 006.
@@ -267,6 +271,16 @@ circulars.put('/:number/analysis', authMiddleware(), async (c) => {
   if (!body.summary || typeof body.summary !== 'string') {
     return c.json({ error: 'summary mancante' }, 400);
   }
+  // Tetti contro contenuti gonfiati a mano (un'analisi la leggono tutti).
+  if (body.summary.length > MAX_SUMMARY_CHARS) {
+    return c.json({ error: 'summary troppo lungo' }, 400);
+  }
+  if (body.deadlines !== undefined && (!Array.isArray(body.deadlines) || body.deadlines.length > MAX_DEADLINES)) {
+    return c.json({ error: 'deadlines non valide' }, 400);
+  }
+  if (typeof body.modelLabel === 'string' && body.modelLabel.length > 120) {
+    return c.json({ error: 'modelLabel non valido' }, 400);
+  }
 
   const payload = c.get('jwtPayload') as JWTPayload;
   const modelLabel = body.modelLabel ?? 'Sconosciuto';
@@ -304,6 +318,10 @@ circulars.put('/:number/analysis', authMiddleware(), async (c) => {
 // ---------------------------------------------------------------------------
 circulars.get('/pdf/:key{.+}', async (c) => {
   const key = c.req.param('key');
+  // Solo i PDF delle circolari: la rotta e' aperta (vedi sopra), non deve servire altro dal bucket.
+  if (!/^circulars\/[\w.\-\/]+\.pdf$/.test(key) || key.includes('..')) {
+    return new Response('PDF non trovato', { status: 404 });
+  }
   const object = await c.env.CIRCULARS_BUCKET.get(key);
 
   if (!object) {

@@ -62,23 +62,17 @@ seatmap.post('/publish', requireRole('REPRESENTATIVE'), async (c) => {
     return c.json({ error: 'layout è richiesto e deve essere un oggetto JSON' }, 400);
   }
 
-  // Rotate history: shift map indices
-  // Current maps: N-1 → N-2 → N-3 → N-4 (max 4 stored)
-  // Before inserting the new one, shift existing records
-  await c.env.DB.prepare(
-    'DELETE FROM seat_map_history WHERE class_id = ? AND map_index >= 4'
-  ).bind(classId).run();
-
-  // Shift existing indices: 3→4, 2→3, 1→2
-  await c.env.DB.prepare(
-    'UPDATE seat_map_history SET map_index = map_index + 1 WHERE class_id = ?'
-  ).bind(classId).run();
-
-  // Insert the new map as index 1 (current / N-1)
+  // Storico a scorrimento (massimo 4 mappe): via la piu' vecchia, le altre scalano di uno, la
+  // nuova diventa la 1. In un'unica transazione: prima erano tre query separate, e un errore a
+  // meta' lasciava lo storico spostato senza la mappa nuova.
   const id = newUUID();
-  await c.env.DB.prepare(
-    'INSERT INTO seat_map_history (id, map_index, layout_json, class_id) VALUES (?, ?, ?, ?)'
-  ).bind(id, 1, JSON.stringify(body.layout), classId).run();
+  await c.env.DB.batch([
+    c.env.DB.prepare('DELETE FROM seat_map_history WHERE class_id = ? AND map_index >= 4').bind(classId),
+    c.env.DB.prepare('UPDATE seat_map_history SET map_index = map_index + 1 WHERE class_id = ?').bind(classId),
+    c.env.DB.prepare(
+      'INSERT INTO seat_map_history (id, map_index, layout_json, class_id) VALUES (?, ?, ?, ?)'
+    ).bind(id, 1, JSON.stringify(body.layout), classId),
+  ]);
 
   // Push notification to class
   inBackground(c, notifyClass(

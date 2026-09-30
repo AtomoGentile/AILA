@@ -84,9 +84,14 @@ function schoolYearStart(now: Date): number {
   return now.getUTCMonth() >= 8 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
 }
 
+/** Data di oggi in Italia (YYYY-MM-DD): fra mezzanotte e le 2 la data UTC e' ancora ieri. */
+export function italianToday(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+}
+
 function buildPrompt(number: number, title: string, attachmentLabels: string[], classes: ClassInfo[]): string {
   const now = new Date();
-  const today = now.toISOString().slice(0, 10);
+  const today = italianToday(now);
   const year = schoolYearStart(now);
   const attachmentsLine = attachmentLabels.length
     ? `Dopo il PDF della circolare ci sono ${attachmentLabels.length} allegati (${attachmentLabels.join(', ')}): considerali parte della circolare.`
@@ -296,7 +301,16 @@ export async function upsertAnalysis(
        submitted_by = excluded.submitted_by,
        tier = excluded.tier,
        updated_at = CURRENT_TIMESTAMP
-     WHERE excluded.tier >= circular_ai_analysis.tier`
+     WHERE ${
+       // Il riassunto del server (submitted_by NULL) sostituisce tutto cio' che ha un livello
+       // uguale o inferiore. Quello di un telefono no: allo stesso livello sostituisce solo
+       // un'altra analisi fatta da un telefono. Prima un telefono con la chiave Gemini personale
+       // ("Rianalizza" o il giro in background) sovrascriveva il riassunto del server, e con lui
+       // le note per classe.
+       submittedBy === null
+         ? 'excluded.tier >= circular_ai_analysis.tier'
+         : '(excluded.tier > circular_ai_analysis.tier OR (excluded.tier = circular_ai_analysis.tier AND circular_ai_analysis.submitted_by IS NOT NULL))'
+     }`
   ).bind(
     number,
     a.badge,
@@ -390,6 +404,27 @@ export async function claimOnDemandSummary(env: Env, number: number): Promise<bo
        AND circular_ai_server_attempts.last_attempt_at < datetime('now', ?)`
   ).bind(number, MAX_ATTEMPTS, `-${ON_DEMAND_COOLDOWN_MINUTES} minutes`).run();
   return (result.meta.changes ?? 0) > 0;
+}
+
+/**
+ * Segna che il server sta per riassumere [number] (circolare appena arrivata): per
+ * ON_DEMAND_COOLDOWN_MINUTES l'apertura della circolare non fa partire un secondo riassunto in
+ * parallelo a quello del cron.
+ */
+export async function markServerSummaryPlanned(env: Env, number: number): Promise<void> {
+  if (!env.GEMINI_API_KEY) return;
+  await env.DB.prepare(
+    `INSERT INTO circular_ai_server_attempts (circular_number, attempts, last_attempt_at)
+     VALUES (?, 0, CURRENT_TIMESTAMP)
+     ON CONFLICT(circular_number) DO UPDATE SET last_attempt_at = CURRENT_TIMESTAMP`
+  ).bind(number).run();
+}
+
+/** Il PDF era assente ed e' stato recuperato: i tentativi falliti per questo non contano piu'. */
+export async function forgetPdfFailures(env: Env, number: number): Promise<void> {
+  await env.DB.prepare(
+    "DELETE FROM circular_ai_server_attempts WHERE circular_number = ? AND last_error = 'PDF assente su R2'"
+  ).bind(number).run();
 }
 
 /** L'analisi di questa circolare manca della parte di qualche classe (o non è del server)? */

@@ -276,9 +276,37 @@ preferences.get('/summary', requireRole('REPRESENTATIVE'), async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /api/preferences/matrix — Matrice completa per algoritmo (solo REPRESENTATIVE)
-// Espone tutti i voti inclusi i -2 SOLO per uso algoritmico, non in UI
+// GET /api/preferences/matrix — Matrice per l'algoritmo (solo REPRESENTATIVE)
+//
+// L'ottimizzatore gira sul telefono del Rappresentante e ha bisogno dei due voti di ogni coppia,
+// ma non di sapere chi ha dato quale: il punteggio di coppia e il divieto "-2 / -2" dipendono solo
+// dalla coppia di valori (SeatMapOptimizer.calculateSocialScore e isForbiddenPair sono
+// simmetrici). Prima la rotta restituiva ogni voto con autore e destinatario, e i "-2 blindati"
+// lo erano solo nell'interfaccia. Ora, per ogni coppia, il voto piu' basso viaggia sempre dallo
+// studente con l'id minore e quello piu' alto dall'altro: le disposizioni generate sono le stesse,
+// chi ha votato cosa non si ricava.
 // ---------------------------------------------------------------------------
+export function anonymizePairs(
+  rows: Array<{ from_student_id: string; to_student_id: string; score: number }>
+): Array<{ from: string; to: string; score: number }> {
+  const pairs = new Map<string, { low: string; high: string; scores: number[] }>();
+  for (const r of rows) {
+    if (r.from_student_id === r.to_student_id) continue;
+    const [low, high] = [r.from_student_id, r.to_student_id].sort();
+    const key = `${low}|${high}`;
+    const entry = pairs.get(key) ?? { low, high, scores: [] };
+    entry.scores.push(r.score);
+    pairs.set(key, entry);
+  }
+  const out: Array<{ from: string; to: string; score: number }> = [];
+  for (const { low, high, scores } of pairs.values()) {
+    const sorted = [...scores, ...(scores.length === 1 ? [0] : [])].sort((a, b) => a - b);
+    if (sorted[0] !== 0) out.push({ from: low, to: high, score: sorted[0] });
+    if (sorted[1] !== 0) out.push({ from: high, to: low, score: sorted[1] });
+  }
+  return out;
+}
+
 preferences.get('/matrix', requireRole('REPRESENTATIVE'), async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT sp.from_student_id, sp.to_student_id, sp.score
@@ -287,13 +315,7 @@ preferences.get('/matrix', requireRole('REPRESENTATIVE'), async (c) => {
      WHERE u.class_id = ?`
   ).bind(await resolveClassId(c)).all<{ from_student_id: string; to_student_id: string; score: number }>();
 
-  return c.json({
-    matrix: rows.results.map((r) => ({
-      from: r.from_student_id,
-      to: r.to_student_id,
-      score: r.score,
-    })),
-  });
+  return c.json({ matrix: anonymizePairs(rows.results) });
 });
 
 export default preferences;

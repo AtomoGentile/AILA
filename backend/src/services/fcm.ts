@@ -264,12 +264,29 @@ async function sendV1(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ message: built }),
+    signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
   });
 
   if (!res.ok) {
-    console.error('[FCM] Invio fallito:', await res.text());
+    const text = await res.text().catch(() => '');
+    if (isDeadToken(res.status, text)) {
+      // App disinstallata o token sostituito: senza cancellarlo, ogni notifica futura gli
+      // mandava ancora una richiesta (che conta nel limite di richieste del Worker).
+      await env.DB.prepare('DELETE FROM fcm_tokens WHERE token = ?').bind(recipient.token).run();
+      console.log('[FCM] Token non piu\' valido rimosso');
+    } else {
+      console.error('[FCM] Invio fallito:', text.slice(0, 300));
+    }
   }
   return res.ok;
+}
+
+const SEND_TIMEOUT_MS = 10_000;
+
+/** FCM dice che il token non esiste piu' (UNREGISTERED) o che non e' un token valido. */
+export function isDeadToken(status: number, body: string): boolean {
+  if (status === 404) return true;
+  return status === 400 && /UNREGISTERED|registration token/i.test(body);
 }
 
 async function resolveCredentials(env: Env): Promise<{ accessToken: string; projectId: string } | null> {
