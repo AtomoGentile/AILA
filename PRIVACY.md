@@ -69,8 +69,8 @@ personali (garanteprivacy.it).
 
 ## A chi è rivolta
 
-AILA è pensata per gli studenti di una classe di scuola superiore (17-18 anni). Non è destinata ai
-minori di 14 anni.
+AILA è pensata per gli studenti di scuola superiore, che hanno almeno 14 anni. Non è destinata
+a chi ha meno di 14 anni.
 
 ## Sicurezza
 
