@@ -139,7 +139,7 @@ calendar.post('/', async (c) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
     return c.json({ error: 'eventDate deve essere nel formato yyyy-mm-dd' }, 400);
   }
-  if (startTime != null && !/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(startTime)) {
+  if (startTime != null && !/^([01]?\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(startTime)) {
     return c.json({ error: 'startTime deve essere nel formato HH:MM' }, 400);
   }
   if (title.length > MAX_TITLE_LENGTH || (notes ?? '').length > MAX_NOTES_LENGTH) {
@@ -223,7 +223,7 @@ calendar.put('/:id', async (c) => {
   if (body.eventDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(body.eventDate)) {
     return c.json({ error: 'eventDate deve essere nel formato yyyy-mm-dd' }, 400);
   }
-  if (body.startTime != null && !/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(body.startTime)) {
+  if (body.startTime != null && !/^([01]?\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(body.startTime)) {
     return c.json({ error: 'startTime deve essere nel formato HH:MM' }, 400);
   }
   if (body.category !== undefined && !VALID_CATEGORIES.includes(body.category)) {
