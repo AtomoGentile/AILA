@@ -16,8 +16,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInParent
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Box
@@ -123,9 +126,14 @@ object AilaSheetBackdrop {
 }
 
 /**
- * Foglio che scende dall'alto (Material): un pannello agganciato al bordo superiore, sotto la barra
- * di stato, che scende con lo scrim che si scurisce e risale chiudendosi. Sta dove sta il "+" che lo
- * apre. L'altezza segue il contenuto (fino a quasi tutto lo schermo, sempre sopra la tastiera).
+ * Foglio dall'alto (Material): un pannello agganciato al bordo superiore, sotto la barra di stato,
+ * con lo scrim che si scurisce. L'altezza segue il contenuto (fino a quasi tutto lo schermo, sempre
+ * sopra la tastiera).
+ *
+ * Con [origin] (il pulsante toccato, es. il "+" del calendario) il pannello nasce da li' come le
+ * pagine di ricerca e notifiche nella Home: la forma cresce dal pulsante fino al rettangolo del
+ * pannello e al ritorno ci rientra. Senza origine (aperto da un testo) scende dal bordo alto e
+ * risale allo stesso modo.
  *
  * Il contenuto riceve `requestClose`: chiude con l'animazione e, a fine corsa, chiama [onClosed].
  * Indietro di sistema e tocco sullo scrim fanno lo stesso (un tocco, non uno sfioramento: niente
@@ -134,6 +142,7 @@ object AilaSheetBackdrop {
  */
 @Composable
 fun AilaTopSheet(
+    origin: AilaTransformOrigin? = null,
     onClosed: () -> Unit,
     content: @Composable ColumnScope.(requestClose: () -> Unit) -> Unit
 ) {
@@ -142,19 +151,28 @@ fun AilaTopSheet(
     val closing = remember { mutableStateOf(false) }
     val density = LocalDensity.current
     val bottomRadius = 28.dp
+    val bottomRadiusPx = with(density) { bottomRadius.toPx() }
+    val panelBounds = remember { mutableStateOf<Rect?>(null) }
     LaunchedEffect(Unit) {
-        // Parte dopo i primi due fotogrammi: comporre il contenuto la prima volta e' pesante, e il
-        // pannello non deve saltare avanti. Smorzamento critico: niente rimbalzo, che lascerebbe
-        // uno spazio vuoto sopra il pannello (e' agganciato al bordo).
+        // Parte dopo i primi due fotogrammi: comporre il contenuto la prima volta e' pesante, e la
+        // forma non deve saltare avanti. Da un pulsante la molla dei container transform; dal bordo
+        // smorzamento critico (niente rimbalzo, che lascerebbe uno spazio vuoto sopra il pannello).
         withFrameNanos { }
         withFrameNanos { }
-        progress.animateTo(1f, spring(dampingRatio = 1f, stiffness = 500f))
+        progress.animateTo(
+            1f,
+            if (origin != null) ailaContainerFloatSpring() else spring(dampingRatio = 1f, stiffness = 500f)
+        )
     }
     val requestClose: () -> Unit = {
         if (!closing.value) {
             closing.value = true
             scope.launch {
-                progress.animateTo(0f, tween(260, easing = androidx.compose.animation.core.FastOutLinearInEasing))
+                progress.animateTo(
+                    0f,
+                    if (origin != null) ailaContainerCloseSpec()
+                    else tween(260, easing = androidx.compose.animation.core.FastOutLinearInEasing)
+                )
                 onClosed()
             }
         }
@@ -172,77 +190,56 @@ fun AilaTopSheet(
                 .background(Color.Black.copy(alpha = 0.32f))
                 .pointerInput(Unit) { detectTapGestures { requestClose() } }
         )
-        Column(
+        Box(
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .heightIn(max = maxSheetHeight)
-                .graphicsLayer { translationY = -(1f - progress.value) * size.height }
-                .clip(RoundedCornerShape(bottomStart = bottomRadius, bottomEnd = bottomRadius))
-                .background(AppTheme.SurfaceWhite)
-                // Il pannello prende i tocchi: senza, quelli sulle zone vuote arriverebbero allo
-                // scrim sotto e lo chiuderebbero.
-                .pointerInput(Unit) { detectTapGestures { } }
-                .statusBarsPadding()
+                .fillMaxSize()
+                .then(
+                    if (origin != null) Modifier
+                        .ailaContainerReveal(
+                            progress = { progress.value },
+                            origin = origin,
+                            containerColor = AppTheme.PrimaryBlue,
+                            pageColor = AppTheme.SurfaceWhite,
+                            closing = { closing.value },
+                            // Il rettangolo del pannello, esteso sopra lo schermo di un raggio: gli
+                            // angoli alti arrotondati durante la corsa non devono vedersi.
+                            targetRect = { panelBounds.value?.let { Rect(it.left, it.top - bottomRadiusPx, it.right, it.bottom) } },
+                            targetRadiusPx = bottomRadiusPx
+                        )
+                        .graphicsLayer {}
+                    else Modifier
+                )
         ) {
-            // Il contenuto scorre da solo se non ci sta; la maniglia sta sotto, fuori dallo scorrimento.
-            Column(modifier = Modifier.weight(1f, fill = false)) {
-                content(requestClose)
-            }
-            Box(
+            Column(
                 modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(top = 4.dp, bottom = 10.dp)
-                    .size(width = 36.dp, height = 5.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(AppTheme.TextFaint.copy(alpha = 0.5f))
-            )
-        }
-    }
-}
-
-/**
- * Selettore data uguale in tutta l'app. Liquid Glass: la card non e' piu' il riquadro lilla
- * pieno di Material ma vetro traslucido col filo di luce sul bordo, e l'app dietro si sfoca
- * come sotto i fogli (vedi AilaSheetBackdrop). Negli altri stili resta il dialogo di Material.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun AilaDatePickerDialog(
-    state: androidx.compose.material3.DatePickerState,
-    onDismiss: () -> Unit,
-    confirmLabel: String,
-    onConfirm: () -> Unit
-) {
-    val glass = AppTheme.isGlass
-    if (glass) {
-        androidx.compose.runtime.DisposableEffect(Unit) {
-            AilaSheetBackdrop.openSheets++
-            onDispose { AilaSheetBackdrop.openSheets-- }
-        }
-    }
-    val shape = RoundedCornerShape(if (glass) 32.dp else 28.dp)
-    val clear = androidx.compose.material3.DatePickerDefaults.colors(containerColor = Color.Transparent)
-    androidx.compose.material3.DatePickerDialog(
-        onDismissRequest = onDismiss,
-        modifier = if (glass) Modifier.ailaGlassSurface(shape) else Modifier,
-        shape = shape,
-        tonalElevation = if (glass) 0.dp else 6.dp,
-        colors = if (glass) clear else androidx.compose.material3.DatePickerDefaults.colors(),
-        confirmButton = {
-            androidx.compose.material3.TextButton(onClick = onConfirm) {
-                androidx.compose.material3.Text(confirmLabel)
-            }
-        },
-        dismissButton = {
-            androidx.compose.material3.TextButton(onClick = onDismiss) {
-                androidx.compose.material3.Text("Annulla")
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .heightIn(max = maxSheetHeight)
+                    .then(
+                        if (origin == null) Modifier.graphicsLayer { translationY = -(1f - progress.value) * size.height }
+                        else Modifier
+                    )
+                    .onGloballyPositioned { panelBounds.value = it.boundsInParent() }
+                    .clip(RoundedCornerShape(bottomStart = bottomRadius, bottomEnd = bottomRadius))
+                    .background(AppTheme.SurfaceWhite)
+                    // Il pannello prende i tocchi: senza, quelli sulle zone vuote arriverebbero allo
+                    // scrim sotto e lo chiuderebbero.
+                    .pointerInput(Unit) { detectTapGestures { } }
+                    .statusBarsPadding()
+            ) {
+                // Il contenuto scorre da solo se non ci sta; la maniglia sta sotto, fuori dallo scorrimento.
+                Column(modifier = Modifier.weight(1f, fill = false)) {
+                    content(requestClose)
+                }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(top = 4.dp, bottom = 10.dp)
+                        .size(width = 36.dp, height = 5.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(AppTheme.TextFaint.copy(alpha = 0.5f))
+                )
             }
         }
-    ) {
-        androidx.compose.material3.DatePicker(
-            state = state,
-            colors = if (glass) clear else androidx.compose.material3.DatePickerDefaults.colors()
-        )
     }
 }

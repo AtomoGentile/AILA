@@ -336,6 +336,14 @@ val ailaUnderlayShift: Float get() = if (AppTheme.isGlass) 1f else 0f
 val ailaUnderlayDim: Float get() = 0f
 
 /**
+ * Se false gli elementi di un foglio ([ailaSheetReveal]) sono subito al loro posto. Il foglio
+ * "Nuovo evento" lo tiene spento mentre scende: l'entrata a scaglioni di una decina di livelli
+ * semitrasparenti insieme alla discesa di un pannello alto (il modulo manuale) faceva scattare
+ * l'animazione. Acceso, per i passi che si aprono dopo, a foglio fermo.
+ */
+val LocalAilaSheetReveal = androidx.compose.runtime.compositionLocalOf { true }
+
+/**
  * Entrata a scaglioni degli elementi di un foglio (dettaglio evento, "Nuovo evento"): ognuno sale di
  * pochi punti e si dissolve, con un ritardo crescente per [index]. Legge l'avanzamento solo nel
  * livello grafico, quindi non sposta niente nel layout: l'altezza del foglio non cambia a ogni
@@ -343,10 +351,13 @@ val ailaUnderlayDim: Float get() = 0f
  */
 @Composable
 fun Modifier.ailaSheetReveal(index: Int): Modifier {
-    val progress = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        delay(40L + index * 45L)
-        progress.animateTo(1f, spring(dampingRatio = 0.85f, stiffness = 320f))
+    val enabled = LocalAilaSheetReveal.current
+    val progress = remember { Animatable(if (enabled) 0f else 1f) }
+    if (enabled) {
+        LaunchedEffect(Unit) {
+            delay(40L + index * 45L)
+            progress.animateTo(1f, spring(dampingRatio = 0.85f, stiffness = 320f))
+        }
     }
     return graphicsLayer {
         val p = progress.value

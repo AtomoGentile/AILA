@@ -4464,8 +4464,23 @@ private fun AddCalendarEventDialog(
         stepTracker[1] = stepTracker[0]
         stepTracker[0] = step
     }
-    // Material: il foglio scende dall'alto (dove sta il "+") e risale chiudendosi; la chiusura la
-    // fa il foglio stesso (hostClose), la si chiede da qui.
+    // Material: il foglio nasce dal "+" toccato (come ricerca e notifiche nella Home) e ci rientra;
+    // aperto da un testo (es. "+ Aggiungi" di un giorno) scende dal bordo alto. L'origine si prende
+    // una volta sola, alla prima composizione, cioe' nel fotogramma del tocco. La chiusura la fa il
+    // foglio stesso (hostClose), la si chiede da qui.
+    val sheetOrigin = remember {
+        if (AppTheme.isGlass) null else {
+            circolareplus.design.AilaContainerTransform.assignFreshTo(ADD_EVENT_KEY)
+            circolareplus.design.AilaContainerTransform.originOf(ADD_EVENT_KEY)
+        }
+    }
+    // Gli elementi entrano a scaglioni solo a foglio fermo (i passi che si aprono dopo): mentre il
+    // foglio si apre sono gia' al loro posto, altrimenti il modulo manuale (tanti elementi) scattava.
+    var sheetSettled by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(700L)
+        sheetSettled = true
+    }
     val hostClose = remember { arrayOf<(() -> Unit)?>(null) }
     // Chiudere senza animazione toglieva il foglio di colpo (tasto X, evento creato): prima si
     // risale (Material) o scende (Glass), poi lo si toglie.
@@ -5072,9 +5087,13 @@ private fun AddCalendarEventDialog(
             content = sheetContent
         )
     } else {
-        circolareplus.design.AilaTopSheet(onClosed = onDismiss) { requestClose ->
+        circolareplus.design.AilaTopSheet(origin = sheetOrigin, onClosed = onDismiss) { requestClose ->
             hostClose[0] = requestClose
-            sheetContent()
+            androidx.compose.runtime.CompositionLocalProvider(
+                circolareplus.design.LocalAilaSheetReveal provides sheetSettled
+            ) {
+                sheetContent()
+            }
         }
     }
 }
@@ -6060,6 +6079,7 @@ private fun offlineDataAgeLabel(): String {
 /** Chiave dell'origine del container transform del dettaglio circolare. */
 private const val DETAIL_TRANSFORM_KEY = "circularDetail"
 private const val EVENT_DETAIL_KEY = "eventDetail"
+private const val ADD_EVENT_KEY = "addEventSheet"
 
 /** Le schermate a tutto schermo della shell; `depth` decide il verso del push/pop. */
 private enum class ShellRoute(val depth: Int) {
