@@ -7,7 +7,8 @@ classe, bacheca delle proposte, sondaggi e mappa dei posti. È un progetto scola
 commerciale, senza pubblicità e senza profilazione.
 
 **Titolare del trattamento:** Simone Bianchin, sviluppatore di AILA.
-**Contatto per qualsiasi richiesta:** [INDIRIZZO EMAIL DI CONTATTO — DA COMPLETARE]
+**Contatto per qualsiasi richiesta:** di persona (sono un tuo compagno di classe) oppure dalla
+pagina del progetto su GitHub (github.com/AtomoGentile/AILA).
 
 > Questa informativa descrive ciò che l'app fa davvero, ricavato dal codice. Se qualcosa cambia,
 > viene aggiornata qui prima del rilascio.
@@ -63,13 +64,13 @@ senza il tuo nome come autore. I contatori dei tentativi di accesso durano pochi
 
 Puoi chiedere accesso, correzione, cancellazione, limitazione e portabilità dei tuoi dati, e
 opporti al trattamento (artt. 15–22 GDPR). Puoi eliminare l'account da solo dall'app; per il resto
-scrivi al contatto qui sopra. Hai anche diritto di reclamo al Garante per la protezione dei dati
+usa il contatto qui sopra. Hai anche diritto di reclamo al Garante per la protezione dei dati
 personali (garanteprivacy.it).
 
-## Minori
+## A chi è rivolta
 
-L'app è pensata per studenti di scuola superiore. Se hai meno di 14 anni, l'uso richiede il
-consenso di un genitore o tutore (art. 2-quinquies del Codice privacy italiano).
+AILA è pensata per gli studenti di una classe di scuola superiore (17-18 anni). Non è destinata ai
+minori di 14 anni.
 
 ## Sicurezza
 
