@@ -301,8 +301,10 @@ auth.get('/classes', async (c) => {
      ORDER BY cl.label`
   ).all<{ id: string; label: string; student_count: number }>();
 
+  // Solo le classi con etichetta "anno + sezione": la classe di prima del multi-classe
+  // (DEFAULT_CLASS) non e' scegliibile, la registrazione la rifiuterebbe.
   return c.json({
-    classes: rows.results.map((r) => ({
+    classes: rows.results.filter((r) => normalizeClassLabel(r.label) !== null).map((r) => ({
       id: r.id,
       label: r.label,
       studentCount: r.student_count,
