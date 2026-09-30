@@ -268,9 +268,14 @@ fun AilaDatePickerDialog(
     val clear = androidx.compose.material3.DatePickerDefaults.colors(containerColor = Color.Transparent)
     androidx.compose.material3.DatePickerDialog(
         onDismissRequest = onDismiss,
-        // Vetro smerigliato: il foglio dietro sta in un'altra finestra e non si puo' sfocare, quindi
-        // un velo quasi pieno tiene leggibile il testo; bordo di luce e angoli restano da vetro.
-        modifier = if (glass) Modifier.ailaGlassSurface(shape, tint = AppTheme.SurfaceWhite.copy(alpha = 0.92f)) else Modifier,
+        // Vetro vero: velo leggero (chiaro o scuro) sull'app sfocata, bordo di luce. Il foglio che
+        // sta dietro si dissolve mentre e' aperto (vedi CreatePollDialog), quindi non serve un fondo pieno.
+        modifier = if (glass) {
+            Modifier.ailaGlassSurface(
+                shape,
+                tint = if (AppTheme.isDarkMode) Color.Black.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.42f)
+            )
+        } else Modifier,
         shape = shape,
         tonalElevation = if (glass) 0.dp else 6.dp,
         colors = if (glass) clear else androidx.compose.material3.DatePickerDefaults.colors(),
