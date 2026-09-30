@@ -14,3 +14,13 @@ data class RegisterFcmTokenRequestDto(
 
 @Serializable
 data class ClearFcmTokenRequestDto(val platform: String? = null)
+
+/** Nomi (segreti) dei topic FCM di istituto e classe: GET /api/fcm/topics. */
+@Serializable
+data class FcmTopicsDto(
+    val school: String,
+    @kotlinx.serialization.SerialName("class") val classTopic: String
+)
+
+@Serializable
+data class TopicsSubscribedRequestDto(val token: String)

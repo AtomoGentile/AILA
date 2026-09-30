@@ -48,6 +48,7 @@ class LocalSettingsManager(
         private const val KEY_LAST_SEEN_POLL_CREATED_AT = "last_seen_poll_created_at"
         private const val KEY_BG_ANALYSES_CURSOR = "bg_analyses_cursor"
         private const val KEY_DATA_OWNER = "data_owner_user_id"
+        private const val KEY_FCM_TOPICS = "fcm_topics"
         private const val KEY_ASSISTANT_HISTORY = "assistant_history_json"
         private const val KEY_CIRCULAR_ANALYSES = "circular_analyses_json"
         private const val KEY_BG_LAST_CIRCULAR = "bg_last_circular_number"
@@ -287,6 +288,14 @@ class LocalSettingsManager(
     var dataOwnerId: String
         get() = settings.getString(KEY_DATA_OWNER, "")
         set(value) = settings.putString(KEY_DATA_OWNER, value)
+
+    /**
+     * Topic FCM a cui questo telefono e' iscritto (separati da virgola). Non si cancella con i dati
+     * dell'account: serve a toglierlo dai topic della classe precedente se entra qualcun altro.
+     */
+    var fcmTopics: List<String>
+        get() = settings.getString(KEY_FCM_TOPICS, "").split(',').filter { it.isNotBlank() }
+        set(value) = settings.putString(KEY_FCM_TOPICS, value.joinToString(","))
 
     /** Cursore di /api/circulars/analyses usato dal giro in background (vedi BackgroundCircularsSync). */
     var backgroundAnalysesCursor: String

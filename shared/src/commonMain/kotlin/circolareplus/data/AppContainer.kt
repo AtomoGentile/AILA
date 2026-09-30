@@ -60,7 +60,7 @@ object AppContainer {
     val seatMapRepository: SeatMapRepository by lazy { SeatMapRepository(api) }
     val pollsRepository: PollsRepository by lazy { PollsRepository(api) }
     val rankingPollsRepository: RankingPollsRepository by lazy { RankingPollsRepository(api) }
-    val fcmRepository: FcmRepository by lazy { FcmRepository(api) }
+    val fcmRepository: FcmRepository by lazy { FcmRepository(api, settings, pushTokenProvider) }
 
     val pdfTextExtractor: PdfTextExtractor by lazy { PdfTextExtractor() }
     val pushTokenProvider: PushTokenProvider by lazy { PushTokenProvider() }

@@ -3,6 +3,17 @@
 Elenco vivo dei problemi aperti e del lavoro ancora mancante, aggiornato mano a mano.
 Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esistente.
 
+## Push a topic FCM (piano Free di Cloudflare)
+
+`notifyClass` faceva una richiesta per token: oltre ~40 dispositivi le push in piu' fallivano in silenzio
+(limite di 50 richieste esterne per esecuzione). Ora Android iscritto riceve **un solo messaggio al topic**
+(classe, o istituto per le circolari); iOS e gli APK vecchi restano per token. `notifyUser`/`notifyUsers`
+restano per token.
+- Topic non indovinabili: `aila_s_<HMAC(JWT_SECRET,"school")>` e `aila_c_<HMAC(JWT_SECRET,classId)>` (16 caratteri base64url).
+- Rotte: `GET /api/fcm/topics`, `POST /api/fcm/topics/subscribed {token}`; il registro e' `fcm_topic_devices` (migrazione 014).
+- **Deploy**: Worker deploy con `014_fcm_topics.sql`, poi un APK nuovo (il Kotlin lo verifica solo la CI "Android Build").
+- Chi ha l'APK vecchio continua a ricevere per token finche' non aggiorna.
+
 ## 30/9: controllo pre-beta, correzioni (branch `ccr-96d6f1f5-84m3vv`, poi main)
 
 Fatto (Worker: migrazione `013_security_and_indexes.sql`, solo CREATE IF NOT EXISTS):

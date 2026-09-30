@@ -253,6 +253,8 @@ class AuthRepository(
      * Non blocca l'uscita: senza rete il logout locale avviene comunque.
      */
     fun signOut(fcmRepository: FcmRepository, pushPlatform: String?) {
+        // Prima della sessione: senza, il telefono resta iscritto ai topic della classe.
+        fcmRepository.unsubscribeFromTopics()
         val token = settings.authToken
         if (token.isNotBlank()) {
             circolareplus.data.AppContainer.appScope.launch {

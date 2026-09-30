@@ -377,6 +377,13 @@ CREATE TABLE IF NOT EXISTS fcm_tokens (
     PRIMARY KEY (user_id, platform)
 );
 
+-- 11a. TELEFONI ISCRITTI AI TOPIC FCM (migrazione 014): chi li riceve dal topic non riceve anche il
+-- messaggio per token. Vedi services/fcm.ts (planDelivery).
+CREATE TABLE IF NOT EXISTS fcm_topic_devices (
+    token TEXT PRIMARY KEY,
+    subscribed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 11b. ISCRIZIONI WEB PUSH DELLA PWA (migrazione 010)
 CREATE TABLE IF NOT EXISTS web_push_subscriptions (
     endpoint TEXT PRIMARY KEY,

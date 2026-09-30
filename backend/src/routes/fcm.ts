@@ -5,7 +5,8 @@
 
 import { Hono } from 'hono';
 import type { Env, JWTPayload } from '../types';
-import { authMiddleware } from '../auth';
+import { authMiddleware, resolveClassId } from '../auth';
+import { topicName } from '../services/fcm';
 
 const fcmRoutes = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();
 
@@ -34,6 +35,17 @@ fcmRoutes.post('/token', async (c) => {
   // due account (Rappresentante e studente, com'è normale provando l'app) il token finiva
   // registrato per entrambi e ogni notifica di classe arrivava due volte. Chi accede per ultimo
   // ne diventa l'unico proprietario.
+  // Un token nuovo per questo utente (di un altro account, o mai visto) non e' piu' iscritto ai
+  // topic di prima: si toglie dal registro PRIMA di riassegnarlo. Non deve far fallire la
+  // registrazione se la migrazione 014 manca.
+  try {
+    await c.env.DB.prepare(
+      'DELETE FROM fcm_topic_devices WHERE token = ? AND token NOT IN (SELECT token FROM fcm_tokens WHERE user_id = ?)'
+    ).bind(token, payload.sub).run();
+  } catch (e) {
+    console.error('[FCM] Registro topic non aggiornato (manca la migrazione 014?)', e);
+  }
+
   await c.env.DB.batch([
     c.env.DB.prepare('DELETE FROM fcm_tokens WHERE token = ? AND user_id != ?').bind(token, payload.sub),
     // Upsert: one token per user per platform
@@ -43,6 +55,13 @@ fcmRoutes.post('/token', async (c) => {
        ON CONFLICT(user_id, platform) DO UPDATE SET token = excluded.token, updated_at = excluded.updated_at`
     ).bind(payload.sub, token, platform),
   ]);
+
+  // I token sostituiti dall'upsert non esistono piu': via anche dal registro.
+  try {
+    await c.env.DB.prepare('DELETE FROM fcm_topic_devices WHERE token NOT IN (SELECT token FROM fcm_tokens)').run();
+  } catch (e) {
+    console.error('[FCM] Registro topic non aggiornato (manca la migrazione 014?)', e);
+  }
 
   if (Array.isArray(mutedKinds) || typeof systemNotifications === 'boolean') {
     const muted = (Array.isArray(mutedKinds) ? mutedKinds : [])
@@ -69,6 +88,16 @@ fcmRoutes.delete('/token', async (c) => {
   const payload = c.get('jwtPayload');
   const { platform } = await c.req.json<{ platform?: 'android' | 'ios' }>();
 
+  // Prima del token, altrimenti la sottoquery non trova piu' nulla.
+  try {
+    await c.env.DB.prepare(
+      `DELETE FROM fcm_topic_devices WHERE token IN
+         (SELECT token FROM fcm_tokens WHERE user_id = ?${platform ? ' AND platform = ?' : ''})`
+    ).bind(...(platform ? [payload.sub, platform] : [payload.sub])).run();
+  } catch (e) {
+    console.error('[FCM] Registro topic non aggiornato (manca la migrazione 014?)', e);
+  }
+
   if (platform) {
     await c.env.DB.prepare(
       'DELETE FROM fcm_tokens WHERE user_id = ? AND platform = ?'
@@ -78,6 +107,39 @@ fcmRoutes.delete('/token', async (c) => {
     await c.env.DB.prepare('DELETE FROM fcm_tokens WHERE user_id = ?').bind(payload.sub).run();
   }
 
+  return c.json({ success: true });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/fcm/topics — Nomi (segreti) dei topic a cui iscriversi: istituto e classe
+// ---------------------------------------------------------------------------
+fcmRoutes.get('/topics', async (c) => {
+  const classId = await resolveClassId(c);
+  return c.json({
+    school: await topicName(c.env, 'school'),
+    class: await topicName(c.env, { classId }),
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/fcm/topics/subscribed — L'app si e' iscritta ai topic: da ora non riceve piu' anche
+// il messaggio per token. Vale solo per un token dell'utente stesso.
+// ---------------------------------------------------------------------------
+fcmRoutes.post('/topics/subscribed', async (c) => {
+  const payload = c.get('jwtPayload');
+  const { token } = await c.req.json<{ token?: string }>().catch(() => ({ token: undefined }));
+  if (!token) return c.json({ error: 'token è obbligatorio' }, 400);
+
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO fcm_topic_devices (token, subscribed_at)
+       SELECT token, CURRENT_TIMESTAMP FROM fcm_tokens WHERE user_id = ? AND token = ? LIMIT 1
+       ON CONFLICT(token) DO UPDATE SET subscribed_at = excluded.subscribed_at`
+    ).bind(payload.sub, token).run();
+  } catch (e) {
+    // Migrazione 014 non ancora applicata: l'app resta iscritta ma il server continua per token.
+    console.error('[FCM] Iscrizione ai topic non registrata (manca la migrazione 014?)', e);
+  }
   return c.json({ success: true });
 });
 
