@@ -132,6 +132,7 @@ fun SettingsScreen(
         installedCache.getOrPut(model.id) { isLocalModelInstalled(model) }
     var selectedModelIdState by remember { mutableStateOf(selectedLocalModelId) }
     var orphansCleared by remember { mutableStateOf(false) }
+    var showPrivacy by remember { mutableStateOf(false) }
     val activeModel = remember(selectedModelIdState, localModels) {
         localModels.firstOrNull { it.id == selectedModelIdState } ?: localModels.firstOrNull()
     }
@@ -743,6 +744,27 @@ fun SettingsScreen(
                             },
                             icon = { AppIcons.Sparkle(modifier = Modifier.size(19.dp), color = AppTheme.TintSlateInk) }
                         )
+                        AilaListRow(
+                            title = "Privacy",
+                            subtitle = if (showPrivacy) "Tocca per chiudere" else "Come vengono trattati i tuoi dati",
+                            tint = AppTheme.TintSlate,
+                            showChevron = false,
+                            onClick = { showPrivacy = !showPrivacy },
+                            icon = { AppIcons.Lock(modifier = Modifier.size(19.dp), color = AppTheme.TintSlateInk) }
+                        )
+                        if (showPrivacy) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(AppTheme.Space16),
+                                verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)
+                            ) {
+                                circolareplus.PrivacyPolicy.sections.forEach { (title, text) ->
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text(text = title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AppTheme.TextDark)
+                                        Text(text = text, fontSize = 12.sp, lineHeight = 17.sp, color = AppTheme.TextMuted)
+                                    }
+                                }
+                            }
+                        }
                         if (showDebugMenu) {
                             AilaListRow(
                                 title = "Diagnostica background",
