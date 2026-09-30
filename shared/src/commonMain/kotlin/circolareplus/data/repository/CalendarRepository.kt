@@ -18,10 +18,10 @@ class CalendarRepository(private val api: ApiClient) {
     }
 
     /**
-     * Crea un evento. Se il server rileva un possibile doppione (stessa categoria/materia entro
-     * ±3 giorni per VERIFICA/INTERROGAZIONE) risponde con "warning" invece di un errore: l'evento
-     * NON viene creato in quel caso, e va chiesto conferma all'utente prima di ripetere la request
-     * lasciando decidere manualmente (gestione doppioni descritta nel Riepilogo Moduli v1.2).
+     * Crea un evento. Se il server trova lo stesso evento nello stesso giorno (stessa categoria e
+     * stesso titolo) risponde con "warning" invece di un errore e NON lo crea: si chiede conferma
+     * all'utente e, se vuole comunque, si ripete con [force]. Piu' verifiche diverse nello stesso
+     * giorno sono normali e non danno avvisi.
      */
     suspend fun createEvent(
         title: String,
@@ -31,12 +31,13 @@ class CalendarRepository(private val api: ApiClient) {
         isForAll: Boolean = true,
         isAiGenerated: Boolean = false,
         visibleToUserIds: List<String>? = null,
-        notes: String? = null
+        notes: String? = null,
+        force: Boolean = false
     ): CreateCalendarEventResponseDto = api.post(
         "/api/calendar",
         CreateCalendarEventRequestDto(
             title, eventDate, startTime, category.name, isForAll, isAiGenerated,
-            visibleToUserIds = visibleToUserIds, notes = notes
+            visibleToUserIds = visibleToUserIds, notes = notes, force = force
         )
     )
 

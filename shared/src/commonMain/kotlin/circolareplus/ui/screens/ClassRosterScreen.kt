@@ -27,6 +27,7 @@ import circolareplus.design.AilaSegmentedTabs
 import circolareplus.design.AilaSwitch
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
+import kotlinx.coroutines.launch
 
 /**
  * Scheda Classe del Rappresentante: unica schermata dove chi ha il ruolo REPRESENTATIVE può
@@ -74,6 +75,8 @@ fun ClassRosterScreen(
                 fontWeight = FontWeight.SemiBold,
                 color = AppTheme.PrimaryBlue
             )
+            Spacer(modifier = Modifier.height(AppTheme.Space8))
+            ClassCodeRow()
         }
 
         if (entries.isEmpty()) {
@@ -109,6 +112,159 @@ fun ClassRosterScreen(
                 )
             }
         }
+    }
+}
+
+/**
+ * Codice per entrare nella classe: senza, chiunque poteva registrarsi in "4 CSA" e vedere nomi,
+ * bacheca e calendario. Si gira ai compagni (es. nel gruppo della classe); se finisce dove non
+ * deve si rigenera e quello vecchio smette di valere. Diventa obbligatorio per registrarsi dal
+ * momento in cui esiste, cioe' dalla prima volta che si apre questa schermata.
+ */
+@Composable
+private fun ClassCodeRow() {
+    var code by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var confirmRegenerate by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        try {
+            code = circolareplus.data.AppContainer.usersRepository.classCode()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            error = (e as? circolareplus.data.remote.ApiException)?.message ?: "Codice classe non disponibile offline."
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+            .background(AppTheme.TintBlue)
+            .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = "Codice classe", fontSize = 12.sp, color = AppTheme.TintBlueInk)
+            Text(
+                text = code ?: error ?: "…",
+                fontSize = if (code != null) 20.sp else 12.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = if (code != null) 3.sp else 0.sp,
+                color = AppTheme.TintBlueInk
+            )
+            if (code != null) {
+                Text(
+                    text = "Serve ai compagni per registrarsi in questa classe.",
+                    fontSize = 11.sp,
+                    color = AppTheme.TintBlueInk.copy(alpha = 0.8f)
+                )
+            }
+        }
+        if (code != null) {
+            TextButton(enabled = !busy, onClick = { confirmRegenerate = true }) {
+                Text(if (busy) "…" else "Rigenera", color = AppTheme.TintBlueInk)
+            }
+        }
+    }
+
+    if (confirmRegenerate) {
+        AlertDialog(
+            onDismissRequest = { confirmRegenerate = false },
+            title = { Text("Nuovo codice classe?") },
+            text = { Text("Il codice attuale smette di valere: chi non si è ancora registrato dovrà usare quello nuovo.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRegenerate = false
+                    busy = true
+                    scope.launch {
+                        try {
+                            code = circolareplus.data.AppContainer.usersRepository.regenerateClassCode()
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            error = (e as? circolareplus.data.remote.ApiException)?.message
+                        } finally {
+                            busy = false
+                        }
+                    }
+                }) { Text("Rigenera") }
+            },
+            dismissButton = { TextButton(onClick = { confirmRegenerate = false }) { Text("Annulla") } }
+        )
+    }
+}
+
+/**
+ * Password dimenticata di un compagno: nell'app non ci sono email, quindi il Rappresentante genera
+ * un codice monouso (24 ore) e glielo dice; lui lo usa in "Password dimenticata?" al login.
+ */
+@Composable
+private fun ResetCodeButton(entry: RatingEntryDto) {
+    var result by remember { mutableStateOf<circolareplus.data.remote.dto.ResetCodeResponseDto?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var confirm by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    TextButton(enabled = !busy, onClick = { confirm = true }) {
+        Text(if (busy) "Genero il codice…" else "Password dimenticata? Genera un codice", fontSize = 13.sp)
+    }
+    error?.let { Text(text = it, fontSize = 12.sp, color = AppTheme.TintRedInk) }
+
+    if (confirm) {
+        AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text("Codice di reset") },
+            text = {
+                Text(
+                    "Generi un codice con cui ${entry.firstName} può scegliere una password nuova. " +
+                        "Dallo solo a lei/lui, di persona o in privato."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirm = false
+                    busy = true
+                    error = null
+                    scope.launch {
+                        try {
+                            result = circolareplus.data.AppContainer.usersRepository.createResetCode(entry.studentId)
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            error = (e as? circolareplus.data.remote.ApiException)?.message ?: "Impossibile generare il codice."
+                        } finally {
+                            busy = false
+                        }
+                    }
+                }) { Text("Genera") }
+            },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text("Annulla") } }
+        )
+    }
+
+    result?.let { reset ->
+        AlertDialog(
+            onDismissRequest = { result = null },
+            title = { Text("Codice per ${entry.firstName}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                    Text(text = reset.code, fontSize = 26.sp, fontWeight = FontWeight.Bold, letterSpacing = 4.sp, color = AppTheme.TextDark)
+                    Text(
+                        text = "Username: ${reset.username ?: "—"}. Al login tocca \"Password dimenticata?\" e inserisce " +
+                            "username, questo codice e la password nuova. Vale 24 ore e una volta sola.",
+                        fontSize = 13.sp,
+                        color = AppTheme.TextMuted,
+                        lineHeight = 18.sp
+                    )
+                }
+            },
+            confirmButton = { TextButton(onClick = { result = null }) { Text("Fatto") } }
+        )
     }
 }
 
@@ -197,6 +353,11 @@ private fun ClassRosterRow(
                         onCheckedChange = onSecurityGuardChange
                     )
                 }
+            }
+
+            if (!isSelf) {
+                Spacer(modifier = Modifier.height(4.dp))
+                ResetCodeButton(entry)
             }
         }
     }

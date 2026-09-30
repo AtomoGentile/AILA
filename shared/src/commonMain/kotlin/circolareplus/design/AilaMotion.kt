@@ -88,7 +88,7 @@ fun Modifier.ailaBreathe(): Modifier {
         animationSpec = tween(durationMillis = 1100),
         label = "ailaBreathe"
     )
-    return this.scale(scale)
+    return this.graphicsLayer { scaleX = scale; scaleY = scale }
 }
 
 /**

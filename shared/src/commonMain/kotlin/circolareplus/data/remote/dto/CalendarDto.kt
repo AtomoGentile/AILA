@@ -29,7 +29,9 @@ data class CreateCalendarEventRequestDto(
     val isForAll: Boolean = true,
     val isAiGenerated: Boolean = false,
     val visibleToUserIds: List<String>? = null,
-    val notes: String? = null
+    val notes: String? = null,
+    /** Inserisci anche se il server ha trovato lo stesso evento nello stesso giorno. */
+    val force: Boolean = false
 )
 
 @Serializable

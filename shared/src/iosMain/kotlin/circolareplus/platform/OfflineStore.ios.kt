@@ -71,4 +71,13 @@ actual object OfflineStore {
         NSFileManager.defaultManager.removeItemAtPath(dir, error = null)
         ensureDir(dir)
     }
+
+    actual fun list(): List<String> =
+        NSFileManager.defaultManager.contentsOfDirectoryAtPath(dir, error = null)
+            ?.mapNotNull { it as? String }
+            ?: emptyList()
+
+    actual fun delete(name: String) {
+        NSFileManager.defaultManager.removeItemAtPath("$dir/$name", error = null)
+    }
 }

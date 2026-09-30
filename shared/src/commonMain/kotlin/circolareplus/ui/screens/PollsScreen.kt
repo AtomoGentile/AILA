@@ -1,5 +1,6 @@
 package circolareplus.ui.screens
 
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -706,7 +707,7 @@ private fun VoteCircle(
     Box(
         modifier = Modifier
             .size(34.dp)
-            .scale(scale)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(CircleShape)
             .background(fill)
             .border(

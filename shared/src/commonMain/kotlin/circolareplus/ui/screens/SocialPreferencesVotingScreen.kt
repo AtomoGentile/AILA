@@ -1,5 +1,6 @@
 package circolareplus.ui.screens
 
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -241,7 +242,7 @@ fun RowScope.SocialScoreButton(
     Box(
         modifier = Modifier
             .weight(1f)
-            .scale(animatedScale)
+            .graphicsLayer { scaleX = animatedScale; scaleY = animatedScale }
             .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
             .background(animatedBgColor)
             .border(1.dp, animatedBorderColor, RoundedCornerShape(AppTheme.SmallElementRadius))

@@ -6,8 +6,6 @@ import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpRequestRetry
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.plugins.logging.LogLevel
-import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
@@ -18,6 +16,8 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
@@ -79,6 +79,11 @@ object ConnectivityState {
     }
 }
 
+/** Segnale "la sessione non vale piu'", osservato da MainAppShell. */
+object SessionEvents {
+    var expired by mutableStateOf(false)
+}
+
 val apiJson: Json = Json {
     ignoreUnknownKeys = true
     isLenient = true
@@ -99,10 +104,14 @@ class ApiClient(
             connectTimeoutMillis = 10_000
         }
         install(HttpRequestRetry) {
-            retryOnServerErrors(maxRetries = 2)
+            // Solo le letture: ritentare una POST/PUT dopo un 5xx poteva creare doppioni
+            // (proposte, commenti, eventi) se il server aveva gia' salvato prima dell'errore.
+            maxRetries = 2
+            retryIf { request, response ->
+                request.method == HttpMethod.Get && response.status.value in 500..599
+            }
             exponentialDelay()
         }
-        install(Logging) { level = LogLevel.INFO }
     }
 ) {
     @PublishedApi internal val client = engine
@@ -112,6 +121,13 @@ class ApiClient(
 
     @PublishedApi internal suspend fun HttpResponse.parsedOrThrow(): String {
         val text = bodyAsText()
+        // Il server non riconosce piu' la sessione (password cambiata su un altro telefono,
+        // account eliminato, token scaduto): l'app torna al login invece di mostrare errori ovunque.
+        // Solo se la richiesta usava la sessione in corso (non, per esempio, quella appena chiusa).
+        val current = settings.authToken
+        if (status.value == 401 && current.isNotBlank() && request.headers[HttpHeaders.Authorization] == "Bearer $current") {
+            SessionEvents.expired = true
+        }
         if (!status.isSuccess()) {
             val errorMessage = try {
                 val obj = apiJson.parseToJsonElement(text) as? JsonObject
@@ -225,10 +241,16 @@ class ApiClient(
         return apiJson.decodeFromString(text)
     }
 
-    suspend inline fun <reified B, reified T> deleteWithBody(path: String, body: B, auth: Boolean = true): T {
+    suspend inline fun <reified B, reified T> deleteWithBody(
+        path: String,
+        body: B,
+        auth: Boolean = true,
+        bearerOverride: String? = null
+    ): T {
         val text = sendText {
             client.delete(baseUrl + path) {
-                if (auth) authHeader()
+                if (bearerOverride != null) header("Authorization", "Bearer $bearerOverride")
+                else if (auth) authHeader()
                 contentType(ContentType.Application.Json)
                 setBody(body)
             }

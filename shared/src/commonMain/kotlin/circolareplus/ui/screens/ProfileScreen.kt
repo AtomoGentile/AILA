@@ -54,6 +54,7 @@ fun ProfileScreen(
     showHeader: Boolean = true
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showPasswordDialog by remember { mutableStateOf(false) }
     val isRepresentative = user.role == UserRole.REPRESENTATIVE
     // Classe e anno: prima erano il sottotitolo dell'intestazione, ora stanno nella card identita'.
     val classLine = buildString {
@@ -229,6 +230,16 @@ fun ProfileScreen(
             // --- Uscita ---------------------------------------------------------------------
             AilaCard {
                 AilaListRow(
+                    title = "Cambia password",
+                    subtitle = "Gli altri dispositivi dovranno accedere di nuovo",
+                    tint = AppTheme.TintSlate,
+                    onClick = { showPasswordDialog = true },
+                    icon = {
+                        AppIcons.Lock(modifier = Modifier.size(20.dp), color = AppTheme.TintSlateInk)
+                    }
+                )
+                HorizontalDivider(color = AppTheme.Hairline, modifier = Modifier.padding(start = 72.dp))
+                AilaListRow(
                     title = "Esci dall'account",
                     tint = AppTheme.TintRed,
                     onClick = onLogoutClick,
@@ -287,6 +298,116 @@ fun ProfileScreen(
             onConfirm = onDeleteAccount
         )
     }
+    if (showPasswordDialog) {
+        ChangePasswordDialog(onDismiss = { showPasswordDialog = false })
+    }
+}
+
+/** Cambio password: quella attuale, la nuova due volte. Il token nuovo lo salva il repository. */
+@Composable
+private fun ChangePasswordDialog(onDismiss: () -> Unit) {
+    var current by remember { mutableStateOf("") }
+    var next by remember { mutableStateOf("") }
+    var repeat by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var done by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    @Composable
+    fun field(value: String, placeholder: String, onChange: (String) -> Unit) {
+        androidx.compose.material3.OutlinedTextField(
+            value = value,
+            onValueChange = {
+                onChange(it)
+                error = null
+            },
+            placeholder = { Text(placeholder, fontSize = 13.sp) },
+            singleLine = true,
+            enabled = !busy && !done,
+            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None,
+                autoCorrectEnabled = false,
+                keyboardType = androidx.compose.ui.text.input.KeyboardType.Password
+            ),
+            shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
+            colors = circolareplus.design.ailaFieldColors(),
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        containerColor = AppTheme.SurfaceWhite,
+        shape = RoundedCornerShape(AppTheme.CardCornerRadius),
+        title = {
+            Text(text = "Cambia password", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = AppTheme.TextDark)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                if (done) {
+                    Text(
+                        text = "Password cambiata. Su questo telefono resti dentro; sugli altri dispositivi va fatto di nuovo l'accesso.",
+                        fontSize = 13.sp,
+                        color = AppTheme.TextMuted,
+                        lineHeight = 18.sp
+                    )
+                } else {
+                    field(current, "Password attuale") { current = it }
+                    field(next, "Nuova password (almeno 8 caratteri)") { next = it }
+                    field(repeat, "Ripeti la nuova password") { repeat = it }
+                    error?.let { Text(text = it, fontSize = 12.sp, color = AppTheme.TintRedInk, lineHeight = 17.sp) }
+                }
+            }
+        },
+        confirmButton = {
+            circolareplus.design.AilaPrimaryButton(
+                text = when {
+                    done -> "Fatto"
+                    busy -> "Salvo…"
+                    else -> "Cambia"
+                },
+                compact = true,
+                onClick = {
+                    if (done) {
+                        onDismiss()
+                        return@AilaPrimaryButton
+                    }
+                    if (busy) return@AilaPrimaryButton
+                    error = when {
+                        current.isBlank() -> "Scrivi la password attuale."
+                        next.length < 8 -> "La nuova password deve essere di almeno 8 caratteri."
+                        next != repeat -> "Le due password nuove non coincidono."
+                        else -> null
+                    }
+                    if (error != null) return@AilaPrimaryButton
+                    busy = true
+                    scope.launch {
+                        try {
+                            circolareplus.data.AppContainer.authRepository.changePassword(current, next)
+                            done = true
+                        } catch (e: circolareplus.data.remote.ApiException) {
+                            error = e.message
+                        } catch (e: Exception) {
+                            error = "Impossibile contattare il server. Riprova."
+                        } finally {
+                            busy = false
+                        }
+                    }
+                }
+            )
+        },
+        dismissButton = {
+            if (!done) {
+                circolareplus.design.AilaSecondaryButton(
+                    text = "Annulla",
+                    compact = true,
+                    onClick = { if (!busy) onDismiss() }
+                )
+            }
+        }
+    )
 }
 
 /**

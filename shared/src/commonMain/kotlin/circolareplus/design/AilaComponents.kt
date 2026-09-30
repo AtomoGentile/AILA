@@ -29,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
@@ -361,8 +362,7 @@ fun AilaSlidingChipRow(
         if (target != null) {
             Box(
                 modifier = Modifier
-                    .offset(x = animatedLeft, y = with(density) { target.top.toDp() })
-                    .width(animatedWidth)
+                    .ailaAnimatedBar(left = { animatedLeft }, width = { animatedWidth }, top = with(density) { target.top.toDp() })
                     .height(with(density) { target.height.toDp() })
                     .then(
                         if (AppTheme.isGlass) Modifier.shadow(3.dp, RoundedCornerShape(percent = 50))
@@ -1120,6 +1120,20 @@ private val SwitchPadding = 2.dp
  * per questo, mentre scorre, si allunga come un elastico invece di restare un cerchio rigido, e
  * torna rotonda solo quando si ferma — è la stessa illusione dei toggle di iOS.
  */
+/**
+ * Posizione e larghezza animate lette in fase di layout, non di composizione: mentre la pillola
+ * scorre (selettore a chip, interruttore Glass) si rifa' solo il layout di questo elemento, invece
+ * di ricomporre a ogni fotogramma tutto il componente che la contiene.
+ */
+internal fun Modifier.ailaAnimatedBar(left: () -> Dp, width: () -> Dp, top: Dp = 0.dp): Modifier =
+    this.layout { measurable, constraints ->
+        val w = width().roundToPx().coerceAtLeast(0)
+        val placeable = measurable.measure(constraints.copy(minWidth = w, maxWidth = w))
+        layout(placeable.width, placeable.height) {
+            placeable.place(left().roundToPx(), top.roundToPx())
+        }
+    }
+
 @Composable
 fun AilaSwitch(
     checked: Boolean,
@@ -1195,8 +1209,7 @@ fun AilaSwitch(
     ) {
         Box(
             modifier = Modifier
-                .offset(x = leftEdge, y = SwitchPadding)
-                .width((rightEdge - leftEdge).coerceAtLeast(4.dp))
+                .ailaAnimatedBar(left = { leftEdge }, width = { (rightEdge - leftEdge).coerceAtLeast(4.dp) }, top = SwitchPadding)
                 .height(SwitchThumbSize)
                 .shadow(elevation = 1.5.dp, shape = RoundedCornerShape(50), clip = false)
                 .clip(RoundedCornerShape(50))

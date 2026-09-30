@@ -677,7 +677,7 @@ private fun ThinkingIndicator(step: Int) {
                 modifier = Modifier
                     .padding(end = if (index < 2) 3.dp else 0.dp)
                     .size(6.dp)
-                    .alpha(alpha)
+                    .graphicsLayer { this.alpha = alpha }
                     .clip(CircleShape)
                     .background(AppTheme.PrimaryBlue)
             )

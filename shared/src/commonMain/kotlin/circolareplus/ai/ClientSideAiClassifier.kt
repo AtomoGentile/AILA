@@ -80,36 +80,7 @@ fun cleanGeminiApiKey(raw: String): String =
 class ClientSideAiClassifier(
     userApiKey: String,
     private val model: String = DEFAULT_MODEL,
-    private val httpClient: HttpClient = HttpClient {
-        install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
-        // Senza questo blocco valgono i tempi di default del motore HTTP di Android (OkHttp):
-        // dieci secondi di lettura. Una generateContent con il testo di una circolare intera ne
-        // impiega regolarmente di piu', e la chiamata moriva con
-        // "SocketTimeoutException: Socket timeout has expired" — che l'app riportava
-        // correttamente come fallimento, ma il fallimento non c'entrava con la chiave o con la
-        // quota: era l'app a riattaccare troppo presto. ApiClient un blocco simile ce l'aveva
-        // gia', questo client era rimasto indietro.
-        install(HttpTimeout) {
-            requestTimeoutMillis = 120_000
-            socketTimeoutMillis = 120_000
-            connectTimeoutMillis = 20_000
-        }
-        // Un 429 (quota esaurita al minuto) su un PDF lungo era un fallimento immediato: nessun
-        // tentativo, dritti al fallback (locale o euristico). La quota di Google si libera in
-        // pochi secondi, quindi vale la pena aspettare e riprovare prima di arrendersi — la
-        // stessa cosa che ApiClient fa gia' per gli errori 5xx verso il backend proprio.
-        install(HttpRequestRetry) {
-            maxRetries = 3
-            // 503 escluso: e' "modello sovraccarico", e ritentare lo stesso modello tre volte con
-            // attese crescenti costava 15-20 secondi prima di passare a gemini-flash-lite-latest,
-            // che di solito risponde subito. Il 503 lo gestisce la scaletta dei modelli.
-            retryIf { _, response ->
-                val code = response.status.value
-                code == 429 || (code in 500..599 && code != 503)
-            }
-            exponentialDelay(base = 2.0, maxDelayMs = 20_000)
-        }
-    }
+    private val httpClient: HttpClient = GeminiHttp.client
 ) : AiClassifier {
     companion object {
         /**
@@ -696,4 +667,45 @@ class ClientSideAiClassifier(
         notConfiguredMessage = "Nessuna API Key AI configurata: aprila dalle Impostazioni, " +
             "oppure scarica un modello per l'AI locale."
     )
+}
+
+/**
+ * Un solo client HTTP per tutte le chiamate a Gemini. Prima ogni classificatore (uno per analisi,
+ * uno per domanda all'assistente) ne creava uno nuovo e non lo chiudeva mai: niente riuso delle
+ * connessioni (una stretta di mano TLS a ogni chiamata) e risorse del motore HTTP che si
+ * accumulavano (thread e pool di OkHttp su Android, NSURLSession su iOS).
+ */
+internal object GeminiHttp {
+    val client: HttpClient by lazy {
+        HttpClient {
+            install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+            // Senza questo blocco valgono i tempi di default del motore HTTP di Android (OkHttp):
+            // dieci secondi di lettura. Una generateContent con il testo di una circolare intera ne
+            // impiega regolarmente di piu', e la chiamata moriva con
+            // "SocketTimeoutException: Socket timeout has expired" — che l'app riportava
+            // correttamente come fallimento, ma il fallimento non c'entrava con la chiave o con la
+            // quota: era l'app a riattaccare troppo presto. ApiClient un blocco simile ce l'aveva
+            // gia', questo client era rimasto indietro.
+            install(HttpTimeout) {
+                requestTimeoutMillis = 120_000
+                socketTimeoutMillis = 120_000
+                connectTimeoutMillis = 20_000
+            }
+            // Un 429 (quota esaurita al minuto) su un PDF lungo era un fallimento immediato: nessun
+            // tentativo, dritti al fallback (locale o euristico). La quota di Google si libera in
+            // pochi secondi, quindi vale la pena aspettare e riprovare prima di arrendersi — la
+            // stessa cosa che ApiClient fa gia' per gli errori 5xx verso il backend proprio.
+            install(HttpRequestRetry) {
+                maxRetries = 3
+                // 503 escluso: e' "modello sovraccarico", e ritentare lo stesso modello tre volte con
+                // attese crescenti costava 15-20 secondi prima di passare a gemini-flash-lite-latest,
+                // che di solito risponde subito. Il 503 lo gestisce la scaletta dei modelli.
+                retryIf { _, response ->
+                    val code = response.status.value
+                    code == 429 || (code in 500..599 && code != 503)
+                }
+                exponentialDelay(base = 2.0, maxDelayMs = 20_000)
+            }
+        }
+    }
 }
