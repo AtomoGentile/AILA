@@ -62,6 +62,13 @@ function extractLinks(cellHtml: string, baseUrl: string): ScrapedAttachment[] {
   return links;
 }
 
+// Un download che non risponde non deve tenere fermo il giro del cron (e con lui tutte le
+// circolari dopo): oltre il timeout la richiesta fallisce e si passa oltre.
+const FETCH_TIMEOUT_MS = 20_000;
+function fetchWithTimeout(url: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(url, { ...init, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+}
+
 // ---------------------------------------------------------------------------
 // Parse HTML table from Spaggiari
 // Colonne della tabella reale (iisprimolevi.edu.it/Spaggiari): Numero | Data | Oggetto | PDF | Allegati
@@ -145,7 +152,7 @@ async function resolveAttachments(
 
     const attKey = `circulars/${circularNumber}-allegati/${i}.pdf`;
     try {
-      const attRes = await fetch(att.url);
+      const attRes = await fetchWithTimeout(att.url);
       if (attRes.ok && attRes.body) {
         await env.CIRCULARS_BUCKET.put(attKey, attRes.body, {
           httpMetadata: { contentType: 'application/pdf' },
@@ -177,7 +184,7 @@ export async function syncSpaggiariCirculars(env: Env): Promise<void> {
   let circulars: ScrapedCircular[];
 
   try {
-    const res = await fetch(baseUrl, {
+    const res = await fetchWithTimeout(baseUrl, {
       headers: { 'User-Agent': 'CircolarePlus/3.0 (+https://circolare.plus)' },
     });
 
@@ -195,6 +202,18 @@ export async function syncSpaggiariCirculars(env: Env): Promise<void> {
   }
 
   for (const circ of circulars) {
+    // Una circolare che fallisce (D1, R2, rete) non deve bloccare quelle dopo: prima l'errore
+    // interrompeva il giro e, riproponendosi identico ad ogni cron, le nuove restavano indietro.
+    try {
+      await syncOneCircular(env, circ);
+    } catch (err) {
+      console.error(`[Spaggiari] Circolare ${circ.number}: errore, si passa alla prossima`, err);
+    }
+  }
+}
+
+async function syncOneCircular(env: Env, circ: ScrapedCircular): Promise<void> {
+  {
     // 1. Deduplication check in D1
     const existing = await env.DB.prepare('SELECT number, attachments_json FROM circulars WHERE number = ?')
       .bind(circ.number)
@@ -214,14 +233,14 @@ export async function syncSpaggiariCirculars(env: Env): Promise<void> {
           .run();
         console.log(`[Spaggiari] Allegati recuperati per la circolare già nota ${circ.number}`);
       }
-      continue;
+      return;
     }
 
     // 2. Download PDF and cache in R2
     const r2Key = `circulars/${circ.number}.pdf`;
 
     try {
-      const pdfRes = await fetch(circ.pdfUrl);
+      const pdfRes = await fetchWithTimeout(circ.pdfUrl);
       if (pdfRes.ok && pdfRes.body) {
         await env.CIRCULARS_BUCKET.put(r2Key, pdfRes.body, {
           httpMetadata: { contentType: 'application/pdf' },
@@ -245,22 +264,27 @@ export async function syncSpaggiariCirculars(env: Env): Promise<void> {
       .bind(circ.number, circ.title, circ.date, r2Key, circ.pdfUrl, JSON.stringify(attachments))
       .run();
 
-    // 5. Riassunto sul server (se c'è GEMINI_API_KEY) prima della notifica: chi apre la
-    //    circolare dalla notifica trova il riassunto già pronto invece di aspettare il telefono.
+    // 5. Push notification to class: subito dopo il salvataggio, senza aspettare Gemini (fino a
+    //    minuti fra timeout e modelli di ripiego). Se il riassunto non e' ancora pronto lo
+    //    recupera comunque summarizePendingCirculars, e l'app lo mostra appena c'e'.
+    try {
+      await notifyClass(
+        env,
+        'Nuova Circolare',
+        `Circolare n. ${circ.number}: ${circ.title}`,
+        { action: 'new_circular', circular_number: String(circ.number) }
+      );
+    } catch (err) {
+      console.error(`[Spaggiari] Push della circolare ${circ.number} non inviata:`, err);
+    }
+
+    // 6. Riassunto sul server (se c'è GEMINI_API_KEY).
     await summarizeCircular(env, {
       number: circ.number,
       title: circ.title,
       r2_pdf_key: r2Key,
       attachments_json: JSON.stringify(attachments),
     });
-
-    // 6. Push notification to class
-    await notifyClass(
-      env,
-      'Nuova Circolare',
-      `Circolare n. ${circ.number}: ${circ.title}`,
-      { action: 'new_circular', circular_number: String(circ.number) }
-    );
 
     console.log(`[Spaggiari] Circolare ${circ.number} aggiunta e notificata`);
   }
