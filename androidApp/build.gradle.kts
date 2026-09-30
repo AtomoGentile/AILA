@@ -102,6 +102,20 @@ android {
         abortOnError = false
     }
 
+    // Chiave di rilascio vera, facoltativa: la usa la CI se trova i secret ANDROID_RELEASE_*
+    // (vedi android-build.yml). Senza, resta la chiave debug di sempre. ATTENZIONE: passare da una
+    // chiave all'altra obbliga chi ha gia' l'app a disinstallarla (perdendo i dati locali) prima
+    // di installare la nuova: va fatto una volta sola, prima del rilascio ufficiale.
+    val releaseStorePath = System.getenv("ANDROID_RELEASE_KEYSTORE_PATH")
+    if (releaseStorePath != null && file(releaseStorePath).exists()) {
+        signingConfigs.create("release") {
+            storeFile = file(releaseStorePath)
+            storePassword = System.getenv("ANDROID_RELEASE_STORE_PASSWORD")
+            keyAlias = System.getenv("ANDROID_RELEASE_KEY_ALIAS")
+            keyPassword = System.getenv("ANDROID_RELEASE_KEY_PASSWORD")
+        }
+    }
+
     buildTypes {
         // L'APK distribuito era il "debug": con Compose e' molto piu' lento (codice non
         // ottimizzato, controlli di debug attivi), da qui gran parte degli scatti nelle
@@ -115,7 +129,7 @@ android {
             isMinifyEnabled = false
             isShrinkResources = false
             isDebuggable = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 }

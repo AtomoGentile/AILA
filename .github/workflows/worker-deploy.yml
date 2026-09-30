@@ -60,12 +60,18 @@ jobs:
 
       # npm 10 (quello di Node 22) si ferma con "Cannot read properties of null (reading
       # 'edgesOut')" risolvendo le dipendenze di vitest 4; npm 11 le installa senza problemi.
+      # `ci`: esattamente le versioni di backend/package-lock.json, non le ultime uscite.
       - name: Install dependencies
-        run: npx -y npm@11 install --no-audit --no-fund
+        run: npx -y npm@11 ci --no-audit --no-fund
 
       # Stesso controllo che si fa in locale: un errore di tipi non arriva in produzione.
       - name: Typecheck
         run: npx tsc --noEmit -p .
+
+      # Test delle rotte su un D1 simulato (SQLite di Node) con lo schema reale: se falliscono
+      # non si applicano migrazioni e non si deploya.
+      - name: Test
+        run: npm test
 
       # Input passato via env e validato: solo nomi di file esistenti in migrations/.
       - name: Apply D1 migrations

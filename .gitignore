@@ -63,6 +63,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 package-lock.json
+# Il Worker invece si deploya sempre con le stesse versioni: il lockfile resta nel repo.
+!backend/package-lock.json
 yarn.lock
 
 # === Cloudflare/Backend ===

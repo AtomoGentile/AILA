@@ -97,7 +97,25 @@ jobs:
 
       # Release (non debuggabile) firmato con la chiave debug qui sopra: stessa firma delle build
       # di prima, si aggiorna sopra l'app installata, ma gira molto piu' fluido del debug.
-      - name: Build APK (release firmato con chiave debug)
+      # Chiave di rilascio vera (facoltativa): secret ANDROID_RELEASE_KEYSTORE (base64 del
+      # keystore), ANDROID_RELEASE_STORE_PASSWORD, ANDROID_RELEASE_KEY_ALIAS,
+      # ANDROID_RELEASE_KEY_PASSWORD. Se ci sono, l'APK e' firmato con quella invece che con la
+      # chiave debug. Cambiare chiave obbliga a disinstallare l'app: farlo una volta sola, prima
+      # del rilascio ufficiale.
+      - name: Release keystore
+        env:
+          ANDROID_RELEASE_KEYSTORE: ${{ secrets.ANDROID_RELEASE_KEYSTORE }}
+        run: |
+          if [ -n "$ANDROID_RELEASE_KEYSTORE" ]; then
+            echo "$ANDROID_RELEASE_KEYSTORE" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+            echo "ANDROID_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build APK (release)
+        env:
+          ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+          ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
         run: |
           ./gradlew --no-daemon :androidApp:assembleRelease
           cp androidApp/build/outputs/apk/release/androidApp-release.apk AILA.apk
