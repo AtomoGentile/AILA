@@ -36,6 +36,9 @@ interface FcmRecipient {
   // Preferenze del dispositivo (migrazione 009). Assenti se la migrazione non e' ancora applicata.
   muted_kinds?: string | null;
   system_notifications?: number | null;
+  // 1 se il telefono e' nel registro fcm_topic_devices (migrazione 014): riceve i messaggi dai
+  // topic. Assente se la migrazione non e' ancora applicata: nessuno e' iscritto.
+  topic?: number | null;
 }
 
 /**
@@ -68,16 +71,62 @@ export function notificationKind(data: Record<string, string>): string {
 /**
  * Legge i destinatari con le loro preferenze; se la migrazione 009 non e' ancora applicata le
  * colonne non esistono e la query fallisce: si ripiega sulla stessa query senza preferenze, cosi'
- * le notifiche continuano ad arrivare come prima.
+ * le notifiche continuano ad arrivare come prima. Con `withTopics` si legge anche il registro
+ * dei telefoni iscritti ai topic (migrazione 014); senza quella tabella nessuno risulta iscritto.
  */
-async function queryRecipients(env: Env, where: string, binds: unknown[]): Promise<FcmRecipient[]> {
-  const run = (columns: string) =>
-    env.DB.prepare(`SELECT DISTINCT ${columns} FROM fcm_tokens t ${where}`).bind(...binds).all<FcmRecipient>();
+async function queryRecipients(
+  env: Env,
+  where: string,
+  binds: unknown[],
+  withTopics = false
+): Promise<FcmRecipient[]> {
+  const run = (columns: string, join = '') =>
+    env.DB.prepare(`SELECT DISTINCT ${columns} FROM fcm_tokens t ${join} ${where}`).bind(...binds).all<FcmRecipient>();
+  const prefs = 't.token, t.platform, t.muted_kinds, t.system_notifications';
+  if (withTopics) {
+    try {
+      return (
+        await run(`${prefs}, (d.token IS NOT NULL) AS topic`, 'LEFT JOIN fcm_topic_devices d ON d.token = t.token')
+      ).results;
+    } catch (e) {
+      // Migrazione 014 non ancora applicata: si continua per token, come prima.
+    }
+  }
   try {
-    return (await run('t.token, t.platform, t.muted_kinds, t.system_notifications')).results;
+    return (await run(prefs)).results;
   } catch (e) {
     return (await run('t.token, t.platform')).results;
   }
+}
+
+/**
+ * Divide i destinatari fra topic e messaggi singoli. Un Android iscritto ai topic riceve solo il
+ * messaggio del topic (una richiesta per tutti); gli altri (APK vecchi non ancora iscritti, iOS)
+ * ricevono il messaggio per token. Cosi' nessuno riceve la stessa notifica due volte.
+ */
+export function planDelivery(recipients: FcmRecipient[]): { topic: boolean; perToken: FcmRecipient[] } {
+  const viaTopic = (r: FcmRecipient) => r.platform === 'android' && !!r.topic;
+  return { topic: recipients.some(viaTopic), perToken: recipients.filter((r) => !viaTopic(r)) };
+}
+
+const TOPIC_ALPHABET_HASH_LENGTH = 16;
+
+/**
+ * Nome di un topic FCM che non si puo' indovinare: chiunque puo' iscriversi a un topic dal client,
+ * quindi il nome dipende da un segreto del server (HMAC-SHA256 con JWT_SECRET, base64url: solo
+ * caratteri ammessi dai topic). "school" = tutto l'istituto (circolari), altrimenti l'id classe.
+ */
+export async function topicName(env: Env, scope: 'school' | { classId: string }): Promise<string> {
+  const isSchool = scope === 'school';
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(env.JWT_SECRET),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(isSchool ? 'school' : scope.classId));
+  return `aila_${isSchool ? 's' : 'c'}_${base64url.encode(mac).slice(0, TOPIC_ALPHABET_HASH_LENGTH)}`;
 }
 
 interface ServiceAccount {
@@ -273,12 +322,30 @@ async function sendV1(
       // App disinstallata o token sostituito: senza cancellarlo, ogni notifica futura gli
       // mandava ancora una richiesta (che conta nel limite di richieste del Worker).
       await env.DB.prepare('DELETE FROM fcm_tokens WHERE token = ?').bind(recipient.token).run();
+      await env.DB.prepare('DELETE FROM fcm_topic_devices WHERE token = ?').bind(recipient.token).run().catch(() => {});
       console.log('[FCM] Token non piu\' valido rimosso');
     } else {
       console.error('[FCM] Invio fallito:', text.slice(0, 300));
     }
   }
   return res.ok;
+}
+
+/** Un solo messaggio data-only al topic: raggiunge tutti gli Android iscritti con una richiesta. */
+async function sendToTopic(
+  accessToken: string,
+  projectId: string,
+  topic: string,
+  message: FcmMessage
+): Promise<void> {
+  const built = buildMessage({ topic }, { token: '', platform: 'android' }, message);
+  const res = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: built }),
+    signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+  });
+  if (!res.ok) console.error('[FCM] Invio al topic fallito:', (await res.text().catch(() => '')).slice(0, 300));
 }
 
 const SEND_TIMEOUT_MS = 10_000;
@@ -319,11 +386,7 @@ async function resolveCredentials(env: Env): Promise<{ accessToken: string; proj
 /**
  * Notify the entire class (or, without a classId, every registered device).
  *
- * Nota: si inviava un unico messaggio al topic FCM "class", ma nessun client si iscrive mai a
- * quel topic (né Android né iOS chiamano subscribeToTopic da nessuna parte) — quindi il topic
- * non ha mai avuto iscritti. FCM risponde comunque "ok" a un invio a un topic senza iscritti,
- * quindi l'errore passava inosservato: le circolari (uniche chiamanti senza classId) non
- * generavano mai una notifica push reale. Si manda direttamente token per token.
+ * Android iscritto ai topic: un solo messaggio al topic. Tutti gli altri: per token.
  */
 export async function notifyClass(
   env: Env,
@@ -355,23 +418,25 @@ async function fcmNotifyClass(
   const creds = await resolveCredentials(env);
   if (!creds) return;
 
-  if (!classId) {
-    const all = await queryRecipients(env, '', []);
-    await Promise.allSettled(
-      all.map((row) => sendV1(env, creds.accessToken, creds.projectId, row, message))
-    );
-    return;
-  }
-
-  // Con una classe indicata non si può usare il topic 'class': è unico e raggiungerebbe anche
-  // gli iscritti delle altre classi. Si mandano i messaggi ai token di quella classe soltanto.
-  // DISTINCT (in queryRecipients): lo stesso telefono può comparire sotto più account (vedi
+  // Un topic per scope (classe, o istituto per le circolari): una sola richiesta qualunque sia il
+  // numero di telefoni, invece di una per token (il piano Free di Cloudflare ne concede 50 per
+  // esecuzione). Il nome del topic e' segreto, vedi topicName. I telefoni che non sono ancora
+  // iscritti (APK vecchi) e quelli iOS ricevono il messaggio per token: planDelivery.
+  // DISTINCT (in queryRecipients): lo stesso telefono puo' comparire sotto piu' account (vedi
   // routes/fcm.ts), e senza raggruppare per token la stessa notifica partiva una volta per account.
-  const tokens = await queryRecipients(env, 'JOIN users u ON u.id = t.user_id WHERE u.class_id = ?', [classId]);
+  const recipients = classId
+    ? await queryRecipients(env, 'JOIN users u ON u.id = t.user_id WHERE u.class_id = ?', [classId], true)
+    : await queryRecipients(env, '', [], true);
+  const plan = planDelivery(recipients);
 
-  await Promise.allSettled(
-    tokens.map((row) => sendV1(env, creds.accessToken, creds.projectId, row, message))
+  const sends: Promise<unknown>[] = plan.perToken.map((row) =>
+    sendV1(env, creds.accessToken, creds.projectId, row, message)
   );
+  if (plan.topic) {
+    const topic = await topicName(env, classId ? { classId } : 'school');
+    sends.push(sendToTopic(creds.accessToken, creds.projectId, topic, message));
+  }
+  await Promise.allSettled(sends);
 }
 
 /**

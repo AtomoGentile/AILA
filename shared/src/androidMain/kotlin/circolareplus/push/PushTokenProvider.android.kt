@@ -20,6 +20,28 @@ actual class PushTokenProvider actual constructor() {
         // invece di far crashare l'app. Vedi FIREBASE_SETUP.md.
         null
     }
+
+    actual suspend fun subscribeToTopics(topics: List<String>): Boolean = try {
+        topics.all { topic ->
+            suspendCancellableCoroutine { continuation ->
+                FirebaseMessaging.getInstance().subscribeToTopic(topic)
+                    .addOnCompleteListener { task ->
+                        if (continuation.isActive) continuation.resumeWith(Result.success(task.isSuccessful))
+                    }
+            }
+        }
+    } catch (e: Exception) {
+        // Firebase non inizializzata: come getToken, si degrada senza topic (il server manda per token).
+        false
+    }
+
+    actual fun unsubscribeFromTopics(topics: List<String>) {
+        try {
+            topics.forEach { FirebaseMessaging.getInstance().unsubscribeFromTopic(it) }
+        } catch (e: Exception) {
+            // Firebase non inizializzata: non c'e' nulla da togliere.
+        }
+    }
 }
 
 actual fun currentPushPlatform(): String = "android"

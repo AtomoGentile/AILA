@@ -18,6 +18,11 @@ actual class PushTokenProvider actual constructor() {
     } catch (e: Exception) {
         null
     }
+
+    // Niente topic su iOS: le push restano per token, il server applica i silenziamenti.
+    actual suspend fun subscribeToTopics(topics: List<String>): Boolean = false
+
+    actual fun unsubscribeFromTopics(topics: List<String>) {}
 }
 
 actual fun currentPushPlatform(): String = "ios"

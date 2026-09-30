@@ -845,6 +845,10 @@ fun MainAppShell(
                     mutedKinds = AppContainer.settings.mutedNotificationKinds,
                     systemNotifications = AppContainer.settings.isSystemNotificationsEnabled
                 )
+                // Topic FCM: una sola richiesta del server per notifica (piano Free di Cloudflare).
+                AppContainer.fcmRepository.subscribeToTopics(token)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 // Non bloccante: l'app resta utilizzabile anche se la registrazione fallisce.
             }
