@@ -4455,15 +4455,6 @@ private fun AddCalendarEventDialog(
     }
 
     val scope = rememberCoroutineScope()
-    // Container transform dei passi: da dove nasce ogni passo e dove si richiude (vedi sotto).
-    val transforms = remember { EventStepTransforms() }
-    // Passo attuale e quello di prima, per sapere in che direzione si sta andando anche mentre il
-    // vecchio contenuto sta ancora uscendo.
-    val stepTracker = remember { arrayOf(step, step) }
-    if (stepTracker[0] != step) {
-        stepTracker[1] = stepTracker[0]
-        stepTracker[0] = step
-    }
     // Material: il foglio nasce dal "+" toccato (come ricerca e notifiche nella Home) e ci rientra;
     // aperto da un testo (es. "+ Aggiungi" di un giorno) scende dal bordo alto. L'origine si prende
     // una volta sola, alla prima composizione, cioe' nel fotogramma del tocco. La chiusura la fa il
@@ -4473,13 +4464,6 @@ private fun AddCalendarEventDialog(
             circolareplus.design.AilaContainerTransform.assignFreshTo(ADD_EVENT_KEY)
             circolareplus.design.AilaContainerTransform.originOf(ADD_EVENT_KEY)
         }
-    }
-    // Gli elementi entrano a scaglioni solo a foglio fermo (i passi che si aprono dopo): mentre il
-    // foglio si apre sono gia' al loro posto, altrimenti il modulo manuale (tanti elementi) scattava.
-    var sheetSettled by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        delay(700L)
-        sheetSettled = true
     }
     val hostClose = remember { arrayOf<(() -> Unit)?>(null) }
     // Chiudere senza animazione toglieva il foglio di colpo (tasto X, evento creato): prima si
@@ -4626,93 +4610,35 @@ private fun AddCalendarEventDialog(
                 }
             }
 
-            // Passi del foglio: avanti (Assistente, Manuale) il nuovo contenuto arriva da destra,
-            // indietro (verso il menu) da sinistra, e l'altezza del foglio segue con una molla
-            // invece di scattare da una misura all'altra.
+            // Passi del foglio: "fade through" di Material. Il passo vecchio si dissolve del tutto
+            // e solo dopo entra il nuovo (un filo piu' piccolo che si distende), mai insieme: prima
+            // il nuovo cominciava mentre il vecchio spariva e per un momento si vedevano sovrapposti.
+            // L'altezza del foglio segue con una molla, senza tagliare il contenuto.
             androidx.compose.animation.AnimatedContent(
                 targetState = step,
                 modifier = Modifier.fillMaxWidth(),
                 transitionSpec = {
-                    val forward = targetState.ordinal > initialState.ordinal
-                    val lower = if (forward) initialState else targetState
-                    val higher = if (forward) targetState else initialState
-                    val hasOrigin = !AppTheme.isGlass && (
-                        if (forward) transforms.openRect(higher, lower) else transforms.closeRect(higher)
-                    ) != null
-                    val sizeSpring = androidx.compose.animation.SizeTransform(clip = false) { _, _ ->
-                        androidx.compose.animation.core.spring<androidx.compose.ui.unit.IntSize>(
-                            dampingRatio = 0.9f, stiffness = 380f
-                        )
-                    }
-                    if (hasOrigin) {
-                        // Material: il passo nasce dalla card (o dal pulsante) toccata e ci si
-                        // richiude tornando indietro. Le animazioni le fa il contenuto stesso
-                        // (ailaContainerReveal): qui solo chi sta sopra e l'altezza del foglio.
-                        androidx.compose.animation.ContentTransform(
-                            targetContentEnter = androidx.compose.animation.EnterTransition.None,
-                            initialContentExit = androidx.compose.animation.ExitTransition.None,
-                            targetContentZIndex = if (forward) 1f else -1f,
-                            sizeTransform = sizeSpring
-                        )
-                    } else {
-                        val slide = androidx.compose.animation.core.spring<androidx.compose.ui.unit.IntOffset>(
-                            dampingRatio = 0.85f, stiffness = 380f
-                        )
-                        androidx.compose.animation.ContentTransform(
-                            targetContentEnter = androidx.compose.animation.fadeIn(
-                                androidx.compose.animation.core.tween(200, delayMillis = 70)
-                            ) + androidx.compose.animation.slideInHorizontally(slide) { w -> if (forward) w / 8 else -w / 8 },
-                            initialContentExit = androidx.compose.animation.fadeOut(
-                                androidx.compose.animation.core.tween(110)
-                            ) + androidx.compose.animation.slideOutHorizontally(slide) { w -> if (forward) -w / 8 else w / 8 },
-                            sizeTransform = sizeSpring
-                        )
-                    }
+                    androidx.compose.animation.ContentTransform(
+                        targetContentEnter = androidx.compose.animation.fadeIn(
+                            androidx.compose.animation.core.tween(190, delayMillis = 100)
+                        ) + androidx.compose.animation.scaleIn(
+                            androidx.compose.animation.core.tween(190, delayMillis = 100),
+                            initialScale = 0.94f
+                        ),
+                        initialContentExit = androidx.compose.animation.fadeOut(
+                            androidx.compose.animation.core.tween(90)
+                        ),
+                        sizeTransform = androidx.compose.animation.SizeTransform(clip = false) { _, _ ->
+                            androidx.compose.animation.core.spring<androidx.compose.ui.unit.IntSize>(
+                                dampingRatio = 0.9f, stiffness = 380f
+                            )
+                        }
+                    )
                 },
                 label = "eventCreationStep"
             ) { shownStep ->
-            // Il passo piu' "profondo" fra i due (Assistente o Manuale rispetto al Menu) e' quello
-            // che cresce dalla card entrando e si richiude nella card uscendo; l'altro resta fermo.
-            val other = if (shownStep == step) stepTracker[1] else step
-            val closingNow = shownStep != step
-            val cardRadiusPx = with(androidx.compose.ui.platform.LocalDensity.current) { AppTheme.CardCornerRadius.toPx() }
-            val stepProgress = transition.animateFloat(
-                transitionSpec = {
-                    if (targetState == androidx.compose.animation.EnterExitState.PostExit) circolareplus.design.ailaContainerCloseSpec()
-                    else circolareplus.design.ailaContainerFloatSpring()
-                },
-                label = "eventStepContainer"
-            ) { state -> if (state == androidx.compose.animation.EnterExitState.Visible) 1f else 0f }
-            val revealRect = if (AppTheme.isGlass || shownStep.ordinal <= other.ordinal) null
-                else if (closingNow) transforms.closeRect(shownStep) else transforms.openRect(shownStep, other)
-            val revealColor = if (closingNow) transforms.cardColor(shownStep) else transforms.openColor(shownStep, other)
             // Colonna propria: AnimatedContent impila i figli come una Box, senza questa si sovrapporrebbero.
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .onGloballyPositioned { coordinates ->
-                        when (shownStep) {
-                            EventCreationStep.MENU -> transforms.menuRoot = coordinates
-                            EventCreationStep.ASSISTANT -> transforms.assistantRoot = coordinates
-                            else -> {}
-                        }
-                    }
-                    .then(
-                        if (revealRect != null) Modifier
-                            .ailaContainerReveal(
-                                progress = { stepProgress.value },
-                                origin = circolareplus.design.AilaTransformOrigin(revealRect, cardRadiusPx),
-                                containerColor = revealColor,
-                                pageColor = AppTheme.SurfaceWhite,
-                                relative = true,
-                                // Una card bianca che cresce su un foglio bianco non si vedrebbe:
-                                // le si lascia il filo del suo contorno, che poi si dissolve.
-                                outlineColor = if (revealColor == AppTheme.SurfaceWhite) AppTheme.FieldOutline else Color.Unspecified
-                            )
-                            .graphicsLayer {}
-                        else Modifier
-                    )
-            ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
             when (shownStep) {
                 EventCreationStep.MENU -> {
                     Text(
@@ -4737,30 +4663,16 @@ private fun AddCalendarEventDialog(
                                     brush = androidx.compose.ui.graphics.SolidColor(color)
                                 )
                             },
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .onGloballyPositioned { transforms.cardCoords[EventCreationStep.ASSISTANT] = it }
-                                .ailaSheetReveal(1),
-                            onClick = {
-                                transforms.snapshotCards()
-                                step = EventCreationStep.ASSISTANT
-                            }
+                            modifier = Modifier.weight(1f).fillMaxHeight().ailaSheetReveal(1),
+                            onClick = { step = EventCreationStep.ASSISTANT }
                         )
                         EventCreationOptionCard(
                             title = "Crea manualmente",
                             subtitle = "Inserisci i dettagli da solo",
                             highlighted = false,
                             icon = { color -> AppIcons.Pencil(modifier = Modifier.size(20.dp), color = color) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .onGloballyPositioned { transforms.cardCoords[EventCreationStep.MANUAL] = it }
-                                .ailaSheetReveal(2),
-                            onClick = {
-                                transforms.snapshotCards()
-                                step = EventCreationStep.MANUAL
-                            }
+                            modifier = Modifier.weight(1f).fillMaxHeight().ailaSheetReveal(2),
+                            onClick = { step = EventCreationStep.MANUAL }
                         )
                     }
                 }
@@ -4841,7 +4753,6 @@ private fun AddCalendarEventDialog(
                                     draft.notes?.let { notes = it }
                                     aiFilled = fromAi != null
                                     aiFallbackNotice = fromAi == null
-                                    transforms.snapshotGenerate()
                                     step = EventCreationStep.MANUAL
                                 } finally {
                                     isGeneratingEvent = false
@@ -4850,7 +4761,6 @@ private fun AddCalendarEventDialog(
                         },
                         enabled = aiPrompt.isNotBlank() && !isGeneratingEvent,
                         fillMaxWidth = true,
-                        modifier = Modifier.onGloballyPositioned { transforms.generateCoords = it },
                         icon = { color -> AppIcons.Sparkle(modifier = Modifier.size(14.dp), color = color) }
                     )
                     if (isGeneratingEvent) {
@@ -5090,57 +5000,12 @@ private fun AddCalendarEventDialog(
         circolareplus.design.AilaTopSheet(origin = sheetOrigin, onClosed = onDismiss) { requestClose ->
             hostClose[0] = requestClose
             androidx.compose.runtime.CompositionLocalProvider(
-                circolareplus.design.LocalAilaSheetReveal provides sheetSettled
+                circolareplus.design.LocalAilaSheetReveal provides false
             ) {
                 sheetContent()
             }
         }
     }
-}
-
-/**
- * Memoria dei rettangoli per il container transform dei passi del foglio "Nuovo evento": dove stanno
- * le due card del menu e il pulsante "Genera evento", nelle coordinate del contenuto di un passo
- * (che e' lo stesso per tutti: i passi stanno sovrapposti nello stesso contenitore). Si fotografano
- * al tocco, quando tutto e' fermo, cosi' non dipendono dal foglio che nel frattempo cresce o si
- * abbassa.
- */
-private class EventStepTransforms {
-    var menuRoot: androidx.compose.ui.layout.LayoutCoordinates? = null
-    var assistantRoot: androidx.compose.ui.layout.LayoutCoordinates? = null
-    val cardCoords = mutableMapOf<EventCreationStep, androidx.compose.ui.layout.LayoutCoordinates>()
-    var generateCoords: androidx.compose.ui.layout.LayoutCoordinates? = null
-    val cardRect = mutableMapOf<EventCreationStep, androidx.compose.ui.geometry.Rect>()
-    var generateRect: androidx.compose.ui.geometry.Rect? = null
-
-    fun snapshotCards() {
-        val root = menuRoot?.takeIf { it.isAttached } ?: return
-        for ((step, coordinates) in cardCoords) {
-            if (coordinates.isAttached) cardRect[step] = root.localBoundingBoxOf(coordinates, clipBounds = false)
-        }
-    }
-
-    fun snapshotGenerate() {
-        val root = assistantRoot?.takeIf { it.isAttached } ?: return
-        val button = generateCoords?.takeIf { it.isAttached } ?: return
-        generateRect = root.localBoundingBoxOf(button, clipBounds = false)
-    }
-
-    /** Da dove nasce [step] arrivando da [from]: la card del menu, o il pulsante "Genera evento". */
-    fun openRect(step: EventCreationStep, from: EventCreationStep) = when {
-        from == EventCreationStep.MENU -> cardRect[step]
-        from == EventCreationStep.ASSISTANT && step == EventCreationStep.MANUAL -> generateRect ?: cardRect[step]
-        else -> null
-    }
-
-    /** Dove si richiude [step] tornando al menu: nella sua card. */
-    fun closeRect(step: EventCreationStep) = cardRect[step] ?: generateRect
-
-    fun cardColor(step: EventCreationStep): Color =
-        if (step == EventCreationStep.ASSISTANT) AppTheme.PrimaryBlue else AppTheme.SurfaceWhite
-
-    fun openColor(step: EventCreationStep, from: EventCreationStep): Color =
-        if (from == EventCreationStep.ASSISTANT && step == EventCreationStep.MANUAL) AppTheme.PrimaryBlue else cardColor(step)
 }
 
 /** Pulsante tondo del foglio "Nuovo evento" (indietro, chiudi): si schiaccia al tocco come gli altri. */
