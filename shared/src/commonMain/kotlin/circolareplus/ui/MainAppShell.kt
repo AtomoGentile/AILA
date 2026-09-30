@@ -5450,20 +5450,16 @@ private fun CreatePollDialog(
         }
     }
 
-    // Col selettore data aperto (in Glass) il contenuto del foglio si dissolve: la card e' vetro
-    // trasparente e i testi del foglio, dietro, la rendevano illeggibile.
-    val sheetContentAlpha by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (showDatePicker && AppTheme.isGlass) 0f else 1f,
-        label = "pollSheetContentAlpha"
-    )
+    // Col selettore data aperto (in Glass) il foglio si dissolve: la card e' vetro trasparente e
+    // i testi del foglio, dietro, la rendevano illeggibile.
     circolareplus.design.AilaBottomSheet(
         onDismissRequest = onDismiss,
+        faded = showDatePicker,
         sheetState = sheetState
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .graphicsLayer { alpha = sheetContentAlpha }
                 .appImePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = AppTheme.Space20)
