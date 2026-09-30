@@ -5,7 +5,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.WindowInsets
@@ -20,6 +19,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInParent
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import kotlinx.coroutines.launch
@@ -185,10 +185,11 @@ fun AilaTopSheet(
         }
     }
     circolareplus.platform.PlatformBackHandler(enabled = true) { requestClose() }
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        // Sempre sopra la tastiera: con lei aperta il pannello si accorcia invece di finirci sotto.
-        val imeHeight = with(density) { WindowInsets.ime.getBottom(density).toDp() }
-        val maxSheetHeight = (maxHeight - imeHeight - 24.dp).coerceAtLeast(240.dp)
+    // Sempre sopra la tastiera: con lei aperta il pannello si accorcia invece di finirci sotto.
+    // L'altezza della tastiera si legge in fase di layout (vedi il pannello piu' sotto): letta qui,
+    // ogni fotogramma dell'animazione della tastiera ricomponeva tutto il contenuto del foglio.
+    val imeInsets = WindowInsets.ime
+    Box(modifier = Modifier.fillMaxSize()) {
         // Scrim: tocco fuori = chiudi.
         Box(
             modifier = Modifier
@@ -221,7 +222,15 @@ fun AilaTopSheet(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
-                    .heightIn(max = maxSheetHeight)
+                    .layout { measurable, constraints ->
+                        val maxSheetHeight = (constraints.maxHeight - imeInsets.getBottom(this) - 24.dp.roundToPx())
+                            .coerceAtLeast(240.dp.roundToPx())
+                            .coerceAtMost(constraints.maxHeight)
+                        val placeable = measurable.measure(
+                            constraints.copy(maxHeight = maxSheetHeight, minHeight = minOf(constraints.minHeight, maxSheetHeight))
+                        )
+                        layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                    }
                     .then(
                         if (origin == null) Modifier.graphicsLayer { translationY = -(1f - progress.value) * size.height }
                         else Modifier

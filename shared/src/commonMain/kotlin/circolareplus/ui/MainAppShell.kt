@@ -156,6 +156,19 @@ fun MainAppShell(
     var currentUser by remember { mutableStateOf<User?>(initialUser) }
     var currentProfile by remember { mutableStateOf<StudentProfile?>(initialProfile) }
 
+    // Sessione rifiutata dal server mentre l'app e' aperta (password cambiata altrove, account
+    // eliminato): si chiude quella locale e si torna al login.
+    LaunchedEffect(circolareplus.data.remote.SessionEvents.expired) {
+        if (circolareplus.data.remote.SessionEvents.expired) {
+            circolareplus.data.remote.SessionEvents.expired = false
+            if (currentUser != null && AppContainer.settings.authToken.isNotBlank()) {
+                AppContainer.authRepository.logout()
+                currentUser = null
+                currentProfile = null
+            }
+        }
+    }
+
     // All'avvio, se non ci sono già uno user/profile forniti dall'esterno, prova a ripristinare
     // la sessione da un token salvato localmente (persistenza login tra un avvio e l'altro).
     var isRestoringSession by remember { mutableStateOf(currentUser == null && AppContainer.authRepository.hasStoredSession()) }
@@ -813,6 +826,7 @@ fun MainAppShell(
         if (ConnectivityState.isOffline) return@LaunchedEffect
         delay(5_000L)
         while (isActive) {
+            circolareplus.platform.awaitForeground()
             circolareplus.data.OfflineSync.runIfDue()
             delay(10L * 60L * 1000L)
         }
@@ -904,6 +918,7 @@ fun MainAppShell(
     var addEventInitialStep by remember { mutableStateOf(EventCreationStep.MENU) }
     var addEventInitialDateIso by remember { mutableStateOf<String?>(null) }
     var pendingDuplicateWarning by remember { mutableStateOf<String?>(null) }
+    var pendingDuplicateRetry by remember { mutableStateOf<(() -> Unit)?>(null) }
     // Evento su cui si è toccato "vedi dettagli" dal calendario: prima onEventClick non faceva
     // nulla, quindi orario, note e destinatari specifici erano invisibili fuori dalla card
     // riassuntiva.
@@ -1445,6 +1460,7 @@ fun MainAppShell(
         if (selectedTab != MainTab.SEATMAP) return@LaunchedEffect
         if (!isPreferencesOpen && !isRepresentative) return@LaunchedEffect
         while (true) {
+            circolareplus.platform.awaitForeground()
             try {
                 preferencesProgress = AppContainer.preferencesRepository.progress()
             } catch (e: CancellationException) {
@@ -1542,6 +1558,7 @@ fun MainAppShell(
         // un'analisi in corso (anche iniziata a meta' di un'attesa lunga).
         var ticksSinceSync = Int.MAX_VALUE
         while (isActive) {
+            circolareplus.platform.awaitForeground()
             if (ticksSinceSync >= 4 || inFlightClassification.isNotEmpty()) {
                 syncServerAnalyses()
                 ticksSinceSync = 0
@@ -1572,6 +1589,7 @@ fun MainAppShell(
         // forzare l'analisi completa aprendo la singola circolare e premendo "Rianalizza".
         var consecutiveLocalFallbacks = 0
         while (isActive) {
+            circolareplus.platform.awaitForeground()
             val next = circulars.sortedByDescending { it.number }
                 .firstOrNull {
                     it.number !in classifications && it.number !in inFlightClassification &&
@@ -1624,6 +1642,7 @@ fun MainAppShell(
     LaunchedEffect(user.id) {
         while (isActive) {
             delay(60_000L)
+            circolareplus.platform.awaitForeground()
             refreshCirculars()
         }
     }
@@ -1645,6 +1664,7 @@ fun MainAppShell(
     LaunchedEffect(user.id) {
         while (isActive) {
             delay(5 * 60 * 1000L)
+            circolareplus.platform.awaitForeground()
             try {
                 noteNovelties(freshProposals = AppContainer.proposalsRepository.listProposals())
             } catch (e: CancellationException) {
@@ -1684,18 +1704,21 @@ fun MainAppShell(
                 // prima restavano "aperti" perché non avevano tutti gli invii.
                 val openPolls = publishedPolls.filterNot { it.isCalculated }
                 if (publishedPolls.isNotEmpty()) {
-                    val lastSeenId = AppContainer.settings.lastSeenPollId
-                    if (lastSeenId.isBlank()) {
-                        AppContainer.settings.lastSeenPollId = publishedPolls.first().id
+                    // Si confrontano le date di creazione (stesso formato del server, ordinabili come
+                    // testo). Prima la data si confrontava con l'id dell'ultimo visto, un UUID.
+                    val newest = publishedPolls.maxOf { it.createdAt }
+                    val lastSeen = AppContainer.settings.lastSeenPollCreatedAt
+                    if (lastSeen.isBlank()) {
+                        AppContainer.settings.lastSeenPollCreatedAt = newest
                     } else {
-                        val newPolls = publishedPolls.filter { it.id != lastSeenId && it.createdAt > lastSeenId }
+                        val newPolls = publishedPolls.filter { it.createdAt > lastSeen }
                         if (newPolls.isNotEmpty()) {
                             newPolls.forEach { poll ->
                                 if (AppContainer.settings.isNotificationKindEnabled(NotificationKind.POLLS.key)) {
                                     AppContainer.settings.addNotification("Nuovo sondaggio: ${poll.subject}", "Apertura prenotazioni", NotificationKind.POLLS.key)
                                 }
                             }
-                            AppContainer.settings.lastSeenPollId = publishedPolls.first().id
+                            AppContainer.settings.lastSeenPollCreatedAt = newest
                             notificationLog = AppContainer.settings.listNotifications()
                         }
                     }
@@ -1816,45 +1839,52 @@ fun MainAppShell(
             initialStep = addEventInitialStep,
             initialDateIso = addEventInitialDateIso,
             onConfirm = { title, date, time, category, visibleToUserIds, notes ->
-                coroutineScope.launch {
-                    try {
-                        val response = AppContainer.calendarRepository.createEvent(
-                            title = title,
-                            eventDate = date,
-                            startTime = time,
-                            category = category,
-                            visibleToUserIds = visibleToUserIds,
-                            notes = notes
-                        )
-                        if (response.warning != null) {
-                            pendingDuplicateWarning = response.warning
-                        } else {
-                            // Il foglio scende con la sua animazione (poi chiama onDismiss). Intanto il
-                            // calendario va sul giorno del nuovo evento e l'evento c'e' gia': si
-                            // inserisce subito, senza aspettare la rilettura, cosi' la sua card entra
-                            // mentre il foglio finisce di scendere. La rilettura poi lo riallinea.
-                            addEventCloseRequested = true
-                            val newId = response.id
-                            if (newId != null && calendarEvents.none { it.id == newId }) {
-                                calendarEvents = calendarEvents + CalendarEvent(
-                                    id = newId,
-                                    title = circolareplus.util.compactClassLabels(title),
-                                    date = date,
-                                    time = time,
-                                    category = category,
-                                    isForAll = visibleToUserIds == null,
-                                    createdByUserId = user.id,
-                                    visibleToUserIds = visibleToUserIds,
-                                    notes = notes
-                                )
+                fun create(force: Boolean) {
+                    coroutineScope.launch {
+                        try {
+                            val response = AppContainer.calendarRepository.createEvent(
+                                title = title,
+                                eventDate = date,
+                                startTime = time,
+                                category = category,
+                                visibleToUserIds = visibleToUserIds,
+                                notes = notes,
+                                force = force
+                            )
+                            if (response.warning != null) {
+                                // Lo stesso evento c'e' gia' quel giorno: si chiede se aggiungerlo
+                                // comunque, senza chiudere il modulo (prima si perdeva cio' che si era scritto).
+                                pendingDuplicateRetry = { create(force = true) }
+                                pendingDuplicateWarning = response.warning
+                            } else {
+                                // Il foglio scende con la sua animazione (poi chiama onDismiss). Intanto il
+                                // calendario va sul giorno del nuovo evento e l'evento c'e' gia': si
+                                // inserisce subito, senza aspettare la rilettura, cosi' la sua card entra
+                                // mentre il foglio finisce di scendere. La rilettura poi lo riallinea.
+                                addEventCloseRequested = true
+                                val newId = response.id
+                                if (newId != null && calendarEvents.none { it.id == newId }) {
+                                    calendarEvents = calendarEvents + CalendarEvent(
+                                        id = newId,
+                                        title = circolareplus.util.compactClassLabels(title),
+                                        date = date,
+                                        time = time,
+                                        category = category,
+                                        isForAll = visibleToUserIds == null,
+                                        createdByUserId = user.id,
+                                        visibleToUserIds = visibleToUserIds,
+                                        notes = notes
+                                    )
+                                }
+                                calendarFocusDateIso = date
+                                reloadCalendar()
                             }
-                            calendarFocusDateIso = date
-                            reloadCalendar()
+                        } catch (e: Exception) {
+                            calendarError = "Impossibile creare l'evento: ${e.message}"
                         }
-                    } catch (e: Exception) {
-                        calendarError = "Impossibile creare l'evento: ${e.message}"
                     }
                 }
+                create(force = false)
             }
         )
     }
@@ -1863,12 +1893,23 @@ fun MainAppShell(
 
     if (pendingDuplicateWarning != null) {
         AlertDialog(
-            onDismissRequest = { pendingDuplicateWarning = null },
-            title = { Text("Possibile doppione") },
+            onDismissRequest = { pendingDuplicateWarning = null; pendingDuplicateRetry = null },
+            title = { Text("Evento già presente") },
             text = { Text(pendingDuplicateWarning ?: "") },
             confirmButton = {
-                TextButton(onClick = { pendingDuplicateWarning = null; addEventCloseRequested = true }) {
-                    Text("Ho capito")
+                TextButton(onClick = {
+                    val retry = pendingDuplicateRetry
+                    pendingDuplicateWarning = null
+                    pendingDuplicateRetry = null
+                    retry?.invoke()
+                }) {
+                    Text("Aggiungi comunque")
+                }
+            },
+            dismissButton = {
+                // Il modulo resta aperto: si puo' correggere titolo o data.
+                TextButton(onClick = { pendingDuplicateWarning = null; pendingDuplicateRetry = null }) {
+                    Text("Annulla")
                 }
             }
         )
@@ -2160,10 +2201,9 @@ fun MainAppShell(
                         isAiGenerated = true
                     )
                     when {
-                        // Il server, sui possibili doppioni, avvisa invece di creare: l'evento
-                        // NON esiste, e dirlo e' l'unico modo perche' non si creda il contrario.
+                        // La stessa scadenza e' gia' in calendario quel giorno: non si duplica.
                         response.warning != null ->
-                            "Non aggiunto: ${response.warning}"
+                            "\"${deadline.title}\" è già in calendario il ${deadline.dueDate}."
                         response.success -> {
                             // Senza questo, l'evento veniva creato sul server ma restava invisibile
                             // in Calendario/Home finché l'app non veniva riavviata: calendarEvents
@@ -3600,14 +3640,15 @@ fun MainAppShell(
                             },
                             onManageClassRoster = { isInClassRosterScreen = true },
                             onLogoutClick = {
-                                coroutineScope.launch {
-                                    try {
-                                        AppContainer.fcmRepository.clearTokens(currentPushPlatform())
-                                    } catch (e: Exception) {
-                                        // Non bloccante: il logout locale procede comunque.
-                                    }
-                                }
-                                AppContainer.authRepository.logout()
+                                // Toglie il token push dal server (con la sessione ancora valida)
+                                // e poi chiude quella locale, dati dell'account compresi.
+                                AppContainer.authRepository.signOut(AppContainer.fcmRepository, currentPushPlatform())
+                                assistantMessages.clear()
+                                assistantConversations = emptyList()
+                                // Analisi (della classe dell'account) e campanella restano in memoria
+                                // oltre il login: chi entra dopo ricomincia dai propri.
+                                classifications.clear()
+                                notificationLog = emptyList()
                                 isInProfileScreen = false
                                 currentUser = null
                                 currentProfile = null
@@ -3619,8 +3660,10 @@ fun MainAppShell(
                                     // server lo ha gia' cancellato a cascata, qui basta uscire.
                                     assistantMessages.clear()
                                     assistantConversations = emptyList()
+                                    classifications.clear()
+                                    notificationLog = emptyList()
                                     isInProfileScreen = false
-                                currentUser = null
+                                    currentUser = null
                                     currentProfile = null
                                     null
                                 } catch (e: CancellationException) {

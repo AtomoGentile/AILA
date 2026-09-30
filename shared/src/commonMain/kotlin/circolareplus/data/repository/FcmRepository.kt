@@ -37,10 +37,17 @@ class FcmRepository(private val api: ApiClient) {
         registerToken(token, platform, mutedKinds, systemNotifications)
     }
 
-    /** platform = null rimuove tutti i token dell'utente (usato al logout). */
-    suspend fun clearTokens(platform: String? = null) {
+    /**
+     * platform = null rimuove tutti i token dell'utente (usato al logout). [authToken]: il token
+     * della sessione che si sta chiudendo, se nel frattempo quello salvato e' gia' stato cancellato.
+     */
+    suspend fun clearTokens(platform: String? = null, authToken: String? = null) {
         lastToken = null
         lastPlatform = null
-        api.deleteWithBody<ClearFcmTokenRequestDto, SuccessDto>("/api/fcm/token", ClearFcmTokenRequestDto(platform))
+        api.deleteWithBody<ClearFcmTokenRequestDto, SuccessDto>(
+            "/api/fcm/token",
+            ClearFcmTokenRequestDto(platform),
+            bearerOverride = authToken
+        )
     }
 }

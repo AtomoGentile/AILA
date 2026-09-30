@@ -57,6 +57,11 @@ class CircolareMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
 
+        // Nessuno collegato su questo telefono (logout): la notifica era per un account che qui
+        // non c'e' piu'. Il server toglie il token al logout, ma senza rete in quel momento
+        // resterebbe fino al prossimo accesso.
+        if (AppContainer.settings.authToken.isBlank()) return
+
         // Il backend manda ad Android messaggi SOLO data (titolo e testo dentro "data"), cosi'
         // questo metodo gira sempre, anche ad app chiusa; il fallback sul blocco "notification"
         // copre un eventuale invio vecchio stile dalla console Firebase.

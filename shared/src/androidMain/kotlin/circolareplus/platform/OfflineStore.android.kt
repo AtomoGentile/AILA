@@ -38,4 +38,10 @@ actual object OfflineStore {
     actual fun clear() {
         dir()?.listFiles()?.forEach { it.delete() }
     }
+
+    actual fun list(): List<String> = dir()?.list()?.filterNot { it.endsWith(".tmp") } ?: emptyList()
+
+    actual fun delete(name: String) {
+        dir()?.let { File(it, name).delete() }
+    }
 }

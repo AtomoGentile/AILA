@@ -54,17 +54,31 @@ object BackgroundCircularsSync {
         // volta quando l'utente la apre, non da un giro che il telefono fa partire in tasca
         // (stesso motivo per cui MainAppShell ferma il suo ciclo in background in questo caso).
         if (AppContainer.isUsingLocalAiFirst()) return
+        // Senza chiave personale l'analisi dal telefono sarebbe solo il ripiego euristico, che non
+        // si condivide: inutile scaricare PDF e interrogare il server.
+        if (AppContainer.settings.userAiApiKey.isBlank()) return
+
+        // Una sola richiesta per sapere cosa e' cambiato sul server dall'ultimo giro, al posto di
+        // una per circolare: prima erano 30 richieste ogni 15 minuti per telefono, anche con
+        // tutti i riassunti gia' pronti, e con qualche decina di telefoni bastavano a esaurire la
+        // quota giornaliera del Worker.
+        val settings = AppContainer.settings
+        val sync = AppContainer.circularsRepository.getAnalysesSince(settings.backgroundAnalysesCursor.ifBlank { null })
+        settings.mergeClassifications(sync.analyses)
+        sync.cursor?.let { settings.backgroundAnalysesCursor = it }
+        val known = settings.readClassificationCache()
 
         val circulars = AppContainer.circularsRepository.listCirculars(limit = 30)
         var processed = 0
         for (circular in circulars.sortedByDescending { it.number }) {
             if (shouldStop() || processed >= maxCirculars) break
+            // Gia' fatta da Gemini (qui o sul server): niente da migliorare.
+            val existing = known[circular.number]
+            if (existing != null && !existing.isFallback && existing.tier >= 2) continue
+            // La riassume il server con la sua chiave: farlo anche da qui voleva dire una chiamata
+            // Gemini per ogni telefono sulla stessa circolare, appena arrivata la notifica.
+            if (sync.serverWillSummarize(circular.number)) continue
             try {
-                // Si salta solo quella gia' fatta da Gemini: una fatta dall'AI locale di un
-                // compagno si puo' migliorare, e il server tiene comunque la migliore.
-                val existing = AppContainer.circularsRepository.getCachedAnalysis(circular.number)
-                if (existing != null && existing.tier >= 2) continue
-
                 val bytes = AppContainer.circularsRepository.downloadPdfBytes(circular.r2PdfKey)
                 val text = AppContainer.pdfTextExtractor.extractText(bytes)
                 val result = AppContainer.newAiClassifier(allowLocalFallback = false)
@@ -75,7 +89,10 @@ object BackgroundCircularsSync {
                     )
                 // Il ripiego euristico non si condivide: e' un messaggio d'errore, non un
                 // riassunto, e il server lo rifiuterebbe comunque.
-                if (!result.isFallback) AppContainer.circularsRepository.saveAnalysis(result)
+                if (!result.isFallback) {
+                    val better = AppContainer.circularsRepository.saveAnalysis(result)
+                    settings.saveClassification(better ?: result)
+                }
                 processed++
             } catch (e: CancellationException) {
                 throw e

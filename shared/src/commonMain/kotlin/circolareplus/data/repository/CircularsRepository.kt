@@ -122,7 +122,9 @@ class CircularsRepository(private val api: ApiClient) {
         // Il server ne restituisce al massimo 200 per volta, dalla più vecchia.
         for (pageIndex in 0 until MAX_ANALYSIS_PAGES) {
             val query = cursor?.let { "?since=" + it.replace(" ", "%20") } ?: ""
-            val page: CircularAnalysesDto = api.get("/api/circulars/analyses$query")
+            // Niente copia offline: ogni valore del cursore sarebbe un file in piu' sul telefono,
+            // mai riletto (le analisi si tengono gia' in LocalSettingsManager).
+            val page: CircularAnalysesDto = api.get("/api/circulars/analyses$query", offlineCopy = false)
             lastPage = page
             all += page.analyses.map { it.toDomain() }
             page.analyses.lastOrNull()?.updatedAt?.let { cursor = it }

@@ -29,6 +29,9 @@ import circolareplus.data.repository.RatingsRepository
 import circolareplus.data.repository.SeatMapRepository
 import circolareplus.data.repository.UsersRepository
 import circolareplus.push.PushTokenProvider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 /**
  * Piccolo service locator condiviso KMP: evita di ricreare ApiClient/repository ad ogni
@@ -40,6 +43,12 @@ import circolareplus.push.PushTokenProvider
 object AppContainer {
     val settings: LocalSettingsManager by lazy { LocalSettingsManager() }
     val api: ApiClient by lazy { ApiClient(settings) }
+
+    /**
+     * Lavori brevi che devono finire anche se la schermata che li ha avviati sparisce (es. la
+     * rimozione del token push al logout).
+     */
+    val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val authRepository: AuthRepository by lazy { AuthRepository(api, settings) }
     val usersRepository: UsersRepository by lazy { UsersRepository(api) }

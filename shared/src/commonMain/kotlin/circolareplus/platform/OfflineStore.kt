@@ -15,6 +15,9 @@ expect object OfflineStore {
     fun totalBytes(): Long
     /** Cancella tutto (logout, o "Svuota dati offline" dalle Impostazioni). */
     fun clear()
+    /** Nomi dei file salvati. */
+    fun list(): List<String>
+    fun delete(name: String)
 }
 
 fun OfflineStore.readText(name: String): String? = readBytes(name)?.decodeToString()

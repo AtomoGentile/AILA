@@ -44,8 +44,28 @@ data class RegisterWithClassRequestDto(
     val password: String,
     val heightCm: Int,
     val representativeCode: String? = null,
-    val classLabel: String
+    val classLabel: String,
+    /** Codice della classe (lo vede il Rappresentante): serve per entrare in una classe che ha gia' iscritti. */
+    val classCode: String? = null
 )
+
+// --- Password e codice classe ------------------------------------------------------------------
+
+@Serializable
+data class ChangePasswordRequestDto(val currentPassword: String, val newPassword: String)
+
+/** Il server risponde con un token nuovo: quelli di prima del cambio non valgono piu'. */
+@Serializable
+data class ChangePasswordResponseDto(val success: Boolean = false, val token: String = "")
+
+@Serializable
+data class ResetPasswordRequestDto(val username: String, val code: String, val newPassword: String)
+
+@Serializable
+data class ResetCodeResponseDto(val code: String = "", val username: String? = null, val expiresAt: String? = null)
+
+@Serializable
+data class ClassCodeResponseDto(val code: String = "")
 
 /** Risposta di `/api/preferences/config`: ora dice anche di quale classe si sta parlando. */
 @Serializable

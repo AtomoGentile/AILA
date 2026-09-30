@@ -81,7 +81,13 @@ internal object AssistantContext {
         val proposals = if (tight) 5 else if (lean) 6 else 25
         val proposalDescriptionChars = if (tight) 140 else if (lean) 200 else 400
         val includeSeatMapHistory = !tight && !lean
-        val includeRatings = !tight && !lean
+        /**
+         * Valutazioni dei compagni (didattica, chiasso, Priority Pass, altezza): dati personali di
+         * minorenni. Mai al cloud (finestra larga = Gemini), dove con una chiave gratuita possono
+         * essere usati da Google; solo al modello sul telefono, quando c'e' spazio.
+         */
+        val sendsToCloud = maxChars >= WIDE_BUDGET_THRESHOLD
+        val includeRatings = !tight && !lean && !sendsToCloud
         val includePolls = !focused
         // Con Gemini (finestra larga) il testo di una circolare entra quasi sempre per intero:
         // 9.000 caratteri tagliavano fuori i divieti e le regole scritti lontano dalla parola
@@ -695,6 +701,13 @@ internal object AssistantContext {
                             (rating.heightCm?.let { " | altezza $it cm" } ?: "")
                     )
                 }
+            }
+        } else if (budget.sendsToCloud && dynamic.ratings.isNotEmpty()) {
+            builder.appendSection("VALUTAZIONI DELLA CLASSE") {
+                appendLine(
+                    "Per privacy le valutazioni dei compagni e il Priority Pass non vengono inviati " +
+                        "all'AI cloud: si consultano nella Scheda Classe."
+                )
             }
         }
 

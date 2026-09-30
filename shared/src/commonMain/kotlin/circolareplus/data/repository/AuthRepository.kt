@@ -8,6 +8,9 @@ import circolareplus.data.remote.dto.LoginRequestDto
 import circolareplus.data.remote.dto.AuthResponseDto
 import circolareplus.data.remote.dto.ClassesListResponseDto
 import circolareplus.data.remote.dto.ClassOptionDto
+import circolareplus.data.remote.dto.ChangePasswordRequestDto
+import circolareplus.data.remote.dto.ChangePasswordResponseDto
+import circolareplus.data.remote.dto.ResetPasswordRequestDto
 import circolareplus.data.remote.dto.DeleteAccountRequestDto
 import circolareplus.data.remote.dto.SuccessDto
 import circolareplus.data.remote.dto.RegisterWithClassRequestDto
@@ -17,6 +20,7 @@ import circolareplus.data.remote.dto.UserDto
 import circolareplus.domain.model.StudentProfile
 import circolareplus.domain.model.User
 import circolareplus.domain.model.UserRole
+import kotlinx.coroutines.launch
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 
@@ -86,7 +90,8 @@ class AuthRepository(
         password: String,
         heightCm: Int,
         classLabel: String,
-        representativeCode: String? = null
+        representativeCode: String? = null,
+        classCode: String? = null
     ): Pair<User, StudentProfile> {
         val response: AuthResponseDto = api.post(
             "/api/auth/register",
@@ -97,11 +102,37 @@ class AuthRepository(
                 password = password,
                 heightCm = heightCm,
                 representativeCode = representativeCode?.ifBlank { null },
-                classLabel = classLabel
+                classLabel = classLabel,
+                classCode = classCode?.trim()?.ifBlank { null }
             ),
             auth = false
         )
         return persistSession(response)
+    }
+
+    /**
+     * Nuova password con il codice monouso dato dal Rappresentante (nell'app non c'e' un'email
+     * per il recupero). A reset riuscito si e' gia' dentro, come dopo un login.
+     */
+    suspend fun resetPassword(username: String, code: String, newPassword: String): Pair<User, StudentProfile> {
+        val response: AuthResponseDto = api.post(
+            "/api/auth/reset-password",
+            ResetPasswordRequestDto(username.trim(), code.trim(), newPassword),
+            auth = false
+        )
+        return persistSession(response)
+    }
+
+    /**
+     * Cambia la password. Il server restituisce un token nuovo (quelli di prima smettono di
+     * valere, anche su altri telefoni): si salva subito, cosi' qui la sessione continua.
+     */
+    suspend fun changePassword(currentPassword: String, newPassword: String) {
+        val response: ChangePasswordResponseDto = api.put(
+            "/api/users/me/password",
+            ChangePasswordRequestDto(currentPassword, newPassword)
+        )
+        if (response.token.isNotBlank()) settings.authToken = response.token
     }
 
     suspend fun login(username: String, password: String): Pair<User, StudentProfile> {
@@ -190,10 +221,14 @@ class AuthRepository(
             "/api/users/me",
             DeleteAccountRequestDto(password)
         )
-        settings.clearAssistantHistory()
-        logout()
+        logoutAndWipe()
     }
 
+    /**
+     * Chiude la sessione (token scaduto, password cambiata altrove, "Esci" dalla schermata offline).
+     * I dati personali restano: se rientra la stessa persona li ritrova; se entra qualcun altro
+     * li cancella [persistSession].
+     */
     fun logout() {
         settings.authToken = ""
         settings.currentUserId = ""
@@ -204,7 +239,39 @@ class AuthRepository(
         settings.lastFullOfflineSyncMillis = 0L
     }
 
+    /** Esce e cancella anche i dati personali salvati sul telefono (vedi LocalSettingsManager.clearUserData). */
+    private fun logoutAndWipe() {
+        logout()
+        settings.clearUserData()
+    }
+
+    /**
+     * Uscita scelta dall'utente: prima si toglie dal server il token push di questo telefono, poi
+     * si chiude la sessione locale. La richiesta parte con il token catturato qui, perche' subito
+     * dopo quello salvato viene cancellato: prima partiva senza autorizzazione (401), il token push
+     * restava sul server e il telefono continuava a ricevere le notifiche dell'account uscito.
+     * Non blocca l'uscita: senza rete il logout locale avviene comunque.
+     */
+    fun signOut(fcmRepository: FcmRepository, pushPlatform: String?) {
+        val token = settings.authToken
+        if (token.isNotBlank()) {
+            circolareplus.data.AppContainer.appScope.launch {
+                try {
+                    fcmRepository.clearTokens(pushPlatform, authToken = token)
+                } catch (e: Exception) {
+                    // Rete assente: il token verra' riassegnato al prossimo accesso su questo telefono.
+                }
+            }
+        }
+        logoutAndWipe()
+    }
+
     private fun persistSession(response: AuthResponseDto): Pair<User, StudentProfile> {
+        // Entra un account diverso da quello a cui appartengono i dati personali salvati qui
+        // (chiave AI, campanella, cronologia dell'assistente): si cancellano prima di cominciare.
+        val owner = settings.dataOwnerId.ifBlank { settings.currentUserId }
+        if (owner.isNotBlank() && owner != response.user.id) settings.clearUserData()
+        settings.dataOwnerId = response.user.id
         settings.authToken = response.token
         settings.currentUserId = response.user.id
         cacheUser(response.user)

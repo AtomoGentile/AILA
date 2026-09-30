@@ -17,9 +17,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
+    <!-- allowBackup false: nelle preferenze ci sono il token di accesso e la chiave Gemini
+         personale, che non devono finire nei backup di Google Drive ne' essere estratti con adb. -->
     <application
         android:name=".CircolarePlusApplication"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:label="AILA"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"

@@ -2,6 +2,7 @@ package circolareplus.data.local
 
 import circolareplus.ai.assistant.AssistantConversation
 import circolareplus.ai.cleanGeminiApiKey
+import circolareplus.ai.tier
 import circolareplus.domain.model.CircularAiClassification
 import circolareplus.domain.model.NotificationLogEntry
 import circolareplus.platform.currentTimeMillis
@@ -44,6 +45,9 @@ class LocalSettingsManager(
         private const val KEY_LAST_SEEN_SEATMAP = "last_seen_seatmap_signature"
         private const val KEY_LAST_SEEN_PREFERENCES_OPEN = "last_seen_preferences_open"
         private const val KEY_LAST_SEEN_POLL_ID = "last_seen_poll_id"
+        private const val KEY_LAST_SEEN_POLL_CREATED_AT = "last_seen_poll_created_at"
+        private const val KEY_BG_ANALYSES_CURSOR = "bg_analyses_cursor"
+        private const val KEY_DATA_OWNER = "data_owner_user_id"
         private const val KEY_ASSISTANT_HISTORY = "assistant_history_json"
         private const val KEY_CIRCULAR_ANALYSES = "circular_analyses_json"
         private const val KEY_BG_LAST_CIRCULAR = "bg_last_circular_number"
@@ -270,6 +274,25 @@ class LocalSettingsManager(
         get() = settings.getString(KEY_LAST_SEEN_POLL_ID, "")
         set(value) = settings.putString(KEY_LAST_SEEN_POLL_ID, value)
 
+    /**
+     * Data di creazione del sondaggio piu' recente gia' visto. Prima si confrontava la data di un
+     * sondaggio con l'id (un UUID) dell'ultimo visto: a seconda della prima cifra dell'UUID non
+     * si segnalava mai nulla o si ripetevano tutti i sondaggi a ogni apertura.
+     */
+    var lastSeenPollCreatedAt: String
+        get() = settings.getString(KEY_LAST_SEEN_POLL_CREATED_AT, "")
+        set(value) = settings.putString(KEY_LAST_SEEN_POLL_CREATED_AT, value)
+
+    /** Utente a cui appartengono i dati personali salvati qui (chiave AI, campanella, assistente...). */
+    var dataOwnerId: String
+        get() = settings.getString(KEY_DATA_OWNER, "")
+        set(value) = settings.putString(KEY_DATA_OWNER, value)
+
+    /** Cursore di /api/circulars/analyses usato dal giro in background (vedi BackgroundCircularsSync). */
+    var backgroundAnalysesCursor: String
+        get() = settings.getString(KEY_BG_ANALYSES_CURSOR, "")
+        set(value) = settings.putString(KEY_BG_ANALYSES_CURSOR, value)
+
     var authToken: String
         get() = settings.getString(KEY_AUTH_TOKEN, "")
         set(value) = settings.putString(KEY_AUTH_TOKEN, value)
@@ -411,6 +434,22 @@ class LocalSettingsManager(
         settings.putString(KEY_CIRCULAR_ANALYSES, json.encodeToString(updated))
     }
 
+    /**
+     * Piu' analisi arrivate dal server in una volta sola (una scrittura invece di una per
+     * analisi). Non sostituisce un'analisi migliore gia' salvata con una di livello inferiore.
+     */
+    fun mergeClassifications(incoming: List<CircularAiClassification>) {
+        if (incoming.isEmpty()) return
+        val merged = readClassificationCache().toMutableMap()
+        for (analysis in incoming) {
+            if (analysis.isFallback) continue
+            val current = merged[analysis.circularNumber]
+            if (current == null || current.tier <= analysis.tier) merged[analysis.circularNumber] = analysis
+        }
+        val updated = merged.values.sortedByDescending { it.circularNumber }.take(MAX_CACHED_ANALYSES)
+        settings.putString(KEY_CIRCULAR_ANALYSES, json.encodeToString(updated))
+    }
+
     fun clearAssistantHistory() {
         settings.remove(KEY_ASSISTANT_HISTORY)
     }
@@ -442,6 +481,25 @@ class LocalSettingsManager(
 
     private fun writeNotifications(entries: List<NotificationLogEntry>) {
         settings.putString(KEY_NOTIFICATION_LOG, json.encodeToString(entries))
+    }
+
+    /**
+     * Al logout: via tutto quello che appartiene all'account (sessione, chiave AI personale,
+     * campanella, cronologia dell'assistente, analisi della sua classe, ricerche, segni di
+     * "gia' visto"). Restano le preferenze del telefono: tema, stile, colore, notifiche, modello di
+     * AI locale scelto, onboarding. Prima il logout toglieva solo il token, e chi entrava dopo sullo
+     * stesso telefono si ritrovava chiave Gemini e conversazioni dell'altro.
+     */
+    fun clearUserData() {
+        listOf(
+            KEY_AUTH_TOKEN, KEY_USER_ID, KEY_CACHED_USER, KEY_USER_AI_API_KEY,
+            KEY_NOTIFICATION_LOG, KEY_ASSISTANT_HISTORY, KEY_CIRCULAR_ANALYSES,
+            KEY_RECENT_SEARCHES, KEY_SUBMITTED_POLLS,
+            KEY_LAST_SEEN_CIRCULAR, KEY_LAST_SEEN_PROPOSAL, KEY_LAST_SEEN_SEATMAP,
+            KEY_LAST_SEEN_PREFERENCES_OPEN, KEY_LAST_SEEN_POLL_ID, KEY_LAST_SEEN_POLL_CREATED_AT,
+            KEY_BG_LAST_CIRCULAR, KEY_BG_ANALYSES_CURSOR,
+            KEY_LAST_ONLINE_SYNC, KEY_LAST_FULL_OFFLINE_SYNC, KEY_DATA_OWNER
+        ).forEach { settings.remove(it) }
     }
 
     /**

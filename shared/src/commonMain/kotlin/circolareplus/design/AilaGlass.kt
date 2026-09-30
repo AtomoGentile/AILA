@@ -4,7 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.CacheDrawScope
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -35,7 +36,10 @@ val AppTheme.GlassBase: Color
  * piu' lo sfondo e' vario (zone chiare, zone sature, colori caldi e freddi), piu' l'effetto vetro
  * si vede, anche mentre si scorre.
  */
-fun Modifier.ailaGlassBackdrop(): Modifier = drawBehind { drawAilaGlassBackdrop() }
+fun Modifier.ailaGlassBackdrop(): Modifier = drawWithCache {
+    val backdrop = glassBackdrop()
+    onDrawBehind { drawGlassBackdrop(backdrop) }
+}
 
 /**
  * Sfondo di una schermata che entra "alla iOS" sopra un'altra: le macchie restano ferme
@@ -47,11 +51,14 @@ fun Modifier.ailaGlassPushBackdrop(
     offset: () -> Float,
     /** Spostamento del livello intero (es. scivola sotto il dettaglio circolare): si compensa. */
     shift: () -> Float = { 0f }
-): Modifier = drawBehind {
-    val left = (offset() * size.width).coerceIn(0f, size.width)
-    if (left >= size.width) return@drawBehind
-    clipRect(left = left) {
-        translate(left = shift() * size.width) { drawAilaGlassBackdrop() }
+): Modifier = drawWithCache {
+    val backdrop = glassBackdrop()
+    onDrawBehind {
+        val left = (offset() * size.width).coerceIn(0f, size.width)
+        if (left >= size.width) return@onDrawBehind
+        clipRect(left = left) {
+            translate(left = shift() * size.width) { drawGlassBackdrop(backdrop) }
+        }
     }
 }
 
@@ -60,12 +67,23 @@ fun Modifier.ailaGlassPushBackdrop(
  * [shift] frazioni di larghezza verso sinistra): le macchie si disegnano spostate al contrario,
  * cosi' sullo schermo restano ferme mentre il contenuto scorre.
  */
-fun Modifier.ailaGlassBackdrop(shift: () -> Float): Modifier = drawBehind {
-    val dx = shift() * size.width
-    translate(left = dx) { drawAilaGlassBackdrop() }
+fun Modifier.ailaGlassBackdrop(shift: () -> Float): Modifier = drawWithCache {
+    val backdrop = glassBackdrop()
+    onDrawBehind {
+        translate(left = shift() * size.width) { drawGlassBackdrop(backdrop) }
+    }
 }
 
-fun DrawScope.drawAilaGlassBackdrop() {
+/**
+ * I pennelli dello sfondo, costruiti una volta per dimensione e tema (drawWithCache): prima si
+ * ricreavano a ogni fotogramma, anche durante le transizioni che spostano lo sfondo.
+ */
+private class GlassBackdrop(
+    val base: Brush,
+    val glows: List<Triple<Brush, Float, Offset>>
+)
+
+private fun CacheDrawScope.glassBackdrop(): GlassBackdrop {
     val dark = AppTheme.isDarkMode
     val w = size.width
     val h = size.height
@@ -91,23 +109,23 @@ fun DrawScope.drawAilaGlassBackdrop() {
             1f to Color(0xFFDEE9EF)
         )
     }
-    drawRect(Brush.verticalGradient(*stops, startY = 0f, endY = h))
-    fun glow(x: Float, y: Float, radius: Float, color: Color) {
+    fun glow(x: Float, y: Float, radius: Float, color: Color): Triple<Brush, Float, Offset> {
         val center = Offset(w * x, h * y)
-        drawCircle(
-            brush = Brush.radialGradient(listOf(color, color.copy(alpha = 0f)), center = center, radius = w * radius),
-            radius = w * radius,
-            center = center
-        )
+        val r = w * radius
+        return Triple(Brush.radialGradient(listOf(color, color.copy(alpha = 0f)), center = center, radius = r), r, center)
     }
     // Due soli bagliori molto larghi e tenui, per dare profondita' senza "macchie".
-    if (dark) {
-        glow(0.1f, 0.12f, 1.2f, accent.copy(alpha = 0.16f))
-        glow(0.95f, 0.6f, 1.1f, Color(0x1A0E7490))
+    val glows = if (dark) {
+        listOf(glow(0.1f, 0.12f, 1.2f, accent.copy(alpha = 0.16f)), glow(0.95f, 0.6f, 1.1f, Color(0x1A0E7490)))
     } else {
-        glow(0.1f, 0.12f, 1.2f, accent.copy(alpha = 0.18f))
-        glow(0.95f, 0.6f, 1.1f, Color(0x3867C6D8))
+        listOf(glow(0.1f, 0.12f, 1.2f, accent.copy(alpha = 0.18f)), glow(0.95f, 0.6f, 1.1f, Color(0x3867C6D8)))
     }
+    return GlassBackdrop(Brush.verticalGradient(*stops, startY = 0f, endY = h), glows)
+}
+
+private fun DrawScope.drawGlassBackdrop(backdrop: GlassBackdrop) {
+    drawRect(backdrop.base)
+    backdrop.glows.forEach { (brush, radius, center) -> drawCircle(brush = brush, radius = radius, center = center) }
 }
 
 /**
@@ -143,23 +161,17 @@ val AppTheme.GlassEdge: Brush
     }
 
 /**
- * Una superficie di vetro: velo quasi trasparente, bagliore morbido lungo il bordo alto (la luce
- * che entra nel vetro) e bordo speculare.
+ * Una superficie di vetro: velo quasi trasparente e bordo speculare.
+ *
+ * Il bagliore interno in alto che c'era qui aveva un'opacita' dello 0,3-0,5% (meno di 1/255 dopo
+ * l'arrotondamento): era una passata di disegno in piu' su ogni card di vetro senza nessun effetto
+ * visibile, quindi e' stato tolto. L'aspetto non cambia.
  */
 fun Modifier.ailaGlassSurface(shape: Shape, tint: Color? = null, edge: Dp = 1.dp): Modifier =
     this
         .clip(shape)
         .background(AppTheme.GlassFill)
         .then(if (tint != null) Modifier.background(tint) else Modifier)
-        .drawBehind {
-            // Bagliore interno in alto: la luce che attraversa lo spessore del vetro.
-            drawRect(
-                Brush.verticalGradient(
-                    listOf(Color.White.copy(alpha = if (AppTheme.isDarkMode) 0.003f else 0.005f), Color.Transparent),
-                    endY = size.height * 0.35f
-                )
-            )
-        }
         .border(edge, AppTheme.GlassEdge, shape)
 
 /** Riflesso "bagnato" sopra un riempimento colorato (pulsanti in vetro tinto). */

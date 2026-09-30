@@ -86,6 +86,12 @@ fun AuthScreen(
     // scriverne una nuova: la prima persona di una classe la porta in vita registrandosi.
     var classInput by remember { mutableStateOf("") }
     var knownClasses by remember { mutableStateOf<List<ClassOptionDto>>(emptyList()) }
+    // Codice della classe: per entrare in una classe che ha gia' iscritti serve quello che il
+    // Rappresentante vede nella Scheda Classe. Il campo compare quando la classe scelta esiste gia'
+    // (o quando il server lo chiede, se l'elenco delle classi non si e' caricato).
+    var classCode by remember { mutableStateOf("") }
+    var classCodeAsked by remember { mutableStateOf(false) }
+    var showResetDialog by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
@@ -133,7 +139,8 @@ fun AuthScreen(
                         password = password,
                         heightCm = selectedHeightCm,
                         classLabel = classInput.trim(),
-                        representativeCode = representativeCode.trim()
+                        representativeCode = representativeCode.trim(),
+                        classCode = classCode
                     )
                 } else {
                     AppContainer.authRepository.login(
@@ -143,6 +150,9 @@ fun AuthScreen(
                 }
                 onLoginSuccess(user, profile)
             } catch (e: ApiException) {
+                if (isRegisterMode && e.statusCode == 403 && e.message.contains("codice classe", ignoreCase = true)) {
+                    classCodeAsked = true
+                }
                 errorMessage = e.message
             } catch (e: Exception) {
                 errorMessage = "Impossibile contattare il server. Controlla la connessione e riprova."
@@ -150,6 +160,22 @@ fun AuthScreen(
                 isLoading = false
             }
         }
+    }
+
+    val joiningExistingClass = remember(classInput, knownClasses) {
+        val wanted = classKey(classInput)
+        wanted.isNotEmpty() && knownClasses.any { it.studentCount > 0 && classKey(it.label) == wanted }
+    }
+
+    if (showResetDialog) {
+        ResetPasswordDialog(
+            initialUsername = username.trim(),
+            onDismiss = { showResetDialog = false },
+            onReset = { user, profile ->
+                showResetDialog = false
+                onLoginSuccess(user, profile)
+            }
+        )
     }
 
     Box(modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
@@ -283,6 +309,32 @@ fun AuthScreen(
                                 knownClasses = knownClasses
                             )
 
+                            AnimatedVisibility(
+                                visible = joiningExistingClass || classCodeAsked,
+                                enter = fadeIn(tween(180)) + expandVertically(tween(220)),
+                                exit = fadeOut(tween(120)) + shrinkVertically(tween(200))
+                            ) {
+                                Column {
+                                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                                    AuthField(
+                                        value = classCode,
+                                        onValueChange = { classCode = it.uppercase().take(12) },
+                                        placeholder = "Codice classe",
+                                        modifier = Modifier.fillMaxWidth(),
+                                        keyboardOptions = KeyboardOptions(
+                                            capitalization = KeyboardCapitalization.Characters,
+                                            autoCorrectEnabled = false
+                                        )
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = "Te lo dà il Rappresentante: lo trova nella Scheda Classe.",
+                                        fontSize = 11.sp,
+                                        color = AppTheme.TextFaint
+                                    )
+                                }
+                            }
+
                             Spacer(modifier = Modifier.height(AppTheme.Space16))
 
                             HeightPicker(
@@ -347,6 +399,18 @@ fun AuthScreen(
                             }
                         }
                     )
+
+                    AnimatedVisibility(
+                        visible = !isRegisterMode,
+                        enter = fadeIn(tween(180)) + expandVertically(tween(220)),
+                        exit = fadeOut(tween(120)) + shrinkVertically(tween(200))
+                    ) {
+                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                            TextButton(onClick = { showResetDialog = true }) {
+                                Text("Password dimenticata?", fontSize = 13.sp, color = AppTheme.PrimaryBlue)
+                            }
+                        }
+                    }
 
                     AnimatedVisibility(
                         visible = isRegisterMode,
@@ -423,6 +487,99 @@ fun AuthScreen(
             Spacer(modifier = Modifier.height(AppTheme.Space24))
         }
     }
+}
+
+/** "4^ CSA", "4 csa" e "4CSA" sono la stessa classe. */
+private fun classKey(label: String): String = label.uppercase().filter { it.isLetterOrDigit() }
+
+/**
+ * Password dimenticata: niente email nell'app, quindi il Rappresentante genera un codice monouso
+ * dalla Scheda Classe e lo dice al compagno, che qui sceglie la password nuova ed entra.
+ */
+@Composable
+private fun ResetPasswordDialog(
+    initialUsername: String,
+    onDismiss: () -> Unit,
+    onReset: (User, StudentProfile) -> Unit
+) {
+    var username by remember { mutableStateOf(initialUsername) }
+    var code by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text("Password dimenticata") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
+                Text(
+                    text = "Chiedi al Rappresentante un codice di reset (lo genera dalla Scheda Classe, vale 24 ore), poi scegli la password nuova.",
+                    fontSize = 13.sp,
+                    color = AppTheme.TextMuted,
+                    lineHeight = 18.sp
+                )
+                AuthField(
+                    value = username,
+                    onValueChange = { username = it },
+                    placeholder = "Username",
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false)
+                )
+                AuthField(
+                    value = code,
+                    onValueChange = { code = it.uppercase().take(12) },
+                    placeholder = "Codice di reset",
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, autoCorrectEnabled = false)
+                )
+                AuthField(
+                    value = newPassword,
+                    onValueChange = { newPassword = it },
+                    placeholder = "Nuova password (almeno 8 caratteri)",
+                    modifier = Modifier.fillMaxWidth(),
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.None,
+                        autoCorrectEnabled = false,
+                        keyboardType = KeyboardType.Password
+                    )
+                )
+                error?.let { Text(it, fontSize = 13.sp, color = AppTheme.TintRedInk) }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !busy,
+                onClick = {
+                    error = null
+                    when {
+                        username.isBlank() || code.isBlank() -> error = "Scrivi username e codice."
+                        newPassword.length < 8 -> error = "La password deve essere di almeno 8 caratteri."
+                        else -> {
+                            busy = true
+                            scope.launch {
+                                try {
+                                    val (user, profile) = AppContainer.authRepository.resetPassword(username, code, newPassword)
+                                    onReset(user, profile)
+                                } catch (e: ApiException) {
+                                    error = e.message
+                                } catch (e: Exception) {
+                                    error = "Impossibile contattare il server. Riprova."
+                                } finally {
+                                    busy = false
+                                }
+                            }
+                        }
+                    }
+                }
+            ) { Text(if (busy) "Attendi…" else "Reimposta ed entra") }
+        },
+        dismissButton = {
+            TextButton(enabled = !busy, onClick = onDismiss) { Text("Annulla") }
+        }
+    )
 }
 
 private val nameKeyboard = KeyboardOptions(

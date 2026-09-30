@@ -1,5 +1,6 @@
 package circolareplus.design
 
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -113,7 +114,7 @@ fun AnimatedFilterChip(
 
     Box(
         modifier = modifier
-            .scale(scale)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
             // Selezionata: riempimento sfumato del brand, come le tab segmentate. Non
             // selezionata: colore pieno animato (il gradiente non è animabile allo stesso modo).

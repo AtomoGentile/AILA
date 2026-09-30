@@ -101,6 +101,19 @@ class MainActivity : ComponentActivity() {
         circolareplus.push.DataRefreshEvents.request()
     }
 
+    // I cicli periodici di MainAppShell (circolari, analisi, novita', copia offline) si fermano
+    // con l'app in background: la composizione resta viva e prima continuavano a interrogare il
+    // server in tasca. Vedi circolareplus.platform.AppForeground.
+    override fun onStart() {
+        super.onStart()
+        circolareplus.platform.AppForeground.isForeground = true
+    }
+
+    override fun onStop() {
+        circolareplus.platform.AppForeground.isForeground = false
+        super.onStop()
+    }
+
     /**
      * Finestra edge-to-edge (obbligatoria da targetSdk 35: il contenuto passa sotto le barre di
      * sistema e i margini li mette il codice condiviso, vedi design/PlatformInsets.kt) con barre
