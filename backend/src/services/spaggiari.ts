@@ -64,7 +64,7 @@ function extractLinks(cellHtml: string, baseUrl: string): ScrapedAttachment[] {
 
 // Un download che non risponde non deve tenere fermo il giro del cron (e con lui tutte le
 // circolari dopo): oltre il timeout la richiesta fallisce e si passa oltre.
-const FETCH_TIMEOUT_MS = 20_000;
+const FETCH_TIMEOUT_MS = 60_000;
 function fetchWithTimeout(url: string, init: RequestInit = {}): Promise<Response> {
   return fetch(url, { ...init, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
 }
