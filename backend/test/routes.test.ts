@@ -255,3 +255,14 @@ describe('funzioni di supporto', () => {
     expect(italianToday(new Date('2026-12-01T10:00:00Z'))).toBe('2026-12-01');
   });
 });
+
+describe('elenco classi', () => {
+  it('nasconde le classi che non hanno il formato anno + sezione', async () => {
+    await register('primo');
+    await env.DB.prepare("INSERT OR IGNORE INTO classes (id, label) VALUES ('X', 'DEFAULT_CLASS')").run();
+    const r = await call('GET', '/api/auth/classes');
+    const labels = (r.json.classes as { label: string }[]).map((c) => c.label);
+    expect(labels).toContain('3 B');
+    expect(labels).not.toContain('DEFAULT_CLASS');
+  });
+});
