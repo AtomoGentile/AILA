@@ -3,6 +3,48 @@
 Elenco vivo dei problemi aperti e del lavoro ancora mancante, aggiornato mano a mano.
 Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esistente.
 
+## 30/9: controllo pre-beta, correzioni (branch `ccr-96d6f1f5-84m3vv`, poi main)
+
+Fatto (Worker: migrazione `013_security_and_indexes.sql`, solo CREATE IF NOT EXISTS):
+- **Calendario**: piu' verifiche/interrogazioni nello stesso giorno. L'avviso resta solo per lo
+  stesso evento (giorno, categoria e titolo uguali) e si supera con "Aggiungi comunque"; prima
+  bastava una verifica qualsiasi entro 3 giorni per bloccare la seconda. Gli eventi per "Persone
+  specifiche" li vedono solo creatore e destinatari (prima tutta la classe).
+- **Accesso**: ruolo e classe riletti dal database a ogni richiesta; token di account eliminati o
+  di prima di un cambio password rifiutati; limite ai tentativi di login/registrazione/reset.
+- **Codice classe**: per registrarsi in una classe con iscritti serve il codice che il
+  Rappresentante vede nella Scheda Classe (rigenerabile). Diventa obbligatorio dalla prima volta
+  che un Rappresentante apre la Scheda Classe. Massimo 2 Rappresentanti per classe.
+- **Password**: "Cambia password" nel profilo; "Password dimenticata?" al login con il codice
+  monouso (24 ore) che il Rappresentante genera dalla Scheda Classe.
+- **Logout**: il token push si toglie davvero dal server (prima la richiesta partiva gia' senza
+  token e il telefono continuava a ricevere le notifiche dell'account uscito); "Esci" cancella
+  chiave Gemini, campanella, assistente e analisi, e cosi' l'ingresso di un account diverso.
+- **Circolari**: un telefono non sovrascrive piu' il riassunto del server; i PDF falliti al primo
+  download si ritentano; una sola push per giro di cron; i telefoni non rifanno con la propria
+  chiave le circolari che riassume il server.
+- **Richieste al Worker** (piano Free: 100.000 al giorno): il giro in background dei telefoni fa
+  una richiesta invece di 31; copia offline ogni 2 ore (6 ad app chiusa); cicli periodici fermi
+  con l'app in background; niente rotte del Rappresentante chieste dagli studenti.
+- **Privacy**: la matrice delle preferenze non dice piu' chi ha votato cosa; le valutazioni dei
+  compagni non vanno all'AI cloud; `allowBackup=false`.
+- **Sondaggi interrogazioni**: calcolato il calendario non si ricalcola ne' si ritira l'invio
+  (il bonus sacrificio si riapplicava). Notifica "Nuovo sondaggio" corretta.
+- Vari: un solo client HTTP per Gemini, ritentativi solo sui GET, token FCM morti cancellati,
+  animazioni lette in layout, test delle rotte del Worker su D1 simulato (anche nel deploy).
+
+Da decidere / fare fuori dal codice:
+- **Piano Workers Paid (5 $/mese)**: sul Free ogni esecuzione fa al massimo 50 richieste esterne
+  (una push = una richiesta per dispositivo) e ha 10 ms di CPU. Oltre ~40 dispositivi le push di
+  una circolare nuova non arrivano a tutti.
+- **Chiave di firma Android definitiva** prima del rilascio ufficiale (secret ANDROID_RELEASE_*,
+  vedi android-build.yml): cambiarla dopo obbliga tutti a reinstallare.
+- **iPhone con SideStore**: le push native non possono funzionare con un Apple ID gratuito
+  (manca l'entitlement aps-environment); serve l'account Apple Developer.
+- **Informativa privacy** (utenti minorenni, valutazioni fra compagni, preferenze sociali).
+- **Numerazione delle circolari**: ricomincia ogni anno scolastico ma `number` e' la chiave
+  primaria; va cambiata (anno + numero) prima di settembre 2027, insieme a SPAGGIARI_URL.
+
 ## 28/9: tablet e iPad (branch `feature/ipad-android-tablet-status-5vedo6`)
 
 Fatto:
