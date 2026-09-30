@@ -57,6 +57,8 @@ import androidx.compose.ui.unit.dp
 fun AilaBottomSheet(
     onDismissRequest: () -> Unit,
     sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    /** Glass: dissolve tutto il foglio (vetro, maniglia, contenuto), per far posto a un'altra card sopra. */
+    faded: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
     if (!AppTheme.isGlass) {
@@ -82,6 +84,10 @@ fun AilaBottomSheet(
     // Angoli concentrici a quelli dello schermo (il foglio sta a [inset] dal bordo).
     val radius = maxOf(circolareplus.platform.displayCornerRadius() - inset, 28.dp)
     val shape = RoundedCornerShape(radius)
+    val fadeAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (faded) 0f else 1f,
+        label = "sheetFade"
+    )
     // Il foglio di Material resta trasparente e senza maniglia: il vetro e la maniglia sono
     // disegnati dentro il contenuto, che si muove sempre insieme al foglio quando lo si trascina.
     ModalBottomSheet(
@@ -98,6 +104,7 @@ fun AilaBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .graphicsLayer { alpha = fadeAlpha }
                 .padding(start = inset, end = inset, bottom = inset)
                 // Stessa trasparenza del resto del vetro (richiesta di Simone).
                 .ailaGlassSurface(shape),
@@ -265,7 +272,15 @@ fun AilaDatePickerDialog(
         }
     }
     val shape = RoundedCornerShape(if (glass) 32.dp else 28.dp)
-    val clear = androidx.compose.material3.DatePickerDefaults.colors(containerColor = Color.Transparent)
+    // Vetro chiaro: titoli e intestazioni scuri come i giorni, non il grigio tenue di Material.
+    val clear = androidx.compose.material3.DatePickerDefaults.colors(
+        containerColor = Color.Transparent,
+        titleContentColor = AppTheme.TextDark,
+        headlineContentColor = AppTheme.TextDark,
+        weekdayContentColor = AppTheme.TextDark,
+        subheadContentColor = AppTheme.TextDark,
+        navigationContentColor = AppTheme.TextDark
+    )
     androidx.compose.material3.DatePickerDialog(
         onDismissRequest = onDismiss,
         // Vetro vero: velo leggero (chiaro o scuro) sull'app sfocata, bordo di luce. Il foglio che
