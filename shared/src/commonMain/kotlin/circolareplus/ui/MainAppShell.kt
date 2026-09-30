@@ -1942,6 +1942,17 @@ fun MainAppShell(
         }
     }
 
+    // "Apri la circolare" dal dettaglio di un evento inserito da AILA Assistant: stessa apertura
+    // della Ricerca (circolare sopra le tab, nella sezione Circolari della tab Classe).
+    val openCircularFromEvent: (Int) -> Unit = { number ->
+        circulars.firstOrNull { it.number == number }?.let { circular ->
+            eventDetailToShow = null
+            selectedCircularForDetail = circular
+            classSection = ClassSection.CIRCULARS
+            selectedTab = MainTab.CLASS
+        }
+    }
+
     // Material: il dettaglio e' una pagina (vedi EventDetailPage, in fondo al livello delle
     // schermate). Il foglio dal basso resta solo in Liquid Glass.
     eventDetailToShow?.takeIf { AppTheme.isGlass }?.let { event ->
@@ -1949,6 +1960,7 @@ fun MainAppShell(
             event = event,
             classmates = classmates,
             currentUser = user,
+            onOpenCircular = openCircularFromEvent,
             onDismiss = { eventDetailToShow = null },
             // Il foglio e' gia' sceso quando arriva qui (vedi EventDetailDialog): si toglie e
             // l'eliminazione parte con la card che esce dal calendario.
@@ -2202,7 +2214,8 @@ fun MainAppShell(
                         eventDate = deadline.dueDate,
                         startTime = deadline.time,
                         category = category,
-                        isAiGenerated = true
+                        isAiGenerated = true,
+                        circularNumber = circular.number
                     )
                     when {
                         // La stessa scadenza e' gia' in calendario quel giorno: non si duplica.
@@ -4123,6 +4136,7 @@ fun MainAppShell(
                     event = eventForDetail,
                     classmates = classmates,
                     currentUser = user,
+                    onOpenCircular = openCircularFromEvent,
                     onBack = { eventDetailToShow = null },
                     // La pagina si richiude nella card e poi la card esce (vedi deleteEventAnimated).
                     onDelete = {
@@ -5084,6 +5098,7 @@ private fun EventDetailDialog(
     event: CalendarEvent,
     classmates: List<User>,
     currentUser: User,
+    onOpenCircular: (Int) -> Unit,
     onDismiss: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -5195,6 +5210,15 @@ private fun EventDetailDialog(
                 )
             }
 
+            event.circularNumber?.let { number ->
+                Spacer(modifier = Modifier.height(AppTheme.Space16))
+                circolareplus.design.AilaSecondaryButton(
+                    text = "Apri la circolare n. $number",
+                    onClick = { closeAnimated { onOpenCircular(number) } },
+                    modifier = Modifier.fillMaxWidth().ailaSheetReveal(6)
+                )
+            }
+
             Spacer(modifier = Modifier.height(AppTheme.Space24))
             Row(
                 modifier = Modifier
@@ -5230,6 +5254,7 @@ private fun EventDetailPage(
     event: CalendarEvent,
     classmates: List<User>,
     currentUser: User,
+    onOpenCircular: (Int) -> Unit,
     onBack: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -5312,6 +5337,14 @@ private fun EventDetailPage(
                         Text(text = event.notes, fontSize = 14.sp, color = AppTheme.TextDark)
                     }
                 }
+            }
+            event.circularNumber?.let { number ->
+                Spacer(modifier = Modifier.height(AppTheme.Space16))
+                circolareplus.design.AilaSecondaryButton(
+                    text = "Apri la circolare n. $number",
+                    onClick = { onOpenCircular(number) },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
             Spacer(modifier = Modifier.height(AppTheme.Space16))
             Row(

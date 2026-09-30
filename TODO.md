@@ -3,6 +3,14 @@
 Elenco vivo dei problemi aperti e del lavoro ancora mancante, aggiornato mano a mano.
 Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esistente.
 
+## Evento AI → circolare (migrazione 015)
+
+Gli eventi inseriti da AILA Assistant ricordano la circolare da cui nascono (`calendar_events.circular_number`,
+solo se la circolare esiste) e il dettaglio evento ha "Apri la circolare n. X". Gli eventi AI creati prima
+non hanno il rimando. **Quando si cambiera' la chiave primaria delle circolari (anno + numero, prima di
+settembre 2027) va aggiornata anche questa colonna.** Deploy: Worker deploy con `015_calendar_circular.sql`
+(contiene un ALTER TABLE: lanciarla una volta sola), poi un APK nuovo.
+
 ## Push a topic FCM (piano Free di Cloudflare)
 
 `notifyClass` faceva una richiesta per token: oltre ~40 dispositivi le push in piu' fallivano in silenzio

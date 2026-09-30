@@ -266,3 +266,22 @@ describe('elenco classi', () => {
     expect(labels).not.toContain('DEFAULT_CLASS');
   });
 });
+
+describe('evento AI con rimando alla circolare', () => {
+  it('salva il numero solo se la circolare esiste e solo per eventi AI', async () => {
+    const u = await register('mario');
+    await env.DB.prepare(
+      "INSERT INTO circulars (number, title, publish_date, r2_pdf_key) VALUES (42, 'Gita', '2026-09-01', 'k')"
+    ).run();
+    const create = (extra: Record<string, unknown>, title: string) =>
+      call('POST', '/api/calendar', { title, eventDate: '2026-10-10', category: 'AVVISO', ...extra }, u.json.token);
+
+    expect((await create({ isAiGenerated: true, circularNumber: 42 }, 'Uno')).status).toBe(201);
+    expect((await create({ isAiGenerated: true, circularNumber: 999 }, 'Due')).status).toBe(201);
+    expect((await create({ circularNumber: 42 }, 'Tre')).status).toBe(201);
+
+    const list = await call('GET', '/api/calendar', undefined, u.json.token);
+    const byTitle = Object.fromEntries((list.json.events as any[]).map((e) => [e.title, e.circularNumber]));
+    expect(byTitle).toEqual({ Uno: 42, Due: null, Tre: null });
+  });
+});

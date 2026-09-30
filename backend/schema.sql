@@ -177,7 +177,9 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     notes TEXT,
     -- Array JSON di id utente (es. '["u1","u2"]'), NULL quando is_for_all = 1.
-    visible_to_user_ids_json TEXT
+    visible_to_user_ids_json TEXT,
+    -- Circolare da cui l'ha ricavato AILA Assistant (migrazione 015).
+    circular_number INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_calendar_class ON calendar_events(class_id);

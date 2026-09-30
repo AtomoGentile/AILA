@@ -32,12 +32,13 @@ class CalendarRepository(private val api: ApiClient) {
         isAiGenerated: Boolean = false,
         visibleToUserIds: List<String>? = null,
         notes: String? = null,
-        force: Boolean = false
+        force: Boolean = false,
+        circularNumber: Int? = null
     ): CreateCalendarEventResponseDto = api.post(
         "/api/calendar",
         CreateCalendarEventRequestDto(
             title, eventDate, startTime, category.name, isForAll, isAiGenerated,
-            visibleToUserIds = visibleToUserIds, notes = notes, force = force
+            visibleToUserIds = visibleToUserIds, notes = notes, circularNumber = circularNumber, force = force
         )
     )
 
@@ -62,5 +63,6 @@ private fun CalendarEventDto.toDomain(): CalendarEvent = CalendarEvent(
     // Prima mancavano qui: il DTO li leggeva dal server ma il dettaglio evento in app li vedeva
     // sempre null, indipendentemente da cosa fosse stato salvato.
     visibleToUserIds = visibleToUserIds,
-    notes = notes
+    notes = notes,
+    circularNumber = circularNumber
 )
