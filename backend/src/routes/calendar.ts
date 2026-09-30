@@ -73,6 +73,7 @@ calendar.get('/', async (c) => {
     created_at: string;
     notes: string | null;
     visible_to_user_ids_json: string | null;
+    circular_number?: number | null;
   }>();
 
   return c.json({
@@ -87,6 +88,7 @@ calendar.get('/', async (c) => {
       createdBy: e.created_by,
       createdAt: e.created_at,
       notes: e.notes,
+      circularNumber: e.circular_number ?? null,
       // Un JSON corrotto non deve far sparire l'intero evento dalla lista: si ripiega su
       // "nessun destinatario specifico noto" invece di far fallire la risposta.
       visibleToUserIds: e.visible_to_user_ids_json
@@ -114,6 +116,7 @@ calendar.post('/', async (c) => {
     category: EventCategory;
     isForAll?: boolean;
     isAiGenerated?: boolean;
+    circularNumber?: number;
     visibleToUserIds?: string[];
     notes?: string;
     // Inserisci anche se c'e' gia' un evento identico (l'utente ha visto l'avviso e conferma).
@@ -172,17 +175,42 @@ calendar.post('/', async (c) => {
     }
   }
 
+  // Circolare da cui AILA Assistant ha ricavato l'evento: solo se esiste davvero (un numero
+  // inventato non deve finire nel calendario di tutta la classe).
+  let circularNumber: number | null = null;
+  if (isAiGenerated && Number.isInteger(body.circularNumber)) {
+    const found = await c.env.DB.prepare('SELECT number FROM circulars WHERE number = ?')
+      .bind(body.circularNumber).first<{ number: number }>();
+    circularNumber = found?.number ?? null;
+  }
+
   const id = newUUID();
-  await c.env.DB.prepare(
-    `INSERT INTO calendar_events
-       (id, title, event_date, start_time, category, is_for_all, is_ai_generated, created_by, class_id, notes, visible_to_user_ids_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(
+  const values = [
     id, title, eventDate, startTime ?? null, category, isForAll ? 1 : 0, isAiGenerated ? 1 : 0,
     payload.sub, classId,
     notes ?? null,
     visibleToUserIds && visibleToUserIds.length > 0 ? JSON.stringify(visibleToUserIds) : null,
-  ).run();
+  ];
+  const insertPlain = () => c.env.DB.prepare(
+    `INSERT INTO calendar_events
+       (id, title, event_date, start_time, category, is_for_all, is_ai_generated, created_by, class_id, notes, visible_to_user_ids_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(...values).run();
+  if (circularNumber === null) {
+    await insertPlain();
+  } else {
+    try {
+      await c.env.DB.prepare(
+        `INSERT INTO calendar_events
+           (id, title, event_date, start_time, category, is_for_all, is_ai_generated, created_by, class_id, notes, visible_to_user_ids_json, circular_number)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(...values, circularNumber).run();
+    } catch (e) {
+      // Migrazione 015 non ancora applicata: l'evento si crea comunque, senza il rimando.
+      console.error('[Calendar] circular_number non salvato (manca la migrazione 015?)', e);
+      await insertPlain();
+    }
+  }
 
   return c.json({ success: true, id }, 201);
 });

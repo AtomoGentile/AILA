@@ -94,7 +94,9 @@ data class CalendarEvent(
     // Destinatari specifici dell'evento (null = tutti, lista = solo questi studenti)
     val visibleToUserIds: List<String>? = null,
     // Note aggiuntive sull'evento
-    val notes: String? = null
+    val notes: String? = null,
+    // Circolare da cui AILA Assistant ha ricavato l'evento (null = scritto a mano o creato prima)
+    val circularNumber: Int? = null
 )
 
 @Serializable

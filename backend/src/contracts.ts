@@ -128,6 +128,8 @@ export interface CalendarEventDto {
   createdAt: string;
   notes: string | null;
   visibleToUserIds: string[] | null;
+  // Circolare da cui AILA Assistant ha ricavato l'evento (migrazione 015).
+  circularNumber: number | null;
 }
 
 export interface CalendarResponse {
@@ -140,6 +142,7 @@ export interface CreateEventRequest {
   startTime?: string;
   category: EventCategory;
   isAiGenerated?: boolean;
+  circularNumber?: number;
   notes?: string;
 }
 

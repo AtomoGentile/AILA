@@ -14,7 +14,9 @@ data class CalendarEventDto(
     val createdBy: String? = null,
     val createdAt: String? = null,
     val visibleToUserIds: List<String>? = null,
-    val notes: String? = null
+    val notes: String? = null,
+    /** Circolare da cui AILA Assistant ha ricavato l'evento. */
+    val circularNumber: Int? = null
 )
 
 @Serializable
@@ -30,6 +32,7 @@ data class CreateCalendarEventRequestDto(
     val isAiGenerated: Boolean = false,
     val visibleToUserIds: List<String>? = null,
     val notes: String? = null,
+    val circularNumber: Int? = null,
     /** Inserisci anche se il server ha trovato lo stesso evento nello stesso giorno. */
     val force: Boolean = false
 )
