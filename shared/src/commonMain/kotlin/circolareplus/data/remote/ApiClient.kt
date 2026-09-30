@@ -125,7 +125,7 @@ class ApiClient(
         // account eliminato, token scaduto): l'app torna al login invece di mostrare errori ovunque.
         // Solo se la richiesta usava la sessione in corso (non, per esempio, quella appena chiusa).
         val current = settings.authToken
-        if (status.value == 401 && current.isNotBlank() && request.headers[HttpHeaders.Authorization] == "Bearer $current") {
+        if (status.value == 401 && current.isNotBlank() && call.request.headers[HttpHeaders.Authorization] == "Bearer $current") {
             SessionEvents.expired = true
         }
         if (!status.isSuccess()) {
