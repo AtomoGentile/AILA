@@ -262,6 +262,20 @@ async function callGemini(apiKey: string, parts: unknown[], classes: ClassInfo[]
   return { ok: false, reason: lastReason, retryLater: false };
 }
 
+/**
+ * Registra il motivo di un fallimento passeggero (quota, servizio giù, rete) senza contarlo fra i
+ * tentativi: la circolare viene riprovata al giro dopo, ma il motivo resta leggibile nel database
+ * (`last_error`) e non solo nei log del Worker, che non si conservano.
+ */
+async function recordTransientFailure(env: Env, number: number, reason: string): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO circular_ai_server_attempts (circular_number, attempts, last_error, last_attempt_at)
+     VALUES (?, 0, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(circular_number) DO UPDATE SET
+       last_error = excluded.last_error, last_attempt_at = CURRENT_TIMESTAMP`
+  ).bind(number, reason.slice(0, 300)).run();
+}
+
 async function recordFailure(env: Env, number: number, reason: string): Promise<void> {
   await env.DB.prepare(
     `INSERT INTO circular_ai_server_attempts (circular_number, attempts, last_error, last_attempt_at)
@@ -366,7 +380,8 @@ export async function summarizeCircular(
     const outcome = await callGemini(apiKey, parts, classes);
     if (!outcome.ok) {
       console.warn(`[Summarizer] Circolare ${circ.number}: ${outcome.reason}`);
-      if (!outcome.retryLater) await recordFailure(env, circ.number, outcome.reason);
+      if (outcome.retryLater) await recordTransientFailure(env, circ.number, outcome.reason);
+      else await recordFailure(env, circ.number, outcome.reason);
       return false;
     }
     await upsertAnalysis(

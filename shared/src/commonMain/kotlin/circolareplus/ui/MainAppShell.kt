@@ -231,6 +231,12 @@ fun MainAppShell(
     // Circolari troppo lunghe per l'AI del telefono (ne leggerebbe solo l'inizio) che il server
     // riassumera' con Gemini: si aspetta lui invece di produrre un riassunto parziale.
     val awaitingServer = remember { mutableStateListOf<Int>() }
+    // Da quando si aspetta il server per ciascuna circolare: l'attesa ha un tetto (vedi
+    // SERVER_WAIT_MILLIS) perche' il server puo' non farcela (quota Gemini, rete) senza mai
+    // arrendersi del tutto.
+    val awaitingServerSince = remember { mutableMapOf<Int, Long>() }
+    // Due giri di cron del server (ogni 15 minuti) piu' un margine.
+    val SERVER_WAIT_MILLIS = 30 * 60_000L
     // Cosa fa il server per conto suo (ultima lettura di /analyses), vedi AnalysesSync.
     var serverSyncInfo by remember { mutableStateOf<CircularsRepository.AnalysesSync?>(null) }
     // Classe dell'utente ("4 CSA"), letta alla prima analisi fatta sul telefono: il contesto
@@ -284,8 +290,21 @@ fun MainAppShell(
         circular: Circular,
         allowLocalFallback: Boolean,
         /** Con l'AI del telefono: una circolare lunga si lascia al server, se la riassumera' lui. */
-        waitForServerIfLong: Boolean = false
+        waitForServerIfLong: Boolean = false,
+        /**
+         * Circolare appena uscita: il server la riassume con Gemini nel giro di qualche minuto,
+         * quindi si aspetta lui (fino a SERVER_WAIT_MILLIS) invece di rifarla subito sul telefono
+         * con i suoi limiti — e col rischio di salvare un'analisi parziale o interrotta.
+         */
+        waitForFreshServer: Boolean = false
     ) {
+        if (waitForFreshServer && serverSyncInfo?.serverWillSummarize(circular.number) == true) {
+            val since = awaitingServerSince.getOrPut(circular.number) { currentTimeMillis() }
+            if (currentTimeMillis() - since < SERVER_WAIT_MILLIS) {
+                if (circular.number !in awaitingServer) awaitingServer += circular.number
+                return
+            }
+        }
         val pdfBytes = AppContainer.circularsRepository.downloadPdfBytes(circular.r2PdfKey)
         var pdfText = AppContainer.pdfTextExtractor.extractText(pdfBytes)
 
@@ -406,7 +425,11 @@ fun MainAppShell(
                     try {
                         // "Analizza"/"Rianalizza" (forceReanalyze) e' una richiesta esplicita:
                         // si analizza sul telefono anche una circolare lunga.
-                        classifyAndShare(circular, allowLocalFallback, waitForServerIfLong = !forceReanalyze)
+                        classifyAndShare(
+                            circular, allowLocalFallback,
+                            waitForServerIfLong = !forceReanalyze,
+                            waitForFreshServer = !forceReanalyze
+                        )
                     } finally {
                         runningLocalClassification = null
                     }
@@ -415,7 +438,7 @@ fun MainAppShell(
                 inFlightTier[number] = 2
                 cloudClassification += number
                 publishAnalysisActivity()
-                classifyAndShare(circular, allowLocalFallback)
+                classifyAndShare(circular, allowLocalFallback, waitForFreshServer = !forceReanalyze)
             }
         } catch (e: CancellationException) {
             // Va sempre rilanciata: è così che funzionano la cancellazione strutturata, il
@@ -1554,7 +1577,11 @@ fun MainAppShell(
         sync.analyses.forEach { adoptServerAnalysis(it) }
         // Se il server ha smesso di provarci (o non ha piu' la chiave), le circolari lunghe in
         // attesa tornano all'AI del telefono: si possono analizzare col tasto "Analizza".
-        val noLongerAwaited = awaitingServer.filter { !sync.serverWillSummarize(it) }
+        val now = currentTimeMillis()
+        val noLongerAwaited = awaitingServer.filter {
+            !sync.serverWillSummarize(it) ||
+                now - (awaitingServerSince[it] ?: now) >= SERVER_WAIT_MILLIS
+        }
         if (noLongerAwaited.isNotEmpty()) awaitingServer.removeAll(noLongerAwaited)
     }
     LaunchedEffect(user.id) {
