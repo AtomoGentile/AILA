@@ -5484,7 +5484,7 @@ private fun EventCreationOptionCard(
 }
 
 /** Bozza locale di uno slot data mentre il rappresentante compila il modulo di creazione. */
-private data class PollSlotDraft(val dateMillis: Long, val capacity: Int, val teacherMandatory: Boolean)
+private data class PollSlotDraft(val dateMillis: Long, val capacity: Int)
 
 /**
  * Creazione di un sondaggio interrogazioni (solo Rappresentante). `PollsRepository.createPoll()`
@@ -5551,7 +5551,7 @@ private fun CreatePollDialog(
             confirmLabel = "Aggiungi"
         ) {
             datePickerState.selectedDateMillis?.let { millis ->
-                slots.add(PollSlotDraft(dateMillis = millis, capacity = 3, teacherMandatory = false))
+                slots.add(PollSlotDraft(dateMillis = millis, capacity = 3))
             }
             showDatePicker = false
         }
@@ -5591,7 +5591,6 @@ private fun CreatePollDialog(
                         PollSlotDraftRow(
                             slot = slot,
                             onCapacityChange = { newCapacity -> slots[index] = slot.copy(capacity = newCapacity) },
-                            onMandatoryChange = { checked -> slots[index] = slot.copy(teacherMandatory = checked) },
                             onRemove = { slots.removeAt(index) }
                         )
                     }
@@ -5604,12 +5603,6 @@ private fun CreatePollDialog(
                 onClick = { showDatePicker = true },
                 icon = { color -> AppIcons.Calendar(modifier = Modifier.size(15.dp), color = color) },
                 modifier = Modifier.fillMaxWidth().ailaSheetReveal(if (slots.isEmpty()) 1 else 2)
-            )
-            Text(
-                text = "Casella di spunta = presenza obbligatoria decisa dal docente",
-                fontSize = 11.sp,
-                color = AppTheme.TextMuted,
-                modifier = Modifier.padding(top = AppTheme.Space8).ailaSheetReveal(if (slots.isEmpty()) 2 else 3)
             )
 
             Spacer(modifier = Modifier.height(AppTheme.Space20))
@@ -5632,7 +5625,7 @@ private fun CreatePollDialog(
                     onClick = {
                         onConfirm(
                             subject.trim(),
-                            slots.map { CreatePollSlotRequestDto(epochMillisToIsoDate(it.dateMillis), it.capacity, it.teacherMandatory) },
+                            slots.map { CreatePollSlotRequestDto(epochMillisToIsoDate(it.dateMillis), it.capacity) },
                             audience
                         )
                     },
@@ -5650,7 +5643,6 @@ private fun CreatePollDialog(
 private fun PollSlotDraftRow(
     slot: PollSlotDraft,
     onCapacityChange: (Int) -> Unit,
-    onMandatoryChange: (Boolean) -> Unit,
     onRemove: () -> Unit
 ) {
     Row(
@@ -5698,10 +5690,6 @@ private fun PollSlotDraftRow(
             }
         }
         Spacer(modifier = Modifier.width(AppTheme.Space8))
-        circolareplus.design.AilaSwitch(
-            checked = slot.teacherMandatory,
-            onCheckedChange = onMandatoryChange
-        )
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
