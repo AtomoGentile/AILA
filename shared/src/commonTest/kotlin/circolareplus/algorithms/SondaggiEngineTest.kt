@@ -33,25 +33,25 @@ class SondaggiEngineTest {
 
     @Test
     fun testBonusSacrificioAttualizzazioneEReset() {
-        // 1. Assegnazione su Rosso Chiaro genera +60 pt
+        // 1. Assegnazione su Rosso Chiaro genera +30 pt
         val bonusAfterLightRed = SondaggiEngine.calculateNextSacrificeBonus(
             currentBonus = 0,
             assignedVoteType = InterrogationVoteType.LIGHT_RED
         )
-        assertEquals(60, bonusAfterLightRed)
+        assertEquals(30, bonusAfterLightRed)
 
-        // 2. Ulteriore assegnazione su Rosso Scuro aggiunge +150 pt (totale 210)
+        // 2. Ulteriore assegnazione su Rosso Scuro aggiunge +150 pt (totale 180)
         val bonusAfterDarkRed = SondaggiEngine.calculateNextSacrificeBonus(
             currentBonus = bonusAfterLightRed,
             assignedVoteType = InterrogationVoteType.DARK_RED
         )
-        assertEquals(210, bonusAfterDarkRed)
+        assertEquals(180, bonusAfterDarkRed)
 
-        // 3. Attualizzazione del voto Verde: base 50 + bonus 210 = 260 pt
+        // 3. Attualizzazione del voto Verde: base 50 + bonus 180 = 230 pt
         val slot = InterrogationSlotInfo(slotId = "slot_test", dateIso = "2026-09-10", capacity = 1)
         val greenVote = StudentInterrogationVote("s1", "slot_test", InterrogationVoteType.GREEN)
         val score = SondaggiEngine.calculateSlotScore(greenVote, slot, accumulatedSacrificeBonus = bonusAfterDarkRed)
-        assertEquals(260, score)
+        assertEquals(230, score)
 
         // 4. Una volta ottenuto lo slot Verde, il bonus si azzera
         val resetBonus = SondaggiEngine.calculateNextSacrificeBonus(
