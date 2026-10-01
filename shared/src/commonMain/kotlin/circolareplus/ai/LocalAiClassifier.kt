@@ -116,6 +116,8 @@ class LocalAiClassifier(
                 failure = null
                 if (compact && !startedCompact) compactPromptModels += model.id
                 break
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 failure = e
                 val message = e.message.orEmpty()
