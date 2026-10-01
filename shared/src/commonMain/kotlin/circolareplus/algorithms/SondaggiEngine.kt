@@ -4,9 +4,9 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 enum class InterrogationVoteType(val score: Int, val maxAllowed: Int?) {
-    GREEN(50, 3),          // Prima scelta (Max 3)
+    GREEN(50, null),       // Prima scelta (Illimitati)
     YELLOW(0, null),       // Neutro / Disponibile (Illimitati)
-    LIGHT_RED(-80, 3),     // Sconsigliato (Max 3)
+    LIGHT_RED(-80, null),  // Sconsigliato (Illimitati; il server li diluisce oltre il 40% delle date)
     DARK_RED(-300, 2);     // Blocco grave / Veto (Max 2)
 
     companion object {
@@ -42,24 +42,18 @@ data class SlotAssignmentResult(
  */
 object SondaggiEngine {
 
+    const val SACRIFICE_LIGHT_RED = 60
+    const val SACRIFICE_DARK_RED = 150
+    const val MAX_SACRIFICE_BONUS = 300
+
     /**
      * Valida che i voti espressi dallo studente rispettino i limiti di budget:
-     * - Max 3 Verdi (+50)
-     * - Illimitati Gialli (0)
-     * - Max 3 Rossi Chiari (-80)
-     * - Max 2 Rossi Scuri (-300)
+     * - Illimitati Verdi (+50), Gialli (0) e Rossi Chiari (-80)
+     * - Max 2 Rossi Scuri (-300): è il veto, l'unico tetto rigido
      */
     fun validateStudentVoteBudget(votes: List<StudentInterrogationVote>): Result<Unit> {
-        val greenCount = votes.count { it.voteType == InterrogationVoteType.GREEN }
-        val lightRedCount = votes.count { it.voteType == InterrogationVoteType.LIGHT_RED }
         val darkRedCount = votes.count { it.voteType == InterrogationVoteType.DARK_RED }
 
-        if (greenCount > 3) {
-            return Result.failure(IllegalArgumentException("Hai superato il limite massimo di 3 scelte Verdi (attuali: $greenCount)."))
-        }
-        if (lightRedCount > 3) {
-            return Result.failure(IllegalArgumentException("Hai superato il limite massimo di 3 voti Rosso Chiaro (attuali: $lightRedCount)."))
-        }
         if (darkRedCount > 2) {
             return Result.failure(IllegalArgumentException("Hai superato il limite massimo di 2 voti di blocco Rosso Scuro (attuali: $darkRedCount)."))
         }
@@ -98,8 +92,8 @@ object SondaggiEngine {
     /**
      * Aggiorna il bonus sacrificio per il giro successivo in base all'esito dell'assegnazione:
      * - Assegnazione passata su Verde / Giallo: Psacrificio = 0 pt (Reset se ottenuto Verde tramite bonus)
-     * - Assegnazione passata su Rosso Chiaro: +100 pt
-     * - Assegnazione passata su Rosso Scuro: +250 pt
+     * - Assegnazione passata su Rosso Chiaro: +60 pt
+     * - Assegnazione passata su Rosso Scuro: +150 pt
      */
     fun calculateNextSacrificeBonus(
         currentBonus: Int,
@@ -108,8 +102,8 @@ object SondaggiEngine {
         return when (assignedVoteType) {
             InterrogationVoteType.GREEN -> 0 // Bonus consumato e azzerato
             InterrogationVoteType.YELLOW -> currentBonus // Non consumato né aumentato
-            InterrogationVoteType.LIGHT_RED -> currentBonus + 100
-            InterrogationVoteType.DARK_RED -> currentBonus + 250
+            InterrogationVoteType.LIGHT_RED -> (currentBonus + SACRIFICE_LIGHT_RED).coerceAtMost(MAX_SACRIFICE_BONUS)
+            InterrogationVoteType.DARK_RED -> (currentBonus + SACRIFICE_DARK_RED).coerceAtMost(MAX_SACRIFICE_BONUS)
         }
     }
 }

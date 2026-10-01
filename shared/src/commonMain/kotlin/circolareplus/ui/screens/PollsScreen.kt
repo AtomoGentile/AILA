@@ -169,7 +169,7 @@ fun PollsScreen(
                     Text(
                         text = "Per ogni data dici quanto ti va bene. Chi accetta le date che " +
                             "gli altri rifiutano guadagna un bonus per i sondaggi futuri. " +
-                            "I \"meglio di no\" contano pieni fino a un terzo delle date: " +
+                            "I \"meglio di no\" contano pieni fino al 40% delle date: " +
                             "se ne metti di più ognuno pesa meno, e vale meno bonus.",
                         fontSize = 13.sp,
                         color = AppTheme.TextMuted,
