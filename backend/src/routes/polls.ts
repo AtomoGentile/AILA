@@ -37,14 +37,18 @@ const VOTE_LIMITS: Record<VoteScore, number> = {
 // onestà, e se l'algoritmo lo metteva comunque su una data "rossa" incassava pure il bonus
 // sacrificio — per una data che in realtà gli andava benissimo. Invece di rimettere un tetto
 // (che costringeva al Giallo su date su cui si aveva un'opinione vera) i voti negativi si
-// diluiscono: fino a un terzo delle date valgono pieni, oltre quella quota ognuno pesa in
+// diluiscono: fino al 40% delle date valgono pieni, oltre quella quota ognuno pesa in
 // proporzione meno, e lo stesso fattore riduce il bonus sacrificio guadagnato. Chi rifiuta
 // tutto finisce, di fatto, come chi ha messo Giallo ovunque.
-const FAIR_NEGATIVE_SHARE = 1 / 3;
+const FAIR_NEGATIVE_SHARE = 0.4;
 
 // Tetto al bonus sacrificio accumulato: senza, qualche giro "sfortunato" di fila dava un
 // credito tale da vincere qualunque data contro chiunque per il resto dell'anno.
-const MAX_SACRIFICE_BONUS = 500;
+const MAX_SACRIFICE_BONUS = 300;
+
+// Bonus guadagnato quando l'algoritmo ti mette su una data che avevi rifiutato.
+const SACRIFICE_LIGHT_RED = 60;
+const SACRIFICE_DARK_RED = 150;
 
 /** Le assegnazioni di questa griglia sono gia' state calcolate (sondaggio chiuso)? */
 async function isGridCalculated(env: Env, gridId: string): Promise<boolean> {
@@ -633,7 +637,7 @@ async function computeAndPersistAssignments(
     if (originalVoteScore === -80 || originalVoteScore === -300) {
       // Il bonus e' diluito come il voto: finire su una delle poche date rifiutate e' un
       // sacrificio, finire su una delle nove "rosse" di chi ne ha lasciata libera una no.
-      const bonus = Math.round((originalVoteScore === -300 ? 250 : 100) * weightOf(a.studentId));
+      const bonus = Math.round((originalVoteScore === -300 ? SACRIFICE_DARK_RED : SACRIFICE_LIGHT_RED) * weightOf(a.studentId));
       bonusStmts.push(
         env.DB.prepare(
           `INSERT INTO student_sacrifice_bonus (student_id, subject, bonus_points)
