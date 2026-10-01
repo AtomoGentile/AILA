@@ -115,15 +115,15 @@ internal object AiCoreEngine {
      *
      * "AICore failed with error type 2-INFERENCE_ERROR and error code 8-NOT_AVAILABLE: Required
      * LLM feature not found" (visto sul campo con AICore installato e attivo) non vuol dire che
-     * AICore manchi: vuol dire che su quel telefono il servizio non offre Gemini Nano alle app
-     * esterne. Mostrato cosi' com'era sembrava un guasto da riprovare; non lo e'.
+     * AICore manchi. Sul telefono di prova Gemini Nano aveva sempre funzionato, quindi puo' essere
+     * passeggero: il messaggio non lo dichiara definitivo.
      */
     private fun describe(e: Throwable): String {
         val raw = "${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}"
         return if (isFeatureMissing(raw)) {
-            "Su questo telefono AICore non mette Gemini Nano a disposizione delle app " +
-                "(errore NOT_AVAILABLE). Scegli un altro modello, per esempio Gemma 4 E2B, " +
-                "oppure usa Google AI Studio. Dettaglio: $raw"
+            "AICore ha risposto NOT_AVAILABLE: Gemini Nano in questo momento non e' " +
+                "utilizzabile (puo' essere passeggero: modello in aggiornamento o occupato). " +
+                "Riprova fra poco; se persiste, scegli un altro modello. Dettaglio: $raw"
         } else {
             raw
         }
