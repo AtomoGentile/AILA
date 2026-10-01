@@ -219,6 +219,10 @@ class ClientSideAiClassifier(
                     circularNumber, circularTitle, pdfText, failureReason = result.reason
                 )
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Timeout dell'anticipo all'avvio o tasto Stop: non e' un errore di Google. Va
+            // rilanciata, altrimenti il ripiego euristico verrebbe salvato come analisi definitiva.
+            throw e
         } catch (e: Exception) {
             fallbackHeuristicClassification(
                 circularNumber, circularTitle, pdfText,
