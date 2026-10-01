@@ -5581,12 +5581,12 @@ private fun CreatePollDialog(
                 singleLine = true,
                 colors = circolareplus.design.ailaFieldColors(),
                 shape = RoundedCornerShape(AppTheme.SmallElementRadius),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().ailaSheetReveal(0)
             )
             Spacer(modifier = Modifier.height(AppTheme.Space16))
 
             if (slots.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8), modifier = Modifier.ailaSheetReveal(1)) {
                     slots.forEachIndexed { index, slot ->
                         PollSlotDraftRow(
                             slot = slot,
@@ -5603,24 +5603,25 @@ private fun CreatePollDialog(
                 text = "+ Aggiungi data/slot",
                 onClick = { showDatePicker = true },
                 icon = { color -> AppIcons.Calendar(modifier = Modifier.size(15.dp), color = color) },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().ailaSheetReveal(if (slots.isEmpty()) 1 else 2)
             )
             Text(
                 text = "Casella di spunta = presenza obbligatoria decisa dal docente",
                 fontSize = 11.sp,
                 color = AppTheme.TextMuted,
-                modifier = Modifier.padding(top = AppTheme.Space8)
+                modifier = Modifier.padding(top = AppTheme.Space8).ailaSheetReveal(if (slots.isEmpty()) 2 else 3)
             )
 
             Spacer(modifier = Modifier.height(AppTheme.Space20))
             circolareplus.ui.screens.PollAudienceSelector(
                 selectedIds = audience,
-                onSelectionChange = { audience = it }
+                onSelectionChange = { audience = it },
+                modifier = Modifier.ailaSheetReveal(if (slots.isEmpty()) 3 else 4)
             )
 
             Spacer(modifier = Modifier.height(AppTheme.Space24))
 
-            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12), modifier = Modifier.ailaSheetReveal(if (slots.isEmpty()) 4 else 5)) {
                 circolareplus.design.AilaSecondaryButton(
                     text = "Annulla",
                     onClick = onDismiss,
@@ -5755,11 +5756,11 @@ private fun CreateRankingPollDialog(
                 placeholder = { Text("Es. Dove andiamo in gita?") },
                 colors = circolareplus.design.ailaFieldColors(),
                 shape = RoundedCornerShape(AppTheme.SmallElementRadius),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().ailaSheetReveal(0)
             )
             Spacer(modifier = Modifier.height(AppTheme.Space16))
 
-            Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+            Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8), modifier = Modifier.ailaSheetReveal(1)) {
                 options.forEachIndexed { index, option ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
@@ -5793,7 +5794,7 @@ private fun CreateRankingPollDialog(
                     text = "Aggiungi opzione",
                     onClick = { options.add("") },
                     icon = { color -> AppIcons.Plus(modifier = Modifier.size(15.dp), color = color) },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().ailaSheetReveal(2)
                 )
             }
             Text(
@@ -5801,18 +5802,19 @@ private fun CreateRankingPollDialog(
                 else "Ognuno le metterà in ordine; la classifica della classe è a punti.",
                 fontSize = 11.sp,
                 color = if (hasDuplicates) AppTheme.TintRedInk else AppTheme.TextMuted,
-                modifier = Modifier.padding(top = AppTheme.Space8)
+                modifier = Modifier.padding(top = AppTheme.Space8).ailaSheetReveal(3)
             )
 
             Spacer(modifier = Modifier.height(AppTheme.Space20))
             circolareplus.ui.screens.PollAudienceSelector(
                 selectedIds = audience,
-                onSelectionChange = { audience = it }
+                onSelectionChange = { audience = it },
+                modifier = Modifier.ailaSheetReveal(4)
             )
 
             Spacer(modifier = Modifier.height(AppTheme.Space24))
 
-            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12), modifier = Modifier.ailaSheetReveal(5)) {
                 circolareplus.design.AilaSecondaryButton(
                     text = "Annulla",
                     onClick = onDismiss,
@@ -5862,7 +5864,7 @@ private fun AddProposalDialog(
                 singleLine = true,
                 colors = circolareplus.design.ailaFieldColors(),
                 shape = RoundedCornerShape(AppTheme.SmallElementRadius),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().ailaSheetReveal(0)
             )
             Spacer(modifier = Modifier.height(AppTheme.Space12))
             OutlinedTextField(
@@ -5872,7 +5874,7 @@ private fun AddProposalDialog(
                 minLines = 3,
                 colors = circolareplus.design.ailaFieldColors(),
                 shape = RoundedCornerShape(AppTheme.SmallElementRadius),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().ailaSheetReveal(1)
             )
             Spacer(modifier = Modifier.height(AppTheme.Space12))
             Row(
@@ -5881,6 +5883,7 @@ private fun AddProposalDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { isAnonymous = !isAnonymous }
+                    .ailaSheetReveal(2)
             ) {
                 Text("Pubblica in forma anonima", fontSize = 13.sp, color = AppTheme.TextDark)
                 circolareplus.design.AilaSwitch(
@@ -5891,7 +5894,7 @@ private fun AddProposalDialog(
 
             Spacer(modifier = Modifier.height(AppTheme.Space24))
 
-            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12), modifier = Modifier.ailaSheetReveal(3)) {
                 circolareplus.design.AilaSecondaryButton(
                     text = "Annulla",
                     onClick = onDismiss,
