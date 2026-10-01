@@ -156,16 +156,17 @@ class ClientSideAiClassifier(
         private val rejectsThinkingConfig = mutableSetOf<String>()
 
         /**
-         * Tempo totale per una risposta in chat, scaletta compresa. Con i ~4 s concessi ai PDF
-         * dall'assistente la risposta arriva entro 20 s (vedi AilaAssistant.TARGET_REPLY_MS).
+         * Tempo totale per una risposta in chat, scaletta compresa. Con 15 s flash-latest che
+         * rispondeva 503 dopo qualche secondo lasciava a flash-lite troppo poco, e finiva in
+         * "non ha risposto in tempo" (visto in campo).
          */
-        private const val CHAT_BUDGET_MS = 15_000L
+        private const val CHAT_BUDGET_MS = 30_000L
 
         /**
          * Tetto per un singolo modello quando ce ne sono altri dopo: flash-latest lento non deve
-         * mangiarsi tutto il tempo, a flash-lite servono pochi secondi per rispondere.
+         * mangiarsi tutto il tempo, a flash-lite ne restano almeno 18 s.
          */
-        private const val CHAT_ATTEMPT_MS = 9_000L
+        private const val CHAT_ATTEMPT_MS = 12_000L
 
         /** Sotto questo tempo residuo un altro tentativo non farebbe in tempo a rispondere. */
         private const val CHAT_MIN_ATTEMPT_MS = 2_500L

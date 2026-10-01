@@ -42,7 +42,7 @@ actual object LocalAiCatalog {
         preferGpu = false,
         supportsActions = true,
         maxOutputTokens = 900,
-        description = "Gemini Nano, il modello che Android include gia': nessun download e " +
+        description = "Gemini Nano, il modello che Android include già: nessun download e " +
             "tutto resta sul telefono. Disponibile solo sui dispositivi compatibili."
     )
 
