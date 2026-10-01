@@ -227,6 +227,7 @@ async function readPdf(env: Env, key: string): Promise<Uint8Array | null> {
 
 async function callGemini(apiKey: string, parts: unknown[], classes: ClassInfo[]): Promise<Outcome> {
   let lastReason = 'nessun modello disponibile';
+  let transientFailure = false;
   for (const model of MODEL_LADDER) {
     let res: Response;
     try {
@@ -254,12 +255,19 @@ async function callGemini(apiKey: string, parts: unknown[], classes: ClassInfo[]
     // Il corpo dell'errore non contiene la chiave; si tiene corto comunque.
     const errBody = (await res.text().catch(() => '')).slice(0, 200);
     lastReason = `HTTP ${res.status} da ${model}: ${errBody}`;
-    // Quota esaurita o servizio giù: si riprova al giro dopo senza contare un tentativo.
-    if (res.status === 429 || res.status >= 500) return { ok: false, reason: lastReason, retryLater: true };
+    // Quota esaurita (per modello) o modello sovraccarico (503): il modello dopo ha la sua quota e
+    // spesso risponde, come fa l'app. Prima qui ci si fermava al primo 503 di flash-latest, e
+    // la circolare restava senza riassunto finche' il cron non lo trovava libero.
+    if (res.status === 429 || res.status >= 500) {
+      transientFailure = true;
+      continue;
+    }
     // Solo un modello inesistente fa provare il successivo.
     if (res.status !== 404) return { ok: false, reason: lastReason, retryLater: false };
   }
-  return { ok: false, reason: lastReason, retryLater: false };
+  // Se almeno un modello era solo sovraccarico/senza quota si riprova al giro dopo senza contare
+  // un tentativo; altrimenti (tutti 404) e' un fallimento vero.
+  return { ok: false, reason: lastReason, retryLater: transientFailure };
 }
 
 /**
