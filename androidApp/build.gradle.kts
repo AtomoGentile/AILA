@@ -158,8 +158,7 @@ android {
     // nella cartella del modulo, nella radice del progetto e nella home, invece che in quella del
     // daemon Gradle. AGP imposta lo storeFile di 'externalOverride' DOPO la creazione dell'oggetto,
     // quindi oltre a 'all' serve anche afterEvaluate.
-    fun resolveStoreFile(file: File?): File? {
-        if (file == null || file.isAbsolute) return file
+    fun resolveStoreFile(file: File): File {
         val projectFile = project.file(file.path)
         val rootFile = rootProject.file(file.path)
         val homeFile = File(System.getProperty("user.home"), file.path)
@@ -170,9 +169,17 @@ android {
             else -> rootFile
         }
     }
-    signingConfigs.all { storeFile = resolveStoreFile(storeFile) }
+    // Si assegna SOLO per i percorsi relativi: riassegnare un percorso assoluto gia' letto da AGP
+    // (es. la chiave debug) fa fallire la configurazione con "It is too late to set storeFilePath".
+    signingConfigs.all {
+        val file = storeFile
+        if (file != null && !file.isAbsolute) storeFile = resolveStoreFile(file)
+    }
     project.afterEvaluate {
-        signingConfigs.forEach { config -> config.storeFile = resolveStoreFile(config.storeFile) }
+        signingConfigs.forEach { config ->
+            val file = config.storeFile
+            if (file != null && !file.isAbsolute) config.storeFile = resolveStoreFile(file)
+        }
     }
 
     buildTypes {
