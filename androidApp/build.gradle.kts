@@ -19,6 +19,41 @@ plugins {
     alias(libs.plugins.googleServices)
 }
 
+// Android Studio (Build > Generate Signed Bundle/APK) inietta il keystore con
+// -Pandroid.injected.signing.store.file=<cio' che e' scritto nel campo>. Se e' un nome relativo
+// (es. "AILA") AGP lo risolve rispetto alla cartella del daemon Gradle (~/.gradle/daemon/<ver>) e
+// validateSigningRelease fallisce con "Keystore file ... not found for signing config
+// 'externalOverride'". Il config iniettato viene creato troppo tardi per essere corretto dal blocco
+// signingConfigs, quindi se il percorso e' relativo se ne crea uno equivalente col percorso
+// risolto (cartella del modulo, radice del progetto, home utente) e lo si assegna alla variante.
+val injectedStore = providers.gradleProperty("android.injected.signing.store.file").orNull
+val resolvedInjectedStore: File? = injectedStore
+    ?.takeIf { !File(it).isAbsolute }
+    ?.let { rel ->
+        listOf(project.file(rel), rootProject.file(rel), File(System.getProperty("user.home"), rel))
+            .firstOrNull { it.exists() }
+    }
+var resolvedSigning: com.android.build.api.dsl.ApkSigningConfig? = null
+
+androidComponents {
+    finalizeDsl { dsl ->
+        if (resolvedInjectedStore != null) {
+            resolvedSigning = dsl.signingConfigs.create("resolvedInjected") {
+                storeFile = resolvedInjectedStore
+                storePassword = providers.gradleProperty("android.injected.signing.store.password").orNull
+                keyAlias = providers.gradleProperty("android.injected.signing.key.alias").orNull
+                keyPassword = providers.gradleProperty("android.injected.signing.key.password").orNull
+            }
+        }
+    }
+    onVariants { variant ->
+        val signing = resolvedSigning
+        if (signing != null) {
+            variant.signingConfig.setConfig(signing)
+        }
+    }
+}
+
 kotlin {
     androidTarget {
         compilerOptions {
@@ -35,6 +70,9 @@ kotlin {
                 implementation(compose.ui)
                 implementation(libs.androidx.activity.compose)
                 implementation(libs.androidx.core.ktx)
+                // Una dipendenza porta un androidx.fragment < 1.3.0: con quello, lintVitalRelease
+                // rifiuta registerForActivityResult in MainActivity. Dichiararlo qui alza la versione.
+                implementation(libs.androidx.fragment)
                 // Splash screen disegnato da noi invece di quello generato da Android a partire
                 // dall'icona dell'app (vedi ic_launcher_foreground.xml e res/values/themes.xml).
                 implementation(libs.androidx.core.splashscreen)
@@ -114,6 +152,27 @@ android {
             keyAlias = System.getenv("ANDROID_RELEASE_KEY_ALIAS")
             keyPassword = System.getenv("ANDROID_RELEASE_KEY_PASSWORD")
         }
+    }
+
+    // Un keystore scritto come percorso relativo (es. "AILA", dal campo di Android Studio) si cerca
+    // nella cartella del modulo, nella radice del progetto e nella home, invece che in quella del
+    // daemon Gradle. AGP imposta lo storeFile di 'externalOverride' DOPO la creazione dell'oggetto,
+    // quindi oltre a 'all' serve anche afterEvaluate.
+    fun resolveStoreFile(file: File?): File? {
+        if (file == null || file.isAbsolute) return file
+        val projectFile = project.file(file.path)
+        val rootFile = rootProject.file(file.path)
+        val homeFile = File(System.getProperty("user.home"), file.path)
+        return when {
+            projectFile.exists() -> projectFile
+            rootFile.exists() -> rootFile
+            homeFile.exists() -> homeFile
+            else -> rootFile
+        }
+    }
+    signingConfigs.all { storeFile = resolveStoreFile(storeFile) }
+    project.afterEvaluate {
+        signingConfigs.forEach { config -> config.storeFile = resolveStoreFile(config.storeFile) }
     }
 
     buildTypes {
