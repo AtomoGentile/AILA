@@ -42,7 +42,7 @@ data class SlotAssignmentResult(
  */
 object SondaggiEngine {
 
-    const val SACRIFICE_LIGHT_RED = 30
+    const val SACRIFICE_LIGHT_RED = 40
     const val SACRIFICE_DARK_RED = 150
     const val MAX_SACRIFICE_BONUS = 300
 
@@ -92,7 +92,7 @@ object SondaggiEngine {
     /**
      * Aggiorna il bonus sacrificio per il giro successivo in base all'esito dell'assegnazione:
      * - Assegnazione passata su Verde / Giallo: Psacrificio = 0 pt (Reset se ottenuto Verde tramite bonus)
-     * - Assegnazione passata su Rosso Chiaro: +30 pt
+     * - Assegnazione passata su Rosso Chiaro: +40 pt
      * - Assegnazione passata su Rosso Scuro: +150 pt
      */
     fun calculateNextSacrificeBonus(

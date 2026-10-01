@@ -47,7 +47,7 @@ const FAIR_NEGATIVE_SHARE = 0.4;
 const MAX_SACRIFICE_BONUS = 300;
 
 // Bonus guadagnato quando l'algoritmo ti mette su una data che avevi rifiutato.
-const SACRIFICE_LIGHT_RED = 30;
+const SACRIFICE_LIGHT_RED = 40;
 const SACRIFICE_DARK_RED = 150;
 
 /** Le assegnazioni di questa griglia sono gia' state calcolate (sondaggio chiuso)? */

@@ -1980,6 +1980,6 @@ Il Kotlin non è compilato: quello puoi farlo solo tu.
 ## 1 ottobre 2026 — Sondaggi interrogazioni: soglia 40% e bonus ridimensionato
 
 - Voti negativi pieni fino al **40%** delle date (prima 1/3); oltre, ognuno pesa in proporzione meno.
-- Bonus sacrificio: Rosso Chiaro **+30** (era +100), Rosso Scuro **+150** (era +250), tetto accumulato **300** (era 500).
+- Bonus sacrificio: Rosso Chiaro **+40** (era +100), Rosso Scuro **+150** (era +250), tetto accumulato **300** (era 500).
 - Nessun tetto a Verdi e Rossi Chiari; resta solo Rosso Scuro max 2 (veto). `SondaggiEngine.kt` (e il suo test) allineato: aveva ancora i vecchi tetti a 3.
 - Testo esplicativo in `PollsScreen.kt` aggiornato. Non compilato né testato qui (Kotlin non eseguibile, dipendenze backend non installate).
