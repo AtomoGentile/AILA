@@ -549,10 +549,6 @@ fun SettingsScreen(
                                 // completo: mostrare cinque schede tutte insieme renderebbe la
                                 // pagina illeggibile, e nella pratica si sceglie una volta sola.
                                 modelsRevision // rilegge lo stato su disco dopo download/eliminazione
-                                // AICore ha risposto NOT_AVAILABLE: il telefono non offre Gemini Nano alle
-                                // app, ritentare "Attiva" non cambia niente.
-                                val systemModelUnavailable = activeModel?.isSystemModel == true &&
-                                    downloadStatus?.contains("NOT_AVAILABLE") == true
                                 val shownModels = if (showAllModels) localModels else listOfNotNull(activeModel)
                                 shownModels.forEach { model ->
                                     LocalModelRow(
@@ -562,7 +558,6 @@ fun SettingsScreen(
                                         isRecommended = model.id == localModels.firstOrNull()?.id,
                                         fits = model.fitsComfortablyIn(deviceRamMb),
                                         supportsActions = model.supportsActions,
-                                        isUnavailable = systemModelUnavailable && model.id == activeModel?.id,
                                         onClick = {
                                             if (model.id != activeModel?.id) {
                                                 selectedModelIdState = model.id
@@ -623,7 +618,7 @@ fun SettingsScreen(
                                     Text(
                                         text = downloadStatus!!,
                                         fontSize = 12.sp,
-                                        color = if (systemModelUnavailable) AppTheme.TintRedInk else AppTheme.TextMuted,
+                                        color = AppTheme.TextMuted,
                                         lineHeight = 17.sp
                                     )
                                 }
@@ -690,7 +685,7 @@ fun SettingsScreen(
                                                 activeModel.isSystemModel -> "Attiva"
                                                 else -> "Scarica (${activeModel.readableSize})"
                                             },
-                                            enabled = !isDownloading && activeModel != null && !systemModelUnavailable,
+                                            enabled = !isDownloading && activeModel != null,
                                             onClick = {
                                                 val model = activeModel ?: return@AilaPrimaryButton
                                                 if (isDownloading) return@AilaPrimaryButton
@@ -805,7 +800,6 @@ private fun LocalModelRow(
     isRecommended: Boolean,
     fits: Boolean,
     supportsActions: Boolean,
-    isUnavailable: Boolean = false,
     onClick: () -> Unit
 ) {
     val shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp)
@@ -868,20 +862,14 @@ private fun LocalModelRow(
         // calendario da solo: e' una differenza concreta e va detta prima di scaricarlo, non
         // dopo.
         Text(
-            text = if (isUnavailable) {
-                "Non disponibile su questo telefono."
-            } else if (supportsActions) {
+            text = if (supportsActions) {
                 "Sa proporre scadenze da aggiungere al calendario."
             } else {
                 "Solo riassunti: non propone scadenze per il calendario."
             },
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
-            color = when {
-                isUnavailable -> AppTheme.TintRedInk
-                supportsActions -> AppTheme.TintGreenInk
-                else -> AppTheme.TextFaint
-            },
+            color = if (supportsActions) AppTheme.TintGreenInk else AppTheme.TextFaint,
             lineHeight = 15.sp
         )
         if (!fits) {
