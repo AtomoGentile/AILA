@@ -46,6 +46,12 @@ const FAIR_NEGATIVE_SHARE = 0.4;
 // credito tale da vincere qualunque data contro chiunque per il resto dell'anno.
 const MAX_SACRIFICE_BONUS = 300;
 
+// Il Rosso Chiaro e' salvato come -80 (e' il codice del voto, vincolato dallo schema e presente
+// nei voti gia' dati), ma nel calcolo vale -60: per un "meglio di no" -80 era troppo duro
+// rispetto al +50 del Verde. Il Rosso Scuro vale quanto il suo codice.
+const LIGHT_RED_POINTS = -60;
+const pointsOf = (voteScore: number) => (voteScore === -80 ? LIGHT_RED_POINTS : voteScore);
+
 // Bonus guadagnato quando l'algoritmo ti mette su una data che avevi rifiutato.
 const SACRIFICE_LIGHT_RED = 40;
 const SACRIFICE_DARK_RED = 150;
@@ -581,7 +587,7 @@ async function computeAndPersistAssignments(
   for (const v of votes.results) {
     if (!scoreMatrix[v.student_id]) scoreMatrix[v.student_id] = {};
     const sacrifice = v.vote_score === 50 ? Math.min(v.sacrifice_bonus, MAX_SACRIFICE_BONUS) : 0;
-    const vote = v.vote_score < 0 ? v.vote_score * weightOf(v.student_id) : v.vote_score;
+    const vote = v.vote_score < 0 ? pointsOf(v.vote_score) * weightOf(v.student_id) : v.vote_score;
     scoreMatrix[v.student_id][v.slot_id] = vote + sacrifice;
   }
 

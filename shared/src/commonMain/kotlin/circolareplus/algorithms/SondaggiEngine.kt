@@ -9,6 +9,9 @@ enum class InterrogationVoteType(val score: Int, val maxAllowed: Int?) {
     LIGHT_RED(-80, null),  // Sconsigliato (Illimitati; il server li diluisce oltre il 40% delle date)
     DARK_RED(-300, 2);     // Blocco grave / Veto (Max 2)
 
+    /** Punti usati nel calcolo. Il Rosso Chiaro resta -80 come codice del voto, ma pesa -60. */
+    val points: Int get() = if (this == LIGHT_RED) -60 else score
+
     companion object {
         fun fromScore(score: Int): InterrogationVoteType =
             entries.firstOrNull { it.score == score } ?: YELLOW
@@ -48,7 +51,7 @@ object SondaggiEngine {
 
     /**
      * Valida che i voti espressi dallo studente rispettino i limiti di budget:
-     * - Illimitati Verdi (+50), Gialli (0) e Rossi Chiari (-80)
+     * - Illimitati Verdi (+50), Gialli (0) e Rossi Chiari (-60)
      * - Max 2 Rossi Scuri (-300): è il veto, l'unico tetto rigido
      */
     fun validateStudentVoteBudget(votes: List<StudentInterrogationVote>): Result<Unit> {
@@ -70,7 +73,7 @@ object SondaggiEngine {
         slot: InterrogationSlotInfo,
         accumulatedSacrificeBonus: Int
     ): Int {
-        val baseScore = vote?.voteType?.score ?: InterrogationVoteType.YELLOW.score
+        val baseScore = vote?.voteType?.points ?: InterrogationVoteType.YELLOW.points
 
         // Gestione Sovrapposizioni: se presente verifica 'Per Tutti' nello stesso giorno, la penalità si annulla (0 pt)
         val adjustedVoteScore = if (slot.isCompitoInClasseForAll && baseScore < 0) {

@@ -1983,3 +1983,4 @@ Il Kotlin non è compilato: quello puoi farlo solo tu.
 - Bonus sacrificio: Rosso Chiaro **+40** (era +100), Rosso Scuro **+150** (era +250), tetto accumulato **300** (era 500).
 - Nessun tetto a Verdi e Rossi Chiari; resta solo Rosso Scuro max 2 (veto). `SondaggiEngine.kt` (e il suo test) allineato: aveva ancora i vecchi tetti a 3.
 - Testo esplicativo in `PollsScreen.kt` aggiornato. Non compilato né testato qui (Kotlin non eseguibile, dipendenze backend non installate).
+- Rosso Chiaro: nel calcolo vale **-60** (prima -80). Il codice del voto resta -80 (vincolo `CHECK` in `schema.sql` e voti già salvati), il peso è `LIGHT_RED_POINTS` in `polls.ts` e `points` in `SondaggiEngine.kt`.
