@@ -1360,6 +1360,7 @@ fun MainAppShell(
                 // finché non è pronto, le circolari restano visibili come "Da classificare"
                 // invece di mostrare un'etichetta finta.
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 circularsError = "Impossibile caricare le circolari. Controlla la connessione."
             } finally {
                 isCircularsLoading = false
@@ -1402,6 +1403,9 @@ fun MainAppShell(
                     }
                 }
             } catch (e: Exception) {
+                // Cambiando tab a caricamento in corso l'effetto viene annullato: non e' un errore
+                // di rete, e scriverlo qui sporcherebbe lo stato del caricamento che riparte.
+                if (e is CancellationException) throw e
                 proposalsError = "Impossibile caricare la bacheca. Controlla la connessione."
             } finally {
                 isProposalsLoading = false
