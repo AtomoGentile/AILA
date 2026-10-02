@@ -69,6 +69,17 @@ import kotlinx.coroutines.delay
 fun Modifier.ailaAppear(index: Int = 0, enabled: Boolean = true): Modifier = this
 
 /**
+ * Una schermata che si sta chiudendo smette di prendere i tocchi: la sua area per il tocco si
+ * azzera (il disegno resta com'e'), cosi' i pulsanti sotto rispondono subito. Senza, fino a fine
+ * animazione di chiusura la pagina in uscita li copriva e "apri-chiudi, apri-chiudi" perdeva i tocchi.
+ */
+fun Modifier.ailaNoTouchWhile(active: Boolean): Modifier =
+    if (!active) this else this.layout { measurable, constraints ->
+        val placeable = measurable.measure(constraints)
+        layout(0, 0) { placeable.place(0, 0) }
+    }
+
+/**
  * Respiro lento: usata dal logo nella schermata di caricamento, per far capire che l'app sta
  * lavorando e non è bloccata. Non usa `rememberInfiniteTransition` di proposito — un'animazione
  * infinita continuerebbe a girare anche a caricamento finito se la schermata restasse composta;
