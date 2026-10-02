@@ -1,0 +1,6 @@
+# Generati da npm install e dagli script: si rifanno con `npm install` e `npm run build`.
+node_modules/
+build/
+snaps/
+sfx.json
+*.mp4
