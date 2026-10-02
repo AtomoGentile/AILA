@@ -1052,9 +1052,18 @@ fun MainAppShell(
     // --- Stato Sondaggi Interrogazioni ------------------------------------------------------
     var currentPoll by remember { mutableStateOf<PollDetailDto?>(null) }
     var isPollLoading by remember { mutableStateOf(false) }
+    // Lo spinner a tutto schermo serve solo alla prima lettura: rientrando in una tab i dati gia'
+    // letti restano a schermo e si aggiornano sotto, senza far "lampeggiare" la ricarica.
+    var pollsLoadedOnce by remember { mutableStateOf(false) }
+    var rankingLoadedOnce by remember { mutableStateOf(false) }
+    var circularsLoadedOnce by remember { mutableStateOf(false) }
+    var proposalsLoadedOnce by remember { mutableStateOf(false) }
     var pollError by remember { mutableStateOf<String?>(null) }
     var pollsRefreshTrigger by remember { mutableStateOf(0) }
     var showCreatePollDialog by remember { mutableStateOf(false) }
+    var closeCreatePollRequested by remember { mutableStateOf(false) }
+    var closeCreateRankingPollRequested by remember { mutableStateOf(false) }
+    var closeAddProposalRequested by remember { mutableStateOf(false) }
     var isCreatingPoll by remember { mutableStateOf(false) }
     var showPollHistory by remember { mutableStateOf(false) }
     // 0 = sondaggi interrogazioni, 1 = sondaggi a ordinamento.
@@ -1353,6 +1362,7 @@ fun MainAppShell(
             circularsError = null
             try {
                 circulars = AppContainer.circularsRepository.listCirculars()
+                circularsLoadedOnce = true
                 noteNovelties(freshCirculars = circulars)
                 // Nota: la classificazione AI (client-side, con la chiave personale dello
                 // studente) richiede il testo estratto dal PDF della circolare. L'estrazione
@@ -1393,6 +1403,7 @@ fun MainAppShell(
                         }
                     }
                     proposals = proposalsDeferred.await()
+                    proposalsLoadedOnce = true
                     noteNovelties(freshProposals = proposals)
                     val state = unlockDeferred.await()
                     if (state != null) {
@@ -1777,7 +1788,9 @@ fun MainAppShell(
                     .filter { AppContainer.settings.isPollSubmitted(it.id) }
                     .map { it.id }
                     .toSet()
+                pollsLoadedOnce = true
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 pollError = "Impossibile caricare i sondaggi. Controlla la connessione."
             } finally {
                 isPollLoading = false
@@ -1794,14 +1807,16 @@ fun MainAppShell(
         if (isInPollsScreen) {
             // Lo spinner solo alla prima lettura: dopo un invio o una chiusura si ricarica in
             // silenzio, senza far sparire le card sotto il dito.
-            isRankingLoading = rankingPolls.isEmpty()
+            isRankingLoading = !rankingLoadedOnce
             rankingError = null
             try {
                 val response = StartupPrefetch.take<circolareplus.data.remote.dto.RankingPollsListResponseDto>("rankingPolls")
                     ?: AppContainer.rankingPollsRepository.listPolls()
                 rankingPolls = response.polls
                 rankingTotalStudents = response.totalStudents
+                rankingLoadedOnce = true
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 rankingError = "Impossibile caricare i sondaggi. Controlla la connessione."
             } finally {
                 isRankingLoading = false
@@ -2008,12 +2023,16 @@ fun MainAppShell(
 
     if (showAddProposalDialog) {
         AddProposalDialog(
-            onDismiss = { showAddProposalDialog = false },
+            closeRequested = closeAddProposalRequested,
+            onDismiss = {
+                showAddProposalDialog = false
+                closeAddProposalRequested = false
+            },
             onConfirm = { title, description, category, isAnonymous ->
                 coroutineScope.launch {
                     try {
                         AppContainer.proposalsRepository.createProposal(title, description, category, isAnonymous)
-                        showAddProposalDialog = false
+                        closeAddProposalRequested = true
                         reloadProposals()
                     } catch (e: Exception) {
                         proposalsError = "Impossibile pubblicare la proposta: ${e.message}"
@@ -2026,17 +2045,21 @@ fun MainAppShell(
     if (showCreateRankingPollDialog) {
         CreateRankingPollDialog(
             isSubmitting = isCreatingRankingPoll,
-            onDismiss = { showCreateRankingPollDialog = false },
+            closeRequested = closeCreateRankingPollRequested,
+            onDismiss = {
+                showCreateRankingPollDialog = false
+                closeCreateRankingPollRequested = false
+            },
             onConfirm = { question, options, audience ->
                 coroutineScope.launch {
                     isCreatingRankingPoll = true
                     try {
                         AppContainer.rankingPollsRepository.createPoll(question, options, audience)
-                        showCreateRankingPollDialog = false
+                        closeCreateRankingPollRequested = true
                         rankingRefreshTrigger++
                     } catch (e: Exception) {
                         rankingError = "Impossibile creare il sondaggio: ${e.message}"
-                        showCreateRankingPollDialog = false
+                        closeCreateRankingPollRequested = true
                     } finally {
                         isCreatingRankingPoll = false
                     }
@@ -2048,7 +2071,11 @@ fun MainAppShell(
     if (showCreatePollDialog) {
         CreatePollDialog(
             isSubmitting = isCreatingPoll,
-            onDismiss = { showCreatePollDialog = false },
+            closeRequested = closeCreatePollRequested,
+            onDismiss = {
+                showCreatePollDialog = false
+                closeCreatePollRequested = false
+            },
             onConfirm = { subject, slots, audience ->
                 coroutineScope.launch {
                     isCreatingPoll = true
@@ -2058,7 +2085,7 @@ fun MainAppShell(
                         if (newId != null) {
                             AppContainer.pollsRepository.publishPoll(newId)
                         }
-                        showCreatePollDialog = false
+                        closeCreatePollRequested = true
                         pollsRefreshTrigger++
                     } catch (e: Exception) {
                         pollError = "Impossibile creare il sondaggio: ${e.message}"
@@ -2498,9 +2525,9 @@ fun MainAppShell(
                             if (tabFade.value < 1f) tabFade.animateTo(1f, androidx.compose.animation.core.tween(140))
                             return@LaunchedEffect
                         }
-                        tabFade.animateTo(0f, androidx.compose.animation.core.tween(if (AppTheme.isGlass) 90 else 70))
+                        tabFade.animateTo(0f, androidx.compose.animation.core.tween(if (AppTheme.isGlass) 60 else 50))
                         tabPager.scrollToPage(target)
-                        tabFade.animateTo(1f, androidx.compose.animation.core.tween(if (AppTheme.isGlass) 140 else 210))
+                        tabFade.animateTo(1f, androidx.compose.animation.core.tween(if (AppTheme.isGlass) 110 else 130))
                     }
                     // Pagine -> barra, in tempo reale: mentre si scorre col dito la barra segue la
                     // pagina verso cui si sta andando (non solo a scorrimento finito).
@@ -2909,7 +2936,7 @@ fun MainAppShell(
                                 when (section) {
                                     ClassSection.CIRCULARS -> {
                                         LoadableContent(
-                                            isLoading = isCircularsLoading,
+                                            isLoading = isCircularsLoading && !circularsLoadedOnce,
                                             error = circularsError,
                                             onRetry = { circularsRefreshTrigger++ }
                                         ) {
@@ -2927,7 +2954,7 @@ fun MainAppShell(
                                         // ricarica (dopo un commento, un cambio di stato) smontava la
                                         // bacheca, e con lei i commenti aperti e il voto appena dato.
                                         LoadableContent(
-                                            isLoading = isProposalsLoading && proposals.isEmpty(),
+                                            isLoading = isProposalsLoading && !proposalsLoadedOnce,
                                             error = proposalsError,
                                             onRetry = { reloadProposals() }
                                         ) {
@@ -3081,7 +3108,7 @@ fun MainAppShell(
                                 }
                                 if (pollsSection == 1) {
                                     LoadableContent(
-                                        isLoading = isRankingLoading,
+                                        isLoading = isRankingLoading && !rankingLoadedOnce,
                                         error = rankingError,
                                         onRetry = { rankingRefreshTrigger++ }
                                     ) {
@@ -3233,7 +3260,7 @@ fun MainAppShell(
                                     )
                                 } else {
                                 LoadableContent(
-                                    isLoading = isPollLoading,
+                                    isLoading = isPollLoading && !pollsLoadedOnce,
                                     error = pollError,
                                     onRetry = { pollsRefreshTrigger++ }
                                 ) {
@@ -5500,6 +5527,35 @@ private data class PollSlotDraft(val dateMillis: Long, val capacity: Int)
  * vedevano sempre "Nessun sondaggio disponibile".
  */
 /**
+ * Chiusura animata dei fogli di creazione: X e chiusura a fine operazione ([closeRequested]) fanno
+ * prima scendere il foglio e solo dopo lo tolgono (con `onDismiss` direttamente spariva di colpo).
+ * Scrim, indietro e trascinamento scendono gia' da soli.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun rememberSheetCloseAnimated(
+    sheetState: androidx.compose.material3.SheetState,
+    onDismiss: () -> Unit,
+    closeRequested: Boolean
+): () -> Unit {
+    val scope = rememberCoroutineScope()
+    val currentOnDismiss by rememberUpdatedState(onDismiss)
+    val close: () -> Unit = {
+        scope.launch {
+            sheetState.hide()
+            currentOnDismiss()
+        }
+    }
+    LaunchedEffect(closeRequested) {
+        if (closeRequested) {
+            sheetState.hide()
+            currentOnDismiss()
+        }
+    }
+    return close
+}
+
+/**
  * Intestazione condivisa dei fogli di creazione (evento, sondaggio, proposta): titolo a sinistra,
  * chiudi a destra. Stessa struttura del foglio "Nuovo evento" del Calendario, perché prima
  * ognuna delle tre creazioni aveva un aspetto diverso — questa era ancora un `AlertDialog` con
@@ -5541,9 +5597,11 @@ private fun CreationSheetHeader(title: String, onClose: () -> Unit) {
 private fun CreatePollDialog(
     isSubmitting: Boolean,
     onDismiss: () -> Unit,
-    onConfirm: (String, List<CreatePollSlotRequestDto>, List<String>?) -> Unit
+    onConfirm: (String, List<CreatePollSlotRequestDto>, List<String>?) -> Unit,
+    closeRequested: Boolean = false
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val closeAnimated = rememberSheetCloseAnimated(sheetState, onDismiss, closeRequested)
     var subject by remember { mutableStateOf("") }
     // null = tutta la classe; altrimenti solo chi deve essere interrogato.
     var audience by remember { mutableStateOf<List<String>?>(null) }
@@ -5580,7 +5638,7 @@ private fun CreatePollDialog(
                 .padding(horizontal = AppTheme.Space20)
                 .padding(bottom = AppTheme.Space32)
         ) {
-            CreationSheetHeader(title = "Nuovo sondaggio interrogazioni", onClose = onDismiss)
+            CreationSheetHeader(title = "Nuovo sondaggio interrogazioni", onClose = closeAnimated)
 
             OutlinedTextField(
                 value = subject,
@@ -5719,9 +5777,11 @@ private fun PollSlotDraftRow(
 private fun CreateRankingPollDialog(
     isSubmitting: Boolean,
     onDismiss: () -> Unit,
-    onConfirm: (String, List<String>, List<String>?) -> Unit
+    onConfirm: (String, List<String>, List<String>?) -> Unit,
+    closeRequested: Boolean = false
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val closeAnimated = rememberSheetCloseAnimated(sheetState, onDismiss, closeRequested)
     var question by remember { mutableStateOf("") }
     val options = remember { mutableStateListOf("", "") }
     // null = tutta la classe.
@@ -5743,7 +5803,7 @@ private fun CreateRankingPollDialog(
                 .padding(horizontal = AppTheme.Space20)
                 .padding(bottom = AppTheme.Space32)
         ) {
-            CreationSheetHeader(title = "Nuovo sondaggio a ordinamento", onClose = onDismiss)
+            CreationSheetHeader(title = "Nuovo sondaggio a ordinamento", onClose = closeAnimated)
 
             OutlinedTextField(
                 value = question,
@@ -5832,9 +5892,11 @@ private fun CreateRankingPollDialog(
 @Composable
 private fun AddProposalDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String, String, String, Boolean) -> Unit
+    onConfirm: (String, String, String, Boolean) -> Unit,
+    closeRequested: Boolean = false
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val closeAnimated = rememberSheetCloseAnimated(sheetState, onDismiss, closeRequested)
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var isAnonymous by remember { mutableStateOf(false) }
@@ -5851,7 +5913,7 @@ private fun AddProposalDialog(
                 .padding(horizontal = AppTheme.Space20)
                 .padding(bottom = AppTheme.Space32)
         ) {
-            CreationSheetHeader(title = "Nuova proposta", onClose = onDismiss)
+            CreationSheetHeader(title = "Nuova proposta", onClose = closeAnimated)
 
             OutlinedTextField(
                 value = title,

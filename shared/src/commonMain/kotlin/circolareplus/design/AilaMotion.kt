@@ -241,8 +241,8 @@ fun Modifier.ailaGlassOverlay(
 
 /** Molla del push/pop fra schermate. */
 fun <T> ailaNavigationSpring(): SpringSpec<T> =
-    if (AppTheme.isGlass) spring(dampingRatio = 1f, stiffness = 420f)
-    else spring(dampingRatio = 0.9f, stiffness = 700f)
+    if (AppTheme.isGlass) spring(dampingRatio = 1f, stiffness = 520f)
+    else spring(dampingRatio = 0.9f, stiffness = 850f)
 
 /** Molla "viva" per indicatori, selezioni e comparse. */
 fun <T> ailaSpatialSpring(): SpringSpec<T> =
@@ -355,7 +355,7 @@ fun Modifier.ailaSheetReveal(index: Int): Modifier {
     val progress = remember { Animatable(if (enabled) 0f else 1f) }
     if (enabled) {
         LaunchedEffect(Unit) {
-            delay(40L + index * 45L)
+            delay(15L + index * 30L)
             progress.animateTo(1f, spring(dampingRatio = 0.85f, stiffness = 320f))
         }
     }
