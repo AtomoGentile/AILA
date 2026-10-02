@@ -189,7 +189,7 @@ fun AilaTopSheet(
     // L'altezza della tastiera si legge in fase di layout (vedi il pannello piu' sotto): letta qui,
     // ogni fotogramma dell'animazione della tastiera ricomponeva tutto il contenuto del foglio.
     val imeInsets = WindowInsets.ime
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.ailaNoTouchWhile(closing.value).fillMaxSize()) {
         // Scrim: tocco fuori = chiudi.
         Box(
             modifier = Modifier

@@ -52,6 +52,7 @@ import circolareplus.data.remote.dto.CreatePollSlotRequestDto
 import circolareplus.data.remote.dto.RatingEntryDto
 import circolareplus.data.repository.CircularsRepository
 import circolareplus.data.repository.SessionRestore
+import circolareplus.design.ailaNoTouchWhile
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
 import circolareplus.design.appImePadding
@@ -3534,6 +3535,8 @@ fun MainAppShell(
             // quella sotto.
             Box(
                 modifier = if (route == ShellRoute.TABS) Modifier.fillMaxSize() else Modifier
+                    // Pagina in uscita: non prende piu' i tocchi mentre si chiude.
+                    .ailaNoTouchWhile(route != shellRoute)
                     .fillMaxSize()
                     .then(
                         if (containerOrigin != null) Modifier.ailaContainerReveal(
@@ -4133,6 +4136,7 @@ fun MainAppShell(
         // sulle zone senza pulsanti arriverebbero alla schermata sotto.
         if (circularForDetail != null) Box(
             modifier = Modifier
+                .ailaNoTouchWhile(selectedCircularForDetail == null)
                 .fillMaxSize()
                 .then(
                     if (detailOrigin != null) Modifier.ailaContainerReveal(
@@ -4175,6 +4179,7 @@ fun MainAppShell(
             ) { state -> if (state == androidx.compose.animation.EnterExitState.Visible) 1f else 0f }
             if (eventForDetail != null) Box(
                 modifier = Modifier
+                    .ailaNoTouchWhile(eventDetailToShow == null)
                     .fillMaxSize()
                     .then(
                         if (eventDetailOrigin != null) Modifier
