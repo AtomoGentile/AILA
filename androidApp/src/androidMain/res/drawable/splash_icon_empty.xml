@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Icona vuota dello splash di sistema: lo splash mostra solo il blu notte e il logo si costruisce
+    subito dopo nella schermata di avvio (AilaLoadingScreen). Con il marchio qui si vedrebbe il logo
+    intero un istante prima che sparisca e si ricostruisca.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M0,0h1v1h-1z" />
+</vector>

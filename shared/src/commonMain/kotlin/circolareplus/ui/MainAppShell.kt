@@ -697,10 +697,14 @@ fun MainAppShell(
         }
     }
 
-    if (isRestoringSession) {
+    // All'avvio a freddo il logo si costruisce (vedi AilaLoadingScreen): la schermata resta finché
+    // l'intro non è finita, anche se la sessione si ripristina prima o non c'è niente da ripristinare.
+    var introPending by remember { mutableStateOf(circolareplus.ui.screens.isAilaIntroPending()) }
+
+    if (isRestoringSession || introPending) {
         // Prima: spinner generico su sfondo bianco. Ora nello stile della schermata
         // "Caricamento" del kit AILA (sfondo scuro sfumato, logo, testo).
-        AilaLoadingScreen()
+        AilaLoadingScreen(onIntroFinished = { introPending = false })
         return
     }
 
