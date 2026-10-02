@@ -79,4 +79,11 @@ class SondaggiEngineTest {
         val score = SondaggiEngine.calculateSlotScore(redVote, slotWithExam, accumulatedSacrificeBonus = 0)
         assertEquals(0, score, "Un compito in classe per tutti deve azzerare la penalità dello slot a 0 pt")
     }
+
+    @Test
+    fun testRossoChiaroPesaMenoDelCodice() {
+        val slot = InterrogationSlotInfo(slotId = "slot", dateIso = "2026-09-20", capacity = 1)
+        val redVote = StudentInterrogationVote("s1", "slot", InterrogationVoteType.LIGHT_RED)
+        assertEquals(-60, SondaggiEngine.calculateSlotScore(redVote, slot, accumulatedSacrificeBonus = 0))
+    }
 }
