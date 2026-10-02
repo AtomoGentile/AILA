@@ -50,6 +50,16 @@ const CHORDS = [ // [note del pad, fondamentale del basso, note dell'arpeggio]
   { pad: [57, 61, 64, 69], bass: 45, arp: [69, 73, 76, 81] },  // A
 ];
 const chordAt = t => CHORDS[Math.floor(t / 2) % 4];
+// finale: progressione più calma e che si risolve (Dmaj7 – Gmaj7 – Bm9 – A – Dmaj7), pianoforte e campanelli
+const CLOSE = [
+  { pad: [62, 66, 69, 73], bass: 38, arp: [62, 66, 69, 73, 74, 78] },
+  { pad: [55, 59, 62, 66], bass: 43, arp: [67, 71, 74, 78, 79, 83] },
+  { pad: [59, 62, 66, 69], bass: 47, arp: [66, 71, 74, 78, 81, 83] },
+  { pad: [57, 61, 64, 69], bass: 45, arp: [64, 69, 73, 76, 81, 85] },
+];
+const CLOSE_SEQ = [0, 1, 2, 3, 0];
+const closeAt = t => CLOSE[CLOSE_SEQ[Math.min(4, Math.floor((t - FINALE) / 2))]];
+const chordFor = t => t >= FINALE ? closeAt(t) : chordAt(t);
 
 // ---------------- arrangiamento ----------------
 const GROOVE = t => has(t, CIRC, ASSIST) || has(t, CAL, FINALE - .25);
@@ -57,7 +67,7 @@ const kickOn = t => GROOVE(t);
 const pulseOn = t => has(t, 4, 10.4);                 // battito sordo nel caos iniziale
 const clapOn = t => GROOVE(t) || has(t, ASSIST + 4, CAL);
 const hatOn = t => has(t, 2, 10.4) || GROOVE(t) || has(t, ASSIST + 2, CAL);
-const arpOn = t => has(t, DROP, FINALE - .25) || has(t, FINALE, DUR - 1);
+const arpOn = t => has(t, DROP, FINALE - .25);
 const arpHi = t => has(t, SEATS, FINALE - .25);
 const bassMode = t => GROOVE(t) ? 'pump' : (has(t, DROP, CIRC) || has(t, ASSIST, CAL) || has(t, FINALE, DUR - 2) ? 'long' : null);
 function padCut(t) {
@@ -197,15 +207,33 @@ for (let s = 0; s * .125 < DUR; s++) {
   pluck(t, n, .16 * fadeIn * outro * quiet, s % 2 ? .35 : -.35);
   if (arpHi(t) && s % 2 === 0) pluck(t + .0625, n + 12, .06, s % 4 ? -.6 : .6);
 }
+// finale: pianoforte che sale e scende a ottavi, con una melodia di campanelli sopra
+function piano(t0, midi, amp, pan) {
+  const i0 = Math.round(t0 * SR), len = Math.round(1.6 * SR), f = mtof(midi);
+  for (let k = 0; k < len; k++) {
+    const t = k / SR;
+    let v = 0;
+    for (let h = 1; h <= 5; h++) v += Math.sin(2 * Math.PI * f * h * t) / (h * h) * Math.exp(-t * (1.6 + 1.8 * h));
+    v *= Math.min(1, t / .004);
+    put(i0 + k, v * amp, pan, .5);
+  }
+}
+const UPDOWN = [0, 1, 2, 3, 4, 5, 4, 3, 2, 1, 3, 2];
+for (let s = 0; FINALE + s * .25 < DUR - .5; s++) {
+  const t = FINALE + .5 + s * .25 - .5, ch = closeAt(t), fade = Math.max(0, 1 - (t - FINALE) / (DUR - FINALE + 1));
+  if (t < FINALE + .75) continue;
+  piano(t, ch.arp[UPDOWN[s % UPDOWN.length]], .2 * (.35 + .65 * fade), (s % 2 ? .3 : -.3));
+}
+[[.9, 86], [2.9, 83], [4.4, 81], [5.4, 78], [6.9, 79], [8.0, 81], [9.0, 74]].forEach(([o, m]) => bell(FINALE + o, m, .13, 0, 2.2));
 // basso
 for (let e = 0; e * .25 < DUR; e++) {
-  const t = e * .25, m = bassMode(t), root = chordAt(t).bass;
+  const t = e * .25, m = bassMode(t), root = chordFor(t).bass;
   if (m === 'pump') bassNote(t, .2, root, e % 2 ? .5 : .32);
   else if (m === 'long' && e % 8 === 0) bassNote(t, 1.9, root, .24 * (t >= FINALE ? Math.max(0, 1 - (t - FINALE) / (DUR - FINALE - 2)) : 1));
 }
 // pad: supersaw (5 voci per nota) — scritto grezzo, filtrato dopo con taglio variabile
 for (let bar = 0; bar * 2 < DUR; bar++) {
-  const t0 = bar * 2, ch = CHORDS[bar % 4];
+  const t0 = bar * 2, ch = t0 >= FINALE ? closeAt(t0) : CHORDS[bar % 4];
   if (t0 >= DUR - 1) break;
   const i0 = Math.round(t0 * SR), len = Math.round(3.3 * SR);
   ch.pad.forEach((m, ni) => {
