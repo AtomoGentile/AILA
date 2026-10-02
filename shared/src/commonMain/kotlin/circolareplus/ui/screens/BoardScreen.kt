@@ -24,6 +24,8 @@ import circolareplus.design.AilaIconButton
 import circolareplus.design.AilaEmptyState
 import circolareplus.design.AilaIconAction
 import circolareplus.design.AilaCard
+import circolareplus.design.ailaDialogMotion
+import circolareplus.design.rememberAilaDialogCloser
 import circolareplus.design.AilaDestructiveButton
 import circolareplus.design.AilaPrimaryButton
 import circolareplus.design.AilaSecondaryButton
@@ -800,10 +802,12 @@ private fun UnlockRequestDialog(
     val scope = rememberCoroutineScope()
     val isValid = reason.trim().length >= 10
 
+    val closer = rememberAilaDialogCloser()
     AlertDialog(
-        onDismissRequest = { if (!isSending) onDismiss() },
+        onDismissRequest = { if (!isSending) closer.close(onDismiss) },
         // Larga quasi quanto lo schermo sul telefono, non oltre MaxDialogWidth su tablet/iPad.
         modifier = Modifier
+            .ailaDialogMotion(closer)
             .widthIn(max = circolareplus.design.MaxDialogWidth)
             .fillMaxWidth()
             .padding(horizontal = AppTheme.Space20),
@@ -856,7 +860,7 @@ private fun UnlockRequestDialog(
                         error = null
                         try {
                             onSubmit(reason.trim())
-                            onDone()
+                            closer.close(onDone)
                         } catch (e: Exception) {
                             error = e.message ?: "Richiesta non riuscita."
                         } finally {
@@ -867,7 +871,7 @@ private fun UnlockRequestDialog(
             )
         },
         dismissButton = {
-            AilaSecondaryButton(text = "Annulla", onClick = onDismiss, large = true)
+            AilaSecondaryButton(text = "Annulla", onClick = { closer.close(onDismiss) }, large = true)
         }
     )
 }
@@ -892,8 +896,10 @@ private fun EditProposalDialog(
     val isChanged = title.trim() != initialTitle || description.trim() != initialDescription
     val isValid = title.isNotBlank() && description.isNotBlank()
 
+    val closer = rememberAilaDialogCloser()
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { closer.close(onDismiss) },
+        modifier = Modifier.ailaDialogMotion(closer),
         title = { Text("Modifica la proposta") },
         text = {
             Column {
@@ -929,11 +935,11 @@ private fun EditProposalDialog(
         confirmButton = {
             TextButton(
                 enabled = isChanged && isValid,
-                onClick = { onConfirm(title.trim(), description.trim()) }
+                onClick = { closer.close { onConfirm(title.trim(), description.trim()) } }
             ) { Text("Salva") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Annulla") }
+            TextButton(onClick = { closer.close(onDismiss) }) { Text("Annulla") }
         }
     )
 }
