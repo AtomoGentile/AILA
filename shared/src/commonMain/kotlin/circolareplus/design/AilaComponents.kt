@@ -703,6 +703,44 @@ fun AilaDestructiveButton(
 }
 
 /**
+ * Entrata e uscita animate dei dialoghi: l'`AlertDialog` tolto dalla composizione spariva di colpo.
+ * Il dialogo resta composto mentre si dissolve e rimpicciolisce un filo; solo a fine corsa parte
+ * l'azione di chiusura ([close] riceve cosa fare dopo: annullare, confermare, ...). Un secondo
+ * tocco durante l'uscita non fa nulla.
+ */
+class AilaDialogCloser internal constructor(
+    internal val progress: Animatable<Float, androidx.compose.animation.core.AnimationVector1D>,
+    val close: (afterClose: () -> Unit) -> Unit
+)
+
+@Composable
+fun rememberAilaDialogCloser(): AilaDialogCloser {
+    val progress = remember { Animatable(0f) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val closing = remember { booleanArrayOf(false) }
+    LaunchedEffect(Unit) { progress.animateTo(1f, tween(180)) }
+    return remember {
+        AilaDialogCloser(progress) { afterClose ->
+            if (!closing[0]) {
+                closing[0] = true
+                scope.launch {
+                    progress.animateTo(0f, tween(130, easing = androidx.compose.animation.core.FastOutLinearInEasing))
+                    afterClose()
+                }
+            }
+        }
+    }
+}
+
+fun Modifier.ailaDialogMotion(closer: AilaDialogCloser): Modifier = graphicsLayer {
+    val p = closer.progress.value
+    alpha = p
+    val sc = 0.92f + 0.08f * p
+    scaleX = sc
+    scaleY = sc
+}
+
+/**
  * Finestra di conferma standard (es. "Eliminare la proposta?"): stessi raggi, colori e pulsanti
  * del resto dell'app invece dell'`AlertDialog` grezzo di Material, che risaltava come l'unico
  * elemento "di sistema" in mezzo a schermate tutte disegnate con questo linguaggio grafico.
@@ -717,12 +755,15 @@ fun AilaConfirmDialog(
     dismissLabel: String = "Annulla",
     isDestructive: Boolean = true
 ) {
+    val closer = rememberAilaDialogCloser()
+    val dismiss = { closer.close(onDismiss) }
     // Larga quasi quanto lo schermo e con testo e pulsanti "da pollice": la versione precedente
     // (280dp, titolo 17sp, pulsanti da 12sp) sembrava un'etichetta e i pulsanti si mancavano.
     androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = dismiss,
         // Larga quasi quanto lo schermo sul telefono, non oltre MaxDialogWidth su tablet/iPad.
         modifier = Modifier
+            .ailaDialogMotion(closer)
             .widthIn(max = circolareplus.design.MaxDialogWidth)
             .fillMaxWidth()
             .padding(horizontal = AppTheme.Space20),
@@ -737,13 +778,13 @@ fun AilaConfirmDialog(
         },
         confirmButton = {
             if (isDestructive) {
-                AilaDestructiveButton(text = confirmLabel, onClick = onConfirm, large = true)
+                AilaDestructiveButton(text = confirmLabel, onClick = { closer.close(onConfirm) }, large = true)
             } else {
-                AilaPrimaryButton(text = confirmLabel, onClick = onConfirm, large = true)
+                AilaPrimaryButton(text = confirmLabel, onClick = { closer.close(onConfirm) }, large = true)
             }
         },
         dismissButton = {
-            AilaSecondaryButton(text = dismissLabel, onClick = onDismiss, large = true)
+            AilaSecondaryButton(text = dismissLabel, onClick = dismiss, large = true)
         }
     )
 }
