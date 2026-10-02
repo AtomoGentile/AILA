@@ -1065,6 +1065,9 @@ fun MainAppShell(
     var closeCreatePollRequested by remember { mutableStateOf(false) }
     var closeCreateRankingPollRequested by remember { mutableStateOf(false) }
     var closeAddProposalRequested by remember { mutableStateOf(false) }
+    // Ricarica da fare quando il foglio di creazione e' sceso del tutto: partita subito, la lista
+    // sotto si ricomponeva (spinner, card nuove) mentre il foglio ancora scendeva e l'animazione scattava.
+    var refreshAfterSheetClose by remember { mutableStateOf<(() -> Unit)?>(null) }
     var isCreatingPoll by remember { mutableStateOf(false) }
     var showPollHistory by remember { mutableStateOf(false) }
     // 0 = sondaggi interrogazioni, 1 = sondaggi a ordinamento.
@@ -2028,13 +2031,15 @@ fun MainAppShell(
             onDismiss = {
                 showAddProposalDialog = false
                 closeAddProposalRequested = false
+                refreshAfterSheetClose?.invoke()
+                refreshAfterSheetClose = null
             },
             onConfirm = { title, description, category, isAnonymous ->
                 coroutineScope.launch {
                     try {
                         AppContainer.proposalsRepository.createProposal(title, description, category, isAnonymous)
                         closeAddProposalRequested = true
-                        reloadProposals()
+                        refreshAfterSheetClose = { reloadProposals() }
                     } catch (e: Exception) {
                         proposalsError = "Impossibile pubblicare la proposta: ${e.message}"
                     }
@@ -2050,6 +2055,8 @@ fun MainAppShell(
             onDismiss = {
                 showCreateRankingPollDialog = false
                 closeCreateRankingPollRequested = false
+                refreshAfterSheetClose?.invoke()
+                refreshAfterSheetClose = null
             },
             onConfirm = { question, options, audience ->
                 coroutineScope.launch {
@@ -2057,7 +2064,7 @@ fun MainAppShell(
                     try {
                         AppContainer.rankingPollsRepository.createPoll(question, options, audience)
                         closeCreateRankingPollRequested = true
-                        rankingRefreshTrigger++
+                        refreshAfterSheetClose = { rankingRefreshTrigger++ }
                     } catch (e: Exception) {
                         rankingError = "Impossibile creare il sondaggio: ${e.message}"
                         closeCreateRankingPollRequested = true
@@ -2076,6 +2083,8 @@ fun MainAppShell(
             onDismiss = {
                 showCreatePollDialog = false
                 closeCreatePollRequested = false
+                refreshAfterSheetClose?.invoke()
+                refreshAfterSheetClose = null
             },
             onConfirm = { subject, slots, audience ->
                 coroutineScope.launch {
@@ -2087,7 +2096,7 @@ fun MainAppShell(
                             AppContainer.pollsRepository.publishPoll(newId)
                         }
                         closeCreatePollRequested = true
-                        pollsRefreshTrigger++
+                        refreshAfterSheetClose = { pollsRefreshTrigger++ }
                     } catch (e: Exception) {
                         pollError = "Impossibile creare il sondaggio: ${e.message}"
                     } finally {
@@ -5545,17 +5554,26 @@ private fun rememberSheetCloseAnimated(
 ): () -> Unit {
     val scope = rememberCoroutineScope()
     val currentOnDismiss by rememberUpdatedState(onDismiss)
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    // Una sola chiusura per volta: un doppio tocco sulla X o X + fine operazione insieme
+    // lanciavano due hide() e due onDismiss.
+    val closing = remember { booleanArrayOf(false) }
     val close: () -> Unit = {
-        scope.launch {
-            sheetState.hide()
-            currentOnDismiss()
+        if (!closing[0]) {
+            closing[0] = true
+            scope.launch {
+                // Prima la tastiera: chiusa insieme al foglio, il contenuto (che segue la tastiera)
+                // saltava mentre scendeva.
+                keyboard?.hide()
+                focusManager.clearFocus(force = true)
+                sheetState.hide()
+                currentOnDismiss()
+            }
         }
     }
     LaunchedEffect(closeRequested) {
-        if (closeRequested) {
-            sheetState.hide()
-            currentOnDismiss()
-        }
+        if (closeRequested) close()
     }
     return close
 }
