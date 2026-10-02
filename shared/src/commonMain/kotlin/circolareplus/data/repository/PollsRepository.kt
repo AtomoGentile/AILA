@@ -85,7 +85,7 @@ class PollsRepository(private val api: ApiClient) {
         api.put<Unit, SuccessDto>("/api/polls/$id/publish", Unit)
     }
 
-    /** voteScore: 50 (verde), 0 (giallo), -80 (rosso chiaro), -300 (rosso scuro), null = rimuovi voto. */
+    /** voteScore: 50 (verde), 0 (giallo), -60 (rosso chiaro), -300 (rosso scuro), null = rimuovi voto. */
     suspend fun voteSlot(pollId: String, slotId: String, voteScore: Int?) {
         api.post<VotePollSlotRequestDto, SuccessDto>("/api/polls/$pollId/vote", VotePollSlotRequestDto(slotId, voteScore))
     }
