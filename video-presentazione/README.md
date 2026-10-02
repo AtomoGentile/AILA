@@ -1,6 +1,6 @@
 # Video di presentazione di AILA
 
-Video di circa 2 minuti e mezzo (1920×1080, 30 fps) da proiettare in classe. È una pagina HTML animata
+Video di circa 2 minuti e mezzo (2:24) (1920×1080, 30 fps) da proiettare in classe. È una pagina HTML animata
 esportata fotogramma per fotogramma, con musica sintetizzata in codice.
 
 | File | Cosa contiene |
@@ -14,9 +14,9 @@ esportata fotogramma per fotogramma, con musica sintetizzata in codice.
 Per rigenerare tutto dopo una modifica: `npm run build` (circa mezz'ora). Se cambi solo la musica:
 `npm run music && npm run mux`.
 
-Scaletta: 0:00 il caos (circolari e chat) · 0:16 logo · 0:22 Circolari e AI · 0:44 AILA Assistant ·
-1:00 Calendario · 1:10 Sondaggi interrogazioni (budget di voti, bonus sacrificio) · 1:32 Mappa posti ·
-1:56 Bacheca e sondaggi a ordinamento · 2:10 piattaforme e privacy · 2:18 finale.
+Scaletta: 0:00 il caos (circolari e chat) · 0:16 logo · 0:22 Circolari e AI · 0:40 AILA Assistant ·
+0:56 Calendario · 1:06 Sondaggi interrogazioni (budget di voti, bonus sacrificio) · 1:28 Mappa posti ·
+1:52 Bacheca e sondaggi a ordinamento · 2:06 piattaforme e privacy · 2:14 finale.
 
 I nomi dei compagni, le circolari e le date sono inventati. Gli algoritmi mostrano solo i risultati,
 senza punteggi (tranne i punti del sondaggio a ordinamento). La versione web (PWA) non viene citata.
