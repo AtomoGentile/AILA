@@ -17,6 +17,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -134,66 +136,130 @@ fun AilaGlyph(
 ) {
     val g = if (simplified) SmallMark else FullMark
     Canvas(modifier = modifier.size(size)) {
-        val s = this.size.width
-        fun px(u: Float) = u * s
-        val deskBrush = brush ?: Brush.linearGradient(
-            listOf(MarkDeskStart, MarkDeskEnd),
-            start = Offset(0f, s),
-            end = Offset(s, 0f)
-        )
-        val spark = Offset(px(g.sparkX), px(g.sparkY))
-        val rows = g.rows.map { (y, _) -> g.deskXs.map { x -> Offset(px(x), px(y)) } }
+        drawAilaMark(g, brush, sparkleColor, build = null)
+    }
+}
 
-        // 1. I collegamenti: dalla scintilla alla prima fila, poi da ogni banco a tutti quelli
-        //    della fila successiva. Stanno sotto ai banchi, che ne coprono le estremità.
-        val lineColor = MarkLine.copy(alpha = g.lineAlpha)
-        val levels = listOf(listOf(spark)) + rows
-        for (i in 0 until levels.size - 1) {
-            for (a in levels[i]) for (b in levels[i + 1]) {
-                drawLine(
-                    color = lineColor,
-                    start = a,
-                    end = b,
-                    strokeWidth = px(g.lineW),
-                    cap = StrokeCap.Round
-                )
+/** Quanto dura la costruzione animata del segno, in secondi: l'ultima a finire è la scintilla. */
+const val AilaMarkBuildSeconds = 1.5f
+
+/**
+ * Il segno che si costruisce pezzo per pezzo, come nel video di presentazione: i banchi salgono al
+ * loro posto, i collegamenti si tracciano dalla scintilla verso il basso, poi si accendono l'alone
+ * e la scintilla, che entra ruotando. Usato all'avvio dell'app (vedi AilaLoadingScreen).
+ *
+ * [elapsed] sono i secondi dall'inizio della costruzione. Viene letto solo dentro il disegno:
+ * mentre il tempo avanza il Canvas si ridisegna senza ricomporre. Da [AilaMarkBuildSeconds] in poi
+ * il segno è identico a quello fermo di [AilaGlyph].
+ */
+@Composable
+fun AilaGlyphBuilding(
+    size: Dp,
+    elapsed: () -> Float,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier.size(size)) {
+        drawAilaMark(FullMark, brush = null, sparkleColor = Color.White, build = elapsed())
+    }
+}
+
+private fun easeOutCubic(p: Float): Float { val q = 1f - p; return 1f - q * q * q }
+private fun easeInOutCubic(p: Float): Float =
+    if (p < 0.5f) 4f * p * p * p else { val q = -2f * p + 2f; 1f - q * q * q / 2f }
+/** Supera di poco l'arrivo e torna indietro: dà il piccolo "rimbalzo" ai banchi e alla scintilla. */
+private fun easeOutBack(p: Float): Float { val q = p - 1f; return 1f + 2.70158f * q * q * q + 1.70158f * q * q }
+
+/**
+ * Disegna il segno. Con [build] `null` è fermo e completo; con un numero di secondi disegna lo
+ * stato della costruzione animata in quell'istante (i tempi sono quelli del video).
+ */
+private fun DrawScope.drawAilaMark(g: AilaMarkGeometry, brush: Brush?, sparkleColor: Color, build: Float?) {
+    val s = this.size.width
+    fun px(u: Float) = u * s
+    fun phase(start: Float, duration: Float): Float =
+        if (build == null) 1f else ((build - start) / duration).coerceIn(0f, 1f)
+    val deskBrush = brush ?: Brush.linearGradient(
+        listOf(MarkDeskStart, MarkDeskEnd),
+        start = Offset(0f, s),
+        end = Offset(s, 0f)
+    )
+    val spark = Offset(px(g.sparkX), px(g.sparkY))
+    val rows = g.rows.map { (y, _) -> g.deskXs.map { x -> Offset(px(x), px(y)) } }
+
+    // 1. I collegamenti: dalla scintilla alla prima fila, poi da ogni banco a tutti quelli
+    //    della fila successiva. Stanno sotto ai banchi, che ne coprono le estremità.
+    //    Nella costruzione ognuno si traccia dal capo alto verso il basso, uno dopo l'altro.
+    val lineColor = MarkLine.copy(alpha = g.lineAlpha)
+    val levels = listOf(listOf(spark)) + rows
+    var lineIndex = 0
+    for (i in 0 until levels.size - 1) {
+        for (a in levels[i]) for (b in levels[i + 1]) {
+            val p = easeInOutCubic(phase(0.3f + lineIndex * 0.03f, 0.5f))
+            lineIndex++
+            if (p <= 0f) continue
+            drawLine(
+                color = lineColor,
+                start = a,
+                end = Offset(a.x + (b.x - a.x) * p, a.y + (b.y - a.y) * p),
+                strokeWidth = px(g.lineW),
+                cap = StrokeCap.Round
+            )
+        }
+    }
+
+    // 2. I banchi: le file più lontane dalla cattedra sfumano un poco. Nella costruzione salgono
+    //    dal basso crescendo, uno alla volta, con un piccolo rimbalzo.
+    var deskIndex = 0
+    g.rows.forEachIndexed { r, (_, alpha) ->
+        for (c in rows[r]) {
+            val p = easeOutBack(phase(deskIndex * 0.06f, 0.55f))
+            deskIndex++
+            if (p <= 0f) continue
+            val deskPath = markRoundRectPath(
+                c.x - px(g.deskW) / 2f, c.y - px(g.deskH) / 2f,
+                px(g.deskW), px(g.deskH), px(g.deskR)
+            )
+            val grow = 0.3f + 0.7f * p
+            withTransform({
+                translate(top = (1f - p) * px(0.18f))
+                scale(grow, grow, pivot = c)
+            }) {
+                drawPath(path = deskPath, brush = deskBrush, alpha = alpha * (p * 1.5f).coerceIn(0f, 1f))
             }
         }
+    }
 
-        // 2. I banchi: le file più lontane dalla cattedra sfumano un poco.
-        g.rows.forEachIndexed { r, (_, alpha) ->
-            for (c in rows[r]) {
-                drawPath(
-                    path = markRoundRectPath(
-                        c.x - px(g.deskW) / 2f, c.y - px(g.deskH) / 2f,
-                        px(g.deskW), px(g.deskH), px(g.deskR)
-                    ),
-                    brush = deskBrush,
-                    alpha = alpha
-                )
-            }
-        }
-
-        // 3. L'alone e la scintilla. L'alone è un drawRect con gradiente radiale che si spegne
-        //    entro il raggio: niente drawCircle/drawArc, per lo stesso vincolo di sopra.
-        val haloR = px(g.halo)
+    // 3. L'alone e la scintilla. L'alone è un drawRect con gradiente radiale che si spegne
+    //    entro il raggio: niente drawCircle/drawArc, per lo stesso vincolo di sopra.
+    val haloIn = easeOutCubic(phase(0.65f, 0.9f))
+    if (haloIn > 0f) {
+        val haloR = px(g.halo) * (0.2f + 0.8f * haloIn)
         drawRect(
             brush = Brush.radialGradient(
-                listOf(MarkHalo.copy(alpha = 0.55f), MarkHalo.copy(alpha = 0f)),
+                listOf(MarkHalo.copy(alpha = 0.55f * haloIn), MarkHalo.copy(alpha = 0f)),
                 center = spark,
                 radius = haloR
             ),
             topLeft = Offset(spark.x - haloR, spark.y - haloR),
             size = Size(haloR * 2f, haloR * 2f)
         )
-        drawPath(
-            path = markSparklePath(spark.x, spark.y, px(g.sparkRx), px(g.sparkRy)),
-            brush = Brush.verticalGradient(
-                listOf(sparkleColor, MarkSparkBottom),
-                startY = spark.y - px(g.sparkRy),
-                endY = spark.y + px(g.sparkRy)
+    }
+    val sparkIn = easeOutBack(phase(0.75f, 0.75f))
+    if (sparkIn > 0f) {
+        withTransform({
+            rotate(degrees = (1f - sparkIn) * -120f, pivot = spark)
+            scale(sparkIn, sparkIn, pivot = spark)
+        }) {
+            drawPath(
+                path = markSparklePath(spark.x, spark.y, px(g.sparkRx), px(g.sparkRy)),
+                brush = Brush.verticalGradient(
+                    listOf(sparkleColor, MarkSparkBottom),
+                    startY = spark.y - px(g.sparkRy),
+                    endY = spark.y + px(g.sparkRy)
+                ),
+                alpha = (sparkIn * 2f).coerceIn(0f, 1f)
             )
-        )
+        }
     }
 }
 

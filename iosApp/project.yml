@@ -53,10 +53,11 @@ targets:
         CFBundleVersion: "1"
         LSRequiresIPhoneOS: true
         UIApplicationSupportsIndirectInputEvents: true
-        # Come lo splash Android (windowSplashScreenBackground #0A1330 + marchio AILA).
+        # Come lo splash Android: solo il blu notte (#0A1330). Il marchio si costruisce animato
+        # nella prima schermata dell'app (AilaLoadingScreen); con il logo qui si vedrebbe intero un
+        # istante prima di ricostruirsi.
         UILaunchScreen:
           UIColorName: LaunchBackground
-          UIImageName: LaunchLogo
         # iPhone solo in verticale, come i telefoni Android; iPad libero, come i tablet.
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

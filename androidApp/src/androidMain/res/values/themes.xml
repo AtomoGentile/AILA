@@ -6,11 +6,14 @@
     comparivano sfocati/"pixelosi" — il difetto segnalato da Simone. Qui lo sfondo è il blu notte
     del brand (lo stesso della piastrella dell'icona, ic_launcher_background.xml) e l'icona è il
     marchio vettoriale, nitido a ogni dimensione.
+
+    Ora l'icona dello splash è vuota: il marchio si costruisce animato nella prima schermata
+    dell'app (AilaLoadingScreen), che parte dallo stesso blu notte.
 -->
 <resources>
     <style name="Theme.App.Starting" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">#0A1330</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_icon_empty</item>
         <!-- Al termine dello splash, MainActivity riparte dal tema che aveva prima. -->
         <item name="postSplashScreenTheme">@android:style/Theme.Material.Light.NoActionBar</item>
     </style>
