@@ -300,7 +300,7 @@ CREATE TABLE IF NOT EXISTS interrogation_slots (
 CREATE TABLE IF NOT EXISTS interrogation_votes (
     slot_id TEXT NOT NULL REFERENCES interrogation_slots(id) ON DELETE CASCADE,
     student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    vote_score INTEGER NOT NULL CHECK(vote_score IN (50, 0, -80, -300)),
+    vote_score INTEGER NOT NULL CHECK(vote_score IN (50, 0, -60, -300)),
     PRIMARY KEY (slot_id, student_id)
 );
 

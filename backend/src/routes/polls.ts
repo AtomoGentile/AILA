@@ -26,7 +26,7 @@ polls.use('*', authMiddleware());
 const VOTE_LIMITS: Record<VoteScore, number> = {
   50: Infinity,   // VERDE: illimitati
   0: Infinity,    // GIALLO: illimitati
-  [-80]: Infinity, // ROSSO CHIARO: illimitati
+  [-60]: Infinity, // ROSSO CHIARO: illimitati
   [-300]: 2,      // ROSSO SCURO (veto): max 2
 };
 
@@ -45,12 +45,6 @@ const FAIR_NEGATIVE_SHARE = 0.4;
 // Tetto al bonus sacrificio accumulato: senza, qualche giro "sfortunato" di fila dava un
 // credito tale da vincere qualunque data contro chiunque per il resto dell'anno.
 const MAX_SACRIFICE_BONUS = 300;
-
-// Il Rosso Chiaro e' salvato come -80 (e' il codice del voto, vincolato dallo schema e presente
-// nei voti gia' dati), ma nel calcolo vale -60: per un "meglio di no" -80 era troppo duro
-// rispetto al +50 del Verde. Il Rosso Scuro vale quanto il suo codice.
-const LIGHT_RED_POINTS = -60;
-const pointsOf = (voteScore: number) => (voteScore === -80 ? LIGHT_RED_POINTS : voteScore);
 
 // Bonus guadagnato quando l'algoritmo ti mette su una data che avevi rifiutato.
 const SACRIFICE_LIGHT_RED = 40;
@@ -155,7 +149,7 @@ polls.get('/:id', async (c) => {
     `SELECT s.id, s.slot_date, s.capacity, s.teacher_mandatory,
             COALESCE(SUM(CASE WHEN v.vote_score > 0 THEN 1 ELSE 0 END), 0) as green_count,
             COALESCE(SUM(CASE WHEN v.vote_score = 0 THEN 1 ELSE 0 END), 0) as yellow_count,
-            COALESCE(SUM(CASE WHEN v.vote_score = -80 THEN 1 ELSE 0 END), 0) as red_light_count,
+            COALESCE(SUM(CASE WHEN v.vote_score = -60 THEN 1 ELSE 0 END), 0) as red_light_count,
             COALESCE(SUM(CASE WHEN v.vote_score = -300 THEN 1 ELSE 0 END), 0) as red_dark_count,
             mv.vote_score as my_vote
      FROM interrogation_slots s
@@ -342,9 +336,9 @@ polls.post('/:id/vote', async (c) => {
   const { slotId, voteScore } = body;
 
   // voteScore null = remove vote
-  const validScores: (VoteScore | null)[] = [50, 0, -80, -300, null];
+  const validScores: (VoteScore | null)[] = [50, 0, -60, -300, null];
   if (!validScores.includes(voteScore)) {
-    return c.json({ error: 'voteScore deve essere 50, 0, -80, -300 oppure null (rimuovi voto)' }, 400);
+    return c.json({ error: 'voteScore deve essere 50, 0, -60, -300 oppure null (rimuovi voto)' }, 400);
   }
 
   const classId = await resolveClassId(c);
@@ -402,7 +396,7 @@ polls.post('/:id/vote', async (c) => {
     if ((usedCount?.cnt ?? 0) >= limit) {
       const scoreLabel: Record<number, string> = {
         50: 'Verde (+50)',
-        [-80]: 'Rosso Chiaro (-80)',
+        [-60]: 'Rosso Chiaro (-60)',
         [-300]: 'Rosso Scuro (-300)',
       };
       return c.json({
@@ -587,7 +581,7 @@ async function computeAndPersistAssignments(
   for (const v of votes.results) {
     if (!scoreMatrix[v.student_id]) scoreMatrix[v.student_id] = {};
     const sacrifice = v.vote_score === 50 ? Math.min(v.sacrifice_bonus, MAX_SACRIFICE_BONUS) : 0;
-    const vote = v.vote_score < 0 ? pointsOf(v.vote_score) * weightOf(v.student_id) : v.vote_score;
+    const vote = v.vote_score < 0 ? v.vote_score * weightOf(v.student_id) : v.vote_score;
     scoreMatrix[v.student_id][v.slot_id] = vote + sacrifice;
   }
 
@@ -640,7 +634,7 @@ async function computeAndPersistAssignments(
       (v) => v.student_id === a.studentId && v.slot_id === a.slotId
     )?.vote_score ?? 0;
 
-    if (originalVoteScore === -80 || originalVoteScore === -300) {
+    if (originalVoteScore === -60 || originalVoteScore === -300) {
       // Il bonus e' diluito come il voto: finire su una delle poche date rifiutate e' un
       // sacrificio, finire su una delle nove "rosse" di chi ne ha lasciata libera una no.
       const bonus = Math.round((originalVoteScore === -300 ? SACRIFICE_DARK_RED : SACRIFICE_LIGHT_RED) * weightOf(a.studentId));

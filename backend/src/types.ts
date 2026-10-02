@@ -119,4 +119,4 @@ export interface Proposal {
   created_at: string;
 }
 
-export type VoteScore = 50 | 0 | -80 | -300;
+export type VoteScore = 50 | 0 | -60 | -300;

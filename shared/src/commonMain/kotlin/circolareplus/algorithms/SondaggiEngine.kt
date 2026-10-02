@@ -6,11 +6,8 @@ import kotlinx.serialization.Serializable
 enum class InterrogationVoteType(val score: Int, val maxAllowed: Int?) {
     GREEN(50, null),       // Prima scelta (Illimitati)
     YELLOW(0, null),       // Neutro / Disponibile (Illimitati)
-    LIGHT_RED(-80, null),  // Sconsigliato (Illimitati; il server li diluisce oltre il 40% delle date)
+    LIGHT_RED(-60, null),  // Sconsigliato (Illimitati; il server li diluisce oltre il 40% delle date)
     DARK_RED(-300, 2);     // Blocco grave / Veto (Max 2)
-
-    /** Punti usati nel calcolo. Il Rosso Chiaro resta -80 come codice del voto, ma pesa -60. */
-    val points: Int get() = if (this == LIGHT_RED) -60 else score
 
     companion object {
         fun fromScore(score: Int): InterrogationVoteType =
@@ -73,7 +70,7 @@ object SondaggiEngine {
         slot: InterrogationSlotInfo,
         accumulatedSacrificeBonus: Int
     ): Int {
-        val baseScore = vote?.voteType?.points ?: InterrogationVoteType.YELLOW.points
+        val baseScore = vote?.voteType?.score ?: InterrogationVoteType.YELLOW.score
 
         // Gestione Sovrapposizioni: se presente verifica 'Per Tutti' nello stesso giorno, la penalità si annulla (0 pt)
         val adjustedVoteScore = if (slot.isCompitoInClasseForAll && baseScore < 0) {

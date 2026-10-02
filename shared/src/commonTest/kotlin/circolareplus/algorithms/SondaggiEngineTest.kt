@@ -81,7 +81,7 @@ class SondaggiEngineTest {
     }
 
     @Test
-    fun testRossoChiaroPesaMenoDelCodice() {
+    fun testRossoChiaroVale60() {
         val slot = InterrogationSlotInfo(slotId = "slot", dateIso = "2026-09-20", capacity = 1)
         val redVote = StudentInterrogationVote("s1", "slot", InterrogationVoteType.LIGHT_RED)
         assertEquals(-60, SondaggiEngine.calculateSlotScore(redVote, slot, accumulatedSacrificeBonus = 0))
