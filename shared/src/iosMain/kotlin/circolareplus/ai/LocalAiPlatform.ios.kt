@@ -4,6 +4,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import platform.Foundation.NSFileManager
+import platform.Foundation.NSFileSystemFreeSize
+import platform.Foundation.NSHomeDirectory
+import platform.Foundation.NSNumber
 import platform.Foundation.NSProcessInfo
 
 /**
@@ -64,8 +68,16 @@ actual class LocalModelStore actual constructor() {
     actual fun partialBytes(model: LocalAiModel): Long = 0L
     // Nessun download parziale esposto da MLXLocalBridge per ora: l'integrazione è inerte.
 
-    actual fun freeSpaceBytes(): Long = 0L
-    // Non calcolato: nessun download reale avviene ancora su questa build.
+    // Spazio libero del volume dell'app, come `usableSpace` su Android. Prima era sempre 0, e
+    // qualunque controllo "c'e' abbastanza spazio?" sul download MLX avrebbe sempre fallito.
+    @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+    actual fun freeSpaceBytes(): Long = try {
+        val attributes = NSFileManager.defaultManager
+            .attributesOfFileSystemForPath(NSHomeDirectory(), error = null)
+        (attributes?.get(NSFileSystemFreeSize) as? NSNumber)?.longLongValue ?: 0L
+    } catch (e: Exception) {
+        0L
+    }
 
     // Il download MLX gira nella coroutine del chiamante (nessun lavoro separato in background):
     // annullarla, come fa gia' la UI, e' sufficiente.
