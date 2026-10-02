@@ -181,7 +181,7 @@ function renderBg(t) {
       <div class="ic" style="background:${k === 'r' ? 'linear-gradient(140deg,#3B82F6,#6366F1)' : 'linear-gradient(140deg,#22C55E,#16A34A)'}">${I(k === 'r' ? 'file-text' : 'message-circle')}</div>
       <div style="flex:1;min-width:0"><div class="app">${k === 'r' ? 'Registro elettronico' : 'Gruppo classe'}<span>ora</span></div><div class="tx">${txt}</div></div></div>`).join('')}
     <div class="layer" id="dim1" style="background:radial-gradient(ellipse at center,rgba(3,6,15,.92) 20%,rgba(3,6,15,.6) 80%)"></div>
-    <div class="a hxl center" id="h1a" style="left:0;width:1920px;top:330px;font-size:92px">Circolari. Scadenze.<br>Interrogazioni. Chat infinite.</div>
+    <div class="a hxl center" id="h1a" style="left:0;width:1920px;top:330px;font-size:92px">Circolari, scadenze,<br>interrogazioni, chat infinite</div>
     <div class="a hxl center" id="h1b" style="left:0;width:1920px;top:360px">E le cose importanti<br><em>si perdono.</em></div>`);
   times.forEach((tt, i) => sfx(tt, N[i][0] === 'r' ? 'ping' : 'ping2'));
   const cards = S.qa('.n');
@@ -315,10 +315,10 @@ function header(S, t, tin, tout) {
       <div class="tabbar"><span>${I('house')}</span><span class="on">${I('file-text')}</span><span>${I('calendar')}</span><span>${I('layout-list')}</span><span>${I('user')}</span></div>
     </div></div>`);
   const steps = S.qa('.step'), cards = S.qa('.cc'), bls = S.qa('.bl');
-  const ST = [21.2, 22.4, 24.0, 31.6]; // quando si attiva ogni passo
+  const ST = [21.2, 22.4, 24.0, 29.2]; // quando si attiva ogni passo
   const BADGE_T = [25.7, 24.3, 24.8, 25.25];
   BADGE_T.forEach(tt => sfx(tt, 'blip'));
-  sfx(22.6, 'notify'); sfx(34.2, 'success');
+  sfx(22.6, 'notify'); sfx(31.3, 'success');
   const pl = S.q('#push').querySelector('svg'); // logo nella notifica: già costruito
   S.render = t => {
     header(S, t, 20.15, 37.3);
@@ -352,14 +352,14 @@ function header(S, t, tin, tout) {
       pose(fn, { o: clamp(pb * 1.5), s: lerp(.6, 1, pb) });
     });
     // dettaglio della circolare
-    const dIn = P(t, 28.3, .6, E.inOut);
+    const dIn = P(t, 26.4, .6, E.inOut);
     pose(S.q('#list'), { o: 1 - dIn, x: -60 * dIn });
     pose(S.q('#det'), { o: dIn, x: 60 * (1 - dIn) });
-    BULLETS.forEach((b, i) => typeText(bls[i], t, 29.0 + i * .95, 60, b));
-    io(S.q('#dl'), t, 32.0, null, { dy: 20, s0: .9, e: E.back, b: 0 });
-    pose(S.q('#btn1'), { o: P(t, 32.8, .4) * (1 - P(t, 34.15, .2)), s: 1 - .05 * Math.sin(clamp((t - 33.9) / .25) * Math.PI) });
-    pose(S.q('#btn2'), { o: P(t, 34.15, .25), s: lerp(.92, 1, P(t, 34.15, .4, E.back)) });
-    io(S.q('#aitag'), t, 34.5, null, { dy: 10, b: 0 });
+    BULLETS.forEach((b, i) => typeText(bls[i], t, 27.1 + i * .65, 90, b));
+    io(S.q('#dl'), t, 29.2, null, { dy: 20, s0: .9, e: E.back, b: 0 });
+    pose(S.q('#btn1'), { o: P(t, 30.0, .4) * (1 - P(t, 31.15, .2)), s: 1 - .05 * Math.sin(clamp((t - 30.9) / .25) * Math.PI) });
+    pose(S.q('#btn2'), { o: P(t, 31.15, .25), s: lerp(.92, 1, P(t, 31.15, .4, E.back)) });
+    io(S.q('#aitag'), t, 31.5, null, { dy: 10, b: 0 });
   };
 }
 
@@ -381,13 +381,13 @@ function renderBars(root, t, active) {
   const A = 'La gita a Praga costa 380 € in totale. L\'acconto di 150 € va versato entro il 15 ottobre, il saldo entro il 30 ottobre.';
   const S = addScene(38, 50.2, `
     <div class="a" style="left:140px;top:120px"><span class="label"><b>02</b> AILA Assistant</span></div>
-    <div class="a h1" style="left:140px;top:195px;width:800px">Chiedi qualcosa.<br><em>AILA risponde.</em></div>
+    <div class="a h1" style="left:140px;top:195px;width:800px">Chiedi qualcosa,<br><em>AILA risponde</em></div>
     <div class="a sub hs" style="left:140px;top:420px;width:740px">Risponde solo con quello che sa davvero: circolari, calendario, sondaggi, bacheca, mappa posti.</div>
     <div class="a" id="f1" style="left:140px;top:640px;display:flex;gap:18px;align-items:center;font-size:28px;font-weight:600">
-      <div style="width:64px;height:64px;border-radius:18px;display:grid;place-items:center;background:rgba(59,130,246,.18);border:1px solid rgba(125,160,255,.35)">${I('file-text', 'style="width:32px;height:32px;color:#9DB6FF"')}</div>E ti mostra sempre la fonte.</div>
+      <div style="width:64px;height:64px;border-radius:18px;display:grid;place-items:center;background:rgba(59,130,246,.18);border:1px solid rgba(125,160,255,.35)">${I('file-text', 'style="width:32px;height:32px;color:#9DB6FF"')}</div>Ti mostra sempre la fonte</div>
     <div class="a" id="f2" style="left:140px;top:740px;display:flex;gap:18px;align-items:center;font-size:28px;font-weight:600">
       <div style="width:64px;height:64px;border-radius:18px;display:grid;place-items:center;background:rgba(20,184,166,.16);border:1px solid rgba(94,234,212,.35)">${I('lock', 'style="width:30px;height:30px;color:#5EEAD4"')}</div>
-      <div>Può usare anche l'AI sul telefono<div style="font-size:22px;color:var(--muted);font-weight:400;margin-top:2px">senza mandare nulla fuori dal dispositivo</div></div></div>
+      <div>Può usare anche l'AI sul dispositivo<div style="font-size:22px;color:var(--muted);font-weight:400;margin-top:2px">senza mandare nulla fuori dal dispositivo</div></div></div>
     <div class="a glass" id="chat" style="left:1000px;top:120px;width:780px;height:850px;overflow:hidden">
       <div style="position:absolute;left:0;right:0;top:0;height:100px;display:flex;align-items:center;gap:18px;padding:0 30px;border-bottom:1px solid rgba(255,255,255,.08)">
         <div id="am" style="width:50px;height:50px">${ASSIST}</div><div style="font-size:27px;font-weight:600">AILA Assistant</div></div>
@@ -458,8 +458,8 @@ function renderBars(root, t, active) {
   }).join('');
   const S = addScene(50, 58.2, `
     <div class="a center" style="left:0;width:1920px;top:70px"><span class="label"><b>03</b> Calendario</span></div>
-    <div class="a h1 center" style="left:0;width:1920px;top:140px">Un calendario. <em>Tutta la classe.</em></div>
-    <div class="a sub hs center" style="left:0;width:1920px;top:250px">Lo aggiornano i compagni. E l'AI lo riempie leggendo le circolari.</div>
+    <div class="a h1 center" style="left:0;width:1920px;top:140px">Un calendario <em>per tutta la classe</em></div>
+    <div class="a sub hs center" style="left:0;width:1920px;top:250px">Lo aggiornano i compagni e l'AI lo completa leggendo le circolari</div>
     <div class="a glass" id="cal" style="left:225px;top:340px;width:1470px;height:690px">
       <div class="a" style="left:36px;top:34px;font-size:36px;font-weight:700">Ottobre 2026</div>
       <div class="a" style="right:36px;top:38px;display:flex;gap:22px;font-size:19px;color:var(--muted)">
@@ -510,8 +510,8 @@ function renderBars(root, t, active) {
   });
   const S = addScene(58, 76.2, `
     <div class="a" style="left:140px;top:110px"><span class="label"><b>04</b> Sondaggi interrogazioni</span></div>
-    <div class="a h1" style="left:140px;top:180px;width:1300px">Interrogazioni:<br><em>niente più corsa alla data.</em></div>
-    <div class="a sub" id="sA" style="left:140px;top:378px;width:1500px">Ognuno vota i giorni con un budget di voti limitato. Nessuno può fare il furbo.</div>
+    <div class="a h1" style="left:140px;top:180px;width:1300px">Interrogazioni<br><em>senza la corsa alla data</em></div>
+    <div class="a sub" id="sA" style="left:140px;top:378px;width:1500px">Ognuno vota i giorni con un budget di voti limitato, così nessuno può fare il furbo</div>
     <div class="a sub" id="sB" style="left:140px;top:378px;width:1500px">Chi ha rinunciato prima, <b style="color:#fff">ha la precedenza dopo</b>.</div>
     <div class="a glass" id="bud" style="left:1350px;top:150px;width:430px;padding:22px 26px;border-radius:24px">
       <div style="font-size:18px;color:var(--muted);font-weight:600;letter-spacing:.08em;text-transform:uppercase">Il tuo budget</div>
@@ -604,7 +604,7 @@ function renderBars(root, t, active) {
   const ME = 17; // "il tuo posto"
   const S = addScene(76, 96.2, `
     <div class="a" style="left:140px;top:110px"><span class="label"><b>05</b> Mappa posti</span></div>
-    <div class="a h1" style="left:140px;top:180px;width:1640px">Il compagno di banco?<br><em>Lo sceglie un algoritmo.</em></div>
+    <div class="a h1" style="left:140px;top:180px;width:1640px">Il compagno di banco<br><em>lo sceglie un algoritmo</em></div>
     ${FACT.map((f, i) => `<div class="factor a" style="left:140px;top:${390 + i * 104}px">
       <div class="fi">${I(f[0])}</div><div><div class="ft">${f[1]}</div><div class="fs">${f[2]}</div></div></div>`).join('')}
     <div class="a glass" id="priv" style="left:140px;top:420px;width:660px;padding:34px;border-radius:28px">
@@ -689,9 +689,9 @@ function renderBars(root, t, active) {
   const OPTS = [['Pizzeria', 46, '#F59E0B'], ['Sushi', 50, '#EC4899'], ['Grigliata al parco', 30, '#22C55E'], ['Hamburgeria', 18, '#06B6D4']];
   const S = addScene(96, 106.2, `
     <div class="a" style="left:140px;top:110px"><span class="label"><b>06</b> Bacheca e sondaggi</span></div>
-    <div class="a h1" style="left:140px;top:180px;width:1640px">La voce della classe,<br><em>finalmente organizzata.</em></div>
+    <div class="a h1" style="left:140px;top:180px;width:1640px">La voce della classe<br><em>in un posto solo</em></div>
     <div class="glass prop" id="p1" style="left:140px;top:400px">
-      <div class="pt1">${I('user', 'style="width:22px;height:22px"')}Giulia · Proposta</div>
+      <div class="pt1">${I('user', 'style="width:22px;height:22px"')}Un compagno · Proposta</div>
       <div class="pt2">Distributore d'acqua al secondo piano</div>
       <div class="pf"><span style="color:#86EFAC">${I('thumbs-up')}<b id="v1">0</b></span><span>${I('thumbs-down')}2</span><span>${I('message-square')}5 commenti</span></div>
       <div class="status" id="st1" style="background:rgba(255,255,255,.08);color:var(--muted)">Aperta</div>
@@ -703,7 +703,7 @@ function renderBars(root, t, active) {
       <div class="pf"><span style="color:#86EFAC">${I('thumbs-up')}<b id="v2">0</b></span><span>${I('thumbs-down')}1</span><span>${I('message-square')}9 commenti</span></div></div>
     <div class="a" id="shield" style="left:140px;top:836px;width:860px;display:flex;gap:20px;align-items:center">
       <div style="width:70px;height:70px;border-radius:20px;background:linear-gradient(140deg,#3B82F6,#8B5CF6);display:grid;place-items:center;flex:none">${I('shield-check', 'style="width:36px;height:36px;color:#fff"')}</div>
-      <div style="font-size:24px;line-height:1.4"><b>Anonimato protetto.</b> <span style="color:var(--muted)">Per svelare un autore servono 2 Rappresentanti e 1 Guardia, ognuno dal proprio account.</span></div></div>
+      <div style="font-size:24px;line-height:1.4"><b>Anonimato protetto:</b> <span style="color:var(--muted)">per svelare un autore servono 2 Rappresentanti e 1 Guardia, ognuno dal proprio account.</span></div></div>
     <div class="a glass" id="rank" style="left:1070px;top:400px;width:710px;height:540px">
       <div class="a" style="left:30px;top:28px;font-size:18px;color:var(--muted);font-weight:600;letter-spacing:.08em;text-transform:uppercase">Sondaggio a ordinamento</div>
       <div class="a" style="left:30px;top:62px;font-size:30px;font-weight:700">Cena di classe: dove andiamo?</div>
@@ -747,7 +747,7 @@ function renderBars(root, t, active) {
   const CH = [['bell-ring', 'Notifiche in tempo reale'], ['users', 'Ogni classe ha i suoi dati'], ['ban', 'Zero pubblicità'],
     ['eye-off', 'Zero profilazione'], ['lock', 'Password mai salvate in chiaro']];
   const S = addScene(106, 113.2, `
-    <div class="a hxl center" style="left:0;width:1920px;top:130px" id="h9">Su ogni telefono.<br><em>Per ogni classe.</em></div>
+    <div class="a hxl center" style="left:0;width:1920px;top:130px" id="h9">Su ogni dispositivo,<br><em>per ogni classe</em></div>
     ${DEV.map(([ic, l], i) => `<div class="a dev" style="left:${540 + i * 300}px;top:440px;width:240px;text-align:center">
       <div class="glass" style="width:170px;height:170px;margin:0 auto;border-radius:40px;display:grid;place-items:center">${I(ic, 'style="width:80px;height:80px;color:#B5C3FF"')}</div>
       <div style="font-size:32px;font-weight:600;margin-top:20px">${l}</div></div>`).join('')}
