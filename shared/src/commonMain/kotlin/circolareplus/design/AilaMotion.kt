@@ -873,3 +873,63 @@ fun ailaRoundRectPathInto(path: Path, left: Float, top: Float, w: Float, h: Floa
     cubicTo(left, top + r - k, left + r - k, top, left + r, top)
     close()
 }
+
+// =============================================================================================
+// Vocabolario per le animazioni delle schermate
+// =============================================================================================
+//
+// Le schermate scrivevano a mano ~70 tween e molle con durate sparse (90, 100, 120, 160, 180,
+// 190, 200, 220, 240, 250, 260...), e nessuna di quelle sentiva "Riduci movimento". Da qui in
+// poi una schermata sceglie *che cosa* anima (una dissolvenza, un movimento, un colore, una
+// molla viva) e la durata da una scala corta; il modo lo decide AilaMotion, uguale ovunque.
+
+/** Scala delle durate (ms). Breve per le uscite, media per entrate e colori, lunga per gli effetti. */
+object AilaDuration {
+    /** Uscite rapide, risposte al tocco. */
+    const val Quick = 120
+    /** Entrate, colori, comparse. */
+    const val Standard = 200
+    /** Riempimenti e barre che crescono, evidenziazioni. */
+    const val Slow = 400
+}
+
+/**
+ * Dissolvenza (alpha). Resta anche con "Riduci movimento": cambiare opacita' non e' movimento,
+ * solo un po' piu' breve.
+ */
+fun <T> ailaFadeSpec(durationMillis: Int = AilaDuration.Standard, delayMillis: Int = 0): androidx.compose.animation.core.FiniteAnimationSpec<T> =
+    if (AppTheme.reduceMotion) tween(durationMillis = minOf(durationMillis, REDUCED_FADE_MS))
+    else tween(durationMillis = durationMillis, delayMillis = delayMillis)
+
+/** Colore che cambia (sfondi, bordi, testo selezionato). Come la dissolvenza: resta, piu' breve. */
+fun <T> ailaColorSpec(): androidx.compose.animation.core.FiniteAnimationSpec<T> = ailaFadeSpec(AilaDuration.Standard)
+
+/**
+ * Movimento a durata fissa (scorrimenti brevi, espansioni, barre che crescono). Con "Riduci
+ * movimento" arriva subito alla fine.
+ */
+fun <T> ailaMoveSpec(
+    durationMillis: Int = AilaDuration.Standard,
+    delayMillis: Int = 0,
+    easing: androidx.compose.animation.core.Easing = androidx.compose.animation.core.FastOutSlowInEasing
+): androidx.compose.animation.core.FiniteAnimationSpec<T> =
+    if (AppTheme.reduceMotion) androidx.compose.animation.core.snap()
+    else tween(durationMillis = durationMillis, delayMillis = delayMillis, easing = easing)
+
+/**
+ * Molla "giocosa" con un po' di rimbalzo, per ciò che risponde al dito (pallini, chip, banchi
+ * selezionati). Con "Riduci movimento" niente rimbalzo.
+ */
+fun <T> ailaBouncySpring(): SpringSpec<T> =
+    if (AppTheme.reduceMotion) reducedMotionSpring()
+    else spring(dampingRatio = 0.75f, stiffness = 450f)
+
+/** Comparsa di un blocco che si apre sotto (campi facoltativi, dettagli): dissolvenza + apertura. */
+fun ailaExpandEnter(): EnterTransition =
+    fadeIn(ailaFadeSpec(AilaDuration.Standard)) +
+        androidx.compose.animation.expandVertically(ailaMoveSpec(AilaDuration.Standard))
+
+/** Chiusura del blocco aperto con [ailaExpandEnter]. */
+fun ailaCollapseExit(): ExitTransition =
+    fadeOut(ailaFadeSpec(AilaDuration.Quick)) +
+        androidx.compose.animation.shrinkVertically(ailaMoveSpec(AilaDuration.Standard))
