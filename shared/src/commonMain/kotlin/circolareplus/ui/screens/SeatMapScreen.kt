@@ -38,7 +38,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import circolareplus.algorithms.DeskAssignment
 import circolareplus.algorithms.OptimizerWeights
 import circolareplus.algorithms.SeatMapOptimizer
@@ -175,7 +174,7 @@ fun SeatMapScreen(
                     searchQuery = it
                     if (it.isNotEmpty()) focusedStudentId = null
                 },
-                placeholder = { Text("Cerca un compagno...", fontSize = 13.sp, maxLines = 1) },
+                placeholder = { Text("Cerca un compagno...", style = MaterialTheme.typography.bodyMedium, maxLines = 1) },
                 leadingIcon = { AppIcons.Search(modifier = Modifier.size(18.dp), color = AppTheme.TextMuted) },
                 trailingIcon = {
                     // Mentre si scrive c'è la X per svuotare; a campo vuoto, "Il mio posto".
@@ -262,7 +261,7 @@ fun SeatMapScreen(
                     ) { text ->
                         Text(
                             text = text,
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = if (!text.startsWith("Nessun")) AppTheme.TextDark else AppTheme.TextMuted
                         )
@@ -281,8 +280,7 @@ fun SeatMapScreen(
                         Spacer(modifier = Modifier.width(AppTheme.Space8))
                         Text(
                             text = "Pannello Rappresentante",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleSmall,
                             color = AppTheme.TextDark
                         )
                     }
@@ -312,7 +310,7 @@ fun SeatMapScreen(
                             ) { open ->
                                 Text(
                                     text = if (open) "Preferenze: APERTE" else "Preferenze: CHIUSE",
-                                    fontSize = 12.sp,
+                                    style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = windowColor
                                 )
@@ -363,8 +361,7 @@ fun SeatMapScreen(
                     // persone ci mette insieme.
                     Text(
                         text = "Posti per banco",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelLarge,
                         color = AppTheme.TextDark
                     )
                     Spacer(modifier = Modifier.height(4.dp))
@@ -465,8 +462,7 @@ fun SeatMapScreen(
             ) {
                 Text(
                     text = "LAVAGNA & CATTEDRA",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelMedium,
                     color = AppTheme.OnHeroPrimary
                 )
             }
@@ -531,7 +527,7 @@ private fun MySeatPill(active: Boolean, onClick: () -> Unit) {
     ) {
         AppIcons.Chair(modifier = Modifier.size(15.dp), color = ink)
         Spacer(modifier = Modifier.width(6.dp))
-        Text(text = "Il mio posto", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ink, maxLines = 1)
+        Text(text = "Il mio posto", style = MaterialTheme.typography.labelMedium, color = ink, maxLines = 1)
     }
 }
 
@@ -583,13 +579,12 @@ private fun PreferencesProgressBlock(progress: circolareplus.data.remote.dto.Pre
         ) {
             Text(
                 text = if (progress.allVoted) "Hanno votato tutti" else "Hanno votato $voted su $total",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelLarge,
                 color = if (progress.allVoted) AppTheme.TintGreenInk else AppTheme.TextDark
             )
             Text(
                 text = if (progress.allVoted) "$voted/$total" else "mancano ${total - voted}",
-                fontSize = 12.sp,
+                style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = if (progress.allVoted) AppTheme.TintGreenInk else AppTheme.TextMuted
             )
@@ -604,9 +599,9 @@ private fun PreferencesProgressBlock(progress: circolareplus.data.remote.dto.Pre
             Text(
                 text = "Non hanno ancora votato: " +
                     progress.pending.joinToString(", ") { "${it.firstName} ${it.lastName.take(1)}." },
-                fontSize = 11.sp,
-                color = AppTheme.TextMuted,
-                lineHeight = 15.sp
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Normal,
+                color = AppTheme.TextMuted
             )
         }
     }
@@ -629,18 +624,17 @@ private fun WeightSlider(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = AppTheme.TextDark)
+            Text(text = label, style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
             Text(
                 // Era `(value * 10).toInt() / 10f`: il troncamento faceva sparire i valori come
                 // 1.2x e 1.4x, che in virgola mobile arrivano come 11.999998 e venivano tagliati
                 // a 1.1x. Con l'arrotondamento il numero segue davvero il cursore.
                 text = "${kotlin.math.round(value * 10) / 10f}x",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelLarge,
                 color = AppTheme.PrimaryBlue
             )
         }
-        Text(text = help, fontSize = 11.sp, color = AppTheme.TextMuted, lineHeight = 15.sp)
+        Text(text = help, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Normal, color = AppTheme.TextMuted)
         Slider(
             value = value,
             onValueChange = onValueChange,
