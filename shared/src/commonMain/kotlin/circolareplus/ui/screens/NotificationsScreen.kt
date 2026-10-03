@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -16,7 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import circolareplus.design.AilaEmptyState
 import circolareplus.design.AilaCard
 import circolareplus.design.AilaDot
@@ -110,7 +110,7 @@ private fun NotificationCard(entry: NotificationLogEntry, onClick: () -> Unit) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = entry.title,
-                    fontSize = 14.sp,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = if (entry.read) FontWeight.SemiBold else FontWeight.Bold,
                     color = AppTheme.TextDark,
                     maxLines = 2
@@ -119,13 +119,13 @@ private fun NotificationCard(entry: NotificationLogEntry, onClick: () -> Unit) {
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = entry.body,
-                        fontSize = 13.sp,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = AppTheme.TextMuted,
                         maxLines = 2
                     )
                 }
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(text = relativeTimeLabel(entry.receivedAtMillis), fontSize = 11.sp, color = AppTheme.TextFaint)
+                Text(text = relativeTimeLabel(entry.receivedAtMillis), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Normal, color = AppTheme.TextFaint)
             }
             if (!entry.read) {
                 Spacer(modifier = Modifier.width(AppTheme.Space8))
@@ -156,8 +156,7 @@ private fun NotificationDetailDialog(entry: NotificationLogEntry, onDismiss: () 
         title = {
             Text(
                 text = entry.title,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge,
                 color = AppTheme.TextDark
             )
         },
@@ -166,15 +165,14 @@ private fun NotificationDetailDialog(entry: NotificationLogEntry, onDismiss: () 
                 if (entry.body.isNotBlank()) {
                     Text(
                         text = entry.body,
-                        fontSize = 14.sp,
-                        color = AppTheme.TextMuted,
-                        lineHeight = 20.sp
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = AppTheme.TextMuted
                     )
                     Spacer(modifier = Modifier.height(AppTheme.Space12))
                 }
                 Text(
                     text = "Ricevuta ${relativeTimeLabel(entry.receivedAtMillis).lowercase()}",
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = AppTheme.TextFaint
                 )
             }
