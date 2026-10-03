@@ -16,6 +16,8 @@ import {
   verifyPassword,
 } from '../auth';
 import { classInviteCode, regenerateClassInviteCode } from '../services/classInvites';
+import { notifyUser } from '../services/fcm';
+import { inBackground } from '../services/background';
 import type { UserRole } from '../types';
 
 const users = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();
@@ -169,6 +171,15 @@ users.post('/:id/reset-code', requireRole('REPRESENTATIVE'), async (c) => {
   } catch {
     return c.json({ error: 'Reset password non ancora attivo sul server (manca la migrazione 013)' }, 503);
   }
+
+  // Avvisa il compagno: se non l'ha chiesto lui, lo sa prima che qualcuno usi il codice al suo posto.
+  inBackground(c, notifyUser(
+    c.env,
+    target.id,
+    'Codice per reimpostare la password',
+    'Il Rappresentante ha generato un codice per cambiare la tua password. Se non l\'hai chiesto tu, parlane subito con lui o con la Guardia.',
+    { action: 'password_reset_code' }
+  ));
 
   return c.json({ code, username: target.username, expiresAt: new Date(expiresAt * 1000).toISOString() });
 });

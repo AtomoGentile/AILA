@@ -16,6 +16,11 @@ beforeEach(() => {
   env = { DB: d1, JWT_SECRET: 'test-secret', REPRESENTATIVE_SIGNUP_CODE: 'REP-CODE' } as unknown as Env;
 });
 
+/** Codice della classe del Rappresentante (serve a chi si registra dopo di lui). */
+async function classCodeOf(repToken: string): Promise<string> {
+  return (await call('GET', '/api/users/class-code', undefined, repToken)).json.code;
+}
+
 async function call(method: string, path: string, body?: unknown, token?: string, headers: Record<string, string> = {}) {
   const res = await worker.fetch(
     new Request(`https://api.test${path}`, {
@@ -69,9 +74,17 @@ describe('registrazione e codice classe', () => {
   });
 
   it('al massimo due Rappresentanti per classe', async () => {
+    const rep1 = await register('rep1', { representativeCode: 'REP-CODE' });
+    const classCode = await classCodeOf(rep1.json.token);
+    expect((await register('rep2', { representativeCode: 'REP-CODE', classCode })).status).toBe(201);
+    expect((await register('rep3', { representativeCode: 'REP-CODE', classCode })).status).toBe(409);
+  });
+
+  it('con un Rappresentante in classe il codice serve anche se lui non ha mai aperto la Scheda Classe', async () => {
     expect((await register('rep1', { representativeCode: 'REP-CODE' })).status).toBe(201);
-    expect((await register('rep2', { representativeCode: 'REP-CODE' })).status).toBe(201);
-    expect((await register('rep3', { representativeCode: 'REP-CODE' })).status).toBe(409);
+    const stranger = await register('sconosciuto');
+    expect(stranger.status).toBe(403);
+    expect(stranger.json.classCodeRequired).toBe(true);
   });
 
   it('il codice Rappresentante non basta per entrare in una classe che ha gia\' un Rappresentante', async () => {
@@ -84,6 +97,24 @@ describe('registrazione e codice classe', () => {
     expect(outsider.status).toBe(403);
     expect(outsider.json.classCodeRequired).toBe(true);
     expect((await register('estraneo', { representativeCode: 'REP-CODE', classCode: code.json.code })).status).toBe(201);
+  });
+});
+
+describe('token', () => {
+  async function sign(header: object, payload: object) {
+    const enc = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
+    const data = `${enc(header)}.${enc(payload)}`;
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode('test-secret'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const sig = Buffer.from(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data))).toString('base64url');
+    return `${data}.${sig}`;
+  }
+
+  it('rifiuta un token senza scadenza o con un algoritmo diverso, anche se firmato', async () => {
+    const { json } = await register('tok');
+    const noExp = await sign({ alg: 'HS256', typ: 'JWT' }, { sub: json.user.id, username: 'tok', role: 'STUDENT', iat: 1 });
+    expect((await call('GET', '/api/users/me', undefined, noExp)).status).toBe(401);
+    const otherAlg = await sign({ alg: 'none', typ: 'JWT' }, { sub: json.user.id, username: 'tok', role: 'STUDENT', iat: 1, exp: 4102444800 });
+    expect((await call('GET', '/api/users/me', undefined, otherAlg)).status).toBe(401);
   });
 });
 
@@ -143,7 +174,7 @@ describe('password e token', () => {
     // Con l'account dell'altro Rappresentante una persona sola avrebbe due firme del quorum
     // (la terza, la Guardia, la nomina lei stessa) e potrebbe svelare gli anonimi da sola.
     const rep1 = await register('rep1', { representativeCode: 'REP-CODE' });
-    const rep2 = await register('rep2', { representativeCode: 'REP-CODE' });
+    const rep2 = await register('rep2', { representativeCode: 'REP-CODE', classCode: await classCodeOf(rep1.json.token) });
     expect((await call('POST', `/api/users/${rep2.json.user.id}/reset-code`, {}, rep1.json.token)).status).toBe(403);
   });
 
@@ -226,7 +257,7 @@ describe('analisi delle circolari', () => {
 describe('sondaggi interrogazioni', () => {
   it('calcolato il calendario non si ricalcola e non si ritira l\'invio', async () => {
     const rep = await register('prof', { representativeCode: 'REP-CODE' });
-    const s = await register('alunno');
+    const s = await register('alunno', { classCode: await classCodeOf(rep.json.token) });
     const created = await call(
       'POST',
       '/api/polls',
