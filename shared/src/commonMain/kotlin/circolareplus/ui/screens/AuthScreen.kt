@@ -43,6 +43,7 @@ import circolareplus.design.appContentWidth
 import circolareplus.design.MaxFormWidth
 import circolareplus.design.ailaAppear
 import circolareplus.design.ailaFieldColors
+import circolareplus.design.ailaTextTouchTarget
 import circolareplus.domain.model.StudentProfile
 import circolareplus.domain.model.User
 import kotlinx.coroutines.launch
@@ -211,7 +212,7 @@ fun AuthScreen(
 
             Text(
                 text = "AILA",
-                fontSize = 30.sp,
+                style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.Black,
                 letterSpacing = 2.sp,
                 color = AppTheme.PrimaryBlue,
@@ -219,7 +220,7 @@ fun AuthScreen(
             )
             Text(
                 text = "La tua scuola, sincronizzata.",
-                fontSize = 13.sp,
+                style = MaterialTheme.typography.bodyMedium,
                 color = AppTheme.TextMuted,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.ailaAppear(1)
@@ -268,9 +269,8 @@ fun AuthScreen(
                             Spacer(modifier = Modifier.width(AppTheme.Space8))
                             Text(
                                 text = errorMessage ?: "",
-                                fontSize = 13.sp,
-                                color = AppTheme.TintRedInk,
-                                lineHeight = 18.sp
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = AppTheme.TintRedInk
                             )
                         }
                     }
@@ -329,7 +329,8 @@ fun AuthScreen(
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Text(
                                         text = "Te lo dà il Rappresentante: lo trova nella Scheda Classe.",
-                                        fontSize = 11.sp,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Normal,
                                         color = AppTheme.TextFaint
                                     )
                                 }
@@ -407,7 +408,7 @@ fun AuthScreen(
                     ) {
                         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
                             TextButton(onClick = { showResetDialog = true }) {
-                                Text("Password dimenticata?", fontSize = 13.sp, color = AppTheme.PrimaryBlue)
+                                Text("Password dimenticata?", style = MaterialTheme.typography.bodyMedium, color = AppTheme.PrimaryBlue)
                             }
                         }
                     }
@@ -432,7 +433,8 @@ fun AuthScreen(
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = "Lascialo vuoto se ti registri come studente.",
-                                fontSize = 11.sp,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Normal,
                                 color = AppTheme.TextFaint
                             )
                         }
@@ -464,8 +466,7 @@ fun AuthScreen(
                         } else {
                             Text(
                                 text = if (isRegisterMode) "Completa la registrazione" else "Accedi",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleSmall,
                                 color = Color.White
                             )
                         }
@@ -477,24 +478,25 @@ fun AuthScreen(
 
             Text(
                 text = "Nessuna email, nessun dato della scuola: username e password li scegli tu.",
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Normal,
                 color = AppTheme.TextFaint,
                 textAlign = TextAlign.Center,
-                lineHeight = 16.sp,
                 modifier = Modifier.padding(horizontal = AppTheme.Space16).ailaAppear(3)
             )
 
             var showPrivacy by remember { mutableStateOf(false) }
             Text(
                 text = if (showPrivacy) "Chiudi l'informativa" else "Informativa sulla privacy",
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = AppTheme.TextMuted,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .clickable { showPrivacy = !showPrivacy }
-                    .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space8)
+                    .ailaTextTouchTarget()
+                    .padding(horizontal = AppTheme.Space16)
                     .ailaAppear(3)
             )
             AnimatedVisibility(visible = showPrivacy) {
@@ -536,9 +538,8 @@ private fun ResetPasswordDialog(
             Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
                 Text(
                     text = "Chiedi al Rappresentante un codice di reset (lo genera dalla Scheda Classe, vale 24 ore), poi scegli la password nuova.",
-                    fontSize = 13.sp,
-                    color = AppTheme.TextMuted,
-                    lineHeight = 18.sp
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AppTheme.TextMuted
                 )
                 AuthField(
                     value = username,
@@ -566,7 +567,7 @@ private fun ResetPasswordDialog(
                         keyboardType = KeyboardType.Password
                     )
                 )
-                error?.let { Text(it, fontSize = 13.sp, color = AppTheme.TintRedInk) }
+                error?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TintRedInk) }
             }
         },
         confirmButton = {
@@ -624,7 +625,7 @@ private fun AuthField(
         value = value,
         onValueChange = onValueChange,
         placeholder = {
-            Text(text = placeholder, fontSize = 14.sp, color = AppTheme.TextFaint)
+            Text(text = placeholder, style = MaterialTheme.typography.bodyLarge, color = AppTheme.TextFaint)
         },
         singleLine = true,
         visualTransformation = visualTransformation,
@@ -653,14 +654,13 @@ private fun HeightPicker(
         ) {
             Text(
                 text = "Altezza",
-                fontSize = 13.sp,
+                style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = AppTheme.TextDark
             )
             Text(
                 text = "$heightCm cm",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelLarge,
                 color = AppTheme.TintBlueInk,
                 modifier = Modifier
                     .clip(RoundedCornerShape(999.dp))
@@ -682,9 +682,9 @@ private fun HeightPicker(
 
         Text(
             text = "Serve solo a calcolare la visuale verso la cattedra nella mappa posti.",
-            fontSize = 11.sp,
-            color = AppTheme.TextFaint,
-            lineHeight = 15.sp
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Normal,
+            color = AppTheme.TextFaint
         )
     }
 }
@@ -708,7 +708,7 @@ private fun ClassPicker(
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = "La tua classe",
-            fontSize = 13.sp,
+            style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
             color = AppTheme.TextDark
         )
@@ -723,7 +723,7 @@ private fun ClassPicker(
                     val isSelected = value.trim().equals(option.label, ignoreCase = true)
                     Text(
                         text = option.label,
-                        fontSize = 13.sp,
+                        style = MaterialTheme.typography.labelLarge,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                         color = if (isSelected) Color.White else AppTheme.TextMuted,
                         modifier = Modifier
@@ -733,7 +733,8 @@ private fun ClassPicker(
                                 else Modifier.background(AppTheme.TintSlate)
                             )
                             .clickable { onValueChange(option.label) }
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                            .ailaTextTouchTarget()
+                            .padding(horizontal = 14.dp)
                     )
                 }
             }
@@ -752,9 +753,9 @@ private fun ClassPicker(
 
         Text(
             text = "Vedrai circolari, bacheca, calendario e mappa posti di questa classe soltanto.",
-            fontSize = 11.sp,
-            color = AppTheme.TextFaint,
-            lineHeight = 15.sp
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Normal,
+            color = AppTheme.TextFaint
         )
     }
 }
