@@ -23,3 +23,12 @@ expect fun displayCornerRadius(): androidx.compose.ui.unit.Dp
 
 /** Versione dell'app installata come la mostra il sistema (es. "1.0.178 (854c8e4)"). */
 expect fun appVersionName(): String
+
+/**
+ * Vero se nel sistema e' attivo "Riduci movimento" (iOS: Accessibilita' > Movimento) o "Rimuovi
+ * animazioni" (Android, scala durata animazioni a 0). Chi soffre di chinetosi o si distrae col
+ * movimento lo accende apposta: l'app deve sostituire scorrimenti, rimbalzi e animazioni continue
+ * con dissolvenze brevi o immagini ferme. Lo legge AilaTheme e lo copia in AppTheme.reduceMotion.
+ */
+@androidx.compose.runtime.Composable
+expect fun isReduceMotionEnabled(): Boolean

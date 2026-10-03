@@ -12,9 +12,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableFloatState
+import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -74,15 +76,35 @@ private suspend fun advanceClock(clock: MutableFloatState, until: Float) {
  *
  * Il tempo dell'animazione viene letto solo in fase di disegno (Canvas e graphicsLayer): la
  * schermata non si ricompone a ogni fotogramma.
+ *
+ * **Riduci movimento.** Con l'impostazione di sistema accesa il logo compare gia' costruito e
+ * fermo: niente intro, niente respiro (il ciclo infinito non viene proprio creato). Resta solo la
+ * rotellina, che e' un indicatore di attesa e non una decorazione.
  */
 @Composable
 fun AilaLoadingScreen(
     message: String = "Caricamento...",
     onIntroFinished: () -> Unit = {}
 ) {
-    // Secondi dall'inizio dell'intro. Se l'intro è già stata vista parte dalla fine.
-    val clock = remember { mutableFloatStateOf(if (ailaIntroPlayed) IntroSeconds + 1f else 0f) }
-    LaunchedEffect(Unit) {
+    // Letto qui dal sistema e non da AppTheme.reduceMotion: questa e' la prima schermata e
+    // AilaTheme lo copia in AppTheme solo dopo il primo fotogramma, quando l'intro sarebbe gia'
+    // partita.
+    val reduceMotion = circolareplus.platform.isReduceMotionEnabled()
+    // Secondi dall'inizio dell'intro. Se l'intro è già stata vista (o il movimento è ridotto)
+    // parte dalla fine.
+    val clock = remember {
+        mutableFloatStateOf(if (ailaIntroPlayed || reduceMotion) IntroSeconds + 1f else 0f)
+    }
+    // Chiave reduceMotion: se l'impostazione si accende durante l'intro, il ciclo dei fotogrammi
+    // viene annullato e il logo salta subito alla fine. onIntroFinished si puo' chiamare piu' volte
+    // (abbassa solo un flag).
+    LaunchedEffect(reduceMotion) {
+        if (reduceMotion) {
+            ailaIntroPlayed = true
+            clock.floatValue = IntroSeconds + 1f
+            onIntroFinished()
+            return@LaunchedEffect
+        }
         if (!ailaIntroPlayed) {
             advanceClock(clock, IntroSeconds)
             ailaIntroPlayed = true
@@ -94,13 +116,19 @@ fun AilaLoadingScreen(
     }
     // Respiro lento del logo, che si innesta piano a costruzione finita: fa capire che l'app sta
     // lavorando e non è piantata.
-    val breath = rememberInfiniteTransition(label = "respiro")
-    val breathPhase = breath.animateFloat(
-        initialValue = 0f,
-        targetValue = 2f * PI.toFloat(),
-        animationSpec = infiniteRepeatable(tween(2200, easing = LinearEasing)),
-        label = "faseRespiro"
-    )
+    // Con il movimento ridotto la transizione infinita non si crea affatto (fase ferma a 0, cioè
+    // scala 1): un'animazione infinita con durata cambiata girerebbe comunque a ogni fotogramma.
+    val breathPhase: State<Float> = if (reduceMotion) {
+        rememberUpdatedState(0f)
+    } else {
+        val breath = rememberInfiniteTransition(label = "respiro")
+        breath.animateFloat(
+            initialValue = 0f,
+            targetValue = 2f * PI.toFloat(),
+            animationSpec = infiniteRepeatable(tween(2200, easing = LinearEasing)),
+            label = "faseRespiro"
+        )
+    }
     fun reveal(start: Float, duration: Float) = ((clock.floatValue - start) / duration).coerceIn(0f, 1f)
 
     Box(

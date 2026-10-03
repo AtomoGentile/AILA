@@ -35,3 +35,45 @@ actual fun appVersionName(): String {
         "?"
     }
 }
+
+// "Rimuovi animazioni" (Accessibilita') e "Scala durata animazioni: off" (Opzioni sviluppatore)
+// scrivono tutti e due ANIMATOR_DURATION_SCALE = 0. Compose da solo non lo guarda per le molle e
+// le animazioni infinite scritte a mano, quindi lo si legge qui. Un ContentObserver sulla stessa
+// impostazione la tiene aggiornata anche se la si cambia con l'app aperta (dalle Impostazioni
+// rapide o in multi-finestra), senza dipendere dal lifecycle che il modulo non usa.
+@androidx.compose.runtime.Composable
+actual fun isReduceMotionEnabled(): Boolean {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    fun read(): Boolean = try {
+        android.provider.Settings.Global.getFloat(
+            context.contentResolver,
+            android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,
+            1f
+        ) == 0f
+    } catch (e: Exception) {
+        false
+    }
+    val reduce = androidx.compose.runtime.remember(context) { androidx.compose.runtime.mutableStateOf(read()) }
+    androidx.compose.runtime.DisposableEffect(context) {
+        val resolver = context.contentResolver
+        val observer = object : android.database.ContentObserver(
+            android.os.Handler(android.os.Looper.getMainLooper())
+        ) {
+            override fun onChange(selfChange: Boolean) {
+                reduce.value = read()
+            }
+        }
+        val registered = try {
+            resolver.registerContentObserver(
+                android.provider.Settings.Global.getUriFor(android.provider.Settings.Global.ANIMATOR_DURATION_SCALE),
+                false,
+                observer
+            )
+            true
+        } catch (e: Exception) {
+            false
+        }
+        onDispose { if (registered) resolver.unregisterContentObserver(observer) }
+    }
+    return reduce.value
+}

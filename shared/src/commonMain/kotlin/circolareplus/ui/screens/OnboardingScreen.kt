@@ -1,6 +1,7 @@
 package circolareplus.ui.screens
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -171,6 +172,15 @@ private val aiStepAccent = Color(0xFF06B6D4)
 private const val PAGE_MS = 340
 private val PageEasing = FastOutSlowInEasing
 
+/**
+ * Cambio pagina con "Riduci movimento" del sistema: solo dissolvenza incrociata, senza scorrimento
+ * laterale ne' scala, e l'altezza che si adegua di colpo come nella versione animata.
+ */
+private fun reducedPageTransform(): ContentTransform =
+    (fadeIn(tween(PAGE_MS / 2, easing = PageEasing)) togetherWith
+        fadeOut(tween(PAGE_MS / 2, easing = PageEasing)))
+        .using(SizeTransform(clip = false) { _, _ -> snap() })
+
 /** Le due strade del passo AI. Nessuna preselezionata: la scelta deve essere consapevole. */
 private enum class AiChoice { GOOGLE, LOCAL }
 
@@ -280,6 +290,7 @@ fun OnboardingScreen(
                 targetState = isAiStep,
                 transitionSpec = {
                     val dir = if (targetState) 1 else -1
+                    if (AppTheme.reduceMotion) reducedPageTransform() else
                     ((fadeIn(tween(PAGE_MS, delayMillis = 90, easing = PageEasing)) +
                         slideInHorizontally(tween(PAGE_MS, easing = PageEasing)) { dir * (it / 8) }) togetherWith
                         (fadeOut(tween(PAGE_MS / 2, easing = PageEasing)) +
@@ -405,6 +416,7 @@ private fun OnboardingCopy(pageIndex: Int) {
             targetState = pageIndex,
             transitionSpec = {
                 val dir = if (targetState > initialState) 1 else -1
+                if (AppTheme.reduceMotion) reducedPageTransform() else
                 ((fadeIn(tween(PAGE_MS, delayMillis = 90, easing = PageEasing)) +
                     slideInHorizontally(tween(PAGE_MS, easing = PageEasing)) { dir * (it / 6) }) togetherWith
                     (fadeOut(tween(PAGE_MS / 2, easing = PageEasing)) +
@@ -1016,35 +1028,47 @@ private fun formatMegabytes(bytes: Long): String {
  */
 @Composable
 private fun OnboardingIllustration(page: OnboardingPage, height: Dp = 250.dp) {
-    val transition = rememberInfiniteTransition(label = "onboardingLoop")
-
-    val orbit = transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 14000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "orbit"
-    )
-    val breath = transition.animateFloat(
-        initialValue = 0.94f,
-        targetValue = 1.06f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2200, easing = PageEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "breath"
-    )
-    val drift = transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 6000, easing = PageEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "drift"
-    )
+    // "Riduci movimento" del sistema: riquadro fermo (puntini, aloni e disco a meta' corsa). La
+    // transizione infinita non viene proprio creata, cosi' non resta nessun ciclo a girare; se
+    // l'impostazione cambia, Compose toglie o rimette il ramo e il ciclo si ferma o riparte.
+    val reduceMotion = AppTheme.reduceMotion
+    val orbit: State<Float>
+    val breath: State<Float>
+    val drift: State<Float>
+    if (reduceMotion) {
+        orbit = rememberUpdatedState(0f)
+        breath = rememberUpdatedState(1f)
+        drift = rememberUpdatedState(0.5f)
+    } else {
+        val transition = rememberInfiniteTransition(label = "onboardingLoop")
+        orbit = transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 14000, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "orbit"
+        )
+        breath = transition.animateFloat(
+            initialValue = 0.94f,
+            targetValue = 1.06f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 2200, easing = PageEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "breath"
+        )
+        drift = transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 6000, easing = PageEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "drift"
+        )
+    }
 
     // Cambio pagina: i colori del fondo scorrono dall'uno all'altro nello stesso tempo del testo.
     // Sono `State` non delegati apposta: si leggono solo nel disegno, vedi sopra.
@@ -1121,6 +1145,11 @@ private fun OnboardingIllustration(page: OnboardingPage, height: Dp = 250.dp) {
             AnimatedContent(
                 targetState = page.iconKind,
                 transitionSpec = {
+                    // Riduci movimento: l'icona sfuma senza crescere.
+                    if (AppTheme.reduceMotion) {
+                        fadeIn(tween(PAGE_MS / 2, easing = PageEasing)) togetherWith
+                            fadeOut(tween(PAGE_MS / 2, easing = PageEasing))
+                    } else
                     (fadeIn(tween(PAGE_MS, delayMillis = 90, easing = PageEasing)) +
                         scaleIn(tween(PAGE_MS, delayMillis = 90, easing = PageEasing), initialScale = 0.7f)) togetherWith
                         (fadeOut(tween(PAGE_MS / 2, easing = PageEasing)) +

@@ -3,6 +3,38 @@
 Elenco vivo dei problemi aperti e del lavoro ancora mancante, aggiornato mano a mano.
 Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esistente.
 
+## 3/10: obiettivo "app perfetta" — secondo giro (sicurezza, coerenza, design, con subagenti)
+
+Sicurezza (Worker, test in `backend/test/routes.test.ts`):
+- codice classe creato e chiesto appena la classe ha un Rappresentante (prima solo dopo che
+  apriva la Scheda Classe); anche il secondo Rappresentante lo deve avere;
+- `verifyJWT` solo HS256 con `exp`; login senza enumerazione degli username dai tempi;
+- notifica allo studente quando il Rappresentante genera un codice di reset per lui;
+- allegati Spaggiari solo http(s) (anche lato app); analisi dai telefoni max 30/ora per utente.
+Sicurezza (app, audit di un subagente su iOS/Android/deep link):
+- iOS: token e chiave Gemini nel Portachiavi (`ThisDeviceOnly`, `AfterFirstUnlock`) invece di
+  NSUserDefaults, che finisce nei backup anche non cifrati; migrazione automatica e pulizia dei
+  segreti di un'installazione precedente (`createSecureSettings`, `LocalSettingsManager`);
+- Android: `data_extraction_rules.xml` (backup e trasferimento fra telefoni esclusi);
+- token APNs non piu' nei log. Deep link, push, componenti esportati, WebView: ok.
+
+Coerenza e design (app, audit di un subagente + correzioni):
+- contrasto: testo dei badge delle circolari (`AppTheme.Badge*Ink`), testo sui voti delle
+  preferenze (`OnPollColor`); conferme su elimina evento, esci, svuota offline, elimina modello;
+- accessibilita': nomi e 44dp su lente, campanella, frecce del mese, svuota ricerca, anteprima
+  mappa, elimina sondaggio, coppie; `selected` sui voti;
+- stati: Home "carico..." invece di "nessuna circolare", Scheda Classe con Riprova, loader del
+  design system;
+- "Riduci movimento" rispettato (iOS e Android, letto dal sistema e aggiornato dal vivo):
+  molle senza rimbalzo, push e tab come dissolvenze, intro e onboarding fermi;
+- testi: Rappresentante, Scheda Classe, mappa posti, "Scegli" al posto di "OK".
+
+Resta (scelte di progetto o lavori lunghi, non bug):
+- codice Rappresentante per classe al posto di quello unico di scuola (piano "Multi-classe");
+- scala tipografica: 349 `fontSize` in 21 misure; proposta di `ailaTypography()` nel report;
+- ~60 spaziature `N.dp` da portare su `AppTheme.SpaceN`, ~70 `tween` fuori da `AilaMotion`,
+  palette propria dell'onboarding; dialoghi con modulo ancora su `AlertDialog` grezzo.
+
 ## 3/10: rifinitura del design (`/impeccable`)
 
 PWA (verificata con screenshot a 390×844 e 1280×800, chiaro e scuro, API simulate):

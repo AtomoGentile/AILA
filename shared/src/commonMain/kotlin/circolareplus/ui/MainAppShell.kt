@@ -3643,7 +3643,15 @@ fun MainAppShell(
                     .then(if (AppTheme.isGlass) Modifier else Modifier.background(AppTheme.BackgroundLight))
                     .then(
                         if (glassSlide != null) Modifier.graphicsLayer {
-                            translationX = glassSlide.value * size.width
+                            val v = glassSlide.value
+                            if (AppTheme.reduceMotion) {
+                                // "Riduci movimento": niente scorrimento, la stessa corsa diventa una
+                                // dissolvenza (0 = visibile; 1 o -ailaUnderlayShift = sparita).
+                                val travel = if (v < 0f) circolareplus.design.ailaUnderlayShift else 1f
+                                alpha = (1f - kotlin.math.abs(v) / travel).coerceIn(0f, 1f)
+                            } else {
+                                translationX = v * size.width
+                            }
                         } else Modifier
                     )
                     .appSafeDrawingPadding()
