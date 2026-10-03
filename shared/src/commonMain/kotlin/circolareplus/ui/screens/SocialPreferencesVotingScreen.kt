@@ -24,9 +24,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import circolareplus.design.AilaPrimaryButton
 import circolareplus.design.AppTheme
 import circolareplus.domain.model.SocialPreference
@@ -57,21 +55,19 @@ fun SocialPreferencesVotingScreen(
     ) {
         Text(
             text = "Esprimi le tue Preferenze",
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.titleLarge,
             color = AppTheme.TextDark
         )
         Text(
             text = "Finestra aperta dal Rappresentante \u2022 Voti strettamente confidenziali",
-            fontSize = 12.sp,
+            style = MaterialTheme.typography.bodySmall,
             color = AppTheme.TextMuted
         )
 
         Text(
             text = "Devi votare tutti i compagni prima di salvare" +
                 if (missingVotes > 0) " • ne mancano $missingVotes" else " • hai votato tutti",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelMedium,
             color = if (missingVotes > 0) AppTheme.PollDarkRed else AppTheme.TintGreenInk,
             modifier = Modifier.padding(top = AppTheme.Space4)
         )
@@ -92,14 +88,12 @@ fun SocialPreferencesVotingScreen(
             ) {
                 Text(
                     text = "Preferenza massima (+2): $plusTwoCount/2",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelMedium,
                     color = AppTheme.TintBlueInk
                 )
                 Text(
                     text = "Rifiuto assoluto (-2): $minusTwoCount/2",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelMedium,
                     color = AppTheme.PollDarkRed
                 )
             }
@@ -127,16 +121,14 @@ fun SocialPreferencesVotingScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "${classmate.firstName} ${classmate.lastName}",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleSmall,
                             color = AppTheme.TextDark,
                             modifier = Modifier.weight(1f)
                         )
                         if (currentScore == null) {
                             Text(
                                 text = "Da votare",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = AppTheme.PollDarkRed
                             )
                         }
@@ -263,8 +255,7 @@ fun RowScope.SocialScoreButton(
     ) {
         Text(
             text = label,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelLarge,
             // Testo scuro fisso sui colori dei voti: il bianco sui pastelli scendeva fino a 1.4:1.
             color = if (isSelected) AppTheme.OnPollColor else if (!enabled) AppTheme.TextFaint else AppTheme.TextDark
         )
