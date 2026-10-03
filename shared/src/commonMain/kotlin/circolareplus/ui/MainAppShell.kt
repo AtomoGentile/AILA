@@ -3491,15 +3491,17 @@ fun MainAppShell(
                         // da sole (shellProgress); qui solo la pagina che si chiude e svanisce.
                         ailaPushTransition(forward = forward)
                     } else {
-                        // Material fra schermate: la pagina che entra si dissolve e cresce da se'
-                        // (pageEnter, piu' sotto), partendo dopo i suoi primi due fotogrammi.
-                        // Con la "fade through" della transizione l'animazione partiva insieme
-                        // al primo fotogramma, che per una schermata pesante come Impostazioni
-                        // dura quanto tutta l'animazione: si vedeva la pagina comparire e basta.
-                        // Quella sotto resta piena finche' la nuova non l'ha coperta.
+                        // Material fra schermate ("shared axis Z"): le pagine si animano da se'
+                        // (pagePresence e pageBehind, piu' sotto), partendo dopo i loro primi due
+                        // fotogrammi. Con la "fade through" della transizione l'animazione partiva
+                        // insieme al primo fotogramma, che per una schermata pesante come
+                        // Impostazioni dura quanto tutta l'animazione: non si vedeva niente.
+                        // Qui solo chi sta sopra e quanto resta composta la pagina che esce.
+                        // Indietro sopra resta quella che si chiude: prima la pagina che tornava
+                        // finiva disegnata sopra di lei e il ritorno era un taglio secco.
                         (androidx.compose.animation.EnterTransition.None togetherWith
                             fadeOut(tween(durationMillis = 1, delayMillis = MATERIAL_PAGE_HOLD_MS))).apply {
-                            targetContentZIndex = 1f
+                            targetContentZIndex = if (forward) 1f else -1f
                         }
                     }
                 },
@@ -3531,22 +3533,40 @@ fun MainAppShell(
                     if (containerOrigin != null && transition.currentState == androidx.compose.animation.EnterExitState.PreEnter) 0f else 1f
                 )
             }
-            // Entrata Material senza container transform: vedi il transitionSpec qui sopra.
-            val pageEnter = remember {
+            // Material fra due schermate ("shared axis Z", vedi il transitionSpec qui sopra).
+            // pagePresence: 1 = c'e', 0 = piccola e trasparente (prima di entrare, dopo essersi
+            // chiusa). pageBehind: 1 = c'e' un'altra pagina aperta sopra, e questa e' un po'
+            // ingrandita dietro di lei. Ingrandita, non rimpicciolita: cosi' copre sempre tutto lo
+            // schermo e non lascia intravedere la Home sotto (il "glitch" di prima).
+            // Le tab (route TABS) e il ritorno alle tab restano alla transizione di prima.
+            val materialPage = !AppTheme.isGlass && route != ShellRoute.TABS
+            val enteringNow = transition.currentState == androidx.compose.animation.EnterExitState.PreEnter
+            val pagePresence = remember {
                 androidx.compose.animation.core.Animatable(
-                    if (!AppTheme.isGlass && containerOrigin == null && route != ShellRoute.TABS &&
-                        transition.currentState == androidx.compose.animation.EnterExitState.PreEnter
-                    ) 0f else 1f
+                    if (materialPage && containerOrigin == null && enteringNow && navForward[0]) 0f else 1f
                 )
             }
-            LaunchedEffect(Unit) {
-                if (pageEnter.value < 1f) {
-                    androidx.compose.runtime.withFrameNanos { }
-                    androidx.compose.runtime.withFrameNanos { }
-                    pageEnter.animateTo(
-                        1f,
-                        tween(durationMillis = MATERIAL_PAGE_ENTER_MS, easing = androidx.compose.animation.core.LinearOutSlowInEasing)
-                    )
+            val pageBehind = remember {
+                androidx.compose.animation.core.Animatable(if (materialPage && enteringNow && !navForward[0]) 1f else 0f)
+            }
+            val isTopPage = route == shellRoute
+            LaunchedEffect(isTopPage) {
+                if (!materialPage) return@LaunchedEffect
+                if (!isTopPage && shellRoute == ShellRoute.TABS) return@LaunchedEffect
+                if (isTopPage && pagePresence.value == 1f && pageBehind.value == 0f) return@LaunchedEffect
+                // Dopo i primi due fotogrammi: quello della pagina nuova puo' durare quanto
+                // tutta l'animazione e se la mangerebbe.
+                androidx.compose.runtime.withFrameNanos { }
+                androidx.compose.runtime.withFrameNanos { }
+                when {
+                    isTopPage -> coroutineScope {
+                        launch { pagePresence.animateTo(1f, tween(MATERIAL_PAGE_ENTER_MS, easing = MaterialEmphasizedDecelerate)) }
+                        launch { pageBehind.animateTo(0f, tween(MATERIAL_PAGE_ENTER_MS, easing = MaterialEmphasizedDecelerate)) }
+                    }
+                    // Se n'e' aperta un'altra sopra: questa si allontana appena, dietro di lei.
+                    navForward[0] -> pageBehind.animateTo(1f, tween(MATERIAL_PAGE_ENTER_MS, easing = MaterialEmphasizedDecelerate))
+                    // Si sta chiudendo: rimpicciolisce e svanisce sopra quella che torna.
+                    else -> pagePresence.animateTo(0f, tween(MATERIAL_PAGE_EXIT_MS, easing = androidx.compose.animation.core.FastOutSlowInEasing))
                 }
             }
             LaunchedEffect(Unit) {
@@ -3581,10 +3601,14 @@ fun MainAppShell(
                     .ailaNoTouchWhile(route != shellRoute)
                     .fillMaxSize()
                     .graphicsLayer {
-                        val p = pageEnter.value
-                        if (p < 1f) {
-                            alpha = p
-                            val scale = 0.94f + 0.06f * p
+                        val p = pagePresence.value
+                        val b = pageBehind.value
+                        if (p < 1f || b > 0f) {
+                            // La dissolvenza finisce prima della crescita: la pagina e' gia' leggibile
+                            // mentre si sta ancora posando.
+                            alpha = (p / 0.6f).coerceIn(0f, 1f)
+                            val scale = (MATERIAL_PAGE_SMALL + (1f - MATERIAL_PAGE_SMALL) * p) *
+                                (1f + (MATERIAL_PAGE_BEHIND - 1f) * b)
                             scaleX = scale
                             scaleY = scale
                         }
@@ -6184,12 +6208,20 @@ private const val EVENT_DETAIL_KEY = "eventDetail"
 private const val ADD_EVENT_KEY = "addEventSheet"
 
 /**
- * Entrata Material di una schermata a tutto schermo (dissolvenza + crescita), dopo i suoi primi
- * due fotogrammi; e quanto resta composta sotto quella di prima perche' non si veda la Home in
- * mezzo anche se i primi fotogrammi sono lenti.
+ * Material fra due schermate a tutto schermo ("shared axis Z"): la nuova entra dissolvendosi e
+ * crescendo da [MATERIAL_PAGE_SMALL], quella sotto si allontana ingrandendosi fino a
+ * [MATERIAL_PAGE_BEHIND]; indietro l'inverso. Prima la nuova cresceva solo dal 94% in 240 ms e
+ * quasi non si notava. [MATERIAL_PAGE_HOLD_MS] e' quanto resta composta la pagina che esce, piu'
+ * dell'animazione anche se i primi fotogrammi sono lenti.
  */
-private const val MATERIAL_PAGE_ENTER_MS = 240
-private const val MATERIAL_PAGE_HOLD_MS = 700
+private const val MATERIAL_PAGE_ENTER_MS = 380
+private const val MATERIAL_PAGE_EXIT_MS = 300
+private const val MATERIAL_PAGE_HOLD_MS = 900
+private const val MATERIAL_PAGE_SMALL = 0.85f
+private const val MATERIAL_PAGE_BEHIND = 1.08f
+
+/** Curva "emphasized decelerate" di Material 3: parte decisa e si posa piano. */
+private val MaterialEmphasizedDecelerate = androidx.compose.animation.core.CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
 
 /** Le schermate a tutto schermo della shell; `depth` decide il verso del push/pop. */
 private enum class ShellRoute(val depth: Int) {
