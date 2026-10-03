@@ -42,6 +42,8 @@ struct iOSApp: App {
         }
         // Ogni volta che l'app va in background si (ri)programma il prossimo risveglio.
         .onChange(of: scenePhase) { _, phase in
+            // Stesso flag che su Android imposta MainActivity: ferma i cicli periodici in background.
+            AppForeground.shared.isForeground = (phase != .background)
             if phase == .background {
                 AilaBackground.schedule()
             }
