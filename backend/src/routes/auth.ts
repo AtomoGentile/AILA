@@ -12,6 +12,7 @@ import {
   passwordProblem,
   sha256Hex,
   storedPasswordHash,
+  timingSafeEqual,
   verifyPassword,
 } from '../auth';
 import { clearAttempts, clientIp, isRateLimited, recordAttempt } from '../rateLimit';
@@ -111,7 +112,7 @@ auth.post('/register', async (c) => {
     if (!c.env.REPRESENTATIVE_SIGNUP_CODE) {
       return c.json({ error: 'Codice rappresentante non configurato sul server' }, 400);
     }
-    if (representativeCode !== c.env.REPRESENTATIVE_SIGNUP_CODE) {
+    if (typeof representativeCode !== 'string' || !timingSafeEqual(representativeCode, c.env.REPRESENTATIVE_SIGNUP_CODE)) {
       return c.json({ error: 'Codice rappresentante non valido' }, 400);
     }
     role = 'REPRESENTATIVE';
@@ -119,7 +120,10 @@ auth.post('/register', async (c) => {
 
   // Classe gia' esistente con degli iscritti: per entrarci serve il suo codice, che ha il
   // Rappresentante. Prima bastava scrivere "4 CSA" per vedere nomi, bacheca e calendario della
-  // classe. Chi si registra con il codice Rappresentante non ne ha bisogno (e' lui a darlo).
+  // classe. Ne e' esente solo il primo Rappresentante (e' lui a dare il codice): il codice
+  // Rappresentante e' uno per tutta la scuola, e se bastasse quello il Rappresentante di
+  // un'altra classe entrerebbe qui come secondo Rappresentante, con i codici di reset delle
+  // password dei compagni e una firma del quorum per svelare gli anonimi.
   const members = await c.env.DB.prepare(
     `SELECT COUNT(*) AS total, SUM(CASE WHEN role = 'REPRESENTATIVE' THEN 1 ELSE 0 END) AS reps
      FROM users WHERE class_id = ?`
@@ -127,7 +131,8 @@ auth.post('/register', async (c) => {
   if (role === 'REPRESENTATIVE' && (members?.reps ?? 0) >= MAX_REPRESENTATIVES_PER_CLASS) {
     return c.json({ error: `La classe ha già ${MAX_REPRESENTATIVES_PER_CLASS} Rappresentanti` }, 409);
   }
-  if (role === 'STUDENT' && (members?.total ?? 0) > 0) {
+  const needsClassCode = role === 'STUDENT' ? (members?.total ?? 0) > 0 : (members?.reps ?? 0) > 0;
+  if (needsClassCode) {
     const expected = await classInviteCode(c.env, classId, { createIfMissing: false });
     if (expected !== null) {
       const given = (classCode ?? '').trim().toUpperCase().replace(/[\s-]/g, '');
@@ -137,7 +142,7 @@ auth.post('/register', async (c) => {
           classCodeRequired: true,
         }, 403);
       }
-      if (given !== expected) {
+      if (!timingSafeEqual(given, expected)) {
         return c.json({ error: 'Codice classe non valido', classCodeRequired: true }, 403);
       }
     }

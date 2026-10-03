@@ -355,7 +355,9 @@ private fun ClassRosterRow(
                 }
             }
 
-            if (!isSelf) {
+            // Non sull'altro Rappresentante: il server lo rifiuta (con il suo account una persona
+            // sola avrebbe due firme del quorum per svelare gli anonimi).
+            if (!isSelf && entry.role != "REPRESENTATIVE") {
                 Spacer(modifier = Modifier.height(4.dp))
                 ResetCodeButton(entry)
             }

@@ -3,6 +3,45 @@
 Elenco vivo dei problemi aperti e del lavoro ancora mancante, aggiornato mano a mano.
 Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esistente.
 
+## 3/10: audit di sicurezza (`/security-audit`)
+
+Corretto (Worker, test in `backend/test/routes.test.ts`; nessuna migrazione):
+- **Critica — Rappresentante in una classe non sua** (`routes/auth.ts`): il codice Rappresentante
+  e' uno per tutta la scuola e chi lo usava non doveva dare il codice classe. Il Rappresentante di
+  un'altra classe entrava come secondo Rappresentante di qualunque classe con meno di 2, vedeva
+  tutto e poteva generare i codici di reset delle password dei compagni (= entrare nei loro
+  account). Ora il codice classe serve anche ai Rappresentanti quando la classe ne ha gia' uno;
+  ne e' esente solo il primo. Codice Rappresentante e codice classe confrontati a tempo costante.
+- **Critica — quorum dell'anonimato aggirabile da una persona sola** (`routes/users.ts`): un
+  Rappresentante poteva generare il codice di reset per l'altro Rappresentante, entrare nel suo
+  account e, con una Guardia nominata da lui, firmare da solo lo svelamento. Ora il reset non vale
+  sugli altri Rappresentanti (e l'app non mostra piu' il pulsante, `ClassRosterScreen.kt`).
+  Conseguenza: un Rappresentante che dimentica la password si recupera solo a mano sul database.
+
+Da fare / da decidere:
+- **Media — codice classe facoltativo finche' il Rappresentante non apre la Scheda Classe**
+  (`services/classInvites.ts`, gia' noto): fino ad allora chiunque scriva "4 CSA" entra nella classe.
+- **Media — quorum e Guardia**: la Guardia la sceglie un Rappresentante, quindi il quorum reale e'
+  "2 Rappresentanti". Una classe con un solo Rappresentante: chi ha il codice Rappresentante puo'
+  diventare il secondo (con il codice classe, che ha). Serve il codice Rappresentante per classe
+  (piano "Multi-classe" qui sotto).
+- **Media — reset del Rappresentante = accesso all'account dello studente**: puo' leggere da li'
+  le proposte anonime dello studente. E' il prezzo del recupero senza email; almeno avvisare lo
+  studente al login successivo che la password e' stata reimpostata.
+- **Media — analisi delle circolari** (`routes/circulars.ts` PUT `/:number/analysis`): il livello
+  lo decide `modelLabel` mandato dal client; chiunque, di qualunque classe, scrivendo
+  "Google Gemini…" pubblica un riassunto (e scadenze) letto da tutta la scuola sulle circolari che
+  il server non ha riassunto. Quello del server resta protetto.
+- **Bassa**: `verifyJWT` accetta un token senza `exp` (serve comunque `JWT_SECRET`); web push
+  accetta qualunque endpoint https (il Worker ci manda solo notifiche cifrate); link degli
+  allegati non filtrati per schema (la CSP blocca `javascript:`); login piu' veloce per username
+  inesistenti (enumerazione).
+
+`npm audit --omit=dev` del Worker: 0 vulnerabilita'. Non controllato: app iOS, deep link (`PendingDeepLink.kt`),
+`npm audit` della PWA (manca il lockfile in `web/`),
+cronologia git oltre la ricerca di chiavi note; `./gradlew check` non eseguito qui (la modifica
+Kotlin la verifica la CI "Android Build").
+
 ## 3/10: motore AI (instradamento, AICore su ML Kit, CI)
 
 Verificato solo dalla CI "Android Build" (compilazione, test di `:shared`, APK): **niente di
