@@ -36,6 +36,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -72,6 +73,7 @@ import circolareplus.design.AilaSecondaryButton
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
 import circolareplus.design.ailaFieldColors
+import circolareplus.design.ailaTextTouchTarget
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.PI
@@ -268,7 +270,7 @@ fun OnboardingScreen(
                 Spacer(modifier = Modifier.width(AppTheme.Space8))
                 Text(
                     text = "AILA",
-                    fontSize = 16.sp,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Black,
                     letterSpacing = 1.5.sp,
                     color = AppTheme.PrimaryBlue
@@ -281,25 +283,27 @@ fun OnboardingScreen(
             if (stepIndex > 0) {
                 Text(
                     text = "Indietro",
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Medium,
                     color = AppTheme.TextMuted,
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
                         .clickable(enabled = !aiBusy) { stepIndex-- }
-                        .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8)
+                        .ailaTextTouchTarget()
+                        .padding(horizontal = AppTheme.Space12)
                 )
             }
             if (!isLast) {
                 Text(
                     text = "Salta",
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Medium,
                     color = AppTheme.TextMuted,
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
                         .clickable(enabled = !aiBusy) { onFinish() }
-                        .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8)
+                        .ailaTextTouchTarget()
+                        .padding(horizontal = AppTheme.Space12)
                 )
             }
             }
@@ -425,7 +429,8 @@ fun OnboardingScreen(
 
         Text(
             text = "${stepIndex + 1} di $totalSteps",
-            fontSize = 11.sp,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Normal,
             color = AppTheme.TextFaint,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
@@ -471,17 +476,14 @@ private fun OnboardingCopyText(page: OnboardingPage, modifier: Modifier) {
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
             text = page.title,
-            fontSize = 27.sp,
-            fontWeight = FontWeight.Bold,
-            color = AppTheme.TextDark,
-            lineHeight = 33.sp
+            style = MaterialTheme.typography.headlineMedium,
+            color = AppTheme.TextDark
         )
         Spacer(modifier = Modifier.height(AppTheme.Space12))
         Text(
             text = page.body,
-            fontSize = 15.sp,
-            color = AppTheme.TextMuted,
-            lineHeight = 22.sp
+            style = MaterialTheme.typography.bodyLarge,
+            color = AppTheme.TextMuted
         )
     }
 }
@@ -544,18 +546,15 @@ private fun AiSetupStep(
     Spacer(modifier = Modifier.height(AppTheme.Space16))
     Text(
         text = "Scegli come AILA\nlegge le circolari",
-        fontSize = 25.sp,
-        fontWeight = FontWeight.Bold,
-        color = AppTheme.TextDark,
-        lineHeight = 31.sp
+        style = MaterialTheme.typography.headlineMedium,
+        color = AppTheme.TextDark
     )
     Spacer(modifier = Modifier.height(AppTheme.Space8))
     Text(
         text = "Per riassumere le circolari e rispondere alle tue domande AILA usa un'AI. " +
             "Scegli una strada: potrai cambiarla quando vuoi da Impostazioni.",
-        fontSize = 14.sp,
-        color = AppTheme.TextMuted,
-        lineHeight = 20.sp
+        style = MaterialTheme.typography.bodyLarge,
+        color = AppTheme.TextMuted
     )
     Spacer(modifier = Modifier.height(AppTheme.Space16))
 
@@ -590,7 +589,7 @@ private fun AiSetupStep(
                 keyStatus = null
                 keyOk = false
             },
-            placeholder = { Text("AIzaSy…", fontSize = 13.sp) },
+            placeholder = { Text("AIzaSy…", style = MaterialTheme.typography.bodyMedium) },
             singleLine = true,
             keyboardOptions = KeyboardOptions(
                 capitalization = KeyboardCapitalization.None,
@@ -604,18 +603,16 @@ private fun AiSetupStep(
             Spacer(modifier = Modifier.height(AppTheme.Space8))
             Text(
                 text = keyStatus!!,
-                fontSize = 12.sp,
+                style = MaterialTheme.typography.labelLarge,
                 fontWeight = if (keyOk) FontWeight.Bold else FontWeight.Normal,
-                color = if (keyOk) AppTheme.TintGreenInk else AppTheme.TintRedInk,
-                lineHeight = 17.sp
+                color = if (keyOk) AppTheme.TintGreenInk else AppTheme.TintRedInk
             )
             if (!keyOk && keyInput.isNotBlank()) {
                 // Senza rete la prova fallisce per forza: chi è offline a scuola deve poter
                 // salvare la chiave lo stesso e verificarla dopo.
                 Text(
                     text = "Salva comunque, la verifico più tardi",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelLarge,
                     color = AppTheme.PrimaryBlue,
                     modifier = Modifier
                         .clickable {
@@ -625,7 +622,7 @@ private fun AiSetupStep(
                                 "Impostazioni con \"Prova la chiave\"."
                             onConfigured()
                         }
-                        .padding(vertical = AppTheme.Space8)
+                        .ailaTextTouchTarget()
                 )
             }
         }
@@ -702,12 +699,11 @@ private fun AiSetupStep(
         if (setup.localModels.size > 1 && !isDownloading) {
             Text(
                 text = if (showAllModels) "Chiudi l'elenco" else "Scegli un altro modello",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelLarge,
                 color = AppTheme.PrimaryBlue,
                 modifier = Modifier
                     .clickable { showAllModels = !showAllModels }
-                    .padding(vertical = AppTheme.Space4)
+                    .ailaTextTouchTarget()
             )
             Spacer(modifier = Modifier.height(AppTheme.Space4))
         }
@@ -720,10 +716,9 @@ private fun AiSetupStep(
         if (modelStatus != null) {
             Text(
                 text = modelStatus!!,
-                fontSize = 12.sp,
+                style = MaterialTheme.typography.labelLarge,
                 fontWeight = if (modelOk) FontWeight.Bold else FontWeight.Normal,
-                color = if (modelOk) AppTheme.TintGreenInk else AppTheme.TintRedInk,
-                lineHeight = 17.sp
+                color = if (modelOk) AppTheme.TintGreenInk else AppTheme.TintRedInk
             )
             Spacer(modifier = Modifier.height(AppTheme.Space8))
         }
@@ -790,9 +785,9 @@ private fun AiSetupStep(
                 Text(
                     text = "Meglio con il Wi-Fi. Resta su questa schermata finché il download non " +
                         "finisce: se si interrompe riparte da dove era arrivato, non da capo.",
-                    fontSize = 11.sp,
-                    color = AppTheme.TextFaint,
-                    lineHeight = 15.sp
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Normal,
+                    color = AppTheme.TextFaint
                 )
             }
         }
@@ -802,9 +797,8 @@ private fun AiSetupStep(
     Text(
         text = "Non vuoi scegliere adesso? Vai avanti: AILA funziona lo stesso, con analisi più " +
             "semplici, e puoi configurare l'AI in ogni momento da Impostazioni.",
-        fontSize = 12.sp,
-        color = AppTheme.TextFaint,
-        lineHeight = 17.sp
+        style = MaterialTheme.typography.bodyMedium,
+        color = AppTheme.TextFaint
     )
 }
 
@@ -875,8 +869,7 @@ private fun AiChoiceCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleSmall,
                     color = if (enabled || selected) AppTheme.TextDark else AppTheme.TextFaint
                 )
                 // 2dp voluti, sotto la griglia: titolo e sottotitolo si leggono come un blocco
@@ -884,9 +877,8 @@ private fun AiChoiceCard(
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = subtitle,
-                    fontSize = 12.sp,
-                    color = AppTheme.TextMuted,
-                    lineHeight = 17.sp
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AppTheme.TextMuted
                 )
                 if (badge != null) {
                     Spacer(modifier = Modifier.height(AppTheme.Space8))
@@ -894,8 +886,7 @@ private fun AiChoiceCard(
                     // fuori griglia): stessa pillola in tutta l'app.
                     Text(
                         text = badge,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelSmall,
                         color = AppTheme.TintGreenInk,
                         modifier = Modifier
                             .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
@@ -923,14 +914,13 @@ private fun StepLine(number: String, text: String) {
                 .background(AppTheme.PrimaryBlue),
             contentAlignment = Alignment.Center
         ) {
-            Text(text = number, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Text(text = number, style = MaterialTheme.typography.labelSmall, color = Color.White)
         }
         Spacer(modifier = Modifier.width(AppTheme.Space8))
         Text(
             text = text,
-            fontSize = 13.sp,
+            style = MaterialTheme.typography.bodyMedium,
             color = AppTheme.TextDark,
-            lineHeight = 18.sp,
             modifier = Modifier.weight(1f)
         )
     }
@@ -963,13 +953,12 @@ private fun OnboardingModelRow(
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text(
                 text = model.displayName,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelLarge,
                 color = AppTheme.TextDark
             )
             if (model.approxSizeBytes > 0L) {
                 Spacer(modifier = Modifier.width(AppTheme.Space8))
-                Text(text = model.readableSize, fontSize = 11.sp, color = AppTheme.TextMuted)
+                Text(text = model.readableSize, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Normal, color = AppTheme.TextMuted)
             }
             Spacer(modifier = Modifier.weight(1f))
             val tag = when {
@@ -981,8 +970,7 @@ private fun OnboardingModelRow(
                 // Stessa pillola 8×4 dell'etichetta in AiChoiceCard.
                 Text(
                     text = tag,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelSmall,
                     color = if (isInstalled) AppTheme.TintGreenInk else AppTheme.TintSlateInk,
                     modifier = Modifier
                         .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
@@ -994,19 +982,17 @@ private fun OnboardingModelRow(
         Spacer(modifier = Modifier.height(AppTheme.Space4))
         Text(
             text = model.description,
-            fontSize = 11.sp,
-            color = AppTheme.TextMuted,
-            lineHeight = 15.sp
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Normal,
+            color = AppTheme.TextMuted
         )
         if (!fits) {
             Spacer(modifier = Modifier.height(AppTheme.Space4))
             Text(
                 text = "Ha bisogno di circa ${model.recommendedRamMb / 1000} GB di memoria: su " +
                     "questo telefono potrebbe non partire.",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = AppTheme.TintRedInk,
-                lineHeight = 15.sp
+                style = MaterialTheme.typography.labelSmall,
+                color = AppTheme.TintRedInk
             )
         }
     }
@@ -1035,7 +1021,8 @@ private fun OnboardingProgressBar(downloadedBytes: Long, totalBytes: Long) {
             // download): "0 MB di 0 MB" sembrava un blocco.
             text = if (totalBytes <= 0) "In attesa del sistema…" else "${formatMegabytes(downloadedBytes)} di ${formatMegabytes(totalBytes)} " +
                 "(${(target * 100).toInt()}%)",
-            fontSize = 11.sp,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Normal,
             color = AppTheme.TextFaint
         )
     }

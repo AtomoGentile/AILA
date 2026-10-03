@@ -21,7 +21,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import circolareplus.design.AilaIconButton
 import circolareplus.design.AilaEmptyState
 import circolareplus.design.AilaIconAction
@@ -327,8 +326,7 @@ fun ProposalCardItem(
                     ) {
                         Text(
                             text = statusLabel,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.labelMedium,
                             color = statusColor
                         )
                     }
@@ -340,7 +338,7 @@ fun ProposalCardItem(
                             revealed = proposal.identityRevealed,
                             name = proposal.authorName
                         ),
-                        fontSize = 13.sp,
+                        style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.SemiBold,
                         color = AppTheme.TextMuted,
                         maxLines = 1,
@@ -355,8 +353,7 @@ fun ProposalCardItem(
                         // pubblicato all'inizio.
                         Text(
                             text = "Modificato",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.labelMedium,
                             color = AppTheme.TintAmberInk,
                             modifier = Modifier
                                 // ButtonCornerRadius e' gia' una capsula (100dp).
@@ -392,8 +389,7 @@ fun ProposalCardItem(
 
             Text(
                 text = proposal.title,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium,
                 color = AppTheme.TextDark
             )
 
@@ -401,7 +397,7 @@ fun ProposalCardItem(
 
             Text(
                 text = proposal.description,
-                fontSize = 14.sp,
+                style = MaterialTheme.typography.bodyLarge,
                 color = AppTheme.TextMuted
             )
 
@@ -466,7 +462,7 @@ fun ProposalCardItem(
                 if (!votingOpen) {
                     Text(
                         text = "Votazione chiusa",
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = AppTheme.TextFaint,
                         modifier = Modifier.weight(1f)
                     )
@@ -543,17 +539,17 @@ fun ProposalCardItem(
                 when {
                     isLoadingComments -> Text(
                         text = "Caricamento commenti…",
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = AppTheme.TextFaint
                     )
                     loadError -> Text(
                         text = "Impossibile caricare i commenti.",
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = AppTheme.TintRedInk
                     )
                     comments.isEmpty() -> Text(
                         text = "Nessun commento. Scrivi il primo.",
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = AppTheme.TextFaint
                     )
                     else -> Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
@@ -566,13 +562,12 @@ fun ProposalCardItem(
                                         revealed = comment.identityRevealed,
                                         name = comment.authorName
                                     ),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.labelMedium,
                                     color = AppTheme.TextDark
                                 )
                                 Text(
                                     text = comment.content,
-                                    fontSize = 13.sp,
+                                    style = MaterialTheme.typography.bodyMedium,
                                     color = AppTheme.TextMuted
                                 )
                                 if (canModerateIdentity && comment.isAnonymous && !comment.identityRevealed && !comment.isMine) {
@@ -598,7 +593,7 @@ fun ProposalCardItem(
                 OutlinedTextField(
                     value = commentInput,
                     onValueChange = { commentInput = it },
-                    placeholder = { Text("Scrivi un commento...", fontSize = 14.sp) },
+                    placeholder = { Text("Scrivi un commento...", style = MaterialTheme.typography.bodyLarge) },
                     maxLines = 4,
                     enabled = !isSending,
                     shape = RoundedCornerShape(AppTheme.SmallElementRadius),
@@ -627,7 +622,7 @@ fun ProposalCardItem(
                         Spacer(modifier = Modifier.width(AppTheme.Space8))
                         Text(
                             text = "Anonimo",
-                            fontSize = 14.sp,
+                            style = MaterialTheme.typography.bodyLarge,
                             color = AppTheme.TextDark
                         )
                     }
@@ -679,7 +674,7 @@ private fun UnlockLink(text: String, onClick: () -> Unit) {
     ) {
         AppIcons.Lock(modifier = Modifier.size(16.dp), color = AppTheme.PrimaryBlue)
         Spacer(modifier = Modifier.width(AppTheme.Space4))
-        Text(text = text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AppTheme.PrimaryBlue)
+        Text(text = text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = AppTheme.PrimaryBlue)
     }
 }
 
@@ -691,7 +686,7 @@ private fun UnlockStatusNote(text: String) {
     ) {
         AppIcons.Lock(modifier = Modifier.size(15.dp), color = AppTheme.TintAmberInk)
         Spacer(modifier = Modifier.width(AppTheme.Space4))
-        Text(text = text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AppTheme.TintAmberInk)
+        Text(text = text, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = AppTheme.TintAmberInk)
     }
 }
 
@@ -713,17 +708,15 @@ private fun UnlockRequestsPanel(
                 Spacer(modifier = Modifier.width(AppTheme.Space8))
                 Text(
                     text = "Svelamento anonimato · ${requests.size} in attesa",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleSmall,
                     color = AppTheme.TintAmberInk
                 )
             }
             Spacer(modifier = Modifier.height(AppTheme.Space4))
             Text(
                 text = "Servono 2 Rappresentanti e 1 Guardia di Sicurezza. L'autore lo vedono solo i tre che firmano.",
-                fontSize = 12.sp,
-                color = AppTheme.TextMuted,
-                lineHeight = 17.sp
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTheme.TextMuted
             )
 
             requests.forEach { request ->
@@ -733,28 +726,27 @@ private fun UnlockRequestsPanel(
 
                 Text(
                     text = if (request.commentId != null) "Commento su “${request.proposalTitle}”" else request.proposalTitle,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleSmall,
                     color = AppTheme.TextDark
                 )
                 if (request.commentExcerpt != null) {
                     Text(
                         text = "“${request.commentExcerpt}”",
-                        fontSize = 13.sp,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = AppTheme.TextMuted
                     )
                 }
                 Spacer(modifier = Modifier.height(AppTheme.Space4))
                 Text(
                     text = "Motivo (${request.requestedByName}): ${request.reason}",
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = AppTheme.TextMuted
                 )
                 Spacer(modifier = Modifier.height(AppTheme.Space4))
                 Text(
                     text = "Rappresentanti ${request.representativeApprovals}/${request.representativesNeeded}" +
                         " · Guardia ${request.guardApprovals}/${request.guardsNeeded}",
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = AppTheme.TintAmberInk
                 )
@@ -763,7 +755,7 @@ private fun UnlockRequestsPanel(
                 if (request.approvedByMe) {
                     Text(
                         text = "Hai già approvato. Aspetti le altre firme.",
-                        fontSize = 13.sp,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = AppTheme.TextFaint
                     )
                     Spacer(modifier = Modifier.height(AppTheme.Space8))
@@ -827,8 +819,7 @@ private fun UnlockRequestDialog(
         title = {
             Text(
                 text = if (isComment) "Svelare l'autore del commento?" else "Svelare l'autore?",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge,
                 color = AppTheme.TextDark
             )
         },
@@ -838,9 +829,8 @@ private fun UnlockRequestDialog(
                     text = "Serve l'approvazione di 2 Rappresentanti e di 1 Guardia di Sicurezza: la tua " +
                         "conta come la prima. Finché non firmano tutti, nessuno vede chi è. " +
                         "Da usare solo per gravi violazioni.",
-                    fontSize = 14.sp,
-                    color = AppTheme.TextMuted,
-                    lineHeight = 20.sp
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = AppTheme.TextMuted
                 )
                 Spacer(modifier = Modifier.height(AppTheme.Space12))
                 OutlinedTextField(
@@ -855,7 +845,7 @@ private fun UnlockRequestDialog(
                 )
                 if (error != null) {
                     Spacer(modifier = Modifier.height(AppTheme.Space8))
-                    Text(text = error!!, fontSize = 13.sp, color = AppTheme.TintRedInk)
+                    Text(text = error!!, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TintRedInk)
                 }
             }
         },
@@ -919,9 +909,8 @@ private fun EditProposalDialog(
                 Text(
                     text = "Ai compagni comparirà la dicitura “Modificato”: i voti e i " +
                         "commenti già raccolti restano.",
-                    fontSize = 12.sp,
-                    color = AppTheme.TextMuted,
-                    lineHeight = 17.sp
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTheme.TextMuted
                 )
                 Spacer(modifier = Modifier.height(AppTheme.Space12))
                 OutlinedTextField(

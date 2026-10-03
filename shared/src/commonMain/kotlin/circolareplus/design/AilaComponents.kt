@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
@@ -53,7 +54,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -116,8 +116,7 @@ fun AilaScreenHeader(
                 // Titoli grandi: "large title" di iOS in Glass, "headline" di Material in Expressive.
                 Text(
                     text = title,
-                    fontSize = if (AppTheme.isGlass) 28.sp else 26.sp,
-                    fontWeight = if (AppTheme.isGlass) FontWeight.Bold else FontWeight.Medium,
+                    style = MaterialTheme.typography.headlineMedium,
                     color = AppTheme.TextDark,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -125,9 +124,8 @@ fun AilaScreenHeader(
                 if (subtitle != null) {
                     Text(
                         text = subtitle,
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = AppTheme.TextMuted,
-                        lineHeight = 16.sp,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -188,8 +186,7 @@ fun AilaBackBar(
             Spacer(modifier = Modifier.width(AppTheme.Space12))
             Text(
                 text = title,
-                fontSize = 19.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge,
                 color = AppTheme.TextDark,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -292,12 +289,15 @@ fun AilaSegmentedTabs(
                                 }
                             }
                         }
+                        // 44dp come bersaglio di tocco: prima l'altezza veniva dall'interlinea di
+                        // 24sp ereditata da Material, che la scala tipografica non ha più.
+                        .heightIn(min = 44.dp)
                         .padding(vertical = 9.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = label,
-                        fontSize = 13.sp,
+                        style = MaterialTheme.typography.labelLarge,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                         color = if (isSelected) AppTheme.OnSelection else AppTheme.TextMuted,
                         maxLines = 1
@@ -489,8 +489,7 @@ fun AilaListRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleSmall,
                 color = AppTheme.TextDark,
                 maxLines = 1
             )
@@ -498,7 +497,7 @@ fun AilaListRow(
                 Spacer(modifier = Modifier.height(1.dp))
                 Text(
                     text = subtitle,
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = AppTheme.TextMuted,
                     maxLines = 2
                 )
@@ -539,7 +538,7 @@ fun AilaPrimaryButton(
             // Anche un pulsante puo' essere l'origine di un container transform (es. "Calcola
             // 3 proposte": la pagina delle proposte si apre dal pulsante).
             .ailaTransformOrigin(24.dp)
-            .then(if (large) Modifier.heightIn(min = 48.dp) else Modifier)
+            .ailaButtonMinHeight(large, compact)
             .clip(shape)
             .then(
                 if (enabled) Modifier.background(AppTheme.PrimaryGradient)
@@ -566,7 +565,7 @@ fun AilaPrimaryButton(
             }
             Text(
                 text = text,
-                fontSize = if (large) 15.sp else if (compact) 12.sp else 13.sp,
+                style = ailaButtonTextStyle(large, compact),
                 fontWeight = if (AppTheme.isGlass) FontWeight.SemiBold else FontWeight.Bold,
                 color = contentColor,
                 maxLines = 1
@@ -628,6 +627,32 @@ fun Modifier.ailaPressScale(interactionSource: MutableInteractionSource, pressed
     }
 }
 
+/** Testo dei pulsanti: 15 per quelli grandi, 12 per i compatti, 13 per gli altri. */
+@Composable
+private fun ailaButtonTextStyle(large: Boolean, compact: Boolean) = when {
+    large -> MaterialTheme.typography.titleSmall
+    compact -> MaterialTheme.typography.labelMedium
+    else -> MaterialTheme.typography.labelLarge
+}
+
+/**
+ * Altezza minima dei pulsanti. Prima la dava, senza dirlo, l'interlinea di 24sp che ogni Text
+ * ereditava da Material: con la scala tipografica l'interlinea segue la misura del testo e il
+ * pulsante normale sarebbe sceso a 40dp, sotto i 44 del bersaglio di tocco. Restano quindi le
+ * altezze di prima (44 normale, 40 compatto, 48 grande); con il testo di sistema più grande il
+ * pulsante cresce oltre il minimo invece di tagliare le lettere.
+ */
+private fun Modifier.ailaButtonMinHeight(large: Boolean, compact: Boolean) =
+    heightIn(min = if (large) 48.dp else if (compact) 40.dp else 44.dp)
+
+/**
+ * Testo cliccabile usato come link ("Salta", "Scegli un altro modello"): almeno 44dp di altezza
+ * con il testo centrato. Come per i pulsanti, prima l'altezza la dava l'interlinea di 24sp
+ * ereditata da Material; con la scala tipografica un link da 13sp sarebbe alto 18dp più il padding.
+ * Va messo dopo `clickable`, così tutta l'area alta 44dp risponde al tocco.
+ */
+fun Modifier.ailaTextTouchTarget() = heightIn(min = 44.dp).wrapContentHeight()
+
 /** Pulsante secondario: stesso ingombro del primario ma solo contorno. */
 @Composable
 fun AilaSecondaryButton(
@@ -641,7 +666,7 @@ fun AilaSecondaryButton(
     val shape = RoundedCornerShape(AppTheme.ButtonCornerRadius)
     Box(
         modifier = modifier
-            .then(if (large) Modifier.heightIn(min = 48.dp) else Modifier)
+            .ailaButtonMinHeight(large, compact)
             .then(
                 if (AppTheme.isGlass) Modifier.ailaGlassSurface(shape)
                 else Modifier.clip(shape).background(AppTheme.SurfaceWhite).border(1.dp, AppTheme.FieldOutline, shape)
@@ -660,8 +685,7 @@ fun AilaSecondaryButton(
             }
             Text(
                 text = text,
-                fontSize = if (large) 15.sp else if (compact) 12.sp else 13.sp,
-                fontWeight = FontWeight.Bold,
+                style = ailaButtonTextStyle(large, compact),
                 color = AppTheme.TextDark,
                 maxLines = 1
             )
@@ -682,7 +706,7 @@ fun AilaDestructiveButton(
     val shape = RoundedCornerShape(AppTheme.ButtonCornerRadius)
     Box(
         modifier = modifier
-            .then(if (large) Modifier.heightIn(min = 48.dp) else Modifier)
+            .ailaButtonMinHeight(large, compact)
             .clip(shape)
             .background(AppTheme.TintRed)
             .ailaGlassPressable(tint = Color.White) { onClick() }
@@ -694,8 +718,7 @@ fun AilaDestructiveButton(
     ) {
         Text(
             text = text,
-            fontSize = if (large) 15.sp else if (compact) 12.sp else 13.sp,
-            fontWeight = FontWeight.Bold,
+            style = ailaButtonTextStyle(large, compact),
             color = AppTheme.TintRedInk,
             maxLines = 1
         )
@@ -771,10 +794,10 @@ fun AilaConfirmDialog(
         containerColor = AppTheme.SurfaceWhite,
         shape = RoundedCornerShape(AppTheme.CardCornerRadius),
         title = {
-            Text(text = title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = AppTheme.TextDark)
+            Text(text = title, style = MaterialTheme.typography.titleLarge, color = AppTheme.TextDark)
         },
         text = {
-            Text(text = message, fontSize = 15.sp, color = AppTheme.TextMuted, lineHeight = 22.sp)
+            Text(text = message, style = MaterialTheme.typography.bodyLarge, color = AppTheme.TextMuted)
         },
         confirmButton = {
             if (isDestructive) {
@@ -806,7 +829,7 @@ fun AilaSectionTitle(
         // primario). Glass: titolo di sezione in grassetto, come iOS.
         Text(
             text = text,
-            fontSize = if (AppTheme.isGlass) 17.sp else 14.sp,
+            style = if (AppTheme.isGlass) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
             fontWeight = if (AppTheme.isGlass) FontWeight.Bold else FontWeight.SemiBold,
             color = if (AppTheme.isGlass) AppTheme.TextDark else AppTheme.PrimaryBlue,
             modifier = if (AppTheme.isGlass) Modifier else Modifier.padding(start = 4.dp)
@@ -814,7 +837,7 @@ fun AilaSectionTitle(
         if (actionText != null && onActionClick != null) {
             Text(
                 text = actionText,
-                fontSize = 13.sp,
+                style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = AppTheme.PrimaryBlue,
                 modifier = Modifier.ailaPressable(pressedScale = 0.95f) { onActionClick() }
@@ -867,8 +890,7 @@ fun AilaEmptyState(
         Spacer(modifier = Modifier.height(AppTheme.Space16))
         Text(
             text = title,
-            fontSize = 17.sp,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.titleMedium,
             color = AppTheme.TextDark,
             textAlign = TextAlign.Center
         )
@@ -876,10 +898,9 @@ fun AilaEmptyState(
             Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = message,
-                fontSize = 13.sp,
+                style = MaterialTheme.typography.bodyMedium,
                 color = AppTheme.TextMuted,
-                textAlign = TextAlign.Center,
-                lineHeight = 19.sp
+                textAlign = TextAlign.Center
             )
         }
         if (actionLabel != null && onAction != null) {
@@ -909,23 +930,21 @@ fun AilaErrorState(
     ) {
         StateBadge(
             brush = Brush.linearGradient(listOf(AppTheme.TintRed, AppTheme.TintAmber)),
-            icon = { Text(text = "!", fontSize = 34.sp, fontWeight = FontWeight.Black, color = AppTheme.TintRedInk) }
+            icon = { Text(text = "!", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Black, color = AppTheme.TintRedInk) }
         )
         Spacer(modifier = Modifier.height(AppTheme.Space16))
         Text(
             text = title,
-            fontSize = 17.sp,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.titleMedium,
             color = AppTheme.TextDark,
             textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = message,
-            fontSize = 13.sp,
+            style = MaterialTheme.typography.bodyMedium,
             color = AppTheme.TextMuted,
-            textAlign = TextAlign.Center,
-            lineHeight = 19.sp
+            textAlign = TextAlign.Center
         )
         if (onRetry != null) {
             Spacer(modifier = Modifier.height(AppTheme.Space20))
@@ -1083,7 +1102,7 @@ fun AilaIconAction(
         icon(ink)
         if (label.isNotEmpty()) {
             Spacer(modifier = Modifier.width(8.dp))
-            Text(text = label, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = ink)
+            Text(text = label, style = MaterialTheme.typography.titleSmall, color = ink)
         }
     }
 }
@@ -1133,8 +1152,7 @@ fun AilaAssistantBadge(
         Spacer(modifier = Modifier.width(4.dp))
         Text(
             text = text,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelSmall,
             color = ink,
             maxLines = 1
         )
@@ -1354,8 +1372,7 @@ fun AilaProfileButton(entry: AilaProfileEntry, modifier: Modifier = Modifier, on
     ) {
         Text(
             text = entry.initials,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.titleSmall,
             color = when {
                 AppTheme.isGlass -> AppTheme.TextDark
                 onHero || AppTheme.isDarkMode -> Color.White

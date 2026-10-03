@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -17,10 +18,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import circolareplus.design.AilaIconButton
 import circolareplus.design.AilaBackBar
 import circolareplus.design.AilaCard
+import circolareplus.design.ailaTextTouchTarget
 import circolareplus.design.AilaListRow
 import circolareplus.design.AilaPrimaryButton
 import circolareplus.design.AilaSectionTitle
@@ -157,8 +158,7 @@ fun SettingsScreen(
                         Column(modifier = Modifier.padding(AppTheme.Space16)) {
                             Text(
                                 text = "Tema",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelLarge,
                                 color = AppTheme.TextDark
                             )
                             Spacer(modifier = Modifier.height(AppTheme.Space8))
@@ -171,8 +171,7 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.height(AppTheme.Space16))
                             Text(
                                 text = "Stile grafico",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelLarge,
                                 color = AppTheme.TextDark
                             )
                             Spacer(modifier = Modifier.height(AppTheme.Space8))
@@ -193,15 +192,13 @@ fun SettingsScreen(
                                     circolareplus.design.UiStyle.EXPRESSIVE ->
                                         "Colori pieni, forme che si deformano al tocco e movimenti vivaci, come Android."
                                 },
-                                fontSize = 12.sp,
-                                color = AppTheme.TextMuted,
-                                lineHeight = 16.sp
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppTheme.TextMuted
                             )
                             Spacer(modifier = Modifier.height(AppTheme.Space16))
                             Text(
                                 text = "Colore principale",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelLarge,
                                 color = AppTheme.TextDark
                             )
                             Spacer(modifier = Modifier.height(AppTheme.Space8))
@@ -211,9 +208,8 @@ fun SettingsScreen(
                                 text = if (accent == circolareplus.design.AilaAccent.Default)
                                     "${accent.label} (predefinito)"
                                 else "${accent.label} \u2022 tocca il primo per tornare al predefinito",
-                                fontSize = 12.sp,
-                                color = AppTheme.TextMuted,
-                                lineHeight = 16.sp
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppTheme.TextMuted
                             )
                         }
                     }
@@ -235,8 +231,7 @@ fun SettingsScreen(
                         Column(modifier = Modifier.padding(AppTheme.Space16)) {
                             Text(
                                 text = "Dati salvati sul telefono",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelLarge,
                                 color = AppTheme.TextDark
                             )
                             Spacer(modifier = Modifier.height(AppTheme.Space4))
@@ -247,9 +242,8 @@ fun SettingsScreen(
                                     "Voti e modifiche richiedono la connessione.\n" +
                                     "Ultimo download completo: ${offlineAgeLabel(lastFullSync)} \u2022 " +
                                     "Spazio occupato: ${formatOfflineSize(offlineBytes)}.",
-                                fontSize = 12.sp,
-                                color = AppTheme.TextMuted,
-                                lineHeight = 16.sp
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppTheme.TextMuted
                             )
                             Spacer(modifier = Modifier.height(AppTheme.Space12))
                             val progress = syncProgress
@@ -261,7 +255,7 @@ fun SettingsScreen(
                                 Spacer(modifier = Modifier.height(AppTheme.Space8))
                             }
                             syncMessage?.let { message ->
-                                Text(text = message, fontSize = 12.sp, color = AppTheme.TextMuted)
+                                Text(text = message, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
                                 Spacer(modifier = Modifier.height(AppTheme.Space8))
                             }
                             AilaPrimaryButton(
@@ -381,9 +375,8 @@ fun SettingsScreen(
                                 text = "La chiave resta su questo dispositivo e serve ad analizzare le " +
                                     "circolari in riservatezza. Se ne ottiene una gratuita, senza carta " +
                                     "di credito, da Google AI Studio: aistudio.google.com/apikey",
-                                fontSize = 12.sp,
-                                color = AppTheme.TextMuted,
-                                lineHeight = 17.sp
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppTheme.TextMuted
                             )
 
                             Spacer(modifier = Modifier.height(AppTheme.Space12))
@@ -394,7 +387,7 @@ fun SettingsScreen(
                                     apiKeyInput = it
                                     apiKeyStatus = null
                                 },
-                                placeholder = { Text("AIzaSy…", fontSize = 13.sp) },
+                                placeholder = { Text("AIzaSy…", style = MaterialTheme.typography.bodyMedium) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(
                                     capitalization = KeyboardCapitalization.None,
@@ -409,9 +402,8 @@ fun SettingsScreen(
                                 Spacer(modifier = Modifier.height(AppTheme.Space8))
                                 Text(
                                     text = apiKeyStatus!!,
-                                    fontSize = 12.sp,
-                                    color = AppTheme.TextMuted,
-                                    lineHeight = 17.sp
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = AppTheme.TextMuted
                                 )
                             }
 
@@ -473,22 +465,19 @@ fun SettingsScreen(
                                 // si dice perché, invece di mostrare un pulsante che non farebbe nulla.
                                 Text(
                                     text = "Non disponibile su questo dispositivo",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.labelLarge,
                                     color = AppTheme.TextDark
                                 )
                                 Spacer(modifier = Modifier.height(AppTheme.Space8))
                                 Text(
                                     text = localAiUnavailableReason,
-                                    fontSize = 12.sp,
-                                    color = AppTheme.TextMuted,
-                                    lineHeight = 17.sp
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = AppTheme.TextMuted
                                 )
                             } else {
                                 Text(
                                     text = "Provider",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.labelLarge,
                                     color = AppTheme.TextDark
                                 )
                                 Spacer(modifier = Modifier.height(AppTheme.Space8))
@@ -507,18 +496,18 @@ fun SettingsScreen(
                                         text = "L'AI sul telefono e' in beta: su molti telefoni e' " +
                                             "lenta. I riassunti delle circolari arrivano comunque " +
                                             "dal server appena pronti e fermano l'analisi sul telefono.",
-                                        fontSize = 11.sp,
-                                        color = AppTheme.TextMuted,
-                                        lineHeight = 15.sp
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Normal,
+                                        color = AppTheme.TextMuted
                                     )
                                     Spacer(modifier = Modifier.height(AppTheme.Space4))
                                 }
                                 Text(
                                     text = "Qualunque sia la scelta, se il provider principale non " +
                                         "risponde l'app prova in automatico con l'altro.",
-                                    fontSize = 11.sp,
-                                    color = AppTheme.TextFaint,
-                                    lineHeight = 15.sp
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Normal,
+                                    color = AppTheme.TextFaint
                                 )
 
                                 Spacer(modifier = Modifier.height(AppTheme.Space16))
@@ -527,8 +516,7 @@ fun SettingsScreen(
 
                                 Text(
                                     text = "Modello",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.labelLarge,
                                     color = AppTheme.TextDark
                                 )
                                 // Memoria e fascia servono a scegliere fra modelli da scaricare: con
@@ -544,9 +532,9 @@ fun SettingsScreen(
                                         } else {
                                             "Memoria del dispositivo non rilevata."
                                         },
-                                        fontSize = 11.sp,
-                                        color = AppTheme.TextFaint,
-                                        lineHeight = 15.sp
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Normal,
+                                        color = AppTheme.TextFaint
                                     )
                                 }
 
@@ -588,29 +576,26 @@ fun SettingsScreen(
                                     Text(
                                         text = "Ci sono ${formatBytes(orphanModelBytes)} di modelli " +
                                             "non piu' usati. Libera spazio",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.labelMedium,
                                         color = AppTheme.TintRedInk,
-                                        lineHeight = 16.sp,
                                         modifier = Modifier
                                             .clickable {
                                                 val freed = onDeleteOrphanModels()
                                                 orphansCleared = true
                                                 downloadStatus = "Liberati ${formatBytes(freed)}."
                                             }
-                                            .padding(vertical = AppTheme.Space4)
+                                            .ailaTextTouchTarget()
                                     )
                                 }
 
                                 if (localModels.size > 1) {
                                     Text(
                                         text = if (showAllModels) "Chiudi l'elenco" else "Scegli un altro modello",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.labelMedium,
                                         color = AppTheme.PrimaryBlue,
                                         modifier = Modifier
                                             .clickable { showAllModels = !showAllModels }
-                                            .padding(vertical = AppTheme.Space4)
+                                            .ailaTextTouchTarget()
                                     )
                                 }
 
@@ -628,9 +613,8 @@ fun SettingsScreen(
                                     Spacer(modifier = Modifier.height(AppTheme.Space8))
                                     Text(
                                         text = downloadStatus!!,
-                                        fontSize = 12.sp,
-                                        color = AppTheme.TextMuted,
-                                        lineHeight = 17.sp
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = AppTheme.TextMuted
                                     )
                                 }
 
@@ -737,9 +721,9 @@ fun SettingsScreen(
                                     Text(
                                         text = "Scarica con il Wi-Fi. Se il download si interrompe " +
                                             "riprende da dove era arrivato, non da capo.",
-                                        fontSize = 11.sp,
-                                        color = AppTheme.TextFaint,
-                                        lineHeight = 15.sp
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Normal,
+                                        color = AppTheme.TextFaint
                                     )
                                 }
                             }
@@ -841,8 +825,7 @@ private fun LocalModelRow(
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text(
                 text = model.displayName,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelLarge,
                 color = AppTheme.TextDark,
                 modifier = Modifier.weight(1f)
             )
@@ -855,8 +838,7 @@ private fun LocalModelRow(
                 Spacer(modifier = Modifier.width(AppTheme.Space8))
                 Text(
                     text = tag,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelSmall,
                     maxLines = 1,
                     softWrap = false,
                     color = if (isInstalled) AppTheme.TintGreenInk else AppTheme.TintSlateInk,
@@ -869,15 +851,16 @@ private fun LocalModelRow(
         }
         Text(
             text = model.readableSize,
-            fontSize = 11.sp,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Normal,
             color = AppTheme.TextMuted
         )
         Spacer(modifier = Modifier.height(AppTheme.Space4))
         Text(
             text = model.description,
-            fontSize = 11.sp,
-            color = AppTheme.TextMuted,
-            lineHeight = 15.sp
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Normal,
+            color = AppTheme.TextMuted
         )
         Spacer(modifier = Modifier.height(AppTheme.Space4))
         // Un modello che non sa produrre azioni resta utile per il riassunto, ma non riempie il
@@ -889,20 +872,16 @@ private fun LocalModelRow(
             } else {
                 "Solo riassunti: non propone scadenze per il calendario."
             },
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            color = if (supportsActions) AppTheme.TintGreenInk else AppTheme.TextFaint,
-            lineHeight = 15.sp
+            style = MaterialTheme.typography.labelSmall,
+            color = if (supportsActions) AppTheme.TintGreenInk else AppTheme.TextFaint
         )
         if (!fits) {
             Spacer(modifier = Modifier.height(AppTheme.Space4))
             Text(
                 text = "Questo modello ha bisogno di circa ${model.recommendedRamMb / 1000} GB " +
                     "di memoria: su questo telefono potrebbe non riuscire a partire.",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = AppTheme.TintRedInk,
-                lineHeight = 15.sp
+                style = MaterialTheme.typography.labelSmall,
+                color = AppTheme.TintRedInk
             )
         }
     }
@@ -928,7 +907,8 @@ private fun DownloadProgressBar(downloadedBytes: Long, totalBytes: Long) {
             // download): "0 MB di 0 MB" sembrava un blocco.
             text = if (totalBytes <= 0) "In attesa del sistema…" else "${formatBytes(downloadedBytes)} di ${formatBytes(totalBytes)} " +
                 "(${(fraction * 100).toInt()}%)",
-            fontSize = 11.sp,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Normal,
             color = AppTheme.TextFaint
         )
     }

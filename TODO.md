@@ -45,6 +45,38 @@ Resta:
 - un Rappresentante che dimentica la password si recupera ancora solo a mano sul database;
 - dopo la transizione: `npx wrangler secret delete REPRESENTATIVE_SIGNUP_CODE`.
 
+## 4/10: scala tipografica dell'app (`ailaTypography()`)
+
+Fatto (un commit per schermata, compilato con `:shared:compileDebugKotlinAndroid`):
+- `design/AilaTheme.kt`: `ailaTypography()` passato a `MaterialTheme`. Misure di iOS:
+  displaySmall 34, headlineMedium 28 (26 Medium in Material), titleLarge 20, titleMedium 17,
+  titleSmall/bodyLarge 15, bodyMedium/labelLarge 13, bodySmall/labelMedium 12, labelSmall 11.
+  "body" normale, "title"/"label" in grassetto; interlinea propria; tracking 0.
+- Migrati: `AilaComponents`, `AnimatedFilterChip`, Sondaggi (8 misure → 4), Onboarding (9 → 4
+  più la scritta "AILA"), Impostazioni (4 → 3), Bacheca (7 → 4), `MainAppShell` (fogli e
+  dialoghi con al massimo 4 misure ciascuno). `fontSize` nell'app: da 349 a 198.
+- Eccezione documentata: etichette della tab bar a 10sp (come iOS), in `GlassTabBarContent`.
+
+Da sapere (cambia l'aspetto anche dove le misure sono rimaste uguali):
+- Prima ogni `Text` ereditava `bodyLarge` di Material: **24sp di interlinea** anche per un testo
+  da 11sp, e 0.5sp di spaziatura fra le lettere. Con la scala l'interlinea segue la misura, quindi
+  righe, card e liste delle schermate migrate sono un po' più compatte e il testo un filo più
+  stretto. Pulsanti, schede segmentate, chip e link di testo tengono l'altezza con un minimo
+  esplicito (44dp; `ailaButtonMinHeight`, `ailaTextTouchTarget()`).
+- In Material/Expressive i titoli `headlineMedium` sono Medium, anche nell'Onboarding (prima Bold).
+- **Non verificato a schermo**: nessun emulatore qui. Da guardare su un telefono vero, in Glass e
+  Material, con il testo di sistema al 100% e al 130%: spaziature fra titolo e sottotitolo nelle
+  card, tab bar, foglio "Nuovo evento", passo AI dell'Onboarding.
+
+Resta:
+- Schermate ancora con `fontSize` a mano: ClassRoster (24), CircularDetail (20), Auth (18),
+  AssistantChat (18), Profile (15), SeatMap (13), RankingPolls (12), SeatMapProposals (10),
+  PollHistory (9), SocialPreferencesVoting (8) e altre 11 con meno di 7. Stesso metodo: misura
+  e peso → stile, al massimo 4 misure, testi cliccabili con `ailaTextTouchTarget()`.
+- Nella mappa posti le etichette dei banchi (9–10sp) possono restare piccole: spazio fisso.
+- Link "azione" di `AilaSectionTitle` e "−/+" della capienza negli slot dei sondaggi
+  (26dp) sotto i 44dp di tocco: lo erano già, allargarli cambia l'impaginazione delle sezioni.
+
 ## 3/10: obiettivo "app perfetta" — secondo giro (sicurezza, coerenza, design, con subagenti)
 
 Sicurezza (Worker, test in `backend/test/routes.test.ts`):
