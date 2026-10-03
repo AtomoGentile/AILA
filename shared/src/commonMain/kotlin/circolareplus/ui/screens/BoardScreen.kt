@@ -909,6 +909,9 @@ private fun EditProposalDialog(
     AlertDialog(
         onDismissRequest = { closer.close(onDismiss) },
         modifier = Modifier.ailaDialogMotion(closer),
+        // Stessa superficie e forma dei dialoghi del design system (AilaConfirmDialog).
+        containerColor = AppTheme.SurfaceWhite,
+        shape = RoundedCornerShape(AppTheme.CardCornerRadius),
         title = { Text("Modifica la proposta") },
         text = {
             Column {
