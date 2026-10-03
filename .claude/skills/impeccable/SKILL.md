@@ -1,123 +1,138 @@
 ---
 name: impeccable
-description: Revisione e rifinitura del design di AILA (schermate Compose condivise Android/iOS e PWA in web/) fino a un risultato curato, coerente e accessibile. Usala quando l'utente chiede di rendere una schermata "impeccabile", rifinire, sistemare la grafica, migliorare UI/UX, controllare coerenza, contrasto, dark mode, animazioni o stati vuoti/errore, oppure prima di un rilascio. Critica, corregge nel codice e verifica.
+description: Revisione e rifinitura del design di un'interfaccia qualsiasi (web, PWA, app mobile o desktop, in React/Vue/Svelte/HTML-CSS, Jetpack/Compose Multiplatform, SwiftUI, Flutter e simili) fino a un risultato curato, coerente e accessibile. Usala quando l'utente chiede di rendere una schermata o un sito "impeccabile", rifinire, sistemare la grafica, migliorare UI/UX, controllare coerenza, contrasto, dark mode, responsive, animazioni o stati vuoti/errore, oppure prima di un rilascio. Critica, corregge nel codice e verifica.
 ---
 
-# Impeccable — rifinitura del design di AILA
+# Impeccable — rifinitura del design
 
-Obiettivo: ogni schermata deve sembrare fatta con cura dalla stessa mano. Non si ridisegna l'app
-e non si inventa uno stile nuovo: si porta ogni schermata al livello del **design system che
-c'è già**, si tolgono incoerenze e difetti, si chiudono gli stati dimenticati.
+Obiettivo: ogni schermata deve sembrare progettata con cura, dalla stessa mano, per persone vere.
+Di norma non si ridisegna il prodotto e non si inventa uno stile nuovo: si porta ogni schermata
+al livello del **design system che esiste già**, si tolgono incoerenze e difetti, si chiudono gli
+stati dimenticati. Se un design system non c'è, lo si estrae da ciò che l'interfaccia fa già.
 
-Argomenti facoltativi (`/impeccable <cosa>`): un nome di schermata (`BoardScreen`,
-`Circulars.tsx`), `web`, `app`, oppure `audit` (solo report, nessuna modifica).
-Senza argomenti: le schermate toccate di recente (`git log --name-only -15 -- shared/src web/src`).
+Argomenti facoltativi: una schermata, un componente o un percorso; `web` / `app`; `audit` (solo
+critica, nessuna modifica); `nuovo` (si sta progettando da zero: vedi la sezione apposita).
+Senza argomenti: le schermate toccate di recente (`git log --name-only -15`).
 
-## Il design system da rispettare
+## 1. Contesto del progetto
 
-**App (Compose Multiplatform)** — `shared/src/commonMain/kotlin/circolareplus/design/`
-- `AppTheme.kt`: unica fonte di colori, raggi e spaziature. Due stili (`UiStyle`):
-  **Liquid Glass** (predefinito su iOS) e **Material/Expressive** (predefinito su Android), più
-  chiaro/scuro e l'accento scelto dall'utente (`AilaAccent`). I colori si leggono da `AppTheme`
-  (`TextDark`, `TextMuted`, `TextFaint`, `SurfaceWhite`, `CardSurface`, `Tint*`, `PrimaryBlue`…)
-  o da `MaterialTheme.colorScheme`, mai `Color(0x…)` scritto in una schermata.
-- Spaziature: solo `AppTheme.Space4…Space48` (griglia da 4). Raggi: `CardCornerRadius`,
-  `ButtonCornerRadius`, `SmallElementRadius`.
-- Componenti: `AilaScreenHeader`, `AilaBackBar`, `AilaCard`, `AilaListRow`, `AilaIconTile`,
-  `AilaPrimaryButton` / `AilaSecondaryButton` / `AilaDestructiveButton`, `AilaConfirmDialog`,
-  `AilaSectionTitle`, `AilaEmptyState`, `AilaErrorState`, `AilaSwitch`, `AilaFab`,
-  `AilaSegmentedTabs`, `AilaSlidingChipRow`, `AilaSheet`, `AilaProgressBar`,
-  `AilaMorphingLoader`. Prima di scrivere un componente nuovo controlla che non esista già.
-- Movimento: `AilaMotion.kt` (`ailaAppear`, `ailaPressable`, `ailaPushTransition`,
-  `ailaTabTransition`, molle `ailaNavigationSpring`/`ailaSpatialSpring`). Niente `tween` e
-  durate inventate nelle schermate.
-- Insets: `PlatformInsets.kt` (`iosSafeDrawingPadding`, `iosImePadding`) su ogni schermata con
-  campi di testo o a tutto schermo.
+Leggi, se esistono:
+- `.claude/design.md`: note di design specifiche del progetto (brand, token, componenti, scelte
+  volute). **Hanno la precedenza** su tutto quello che segue: ciò che lì è dichiarato voluto non
+  è un difetto.
+- `CLAUDE.md`, linee guida di design, Storybook, Figma citati nel README.
 
-**PWA (Preact)** — `web/src/styles.css`, `web/src/ui/*.tsx`
-- Token CSS in `:root` (`--bg`, `--surface`, `--text`, `--muted`, `--border`, `--accent`,
-  `--accent-grad`, `--radius`) con la variante `prefers-color-scheme: dark`. Font Sora.
-- Niente colori o raggi letterali nei componenti: si usano le variabili; se manca un token si
-  aggiunge in `:root` **e** nel blocco dark.
-- Nessuno stile inline che la CSP blocca (`style-src 'self'` in `web/public/_headers`): classi
-  in `styles.css`.
+Poi trova il design system nel codice:
+- **Token**: colori, tipografia, spaziature, raggi, ombre, durate. Web: variabili CSS in `:root`,
+  `tailwind.config.*`, file `theme`/`tokens`. Compose: `MaterialTheme`, oggetti `*Theme`/`Tokens`.
+  SwiftUI: estensioni di `Color`/`Font`, asset catalog. Flutter: `ThemeData`.
+- **Componenti** condivisi (pulsanti, card, liste, dialoghi, campi, stati vuoti/errore/caricamento).
+- **Movimento**: helper o costanti di animazione già usati.
+- **Lingua e tono** dei testi esistenti.
 
-Il brand è blu notte + blu/viola (`#3B82F6` → `#8B5CF6`) ed è voluto: gradienti e vetro sono
-parte dell'identità, non "difetti da AI". Il problema è usarli dove non servono (testo su
-gradiente illeggibile, vetro sopra vetro, tre gradienti nella stessa schermata).
+Annota in 5-10 righe cosa hai trovato: è il metro con cui giudicare.
 
-## Procedura
+## 2. Guarda prima di toccare
 
-### 1. Guarda prima di toccare
 - Leggi per intero la schermata e i componenti che usa.
-- Se puoi vederla, guardala: per la PWA `cd web && npm run dev` e screenshot con Playwright
-  (Chromium è in `/opt/pw-browsers`) a 390×844 e 1280×800, chiaro e scuro
-  (`colorScheme: 'dark'`). Per l'app Compose non c'è un emulatore: ragiona sul codice e dillo.
+- Se puoi vederla, guardala. Per il web: avvia il server di sviluppo del progetto e fai
+  screenshot con Playwright a larghezza telefono (390×844) e desktop (1280×800), tema chiaro e
+  scuro (`colorScheme: 'dark'`), e con `reducedMotion: 'reduce'`. Per app native senza emulatore,
+  ragiona sul codice e dichiaralo nel risultato.
+- Per i dettagli tecnici della piattaforma apri il riferimento giusto:
+  [references/web.md](references/web.md) ·
+  [references/native.md](references/native.md)
 
-### 2. Critica, con questa lista
-Segna ogni punto come ok / da correggere, con file e riga.
+## 3. Critica
+
+Usa questa lista; segna ogni punto come ok / da correggere, con file e riga.
 
 **Gerarchia e layout**
-- Un solo elemento principale per schermata; titolo con `AilaScreenHeader` o `AilaBackBar`.
-- Allineamenti su un'unica griglia; margini laterali uguali in tutta l'app; niente card dentro
-  card dentro card.
-- Liste lunghe: `LazyColumn` con `key`; su tablet/desktop (`AilaAdaptiveList`, `max-width` della
-  PWA) il contenuto non si allunga a tutta larghezza.
+- Si capisce in un secondo cos'è la schermata e qual è l'azione principale. Un solo elemento
+  dominante; le azioni secondarie sembrano secondarie.
+- Allineamenti su una griglia, spaziature dalla scala del progetto (tipicamente multipli di 4/8),
+  margini laterali uguali in tutta l'app. Gruppi vicini = cose collegate.
+- Niente card dentro card dentro card, niente bordi + ombre + sfondo tutti insieme senza motivo.
+- Responsive: su schermi larghi il testo non si allunga a tutta larghezza; su schermi stretti
+  niente scroll orizzontale, niente testo tagliato, niente elementi sovrapposti.
 
 **Tipografia**
-- Si usano gli stili di `MaterialTheme.typography` / le regole `h1/h2/h3` della PWA, non
-  `fontSize = 17.sp` sparsi. Massimo 3 dimensioni per schermata.
-- Testi lunghi (circolari, risposte dell'assistente) con interlinea comoda e larghezza di riga
-  leggibile; niente maiuscolo per frasi intere.
+- Stili dalla scala tipografica del progetto, non dimensioni sparse. Massimo 3-4 livelli per
+  schermata, distinti in modo netto.
+- Righe di testo lungo tra ~45 e ~80 caratteri, interlinea comoda; niente intere frasi in
+  maiuscolo; numeri tabellari (`tabular-nums`) dove si confrontano cifre.
 
 **Colore e contrasto**
-- Contrasto WCAG AA: 4.5:1 per il testo normale, 3:1 per testo grande e icone. Controlla in
-  modo particolare `TextFaint`, testo su `HeroGradient`, testo su vetro in modalità scura.
-- Ogni colore funziona in chiaro, scuro, Glass, Material e con ogni `AilaAccent`.
-- Il colore non è l'unico segnale: le categorie delle circolari (Ti riguarda / Potenziale
-  interesse / Non ti riguarda) e i livelli dei sondaggi (verde/giallo/rosso chiaro/rosso scuro)
-  hanno anche testo o icona.
+- Contrasto WCAG AA: 4.5:1 testo normale, 3:1 testo grande, icone e bordi dei controlli.
+  Punti critici: testo secondario/disabilitato, testo su immagini, gradienti o superfici
+  semitrasparenti, tema scuro.
+- Colori solo dai token, e che funzionino in tutti i temi e varianti che il progetto supporta.
+- Il colore non è l'unico segnale (stato, categoria, errore): serve anche testo o icona.
+- Un accento usato per ciò che conta, non ovunque.
 
 **Stati**
-- Ogni schermata che carica dati ha caricamento (`AilaMorphingLoader`/skeleton), vuoto
-  (`AilaEmptyState` con un'azione utile), errore (`AilaErrorState` con "Riprova") e offline.
-- Pulsanti: stato disabilitato e "in corso" (niente doppio invio di voti o proposte).
-- Azioni distruttive o irreversibili (eliminare, chiudere un sondaggio, sbloccare l'anonimato)
-  passano da `AilaConfirmDialog` con testo che dice cosa succede.
+- Ogni vista con dati ha: caricamento (skeleton o indicatore, senza salti di layout), vuoto
+  (che spiega e propone un'azione), errore (che dice cosa fare, con "Riprova"), offline se l'app
+  lo supporta, contenuto molto lungo e molto corto.
+- Pulsanti: disabilitato, in corso (niente doppio invio), successo visibile.
+- Azioni distruttive o irreversibili chiedono conferma dicendo cosa succede; dove possibile,
+  "Annulla" è meglio di una conferma.
 
 **Interazione e accessibilità**
-- Aree di tocco almeno 48dp (Android) / 44pt (iOS) / 44px (PWA).
-- `contentDescription` su icone che fanno qualcosa, `null` su quelle decorative; `aria-label`
-  sui pulsanti-icona della PWA; focus visibile da tastiera nella PWA.
-- Movimento: animazioni brevi e con uno scopo. La PWA oggi non rispetta
-  `prefers-reduced-motion`: ogni animazione CSS nuova o toccata va disattivata lì dentro.
-- Tastiera: `KeyboardOptions` giuste (tipo, azione "Avanti/Fatto"), il campo attivo non resta
-  sotto la tastiera.
+- Aree di tocco ≥ 44×44 pt / 48×48 dp; spazio tra target vicini.
+- Ogni controllo ha un nome accessibile (label, `aria-label`, `contentDescription`,
+  `accessibilityLabel`); le immagini decorative sono ignorate dagli screen reader.
+- Navigazione da tastiera (web/desktop): ordine logico, focus sempre visibile, niente trappole.
+- Il testo si ingrandisce (font scaling / zoom 200%) senza rompersi.
+- Movimento: breve, con uno scopo (orientare, dare risposta a un'azione), coerente con gli
+  helper del progetto; disattivato o ridotto con "riduci movimento".
+- Moduli: etichette visibili (non solo placeholder), tipo di tastiera giusto, errori accanto al
+  campo, il campo attivo non resta sotto la tastiera.
 
 **Testi**
-- Italiano semplice, tono da compagno di classe, frasi brevi. Pulsanti con verbi
-  ("Invia proposta", non "OK"). Errori che dicono cosa fare, non codici.
-- Stessa parola per la stessa cosa ovunque (Rappresentante, Guardia, bacheca, circolare).
+- Nella lingua e nel tono del prodotto, frasi brevi, parole di chi usa l'app e non del codice.
+- Pulsanti con verbi che dicono cosa succede ("Salva modifiche", non "OK").
+- La stessa cosa si chiama sempre allo stesso modo.
 
-**Coerenza tra piattaforme**
-- La stessa funzione ha la stessa struttura e gli stessi testi nell'app e nella PWA
-  (`web/src/ui/` rispetto a `shared/.../ui/screens/`), adattando solo i controlli nativi.
+**Coerenza**
+- La stessa funzione ha lo stesso aspetto e gli stessi testi in tutte le schermate e su tutte le
+  piattaforme del progetto, adattando solo i controlli nativi.
+- Componenti duplicati o quasi uguali vanno ricondotti a quello condiviso.
 
-### 3. Correggi
-- Parti dai problemi che l'utente vede di più: contrasto, stati mancanti, layout rotti,
+**Aspetto "generico"**: segnali di un'interfaccia fatta col pilota automatico, da correggere
+*a meno che* siano scelte dichiarate del brand:
+- gradiente viola-blu su tutto, glassmorphism ovunque, ombre enormi e sfocate;
+- emoji al posto di icone, icone di set diversi mescolati;
+- ogni sezione in una card arrotondata identica, griglie di "feature card" tutte uguali;
+- testo grigio chiaro su bianco, tutto centrato, titoli enormi senza contenuto;
+- frasi di riempimento ("Sblocca il tuo potenziale"), placeholder lorem ipsum rimasti.
+
+## 4. Correggi
+
+Salvo l'argomento `audit`:
+- Parti da ciò che l'utente vede di più: contrasto e leggibilità, stati mancanti, layout rotti,
   incoerenze evidenti. Poi i dettagli.
 - Modifiche piccole e locali, nello stile del file. Se un valore manca nel design system,
-  aggiungilo in `AppTheme.kt` / `styles.css` e usalo, invece di scriverlo a mano.
-- Non cambiare comportamento, flussi o dati: se un problema di design richiede di cambiarli,
+  aggiungilo lì (con le varianti di tema) e usalo, invece di scriverlo a mano nella schermata.
+- Non cambiare comportamento, flussi, dati o API: se un problema di design li richiede,
   proponilo invece di farlo.
 
-### 4. Verifica
-- PWA: `cd web && npm test && npm run typecheck`, poi di nuovo gli screenshot prima/dopo.
-- App: `./gradlew :androidApp:assembleDebug` (e `./gradlew check`) se Gradle e l'SDK sono
-  disponibili; altrimenti scrivi che non è stato compilato.
-- Rileggi il diff cercando colori, dimensioni e durate scritti a mano.
+## 5. Verifica
+
+- Fai girare test, typecheck, lint e build del progetto.
+- Rifai gli screenshot (stessi formati di prima) e confrontali.
+- Rileggi il diff cercando colori, dimensioni e durate scritti a mano e stili duplicati.
+
+## Progettare da zero (`nuovo`)
+
+Se non c'è niente da cui partire: prima di scrivere codice scegli una direzione precisa (tono,
+pubblico, un riferimento visivo), poi fissa i token (palette con contrasti verificati in chiaro e
+scuro, scala tipografica, scala di spaziature, raggi, durate) e pochi componenti base. Evita
+l'aspetto generico descritto sopra; una scelta tipografica e cromatica con carattere vale più di
+tanti effetti. Poi applica le sezioni 3-5.
 
 ## Risultato
-Riassunto in chat: cosa hai cambiato (file:riga, prima → dopo), cosa resta da fare e cosa non
-hai potuto verificare (ad esempio "nessuna prova a schermo su iOS"). Allega gli screenshot
-prima/dopo della PWA quando li hai. Per lavori grandi aggiungi una sezione datata in `TODO.md`.
+
+Riassunto in chat: cosa hai cambiato (file:riga, prima → dopo), cosa resta da fare in ordine di
+impatto, cosa non hai potuto verificare. Allega gli screenshot prima/dopo quando li hai.
+Se il progetto tiene un diario dei lavori, aggiungi una sezione datata.

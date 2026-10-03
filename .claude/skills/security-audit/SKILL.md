@@ -1,147 +1,117 @@
 ---
 name: security-audit
-description: Audit di sicurezza completo di AILA (Worker Cloudflare, PWA, app KMP Android/iOS, CI). Usala quando l'utente chiede un audit, una revisione di sicurezza, "controlla se ci sono falle", prima di un rilascio o dopo modifiche a autenticazione, ruoli, isolamento tra classi, anonimato della bacheca, push o segreti. Trova i problemi, li verifica sul codice, corregge quelli confermati e scrive un report.
+description: Audit di sicurezza di un progetto qualsiasi (backend/API, frontend web, app mobile, CLI, librerie, infrastruttura e CI). Usala quando l'utente chiede un audit o una revisione di sicurezza, "controlla se ci sono falle", prima di un rilascio, o dopo modifiche ad autenticazione, permessi, dati personali, pagamenti, upload, segreti o pipeline. Ricostruisce la superficie d'attacco, cerca falle reali, le conferma sul codice, corregge quelle gravi e scrive un report.
 ---
 
-# Audit di sicurezza di AILA
+# Security audit
 
-Obiettivo: trovare falle **reali e sfruttabili**, non un elenco di buone pratiche generiche.
-Ogni problema va confermato leggendo il codice (e, dove si può, con un test che lo riproduce)
-prima di finire nel report o di essere corretto.
+Obiettivo: trovare falle **reali e sfruttabili** in questo progetto, non un elenco di buone
+pratiche generiche. Ogni problema va confermato seguendo il dato nel codice (e, quando si può,
+con un test che lo riproduce) prima di finire nel report o di essere corretto.
 
-Argomenti facoltativi (`/security-audit <ambito>`): `backend`, `web`, `app`, `ci`, oppure un
-percorso o un nome di rotta. Senza argomenti: tutto, nell'ordine sotto.
+Argomenti facoltativi: un'area (`backend`, `web`, `mobile`, `ci`, `deps`), un percorso, oppure
+`diff` (solo le modifiche del branch rispetto al ramo principale) o `report` (nessuna modifica
+al codice). Senza argomenti: tutto il progetto.
 
-## Mappa delle superfici
+## 1. Contesto del progetto
 
-| Area | Dove | Cosa conta di più |
-|---|---|---|
-| Worker | `backend/src/index.ts`, `auth.ts`, `rateLimit.ts`, `routes/*.ts`, `services/*.ts` | Autorizzazione per ruolo e per classe, anonimato, SQL, segreti |
-| Schema | `backend/schema.sql`, `backend/migrations/*.sql` | Vincoli, colonne `class_id`, indici di unicità |
-| Contratto | `backend/src/contracts.ts` (condiviso con la PWA) | Campi esposti al client |
-| PWA | `web/src/**`, `web/public/_headers`, `web/src/sw.ts` | XSS, CSP, token in IndexedDB, cache del service worker |
-| App KMP | `shared/src/commonMain/kotlin/circolareplus/**`, `androidApp/`, `iosApp/` | Dove stanno token e chiave Gemini, backup, deep link, log |
-| CI | `.github/workflows/*.yml` | Input non fidati nei `run:`, permessi, segreti nei log |
+Prima di tutto leggi, se esistono:
+- `.claude/security-audit.md`: note di sicurezza specifiche del progetto (ruoli, dati sensibili,
+  punti delicati, comandi di test). **Hanno la precedenza** sulle indicazioni generiche qui sotto.
+- `CLAUDE.md`, `README.md`, `SECURITY.md`, documentazione su privacy e deploy.
+- Le voci già note su sicurezza in TODO/issue, per non riportare come nuovo ciò che è tracciato.
 
-Ruoli (`contracts.ts`): `STUDENT`, `REPRESENTATIVE`, `SECURITY_GUARD`. La classe dell'utente
-arriva da `resolveClassId(c)`; ruolo e classe vengono riletti dal DB a ogni richiesta in
-`authMiddleware`.
+## 2. Ricognizione
 
-## Procedura
+Ricostruisci la mappa prima di cercare problemi. Scrivila brevemente (ti serve per il report).
 
-### 1. Preparazione
-- `git log --oneline -20` e `git diff origin/main...HEAD` per sapere cosa è cambiato di recente:
-  le modifiche nuove sono le prime da guardare.
-- Cerca in `TODO.md` le voci su sicurezza già note (`grep -n -i "sicurezza\|security" TODO.md`),
-  per non riportare come nuovo ciò che è già tracciato o già corretto.
+- **Stack**: guarda i manifest (`package.json`, `pyproject.toml`/`requirements*.txt`, `go.mod`,
+  `Cargo.toml`, `pom.xml`/`build.gradle*`, `Gemfile`, `composer.json`, `*.csproj`, `Podfile`,
+  `Package.swift`), Dockerfile, IaC (`*.tf`, `wrangler.toml`, `serverless.yml`, k8s, `fly.toml`,
+  `vercel.json`), cartelle di workflow CI.
+- **Punti d'ingresso**: rotte HTTP/GraphQL/RPC, handler di code e cron, webhook, comandi CLI,
+  deep link, componenti esportati delle app, file caricati, input da servizi esterni (scraping,
+  API di terzi, risposte di LLM).
+- **Confini di fiducia**: cosa arriva dall'utente, cosa da altri utenti (contenuti condivisi),
+  cosa da terzi. Tutto ciò che attraversa un confine è non fidato.
+- **Modello di identità e permessi**: come si autentica (sessione, JWT, OAuth, chiavi API),
+  quali ruoli esistono, chi possiede cosa, se ci sono più tenant/organizzazioni/gruppi i cui dati
+  devono restare separati.
+- **Dati sensibili**: credenziali, dati personali (in particolare di minori), dati sanitari o di
+  pagamento, contenuti privati o anonimi, chiavi di terzi.
+- **Segreti**: dove sono configurati e come arrivano al codice.
 
-### 2. Worker — una rotta alla volta
-Per **ogni** handler in `backend/src/routes/*.ts` compila mentalmente questa riga e segnati quelle
-che non tornano:
+Le modifiche recenti (`git log --oneline -30`, `git diff <ramo-principale>...HEAD`) sono le
+prime da guardare.
 
-1. **Autenticazione**: la rotta passa da `authMiddleware()`? Le uniche rotte pubbliche ammesse
-   sono login, registrazione, reset password, health. Qualsiasi altra rotta senza middleware è
-   un problema.
-2. **Ruolo**: le azioni da Rappresentante/Guardia usano `requireRole(...)` o un controllo
-   equivalente sul ruolo letto dal DB, non un campo del body.
-3. **Isolamento tra classi** (il rischio principale dell'app): ogni `SELECT`, `UPDATE`, `DELETE`
-   su dati di classe filtra su `class_id = ?` con il valore di `resolveClassId(c)`. Attenzione
-   alle query per id (`WHERE id = ?`): un id di un'altra classe non deve essere leggibile né
-   modificabile. Controlla anche le JOIN e le sottoquery, non solo la tabella principale.
-4. **Proprietà**: modificare/cancellare un evento, una proposta, un commento o un voto richiede
-   di esserne l'autore (o un ruolo che lo consente esplicitamente).
-5. **Input**: tutte le query sono `prepare(...).bind(...)`. Cerca interpolazioni:
-   `grep -n '\${' backend/src/routes/*.ts backend/src/services/*.ts` e verifica che ogni
-   `${...}` dentro una stringa SQL sia una costante del codice, mai un valore della richiesta.
-   Controlla tipi, lunghezze massime e valori ammessi (enum, range dei voti -2…+2, budget voti).
-6. **Risposta**: non restituisce `password_hash`, token di altri, le valutazioni riservate del
-   Rappresentante (`ratings`) a chi non è Rappresentante, né l'autore di contenuti anonimi.
+## 3. Ricerca
 
-### 3. Punti sensibili specifici di AILA
-- **Anonimato della bacheca** (`routes/proposals.ts`, tabelle `anonymity_unlock_*`): l'identità
-  di proposte e commenti anonimi si sblocca solo con il quorum (2 Rappresentanti + 1 Guardia
-  scelta dal Rappresentante, ognuno dal proprio account). Verifica che: lo stesso account non
-  conti due volte; la Guardia sia quella designata per *quella* classe; l'autore non trapeli da
-  altri campi (liste, conteggi, notifiche push, ordinamenti, `author_id` nel JSON, errori).
-- **Preferenze sociali e valutazioni**: il Rappresentante vede aggregati, non chi ha votato cosa
-  (`routes/preferences.ts`, `routes/ratings.ts`). Le valutazioni non devono finire in prompt AI
-  (`services/summarizer.ts`, `services/classAnalysis.ts`, assistente in `shared/.../ai`).
-- **Sondaggi**: un utente non può votare oltre il budget, votare per un altro, o vedere le scelte
-  altrui prima del momento previsto (`routes/polls.ts`, `routes/rankingPolls.ts`, `audience.ts`).
-- **Registrazione e ruoli**: `REPRESENTATIVE_SIGNUP_CODE` confrontato a tempo costante
-  (`timingSafeEqual`), codici invito di classe (`services/classInvites.ts`) monouso, salvati solo
-  come hash, con scadenza e rate limit.
-- **JWT** (`auth.ts`): HS256 con `JWT_SECRET`; `verifyJWT` deve rifiutare `alg` diversi, token
-  senza `exp`, firma assente. Il `pv` invalida i token dopo cambio password: verifica che tutte le
-  vie di cambio/reset password lo aggiornino.
-- **Rate limit** (`rateLimit.ts`): login, registrazione, reset, codici invito. Nota che fallisce
-  "aperto" se manca la tabella: va bene solo se la migrazione 013 è applicata in produzione.
-- **Push** (`services/fcm.ts`, `webpush.ts`, `routes/fcm.ts`, `routes/webpush.ts`): un utente
-  non può iscrivere un token/endpoint a topic di un'altra classe; il testo delle notifiche non
-  rivela autori anonimi; l'endpoint web push è validato (solo https, niente SSRF verso host
-  interni).
-- **Spaggiari e PDF** (`services/spaggiari.ts`, R2): URL scaricati solo dal dominio della scuola;
-  le chiavi R2 non derivano da input dell'utente senza normalizzazione (path traversal); limiti di
-  dimensione.
-- **CORS** (`index.ts`): solo `WEB_ORIGINS` e localhost. Nessun `*` con credenziali.
-- **Errori**: `app.onError` non deve rimandare stack o messaggi SQL al client.
+Per ogni area presente nel progetto apri il riferimento corrispondente e seguilo:
 
-### 4. PWA (`web/`)
-- Sink XSS: `grep -rn "dangerouslySetInnerHTML\|innerHTML\|insertAdjacentHTML\|eval(\|new Function" web/src`.
-  Il testo di circolari, proposte, commenti e risposte dell'AI è sempre non fidato.
-- Link generati da dati: niente `javascript:`; `target="_blank"` con `rel="noopener"`.
-- `web/public/_headers`: la CSP resta senza `unsafe-inline`/`unsafe-eval`; `connect-src`
-  allineato all'URL reale del Worker e a Gemini e a nient'altro.
-- `sw.ts`: le risposte API autenticate non vanno messe in una cache condivisa che sopravvive al
-  logout; il logout (`lib/session.ts`) svuota token, utente e cache.
-- La chiave Gemini personale non lascia il browser se non verso `generativelanguage.googleapis.com`.
+| Area | Riferimento |
+|---|---|
+| Backend, API, database, job | [references/backend.md](references/backend.md) |
+| Frontend web, PWA, estensioni | [references/web.md](references/web.md) |
+| App mobile e desktop | [references/mobile.md](references/mobile.md) |
+| Segreti, CI/CD, infrastruttura, dipendenze | [references/supply-chain.md](references/supply-chain.md) |
+| Funzioni con LLM/AI | [references/ai.md](references/ai.md) |
 
-### 5. App KMP
-- Dove stanno token e chiave Gemini (`AuthRepository`, `LocalSettingsManager`, impostazioni):
-  Android `allowBackup="false"` nel manifest; iOS esclusione dai backup. Nessun valore sensibile
-  in `println`/`Log`/crash.
-- Deep link e `PendingDeepLink.kt`: un link esterno non può eseguire azioni (votare, cancellare)
-  senza conferma dell'utente.
-- `AndroidManifest.xml`: componenti `exported` solo dove serve; niente `usesCleartextTraffic`.
-- Nessuna chiave o URL privato hardcoded: `grep -rn -i "AIza\|BEGIN PRIVATE\|secret\|api_key" shared androidApp iosApp --include=*.kt --include=*.swift --include=*.plist --include=*.xml`.
+Le falle che contano di più, quasi in ogni progetto, in quest'ordine:
+1. **Controllo degli accessi rotto**: rotte senza autenticazione, ruoli non verificati sul server,
+   oggetti letti o modificati per id senza controllare proprietario o tenant (IDOR), dati di un
+   tenant visibili a un altro.
+2. **Iniezioni**: SQL/NoSQL, comandi di shell, template, path traversal, SSRF, XSS,
+   deserializzazione non sicura, prompt injection con strumenti.
+3. **Autenticazione e sessioni**: password, token, reset, rate limit, confronti non a tempo
+   costante, sessioni che sopravvivono a logout o cambio password.
+4. **Esposizione di dati**: campi in più nelle risposte, log, messaggi d'errore, cache, notifiche.
+5. **Segreti** nel codice, nella cronologia git, nei log o nel bundle del client.
+6. **Pipeline e dipendenze**.
 
-### 6. Segreti e CI
-- Segreti nel repo e nella cronologia:
-  `git grep -n -I -E "AIza[0-9A-Za-z_-]{30,}|-----BEGIN (RSA |EC )?PRIVATE KEY|\"private_key\"|ghp_[0-9A-Za-z]{30,}"`
-  e `git log -p -S "private_key" --all | head`. File che `.gitignore` esclude
-  (`google-services.json`, `*firebase-adminsdk*.json`) non devono comparire in `git ls-files`.
-- Workflow: nessun `${{ github.event.* }}` o `${{ inputs.* }}` dentro `run:` (passarli via `env:`
-  e validarli come fa `worker-deploy.yml`); `permissions:` minimi; nessun `pull_request_target`
-  che esegue codice della PR; segreti mascherati.
-- Dipendenze: `cd backend && npm audit --omit=dev` e `cd web && npm audit --omit=dev` (se la rete
-  lo consente). Riporta solo vulnerabilità raggiungibili dal codice.
+Metodo: parti da ogni punto d'ingresso e segui il dato fino a dove viene usato (query, file,
+comando, risposta, altro utente). Usa `grep`/`rg` per trovare i "sink" pericolosi elencati nei
+riferimenti, poi risali a ritroso fino all'input.
 
-## Verifica e correzione
-- Per ogni sospetto, conferma con il codice: segui il dato dalla richiesta fino alla query.
-  Se non riesci a costruire uno scenario concreto (chi, quale richiesta, cosa ottiene), non è
-  un problema confermato: mettilo tra i "da verificare".
-- Per i problemi del Worker scrivi un test in `backend/test/routes.test.ts` (usa lo shim D1 di
-  `backend/test/d1shim.ts`) che fallisce prima della correzione e passa dopo.
-- Correggi i problemi **Critici** e **Alti** confermati con la modifica minima, nello stile del
-  codice intorno (commenti in italiano che spiegano il perché). I **Medi/Bassi** vanno nel
-  report, salvo correzioni banali.
-- Se una correzione richiede una migrazione D1, crea il file numerato successivo in
-  `backend/migrations/` (solo `CREATE ... IF NOT EXISTS` o istruzioni idempotenti) e scrivi nel
-  report che va applicata dal workflow **Worker deploy**.
-- Controlli prima del commit:
-  - `cd backend && npx tsc --noEmit -p . && npm test`
-  - `cd web && npm test && npm run typecheck`
-  - per modifiche a `shared/`: `./gradlew check` se Gradle è disponibile, altrimenti
-    dillo nel report.
+## 4. Verifica
 
-## Report
-Alla fine scrivi un report (in chat, e aggiungi una sezione datata in `TODO.md` come per gli
-altri lavori) con:
+- Un problema è **confermato** solo se sai dire: chi è l'attaccante (anonimo, utente normale,
+  utente di un altro tenant, ruolo basso), quale richiesta fa, cosa ottiene. Altrimenti va tra i
+  "da verificare", non tra i problemi.
+- Dove c'è una suite di test, scrivi un test che riproduce il problema (fallisce prima della
+  correzione, passa dopo), nello stile dei test esistenti.
+- Scarta: problemi solo teorici, protezioni già presenti più in alto (middleware, framework,
+  proxy), codice morto o solo di sviluppo, consigli generici senza file e riga.
+
+## 5. Correzione
+
+Salvo l'argomento `report`:
+- Correggi i problemi **Critici** e **Alti** confermati, con la modifica minima, nello stile e
+  nella lingua dei commenti del codice intorno. Spiega nel commento il perché, non il cosa.
+- Preferisci la correzione strutturale (un controllo centralizzato, una query parametrizzata,
+  un helper già esistente) a toppe sparse.
+- Se serve una migrazione di schema, crea un file nuovo e idempotente nel formato del progetto e
+  segnala nel report che va applicato.
+- Non cambiare comportamento visibile oltre il necessario: se una correzione rompe un flusso
+  (per esempio richiede un nuovo login a tutti), dillo prima di farla.
+- Fai girare i controlli del progetto (test, typecheck, lint, build) prima di committare. Se un
+  controllo non si può eseguire nell'ambiente, scrivilo.
+
+## 6. Report
+
+In chat, e se il progetto tiene un diario dei lavori (TODO, CHANGELOG, note) aggiungi lì una
+sezione datata. Formato:
+
+**Superficie analizzata**: stack, punti d'ingresso, ruoli, dati sensibili (3-6 righe).
 
 | Gravità | Area | File:riga | Problema | Scenario d'attacco | Stato |
 |---|---|---|---|---|---|
 
-Gravità: **Critica** (dati di altre classi, identità anonime, account altrui), **Alta**
-(escalation di ruolo, segreti esposti), **Media**, **Bassa**. Stato: corretto (con commit),
-da correggere, da verificare. Elenca anche cosa non è stato controllato e perché.
-Non riportare problemi solo teorici né consigli generici senza un file e una riga.
+- **Critica**: accesso ai dati di altri utenti/tenant, presa di controllo di account, esecuzione
+  di codice, segreti di produzione esposti.
+- **Alta**: escalation di privilegi, XSS memorizzato, SSRF verso rete interna, bypass del rate
+  limit sul login.
+- **Media**: fughe di informazioni limitate, protezioni mancanti con sfruttabilità ridotta.
+- **Bassa**: difese in profondità, hardening.
+
+Stato: corretto (commit), da correggere, da verificare. Chiudi con cosa **non** è stato
+controllato e perché (ambiente, accesso, tempo).
