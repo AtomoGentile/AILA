@@ -61,7 +61,7 @@ fun ClassRosterScreen(
             Text(
                 text = "Valutazioni didattica/comportamento (1-5) e Priority Pass: usati dall'algoritmo " +
                     "quando generi le proposte di Mappa Posti.",
-                fontSize = 12.sp,
+                style = MaterialTheme.typography.bodySmall,
                 color = AppTheme.TextMuted
             )
             Spacer(modifier = Modifier.height(4.dp))
@@ -73,7 +73,7 @@ fun ClassRosterScreen(
                 else
                     "Scegli la Guardia di Sicurezza di un compagno: senza di lei nessuno può chiedere " +
                         "di svelare un autore anonimo.",
-                fontSize = 12.sp,
+                style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = AppTheme.PrimaryBlue
             )
@@ -150,18 +150,18 @@ private fun ClassCodeRow() {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = "Codice classe", fontSize = 12.sp, color = AppTheme.TintBlueInk)
+            Text(text = "Codice classe", style = MaterialTheme.typography.bodySmall, color = AppTheme.TintBlueInk)
             Text(
                 text = code ?: error ?: "…",
-                fontSize = if (code != null) 20.sp else 12.sp,
-                fontWeight = FontWeight.Bold,
+                style = if (code != null) MaterialTheme.typography.titleLarge else MaterialTheme.typography.labelMedium,
                 letterSpacing = if (code != null) 3.sp else 0.sp,
                 color = AppTheme.TintBlueInk
             )
             if (code != null) {
                 Text(
                     text = "Serve ai compagni per registrarsi in questa classe.",
-                    fontSize = 11.sp,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Normal,
                     color = AppTheme.TintBlueInk.copy(alpha = 0.8f)
                 )
             }
@@ -211,9 +211,9 @@ private fun ResetCodeButton(entry: RatingEntryDto) {
     val scope = rememberCoroutineScope()
 
     TextButton(enabled = !busy, onClick = { confirm = true }) {
-        Text(if (busy) "Genero il codice…" else "Password dimenticata? Genera un codice", fontSize = 13.sp)
+        Text(if (busy) "Genero il codice…" else "Password dimenticata? Genera un codice", style = MaterialTheme.typography.bodyMedium)
     }
-    error?.let { Text(text = it, fontSize = 12.sp, color = AppTheme.TintRedInk) }
+    error?.let { Text(text = it, style = MaterialTheme.typography.bodySmall, color = AppTheme.TintRedInk) }
 
     if (confirm) {
         circolareplus.design.AilaConfirmDialog(
@@ -251,13 +251,12 @@ private fun ResetCodeButton(entry: RatingEntryDto) {
             title = { Text("Codice per ${entry.firstName}") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
-                    Text(text = reset.code, fontSize = 26.sp, fontWeight = FontWeight.Bold, letterSpacing = 4.sp, color = AppTheme.TextDark)
+                    Text(text = reset.code, style = MaterialTheme.typography.headlineMedium, letterSpacing = 4.sp, color = AppTheme.TextDark)
                     Text(
                         text = "Username: ${reset.username ?: "—"}. Al login tocca \"Password dimenticata?\" e inserisce " +
                             "username, questo codice e la password nuova. Vale 24 ore e una volta sola.",
-                        fontSize = 13.sp,
-                        color = AppTheme.TextMuted,
-                        lineHeight = 18.sp
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AppTheme.TextMuted
                     )
                 }
             },
@@ -287,16 +286,14 @@ private fun ClassRosterRow(
                 ) {
                     Text(
                         text = "${entry.firstName.take(1)}${entry.lastName.take(1)}",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleSmall,
                         color = AppTheme.TintBlueInk
                     )
                 }
                 Spacer(modifier = Modifier.width(AppTheme.Space12))
                 Text(
                     text = "${entry.firstName} ${entry.lastName}" + if (isSelf) " (Tu)" else "",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleSmall,
                     color = AppTheme.TextDark
                 )
             }
@@ -324,7 +321,7 @@ private fun ClassRosterRow(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = "Priority Pass (prime 3 file)", fontSize = 14.sp, color = AppTheme.TextMuted)
+                Text(text = "Priority Pass (prime 3 file)", style = MaterialTheme.typography.bodyLarge, color = AppTheme.TextMuted)
                 AilaSwitch(
                     checked = entry.priorityPass,
                     onCheckedChange = onPriorityPassChange
@@ -342,7 +339,7 @@ private fun ClassRosterRow(
                 ) {
                     Text(
                         text = "Guardia di Sicurezza (3ª firma)",
-                        fontSize = 14.sp,
+                        style = MaterialTheme.typography.bodyLarge,
                         color = AppTheme.TextMuted,
                         modifier = Modifier.weight(1f)
                     )
@@ -371,7 +368,7 @@ private fun RatingStepper(label: String, value: Int, onValueChange: (Int) -> Uni
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label, fontSize = 14.sp, color = AppTheme.TextMuted)
+        Text(text = label, style = MaterialTheme.typography.bodyLarge, color = AppTheme.TextMuted)
         Row(verticalAlignment = Alignment.CenterVertically) {
             // 44dp come gli altri pulsanti-icona (erano 28: troppo piccoli per il pollice), spenti ai
             // limiti della scala e con un nome per lo screen reader al posto di "meno"/"più".
@@ -382,15 +379,13 @@ private fun RatingStepper(label: String, value: Int, onValueChange: (Int) -> Uni
             ) {
                 Text(
                     text = "−",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge,
                     color = if (value > 1) AppTheme.PrimaryBlue else AppTheme.TextFaint
                 )
             }
             Text(
                 text = "$value",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleSmall,
                 color = AppTheme.TextDark,
                 modifier = Modifier.padding(horizontal = AppTheme.Space8)
             )
@@ -401,8 +396,7 @@ private fun RatingStepper(label: String, value: Int, onValueChange: (Int) -> Uni
             ) {
                 Text(
                     text = "+",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge,
                     color = if (value < 5) AppTheme.PrimaryBlue else AppTheme.TextFaint
                 )
             }
@@ -433,8 +427,7 @@ private fun DisciplinePairsCard(
         Column(modifier = Modifier.padding(AppTheme.Space16)) {
             Text(
                 text = "Coppie da separare",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleSmall,
                 color = AppTheme.TextDark
             )
             Spacer(modifier = Modifier.height(4.dp))
@@ -442,9 +435,8 @@ private fun DisciplinePairsCard(
                 text = "Per chi insieme fa caos ma con altri e' tranquillo. La Mappa Posti evita di " +
                     "metterli nello stesso banco, senza bloccare la rotazione. Lo vedono solo i " +
                     "Rappresentanti e scade da solo.",
-                fontSize = 12.sp,
-                color = AppTheme.TextMuted,
-                lineHeight = 16.sp
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTheme.TextMuted
             )
             pairs.forEach { pair ->
                 Spacer(modifier = Modifier.height(AppTheme.Space8))
@@ -455,13 +447,13 @@ private fun DisciplinePairsCard(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "${names[pair.studentA] ?: "?"} + ${names[pair.studentB] ?: "?"}",
-                            fontSize = 14.sp,
+                            style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = AppTheme.TextDark
                         )
                         Text(
                             text = "Fino al ${italianDate(pair.expiresAt)}",
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.bodySmall,
                             color = AppTheme.TextMuted
                         )
                     }
@@ -513,7 +505,7 @@ private fun AddDisciplinePairDialog(
             Column {
                 Text(
                     text = "Scegli due compagni.",
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = AppTheme.TextMuted
                 )
                 Spacer(modifier = Modifier.height(AppTheme.Space8))
@@ -541,7 +533,7 @@ private fun AddDisciplinePairDialog(
                         ) {
                             Text(
                                 text = "${entry.firstName} ${entry.lastName}",
-                                fontSize = 14.sp,
+                                style = MaterialTheme.typography.titleSmall,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                 color = if (isSelected) AppTheme.TintBlueInk else AppTheme.TextDark,
                                 modifier = Modifier.weight(1f)
@@ -553,7 +545,7 @@ private fun AddDisciplinePairDialog(
                     }
                 }
                 Spacer(modifier = Modifier.height(AppTheme.Space12))
-                Text(text = "Per quanto tempo", fontSize = 13.sp, color = AppTheme.TextMuted)
+                Text(text = "Per quanto tempo", style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
                 Spacer(modifier = Modifier.height(4.dp))
                 AilaSegmentedTabs(
                     labels = PAIR_DURATIONS.map { it.first },
