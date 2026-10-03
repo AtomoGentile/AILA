@@ -3,6 +3,39 @@
 Elenco vivo dei problemi aperti e del lavoro ancora mancante, aggiornato mano a mano.
 Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esistente.
 
+## 3/10: motore AI (instradamento, AICore su ML Kit, CI)
+
+Verificato solo dalla CI "Android Build" (compilazione, test di `:shared`, APK): **niente di
+questo giro e' stato provato su un telefono**.
+
+Fatto:
+- **CI**: passo "AI engine tests" (`--tests 'circolareplus.ai.*'`) prima dei test completi di
+  `:shared`, report HTML come artifact `shared-test-report`, totali dei test nella pagina del run
+  e nel log, `concurrency` che ferma i run vecchi sullo stesso ref.
+- **Pausa di AICore** (`AiCoreCooldown` in `AiRouting.kt`): dopo QUOTA, BACKGROUND, BUSY (finiti i
+  ritentativi), NOT_AVAILABLE/FEATURE_NOT_FOUND o NEEDS_SYSTEM_UPDATE AICore si salta per 5 minuti;
+  `planAiRoute` passa a un modello LiteRT-LM gia' scaricato, poi al cloud, e senza nessuno dei due
+  spiega la pausa. Una generazione riuscita (anche "Prova" nelle Impostazioni) la chiude. La pausa
+  vive in memoria: un riavvio dell'app riparte da AICore.
+- **AICore su ML Kit GenAI Prompt API** (`com.google.mlkit:genai-prompt:1.0.0-beta4`) al posto di
+  `com.google.ai.edge.aicore:aicore:0.0.1-exp02`. `checkStatus()` dice se Gemini Nano c'e', va
+  scaricato o si sta scaricando: tolti il flag `prepared` nelle SharedPreferences, la prova
+  "Rispondi solo: OK" e il riconoscimento di NOT_AVAILABLE dal solo testo. Stati ed errori si
+  traducono in `AiCoreStatus.kt` (commonMain, `AiCoreStatusTest`). Stessa interfaccia verso
+  l'app, stessi ritentativi sugli errori passeggeri, stesso "testo vuoto" per `LocalAiClassifier`,
+  stesso mutex della coda unica.
+
+Da provare su un telefono con Gemini Nano (Pixel 9/10, Galaxy S25/S26...):
+- "Attiva" AICore: stato disponibile / download con barra di avanzamento / non disponibile.
+- Analisi di una circolare e chat con AICore; risposta vuota → secondo giro con il prompt
+  compatto; app in background → BACKGROUND_USE_BLOCKED, pausa e passaggio al motore successivo.
+- Primo avvio con AICore scelto: `isAvailable()` sul thread principale risponde `false` finche'
+  `checkStatus()` non ha risposto (in sottofondo); le Impostazioni potrebbero mostrare "Attiva"
+  per un attimo.
+- La beta3 di ML Kit chiedeva ad AICore una funzione inesistente (googlesamples/mlkit#1061,
+  errore 606-FEATURE_NOT_FOUND); la beta4 dice di correggere la compatibilita' con Gemini Nano v4
+  e i telefoni non Pixel: da confermare in campo.
+
 ## Evento AI → circolare (migrazione 015)
 
 Gli eventi inseriti da AILA Assistant ricordano la circolare da cui nascono (`calendar_events.circular_number`,
@@ -277,9 +310,8 @@ Fatto:
   `PassageSelectorTest` (verificati su una copia Python della stessa logica, non con Gradle).
 
 Non fatto / da valutare:
-- AICore: la libreria `0.0.1-exp02` e' sperimentale e funziona su pochi telefoni. La strada
-  ufficiale per Gemini Nano nelle app e' ML Kit GenAI (Prompt API), con un controllo di stato
-  esplicito: migrazione da fare con una build vera sotto mano.
+- ~~AICore: migrazione a ML Kit GenAI (Prompt API)~~: fatta il 3/10 (vedi sopra), da provare
+  su un telefono.
 - Prova di velocita' del modello locale prima di attivarlo (per ora c'e' solo l'etichetta Beta).
 
 ## 21/9: allineamento Android/iOS (branch `parita-android-ios`)
@@ -321,7 +353,8 @@ Fatto:
 Non fatto / limiti:
 - Push iOS: senza account Apple a pagamento non ricevono nulla (niente capability APNs).
 - Sync in background iOS (`BGAppRefreshTask`): non fatto, non verificabile qui.
-- AICore Android: non e' mai il modello consigliato e il suo stato si perde al riavvio.
+- AICore Android: non e' mai il modello consigliato. (Lo stato non si perde piu' al riavvio: dal
+  3/10 lo dice `checkStatus()` di ML Kit.)
 - Il retry sul contesto pieno esiste solo nell'assistente, non in classificazione/eventi.
 - Status bar Android non legata al tema in-app: la barra ha un colore di sistema fisso, icone scure
   sarebbero illeggibili.
