@@ -1,11 +1,6 @@
 package circolareplus.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -256,8 +251,8 @@ fun AuthScreen(
 
                     AnimatedVisibility(
                         visible = errorMessage != null,
-                        enter = fadeIn() + expandVertically(),
-                        exit = fadeOut() + shrinkVertically()
+                        enter = circolareplus.design.ailaExpandEnter(),
+                        exit = circolareplus.design.ailaCollapseExit()
                     ) {
                         Row(
                             modifier = Modifier
@@ -284,8 +279,8 @@ fun AuthScreen(
 
                     AnimatedVisibility(
                         visible = isRegisterMode,
-                        enter = fadeIn(tween(180)) + expandVertically(tween(220)),
-                        exit = fadeOut(tween(120)) + shrinkVertically(tween(200))
+                        enter = circolareplus.design.ailaExpandEnter(),
+                        exit = circolareplus.design.ailaCollapseExit()
                     ) {
                         Column {
                             Row(
@@ -318,8 +313,8 @@ fun AuthScreen(
 
                             AnimatedVisibility(
                                 visible = joiningExistingClass || classCodeAsked,
-                                enter = fadeIn(tween(180)) + expandVertically(tween(220)),
-                                exit = fadeOut(tween(120)) + shrinkVertically(tween(200))
+                                enter = circolareplus.design.ailaExpandEnter(),
+                                exit = circolareplus.design.ailaCollapseExit()
                             ) {
                                 Column {
                                     Spacer(modifier = Modifier.height(AppTheme.Space12))
@@ -333,7 +328,7 @@ fun AuthScreen(
                                             autoCorrectEnabled = false
                                         )
                                     )
-                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Spacer(modifier = Modifier.height(AppTheme.Space4))
                                     Text(
                                         text = "Te lo dà il Rappresentante: lo trova nella Scheda Classe.",
                                         fontSize = 11.sp,
@@ -388,7 +383,7 @@ fun AuthScreen(
                             // conoscono e non ruba spazio alla password.
                             Box(
                                 modifier = Modifier
-                                    .padding(end = 4.dp)
+                                    .padding(end = AppTheme.Space4)
                                     .size(40.dp)
                                     .clip(RoundedCornerShape(8.dp))
                                     .clickable { isPasswordVisible = !isPasswordVisible }
@@ -409,8 +404,8 @@ fun AuthScreen(
 
                     AnimatedVisibility(
                         visible = !isRegisterMode,
-                        enter = fadeIn(tween(180)) + expandVertically(tween(220)),
-                        exit = fadeOut(tween(120)) + shrinkVertically(tween(200))
+                        enter = circolareplus.design.ailaExpandEnter(),
+                        exit = circolareplus.design.ailaCollapseExit()
                     ) {
                         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
                             TextButton(onClick = { showResetDialog = true }) {
@@ -421,8 +416,8 @@ fun AuthScreen(
 
                     AnimatedVisibility(
                         visible = isRegisterMode,
-                        enter = fadeIn(tween(180)) + expandVertically(tween(220)),
-                        exit = fadeOut(tween(120)) + shrinkVertically(tween(200))
+                        enter = circolareplus.design.ailaExpandEnter(),
+                        exit = circolareplus.design.ailaCollapseExit()
                     ) {
                         Column {
                             Spacer(modifier = Modifier.height(AppTheme.Space12))
@@ -436,7 +431,7 @@ fun AuthScreen(
                                     autoCorrectEnabled = false
                                 )
                             )
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.height(AppTheme.Space4))
                             Text(
                                 text = "Solo per i Rappresentanti eletti: il codice vale per la classe scelta sopra e una volta sola. Lascialo vuoto se ti registri come studente.",
                                 fontSize = 11.sp,
@@ -670,9 +665,9 @@ private fun HeightPicker(
                 fontWeight = FontWeight.Bold,
                 color = AppTheme.TintBlueInk,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
+                    .clip(RoundedCornerShape(AppTheme.ButtonCornerRadius))
                     .background(AppTheme.TintBlue)
-                    .padding(horizontal = 12.dp, vertical = 5.dp)
+                    .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space4)
             )
         }
 
@@ -734,13 +729,15 @@ private fun ClassPicker(
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                         color = if (isSelected) Color.White else AppTheme.TextMuted,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
+                            .clip(RoundedCornerShape(AppTheme.ButtonCornerRadius))
                             .then(
                                 if (isSelected) Modifier.background(AppTheme.PrimaryGradient)
                                 else Modifier.background(AppTheme.TintSlate)
                             )
                             .clickable { onValueChange(option.label) }
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                            // 44dp di altezza: con 8dp sopra e sotto la chip della classe era
+                            // alta circa 34dp, difficile da centrare col pollice.
+                            .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12)
                     )
                 }
             }
@@ -755,7 +752,7 @@ private fun ClassPicker(
             modifier = Modifier.fillMaxWidth()
         )
 
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(AppTheme.Space4))
 
         Text(
             text = "Vedrai circolari, bacheca, calendario e mappa posti di questa classe soltanto.",
