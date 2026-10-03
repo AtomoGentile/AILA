@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import circolareplus.design.AilaGlyphBuilding
 import circolareplus.design.AilaMarkBuildSeconds
+import circolareplus.design.AppTheme
 import kotlin.math.PI
 import kotlin.math.sin
 
@@ -41,9 +42,6 @@ fun isAilaIntroPending(): Boolean = !ailaIntroPlayed
 
 /** Fine dell'intro: il segno è costruito e la scritta "AILA" è entrata tutta. */
 private const val IntroSeconds = 1.7f
-
-/** Lo stesso blu notte dello splash di sistema (themes.xml su Android, LaunchBackground su iOS). */
-private val SplashNavy = Color(0xFF0A1330)
 
 /**
  * Fa avanzare [clock] fotogramma per fotogramma fino a [until] secondi. Ogni passo vale al massimo
@@ -125,6 +123,8 @@ fun AilaLoadingScreen(
         breath.animateFloat(
             initialValue = 0f,
             targetValue = 2f * PI.toFloat(),
+            // `tween` a mano: infiniteRepeatable vuole una specifica a durata e il vocabolario di
+            // AilaMotion non ne ha; con il movimento ridotto questo ramo non viene creato.
             animationSpec = infiniteRepeatable(tween(2200, easing = LinearEasing)),
             label = "faseRespiro"
         )
@@ -135,15 +135,17 @@ fun AilaLoadingScreen(
         modifier = Modifier
             .fillMaxSize()
             // Stesso gradiente dell'onboarding: prima erano due blu notte scritti a mano qui.
-            .background(circolareplus.design.AppTheme.HeroGradientDeep),
+            .background(AppTheme.HeroGradientDeep),
         contentAlignment = Alignment.Center
     ) {
-        // Il blu pieno dello splash che si scioglie nel gradiente.
+        // Il blu pieno dello splash che si scioglie nel gradiente. Il colore sta in AppTheme
+        // (SplashBackground) accanto agli altri, ma deve restare uguale a quello dello splash di
+        // sistema (themes.xml su Android, LaunchBackground su iOS).
         Box(
             modifier = Modifier
                 .matchParentSize()
                 .graphicsLayer { alpha = 1f - reveal(0f, 0.6f) }
-                .background(SplashNavy)
+                .background(AppTheme.SplashBackground)
         )
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             AilaGlyphBuilding(
@@ -156,8 +158,9 @@ fun AilaLoadingScreen(
                     scaleY = scale
                 }
             )
-            Spacer(modifier = Modifier.height(22.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            // 20 e non 24 (prima 22, fuori griglia): marchio e scritta sono un'unità sola.
+            Spacer(modifier = Modifier.height(AppTheme.Space20))
+            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space4)) {
                 "AILA".forEachIndexed { i, letter ->
                     Text(
                         text = letter.toString(),
@@ -172,11 +175,11 @@ fun AilaLoadingScreen(
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(AppTheme.Space8))
             Text(
                 text = "La vita di classe, in un'app.",
                 fontSize = 15.sp,
-                color = Color(0xCCFFFFFF),
+                color = AppTheme.OnGradientSecondary,
                 modifier = Modifier.graphicsLayer {
                     val p = reveal(1.25f, 0.45f)
                     alpha = p
@@ -189,17 +192,19 @@ fun AilaLoadingScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.graphicsLayer { alpha = reveal(IntroSeconds + 0.1f, 0.3f) }
             ) {
-                Spacer(modifier = Modifier.height(28.dp))
+                // 32 e non 24 (prima 28, fuori griglia): l'attesa è un gruppo a parte rispetto
+                // al marchio, e il distacco più ampio lo dice.
+                Spacer(modifier = Modifier.height(AppTheme.Space32))
                 CircularProgressIndicator(
                     modifier = Modifier.size(22.dp),
                     color = Color.White,
                     strokeWidth = 2.dp
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(AppTheme.Space12))
                 Text(
                     text = message,
                     fontSize = 13.sp,
-                    color = Color(0xCCFFFFFF)
+                    color = AppTheme.OnGradientSecondary
                 )
             }
         }
