@@ -272,6 +272,28 @@ object AppTheme {
     /** Testo sopra i colori dei sondaggi e delle preferenze (pastelli e rossi): scuro fisso in
      *  ogni tema, perche' il bianco sui pastelli stava a 1.5:1. */
     val OnPollColor = Color(0xFF0F172A)
+
+    // --- Voti delle preferenze sociali (+1, 0, -1, -2; il +2 e' PollGreen) --------------------
+    val PrefPlusOne = Color(0xFF86EFAC)
+    val PrefNeutral = Color(0xFFCBD5E1)
+    val PrefMinusOne = Color(0xFFFCA5A5)
+    val PrefMinusTwo = Color(0xFFEF4444)
+
+    // --- Superfici che erano scritte nelle schermate ------------------------------------------
+    /** Pavimento sotto i banchi della mappa posti (Material "surface container"). */
+    val DeskFloor get() = if (isDarkMode) Color(0xFF22252C) else Color(0xFFECEEF8)
+    /** Banco evidenziato nella mappa posti. */
+    val DeskFocused get() = if (isDarkMode) Color(0xFF5C4200) else Color(0xFFFFDDB3)
+    /** Riquadro pieno piu' marcato (Material "surface container highest"). */
+    val SurfaceContainerHighest get() = if (isDarkMode) Color(0xFF2E3138) else Color(0xFFE1E3EE)
+    /** Riempimento della voce scelta in Material: lo stesso di [SelectionFill], come colore. */
+    val SelectionContainer get() = if (accent != AilaAccent.BLUE) AccentContainer
+        else if (isDarkMode) Color(0xFF34457A) else Color(0xFFD9E2FF)
+    /** Riempimento della voce scelta in Liquid Glass sopra un binario. */
+    val GlassSelectionTint get() = if (isDarkMode) Color(0x33FFFFFF) else Color(0x1A767680)
+    /** Testo secondario e velo bianco su un gradiente scuro, uguali in ogni stile (splash, pannelli). */
+    val OnGradientSecondary = Color(0xCCFFFFFF)
+    val OnGradientSurface = Color(0x2EFFFFFF)
 }
 
 /** Interpolazione lineare tra due colori (usata per derivare i toni dall'accento scelto). */
