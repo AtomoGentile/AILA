@@ -1,238 +1,209 @@
 package circolareplus.ai
 
 import android.os.Build
+import android.os.Looper
 import circolareplus.platform.AndroidAppContext
-import com.google.ai.edge.aicore.DownloadCallback
-import com.google.ai.edge.aicore.DownloadConfig
-import com.google.ai.edge.aicore.GenerationConfig
-import com.google.ai.edge.aicore.GenerateContentResponse
-import com.google.ai.edge.aicore.GenerativeAIException
-import com.google.ai.edge.aicore.GenerativeModel
-import com.google.ai.edge.aicore.TextPart
+import com.google.mlkit.genai.common.DownloadStatus
+import com.google.mlkit.genai.common.FeatureStatus
+import com.google.mlkit.genai.common.GenAiException
+import com.google.mlkit.genai.prompt.Candidate
+import com.google.mlkit.genai.prompt.GenerateContentResponse
+import com.google.mlkit.genai.prompt.Generation
+import com.google.mlkit.genai.prompt.GenerativeModel
+import com.google.mlkit.genai.prompt.TextPart
+import com.google.mlkit.genai.prompt.generateContentRequest
+import com.google.mlkit.genai.prompt.generationConfig
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
-import java.util.concurrent.Executors
 
 /**
- * Tier 1 Android: Gemini Nano di sistema via **AICore** (`com.google.ai.edge.aicore`).
+ * Tier 1 Android: Gemini Nano di sistema via **ML Kit GenAI Prompt API**
+ * (`com.google.mlkit:genai-prompt`), che parla con AICore.
  *
- * Scritta contro l'API reale documentata su
- * developer.android.com/ai/reference/com/google/ai/edge/aicore (classi/metodi verificati con una
- * ricerca web il 20/9/2026: `GenerativeModel`, `GenerationConfig.Builder`,
- * `DownloadConfig(DownloadCallback)`, `DownloadCallback` con `onDownloadStarted/Progress/
- * Completed/Failed/DidNotStart/Pending`, `GenerateContentResponse.getText()`). **Non è mai stata
- * compilata né eseguita**: questo ambiente non ha un dispositivo Android con AICore, e la
- * dipendenza Gradle è stata attivata solo ora (coordinate confermate su mvnrepository.com, non
- * più una supposizione) — la prima verifica reale resta `:androidApp:assembleDebug` su una
- * macchina vera.
+ * Prima si usava `com.google.ai.edge.aicore:aicore:0.0.1-exp02`, sperimentale e ferma da marzo
+ * 2025, che funzionava su pochi telefoni e non aveva un modo di chiedere "Gemini Nano c'e'?":
+ * lo si scopriva preparando il motore e facendo una generazione di prova ("Rispondi solo: OK"),
+ * si teneva un flag `prepared` nelle SharedPreferences per non perderlo al riavvio e si
+ * riconosceva NOT_AVAILABLE dal testo dell'errore. ML Kit ha `checkStatus()` (disponibile, da
+ * scaricare, in scaricamento, non disponibile) e `download()`: niente flag, niente prova.
  *
- * **Non esiste un metodo di stato** ("è disponibile?") separato in `GenerativeModel`: la
- * disponibilità si scopre chiamando [prepareInferenceEngine], che scarica il modello di sistema
- * se serve (da cui il collegamento con [LocalModelStore.download] — "scaricare" AICore è
- * letteralmente prepararlo la prima volta, non un file gestito da questa app).
+ * Classi e metodi usati sono quelli della documentazione ufficiale e del sample
+ * googlesamples/mlkit (android/genai, OpenPromptActivity) per la 1.0.0-beta4:
+ * `Generation.getClient()`, `checkStatus()`, `download()` con `DownloadStatus`,
+ * `generateContentRequest(TextPart(...)) { temperature; topK; maxOutputTokens; candidateCount }`,
+ * `generateContent`, `generateContentStream`, `Candidate.text`/`finishReason`. **Compilata
+ * solo dalla CI, mai provata su un telefono**: vedi TODO.md.
  *
- * **AICore è stateless**: a differenza di Apple Intelligence (che mantiene una sessione con
- * storico lato Swift) non c'è conversazione — [generate] concatena system+user prompt a ogni
- * chiamata, esattamente come indicato nel piano di partenza.
+ * La traduzione di stati ed errori in [AiCoreState]/[AiCoreFailure] sta in commonMain
+ * ([AiCoreStatusMapper]), cosi' si prova con i test comuni; qui si convertono solo le costanti
+ * dell'SDK.
  *
- * **Risposta vuota su un prompt che chiede JSON puro** (segnalato in campo: `response.text` torna
- * `""`, non `null`, quindi nessuna eccezione — il fallimento emergeva solo piu' avanti, in
- * [LocalAiClassifier], come "non ha risposto in JSON" senza alcun dettaglio dopo i due punti).
- * [generate] ora lancia un errore che riporta `finishReason` e la lunghezza del prompt. Prima
- * ritentava con un promemoria sul formato, ma rimandare lo stesso prompt non cambia niente se la
- * causa e' la lunghezza o un filtro: il ritentativo utile (meno testo di PDF) sta in
- * [LocalAiClassifier], che riconosce "testo vuoto" nel messaggio.
+ * **Prompt senza stato**: system e user prompt concatenati a ogni chiamata, come con la
+ * libreria di prima (verificato in campo su un S26 Ultra). Le istruzioni di sistema separate
+ * esistono solo dalla beta3, e la beta3 chiedeva ad AICore una funzione che i telefoni non
+ * avevano (googlesamples/mlkit#1061): meglio non dipenderne.
+ *
+ * **Risposta vuota su un prompt che chiede JSON puro** (segnalato in campo: testo `""`, nessuna
+ * eccezione). [generate] lancia un errore che riporta `finishReason` e la lunghezza del prompt e
+ * comincia con "testo vuoto": il ritentativo utile (meno testo di PDF) sta in
+ * [LocalAiClassifier], che lo riconosce.
  */
 internal object AiCoreEngine {
 
     @Volatile
     private var model: GenerativeModel? = null
 
+    /** Ultimo stato letto da `checkStatus()`, `null` finche' non lo si e' chiesto. */
+    @Volatile
+    private var lastState: AiCoreState? = null
+
     @Volatile
     private var lastFailureReason: String? = null
 
-    // Richiesti (non-null) da GenerationConfig.Builder. Un solo thread per i callback di
-    // download (eventi rari e in ordine), un pool piccolo per il lavoro dell'engine.
-    private val callbackExecutor = Executors.newSingleThreadExecutor()
-    private val workerExecutor = Executors.newFixedThreadPool(2)
+    /** Per rileggere lo stato senza bloccare chi chiama [isAvailable] dal thread principale. */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** Pausa prima di ritentare un errore passeggero del servizio (vedi [generate]). */
-    private const val TRANSIENT_RETRY_DELAY_MS = 1_500L
+    @Volatile
+    private var refreshing = false
 
-    /** Tentativi in tutto per un errore passeggero: la pausa cresce a ogni giro (1,5 s, 3 s). */
-    private const val TRANSIENT_ATTEMPTS = 3
+    @Volatile
+    private var lastStateAt = 0L
 
     /**
-     * Codici di errore AICore che riprovare subito non risolve. Confrontati per nome e non per
-     * numero: il messaggio dell'SDK e' "error code N-NOME", e i numeri non sono documentati.
+     * Ogni quanto rileggere lo stato in sottofondo: [isAvailable] la chiedono anche le
+     * Impostazioni a ogni ridisegno, e una chiamata ad AICore per ognuno sarebbe sprecata.
      */
-    private val PERMANENT_CODES = listOf(
-        "NOT_AVAILABLE", "REQUEST_TOO_LARGE", "REQUEST_TOO_SMALL", "QUOTA", "BACKGROUND",
-        "NEEDS_SYSTEM_UPDATE", "NOT_ENOUGH_DISK_SPACE", "PRIVATE_MODE"
-    )
+    private const val STATE_MAX_AGE_MS = 30_000L
 
-    /** Tempo concesso alla generazione di prova durante "Attiva". */
-    private const val PROBE_TIMEOUT_MS = 30_000L
-
-    private const val PREFS = "aicore"
-    private const val KEY_PREPARED = "prepared"
+    /** Tetto alla lettura dello stato quando si puo' aspettare (fuori dal thread principale). */
+    private const val STATUS_TIMEOUT_MS = 2_000L
 
     /**
-     * `true` se AICore e' pronto **o lo e' stato in un avvio precedente**.
+     * `true` se Gemini Nano e' scaricato e pronto, secondo l'ultimo `checkStatus()`.
      *
-     * Prima valeva solo `model != null`, cioe' lo stato in memoria del processo: dopo ogni
-     * riavvio dell'app AICore risultava "non installato" anche se il modello di sistema era
-     * pronto da tempo, `LocalModelStore.installedPath` restituiva `null`, il classificatore
-     * dichiarava "nessun modello locale" e la catena passava al cloud (Gemini Flash) senza mai
-     * provare AICore. Il flag persistente dice che la preparazione e' gia' andata a buon fine;
-     * [generate] ricrea il `GenerativeModel` da solo alla prima chiamata.
+     * Sincrona perche' la chiede [LocalModelStore.isInstalled]. La prima volta nel processo lo
+     * stato non c'e' ancora: fuori dal thread principale (analisi, Worker) lo si legge subito,
+     * con un tetto di [STATUS_TIMEOUT_MS]; sul thread principale (Impostazioni) si risponde con
+     * quello che si sa e lo si rilegge in sottofondo, per non bloccare l'interfaccia.
      */
-    fun isAvailable(): Boolean = model != null || wasPreparedBefore()
-
-    private fun wasPreparedBefore(): Boolean = try {
-        AndroidAppContext.getOrNull()
-            ?.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
-            ?.getBoolean(KEY_PREPARED, false) == true
-    } catch (e: Exception) {
-        false
-    }
-
-    private fun rememberPrepared(prepared: Boolean) {
-        try {
-            AndroidAppContext.getOrNull()
-                ?.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
-                ?.edit()?.putBoolean(KEY_PREPARED, prepared)?.apply()
-        } catch (e: Exception) {
-            // Solo un'ottimizzazione: senza flag si torna al comportamento di prima.
+    fun isAvailable(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
+        lastState?.let {
+            refreshAsync()
+            return AiCoreStatusMapper.canGenerate(it)
         }
-    }
-
-    /**
-     * Messaggio leggibile per un errore di AICore.
-     *
-     * "AICore failed with error type 2-INFERENCE_ERROR and error code 8-NOT_AVAILABLE: Required
-     * LLM feature not found" (visto sul campo con AICore installato e attivo) non vuol dire che
-     * AICore manchi. Sul telefono di prova Gemini Nano aveva sempre funzionato, quindi puo' essere
-     * passeggero: il messaggio non lo dichiara definitivo.
-     */
-    private fun describe(e: Throwable): String {
-        val raw = "${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}"
-        return if (isFeatureMissing(raw)) {
-            "AICore ha risposto NOT_AVAILABLE: Gemini Nano in questo momento non e' " +
-                "utilizzabile (puo' essere passeggero: modello in aggiornamento o occupato). " +
-                "Riprova fra poco; se persiste, scegli un altro modello. Dettaglio: $raw"
-        } else {
-            raw
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            refreshAsync()
+            return false
         }
+        val state = runBlocking { withTimeoutOrNull(STATUS_TIMEOUT_MS) { readState() } }
+        return state != null && AiCoreStatusMapper.canGenerate(state)
     }
 
-    private fun isFeatureMissing(message: String): Boolean =
-        message.contains("NOT_AVAILABLE") || message.contains("feature not found", ignoreCase = true)
-
-    /**
-     * Dopo un errore che dice "non supportato" AICore non va piu' considerato pronto: prima il
-     * flag persistente restava vero e l'app continuava a sceglierlo e a fallire a ogni analisi.
-     */
-    private fun forgetIfUnsupported(message: String) {
-        if (!isFeatureMissing(message)) return
-        model = null
-        rememberPrepared(false)
+    private fun refreshAsync() {
+        if (refreshing) return
+        if (lastState != null && System.currentTimeMillis() - lastStateAt < STATE_MAX_AGE_MS) return
+        refreshing = true
+        scope.launch {
+            try {
+                readState()
+            } finally {
+                refreshing = false
+            }
+        }
     }
 
     fun unavailableReason(): String =
-        lastFailureReason ?: "AICore non ancora preparato: scaricalo dalle Impostazioni."
+        lastFailureReason ?: "AICore non ancora preparato: attivalo dalle Impostazioni."
+
+    // Configurazione vuota come nel sample ufficiale: temperatura e tetto ai token vanno per
+    // richiesta (vedi generateOnce).
+    private fun client(): GenerativeModel =
+        model ?: Generation.getClient(generationConfig {}).also { model = it }
+
+    /** Chiede lo stato ad AICore e lo ricorda. Non lancia: un errore diventa [AiCoreState.Failed]. */
+    private suspend fun readState(): AiCoreState {
+        val state = try {
+            AiCoreStatusMapper.fromFeatureStatus(featureStatusOf(client().checkStatus()))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // checkStatus stesso puo' lanciare (visto in campo: "606-FEATURE_NOT_FOUND" sui
+            // telefoni senza la funzione richiesta).
+            AiCoreState.Failed(failureOf(e))
+        }
+        lastState = state
+        lastStateAt = System.currentTimeMillis()
+        when (state) {
+            is AiCoreState.Unavailable -> lastFailureReason = state.message
+            is AiCoreState.Failed -> lastFailureReason = state.failure.message
+            AiCoreState.Available -> lastFailureReason = null
+            else -> Unit
+        }
+        return state
+    }
 
     /**
-     * Prepara il motore AICore, scaricando il modello di sistema se necessario. Chiamata da
-     * [LocalModelStore.download] quando l'utente tocca "Scarica" sulla voce AICore delle
-     * Impostazioni — con AICore quel tasto non scarica un file nostro, avvia proprio questa
-     * preparazione.
+     * Prepara Gemini Nano, scaricandolo se serve. Chiamata da [LocalModelStore.download] quando
+     * l'utente tocca "Attiva" sulla voce AICore delle Impostazioni: con AICore quel tasto non
+     * scarica un file nostro, chiede al sistema il modello.
      */
     suspend fun prepare(maxOutputTokens: Int, onProgress: (downloaded: Long, total: Long) -> Unit): Boolean {
-        model?.let { return true }
-        // La libreria richiede API 31 (l'app parte da 26, con override nel manifest): sotto, non
-        // va nemmeno toccata, o le sue classi lancerebbero al primo uso.
+        // AICore esiste solo da Android 12 in su (l'app parte da 26, con override nel manifest):
+        // sotto, le classi di ML Kit non vanno nemmeno toccate.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
             lastFailureReason = "AICore richiede Android 12 o successivo."
             return false
         }
-        val context = AndroidAppContext.getOrNull() ?: run {
+        if (AndroidAppContext.getOrNull() == null) {
             lastFailureReason = "AI locale non ancora inizializzata."
             return false
         }
+        val state = readState()
+        if (AiCoreStatusMapper.canGenerate(state)) return true
+        if (!AiCoreStatusMapper.needsDownload(state)) return false
+        return download(onProgress)
+    }
 
-        val outcome = CompletableDeferred<Boolean>()
-        val callback = object : DownloadCallback {
-            override fun onDownloadStarted(bytesToDownload: Long) {
-                onProgress(0L, bytesToDownload)
+    private suspend fun download(onProgress: (downloaded: Long, total: Long) -> Unit): Boolean {
+        var completed = false
+        try {
+            client().download().collect { status ->
+                when (status) {
+                    is DownloadStatus.DownloadStarted -> onProgress(0L, status.bytesToDownload)
+                    // Il totale non arriva a ogni avanzamento: -1 = "totale invariato", chi
+                    // osserva onProgress tiene l'ultimo valido.
+                    is DownloadStatus.DownloadProgress -> onProgress(status.totalBytesDownloaded, -1L)
+                    is DownloadStatus.DownloadCompleted -> {
+                        completed = true
+                        onProgress(1L, 1L)
+                    }
+                    is DownloadStatus.DownloadFailed -> {
+                        lastFailureReason = failureOf(status.e).message
+                    }
+                }
             }
-
-            override fun onDownloadProgress(totalBytesDownloaded: Long) {
-                // Il totale non è noto ad ogni progress: -1 segnala "totale sconosciuto in
-                // questo aggiornamento", chi osserva onProgress tiene l'ultimo totale valido.
-                onProgress(totalBytesDownloaded, -1L)
-            }
-
-            override fun onDownloadCompleted() {
-                onProgress(1L, 1L)
-            }
-
-            override fun onDownloadFailed(failureStatus: String, e: GenerativeAIException) {
-                lastFailureReason = "$failureStatus: ${e.message ?: e::class.simpleName}"
-                outcome.complete(false)
-            }
-
-            override fun onDownloadDidNotStart(e: GenerativeAIException) {
-                lastFailureReason = e.message ?: (e::class.simpleName ?: "download non avviato")
-                outcome.complete(false)
-            }
-        }
-
-        return try {
-            // Il Builder di 0.0.1-exp02 espone proprietà (var), non setter concatenabili: i
-            // metodi setX() restituiscono Unit.
-            val generationConfig = GenerationConfig.Builder().apply {
-                this.context = context
-                this.maxOutputTokens = maxOutputTokens
-                // Senza questi il campionamento e' quello di default, pensato per la
-                // conversazione: qui serve quasi sempre un JSON, e la temperatura alta lo rompe.
-                // Valori dell'esempio ufficiale di AICore.
-                this.temperature = 0.2f
-                this.topK = 16
-                this.candidateCount = 1
-                this.callbackExecutor = this@AiCoreEngine.callbackExecutor
-                this.workerExecutor = this@AiCoreEngine.workerExecutor
-            }.build()
-            val candidate = GenerativeModel(generationConfig, DownloadConfig(callback))
-            candidate.prepareInferenceEngine()
-            if (!outcome.isCompleted) outcome.complete(true)
-            if (!outcome.await()) {
-                rememberPrepared(false)
-                return false
-            }
-            // Motore pronto non vuol dire modello utilizzabile: su alcuni telefoni la
-            // preparazione riesce e poi ogni generazione fallisce con NOT_AVAILABLE. Una prova
-            // minuscola qui fa fallire subito "Attiva", con il motivo, invece di ogni analisi.
-            probe(candidate)
-            model = candidate
-            rememberPrepared(true)
-            true
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            lastFailureReason = describe(e)
-            model = null
-            rememberPrepared(false)
-            false
+            lastFailureReason = failureOf(e).message
+            return false
         }
+        if (!completed) return false
+        return AiCoreStatusMapper.canGenerate(readState())
     }
 
     /**
-     * @throws IllegalStateException se AICore non è ancora stato preparato — [LocalLlm]
-     * intercetta e ricade sul modello LiteRT-LM, esattamente come già fa per un fallimento GPU.
+     * @throws IllegalStateException se Gemini Nano non e' pronto o la generazione fallisce:
+     * [LocalAiClassifier] lo trasforma nel ripiego, e il messaggio contiene il nome del codice
+     * (lo usa [AiCoreCooldown]).
      */
     suspend fun generate(
         systemPrompt: String,
@@ -240,117 +211,73 @@ internal object AiCoreEngine {
         timeoutMillis: Long,
         maxOutputTokens: Int
     ): String {
-        // Dopo un riavvio `model` e' null anche se AICore era gia' pronto (vedi isAvailable):
-        // si ricrea qui, senza far ripassare l'utente dalle Impostazioni. Se non riesce, il
-        // motivo vero (dispositivo non supportato, Gemini Nano non ancora scaricato...) finisce
-        // nell'eccezione invece di sparire dietro il ripiego sul cloud.
-        if (model == null) prepare(maxOutputTokens) { _, _ -> }
-        val activeModel = model ?: throw IllegalStateException(unavailableReason())
-
-        // Rimandare lo STESSO prompt dopo una risposta vuota non cambia niente quando la causa e'
-        // la lunghezza o un filtro sul contenuto: chi chiama sa riprovare con meno testo (vedi
-        // LocalAiClassifier, che riconosce "testo vuoto"). Si ritenta invece, fino a
-        // [TRANSIENT_ATTEMPTS] volte e con una pausa, un errore del servizio che non dipende dal
-        // prompt: "error type 2-INFERENCE_ERROR" con 11-RESPONSE_PROCESSING_ERROR, BUSY e simili
-        // compare ogni tanto (segnalato in campo) e la stessa richiesta subito dopo va. Con IPC il collegamento al servizio di
-        // sistema e' caduto: si ricrea il modello prima di riprovare.
-        var current = activeModel
-        for (attempt in 1..TRANSIENT_ATTEMPTS) {
-            try {
-                return generateOnce(current, systemPrompt, userPrompt, timeoutMillis)
-            } catch (e: AiCoreServiceException) {
-                val message = e.message.orEmpty()
-                if (!isTransient(message)) throw IllegalStateException(message, e)
-                if (attempt == TRANSIENT_ATTEMPTS) throw IllegalStateException(readable(message), e)
-                delay(TRANSIENT_RETRY_DELAY_MS * attempt)
-                if (message.contains("IPC", ignoreCase = true)) {
-                    model = null
-                    prepare(maxOutputTokens) { _, _ -> }
-                    current = model ?: throw IllegalStateException(unavailableReason())
+        // Lo stato si richiede a ogni generazione: costa poco, e dice subito se nel frattempo
+        // Gemini Nano e' sparito (aggiornamento di sistema) invece di scoprirlo da un errore.
+        val state = readState()
+        if (!AiCoreStatusMapper.canGenerate(state)) {
+            throw IllegalStateException(
+                when (state) {
+                    is AiCoreState.Unavailable -> state.message
+                    is AiCoreState.Failed -> state.failure.message
+                    else -> "Gemini Nano non e' ancora sul telefono: attivalo dalle Impostazioni."
                 }
+            )
+        }
+
+        // Si ritenta, fino a TRANSIENT_ATTEMPTS volte e con una pausa, solo un errore del servizio
+        // che non dipende dal prompt (BUSY, RESPONSE_PROCESSING_ERROR, collegamento caduto):
+        // compare ogni tanto e la stessa richiesta subito dopo va. Con il collegamento caduto si
+        // ricrea il client prima di riprovare.
+        var attempt = 1
+        while (true) {
+            try {
+                return generateOnce(client(), "$systemPrompt\n\n$userPrompt", timeoutMillis, maxOutputTokens)
+            } catch (e: AiCoreServiceException) {
+                val failure = e.failure
+                lastFailureReason = failure.message
+                if (!AiCoreStatusMapper.shouldRetry(failure, attempt)) {
+                    throw IllegalStateException(failure.message, e)
+                }
+                delay(AiCoreStatusMapper.retryDelayMillis(attempt))
+                if (AiCoreStatusMapper.needsReconnect(failure)) {
+                    runCatching { model?.close() }
+                    model = null
+                }
+                attempt++
             }
         }
-        error("irraggiungibile")
     }
 
-    /**
-     * La generazione di prova di "Attiva", con gli stessi ritentativi di [generate].
-     *
-     * Serve solo a scoprire i telefoni dove AICore non offre Gemini Nano (NOT_AVAILABLE). Un
-     * errore passeggero come "11-RESPONSE_PROCESSING_ERROR" (visto in campo: "Attiva" falliva
-     * e toccandolo di nuovo andava) non dice niente del telefono: se resta anche dopo i
-     * ritentativi il modello si tiene lo stesso, e le generazioni vere hanno i loro ritentativi.
-     */
-    private suspend fun probe(candidate: GenerativeModel) {
-        for (attempt in 1..TRANSIENT_ATTEMPTS) {
-            val answered = try {
-                withTimeoutOrNull(PROBE_TIMEOUT_MS) { candidate.generateContent("Rispondi solo: OK") } != null
-            } catch (e: GenerativeAIException) {
-                val reason = describe(e)
-                if (!isTransient(reason)) throw IllegalStateException(reason, e)
-                if (attempt == TRANSIENT_ATTEMPTS) return
-                delay(TRANSIENT_RETRY_DELAY_MS * attempt)
-                continue
-            }
-            if (!answered) {
-                throw IllegalStateException("AICore non ha risposto alla prova entro ${PROBE_TIMEOUT_MS / 1000} secondi.")
-            }
-            return
-        }
-    }
-
-    /** Errore del servizio AICore durante una generazione, distinto dai nostri. */
-    private class AiCoreServiceException(message: String, cause: Throwable) : Exception(message, cause)
-
-    /**
-     * `true` per gli errori che non dipendono dal prompt e che di solito spariscono da soli:
-     * servizio occupato da un'altra app, collegamento caduto, errore interno. Non lo sono il
-     * modello non disponibile, il prompt troppo lungo e i limiti imposti dal sistema (batteria,
-     * app in background), per cui riprovare subito darebbe lo stesso errore.
-     */
-    private fun isTransient(message: String): Boolean {
-        val upper = message.uppercase()
-        if (isFeatureMissing(message)) return false
-        return PERMANENT_CODES.none { upper.contains(it) }
-    }
-
-    /**
-     * Il messaggio da mostrare quando anche il secondo tentativo e' fallito: il codice grezzo
-     * ("error type 2-INFERENCE_ERROR and error code 9-BUSY") resta in coda per chi deve capire.
-     */
-    private fun readable(message: String): String {
-        val upper = message.uppercase()
-        val hint = when {
-            upper.contains("BUSY") -> "Gemini Nano e' occupato da un'altra app."
-            upper.contains("IPC") -> "Il collegamento con AICore si e' interrotto."
-            upper.contains("QUOTA") -> "Android ha limitato l'uso di Gemini Nano per risparmiare batteria."
-            upper.contains("BACKGROUND") -> "Gemini Nano funziona solo con l'app aperta in primo piano."
-            upper.contains("RESPONSE_PROCESSING") -> "Gemini Nano non e' riuscito a completare la risposta."
-            else -> "AICore ha avuto un errore interno."
-        }
-        return "$hint Riprova tra qualche secondo. ($message)"
-    }
+    /** Errore del servizio AICore durante una generazione, gia' classificato. */
+    private class AiCoreServiceException(val failure: AiCoreFailure, cause: Throwable) :
+        Exception(failure.message, cause)
 
     private suspend fun generateOnce(
         activeModel: GenerativeModel,
-        systemPrompt: String,
-        userPrompt: String,
-        timeoutMillis: Long
+        prompt: String,
+        timeoutMillis: Long,
+        maxOutputTokens: Int
     ): String {
-        val prompt = "$systemPrompt\n\n$userPrompt"
+        // Senza questi il campionamento e' quello di default, pensato per la conversazione: qui
+        // serve quasi sempre un JSON, e la temperatura alta lo rompe. Valori gia' usati con la
+        // libreria di prima. maxOutputTokens ora va per richiesta, non piu' fissato alla
+        // preparazione.
+        val request = generateContentRequest(TextPart(prompt)) {
+            temperature = 0.2f
+            topK = 16
+            candidateCount = 1
+            this.maxOutputTokens = maxOutputTokens
+        }
         val response = withTimeoutOrNull(timeoutMillis) {
             try {
-                activeModel.generateContent(prompt)
-            } catch (e: GenerativeAIException) {
-                val reason = describe(e)
-                forgetIfUnsupported(reason)
-                lastFailureReason = reason
-                throw AiCoreServiceException(reason, e)
+                activeModel.generateContent(request)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                throw AiCoreServiceException(failureOf(e), e)
             }
         } ?: throw IllegalStateException("AICore non ha risposto entro ${timeoutMillis / 1000} secondi.")
 
-        // `response.text` e' solo la PRIMA parte di testo: se il modello risponde con piu' parti,
-        // o con una prima parte vuota, sembra una risposta vuota anche quando non lo e'.
         val direct = textOf(response)
         if (direct.isNotBlank()) return direct
 
@@ -358,33 +285,64 @@ internal object AiCoreEngine {
         // servizio di sistema. Costa una seconda generazione solo quando la prima e' vuota.
         val streamed = withTimeoutOrNull(timeoutMillis) {
             try {
-                activeModel.generateContentStream(prompt).toList().joinToString("") { textOf(it) }
-            } catch (e: GenerativeAIException) {
+                activeModel.generateContentStream(request).toList().joinToString("") { textOf(it) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 ""
             }
         }.orEmpty()
         if (streamed.isNotBlank()) return streamed
 
-        // finishReason: 0 = STOP (il modello ha chiuso da solo, senza scrivere niente), 1 =
-        // MAX_TOKENS. Verificato sulle costanti dell'SDK: un commento precedente le dava sbagliate
-        // (1 e 2). Corto di proposito: il messaggio finisce in una riga di 140 caratteri (vedi
-        // HeuristicClassification.shortenReason) e i valori che servono sono in fondo. "testo vuoto"
-        // e' il segnale con cui LocalAiClassifier decide di riprovare con un prompt diverso.
-        val candidate = response.candidates.firstOrNull()
-        val finish = when (val reason = candidate?.finishReason) {
-            0 -> "STOP"
-            1 -> "MAX_TOKENS"
+        val reason = response.candidates.firstOrNull()?.finishReason
+        val finish = when (reason) {
+            null -> "nessun candidato"
+            Candidate.FinishReason.MAX_TOKENS -> "MAX_TOKENS"
             else -> reason.toString()
         }
         throw IllegalStateException(
-            "testo vuoto da AICore (finish=$finish, parti=${candidate?.content?.parts?.size}, ${prompt.length} car.)"
+            AiCoreStatusMapper.emptyAnswerMessage(
+                finishReason = finish,
+                parts = response.candidates.size,
+                promptChars = prompt.length
+            )
         )
     }
 
     private fun textOf(response: GenerateContentResponse): String =
-        response.text?.takeIf { it.isNotBlank() }
-            ?: response.candidates
-                .flatMap { it.content.parts }
-                .filterIsInstance<TextPart>()
-                .joinToString("") { it.text }
+        response.candidates.joinToString("") { it.text }
+
+    private fun featureStatusOf(status: Int): AiCoreFeatureStatus = when (status) {
+        FeatureStatus.AVAILABLE -> AiCoreFeatureStatus.AVAILABLE
+        FeatureStatus.DOWNLOADABLE -> AiCoreFeatureStatus.DOWNLOADABLE
+        FeatureStatus.DOWNLOADING -> AiCoreFeatureStatus.DOWNLOADING
+        FeatureStatus.UNAVAILABLE -> AiCoreFeatureStatus.UNAVAILABLE
+        else -> AiCoreFeatureStatus.UNKNOWN
+    }
+
+    private fun failureOf(e: Throwable): AiCoreFailure {
+        val raw = "${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}"
+        val code = (e as? GenAiException)?.let { errorCodeOf(it.errorCode) }
+        return AiCoreStatusMapper.classifyError(code, raw)
+    }
+
+    /**
+     * Codici numerici dell'SDK tradotti nei nostri. Solo quelli documentati in
+     * `GenAiException.ErrorCode`; gli altri (606-FEATURE_NOT_FOUND, che arriva da AICore) li
+     * riconosce [AiCoreStatusMapper.errorCodeFromMessage] dal testo.
+     */
+    private fun errorCodeOf(code: Int): AiCoreErrorCode? = when (code) {
+        GenAiException.ErrorCode.BUSY -> AiCoreErrorCode.BUSY
+        GenAiException.ErrorCode.CANCELLED -> AiCoreErrorCode.CANCELLED
+        GenAiException.ErrorCode.NEEDS_SYSTEM_UPDATE -> AiCoreErrorCode.NEEDS_SYSTEM_UPDATE
+        GenAiException.ErrorCode.NOT_AVAILABLE -> AiCoreErrorCode.NOT_AVAILABLE
+        GenAiException.ErrorCode.NOT_ENOUGH_DISK_SPACE -> AiCoreErrorCode.NOT_ENOUGH_DISK_SPACE
+        GenAiException.ErrorCode.REQUEST_PROCESSING_ERROR -> AiCoreErrorCode.REQUEST_PROCESSING_ERROR
+        GenAiException.ErrorCode.REQUEST_TOO_LARGE -> AiCoreErrorCode.REQUEST_TOO_LARGE
+        GenAiException.ErrorCode.RESPONSE_GENERATION_ERROR -> AiCoreErrorCode.RESPONSE_GENERATION_ERROR
+        GenAiException.ErrorCode.PER_APP_BATTERY_USE_QUOTA_EXCEEDED ->
+            AiCoreErrorCode.PER_APP_BATTERY_USE_QUOTA_EXCEEDED
+        GenAiException.ErrorCode.BACKGROUND_USE_BLOCKED -> AiCoreErrorCode.BACKGROUND_USE_BLOCKED
+        else -> null
+    }
 }

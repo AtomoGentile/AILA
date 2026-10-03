@@ -324,7 +324,7 @@ class LocalAiClassifier(
     }
 
     /** `true` per la risposta vuota di AICore (`finish=STOP`, nessun testo). */
-    private fun isEmptyAnswer(reason: String): Boolean = reason.lowercase().contains("testo vuoto")
+    private fun isEmptyAnswer(reason: String): Boolean = AiCoreStatusMapper.isEmptyAnswer(reason)
 
     /** Riconosce il fallimento "prompt troppo lungo" del motore nativo dal testo dell'errore. */
     private fun isPromptTooLong(reason: String): Boolean {

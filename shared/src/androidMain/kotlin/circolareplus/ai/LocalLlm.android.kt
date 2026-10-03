@@ -86,12 +86,9 @@ actual class LocalLlm actual constructor() {
         // parallelo (due circolari aperte una dopo l'altra) si rubavano NPU e memoria a vicenda
         // e finivano entrambe piu' tardi di quanto avrebbero fatto una dopo l'altra.
         // `stopWhen`/streaming non si applicano (AICore genera in un colpo solo, per ora): vedi
-        // AiCoreEngine.kt per lo stato reale dell'integrazione.
-        if (modelPath == "aicore") {
-            // maxOutputTokens serve solo se AICore va ricreato (dopo un riavvio dell'app):
-            // è fissato una volta sola in AiCoreEngine.prepare, dentro GenerationConfig —
-            // GenerativeModel non lo accetta per singola chiamata come fa ConversationConfig
-            // con LiteRT-LM.
+        // AiCoreEngine.kt (ML Kit GenAI Prompt API) per lo stato reale dell'integrazione.
+        if (modelPath == AICORE_MODEL_ID) {
+            // Con ML Kit maxOutputTokens va per richiesta, come ConversationConfig con LiteRT-LM.
             return mutex.withLock {
                 AiCoreEngine.generate(
                     systemPrompt = systemPrompt,

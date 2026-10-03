@@ -16,12 +16,12 @@ activityCompose = "1.11.0"
 androidxFragment = "1.8.9"
 androidxCoreKtx = "1.17.0"
 litertlm = "0.17.0"
-# AICore (Tier 1 Android, Gemini Nano di sistema): coordinate confermate su mvnrepository.com
-# (backed da maven.google.com) con una ricerca web il 20/9/2026 — "0.0.1-exp01"/"0.0.1-exp02"
-# sono le uniche versioni pubblicate trovate, entrambe developer preview. Mai risolta da questo
-# ambiente (nessun accesso di rete a Maven qui): controllare se nel frattempo è uscita una
-# versione più recente prima della build. Vedi AiCoreEngine.kt per lo stato dell'integrazione.
-aicore = "0.0.1-exp02"
+# Gemini Nano di sistema (AICore) via ML Kit GenAI Prompt API. Sostituisce
+# com.google.ai.edge.aicore:aicore:0.0.1-exp02, sperimentale e ferma da marzo 2025. 1.0.0-beta4
+# (21/7/2026) e' l'ultima trovata il 3/10/2026 (sample ufficiale googlesamples/mlkit e note di
+# rilascio): la beta3 chiedeva ad AICore una funzione che nessun telefono aveva (issue #1061).
+# Vedi AiCoreEngine.kt.
+mlkitGenaiPrompt = "1.0.0-beta4"
 androidxWork = "2.10.0"
 # Installa i profili di compilazione (baseline profile) che Compose e le altre librerie AndroidX
 # portano con se': senza, un APK installato a mano (non da Play) esegue Compose interpretato e le
@@ -72,7 +72,7 @@ androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx
 # E' la ragione per cui Kotlin e' stato portato a 2.4: questa libreria e' scritta in Kotlin e i
 # suoi .class portano metadata 2.4, illeggibili dal compilatore 2.0.20 di prima.
 litertlm-android = { module = "com.google.ai.edge.litertlm:litertlm-android", version.ref = "litertlm" }
-aicore-android = { module = "com.google.ai.edge.aicore:aicore", version.ref = "aicore" }
+mlkit-genai-prompt = { module = "com.google.mlkit:genai-prompt", version.ref = "mlkitGenaiPrompt" }
 # Elaborazione in background reale (download modello locale, download PDF, classificazione in
 # coda): sopravvive a schermo spento, app in background o processo ucciso dal sistema, cosa che
 # prima non c'era — tutto girava in coroutine legate al lifecycle della UI Compose.

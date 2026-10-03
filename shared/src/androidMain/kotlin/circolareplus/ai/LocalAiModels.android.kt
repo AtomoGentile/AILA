@@ -27,14 +27,15 @@ actual object LocalAiCatalog {
      * iOS): `downloadUrl` vuoto e `approxSizeBytes = 0` sono il segnale che [LocalModelStore]
      * legge per trattarla come modello "di sistema" invece che come file da scaricare.
      *
-     * Verificata in campo su un Galaxy S26 Ultra: chat e analisi delle circolari funzionano
-     * (vedi `AiCoreEngine.kt` per gli accorgimenti sul prompt). Non e' mai proposta come
-     * "consigliata": dipende dal telefono e da Gemini Nano di sistema.
+     * Verificata in campo su un Galaxy S26 Ultra con la libreria AICore sperimentale di prima;
+     * con ML Kit GenAI (oggi) solo compilata, non ancora provata su un telefono (vedi
+     * `AiCoreEngine.kt`). Non e' mai proposta come "consigliata": dipende dal telefono e da
+     * Gemini Nano di sistema.
      */
     val AICORE = LocalAiModel(
-        id = "aicore",
+        id = AICORE_MODEL_ID,
         displayName = "Android AICore (Gemini Nano)",
-        fileName = "aicore",
+        fileName = AICORE_MODEL_ID,
         downloadUrl = "",
         approxSizeBytes = 0L,
         tier = DeviceTier.HIGH,
