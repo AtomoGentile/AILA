@@ -104,7 +104,8 @@ jobs:
           if-no-files-found: ignore
 
       # Totali nella pagina del run, letti dai JUnit XML: si vede quanti test sono passati senza
-      # aprire il log. Sommati gli attributi dei <testsuite>, un file per classe di test.
+      # aprire il log. Sommati gli attributi dei <testsuite>, un file per classe di test. Scritti
+      # anche nel log, che si legge pure da chi non ha accesso alla pagina del run.
       - name: Test summary
         if: always()
         run: |
@@ -126,7 +127,7 @@ jobs:
                 grep -l -E "<(failure|error)" "$dir"/*.xml | xargs -n1 basename | sed 's/^TEST-/- /; s/\.xml$//'
               fi
             fi
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       # Chiave di firma debug stabile (secret ANDROID_DEBUG_KEYSTORE, base64 di debug.keystore):
       # senza, ogni build ha una chiave diversa e per aggiornare l'app va prima disinstallata.
