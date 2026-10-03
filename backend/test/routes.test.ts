@@ -32,7 +32,7 @@ const ADMIN = 'admin-secret-di-prova-1234';
 async function repCode(classLabel = '3 B', ttlDays?: number): Promise<string> {
   const res = await call('POST', '/api/admin/representative-invites', { classLabel, ttlDays }, undefined, { 'X-Admin-Secret': ADMIN });
   expect(res.status).toBe(201);
-  return res.json.code;
+  return res.json.codes[0].code;
 }
 
 /** Codice della classe del Rappresentante (serve a chi si registra dopo di lui). */
@@ -163,20 +163,45 @@ describe('codici Rappresentante per classe e monouso', () => {
     expect((await issue({ 'X-Admin-Secret': '' })).status).toBe(503);
   });
 
+  it('count 2: due codici diversi, uno per Rappresentante', async () => {
+    const headers = { 'X-Admin-Secret': ADMIN };
+    const res = await call('POST', '/api/admin/representative-invites', { classLabel: '3 B', count: 2 }, undefined, headers);
+    expect(res.status).toBe(201);
+    const [a, b] = res.json.codes.map((c: { code: string }) => c.code);
+    expect(a).toMatch(/^[A-Z2-9]{5}-[A-Z2-9]{5}$/);
+    expect(a).not.toBe(b);
+    expect((await register('rep1', { representativeCode: a })).status).toBe(201);
+    expect((await register('rep2', { representativeCode: b })).status).toBe(201);
+    expect((await call('POST', '/api/admin/representative-invites', { classLabel: '3 B', count: 3 }, undefined, headers)).status).toBe(400);
+  });
+
+  it('la pagina di amministrazione non contiene segreti e non si mette in cache', async () => {
+    const res = await worker.fetch(new Request('https://api.test/admin'), env, ctx);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('Codici Rappresentante');
+    expect(html).not.toContain(ADMIN);
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+    const csp = res.headers.get('Content-Security-Policy') ?? '';
+    expect(csp).toContain("frame-ancestors 'none'");
+    const nonce = /script-src 'nonce-([a-f0-9]+)'/.exec(csp)?.[1];
+    expect(nonce && html.includes(`<script nonce="${nonce}">`)).toBe(true);
+  });
+
   it('elenco senza codici in chiaro e ritiro di un codice non usato', async () => {
     const headers = { 'X-Admin-Secret': ADMIN };
     const used = await repCode();
     await register('rep1', { representativeCode: used });
-    const spare = await call('POST', '/api/admin/representative-invites', { classLabel: '3B' }, undefined, headers);
+    const spare = (await call('POST', '/api/admin/representative-invites', { classLabel: '3B' }, undefined, headers)).json.codes[0];
 
     const list = await call('GET', '/api/admin/representative-invites?classLabel=3%20B', undefined, undefined, headers);
     expect(list.status).toBe(200);
     expect(list.json.invites).toHaveLength(2);
-    expect(JSON.stringify(list.json)).not.toContain(spare.json.code);
+    expect(JSON.stringify(list.json)).not.toContain(spare.code);
     expect(list.json.invites.map((i: any) => i.usedBy)).toContain('rep1');
 
-    expect((await call('DELETE', `/api/admin/representative-invites/${spare.json.id}`, undefined, undefined, headers)).status).toBe(200);
-    expect((await register('rep2', { representativeCode: spare.json.code })).status).toBe(400);
+    expect((await call('DELETE', `/api/admin/representative-invites/${spare.id}`, undefined, undefined, headers)).status).toBe(200);
+    expect((await register('rep2', { representativeCode: spare.code })).status).toBe(400);
   });
 
   it('avvisa i Rappresentanti e la Guardia della classe quando ne arriva uno nuovo', async () => {

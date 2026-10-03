@@ -29,6 +29,11 @@ Fatto (Worker, test in `backend/test/routes.test.ts`):
   prima di creare l'account, restituito se la creazione fallisce) e scade. Il Rappresentante con
   un codice valido non deve piu' chiedere il codice classe all'altro Rappresentante;
 - notifica "Nuovo Rappresentante in classe" agli altri Rappresentanti e alla Guardia;
+- `count` (1-2) nell'emissione: due codici diversi in un colpo, uno per Rappresentante (mai un
+  codice valido due volte: chi lo riceve potrebbe usarlo per due account suoi);
+- pagina `/admin` del Worker (`routes/adminPage.ts`) per emettere, vedere e ritirare i codici dal
+  browser, anche dal telefono, senza terminale: chiede `ADMIN_SECRET` ogni volta, niente cache,
+  CSP con nonce, non indicizzata. Provata con `wrangler dev` + Chromium a 390px, chiaro e scuro;
 - transizione: il codice unico vale solo con `REPRESENTATIVE_GLOBAL_CODE_UNTIL="AAAA-MM-GG"` e solo
   in una classe senza Rappresentanti. **Senza quella variabile il codice unico smette di valere al
   deploy**: chi aspettava di registrarsi come Rappresentante deve ricevere un codice nuovo.
