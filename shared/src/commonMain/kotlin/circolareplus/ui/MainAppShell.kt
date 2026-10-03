@@ -1643,7 +1643,8 @@ fun MainAppShell(
         // forzare l'analisi completa aprendo la singola circolare e premendo "Rianalizza".
         var consecutiveLocalFallbacks = 0
         while (isActive) {
-            circolareplus.platform.awaitForeground()
+            // Su iOS l'analisi prosegue con l'app in background (beginBackgroundTask): non si ferma.
+            if (!circolareplus.platform.isIos()) circolareplus.platform.awaitForeground()
             val next = circulars.sortedByDescending { it.number }
                 .firstOrNull {
                     it.number !in classifications && it.number !in inFlightClassification &&
