@@ -1,8 +1,6 @@
 package circolareplus.ui.screens
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -36,7 +34,6 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import circolareplus.ai.assistant.AilaAssistant
 import circolareplus.ai.assistant.AssistantAuthor
 import circolareplus.ai.assistant.AssistantConversation
@@ -52,6 +49,17 @@ import circolareplus.design.ailaAppear
 import circolareplus.design.ailaGlassSurface
 import circolareplus.design.ailaMorphShape
 import circolareplus.design.ailaPressable
+import circolareplus.design.AilaAssistantWave
+import circolareplus.design.ailaBubbleEnter
+import circolareplus.design.ailaNavigationSpring
+import circolareplus.design.ailaRevealEnter
+import circolareplus.design.ailaSelectionPop
+import circolareplus.design.ailaSheetReveal
+import circolareplus.design.ailaSpatialSpring
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateContentSize
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.lerp
 import kotlinx.coroutines.delay
 
 /**
@@ -97,6 +105,17 @@ fun AssistantChatScreen(
             ?.takeIf { it.author != AssistantAuthor.USER && !it.isError }?.id
     }
     wasThinking[0] = isThinking
+
+    // Domanda appena mandata: e' l'unico messaggio nuovo rispetto alla composizione precedente ed
+    // e' dell'utente. Aprendo una conversazione dallo storico i messaggi nuovi sono tanti insieme,
+    // quindi nessuno entra con l'animazione: si vede la conversazione gia' al suo posto.
+    val seenIds = remember { messages.mapTo(HashSet()) { it.id } }
+    val sentHolder = remember { arrayOf<String?>(null) }
+    val newMessages = messages.filter { it.id !in seenIds }
+    if (newMessages.size == 1 && newMessages[0].author == AssistantAuthor.USER) {
+        sentHolder[0] = newMessages[0].id
+    }
+    newMessages.forEach { seenIds.add(it.id) }
 
     LaunchedEffect(messages.size, isThinking) {
         // Il benvenuto occupa la lista solo quando non c'e' nient'altro, quindi quando c'e'
@@ -145,13 +164,17 @@ fun AssistantChatScreen(
 
             items(messages, key = { it.id }) { message ->
                 when {
-                    message.author == AssistantAuthor.USER -> UserBubble(message.text)
+                    message.author == AssistantAuthor.USER -> UserBubble(
+                        text = message.text,
+                        animateSend = message.id == sentHolder[0],
+                        onShown = { if (sentHolder[0] == message.id) sentHolder[0] = null }
+                    )
                     message.isError -> AssistantErrorBubble(message.text)
                     else -> AssistantBubble(
                         message = message,
                         onOpenSource = onOpenSource,
-                        // La risposta appena arrivata "nasce" dall'indicatore di attesa: la
-                        // forma che cambia diventa l'icona di AILA Assistant e il messaggio compare.
+                        // La risposta appena arrivata "nasce" dall'indicatore di attesa: l'onda
+                        // si calma nell'icona di AILA Assistant e il messaggio compare.
                         animateArrival = message.id == arrivalHolder[0],
                         onArrived = { if (arrivalHolder[0] == message.id) arrivalHolder[0] = null }
                     )
@@ -181,22 +204,30 @@ fun AssistantChatScreen(
                     .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                // La spiegazione cambia in dissolvenza e il riquadro segue la nuova altezza con
+                // una molla, invece di scattare di una riga quando si accende l'interruttore.
+                Column(modifier = Modifier.weight(1f).animateContentSize(ailaSpatialSpring())) {
                     Text(
                         text = "Modalità ragionamento",
                         style = MaterialTheme.typography.labelLarge,
                         color = AppTheme.TextDark
                     )
-                    Text(
-                        text = if (thinkingEnabled) {
-                            "Attiva: risposte più ponderate, ma più lente. Vale per l'AI sul telefono."
-                        } else {
-                            "Spenta: risposte rapide. Vale per l'AI sul telefono."
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Normal,
-                        color = AppTheme.TextMuted
-                    )
+                    Crossfade(
+                        targetState = thinkingEnabled,
+                        animationSpec = ailaNavigationSpring(),
+                        label = "thinkingModeHint"
+                    ) { enabled ->
+                        Text(
+                            text = if (enabled) {
+                                "Attiva: risposte più ponderate, ma più lente. Vale per l'AI sul telefono."
+                            } else {
+                                "Spenta: risposte rapide. Vale per l'AI sul telefono."
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Normal,
+                            color = AppTheme.TextMuted
+                        )
+                    }
                 }
                 circolareplus.design.AilaSwitch(
                     checked = thinkingEnabled,
@@ -289,17 +320,26 @@ private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val glass = AppTheme.isGlass
     val shape = if (glass) CircleShape else ailaMorphShape(interactionSource)
+    // Il blu si accende in dissolvenza appena c'e' qualcosa da mandare (prima scattava al primo
+    // carattere) e la freccia fa un piccolo "pop": il pulsante dice "ora puoi" senza scritte.
+    val on by animateFloatAsState(
+        targetValue = if (enabled) 1f else 0f,
+        animationSpec = ailaNavigationSpring(),
+        label = "sendButtonOn"
+    )
+    val blue = AppTheme.PrimaryBlue
     Box(
         modifier = Modifier
             .padding(bottom = 4.dp)
             .size(48.dp)
+            // Sotto, il pulsante spento (vetro o pillola tonale); sopra, il blu con l'opacita'
+            // che segue `on`.
             .then(
-                when {
-                    enabled -> Modifier.clip(shape).background(AppTheme.PrimaryBlue)
-                    glass -> Modifier.ailaGlassSurface(shape)
-                    else -> Modifier.clip(shape).background(AppTheme.TrackFill)
-                }
+                if (glass) Modifier.ailaGlassSurface(shape)
+                else Modifier.clip(shape).background(AppTheme.TrackFill)
             )
+            .clip(shape)
+            .drawBehind { drawRect(blue, alpha = on) }
             .clickable(interactionSource = interactionSource, indication = null, enabled = enabled) { onClick() }
             .semantics { contentDescription = "Invia" },
         contentAlignment = Alignment.Center
@@ -307,8 +347,9 @@ private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
         AppIcons.ArrowUp(
             modifier = Modifier
                 .size(22.dp)
+                .ailaSelectionPop(enabled)
                 .graphicsLayer { rotationZ = if (glass) 0f else 90f },
-            color = if (enabled) Color.White else AppTheme.TextFaint
+            color = lerp(AppTheme.TextFaint, Color.White, on)
         )
     }
 }
@@ -363,6 +404,13 @@ private fun AssistantHistorySheet(
                 items(conversations, key = { it.id }) { conversation ->
                     Row(
                         modifier = Modifier
+                            // Eliminando una conversazione le altre scorrono al loro posto invece
+                            // di saltare, e quella eliminata svanisce.
+                            .animateItem(
+                                fadeInSpec = null,
+                                placementSpec = ailaNavigationSpring(),
+                                fadeOutSpec = ailaNavigationSpring()
+                            )
                             .fillMaxWidth()
                             // Glass: le righe piene dei gruppi di iOS sul foglio (di vetro quasi
                             // invisibile non si leggevano). Material: il tono "container" sopra
@@ -380,7 +428,9 @@ private fun AssistantHistorySheet(
                                     Modifier.alpha(0.5f)
                                 }
                             )
-                            .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space12),
+                            // Margini piu' stretti a destra e in verticale: il cestino da 44dp ha gia'
+                            // il suo spazio intorno all'icona, e la riga resta alta come prima.
+                            .padding(start = AppTheme.Space12, end = AppTheme.Space4, top = AppTheme.Space8, bottom = AppTheme.Space8),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         AilaAssistantMark(size = 18.dp)
@@ -404,9 +454,12 @@ private fun AssistantHistorySheet(
                         Spacer(modifier = Modifier.width(AppTheme.Space8))
                         Box(
                             modifier = Modifier
+                                // 44dp di tocco (prima 28): il cestino sta accanto alla riga che
+                                // apre la conversazione, mancarlo voleva dire aprirla.
+                                .size(44.dp)
                                 .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
                                 .ailaPressable(pressedScale = 0.9f) { onDelete(conversation.id) }
-                                .padding(6.dp),
+                                .semantics { contentDescription = "Elimina conversazione" },
                             contentAlignment = Alignment.Center
                         ) {
                             AppIcons.Trash(modifier = Modifier.size(16.dp), color = AppTheme.TextFaint)
@@ -437,7 +490,9 @@ private fun relativeTimeLabel(atMillis: Long): String {
 private fun AssistantWelcome(onPick: (String) -> Unit) {
     Column(modifier = Modifier.fillMaxWidth().padding(top = AppTheme.Space24)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            AilaAssistantMark(size = 34.dp)
+            // Le barre del marchio si alzano una dopo l'altra: e' l'unico elemento che si muove,
+            // il resto della pagina e' gia' al suo posto (niente cascate, come nel resto dell'app).
+            AilaAssistantWave(active = false, size = 34.dp, intro = true)
             Spacer(modifier = Modifier.width(AppTheme.Space12))
             Column {
                 Text(
@@ -484,10 +539,16 @@ private val BubbleRadius = 20.dp
 private val BubbleTail get() = if (AppTheme.isGlass) 6.dp else 4.dp
 
 @Composable
-private fun UserBubble(text: String) {
+private fun UserBubble(text: String, animateSend: Boolean = false, onShown: () -> Unit = {}) {
+    // Deciso una volta sola: se il fumetto esce dallo schermo e ci torna non deve rientrare.
+    val sending = remember { animateSend }
+    if (sending) LaunchedEffect(Unit) { onShown() }
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         Box(
             modifier = Modifier
+                // La domanda appena mandata sale dal campo di testo e si allarga dall'angolo in
+                // basso a destra, quello della "coda" del fumetto.
+                .ailaBubbleEnter(enabled = sending, fromEnd = true)
                 .widthIn(max = 300.dp)
                 .clip(
                     RoundedCornerShape(
@@ -518,41 +579,30 @@ private fun AssistantBubble(
     animateArrival: Boolean = false,
     onArrived: () -> Unit = {}
 ) {
-    // Arrivo: si parte dall'indicatore di attesa al posto dell'icona; subito dopo l'indicatore si
-    // trasforma nell'icona di AILA Assistant (rimpicciolendo e sfumando mentre l'icona cresce) e
-    // il fumetto con la risposta si apre sotto.
-    var revealed by remember(message.id) { mutableStateOf(!animateArrival) }
-    if (animateArrival) {
+    // Arrivo: l'icona parte come onda in movimento, la stessa dell'attesa (ThinkingBubble), e si
+    // calma fino al marchio fermo mentre il fumetto con la risposta si apre sotto. Prima l'icona
+    // sostituiva l'indicatore con uno scambio di forme; ora e' un solo segno che smette di parlare.
+    val arriving = remember(message.id) { animateArrival }
+    var revealed by remember(message.id) { mutableStateOf(!arriving) }
+    if (arriving) {
         LaunchedEffect(message.id) {
-            delay(60)
+            // Un attimo di onda ancora attiva: senza, l'indicatore spariva e la risposta compariva
+            // nello stesso fotogramma e il passaggio non si vedeva.
+            delay(120)
             revealed = true
             onArrived()
         }
     }
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        androidx.compose.animation.AnimatedContent(
-            targetState = revealed,
-            transitionSpec = {
-                (androidx.compose.animation.fadeIn(tween(220)) +
-                    androidx.compose.animation.scaleIn(circolareplus.design.ailaSpatialSpring(), initialScale = 0.4f)) togetherWith
-                    (androidx.compose.animation.fadeOut(tween(160)) +
-                        androidx.compose.animation.scaleOut(tween(200), targetScale = 1.4f))
-            },
-            label = "assistantArrivalIcon",
-            modifier = Modifier.padding(top = 4.dp).size(26.dp)
-        ) { shown ->
-            Box(modifier = Modifier.size(26.dp), contentAlignment = Alignment.Center) {
-                if (shown) AilaAssistantMark(size = 26.dp) else ThinkingIndicator(step = 0)
-            }
-        }
+        AilaAssistantWave(
+            active = !revealed,
+            size = 26.dp,
+            modifier = Modifier.padding(top = 4.dp)
+        )
         Spacer(modifier = Modifier.width(AppTheme.Space8))
         androidx.compose.animation.AnimatedVisibility(
             visible = revealed,
-            enter = androidx.compose.animation.fadeIn(tween(260, delayMillis = 90)) +
-                androidx.compose.animation.expandVertically(
-                    circolareplus.design.ailaSpatialSpring(),
-                    expandFrom = Alignment.Top
-                ),
+            enter = ailaRevealEnter(),
             modifier = Modifier.weight(1f)
         ) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -578,7 +628,11 @@ private fun AssistantBubble(
             if (message.sources.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(AppTheme.Space8))
                 Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    modifier = Modifier
+                        // Le fonti salgono subito dopo il fumetto: prima la risposta, poi da dove
+                        // viene. Solo all'arrivo, non riaprendo una conversazione.
+                        .then(if (arriving) Modifier.ailaSheetReveal(4) else Modifier)
+                        .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
                 ) {
                     message.sources.forEach { source ->
@@ -589,7 +643,13 @@ private fun AssistantBubble(
 
             message.modelLabel?.let { label ->
                 Spacer(modifier = Modifier.height(6.dp))
-                Text(text = label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Normal, color = AppTheme.TextFaint)
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Normal,
+                    color = AppTheme.TextFaint,
+                    modifier = if (arriving) Modifier.ailaSheetReveal(6) else Modifier
+                )
             }
         }
         }
@@ -628,54 +688,21 @@ private fun AssistantErrorBubble(text: String) {
     }
 }
 
-/** Mentre il modello lavora: forma che cambia (Material) o tre puntini che respirano (Glass). */
+/**
+ * Mentre il modello lavora: il marchio di AILA Assistant che "parla" (l'onda in movimento), al posto
+ * dell'icona e senza fumetto. Quando arriva la risposta la stessa onda si calma nella sua icona (vedi
+ * AssistantBubble). Prima erano tre puntini in Glass e la forma che cambia in Material: due segni
+ * diversi per la stessa cosa, e nessuno dei due era l'Assistant.
+ */
 @Composable
 private fun ThinkingBubble() {
-    var step by remember { mutableStateOf(0) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(400)
-            step = (step + 1) % 3
-        }
-    }
-
-    // Solo l'indicatore, al posto dell'icona: niente fumetto ne' scritta. Il fumetto compare con
-    // la risposta. Material: la forma che cambia; Glass: i tre puntini.
-    Box(
+    AilaAssistantWave(
+        active = true,
+        size = 26.dp,
         modifier = Modifier
             .padding(top = 4.dp)
-            .size(26.dp)
-            .semantics { contentDescription = "AILA Assistant sta cercando" },
-        contentAlignment = Alignment.Center
-    ) {
-        ThinkingIndicator(step)
-    }
-}
-
-/** Indicatore di attesa: forma che cambia (Material) o tre puntini che respirano (Glass). */
-@Composable
-private fun ThinkingIndicator(step: Int) {
-    if (!AppTheme.isGlass) {
-        circolareplus.design.AilaMorphingLoader(size = 24.dp)
-        return
-    }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        repeat(3) { index ->
-            val alpha by animateFloatAsState(
-                targetValue = if (index == step) 1f else 0.25f,
-                animationSpec = tween(400),
-                label = "assistantDot$index"
-            )
-            Box(
-                modifier = Modifier
-                    .padding(end = if (index < 2) 3.dp else 0.dp)
-                    .size(6.dp)
-                    .graphicsLayer { this.alpha = alpha }
-                    .clip(CircleShape)
-                    .background(AppTheme.PrimaryBlue)
-            )
-        }
-    }
+            .semantics { contentDescription = "AILA Assistant sta cercando" }
+    )
 }
 
 @Composable

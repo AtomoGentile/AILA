@@ -4978,6 +4978,14 @@ private fun AddCalendarEventDialog(
                         icon = { color -> AppIcons.Sparkle(modifier = Modifier.size(14.dp), color = color) }
                     )
                     if (isGeneratingEvent) {
+                        Spacer(modifier = Modifier.height(AppTheme.Space12))
+                        // Lo stesso segno dell'attesa nella chat dell'Assistant: l'onda del marchio
+                        // che si muove dice "sta lavorando" anche quando l'AI locale ci mette un minuto.
+                        circolareplus.design.AilaAssistantWave(
+                            active = true,
+                            size = 22.dp,
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                        )
                         Spacer(modifier = Modifier.height(AppTheme.Space8))
                         Text(
                             text = if (generatingElapsedSeconds < 5) {
