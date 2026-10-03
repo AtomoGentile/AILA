@@ -3870,7 +3870,7 @@ fun MainAppShell(
                                     Spacer(modifier = Modifier.width(AppTheme.Space8))
                                     Text(
                                         text = "$classRosterActionError",
-                                        fontSize = 12.sp,
+                                        style = MaterialTheme.typography.bodySmall,
                                         color = AppTheme.TintRedInk
                                     )
                                 }
@@ -4333,7 +4333,7 @@ private fun PreferencesOpenBanner(onClick: () -> Unit) {
         ) {
             Text(
                 text = "Il Rappresentante ha aperto la votazione preferenze. Tocca per votare →",
-                fontSize = 13.sp,
+                style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = AppTheme.TintBlueInk,
                 modifier = Modifier.weight(1f)
@@ -4816,8 +4816,7 @@ private fun AddCalendarEventDialog(
                             EventCreationStep.ASSISTANT -> "AILA Assistant"
                             EventCreationStep.MANUAL -> "Dettagli evento"
                         },
-                        fontSize = 19.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge,
                         color = AppTheme.TextDark
                     )
                 }
@@ -4859,7 +4858,7 @@ private fun AddCalendarEventDialog(
                 EventCreationStep.MENU -> {
                     Text(
                         text = "Come vuoi crearlo?",
-                        fontSize = 13.sp,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = AppTheme.TextMuted,
                         modifier = Modifier.ailaSheetReveal(0).padding(bottom = AppTheme.Space16)
                     )
@@ -4896,7 +4895,7 @@ private fun AddCalendarEventDialog(
                 EventCreationStep.ASSISTANT -> {
                     Text(
                         text = "Descrivi cosa vuoi inserire e AILA Assistant compila tutto per te.",
-                        fontSize = 13.sp,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = AppTheme.TextMuted,
                         modifier = Modifier.ailaSheetReveal(0).padding(bottom = AppTheme.Space12)
                     )
@@ -4912,8 +4911,7 @@ private fun AddCalendarEventDialog(
                     Spacer(modifier = Modifier.height(AppTheme.Space16))
                     Text(
                         text = "Esempi rapidi",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelMedium,
                         color = AppTheme.TextMuted,
                         modifier = Modifier.ailaSheetReveal(2).padding(bottom = AppTheme.Space8)
                     )
@@ -4933,7 +4931,7 @@ private fun AddCalendarEventDialog(
                             ) {
                                 AppIcons.Sparkle(modifier = Modifier.size(13.dp), color = AppTheme.TintVioletInk)
                                 Spacer(modifier = Modifier.width(AppTheme.Space8))
-                                Text(text = "\"$example\"", fontSize = 13.sp, color = AppTheme.TextDark)
+                                Text(text = "\"$example\"", style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextDark)
                             }
                         }
                     }
@@ -4987,7 +4985,7 @@ private fun AddCalendarEventDialog(
                             } else {
                                 "Con l'AI locale può richiedere fino a un minuto ($generatingElapsedSeconds s) — resta in attesa, sta ancora lavorando."
                             },
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.bodySmall,
                             color = AppTheme.TextMuted,
                             modifier = Modifier.fillMaxWidth(),
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -5006,7 +5004,7 @@ private fun AddCalendarEventDialog(
                         Text(
                             text = "L'AI non è disponibile ora (controlla la chiave o il modello nelle " +
                                 "Impostazioni): ho compilato i campi leggendo il testo, controllali prima di salvare.",
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.bodySmall,
                             color = AppTheme.TextMuted,
                             modifier = Modifier.padding(bottom = AppTheme.Space12)
                         )
@@ -5033,8 +5031,7 @@ private fun AddCalendarEventDialog(
                     Spacer(modifier = Modifier.height(AppTheme.Space16))
                     Text(
                         text = "Quando",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelMedium,
                         color = AppTheme.TextMuted,
                         modifier = Modifier.ailaSheetReveal(3).padding(bottom = AppTheme.Space8)
                     )
@@ -5055,7 +5052,7 @@ private fun AddCalendarEventDialog(
                             Spacer(modifier = Modifier.width(AppTheme.Space8))
                             Text(
                                 text = dateLabel,
-                                fontSize = 13.sp,
+                                style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Medium,
                                 color = if (selectedDateMillis != null) AppTheme.TextDark else AppTheme.TextFaint,
                                 maxLines = 1
@@ -5074,7 +5071,7 @@ private fun AddCalendarEventDialog(
                     if (isPastDate) {
                         Text(
                             text = "Questa data è già passata: scegli oggi o un giorno futuro.",
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.bodySmall,
                             color = AppTheme.TintRedInk,
                             modifier = Modifier.padding(top = AppTheme.Space8)
                         )
@@ -5082,8 +5079,7 @@ private fun AddCalendarEventDialog(
                     Spacer(modifier = Modifier.height(AppTheme.Space16))
                     Text(
                         text = "Tipo di evento",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelMedium,
                         color = AppTheme.TextMuted,
                         modifier = Modifier.ailaSheetReveal(4).padding(bottom = AppTheme.Space8)
                     )
@@ -5106,8 +5102,7 @@ private fun AddCalendarEventDialog(
                     Spacer(modifier = Modifier.height(AppTheme.Space16))
                     Text(
                         text = "Note",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelMedium,
                         color = AppTheme.TextMuted,
                         modifier = Modifier.ailaSheetReveal(5).padding(bottom = AppTheme.Space8)
                     )
@@ -5124,8 +5119,7 @@ private fun AddCalendarEventDialog(
                     Spacer(modifier = Modifier.height(AppTheme.Space16))
                     Text(
                         text = "Visibilità",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelMedium,
                         color = AppTheme.TextMuted,
                         modifier = Modifier.ailaSheetReveal(6).padding(bottom = AppTheme.Space8)
                     )
@@ -5150,24 +5144,24 @@ private fun AddCalendarEventDialog(
                         Spacer(modifier = Modifier.height(AppTheme.Space12))
                         Text(
                             text = "Seleziona fino a 5 persone",
-                            fontSize = 11.sp,
+                            style = MaterialTheme.typography.bodySmall,
                             color = AppTheme.TextFaint
                         )
                         Spacer(modifier = Modifier.height(AppTheme.Space8))
                         when {
                             isLoadingRecipients -> Text(
                                 text = "Carico l'elenco della classe...",
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = AppTheme.TextMuted
                             )
                             recipientsError != null -> Text(
                                 text = recipientsError ?: "",
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = AppTheme.TintRedInk
                             )
                             recipientCandidates.isEmpty() -> Text(
                                 text = "Nessun compagno registrato ancora. Compariranno qui appena si iscrivono.",
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = AppTheme.TextMuted
                             )
                             else -> FlowRow(
@@ -5328,13 +5322,12 @@ private fun EventDetailDialog(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = event.title,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge,
                         color = AppTheme.TextDark
                     )
                     Text(
                         text = eventCategoryLabel(event.category),
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = AppTheme.TextMuted
                     )
                 }
@@ -5368,14 +5361,13 @@ private fun EventDetailDialog(
                 Spacer(modifier = Modifier.height(AppTheme.Space8))
                 Text(
                     text = "Note",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelMedium,
                     color = AppTheme.TextMuted,
                     modifier = Modifier.ailaSheetReveal(5).padding(bottom = AppTheme.Space4)
                 )
                 Text(
                     text = event.notes,
-                    fontSize = 14.sp,
+                    style = MaterialTheme.typography.bodyLarge,
                     color = AppTheme.TextDark,
                     modifier = Modifier.ailaSheetReveal(5)
                 )
@@ -5406,8 +5398,7 @@ private fun EventDetailDialog(
                 Spacer(modifier = Modifier.width(AppTheme.Space8))
                 Text(
                     text = "Elimina evento",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleSmall,
                     color = AppTheme.TintRedInk
                 )
             }
@@ -5484,13 +5475,12 @@ private fun EventDetailPage(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = event.title,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleLarge,
                                 color = AppTheme.TextDark
                             )
                             Text(
                                 text = eventCategoryLabel(event.category),
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = AppTheme.TextMuted
                             )
                         }
@@ -5516,12 +5506,11 @@ private fun EventDetailPage(
                     if (!event.notes.isNullOrBlank()) {
                         Text(
                             text = "Note",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.labelMedium,
                             color = AppTheme.TextMuted,
                             modifier = Modifier.padding(bottom = AppTheme.Space4)
                         )
-                        Text(text = event.notes, fontSize = 14.sp, color = AppTheme.TextDark)
+                        Text(text = event.notes, style = MaterialTheme.typography.bodyLarge, color = AppTheme.TextDark)
                     }
                 }
             }
@@ -5548,8 +5537,7 @@ private fun EventDetailPage(
                 Spacer(modifier = Modifier.width(AppTheme.Space8))
                 Text(
                     text = "Elimina evento",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleSmall,
                     color = AppTheme.TintRedInk
                 )
             }
@@ -5560,9 +5548,9 @@ private fun EventDetailPage(
 @Composable
 private fun EventDetailRow(label: String, value: String, modifier: Modifier = Modifier) {
     Column(modifier = modifier.padding(bottom = AppTheme.Space12)) {
-        Text(text = label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AppTheme.TextMuted)
+        Text(text = label, style = MaterialTheme.typography.labelMedium, color = AppTheme.TextMuted)
         Spacer(modifier = Modifier.height(2.dp))
-        Text(text = value, fontSize = 14.sp, color = AppTheme.TextDark)
+        Text(text = value, style = MaterialTheme.typography.bodyLarge, color = AppTheme.TextDark)
     }
 }
 
@@ -5629,16 +5617,14 @@ private fun EventCreationOptionCard(
         Spacer(modifier = Modifier.height(AppTheme.Space12))
         Text(
             text = title,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.titleSmall,
             color = if (highlighted) Color.White else AppTheme.TextDark
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = subtitle,
-            fontSize = 11.sp,
-            color = if (highlighted) Color(0xCCFFFFFF) else AppTheme.TextMuted,
-            lineHeight = 14.sp
+            style = MaterialTheme.typography.bodySmall,
+            color = if (highlighted) Color(0xCCFFFFFF) else AppTheme.TextMuted
         )
     }
 }
@@ -5703,8 +5689,7 @@ private fun CreationSheetHeader(title: String, onClose: () -> Unit) {
     ) {
         Text(
             text = title,
-            fontSize = 19.sp,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.titleLarge,
             color = AppTheme.TextDark,
             modifier = Modifier.weight(1f)
         )
@@ -5855,8 +5840,7 @@ private fun PollSlotDraftRow(
     ) {
         Text(
             text = epochMillisToIsoDate(slot.dateMillis),
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelLarge,
             color = AppTheme.TextDark,
             modifier = Modifier.weight(1f)
         )
@@ -5869,12 +5853,11 @@ private fun PollSlotDraftRow(
                     .clickable(enabled = slot.capacity > 1) { onCapacityChange(slot.capacity - 1) },
                 contentAlignment = Alignment.Center
             ) {
-                Text("−", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = AppTheme.TextDark)
+                Text("−", style = MaterialTheme.typography.titleSmall, color = AppTheme.TextDark)
             }
             Text(
                 text = "${slot.capacity}",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelLarge,
                 color = AppTheme.TextDark,
                 modifier = Modifier.padding(horizontal = AppTheme.Space8)
             )
@@ -5886,7 +5869,7 @@ private fun PollSlotDraftRow(
                     .clickable { onCapacityChange(slot.capacity + 1) },
                 contentAlignment = Alignment.Center
             ) {
-                Text("+", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = AppTheme.TextDark)
+                Text("+", style = MaterialTheme.typography.titleSmall, color = AppTheme.TextDark)
             }
         }
         Spacer(modifier = Modifier.width(AppTheme.Space8))
@@ -5990,7 +5973,8 @@ private fun CreateRankingPollDialog(
             Text(
                 text = if (hasDuplicates) "Ci sono opzioni ripetute."
                 else "Ognuno le metterà in ordine; la classifica della classe è a punti.",
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Normal,
                 color = if (hasDuplicates) AppTheme.TintRedInk else AppTheme.TextMuted,
                 modifier = Modifier.padding(top = AppTheme.Space8).ailaSheetReveal(3)
             )
@@ -6077,7 +6061,7 @@ private fun AddProposalDialog(
                     .clickable { isAnonymous = !isAnonymous }
                     .ailaSheetReveal(2)
             ) {
-                Text("Pubblica in forma anonima", fontSize = 13.sp, color = AppTheme.TextDark)
+                Text("Pubblica in forma anonima", style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextDark)
                 circolareplus.design.AilaSwitch(
                     checked = isAnonymous,
                     onCheckedChange = { isAnonymous = it }
@@ -6133,15 +6117,14 @@ private fun OfflineBanner(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = "Sei offline",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelLarge,
                 color = AppTheme.TintAmberInk
             )
             Text(
                 text = offlineDataAgeLabel(),
-                fontSize = 11.sp,
-                color = AppTheme.TintAmberInk,
-                lineHeight = 15.sp
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Normal,
+                color = AppTheme.TintAmberInk
             )
         }
         Spacer(modifier = Modifier.width(AppTheme.Space8))
@@ -6156,8 +6139,7 @@ private fun OfflineBanner(
             Spacer(modifier = Modifier.width(4.dp))
             Text(
                 text = "Riprova",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelMedium,
                 color = AppTheme.TintAmberInk
             )
         }
@@ -6201,17 +6183,15 @@ private fun OfflineGateScreen(
             Spacer(modifier = Modifier.height(AppTheme.Space24))
             Text(
                 text = "Nessuna connessione",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge,
                 color = AppTheme.TextDark
             )
             Spacer(modifier = Modifier.height(AppTheme.Space8))
             Text(
                 text = "Non riesco a raggiungere il server e non ho ancora una copia del tuo " +
                     "profilo su questo dispositivo. Il tuo accesso è salvo: riprova appena torni online.",
-                fontSize = 13.sp,
+                style = MaterialTheme.typography.bodyMedium,
                 color = AppTheme.TextMuted,
-                lineHeight = 19.sp,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
             Spacer(modifier = Modifier.height(AppTheme.Space24))
@@ -6475,7 +6455,7 @@ private fun FloatingRailItem(tab: MainTab, selected: Boolean, onClick: () -> Uni
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = if (tab == MainTab.SEATMAP) "Posti" else tab.title,
-            fontSize = 11.sp,
+            style = MaterialTheme.typography.labelSmall,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
             color = ink,
             maxLines = 1,
@@ -6617,8 +6597,7 @@ private fun RowScope.FloatingTabItem(
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = tab.title,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelLarge,
                     color = activeInk,
                     maxLines = 1,
                     softWrap = false,
@@ -6732,7 +6711,10 @@ private fun RowScope.GlassTabBarContent(selectedTab: MainTab, onSelect: (MainTab
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = if (tab == MainTab.SEATMAP) "Posti" else tab.title,
-                        fontSize = 10.sp,
+                        // Eccezione alla scala: 10sp come le etichette della tab bar di iOS. Ogni
+                        // scheda ha un quinto della barra e "Calendario" a 11sp, con il testo di
+                        // sistema appena ingrandito, verrebbe tagliato.
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 12.sp),
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                         color = ink,
                         maxLines = 1
