@@ -141,15 +141,25 @@ echo "$ADMIN_SECRET"   # conservalo in un gestore di password: serve per ogni co
 printf '%s' "$ADMIN_SECRET" | npx wrangler secret put ADMIN_SECRET
 ```
 
-Emettere un codice (il codice in chiaro compare solo in questa risposta, sul database resta
-l'hash SHA-256) e consegnarlo di persona al Rappresentante eletto:
+**Dal browser (anche dal telefono)**: apri
+`https://circolare-plus-worker.circolareclass.workers.dev/admin`, scrivi il segreto, scegli la
+classe, quanti codici (2 = uno per Rappresentante) e per quanti giorni valgono (1-30, di default
+7), poi "Crea codici". Dalla stessa pagina vedi i codici gia' emessi (liberi, usati da chi,
+scaduti) e ritiri quelli non ancora usati. La pagina non contiene niente di segreto: il segreto lo
+scrivi tu ogni volta (o lo ricorda il gestore di password del browser).
+
+Ogni Rappresentante riceve il **suo** codice, di persona o in privato: mai un codice solo per due,
+e mai tutti e due i codici alla stessa persona, altrimenti potrebbe usarli per due account suoi.
+I codici in chiaro compaiono solo appena creati: sul database resta l'hash SHA-256.
+
+**Dal terminale**, se preferisci:
 
 ```bash
 API=https://circolare-plus-worker.circolareclass.workers.dev
 curl -s -X POST "$API/api/admin/representative-invites" \
   -H "X-Admin-Secret: $ADMIN_SECRET" -H 'Content-Type: application/json' \
-  -d '{"classLabel": "4 CSA", "ttlDays": 7}'
-# → {"code":"ABCDE-FGHIJ","classLabel":"4 CSA","expiresAt":"…","representatives":1,…}
+  -d '{"classLabel": "4 CSA", "count": 2, "ttlDays": 7}'
+# → {"codes":[{"id":"…","code":"ABCDE-FGHIJ"},{"id":"…","code":"KLMNP-QRSTU"}],"classLabel":"4 CSA","expiresAt":"…","representatives":0,…}
 ```
 
 `representatives` dice quanti Rappresentanti ha gia' la classe (con 2 la registrazione risponde
