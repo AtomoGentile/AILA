@@ -9,6 +9,8 @@
 		<string>com.circolareplus.refresh</string>
 		<string>com.circolareplus.analysis.*</string>
 	</array>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

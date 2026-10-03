@@ -53,6 +53,9 @@ targets:
         CFBundleVersion: "1"
         LSRequiresIPhoneOS: true
         UIApplicationSupportsIndirectInputEvents: true
+        # 120 Hz sugli iPhone ProMotion. Compose Multiplatform lo richiede e, senza, all'avvio
+        # lancia un'eccezione (PlistSanityCheck) e l'app si chiude: succedeva sugli iPhone Pro.
+        CADisableMinimumFrameDurationOnPhone: true
         # Come lo splash Android: solo il blu notte (#0A1330). Il marchio si costruisce animato
         # nella prima schermata dell'app (AilaLoadingScreen); con il logo qui si vedrebbe intero un
         # istante prima di ricostruirsi.
