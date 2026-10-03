@@ -15,7 +15,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import circolareplus.design.AilaCard
 import circolareplus.design.AilaListRow
 import circolareplus.design.AilaScreenHeader
@@ -114,8 +113,7 @@ fun ProfileScreen(
                     ) {
                         Text(
                             text = "${user.firstName.take(1)}${user.lastName.take(1)}".uppercase(),
-                            fontSize = 30.sp,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.displaySmall,
                             color = AppTheme.OnHeroPrimary
                         )
                     }
@@ -124,21 +122,20 @@ fun ProfileScreen(
 
                     Text(
                         text = "${user.firstName} ${user.lastName}",
-                        fontSize = 21.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge,
                         color = AppTheme.OnHeroPrimary,
                         maxLines = 1
                     )
                     Text(
                         text = "@${user.username}",
-                        fontSize = 13.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = AppTheme.OnHeroSecondary,
                         maxLines = 1
                     )
                     if (classLine != null) {
                         Text(
                             text = classLine,
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.bodySmall,
                             color = AppTheme.OnHeroSecondary,
                             maxLines = 1
                         )
@@ -159,8 +156,7 @@ fun ProfileScreen(
                         }
                         Text(
                             text = if (isRepresentative) "Rappresentante" else "Studente",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.labelMedium,
                             color = AppTheme.OnHeroPrimary
                         )
                     }
@@ -338,7 +334,7 @@ private fun ChangePasswordDialog(onDismiss: () -> Unit) {
                 onChange(it)
                 error = null
             },
-            placeholder = { Text(placeholder, fontSize = 13.sp) },
+            placeholder = { Text(placeholder, style = MaterialTheme.typography.bodyMedium) },
             singleLine = true,
             enabled = !busy && !done,
             visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
@@ -358,22 +354,21 @@ private fun ChangePasswordDialog(onDismiss: () -> Unit) {
         containerColor = AppTheme.SurfaceWhite,
         shape = RoundedCornerShape(AppTheme.CardCornerRadius),
         title = {
-            Text(text = "Cambia password", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = AppTheme.TextDark)
+            Text(text = "Cambia password", style = MaterialTheme.typography.titleLarge, color = AppTheme.TextDark)
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
                 if (done) {
                     Text(
                         text = "Password cambiata. Su questo telefono resti dentro; sugli altri dispositivi va fatto di nuovo l'accesso.",
-                        fontSize = 13.sp,
-                        color = AppTheme.TextMuted,
-                        lineHeight = 18.sp
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AppTheme.TextMuted
                     )
                 } else {
                     field(current, "Password attuale") { current = it }
                     field(next, "Nuova password (almeno 8 caratteri)") { next = it }
                     field(repeat, "Ripeti la nuova password") { repeat = it }
-                    error?.let { Text(text = it, fontSize = 12.sp, color = AppTheme.TintRedInk, lineHeight = 17.sp) }
+                    error?.let { Text(text = it, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TintRedInk) }
                 }
             }
         },
@@ -447,8 +442,7 @@ private fun DeleteAccountDialog(
         title = {
             Text(
                 text = "Eliminare l'account?",
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge,
                 color = AppTheme.TextDark
             )
         },
@@ -457,9 +451,8 @@ private fun DeleteAccountDialog(
                 Text(
                     text = "L'operazione è definitiva: profilo, voti, preferenze, proposte e commenti " +
                         "vengono cancellati e non si possono recuperare. Per confermare, inserisci la password.",
-                    fontSize = 13.sp,
-                    color = AppTheme.TextMuted,
-                    lineHeight = 18.sp
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AppTheme.TextMuted
                 )
                 Spacer(modifier = Modifier.height(AppTheme.Space12))
                 androidx.compose.material3.OutlinedTextField(
@@ -468,7 +461,7 @@ private fun DeleteAccountDialog(
                         password = it
                         error = null
                     },
-                    placeholder = { Text("Password", fontSize = 13.sp) },
+                    placeholder = { Text("Password", style = MaterialTheme.typography.bodyMedium) },
                     singleLine = true,
                     enabled = !isDeleting,
                     visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
@@ -483,7 +476,7 @@ private fun DeleteAccountDialog(
                 )
                 if (error != null) {
                     Spacer(modifier = Modifier.height(AppTheme.Space8))
-                    Text(text = error!!, fontSize = 12.sp, color = AppTheme.TintRedInk, lineHeight = 17.sp)
+                    Text(text = error!!, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TintRedInk)
                 }
             }
         },
@@ -539,13 +532,12 @@ private fun HeroStatBox(
             }
             Text(
                 text = value,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleSmall,
                 color = AppTheme.OnHeroPrimary,
                 maxLines = 1
             )
         }
         Spacer(modifier = Modifier.height(2.dp))
-        Text(text = label, fontSize = 11.sp, color = AppTheme.OnHeroSecondary, maxLines = 1)
+        Text(text = label, style = MaterialTheme.typography.bodySmall, color = AppTheme.OnHeroSecondary, maxLines = 1)
     }
 }
