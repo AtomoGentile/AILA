@@ -112,7 +112,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         // Converti il token binario in stringa esadecimale (es. "a1b2c3d4...ef01")
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
         AppDelegate.apnsToken = token
-        print("APNs token registrato: \(token)")
+        // Il token APNs identifica il dispositivo: non nei log.
+        print("APNs token registrato")
 
         // Solo se Firebase e' stato configurato (vedi didFinishLaunchingWithOptions): senza
         // GoogleService-Info.plist, FirebaseApp.app() e' nil e Messaging.messaging() crasherebbe.

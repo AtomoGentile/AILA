@@ -181,5 +181,9 @@ private fun CircularAttachmentDto.toDomain(baseUrl: String): CircularAttachment 
     if (pdfKey != null) {
         CircularAttachment(label = decodeHtmlEntities(label), downloadUrl = "$baseUrl/api/circulars/pdf/$pdfKey", isPdf = true, pdfKey = pdfKey)
     } else {
-        CircularAttachment(label = decodeHtmlEntities(label), downloadUrl = url ?: "", isPdf = false)
+        // Solo link web: arrivano dal sito della scuola e si aprono nel browser di sistema, quindi
+        // niente "intent:", "javascript:" o altri schemi (il Worker li scarta gia', questo vale
+        // anche per le circolari salvate prima).
+        val safeUrl = url?.takeIf { it.startsWith("https://", ignoreCase = true) || it.startsWith("http://", ignoreCase = true) }
+        CircularAttachment(label = decodeHtmlEntities(label), downloadUrl = safeUrl ?: "", isPdf = false)
     }

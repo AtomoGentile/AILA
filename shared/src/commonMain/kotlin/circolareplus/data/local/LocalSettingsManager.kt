@@ -5,6 +5,7 @@ import circolareplus.ai.cleanGeminiApiKey
 import circolareplus.ai.tier
 import circolareplus.domain.model.CircularAiClassification
 import circolareplus.domain.model.NotificationLogEntry
+import circolareplus.platform.createSecureSettings
 import circolareplus.platform.currentTimeMillis
 import com.russhwolf.settings.Settings
 import kotlinx.serialization.json.Json
@@ -17,7 +18,10 @@ import kotlinx.serialization.encodeToString
  * storico notifiche ricevute)
  */
 class LocalSettingsManager(
-    private val settings: Settings = Settings()
+    private val settings: Settings = Settings(),
+    // Token e chiave Gemini: vedi createSecureSettings (su iOS il Portachiavi, su Android le
+    // stesse preferenze).
+    private val secure: Settings = createSecureSettings() ?: settings
 ) {
     companion object {
         private const val KEY_USER_AI_API_KEY = "user_ai_api_key"
@@ -53,6 +57,8 @@ class LocalSettingsManager(
         private const val KEY_CIRCULAR_ANALYSES = "circular_analyses_json"
         private const val KEY_BG_LAST_CIRCULAR = "bg_last_circular_number"
         private const val KEY_DEBUG_MENU = "debug_menu_enabled"
+        /** Nelle impostazioni normali: i segreti nel Portachiavi sono di questa installazione. */
+        private const val KEY_SECRETS_OWNED = "secrets_in_secure_storage"
         /** Scritto da Swift (AilaBackground.swift): righe separate da "\n", max 100. */
         const val KEY_BG_LOG = "bg_log"
 
@@ -86,8 +92,8 @@ class LocalSettingsManager(
 
     /** Ripulita sia in scrittura sia in lettura, cosi' si sistema anche una chiave gia' salvata. */
     var userAiApiKey: String
-        get() = cleanGeminiApiKey(settings.getString(KEY_USER_AI_API_KEY, ""))
-        set(value) = settings.putString(KEY_USER_AI_API_KEY, cleanGeminiApiKey(value))
+        get() = cleanGeminiApiKey(readSecret(KEY_USER_AI_API_KEY))
+        set(value) = writeSecret(KEY_USER_AI_API_KEY, cleanGeminiApiKey(value))
 
     /**
      * Provider AI scelto: uno degli `id` di [circolareplus.ai.AiProvider].
@@ -303,8 +309,8 @@ class LocalSettingsManager(
         set(value) = settings.putString(KEY_BG_ANALYSES_CURSOR, value)
 
     var authToken: String
-        get() = settings.getString(KEY_AUTH_TOKEN, "")
-        set(value) = settings.putString(KEY_AUTH_TOKEN, value)
+        get() = readSecret(KEY_AUTH_TOKEN)
+        set(value) = writeSecret(KEY_AUTH_TOKEN, value)
 
     var currentUserId: String
         get() = settings.getString(KEY_USER_ID, "")
@@ -509,6 +515,7 @@ class LocalSettingsManager(
             KEY_BG_LAST_CIRCULAR, KEY_BG_ANALYSES_CURSOR,
             KEY_LAST_ONLINE_SYNC, KEY_LAST_FULL_OFFLINE_SYNC, KEY_DATA_OWNER
         ).forEach { settings.remove(it) }
+        clearSecrets()
     }
 
     /**
@@ -518,7 +525,54 @@ class LocalSettingsManager(
      */
     fun clear() {
         val onboardingSeen = hasSeenOnboarding
+        clearSecrets()
         settings.clear()
         hasSeenOnboarding = onboardingSeen
+    }
+
+    // --- Segreti (token, chiave Gemini) ----------------------------------------------------
+
+    private val separateSecureStorage get() = secure !== settings
+
+    private fun readSecret(key: String): String {
+        if (!separateSecureStorage) return settings.getString(key, "")
+        // Il Portachiavi sopravvive alla disinstallazione, le impostazioni no: senza il segno
+        // nelle impostazioni quel che c'e' e' di un'installazione precedente e non deve valere.
+        if (!settings.getBoolean(KEY_SECRETS_OWNED, false)) {
+            runCatching { secure.remove(key) }
+        } else {
+            val stored = runCatching { secure.getString(key, "") }.getOrDefault("")
+            if (stored.isNotEmpty()) return stored
+        }
+        // Salvato in chiaro da una versione precedente (o rimasto li' perche' il Portachiavi non
+        // rispondeva): si sposta.
+        val legacy = settings.getString(key, "")
+        if (legacy.isNotEmpty()) writeSecret(key, legacy)
+        return legacy
+    }
+
+    private fun writeSecret(key: String, value: String) {
+        if (!separateSecureStorage) {
+            settings.putString(key, value)
+            return
+        }
+        // Primo segreto di questa installazione: via quelli rimasti da una precedente, che
+        // altrimenti diventerebbero validi insieme al nuovo segno.
+        if (!settings.getBoolean(KEY_SECRETS_OWNED, false)) clearSecrets()
+        val saved = runCatching {
+            if (value.isEmpty()) secure.remove(key) else secure.putString(key, value)
+        }.isSuccess
+        if (saved) {
+            settings.putBoolean(KEY_SECRETS_OWNED, true)
+            settings.remove(key)
+        } else {
+            // Portachiavi non disponibile: meglio in chiaro che perdere il login.
+            settings.putString(key, value)
+        }
+    }
+
+    private fun clearSecrets() {
+        if (!separateSecureStorage) return
+        listOf(KEY_AUTH_TOKEN, KEY_USER_AI_API_KEY).forEach { key -> runCatching { secure.remove(key) } }
     }
 }
