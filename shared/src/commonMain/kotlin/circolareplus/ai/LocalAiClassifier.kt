@@ -20,7 +20,18 @@ class LocalAiClassifier(
      * classificazione delle circolari e bozza degli eventi restano sempre a ragionamento spento,
      * perche' li' serve un JSON e basta e il tempo e' gia' tanto.
      */
-    private val enableThinking: Boolean = false
+    private val enableThinking: Boolean = false,
+    /**
+     * Pausa di AICore dopo un errore che riprovare subito non risolve (vedi [AiCoreCooldown]):
+     * qui si registrano esiti e fallimenti del modello AICore, la decisione di saltarlo la prende
+     * [planAiRoute] alla richiesta successiva.
+     */
+    private val aiCoreCooldown: AiCoreCooldown? = null,
+    /**
+     * Perche' [model] e' `null` quando non e' "nessun modello installato": oggi solo AICore in
+     * pausa senza un modello LiteRT-LM su cui ripiegare.
+     */
+    private val noModelReason: String? = null
 ) : AiClassifier {
 
     private companion object {
@@ -62,7 +73,7 @@ class LocalAiClassifier(
         if (model == null || path == null) {
             return heuristicFallback(
                 circularNumber, circularTitle, pdfText,
-                "nessun modello locale installato"
+                noModelReason ?: "nessun modello locale installato"
             )
         }
 
@@ -136,6 +147,7 @@ class LocalAiClassifier(
                 }
             }
         }
+        noteOutcome(model, failure)
         failure?.let { e ->
             return heuristicFallback(
                 circularNumber, circularTitle, pdfText,
@@ -185,6 +197,7 @@ class LocalAiClassifier(
                         EventGenerationPrompt.buildUserPrompt(userPrompt)
                     }
                 )
+                noteOutcome(model, null)
                 val draft = EventGenerationPrompt.extractJsonObject(raw)
                     ?.let { EventGenerationPrompt.parse(it) }
                 if (draft != null) {
@@ -198,6 +211,7 @@ class LocalAiClassifier(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
+                noteOutcome(model, e)
                 if (compact || !isPromptTooLong(e.message.orEmpty())) break
                 compact = true
             }
@@ -226,7 +240,7 @@ class LocalAiClassifier(
         val path = modelPath
         if (model == null || path == null) {
             return AiTextResult.Failure(
-                "Nessun modello di AI locale installato: scaricalo dalle Impostazioni."
+                noModelReason ?: "Nessun modello di AI locale installato: scaricalo dalle Impostazioni."
             )
         }
 
@@ -276,18 +290,36 @@ class LocalAiClassifier(
                 },
                 userPrompt = built.userPrompt
             )
+            noteOutcome(model, null)
             if (raw.isBlank()) {
                 AiTextResult.Failure("${model.displayName} non ha prodotto nessuna risposta.")
             } else {
                 AiTextResult.Success(raw, "AI locale (${model.displayName})")
             }
         } catch (e: Exception) {
+            noteOutcome(model, e)
             AiTextResult.Failure(
                 "${model.displayName} non e' riuscito a rispondere: " +
                     HeuristicClassification.shortenReason(
                         "${e::class.simpleName}: ${e.message ?: "nessun dettaglio"}"
                     )
             )
+        }
+    }
+
+    /**
+     * Riporta a [aiCoreCooldown] l'esito di una generazione di AICore. Gli altri modelli non
+     * contano: la pausa serve solo a non ripassare da Gemini Nano quando il sistema lo blocca.
+     */
+    private fun noteOutcome(model: LocalAiModel, failure: Exception?) {
+        val cooldown = aiCoreCooldown ?: return
+        if (model.id != AICORE_MODEL_ID) return
+        // Lo Stop dell'utente non dice niente sullo stato di Gemini Nano.
+        if (failure is kotlinx.coroutines.CancellationException) return
+        if (failure == null) {
+            cooldown.recordSuccess()
+        } else {
+            cooldown.recordFailure(failure.message ?: failure::class.simpleName.orEmpty())
         }
     }
 
@@ -309,7 +341,7 @@ class LocalAiClassifier(
     override suspend fun testConfiguration(): String {
         val unavailable = onDeviceAiUnavailableReason()
         if (unavailable != null) return unavailable
-        if (model == null) return "Nessun modello locale selezionato."
+        if (model == null) return noModelReason ?: "Nessun modello locale selezionato."
         val path = modelPath
             ?: return "${model.displayName} non è ancora stato scaricato."
 
@@ -323,8 +355,11 @@ class LocalAiClassifier(
                 systemPrompt = "Rispondi con una sola parola.",
                 userPrompt = "Scrivi soltanto: ok"
             )
+            // La prova dalle Impostazioni e' anche il modo per togliere a mano la pausa di AICore.
+            noteOutcome(model, null)
             "${model.displayName} funziona su ${llm.backendLabel()}. Risposta di prova: \"${answer.trim().take(60)}\""
         } catch (e: Exception) {
+            noteOutcome(model, e)
             // Accorciato: l'errore del motore nativo porta con sé il trace del codice C++ e i
             // byte grezzi di uno StatusList protobuf, che riempivano mezza schermata delle
             // Impostazioni senza dire niente di piu' della prima riga.

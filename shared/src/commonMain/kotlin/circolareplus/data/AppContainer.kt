@@ -1,9 +1,11 @@
 package circolareplus.data
 
 import circolareplus.ai.AiClassifier
+import circolareplus.ai.AiCoreCooldown
 import circolareplus.ai.assistant.AilaAssistant
 import circolareplus.ai.assistant.AssistantKnowledgeLoader
 import circolareplus.ai.AiProvider
+import circolareplus.ai.AiRoutePlan
 import circolareplus.ai.ChainedAiClassifier
 import circolareplus.ai.ClientSideAiClassifier
 import circolareplus.ai.LocalAiCatalog
@@ -13,9 +15,10 @@ import circolareplus.ai.LocalLlm
 import circolareplus.ai.LocalModelStore
 import circolareplus.ai.PdfTextExtractor
 import circolareplus.ai.deviceTierForRam
-import circolareplus.ai.shouldPreferCloudForLength
+import circolareplus.ai.planAiRoute
 import circolareplus.ai.totalDeviceRamMb
 import circolareplus.data.local.LocalSettingsManager
+import circolareplus.platform.currentTimeMillis
 import circolareplus.data.remote.ApiClient
 import circolareplus.data.repository.AuthRepository
 import circolareplus.data.repository.CalendarRepository
@@ -117,9 +120,32 @@ object AppContainer {
      * da un secondo, e' da mezzo minuto di CPU o GPU a pieno regime. Le parti dell'app che
      * classificano in anticipo o in sottofondo si comportano di conseguenza.
      */
-    fun isUsingLocalAiFirst(): Boolean =
-        AiProvider.fromId(settings.aiProvider) == AiProvider.ON_DEVICE &&
-            localModelStore.isInstalled(selectedLocalModel())
+    fun isUsingLocalAiFirst(): Boolean {
+        if (AiProvider.fromId(settings.aiProvider) != AiProvider.ON_DEVICE) return false
+        val plan = currentRoute(AiProvider.ON_DEVICE, pdfTextLength = null)
+        val model = plan.localModel ?: return false
+        return !plan.cloudFirst && localModelStore.isInstalled(model)
+    }
+
+    /**
+     * Pausa di AICore dopo un errore che riprovare subito non risolve: una sola per processo,
+     * cosi' tutte le analisi in coda la vedono. Dopo un riavvio dell'app si riparte da AICore.
+     */
+    val aiCoreCooldown: AiCoreCooldown by lazy { AiCoreCooldown(now = ::currentTimeMillis) }
+
+    private fun currentRoute(provider: AiProvider, pdfTextLength: Int?): AiRoutePlan {
+        val paused = aiCoreCooldown.isPaused()
+        return planAiRoute(
+            provider = provider,
+            selectedModel = selectedLocalModel(),
+            // Servono solo per ripiegare da AICore in pausa: altrimenti non si guarda il disco.
+            installedModels = if (paused) localModelStore.installedModels() else emptyList(),
+            hasCloudKey = settings.userAiApiKey.isNotBlank(),
+            aiCorePaused = paused,
+            textLength = pdfTextLength,
+            preferCloudForLongText = PREFER_CLOUD_FOR_LONG_TEXT
+        )
+    }
 
     /**
      * Se, con una chiave cloud configurata, le circolari lunghe scavalcano il provider "AI
@@ -165,33 +191,24 @@ object AppContainer {
     ): AiClassifier {
         val cloud = ClientSideAiClassifier(userApiKey = settings.userAiApiKey)
 
-        val model = selectedLocalModel()
+        val provider = AiProvider.fromId(settings.aiProvider)
+        // AICore in pausa (vedi AiCoreCooldown) si salta: al suo posto un modello LiteRT-LM gia'
+        // scaricato, o il cloud se non ce n'e'.
+        val plan = currentRoute(provider, pdfTextLength)
+        val model = plan.localModel
         val local = LocalAiClassifier(
             model = model,
-            modelPath = localModelStore.installedPath(model),
+            modelPath = model?.let { localModelStore.installedPath(it) },
             llm = localLlm,
-            enableThinking = localThinking
+            enableThinking = localThinking,
+            aiCoreCooldown = aiCoreCooldown,
+            noModelReason = if (plan.aiCoreSkipped && model == null) aiCoreCooldown.skipReason() else null
         )
 
-        return when (AiProvider.fromId(settings.aiProvider)) {
-            AiProvider.ON_DEVICE -> {
-                val preferCloudForLength = PREFER_CLOUD_FOR_LONG_TEXT &&
-                    pdfTextLength != null && shouldPreferCloudForLength(
-                    textLength = pdfTextLength,
-                    localModel = model,
-                    hasCloudKey = settings.userAiApiKey.isNotBlank()
-                )
-                if (preferCloudForLength) {
-                    ChainedAiClassifier(
-                        primary = cloud,
-                        secondary = local,
-                        escalateToSecondary = allowLocalFallback
-                    )
-                } else {
-                    ChainedAiClassifier(primary = local, secondary = cloud)
-                }
-            }
-            AiProvider.GOOGLE_AI_STUDIO -> ChainedAiClassifier(
+        return when {
+            provider == AiProvider.ON_DEVICE && !plan.cloudFirst ->
+                ChainedAiClassifier(primary = local, secondary = cloud)
+            else -> ChainedAiClassifier(
                 primary = cloud,
                 secondary = local,
                 escalateToSecondary = allowLocalFallback
