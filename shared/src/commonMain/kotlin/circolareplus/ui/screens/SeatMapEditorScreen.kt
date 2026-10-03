@@ -22,6 +22,8 @@ import circolareplus.design.AilaPrimaryButton
 import circolareplus.design.AilaSecondaryButton
 import circolareplus.design.AppTheme
 import circolareplus.design.ailaGlassSurface
+import circolareplus.design.ailaDeskLabel
+import circolareplus.design.ailaDeskBadge
 import circolareplus.domain.model.SocialPreferenceScore
 import circolareplus.domain.model.User
 
@@ -71,8 +73,7 @@ fun SeatMapEditorScreen(
             Column(modifier = Modifier.padding(AppTheme.Space12)) {
                 Text(
                     text = satisfactionLabel(satisfaction),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelLarge,
                     color = AppTheme.TextDark
                 )
                 Spacer(modifier = Modifier.height(AppTheme.Space8))
@@ -86,7 +87,8 @@ fun SeatMapEditorScreen(
                         "Tocca un nome per selezionarlo, poi un secondo per scambiarli."
                     else
                         "Ora tocca un secondo nome per completare lo scambio.",
-                    fontSize = 11.sp,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Normal,
                     color = AppTheme.TextMuted,
                     modifier = Modifier.padding(top = AppTheme.Space8)
                 )
@@ -161,15 +163,13 @@ fun SeatMapEditorScreen(
                     ) {
                         Text(
                             text = "Banco F${desk.row + 1}C${desk.column + 1}",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.ailaDeskLabel,
                             color = AppTheme.TextMuted
                         )
                         if (isForbidden) {
                             Text(
                                 text = "Coppia vietata",
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.ailaDeskBadge,
                                 color = AppTheme.PollDarkRed
                             )
                         }
@@ -242,11 +242,15 @@ private fun handleSeatTap(
 private fun SeatSlotLabel(name: String?, isSelected: Boolean, onClick: () -> Unit) {
     Text(
         text = name ?: "Vuoto",
-        fontSize = 12.sp,
+        style = MaterialTheme.typography.labelMedium,
         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
         color = if (isSelected) AppTheme.PrimaryBlue else AppTheme.TextDark,
         modifier = Modifier
             .clickable(onClick = onClick)
+            // L'altezza di prima (28dp), che veniva dall'interlinea di 24sp ereditata da Material:
+            // nel banco non c'e' posto per 44, ma sotto i 28 il nome diventava difficile da toccare.
+            .heightIn(min = 28.dp)
+            .wrapContentHeight()
             .then(
                 if (isSelected) Modifier.border(1.dp, AppTheme.PrimaryBlue, RoundedCornerShape(4.dp)) else Modifier
             )
