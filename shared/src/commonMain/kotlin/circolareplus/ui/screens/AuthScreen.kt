@@ -528,6 +528,9 @@ private fun ResetPasswordDialog(
 
     AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
+        // Stessa superficie e forma dei dialoghi del design system (AilaConfirmDialog).
+        containerColor = AppTheme.SurfaceWhite,
+        shape = RoundedCornerShape(AppTheme.CardCornerRadius),
         title = { Text("Password dimenticata") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {

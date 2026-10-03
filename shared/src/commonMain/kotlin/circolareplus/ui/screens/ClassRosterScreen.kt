@@ -174,28 +174,26 @@ private fun ClassCodeRow() {
     }
 
     if (confirmRegenerate) {
-        AlertDialog(
-            onDismissRequest = { confirmRegenerate = false },
-            title = { Text("Nuovo codice classe?") },
-            text = { Text("Il codice attuale smette di valere: chi non si è ancora registrato dovrà usare quello nuovo.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmRegenerate = false
-                    busy = true
-                    scope.launch {
-                        try {
-                            code = circolareplus.data.AppContainer.usersRepository.regenerateClassCode()
-                        } catch (e: kotlinx.coroutines.CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            error = (e as? circolareplus.data.remote.ApiException)?.message
-                        } finally {
-                            busy = false
-                        }
+        circolareplus.design.AilaConfirmDialog(
+            title = "Nuovo codice classe?",
+            message = "Il codice attuale smette di valere: chi non si è ancora registrato dovrà usare quello nuovo.",
+            onDismiss = { confirmRegenerate = false },
+            onConfirm = {
+                confirmRegenerate = false
+                busy = true
+                scope.launch {
+                    try {
+                        code = circolareplus.data.AppContainer.usersRepository.regenerateClassCode()
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        error = (e as? circolareplus.data.remote.ApiException)?.message
+                    } finally {
+                        busy = false
                     }
-                }) { Text("Rigenera") }
+                }
             },
-            dismissButton = { TextButton(onClick = { confirmRegenerate = false }) { Text("Annulla") } }
+            confirmLabel = "Rigenera"
         )
     }
 }
@@ -218,40 +216,38 @@ private fun ResetCodeButton(entry: RatingEntryDto) {
     error?.let { Text(text = it, fontSize = 12.sp, color = AppTheme.TintRedInk) }
 
     if (confirm) {
-        AlertDialog(
-            onDismissRequest = { confirm = false },
-            title = { Text("Codice di reset") },
-            text = {
-                Text(
-                    "Generi un codice con cui ${entry.firstName} può scegliere una password nuova. " +
-                        "Dallo solo a lei/lui, di persona o in privato."
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirm = false
-                    busy = true
-                    error = null
-                    scope.launch {
-                        try {
-                            result = circolareplus.data.AppContainer.usersRepository.createResetCode(entry.studentId)
-                        } catch (e: kotlinx.coroutines.CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            error = (e as? circolareplus.data.remote.ApiException)?.message ?: "Impossibile generare il codice."
-                        } finally {
-                            busy = false
-                        }
+        circolareplus.design.AilaConfirmDialog(
+            title = "Codice di reset",
+            message = "Generi un codice con cui ${entry.firstName} può scegliere una password nuova: " +
+                "daglielo solo di persona o in privato. Riceverà anche una notifica.",
+            onDismiss = { confirm = false },
+            onConfirm = {
+                confirm = false
+                busy = true
+                error = null
+                scope.launch {
+                    try {
+                        result = circolareplus.data.AppContainer.usersRepository.createResetCode(entry.studentId)
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        error = (e as? circolareplus.data.remote.ApiException)?.message ?: "Impossibile generare il codice."
+                    } finally {
+                        busy = false
                     }
-                }) { Text("Genera") }
+                }
             },
-            dismissButton = { TextButton(onClick = { confirm = false }) { Text("Annulla") } }
+            confirmLabel = "Genera",
+            isDestructive = false
         )
     }
 
     result?.let { reset ->
         AlertDialog(
             onDismissRequest = { result = null },
+            // Stessa superficie e forma dei dialoghi del design system (AilaConfirmDialog).
+            containerColor = AppTheme.SurfaceWhite,
+            shape = RoundedCornerShape(AppTheme.CardCornerRadius),
             title = { Text("Codice per ${entry.firstName}") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
@@ -509,6 +505,9 @@ private fun AddDisciplinePairDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        // Stessa superficie e forma dei dialoghi del design system (AilaConfirmDialog).
+        containerColor = AppTheme.SurfaceWhite,
+        shape = RoundedCornerShape(AppTheme.CardCornerRadius),
         title = { Text("Coppia da separare") },
         text = {
             Column {

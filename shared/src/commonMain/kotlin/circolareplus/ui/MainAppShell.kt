@@ -1957,26 +1957,19 @@ fun MainAppShell(
     if (AppTheme.isGlass) addEventDialog()
 
     if (pendingDuplicateWarning != null) {
-        AlertDialog(
-            onDismissRequest = { pendingDuplicateWarning = null; pendingDuplicateRetry = null },
-            title = { Text("Evento già presente") },
-            text = { Text(pendingDuplicateWarning ?: "") },
-            confirmButton = {
-                TextButton(onClick = {
-                    val retry = pendingDuplicateRetry
-                    pendingDuplicateWarning = null
-                    pendingDuplicateRetry = null
-                    retry?.invoke()
-                }) {
-                    Text("Aggiungi comunque")
-                }
+        // Il modulo resta aperto se si annulla: si puo' correggere titolo o data.
+        circolareplus.design.AilaConfirmDialog(
+            title = "Evento già presente",
+            message = pendingDuplicateWarning ?: "",
+            onDismiss = { pendingDuplicateWarning = null; pendingDuplicateRetry = null },
+            onConfirm = {
+                val retry = pendingDuplicateRetry
+                pendingDuplicateWarning = null
+                pendingDuplicateRetry = null
+                retry?.invoke()
             },
-            dismissButton = {
-                // Il modulo resta aperto: si puo' correggere titolo o data.
-                TextButton(onClick = { pendingDuplicateWarning = null; pendingDuplicateRetry = null }) {
-                    Text("Annulla")
-                }
-            }
+            confirmLabel = "Aggiungi comunque",
+            isDestructive = false
         )
     }
 
@@ -2117,6 +2110,9 @@ fun MainAppShell(
     if (seatMapActionError != null) {
         AlertDialog(
             onDismissRequest = { seatMapActionError = null },
+            // Stessa superficie e forma dei dialoghi del design system (AilaConfirmDialog).
+            containerColor = AppTheme.SurfaceWhite,
+            shape = RoundedCornerShape(AppTheme.CardCornerRadius),
             title = { Text("Attenzione") },
             text = { Text(seatMapActionError ?: "") },
             confirmButton = {
