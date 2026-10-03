@@ -23,6 +23,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -69,15 +70,40 @@ import kotlinx.coroutines.delay
 fun Modifier.ailaAppear(index: Int = 0, enabled: Boolean = true): Modifier = this
 
 /**
- * Una schermata che si sta chiudendo smette di prendere i tocchi: la sua area per il tocco si
- * azzera (il disegno resta com'e'), cosi' i pulsanti sotto rispondono subito. Senza, fino a fine
- * animazione di chiusura la pagina in uscita li copriva e "apri-chiudi, apri-chiudi" perdeva i tocchi.
+ * Una schermata che si sta chiudendo smette di prendere i tocchi, cosi' i pulsanti sotto
+ * rispondono subito. Senza, fino a fine animazione di chiusura la pagina in uscita li copriva e
+ * "apri-chiudi, apri-chiudi" perdeva i tocchi.
+ *
+ * Il contenuto viene spostato fuori schermo di [AILA_NO_TOUCH_SHIFT_PX] solo per il layout (e
+ * quindi per i tocchi, che seguono le posizioni del layout) e ridisegnato al suo posto con una
+ * traslazione del disegno. Prima la misura si dichiarava 0x0: dentro un contenitore che impone
+ * tutto lo schermo come minimo, Compose porta la misura al minimo e *centra* il contenuto, e la
+ * pagina in uscita si disegnava da meta' schermo (segnalato: la card del profilo "in basso a
+ * destra" per un attimo aprendo le Impostazioni). In piu' i figli di un nodo 0x0 restano
+ * toccabili alla loro posizione vera: il blocco funzionava solo perche' erano stati spostati.
  */
 fun Modifier.ailaNoTouchWhile(active: Boolean): Modifier =
-    if (!active) this else this.layout { measurable, constraints ->
-        val placeable = measurable.measure(constraints)
-        layout(0, 0) { placeable.place(0, 0) }
-    }
+    if (!active) this else this
+        .drawWithContent {
+            translate(left = AILA_NO_TOUCH_SHIFT_PX.toFloat()) { this@drawWithContent.drawContent() }
+        }
+        .layout { measurable, constraints ->
+            val placeable = measurable.measure(constraints)
+            layout(placeable.width, placeable.height) { placeable.place(-AILA_NO_TOUCH_SHIFT_PX, 0) }
+        }
+
+/**
+ * Di quanto [ailaNoTouchWhile] sposta il layout. Molto piu' di qualunque schermo, ma abbastanza
+ * piccolo da restare preciso al sottopixel in virgola mobile.
+ */
+const val AILA_NO_TOUCH_SHIFT_PX = 100_000
+
+/**
+ * La posizione nello schermo dove l'elemento si vede davvero: dentro una pagina in chiusura
+ * (vedi [ailaNoTouchWhile]) il layout e' spostato, il disegno no.
+ */
+internal fun visibleXInRoot(x: Float): Float =
+    if (x < -AILA_NO_TOUCH_SHIFT_PX / 2f) x + AILA_NO_TOUCH_SHIFT_PX else x
 
 /**
  * Respiro lento: usata dal logo nella schermata di caricamento, per far capire che l'app sta
@@ -584,6 +610,10 @@ fun Modifier.ailaTransformOrigin(
     }
     return this
         .onGloballyPositioned {
+            // Dentro una pagina in chiusura il layout e' spostato fuori schermo (vedi
+            // ailaNoTouchWhile) e boundsInRoot, ritagliato allo schermo, sarebbe vuoto: si tiene
+            // l'ultima posizione vera, la pagina non si muove mentre si chiude.
+            if (visibleXInRoot(it.positionInRoot().x) != it.positionInRoot().x) return@onGloballyPositioned
             val bounds = it.boundsInRoot()
             holder[0] = bounds
             if (liveKey != null) {
@@ -657,7 +687,11 @@ fun Modifier.ailaContainerReveal(
 ): Modifier {
     val selfOffset = arrayOf(Offset.Zero)
     return this
-        .onGloballyPositioned { selfOffset[0] = it.positionInRoot() }
+        .onGloballyPositioned {
+            val position = it.positionInRoot()
+            // Pagina in chiusura (vedi ailaNoTouchWhile): conta dove si vede, non il layout.
+            selfOffset[0] = Offset(visibleXInRoot(position.x), position.y)
+        }
         // La forma che cresce e' il contorno del livello grafico, non un clipPath: il contorno a
         // rettangolo arrotondato lo ritaglia la GPU quasi gratis, mentre il clipPath di un
         // tracciato a ogni fotogramma su Android passa da una maschera ed era la causa degli
