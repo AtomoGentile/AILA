@@ -3702,7 +3702,8 @@ fun MainAppShell(
                             circolareplus.ai.LocalAiClassifier(
                                 model = model,
                                 modelPath = AppContainer.localModelStore.installedPath(model),
-                                llm = AppContainer.localLlm
+                                llm = AppContainer.localLlm,
+                                aiCoreCooldown = AppContainer.aiCoreCooldown
                             ).testConfiguration()
                         },
                         showDebugMenu = debugMenuUnlocked || circolareplus.platform.isDebugBuild(),
