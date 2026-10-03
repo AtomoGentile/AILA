@@ -362,7 +362,9 @@ private fun AskAilaButton(query: String, onClick: () -> Unit) {
             modifier = Modifier
                 .size(38.dp)
                 .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                .background(Color(0x2EFFFFFF)),
+                // Il pulsante e' blu pieno in entrambi gli stili (PrimaryGradient), quindi i colori
+                // "su gradiente" fissi e non gli OnHero*, che in Glass diventano scuri.
+                .background(AppTheme.OnGradientSurface),
             contentAlignment = Alignment.Center
         ) {
             AilaAssistantMark(
@@ -386,7 +388,7 @@ private fun AskAilaButton(query: String, onClick: () -> Unit) {
                     "Circolari, calendario, bacheca e altro"
                 },
                 fontSize = 11.sp,
-                color = Color(0xCCFFFFFF),
+                color = AppTheme.OnGradientSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

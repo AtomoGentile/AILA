@@ -126,7 +126,9 @@ Da fare / da decidere:
 - **Media — reset del Rappresentante = accesso all'account dello studente**: puo' leggere da li'
   le proposte anonime dello studente. E' il prezzo del recupero senza email; almeno avvisare lo
   studente al login successivo che la password e' stata reimpostata.
-- **Media — analisi delle circolari** (`routes/circulars.ts` PUT `/:number/analysis`): il livello
+- **Accettato (3/10, Simone) — analisi delle circolari**: serve un proxy sul proprio telefono e
+  lascia `submitted_by`; con la chiave Gemini sul server il falso viene rifatto in pochi minuti.
+  Si lascia cosi'. Dettaglio originale: (`routes/circulars.ts` PUT `/:number/analysis`): il livello
   lo decide `modelLabel` mandato dal client; chiunque, di qualunque classe, scrivendo
   "Google Gemini…" pubblica un riassunto (e scadenze) letto da tutta la scuola sulle circolari che
   il server non ha riassunto. Quello del server resta protetto.

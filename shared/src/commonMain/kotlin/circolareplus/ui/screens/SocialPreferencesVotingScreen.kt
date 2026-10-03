@@ -2,10 +2,7 @@ package circolareplus.ui.screens
 
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -29,6 +26,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import circolareplus.design.AilaPrimaryButton
 import circolareplus.design.AppTheme
+import circolareplus.design.ailaBouncySpring
+import circolareplus.design.ailaColorSpec
 import circolareplus.domain.model.SocialPreference
 import circolareplus.domain.model.SocialPreferenceScore
 import circolareplus.domain.model.User
@@ -144,12 +143,11 @@ fun SocialPreferencesVotingScreen(
 
                     Spacer(modifier = Modifier.height(AppTheme.Space8))
 
-                    // Bottoni per i 5 valori (+2, +1, 0, -1, -2). I pastelli di +1/0/-1/-2 non
-                    // hanno un token identico in AppTheme (i Tint*Ink cambiano col tema), quindi
-                    // restano qui; il testo sopra e' sempre AppTheme.OnPollColor.
+                    // Bottoni per i 5 valori (+2, +1, 0, -1, -2): colori fissi in ogni tema
+                    // (AppTheme.Pref*), il testo sopra e' sempre AppTheme.OnPollColor.
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(AppTheme.Space4)
                     ) {
                         SocialScoreButton(
                             label = "+2",
@@ -161,26 +159,26 @@ fun SocialPreferencesVotingScreen(
                         SocialScoreButton(
                             label = "+1",
                             isSelected = currentScore == SocialPreferenceScore.MEDIUM_AFFINITY,
-                            activeColor = Color(0xFF86EFAC),
+                            activeColor = AppTheme.PrefPlusOne,
                             onClick = { onVoteChanged(classmate.id, SocialPreferenceScore.MEDIUM_AFFINITY) }
                         )
                         SocialScoreButton(
                             label = "0",
                             isSelected = currentScore == SocialPreferenceScore.NEUTRAL,
-                            activeColor = Color(0xFFCBD5E1),
+                            activeColor = AppTheme.PrefNeutral,
                             onClick = { onVoteChanged(classmate.id, SocialPreferenceScore.NEUTRAL) }
                         )
                         SocialScoreButton(
                             label = "-1",
                             isSelected = currentScore == SocialPreferenceScore.MILD_REJECTION,
-                            activeColor = Color(0xFFFCA5A5),
+                            activeColor = AppTheme.PrefMinusOne,
                             onClick = { onVoteChanged(classmate.id, SocialPreferenceScore.MILD_REJECTION) }
                         )
                         SocialScoreButton(
                             label = "-2",
                             isSelected = currentScore == SocialPreferenceScore.STRONG_REJECTION,
                             enabled = currentScore == SocialPreferenceScore.STRONG_REJECTION || minusTwoCount < 2,
-                            activeColor = Color(0xFFEF4444),
+                            activeColor = AppTheme.PrefMinusTwo,
                             onClick = { onVoteChanged(classmate.id, SocialPreferenceScore.STRONG_REJECTION) }
                         )
                     }
@@ -222,29 +220,28 @@ fun RowScope.SocialScoreButton(
 
     val animatedBgColor by animateColorAsState(
         targetValue = targetBgColor,
-        animationSpec = tween(200),
+        animationSpec = ailaColorSpec(),
         label = "socialBtnBg"
     )
 
     val animatedBorderColor by animateColorAsState(
         targetValue = if (isSelected) activeColor else AppTheme.FieldOutline,
-        animationSpec = tween(200),
+        animationSpec = ailaColorSpec(),
         label = "socialBtnBorder"
     )
 
     val animatedScale by animateFloatAsState(
         targetValue = if (isPressed && enabled) 0.93f else if (isSelected) 1.04f else 1.0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
+        // Pressione e selezione rispondono al dito: la molla giocosa del sistema, che con
+        // "Riduci movimento" perde il rimbalzo.
+        animationSpec = ailaBouncySpring(),
         label = "socialBtnScale"
     )
 
     Box(
         modifier = Modifier
             .weight(1f)
-            // 44dp minimi: con solo 10dp sopra e sotto il bottone era alto circa 38dp.
+            // 44dp minimi: con il solo padding verticale il bottone restava sotto i 44dp.
             .heightIn(min = 44.dp)
             .graphicsLayer { scaleX = animatedScale; scaleY = animatedScale }
             .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
@@ -258,7 +255,7 @@ fun RowScope.SocialScoreButton(
             )
             // Il voto scelto si distingue solo dal colore: lo diciamo anche al lettore di schermo.
             .semantics { selected = isSelected }
-            .padding(vertical = 10.dp),
+            .padding(vertical = AppTheme.Space12),
         contentAlignment = Alignment.Center
     ) {
         Text(

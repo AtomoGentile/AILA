@@ -1,7 +1,6 @@
 package circolareplus.ui.screens
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -43,13 +42,16 @@ import circolareplus.ai.assistant.AssistantMessage
 import circolareplus.ai.assistant.AssistantSource
 import circolareplus.ai.assistant.AssistantSourceKind
 import circolareplus.design.AilaAssistantMark
+import circolareplus.design.AilaDuration
 import circolareplus.design.AilaBackBar
 import circolareplus.design.AilaIconButton
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
 import circolareplus.design.ailaAppear
+import circolareplus.design.ailaFadeSpec
 import circolareplus.design.ailaGlassSurface
 import circolareplus.design.ailaMorphShape
+import circolareplus.design.ailaMoveSpec
 import circolareplus.design.ailaPressable
 import kotlinx.coroutines.delay
 
@@ -246,7 +248,7 @@ fun AssistantChatScreen(
                 SendButton(enabled = canSend, onClick = send)
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(AppTheme.Space8))
             Text(
                 text = "Usa i dati di AILA per la scuola e le sue conoscenze per il resto. Può " +
                     "sbagliare: per le cose importanti apri la circolare.",
@@ -290,7 +292,7 @@ private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
     val shape = if (glass) CircleShape else ailaMorphShape(interactionSource)
     Box(
         modifier = Modifier
-            .padding(bottom = 4.dp)
+            .padding(bottom = AppTheme.Space4)
             .size(48.dp)
             .then(
                 when {
@@ -346,7 +348,7 @@ private fun AssistantHistorySheet(
                 fontWeight = FontWeight.Bold,
                 color = AppTheme.TextDark
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(AppTheme.Space4))
             Text(
                 text = "Restano su questo telefono: non passano dal server della classe.",
                 fontSize = 12.sp,
@@ -395,7 +397,7 @@ private fun AssistantHistorySheet(
                                 maxLines = 2,
                                 lineHeight = 18.sp
                             )
-                            Spacer(modifier = Modifier.height(2.dp))
+                            Spacer(modifier = Modifier.height(AppTheme.Space4))
                             Text(
                                 text = "${conversation.messages.size} messaggi \u2022 " +
                                     relativeTimeLabel(conversation.updatedAtMillis),
@@ -408,7 +410,9 @@ private fun AssistantHistorySheet(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
                                 .ailaPressable(pressedScale = 0.9f) { onDelete(conversation.id) }
-                                .padding(6.dp),
+                                // 8 e non 6: sta sulla griglia e allarga un poco l'area di tocco
+                                // del cestino, che era piccola.
+                                .padding(AppTheme.Space8),
                             contentAlignment = Alignment.Center
                         ) {
                             AppIcons.Trash(modifier = Modifier.size(16.dp), color = AppTheme.TextFaint)
@@ -538,13 +542,13 @@ private fun AssistantBubble(
         androidx.compose.animation.AnimatedContent(
             targetState = revealed,
             transitionSpec = {
-                (androidx.compose.animation.fadeIn(tween(220)) +
+                (androidx.compose.animation.fadeIn(ailaFadeSpec(AilaDuration.Standard)) +
                     androidx.compose.animation.scaleIn(circolareplus.design.ailaSpatialSpring(), initialScale = 0.4f)) togetherWith
-                    (androidx.compose.animation.fadeOut(tween(160)) +
-                        androidx.compose.animation.scaleOut(tween(200), targetScale = 1.4f))
+                    (androidx.compose.animation.fadeOut(ailaFadeSpec(AilaDuration.Quick)) +
+                        androidx.compose.animation.scaleOut(ailaMoveSpec(AilaDuration.Standard), targetScale = 1.4f))
             },
             label = "assistantArrivalIcon",
-            modifier = Modifier.padding(top = 4.dp).size(26.dp)
+            modifier = Modifier.padding(top = AppTheme.Space4).size(26.dp)
         ) { shown ->
             Box(modifier = Modifier.size(26.dp), contentAlignment = Alignment.Center) {
                 if (shown) AilaAssistantMark(size = 26.dp) else ThinkingIndicator(step = 0)
@@ -553,7 +557,7 @@ private fun AssistantBubble(
         Spacer(modifier = Modifier.width(AppTheme.Space8))
         androidx.compose.animation.AnimatedVisibility(
             visible = revealed,
-            enter = androidx.compose.animation.fadeIn(tween(260, delayMillis = 90)) +
+            enter = androidx.compose.animation.fadeIn(ailaFadeSpec(AilaDuration.Standard, delayMillis = 90)) +
                 androidx.compose.animation.expandVertically(
                     circolareplus.design.ailaSpatialSpring(),
                     expandFrom = Alignment.Top
@@ -594,7 +598,7 @@ private fun AssistantBubble(
             }
 
             message.modelLabel?.let { label ->
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(AppTheme.Space8))
                 Text(text = label, fontSize = 10.sp, color = AppTheme.TextFaint)
             }
         }
@@ -624,7 +628,7 @@ private fun AssistantErrorBubble(text: String) {
                         fontWeight = FontWeight.Bold,
                         color = AppTheme.TintRedInk
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(AppTheme.Space4))
                     // Il motivo vero, non una frase generica: quasi sempre e' una chiave AI
                     // mancante o una quota esaurita, cioe' qualcosa che l'utente puo' sistemare
                     // dalle Impostazioni — ma solo se gli si dice quale dei due.
@@ -650,7 +654,7 @@ private fun ThinkingBubble() {
     // la risposta. Material: la forma che cambia; Glass: i tre puntini.
     Box(
         modifier = Modifier
-            .padding(top = 4.dp)
+            .padding(top = AppTheme.Space4)
             .size(26.dp)
             .semantics { contentDescription = "AILA Assistant sta cercando" },
         contentAlignment = Alignment.Center
@@ -670,12 +674,12 @@ private fun ThinkingIndicator(step: Int) {
         repeat(3) { index ->
             val alpha by animateFloatAsState(
                 targetValue = if (index == step) 1f else 0.25f,
-                animationSpec = tween(400),
+                animationSpec = ailaFadeSpec(AilaDuration.Slow),
                 label = "assistantDot$index"
             )
             Box(
                 modifier = Modifier
-                    .padding(end = if (index < 2) 3.dp else 0.dp)
+                    .padding(end = if (index < 2) AppTheme.Space4 else 0.dp)
                     .size(6.dp)
                     .graphicsLayer { this.alpha = alpha }
                     .clip(CircleShape)
@@ -694,11 +698,11 @@ private fun SourceChip(source: AssistantSource, onClick: () -> Unit) {
             .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
             .background(tint)
             .ailaPressable(pressedScale = 0.95f) { onClick() }
-            .padding(horizontal = AppTheme.Space12, vertical = 7.dp),
+            .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8),
         verticalAlignment = Alignment.CenterVertically
     ) {
         source.kind.Icon(ink)
-        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(modifier = Modifier.width(AppTheme.Space4))
         Text(
             text = source.label,
             fontSize = 11.sp,

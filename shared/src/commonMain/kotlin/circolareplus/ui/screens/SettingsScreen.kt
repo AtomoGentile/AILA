@@ -183,7 +183,7 @@ fun SettingsScreen(
                                 onSelect = { index -> onUiStyleChange(styles[index]) },
                                 modifier = Modifier.fillMaxWidth()
                             )
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.height(AppTheme.Space8))
                             Text(
                                 text = when (uiStyle) {
                                     circolareplus.design.UiStyle.AUTO ->
@@ -206,7 +206,7 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.height(AppTheme.Space8))
                             AccentPicker(selected = accent, onSelect = onAccentChange)
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.height(AppTheme.Space8))
                             Text(
                                 text = if (accent == circolareplus.design.AilaAccent.Default)
                                     "${accent.label} (predefinito)"
@@ -239,7 +239,7 @@ fun SettingsScreen(
                                 fontWeight = FontWeight.Bold,
                                 color = AppTheme.TextDark
                             )
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.height(AppTheme.Space4))
                             Text(
                                 text = "Senza rete puoi consultare circolari (con i PDF delle ultime), " +
                                     "calendario, sondaggi, bacheca e mappa posti come li hai visti l'ultima " +
@@ -863,7 +863,7 @@ private fun LocalModelRow(
                     modifier = Modifier
                         .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
                         .background(if (isInstalled) AppTheme.TintGreen else AppTheme.TintSlate)
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                        .padding(horizontal = AppTheme.Space8, vertical = AppTheme.Space4)
                 )
             }
         }
@@ -968,7 +968,10 @@ private fun AccentPicker(
             )
             val ring by androidx.compose.animation.core.animateDpAsState(
                 targetValue = if (isSelected) 3.dp else 0.dp,
-                animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.7f, stiffness = 600f),
+                // Selezione che risponde al dito: molla giocosa del sistema (senza rimbalzo con
+                // "Riduci movimento"). Lo spessore dell'anello e lo stacco del pallino sotto sono
+                // geometria del selettore, non spaziatura: restano 3/6dp.
+                animationSpec = circolareplus.design.ailaBouncySpring(),
                 label = "accentRing"
             )
             Box(

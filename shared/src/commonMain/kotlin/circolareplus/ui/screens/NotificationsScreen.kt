@@ -116,7 +116,7 @@ private fun NotificationCard(entry: NotificationLogEntry, onClick: () -> Unit) {
                     maxLines = 2
                 )
                 if (entry.body.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height(AppTheme.Space4))
                     Text(
                         text = entry.body,
                         fontSize = 13.sp,
@@ -124,12 +124,12 @@ private fun NotificationCard(entry: NotificationLogEntry, onClick: () -> Unit) {
                         maxLines = 2
                     )
                 }
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(AppTheme.Space4))
                 Text(text = relativeTimeLabel(entry.receivedAtMillis), fontSize = 11.sp, color = AppTheme.TextFaint)
             }
             if (!entry.read) {
                 Spacer(modifier = Modifier.width(AppTheme.Space8))
-                AilaDot(color = AppTheme.PrimaryBlue, size = 8.dp, modifier = Modifier.padding(top = 4.dp))
+                AilaDot(color = AppTheme.PrimaryBlue, size = 8.dp, modifier = Modifier.padding(top = AppTheme.Space4))
             }
         }
     }

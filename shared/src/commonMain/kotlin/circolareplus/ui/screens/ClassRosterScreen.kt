@@ -64,7 +64,7 @@ fun ClassRosterScreen(
                 fontSize = 12.sp,
                 color = AppTheme.TextMuted
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(AppTheme.Space4))
             // La Guardia la sceglie il Rappresentante: è la terza firma, con i due Rappresentanti,
             // per svelare l'autore di una proposta o di un commento anonimi.
             Text(
@@ -309,7 +309,7 @@ private fun ClassRosterRow(
                 onValueChange = onDidacticChange
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(AppTheme.Space8))
 
             RatingStepper(
                 label = "Comportamento",
@@ -317,7 +317,7 @@ private fun ClassRosterRow(
                 onValueChange = onBehaviorChange
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(AppTheme.Space8))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -334,7 +334,7 @@ private fun ClassRosterRow(
             // I Rappresentanti non possono essere anche la Guardia: le tre firme sono di tre
             // persone diverse.
             if (entry.role != "REPRESENTATIVE") {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(AppTheme.Space8))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -356,7 +356,7 @@ private fun ClassRosterRow(
             // Non sull'altro Rappresentante: il server lo rifiuta (con il suo account una persona
             // sola avrebbe due firme del quorum per svelare gli anonimi).
             if (!isSelf && entry.role != "REPRESENTATIVE") {
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(AppTheme.Space4))
                 ResetCodeButton(entry)
             }
         }
@@ -437,7 +437,7 @@ private fun DisciplinePairsCard(
                 fontWeight = FontWeight.Bold,
                 color = AppTheme.TextDark
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(AppTheme.Space4))
             Text(
                 text = "Per chi insieme fa caos ma con altri e' tranquillo. La Mappa Posti evita di " +
                     "metterli nello stesso banco, senza bloccare la rotazione. Lo vedono solo i " +
@@ -536,7 +536,9 @@ private fun AddDisciplinePairDialog(
                                         selected += entry.studentId
                                     }
                                 }
-                                .padding(horizontal = AppTheme.Space8, vertical = 10.dp),
+                                // 12 e non 10: sulla griglia, e con il testo a 14sp la riga
+                                // arriva ai 44dp di area di tocco.
+                                .padding(horizontal = AppTheme.Space8, vertical = AppTheme.Space12),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
@@ -554,7 +556,7 @@ private fun AddDisciplinePairDialog(
                 }
                 Spacer(modifier = Modifier.height(AppTheme.Space12))
                 Text(text = "Per quanto tempo", fontSize = 13.sp, color = AppTheme.TextMuted)
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(AppTheme.Space4))
                 AilaSegmentedTabs(
                     labels = PAIR_DURATIONS.map { it.first },
                     selectedIndex = durationIndex,

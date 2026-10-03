@@ -115,14 +115,14 @@ fun PollHistoryScreen(
                                         color = AppTheme.TextDark,
                                         maxLines = 1
                                     )
-                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Spacer(modifier = Modifier.height(AppTheme.Space4))
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         StatusPill(
                                             text = if (poll.isPublished) "Pubblicato" else "Non pubblicato",
                                             tint = if (poll.isPublished) AppTheme.TintGreen else AppTheme.TintSlate,
                                             ink = if (poll.isPublished) AppTheme.TintGreenInk else AppTheme.TextFaint
                                         )
-                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Spacer(modifier = Modifier.width(AppTheme.Space8))
                                         StatusPill(
                                             text = "${poll.totalStudents} student${if (poll.totalStudents == 1) "e" else "i"}",
                                             tint = AppTheme.TintSlate,
@@ -149,7 +149,7 @@ fun PollHistoryScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(if (isExpanded) "Chiudi risultati" else "Vedi risultati")
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(AppTheme.Space4))
                             AppIcons.ChevronRight(
                                 modifier = Modifier.size(14.dp).rotate(if (isExpanded) 90f else 0f),
                                 color = AppTheme.PrimaryBlue
@@ -177,7 +177,7 @@ fun PollHistoryScreen(
                                     color = AppTheme.TextFaint
                                 )
                                 else -> Column {
-                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
                                         assignments.forEach { a ->
                                             AssignmentRow(a)
                                         }
@@ -212,9 +212,10 @@ private fun StatusPill(text: String, tint: Color, ink: Color) {
         fontWeight = FontWeight.Bold,
         color = ink,
         modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
+            // ButtonCornerRadius e' gia' una capsula (100dp): stessa forma dei pulsanti.
+            .clip(RoundedCornerShape(AppTheme.ButtonCornerRadius))
             .background(tint)
-            .padding(horizontal = 8.dp, vertical = 2.dp)
+            .padding(horizontal = AppTheme.Space8, vertical = AppTheme.Space4)
     )
 }
 
@@ -280,7 +281,7 @@ private fun CalendarSyncAction(
                 .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
                 .background(AppTheme.TintViolet)
                 .ailaPressable(enabled = !isLoading, pressedScale = 0.98f) { onClick() }
-                .padding(horizontal = AppTheme.Space12, vertical = 10.dp),
+                .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space12),
             verticalAlignment = Alignment.CenterVertically
         ) {
             AppIcons.Sparkle(modifier = Modifier.size(16.dp), color = AppTheme.TintVioletInk)
@@ -301,7 +302,7 @@ private fun CalendarSyncAction(
             }
         }
         if (message != null) {
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(AppTheme.Space8))
             Text(
                 text = message,
                 fontSize = 11.sp,

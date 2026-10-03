@@ -92,6 +92,8 @@ fun ProfileScreen(
                         // Liquid Glass: pannello di vetro col suo bordo di luce e un velo piu'
                         // presente del resto del vetro (col solo gradiente, ormai quasi a zero,
                         // e senza bordo, il pannello spariva). Material: il gradiente pieno.
+                        // Il velo resta scritto qui: nessun token di AppTheme ha questi valori
+                        // (OnHeroSurface in Glass e' quasi trasparente, ed e' proprio il problema).
                         if (AppTheme.isGlass) Modifier.ailaGlassSurface(
                             RoundedCornerShape(AppTheme.CardCornerRadius + 4.dp),
                             tint = if (AppTheme.isDarkMode) Color(0x1AFFFFFF) else Color(0x40FFFFFF)
@@ -150,12 +152,12 @@ fun ProfileScreen(
                         modifier = Modifier
                             .clip(CircleShape)
                             .background(AppTheme.OnHeroSurface)
-                            .padding(horizontal = 12.dp, vertical = 5.dp),
+                            .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space4),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (isRepresentative) {
                             AppIcons.Crown(modifier = Modifier.size(13.dp), color = AppTheme.OnHeroPrimary)
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(AppTheme.Space4))
                         }
                         Text(
                             text = if (isRepresentative) "Rappresentante" else "Studente",
@@ -535,7 +537,7 @@ private fun HeroStatBox(
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (highlighted) {
                 AppIcons.Star(modifier = Modifier.size(12.dp), color = AppTheme.OnHeroPrimary)
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(AppTheme.Space4))
             }
             Text(
                 text = value,
@@ -545,7 +547,7 @@ private fun HeroStatBox(
                 maxLines = 1
             )
         }
-        Spacer(modifier = Modifier.height(2.dp))
+        Spacer(modifier = Modifier.height(AppTheme.Space4))
         Text(text = label, fontSize = 11.sp, color = AppTheme.OnHeroSecondary, maxLines = 1)
     }
 }

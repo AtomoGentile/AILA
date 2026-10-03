@@ -209,7 +209,8 @@ fun CircularListItem(
                     } else {
                         AilaDot(color = badgeColor)
                     }
-                    Spacer(modifier = Modifier.width(6.dp))
+                    // Pallino ed etichetta con lo stesso stacco della legenda dei sondaggi.
+                    Spacer(modifier = Modifier.width(AppTheme.Space8))
                     Text(
                         text = badgeText,
                         fontSize = 12.sp,
@@ -238,7 +239,7 @@ fun CircularListItem(
                 val summaryContent: @Composable () -> Unit = {
                     Column(modifier = Modifier.padding(AppTheme.Space12)) {
                         AilaAssistantBadge(text = "Analisi AILA Assistant")
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(AppTheme.Space8))
                         Text(
                             text = classification.personalSummary,
                             fontSize = 13.sp,
@@ -250,6 +251,7 @@ fun CircularListItem(
                 if (AppTheme.isGlass) {
                     // Liquid Glass: niente vetro dentro al vetro (veniva un pannello grigio con
                     // bordi lucidi). Solo un incavo appena piu' scuro/chiaro, senza bordo ne' riflesso.
+                    // Velo scritto qui: nessun token ha un incavo nero in scuro e bianco in chiaro.
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
