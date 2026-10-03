@@ -160,7 +160,13 @@ describe('codici Rappresentante per classe e monouso', () => {
     expect((await call('POST', '/api/admin/representative-invites', { classLabel: '3 B', ttlDays: 90 }, undefined, { 'X-Admin-Secret': ADMIN })).status).toBe(400);
 
     env = { ...env, ADMIN_SECRET: undefined } as Env;
-    expect((await issue({ 'X-Admin-Secret': '' })).status).toBe(503);
+    const missing = await issue({ 'X-Admin-Secret': '' });
+    expect(missing.status).toBe(503);
+    expect(missing.json.error).toMatch(/non arriva/);
+    env = { ...env, ADMIN_SECRET: 'corto' } as Env;
+    const short = await issue({ 'X-Admin-Secret': 'corto' });
+    expect(short.status).toBe(503);
+    expect(short.json.error).toMatch(/troppo corto/);
   });
 
   it('count 2: due codici diversi, uno per Rappresentante', async () => {
