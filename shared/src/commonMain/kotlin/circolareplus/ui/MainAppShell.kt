@@ -2,6 +2,7 @@ package circolareplus.ui.screens
 
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -3485,8 +3486,21 @@ fun MainAppShell(
                             androidx.compose.animation.ExitTransition.None).apply {
                             targetContentZIndex = if (forward) 1f else -1f
                         }
-                    } else {
+                    } else if (targetState == ShellRoute.TABS) {
+                        // Ritorno alle tab: sono gia' composte sotto, nello Scaffold, e riemergono
+                        // da sole (shellProgress); qui solo la pagina che si chiude e svanisce.
                         ailaPushTransition(forward = forward)
+                    } else {
+                        // Material fra schermate: la pagina che entra si dissolve e cresce da se'
+                        // (pageEnter, piu' sotto), partendo dopo i suoi primi due fotogrammi.
+                        // Con la "fade through" della transizione l'animazione partiva insieme
+                        // al primo fotogramma, che per una schermata pesante come Impostazioni
+                        // dura quanto tutta l'animazione: si vedeva la pagina comparire e basta.
+                        // Quella sotto resta piena finche' la nuova non l'ha coperta.
+                        (androidx.compose.animation.EnterTransition.None togetherWith
+                            fadeOut(tween(durationMillis = 1, delayMillis = MATERIAL_PAGE_HOLD_MS))).apply {
+                            targetContentZIndex = 1f
+                        }
                     }
                 },
                 label = "shellRoute",
@@ -3516,6 +3530,24 @@ fun MainAppShell(
                 androidx.compose.animation.core.Animatable(
                     if (containerOrigin != null && transition.currentState == androidx.compose.animation.EnterExitState.PreEnter) 0f else 1f
                 )
+            }
+            // Entrata Material senza container transform: vedi il transitionSpec qui sopra.
+            val pageEnter = remember {
+                androidx.compose.animation.core.Animatable(
+                    if (!AppTheme.isGlass && containerOrigin == null && route != ShellRoute.TABS &&
+                        transition.currentState == androidx.compose.animation.EnterExitState.PreEnter
+                    ) 0f else 1f
+                )
+            }
+            LaunchedEffect(Unit) {
+                if (pageEnter.value < 1f) {
+                    androidx.compose.runtime.withFrameNanos { }
+                    androidx.compose.runtime.withFrameNanos { }
+                    pageEnter.animateTo(
+                        1f,
+                        tween(durationMillis = MATERIAL_PAGE_ENTER_MS, easing = androidx.compose.animation.core.LinearOutSlowInEasing)
+                    )
+                }
             }
             LaunchedEffect(Unit) {
                 if (openProgress.value < 1f) {
@@ -3548,6 +3580,15 @@ fun MainAppShell(
                     // Pagina in uscita: non prende piu' i tocchi mentre si chiude.
                     .ailaNoTouchWhile(route != shellRoute)
                     .fillMaxSize()
+                    .graphicsLayer {
+                        val p = pageEnter.value
+                        if (p < 1f) {
+                            alpha = p
+                            val scale = 0.94f + 0.06f * p
+                            scaleX = scale
+                            scaleY = scale
+                        }
+                    }
                     .then(
                         if (containerOrigin != null) Modifier.ailaContainerReveal(
                             // Il minimo dei due: aprendo comanda openProgress (in ritardo di due
@@ -3587,7 +3628,7 @@ fun MainAppShell(
             )) {
             when (route) {
                 ShellRoute.BACKGROUND_DEBUG -> {
-                    circolareplus.platform.PlatformBackHandler { isInBackgroundDebugScreen = false }
+                    circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { isInBackgroundDebugScreen = false }
                     BackgroundDebugScreen(
                         isSupported = circolareplus.platform.isBackgroundRefreshSupported(),
                         readLog = { AppContainer.settings.backgroundLog },
@@ -3599,7 +3640,7 @@ fun MainAppShell(
                     )
                 }
                 ShellRoute.SETTINGS -> {
-                    circolareplus.platform.PlatformBackHandler { isInSettingsScreen = false }
+                    circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { isInSettingsScreen = false }
                     SettingsScreen(
                         // Numero della build e commit: dice quale APK e' davvero installato.
                         appVersion = circolareplus.platform.appVersionName(),
@@ -3716,7 +3757,7 @@ fun MainAppShell(
                     )
                 }
                 ShellRoute.PROFILE -> {
-                    circolareplus.platform.PlatformBackHandler { isInProfileScreen = false }
+                    circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { isInProfileScreen = false }
                     Column(modifier = Modifier.fillMaxSize()) {
                         ScreenBackBar(title = "Profilo", onBackClick = { isInProfileScreen = false })
                         ProfileScreen(
@@ -3771,7 +3812,7 @@ fun MainAppShell(
                     }
                 }
                 ShellRoute.CLASS_ROSTER -> {
-                    circolareplus.platform.PlatformBackHandler { isInClassRosterScreen = false }
+                    circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { isInClassRosterScreen = false }
                     Column(modifier = Modifier.fillMaxSize()) {
                         ScreenBackBar(title = "Scheda Classe", onBackClick = { isInClassRosterScreen = false })
                         if (classRosterActionError != null) {
@@ -3897,7 +3938,7 @@ fun MainAppShell(
                     }
                 }
                 ShellRoute.ASSISTANT -> {
-                    circolareplus.platform.PlatformBackHandler { isInAssistantScreen = false }
+                    circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { isInAssistantScreen = false }
                     AssistantChatScreen(
                         messages = assistantMessages,
                         isThinking = isAssistantThinking,
@@ -3961,7 +4002,7 @@ fun MainAppShell(
                     )
                 }
                 ShellRoute.SEARCH -> {
-                    circolareplus.platform.PlatformBackHandler { isInSearchScreen = false }
+                    circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { isInSearchScreen = false }
                     SearchScreen(
                         circulars = circulars,
                         calendarEvents = calendarEvents,
@@ -4002,7 +4043,7 @@ fun MainAppShell(
                     )
                 }
                 ShellRoute.NOTIFICATIONS -> {
-                    circolareplus.platform.PlatformBackHandler { isInNotificationsScreen = false }
+                    circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { isInNotificationsScreen = false }
                     Column(modifier = Modifier.fillMaxSize()) {
                         ScreenBackBar(title = "Notifiche", onBackClick = { isInNotificationsScreen = false })
                         NotificationsScreen(
@@ -4014,7 +4055,7 @@ fun MainAppShell(
                 ShellRoute.SEATMAP_PROPOSALS -> {
                     // Le tre proposte restano tutte disponibili finche' non se ne sceglie una:
                     // l'anteprima con l'occhio non ne scarta nessuna. Il back le abbandona.
-                    circolareplus.platform.PlatformBackHandler { proposalOptions = emptyList() }
+                    circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { proposalOptions = emptyList() }
                     val proposalsStudentsMap = remember(classmates, user) {
                         classmates.associateBy { it.id } + (user.id to user)
                     }
@@ -4045,7 +4086,7 @@ fun MainAppShell(
                     editingSeatMapProposal?.let { lastEditorAssignments[0] = it }
                     val currentAssignments = editingSeatMapProposal ?: lastEditorAssignments[0]
                     // Il back torna alla schermata precedente (le proposte), non alla mappa.
-                    circolareplus.platform.PlatformBackHandler {
+                    circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) {
                         editingSeatMapProposal = null
                         originalSeatMapProposal = null
                     }
@@ -6141,6 +6182,14 @@ private fun offlineDataAgeLabel(): String {
 private const val DETAIL_TRANSFORM_KEY = "circularDetail"
 private const val EVENT_DETAIL_KEY = "eventDetail"
 private const val ADD_EVENT_KEY = "addEventSheet"
+
+/**
+ * Entrata Material di una schermata a tutto schermo (dissolvenza + crescita), dopo i suoi primi
+ * due fotogrammi; e quanto resta composta sotto quella di prima perche' non si veda la Home in
+ * mezzo anche se i primi fotogrammi sono lenti.
+ */
+private const val MATERIAL_PAGE_ENTER_MS = 240
+private const val MATERIAL_PAGE_HOLD_MS = 700
 
 /** Le schermate a tutto schermo della shell; `depth` decide il verso del push/pop. */
 private enum class ShellRoute(val depth: Int) {
