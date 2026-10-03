@@ -8,11 +8,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.TextFieldColors
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.fillMaxSize
 
 /**
@@ -94,6 +100,68 @@ private fun ailaShapes() = Shapes(
 )
 
 /**
+ * Scala tipografica di AILA.
+ *
+ * Perché serviva: ogni schermata scriveva `fontSize = N.sp` a mano (349 volte, 21 misure diverse)
+ * e nessuna leggeva `MaterialTheme.typography`. In più, senza una scala propria, ogni `Text`
+ * ereditava `bodyLarge` di Material: interlinea di 24sp anche sotto un testo da 11sp (righe più
+ * alte del necessario e diverse da schermata a schermata) e spaziatura fra le lettere di 0.5sp,
+ * tipica di Android ma estranea alla scala di iOS da cui vengono le misure.
+ *
+ * Le misure seguono iOS (28/20/17/15/13/12/11), che è quella già usata dai componenti condivisi.
+ * Ogni misura ha due pesi: normale per il testo ("body") e grassetto per titoli ed etichette
+ * ("title"/"label"). Interlinea fra 1,2 e 1,5 volte la misura: mai sotto, perché con la scala dei
+ * caratteri di sistema le lettere con accenti e discendenti verrebbero tagliate.
+ *
+ * Tutte le misure sono in sp, quindi crescono con la dimensione del testo scelta nel sistema.
+ */
+private val AilaLineHeightStyle = LineHeightStyle(
+    // Come la scala di default di Material: il testo resta centrato nella riga e lo spazio in più
+    // non viene tolto sopra la prima riga, così il testo resta allineato com'era dentro chip,
+    // pulsanti e righe.
+    alignment = LineHeightStyle.Alignment.Center,
+    trim = LineHeightStyle.Trim.None
+)
+
+private fun ailaTextStyle(size: Int, lineHeight: Int, weight: FontWeight) = TextStyle(
+    fontFamily = FontFamily.Default,
+    fontSize = size.sp,
+    lineHeight = lineHeight.sp,
+    fontWeight = weight,
+    letterSpacing = 0.sp,
+    lineHeightStyle = AilaLineHeightStyle
+)
+
+private fun ailaTypography() = Typography(
+    // Numeri grandi (voti, conteggi, codici): "large title" di iOS.
+    displaySmall = ailaTextStyle(34, 41, FontWeight.Bold),
+    // Titolo della schermata (AilaScreenHeader). In Material/Expressive più sottile e un filo più
+    // piccolo, come gli "headline" di Android; in Glass il grassetto del large title di iOS.
+    headlineMedium = if (AppTheme.isGlass) ailaTextStyle(28, 34, FontWeight.Bold)
+    else ailaTextStyle(26, 32, FontWeight.Medium),
+    // Titoli di dialoghi, barre di navigazione e numeri medi.
+    titleLarge = ailaTextStyle(20, 25, FontWeight.Bold),
+    // Titoli di sezione, stati vuoti e d'errore.
+    titleMedium = ailaTextStyle(17, 22, FontWeight.Bold),
+    // Titolo di una riga o di una card, testo dei pulsanti grandi.
+    titleSmall = ailaTextStyle(15, 20, FontWeight.Bold),
+    // Testo lungo (messaggi dei dialoghi, circolari): interlinea più comoda per leggere.
+    // È anche lo stile di partenza di ogni Text e dei campi di testo.
+    bodyLarge = ailaTextStyle(15, 22, FontWeight.Normal),
+    // Sottotitoli e descrizioni.
+    bodyMedium = ailaTextStyle(13, 18, FontWeight.Normal),
+    // Note, date, testo secondario.
+    bodySmall = ailaTextStyle(12, 16, FontWeight.Normal),
+    // Pulsanti, chip, schede: è lo stile che Material usa da sé per il testo dei pulsanti.
+    labelLarge = ailaTextStyle(13, 18, FontWeight.Bold),
+    // Etichette piccole in grassetto (badge, metadati in evidenza).
+    labelMedium = ailaTextStyle(12, 16, FontWeight.Bold),
+    // Il minimo leggibile: badge stretti, didascalie. Sotto gli 11sp solo le etichette dei banchi
+    // nella mappa posti, dove lo spazio è fisso.
+    labelSmall = ailaTextStyle(11, 14, FontWeight.Bold)
+)
+
+/**
  * Avvolge l'intera app. Va applicato nei punti d'ingresso di piattaforma (MainActivity su
  * Android, MainViewController su iOS) e non dentro le singole schermate, così vale anche per
  * login, caricamento e onboarding.
@@ -111,7 +179,8 @@ fun AilaTheme(content: @Composable () -> Unit) {
         // Ricalcolati a ogni ricomposizione: dipendono da AppTheme.isDarkMode, che è stato di
         // Compose e cambia dalle Impostazioni.
         colorScheme = ailaColorScheme(),
-        shapes = ailaShapes()
+        shapes = ailaShapes(),
+        typography = ailaTypography()
     ) {
         // Liquid Glass: lo sfondo a macchie di colore dietro a tutta l'app (vedi AilaGlass.kt).
         androidx.compose.foundation.layout.Box(
