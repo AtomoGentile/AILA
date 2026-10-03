@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -26,7 +27,6 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import circolareplus.design.AilaIconButton
 import circolareplus.design.AilaAssistantBadge
 import circolareplus.design.AilaCard
@@ -165,8 +165,7 @@ fun CalendarScreen(
                         ITALIAN_WEEKDAY_INITIALS.forEach { initial ->
                             Text(
                                 text = initial,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = AppTheme.TextFaint,
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                 modifier = Modifier.weight(1f)
@@ -499,8 +498,7 @@ private fun MonthNavigator(
         ) { key ->
             Text(
                 text = "${ITALIAN_MONTHS.getOrElse(key % 100) { "" }} ${key / 100}",
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium,
                 color = AppTheme.TextDark
             )
         }
@@ -599,7 +597,7 @@ private fun DayCell(
         ) {
             Text(
                 text = "$day",
-                fontSize = 14.sp,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Medium,
                 color = when {
                     isSelected -> Color.White
@@ -663,8 +661,7 @@ fun CalendarEventCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = event.title,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleSmall,
                     color = AppTheme.TextDark,
                     maxLines = 2
                 )
@@ -674,7 +671,7 @@ fun CalendarEventCard(
                 } else null
                 Text(
                     text = listOfNotNull(dayLabel, event.time ?: "Tutto il giorno").joinToString(" \u00B7 "),
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = AppTheme.TextMuted
                 )
                 if (event.isAiGenerated) {
@@ -692,7 +689,7 @@ fun CalendarEventCard(
                         .background(AppTheme.TintSlate)
                         .padding(horizontal = 9.dp, vertical = 4.dp)
                 ) {
-                    Text(text = "Tutti", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AppTheme.TextMuted)
+                    Text(text = "Tutti", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
                 }
             }
         }
