@@ -27,6 +27,12 @@ on:
 permissions:
   contents: write # solo per allegare l'APK alla release sui tag
 
+# Piu' push ravvicinati sullo stesso ref: conta solo l'ultimo, i run vecchi si fermano invece di
+# occupare minuti di Actions su un commit gia' superato.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -79,8 +85,48 @@ jobs:
       - name: Compile Kotlin (shared + androidApp)
         run: ./gradlew --no-daemon :shared:compileDebugKotlinAndroid :androidApp:compileDebugKotlinAndroid
 
+      # Prima i soli test del motore AI (instradamento, AICore, catalogo): se si rompe qui il
+      # passo rosso dice gia' dove guardare, senza cercare nel log di tutti i test di :shared.
+      - name: AI engine tests
+        run: ./gradlew --no-daemon :shared:testDebugUnitTest --tests 'circolareplus.ai.*'
+
+      # Tutti i test di :shared: resta la verifica completa, anche dopo quelli del motore AI.
       - name: Shared unit tests
         run: ./gradlew --no-daemon :shared:testDebugUnitTest
+
+      # Il report HTML ha lo stack trace di ogni test fallito: nel log di Gradle c'e' solo il nome.
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shared-test-report
+          path: shared/build/reports/tests/
+          if-no-files-found: ignore
+
+      # Totali nella pagina del run, letti dai JUnit XML: si vede quanti test sono passati senza
+      # aprire il log. Sommati gli attributi dei <testsuite>, un file per classe di test.
+      - name: Test summary
+        if: always()
+        run: |
+          dir=shared/build/test-results/testDebugUnitTest
+          {
+            echo "### Test di :shared"
+            if ! ls "$dir"/*.xml >/dev/null 2>&1; then
+              echo "Nessun risultato JUnit in \`$dir\`: i test non sono partiti."
+            else
+              sum() { grep -ho "<testsuite [^>]*" "$dir"/*.xml | grep -o " $1=\"[0-9]*\"" | grep -o '[0-9]*' | awk '{s+=$1} END {print s+0}'; }
+              tests=$(sum tests); failures=$(sum failures); errors=$(sum errors); skipped=$(sum skipped)
+              failed=$((failures + errors))
+              echo "| Totali | Passati | Falliti | Saltati |"
+              echo "|---|---|---|---|"
+              echo "| $tests | $((tests - failed - skipped)) | $failed | $skipped |"
+              if [ "$failed" -gt 0 ]; then
+                echo
+                echo "Falliti:"
+                grep -l -E "<(failure|error)" "$dir"/*.xml | xargs -n1 basename | sed 's/^TEST-/- /; s/\.xml$//'
+              fi
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # Chiave di firma debug stabile (secret ANDROID_DEBUG_KEYSTORE, base64 di debug.keystore):
       # senza, ogni build ha una chiave diversa e per aggiornare l'app va prima disinstallata.
