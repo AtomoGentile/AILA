@@ -27,8 +27,12 @@ const ADMIN_MAX_FAILURES_PER_IP = 10;
 
 admin.use('*', async (c, next) => {
   const secret = c.env.ADMIN_SECRET;
-  if (!secret || secret.length < MIN_SECRET_LENGTH) {
-    return c.json({ error: `ADMIN_SECRET non configurato sul Worker (almeno ${MIN_SECRET_LENGTH} caratteri)` }, 503);
+  // Due messaggi distinti: "manca" e "troppo corto" si risolvono in modi diversi.
+  if (!secret) {
+    return c.json({ error: 'ADMIN_SECRET non arriva al Worker: manca, ha un altro nome o non è stato distribuito' }, 503);
+  }
+  if (secret.length < MIN_SECRET_LENGTH) {
+    return c.json({ error: `ADMIN_SECRET è troppo corto: servono almeno ${MIN_SECRET_LENGTH} caratteri` }, 503);
   }
   const ip = clientIp(c.req);
   const key = ip ? `admin:ip:${ip}` : null;
