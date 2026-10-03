@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,17 +73,15 @@ fun SeatMapProposalsScreen(
             Column {
                 Text(
                     text = "Scegli la disposizione",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge,
                     color = AppTheme.TextDark
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = "Tocca l'occhio per guardare la mappa di una proposta senza sceglierla: " +
                         "le altre restano disponibili. Dopo la scelta potrai ancora modificare i posti.",
-                    fontSize = 12.sp,
-                    color = AppTheme.TextMuted,
-                    lineHeight = 17.sp
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTheme.TextMuted
                 )
             }
         }
@@ -109,8 +108,7 @@ fun SeatMapProposalsScreen(
                 Column {
                     Text(
                         text = "Anteprima",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleSmall,
                         color = AppTheme.TextDark
                     )
                     Spacer(modifier = Modifier.height(AppTheme.Space8))
@@ -127,7 +125,7 @@ fun SeatMapProposalsScreen(
                         text = "Proposta ${safePreview + 1} • " +
                             (proposal.satisfaction?.let { "${it.percentage.toInt()}% soddisfazione" } ?: "nessun voto") +
                             " • " + if (hasTrio) "banchi da tre" else "banchi da due",
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = AppTheme.TextMuted
                     )
                 }
@@ -144,8 +142,7 @@ fun SeatMapProposalsScreen(
                 ) {
                     Text(
                         text = "LAVAGNA & CATTEDRA",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelMedium,
                         color = AppTheme.OnHeroPrimary
                     )
                 }
@@ -189,16 +186,14 @@ private fun ProposalCard(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "Proposta $number",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleSmall,
                             color = AppTheme.TextDark
                         )
                         if (isBest) {
                             Spacer(modifier = Modifier.width(AppTheme.Space8))
                             Text(
                                 text = "MIGLIORE",
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = AppTheme.TintGreenInk,
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(50))
@@ -209,7 +204,7 @@ private fun ProposalCard(
                     }
                     Text(
                         text = satisfactionLabel(proposal.satisfaction),
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = AppTheme.TextMuted
                     )
                 }
@@ -293,11 +288,10 @@ internal fun StatChip(label: String, value: Int, modifier: Modifier = Modifier) 
     ) {
         Text(
             text = if (value > 0) "+$value" else value.toString(),
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelLarge,
             color = AppTheme.TextDark
         )
-        Text(text = label, fontSize = 10.sp, color = AppTheme.TextMuted)
+        Text(text = label, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
     }
 }
 
