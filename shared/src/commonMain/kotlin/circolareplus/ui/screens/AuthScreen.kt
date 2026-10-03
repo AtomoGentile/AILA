@@ -153,7 +153,14 @@ fun AuthScreen(
                 if (isRegisterMode && e.statusCode == 403 && e.message.contains("codice classe", ignoreCase = true)) {
                     classCodeAsked = true
                 }
-                errorMessage = e.message
+                // Il codice Rappresentante vale per una classe sola e una volta sola: i messaggi del
+                // server (altra classe, gia' usato, scaduto) dicono gia' cosa fare; qui si traduce
+                // solo il caso del server non ancora aggiornato.
+                errorMessage = if (isRegisterMode && e.statusCode == 503 && e.message.contains("Rappresentante")) {
+                    "La registrazione come Rappresentante non è ancora attiva sul server. Riprova più tardi."
+                } else {
+                    e.message
+                }
             } catch (e: Exception) {
                 errorMessage = "Impossibile contattare il server. Controlla la connessione e riprova."
             } finally {
@@ -422,7 +429,7 @@ fun AuthScreen(
                             AuthField(
                                 value = representativeCode,
                                 onValueChange = { representativeCode = it },
-                                placeholder = "Codice Rappresentante (facoltativo)",
+                                placeholder = "Codice Rappresentante della classe (facoltativo)",
                                 modifier = Modifier.fillMaxWidth(),
                                 keyboardOptions = KeyboardOptions(
                                     capitalization = KeyboardCapitalization.None,
@@ -431,7 +438,7 @@ fun AuthScreen(
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Lascialo vuoto se ti registri come studente.",
+                                text = "Solo per i Rappresentanti eletti: il codice vale per la classe scelta sopra e una volta sola. Lascialo vuoto se ti registri come studente.",
                                 fontSize = 11.sp,
                                 color = AppTheme.TextFaint
                             )
