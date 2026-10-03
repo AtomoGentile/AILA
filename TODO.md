@@ -25,6 +25,13 @@ Fatto:
   l'app, stessi ritentativi sugli errori passeggeri, stesso "testo vuoto" per `LocalAiClassifier`,
   stesso mutex della coda unica.
 
+**Segnalato in campo (3/10)**: onboarding fermo su "Attiva" AICore con "0 MB di 0 MB": il
+`download()` di ML Kit non ha mai emesso un evento e l'attesa non aveva tetto. Ora `checkStatus()`
+ha un tetto di 10 s e il download si abbandona dopo 60 s senza partenza (o 120 s senza
+avanzamento), con un messaggio che riporta lo stato letto da AICore (DOWNLOADABLE/DOWNLOADING):
+**serve quel messaggio dal telefono** per capire se Gemini Nano e' davvero da scaricare per ML
+Kit o se il sistema rimanda il download.
+
 Da provare su un telefono con Gemini Nano (Pixel 9/10, Galaxy S25/S26...):
 - "Attiva" AICore: stato disponibile / download con barra di avanzamento / non disponibile.
 - Analisi di una circolare e chat con AICore; risposta vuota → secondo giro con il prompt

@@ -902,7 +902,9 @@ private fun DownloadProgressBar(downloadedBytes: Long, totalBytes: Long) {
         circolareplus.design.AilaProgressBar(progress = fraction)
         Spacer(modifier = Modifier.height(AppTheme.Space4))
         Text(
-            text = "${formatBytes(downloadedBytes)} di ${formatBytes(totalBytes)} " +
+            // Totale ancora ignoto (Gemini Nano di AICore, prima che il sistema avvii il
+            // download): "0 MB di 0 MB" sembrava un blocco.
+            text = if (totalBytes <= 0) "In attesa del sistema…" else "${formatBytes(downloadedBytes)} di ${formatBytes(totalBytes)} " +
                 "(${(fraction * 100).toInt()}%)",
             fontSize = 11.sp,
             color = AppTheme.TextFaint

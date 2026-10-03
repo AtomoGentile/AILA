@@ -235,4 +235,67 @@ class AiCoreStatusTest {
             assertFalse(AiCoreCooldown.isPausingFailure(failure.message), "Non deve mettere in pausa: $code")
         }
     }
+
+    // --- Download di Gemini Nano che non parte o si ferma ---
+
+    private class Clock(var now: Long = 0L)
+
+    @Test
+    fun downloadMaiPartitoSiDichiaraFermo() {
+        val clock = Clock()
+        val watch = AiCoreDownloadWatch(now = { clock.now }, startTimeoutMillis = 60_000, stallTimeoutMillis = 120_000)
+        clock.now = 60_000
+        assertFalse(watch.isStalled(), "Fino al tetto si aspetta")
+        clock.now = 60_001
+        assertTrue(watch.isStalled(), "Senza nessun evento dopo il tetto si smette di aspettare")
+        val message = watch.stalledMessage(AiCoreState.Downloadable.statusName())
+        assertTrue("DOWNLOADABLE" in message, message)
+        assertTrue("non ha avviato" in message, message)
+    }
+
+    @Test
+    fun downloadCheAvanzaNonEFermo() {
+        val clock = Clock()
+        val watch = AiCoreDownloadWatch(now = { clock.now }, startTimeoutMillis = 60_000, stallTimeoutMillis = 120_000)
+        clock.now = 50_000
+        watch.onStarted(1_000L)
+        clock.now = 150_000
+        assertFalse(watch.isStalled(), "Partito: vale il tetto piu' lungo")
+        watch.onProgress(400L)
+        clock.now = 260_000
+        assertFalse(watch.isStalled(), "Ogni avanzamento sposta il tetto")
+        clock.now = 270_001
+        assertTrue(watch.isStalled())
+        assertTrue("non avanza" in watch.stalledMessage("DOWNLOADING"))
+    }
+
+    @Test
+    fun totaleDelDownloadTenutoFraGliEventi() {
+        val watch = AiCoreDownloadWatch(now = { 0L })
+        watch.onStarted(1_000L)
+        watch.onProgress(250L)
+        assertEquals(1_000L, watch.totalBytes, "Il totale arriva solo all'inizio e va ricordato")
+        assertEquals(250L, watch.downloadedBytes)
+        watch.onProgress(1_200L)
+        assertEquals(1_200L, watch.totalBytes, "Mai oltre il 100%")
+    }
+
+    @Test
+    fun totaleIgnotoSenzaPartenza() {
+        val watch = AiCoreDownloadWatch(now = { 0L })
+        watch.onStarted(0L)
+        assertEquals(0L, watch.totalBytes)
+        assertTrue(watch.started)
+    }
+
+    @Test
+    fun nomiDegliStatiPerLaDiagnosi() {
+        assertEquals("AVAILABLE", AiCoreState.Available.statusName())
+        assertEquals("DOWNLOADING", AiCoreState.Downloading.statusName())
+        assertEquals("UNAVAILABLE", AiCoreState.Unavailable("x").statusName())
+        assertEquals(
+            "BUSY",
+            AiCoreState.Failed(AiCoreStatusMapper.classifyError(AiCoreErrorCode.BUSY, "")).statusName()
+        )
+    }
 }

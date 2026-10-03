@@ -213,3 +213,70 @@ object AiCoreStatusMapper {
         return "$hint$retryHint ($codeName${rawMessage.ifBlank { "nessun dettaglio" }})"
     }
 }
+
+/**
+ * Avanzamento del download di Gemini Nano e momento di smettere di aspettarlo.
+ *
+ * Serve perche' `download()` di ML Kit puo' non emettere mai niente: segnalato in campo, il
+ * tasto "Attiva" restava su "0 MB di 0 MB" senza fine. Il sistema decide da se' quando scaricare
+ * (rete, batteria, altri download di AICore), e un Flow che non finisce bloccava l'onboarding.
+ * Qui si tiene l'ultimo totale noto (ML Kit lo da' solo all'inizio) e si dichiara fermo il
+ * download dopo [startTimeoutMillis] senza partenza o [stallTimeoutMillis] senza avanzamento.
+ */
+class AiCoreDownloadWatch(
+    private val now: () -> Long,
+    private val startTimeoutMillis: Long = DEFAULT_START_TIMEOUT_MILLIS,
+    private val stallTimeoutMillis: Long = DEFAULT_STALL_TIMEOUT_MILLIS
+) {
+    private var lastEventAt = now()
+
+    var started = false
+        private set
+
+    var totalBytes = 0L
+        private set
+
+    var downloadedBytes = 0L
+        private set
+
+    fun onStarted(bytesToDownload: Long) {
+        started = true
+        lastEventAt = now()
+        if (bytesToDownload > 0) totalBytes = bytesToDownload
+    }
+
+    fun onProgress(totalBytesDownloaded: Long) {
+        started = true
+        lastEventAt = now()
+        downloadedBytes = totalBytesDownloaded
+        // Un totale mai arrivato non deve dare percentuali oltre il 100%.
+        if (totalBytesDownloaded > totalBytes) totalBytes = totalBytesDownloaded
+    }
+
+    fun isStalled(): Boolean =
+        now() - lastEventAt > if (started) stallTimeoutMillis else startTimeoutMillis
+
+    /** Il motivo da mostrare quando si smette di aspettare, con lo stato letto da AICore. */
+    fun stalledMessage(statusName: String): String = if (!started) {
+        "AICore non ha avviato il download di Gemini Nano entro ${startTimeoutMillis / 1000} " +
+            "secondi (stato: $statusName). Il sistema puo' rimandarlo (rete, batteria, altri " +
+            "aggiornamenti): riprova piu' tardi da Impostazioni. Intanto AILA usa un altro motore."
+    } else {
+        "Il download di Gemini Nano non avanza da ${stallTimeoutMillis / 1000} secondi " +
+            "(stato: $statusName). Riprova piu' tardi da Impostazioni."
+    }
+
+    companion object {
+        const val DEFAULT_START_TIMEOUT_MILLIS = 60_000L
+        const val DEFAULT_STALL_TIMEOUT_MILLIS = 120_000L
+    }
+}
+
+/** Nome breve di uno stato, per i messaggi di diagnosi. */
+fun AiCoreState.statusName(): String = when (this) {
+    AiCoreState.Available -> "AVAILABLE"
+    AiCoreState.Downloadable -> "DOWNLOADABLE"
+    AiCoreState.Downloading -> "DOWNLOADING"
+    is AiCoreState.Unavailable -> "UNAVAILABLE"
+    is AiCoreState.Failed -> failure.code?.name ?: "ERROR"
+}

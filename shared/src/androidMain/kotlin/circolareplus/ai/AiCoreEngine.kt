@@ -17,8 +17,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
@@ -82,6 +84,12 @@ internal object AiCoreEngine {
      */
     private const val STATE_MAX_AGE_MS = 30_000L
 
+    /** Tetto a una singola chiamata di `checkStatus()`. */
+    private const val CHECK_STATUS_TIMEOUT_MS = 10_000L
+
+    /** Ogni quanto controllare se il download di Gemini Nano si e' fermato. */
+    private const val DOWNLOAD_WATCH_INTERVAL_MS = 1_000L
+
     /** Tetto alla lettura dello stato quando si puo' aspettare (fuori dal thread principale). */
     private const val STATUS_TIMEOUT_MS = 2_000L
 
@@ -131,7 +139,17 @@ internal object AiCoreEngine {
     /** Chiede lo stato ad AICore e lo ricorda. Non lancia: un errore diventa [AiCoreState.Failed]. */
     private suspend fun readState(): AiCoreState {
         val state = try {
-            AiCoreStatusMapper.fromFeatureStatus(featureStatusOf(client().checkStatus()))
+            // Con un tetto: anche checkStatus puo' restare senza risposta se il servizio di
+            // sistema e' bloccato, e chi aspetta qui e' l'onboarding o un'analisi.
+            withTimeoutOrNull(CHECK_STATUS_TIMEOUT_MS) { client().checkStatus() }
+                ?.let { AiCoreStatusMapper.fromFeatureStatus(featureStatusOf(it)) }
+                ?: AiCoreState.Failed(
+                    AiCoreStatusMapper.classifyError(
+                        null,
+                        "AICore non ha detto lo stato di Gemini Nano entro " +
+                            "${CHECK_STATUS_TIMEOUT_MS / 1000} secondi."
+                    )
+                )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -169,24 +187,57 @@ internal object AiCoreEngine {
         val state = readState()
         if (AiCoreStatusMapper.canGenerate(state)) return true
         if (!AiCoreStatusMapper.needsDownload(state)) return false
-        return download(onProgress)
+        return download(state, onProgress)
     }
 
-    private suspend fun download(onProgress: (downloaded: Long, total: Long) -> Unit): Boolean {
+    private suspend fun download(
+        state: AiCoreState,
+        onProgress: (downloaded: Long, total: Long) -> Unit
+    ): Boolean {
+        val watch = AiCoreDownloadWatch(now = System::currentTimeMillis)
         var completed = false
+        var failed = false
+        var stalled = false
         try {
-            client().download().collect { status ->
-                when (status) {
-                    is DownloadStatus.DownloadStarted -> onProgress(0L, status.bytesToDownload)
-                    // Il totale non arriva a ogni avanzamento: -1 = "totale invariato", chi
-                    // osserva onProgress tiene l'ultimo valido.
-                    is DownloadStatus.DownloadProgress -> onProgress(status.totalBytesDownloaded, -1L)
-                    is DownloadStatus.DownloadCompleted -> {
-                        completed = true
-                        onProgress(1L, 1L)
-                    }
-                    is DownloadStatus.DownloadFailed -> {
-                        lastFailureReason = failureOf(status.e).message
+            coroutineScope {
+                val collector = launch {
+                    // transformWhile: il Flow si chiude da solo dopo l'esito, anche se ML Kit non
+                    // lo chiudesse (prima un DownloadFailed lasciava l'attesa aperta per sempre).
+                    client().download()
+                        .transformWhile { status ->
+                            emit(status)
+                            status !is DownloadStatus.DownloadCompleted &&
+                                status !is DownloadStatus.DownloadFailed
+                        }
+                        .collect { status ->
+                            when (status) {
+                                is DownloadStatus.DownloadStarted -> {
+                                    watch.onStarted(status.bytesToDownload)
+                                    onProgress(0L, watch.totalBytes)
+                                }
+                                // Il totale arriva solo all'inizio: si passa sempre l'ultimo noto.
+                                is DownloadStatus.DownloadProgress -> {
+                                    watch.onProgress(status.totalBytesDownloaded)
+                                    onProgress(watch.downloadedBytes, watch.totalBytes)
+                                }
+                                is DownloadStatus.DownloadCompleted -> {
+                                    completed = true
+                                    onProgress(watch.totalBytes.coerceAtLeast(1L), watch.totalBytes.coerceAtLeast(1L))
+                                }
+                                is DownloadStatus.DownloadFailed -> {
+                                    failed = true
+                                    lastFailureReason = failureOf(status.e).message
+                                }
+                            }
+                        }
+                }
+                // Il sistema puo' non far partire mai il download: senza questo controllo "Attiva"
+                // restava su "0 MB di 0 MB" finche' l'utente non annullava.
+                while (collector.isActive) {
+                    delay(DOWNLOAD_WATCH_INTERVAL_MS)
+                    if (watch.isStalled()) {
+                        stalled = true
+                        collector.cancel()
                     }
                 }
             }
@@ -196,8 +247,23 @@ internal object AiCoreEngine {
             lastFailureReason = failureOf(e).message
             return false
         }
-        if (!completed) return false
-        return AiCoreStatusMapper.canGenerate(readState())
+        if (stalled) {
+            lastFailureReason = watch.stalledMessage(state.statusName())
+            return false
+        }
+        if (failed) return false
+        if (!completed) {
+            lastFailureReason = "AICore ha chiuso il download di Gemini Nano senza un esito " +
+                "(stato: ${state.statusName()}). Riprova piu' tardi da Impostazioni."
+            return false
+        }
+        val after = readState()
+        if (!AiCoreStatusMapper.canGenerate(after)) {
+            lastFailureReason = "Download di Gemini Nano finito, ma AICore lo dice ancora " +
+                "${after.statusName()}. Riprova fra qualche minuto."
+            return false
+        }
+        return true
     }
 
     /**

@@ -975,7 +975,9 @@ private fun OnboardingProgressBar(downloadedBytes: Long, totalBytes: Long) {
         circolareplus.design.AilaProgressBar(progress = fraction)
         Spacer(modifier = Modifier.height(AppTheme.Space4))
         Text(
-            text = "${formatMegabytes(downloadedBytes)} di ${formatMegabytes(totalBytes)} " +
+            // Totale ancora ignoto (Gemini Nano di AICore, prima che il sistema avvii il
+            // download): "0 MB di 0 MB" sembrava un blocco.
+            text = if (totalBytes <= 0) "In attesa del sistema…" else "${formatMegabytes(downloadedBytes)} di ${formatMegabytes(totalBytes)} " +
                 "(${(target * 100).toInt()}%)",
             fontSize = 11.sp,
             color = AppTheme.TextFaint
