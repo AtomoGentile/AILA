@@ -6,11 +6,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
 import circolareplus.design.AilaBackBar
 import circolareplus.design.AilaCard
 import circolareplus.design.AilaPrimaryButton
@@ -74,7 +74,7 @@ fun BackgroundDebugScreen(
                 AilaCard {
                     Text(
                         text = "Non applicabile su Android: le circolari arrivano con le notifiche push.",
-                        fontSize = 14.sp,
+                        style = MaterialTheme.typography.bodyLarge,
                         color = AppTheme.TextDark,
                         modifier = Modifier.padding(AppTheme.Space16)
                     )
@@ -106,28 +106,27 @@ fun BackgroundDebugScreen(
 
             Text(
                 text = "Segnalibro attuale: ${if (bookmark == 0) "non ancora fissato" else "n. $bookmark"}",
-                fontSize = 13.sp,
+                style = MaterialTheme.typography.bodyMedium,
                 color = AppTheme.TextMuted
             )
 
             lastResult?.let {
-                Text(text = "Esito: $it", fontSize = 13.sp, color = AppTheme.TextMuted)
+                Text(text = "Esito: $it", style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
             }
 
             AilaCard {
                 Column(modifier = Modifier.padding(AppTheme.Space16)) {
                     Text(
                         text = "bg_log (più recenti in fondo)",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelLarge,
                         color = AppTheme.TextDark
                     )
                     Spacer(modifier = Modifier.height(AppTheme.Space8))
                     SelectionContainer {
                         Text(
                             text = log.ifBlank { "Nessun risveglio registrato." },
-                            fontSize = 11.sp,
-                            lineHeight = 15.sp,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Normal,
                             fontFamily = FontFamily.Monospace,
                             color = AppTheme.TextMuted
                         )
