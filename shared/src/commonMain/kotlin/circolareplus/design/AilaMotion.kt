@@ -113,6 +113,8 @@ internal fun visibleXInRoot(x: Float): Float =
  */
 @Composable
 fun Modifier.ailaBreathe(): Modifier {
+    // Riduci movimento: logo fermo. Il ritorno anticipato toglie anche il ciclo, non solo la scala.
+    if (AppTheme.reduceMotion) return this
     var expanded by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -153,8 +155,10 @@ fun Modifier.ailaPressable(
 ): Modifier {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
+    // Riduci movimento: niente rimpicciolimento elastico, resta solo la velatura (alpha) qui sotto,
+    // che basta a dire "toccato" senza far muovere niente.
     val scale = animateFloatAsState(
-        targetValue = if (isPressed && enabled) pressedScale else 1f,
+        targetValue = if (isPressed && enabled && !AppTheme.reduceMotion) pressedScale else 1f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessHigh
@@ -274,16 +278,30 @@ fun Modifier.ailaGlassOverlay(
 // - Liquid Glass: molle morbide, rimbalzo appena accennato; push da destra come iOS.
 // - Material Expressive: le "spatial spring" di M3 Expressive, piu' rigide e piu' rimbalzanti;
 //   navigazione "shared axis" (scorrimento breve + dissolvenza) e cambio tab "fade through".
+//
+// Con "Riduci movimento" del sistema (AppTheme.reduceMotion) i due stili si comportano allo stesso
+// modo: molle rapide e senza rimbalzo, schermate e tab che si cambiano con una dissolvenza breve
+// invece di scorrere o crescere, effetti decorativi spenti. Le firme restano le stesse, cosi' chi
+// le chiama non deve sapere niente.
 // ---------------------------------------------------------------------------------------------
+
+/** Durata delle dissolvenze che, con "Riduci movimento", prendono il posto di scorrimenti e scale. */
+private const val REDUCED_FADE_MS = 150
+
+/** Molla rapida e senza rimbalzo: con "Riduci movimento" sostituisce tutte le altre. */
+private fun <T> reducedMotionSpring(): SpringSpec<T> =
+    spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh)
 
 /** Molla del push/pop fra schermate. */
 fun <T> ailaNavigationSpring(): SpringSpec<T> =
-    if (AppTheme.isGlass) spring(dampingRatio = 1f, stiffness = 520f)
+    if (AppTheme.reduceMotion) reducedMotionSpring()
+    else if (AppTheme.isGlass) spring(dampingRatio = 1f, stiffness = 520f)
     else spring(dampingRatio = 0.9f, stiffness = 850f)
 
 /** Molla "viva" per indicatori, selezioni e comparse. */
 fun <T> ailaSpatialSpring(): SpringSpec<T> =
-    if (AppTheme.isGlass) spring(dampingRatio = 0.78f, stiffness = 380f)
+    if (AppTheme.reduceMotion) reducedMotionSpring()
+    else if (AppTheme.isGlass) spring(dampingRatio = 0.78f, stiffness = 380f)
     else spring(dampingRatio = 0.6f, stiffness = 800f)
 
 /**
@@ -293,7 +311,18 @@ fun <T> ailaSpatialSpring(): SpringSpec<T> =
  * di pochi dp piu' dissolvenza incrociata.
  */
 fun AnimatedContentTransitionScope<*>.ailaPushTransition(forward: Boolean): ContentTransform {
-    val transform = if (AppTheme.isGlass) {
+    val transform = if (AppTheme.reduceMotion) {
+        // Riduci movimento: solo dissolvenza, niente scorrimento ne' crescita. Come nella "fade
+        // through" qui sotto, la pagina che resta sotto non deve svanire mentre l'altra compare
+        // (si vedrebbe la Home in mezzo): avanti la nuova si accende sopra e la vecchia sparisce a
+        // cose fatte; indietro quella che torna e' gia' piena e svanisce solo quella che si chiude.
+        if (forward) {
+            fadeIn(tween(durationMillis = REDUCED_FADE_MS)) togetherWith
+                fadeOut(tween(durationMillis = 40, delayMillis = REDUCED_FADE_MS))
+        } else {
+            EnterTransition.None togetherWith fadeOut(tween(durationMillis = REDUCED_FADE_MS))
+        }
+    } else if (AppTheme.isGlass) {
         if (forward) {
             slideInHorizontally(ailaNavigationSpring()) { it } togetherWith
                 (slideOutHorizontally(ailaNavigationSpring()) { -it / 3 } +
@@ -330,7 +359,8 @@ fun AnimatedContentTransitionScope<*>.ailaPushTransition(forward: Boolean): Cont
  * crescendo appena.
  */
 fun AnimatedContentTransitionScope<*>.ailaTabTransition(): ContentTransform =
-    if (AppTheme.isGlass) {
+    // Riduci movimento: la dissolvenza rapida di Glass vale per entrambi gli stili (niente crescita).
+    if (AppTheme.isGlass || AppTheme.reduceMotion) {
         fadeIn(tween(durationMillis = 140)) togetherWith fadeOut(tween(durationMillis = 90))
     } else {
         materialFadeThroughEnter() togetherWith materialFadeThroughExit()
@@ -338,7 +368,8 @@ fun AnimatedContentTransitionScope<*>.ailaTabTransition(): ContentTransform =
 
 /** Material "fade through": ingresso (dissolvenza + leggera crescita, dopo l'uscita). */
 fun materialFadeThroughEnter(): EnterTransition =
-    fadeIn(tween(durationMillis = 210, delayMillis = 70)) +
+    if (AppTheme.reduceMotion) fadeIn(tween(durationMillis = REDUCED_FADE_MS))
+    else fadeIn(tween(durationMillis = 210, delayMillis = 70)) +
         scaleIn(tween(durationMillis = 210, delayMillis = 70), initialScale = 0.94f)
 
 /** Material "fade through": uscita rapida. */
@@ -353,11 +384,13 @@ const val AILA_CONTAINER_TRANSFORM_ENABLED = false
 
 /** Ingresso/uscita di un livello "push" mostrato con AnimatedVisibility (dettaglio circolare). */
 fun ailaPushEnter(): EnterTransition =
-    if (AppTheme.isGlass) slideInHorizontally(ailaNavigationSpring()) { it }
+    if (AppTheme.reduceMotion) fadeIn(tween(durationMillis = REDUCED_FADE_MS))
+    else if (AppTheme.isGlass) slideInHorizontally(ailaNavigationSpring()) { it }
     else materialFadeThroughEnter()
 
 fun ailaPushExit(): ExitTransition =
-    if (AppTheme.isGlass) slideOutHorizontally(ailaNavigationSpring()) { it }
+    if (AppTheme.reduceMotion) fadeOut(tween(durationMillis = REDUCED_FADE_MS))
+    else if (AppTheme.isGlass) slideOutHorizontally(ailaNavigationSpring()) { it }
     else materialFadeThroughExit()
 
 /**
@@ -388,7 +421,8 @@ val LocalAilaSheetReveal = androidx.compose.runtime.compositionLocalOf { true }
  */
 @Composable
 fun Modifier.ailaSheetReveal(index: Int): Modifier {
-    val enabled = LocalAilaSheetReveal.current
+    // Riduci movimento: elementi subito al loro posto, come col foglio "Nuovo evento" che scende.
+    val enabled = LocalAilaSheetReveal.current && !AppTheme.reduceMotion
     val progress = remember { Animatable(if (enabled) 0f else 1f) }
     if (enabled) {
         LaunchedEffect(Unit) {
@@ -464,8 +498,14 @@ private object AilaUnlockMemory {
  */
 @Composable
 fun Modifier.ailaUnlock(): Modifier {
-    val play = remember { !AilaUnlockMemory.played }
-    if (!play) return this
+    // Riduci movimento: niente ingrandimento con rimbalzo, l'app e' subito ferma al suo posto. Lo
+    // sblocco si segna comunque come fatto: se l'impostazione si spegnesse dopo, non deve partire a
+    // meta' sessione (il contenuto sparirebbe e ricomparirebbe).
+    val play = remember { !AilaUnlockMemory.played && !AppTheme.reduceMotion }
+    if (!play) {
+        AilaUnlockMemory.played = true
+        return this
+    }
     val glass = AppTheme.isGlass
     val progress = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
@@ -497,7 +537,8 @@ fun Modifier.ailaSelectionPop(selected: Boolean): Modifier {
     val scale = remember { Animatable(1f) }
     val wasSelected = remember { arrayOf(selected) }
     LaunchedEffect(selected) {
-        if (selected && !wasSelected[0]) {
+        // Riduci movimento: l'icona cambia stato senza "pop".
+        if (selected && !wasSelected[0] && !AppTheme.reduceMotion) {
             scale.animateTo(0.82f, spring(stiffness = 1400f))
             scale.animateTo(1f, spring(dampingRatio = 0.42f, stiffness = 520f))
         }
@@ -635,13 +676,19 @@ fun Modifier.ailaTransformOrigin(
  * di arrivo minuscola, cosi' in chiusura la pagina arriva davvero sui bordi dell'elemento invece
  * di sparire poco prima.
  */
-fun <T> ailaContainerSpring(): SpringSpec<T> = spring(dampingRatio = 1f, stiffness = 520f)
+fun <T> ailaContainerSpring(): SpringSpec<T> =
+    if (AppTheme.reduceMotion) reducedMotionSpring() else spring(dampingRatio = 1f, stiffness = 520f)
 
 /**
  * Come [ailaContainerSpring], per i Float, con la soglia di arrivo stretta. Un filo piu' lenta di
  * prima (620): a quella velocita' la forma che si allargava risultava troppo brusca.
  */
-fun ailaContainerFloatSpring(): SpringSpec<Float> = spring(dampingRatio = 1f, stiffness = 450f, visibilityThreshold = 0.0005f)
+fun ailaContainerFloatSpring(): SpringSpec<Float> = spring(
+    dampingRatio = 1f,
+    // Riduci movimento: la forma che si allarga dura il meno possibile.
+    stiffness = if (AppTheme.reduceMotion) Spring.StiffnessHigh else 450f,
+    visibilityThreshold = 0.0005f
+)
 
 /**
  * Chiusura del container transform (la pagina che rientra nel pulsante). Non la molla
@@ -651,7 +698,8 @@ fun ailaContainerFloatSpring(): SpringSpec<Float> = spring(dampingRatio = 1f, st
  * rallenta a lungo prima di posarsi sul pulsante (l'"emphasized" di Material).
  */
 fun ailaContainerCloseSpec(): androidx.compose.animation.core.FiniteAnimationSpec<Float> = tween(
-    durationMillis = 520,
+    // Riduci movimento: chiusura breve, la forma che si stringe si vede appena.
+    durationMillis = if (AppTheme.reduceMotion) 200 else 520,
     delayMillis = 40,
     easing = androidx.compose.animation.core.CubicBezierEasing(0.3f, 0f, 0f, 1f)
 )

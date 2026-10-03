@@ -100,6 +100,13 @@ private fun ailaShapes() = Shapes(
  */
 @Composable
 fun AilaTheme(content: @Composable () -> Unit) {
+    // "Riduci movimento" del sistema, copiato nello stato globale che leggono le molle e le
+    // transizioni di AilaMotion (non sono @Composable). In un SideEffect e non durante la
+    // composizione: scrivere uno stato mentre si compone fa ricomporre di nuovo chi l'ha appena
+    // letto. Le schermate che partono subito con un'animazione (caricamento) leggono il sistema
+    // da sole per non perdere il primo fotogramma.
+    val reduceMotion = circolareplus.platform.isReduceMotionEnabled()
+    androidx.compose.runtime.SideEffect { AppTheme.reduceMotion = reduceMotion }
     MaterialTheme(
         // Ricalcolati a ogni ricomposizione: dipendono da AppTheme.isDarkMode, che è stato di
         // Compose e cambia dalle Impostazioni.
