@@ -48,11 +48,11 @@ export function Calendar() {
         />
       )}
       <div class="chips" role="toolbar" aria-label="Filtra per categoria">
-        <button class={`filter ${filter === null ? 'on' : ''}`} onClick={() => setFilter(null)}>
+        <button class={`filter ${filter === null ? 'on' : ''}`} aria-pressed={filter === null} onClick={() => setFilter(null)}>
           Tutti
         </button>
         {CATEGORIES.map((c) => (
-          <button key={c} class={`filter cat-${c.toLowerCase()} ${filter === c ? 'on' : ''}`} onClick={() => setFilter(c)}>
+          <button key={c} class={`filter cat-${c.toLowerCase()} ${filter === c ? 'on' : ''}`} aria-pressed={filter === c} onClick={() => setFilter(c)}>
             {CATEGORY_LABELS[c]}
           </button>
         ))}
@@ -63,7 +63,12 @@ export function Calendar() {
       </label>
       {list.loading && !list.data && <Loading />}
       {list.error && <ErrorBox message={list.error} onRetry={list.reload} />}
-      {list.data && events.length === 0 && <Empty>Nessun evento.</Empty>}
+      {list.data && events.length === 0 && (
+        <Empty>
+          {filter ? `Nessun evento di tipo "${CATEGORY_LABELS[filter]}".` : 'Nessun evento in arrivo.'}{' '}
+          Aggiungine uno con "+ Evento".
+        </Empty>
+      )}
       {[...groups.entries()].map(([month, items]) => (
         <div key={month}>
           <h2 class="month">
@@ -184,7 +189,7 @@ function NewEvent({ onDone }: { onDone: () => void }) {
       </label>
       {error && <p class="form-error">{error}</p>}
       <button class="btn btn-primary" disabled={busy}>
-        {busy ? 'Salvo…' : 'Aggiungi'}
+        {busy ? 'Salvo…' : 'Aggiungi evento'}
       </button>
     </form>
   );

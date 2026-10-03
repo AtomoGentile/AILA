@@ -15,6 +15,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -366,12 +368,19 @@ fun ProposalCardItem(
                     // 44dp l'uno: erano 28dp con un'icona da 15, praticamente impossibili da
                     // centrare col pollice, e uno stava attaccato all'altro (matita e cestino).
                     if (canEdit) {
-                        IconButton(onClick = { showEditDialog = true }, modifier = Modifier.size(44.dp)) {
+                        // Nome per lo screen reader: l'icona da sola non dice cosa fa il pulsante.
+                        IconButton(
+                            onClick = { showEditDialog = true },
+                            modifier = Modifier.size(44.dp).semantics { contentDescription = "Modifica proposta" }
+                        ) {
                             AppIcons.Pencil(modifier = Modifier.size(21.dp), color = AppTheme.TintSlateInk)
                         }
                     }
                     if (canDelete) {
-                        IconButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.size(44.dp)) {
+                        IconButton(
+                            onClick = { showDeleteConfirm = true },
+                            modifier = Modifier.size(44.dp).semantics { contentDescription = "Elimina proposta" }
+                        ) {
                             AppIcons.Trash(modifier = Modifier.size(21.dp), color = AppTheme.TintRedInk)
                         }
                     }

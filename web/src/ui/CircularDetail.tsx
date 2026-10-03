@@ -18,7 +18,7 @@ import { api, pdfUrl } from '../lib/api';
 import { kv } from '../lib/db';
 import { extractText, openPdf, renderPage } from '../lib/pdf';
 import { studentContext } from '../lib/session';
-import { ErrorBox, Loading, RelevanceChip, formatDate, toCategory, useAsync } from './common';
+import { ErrorBox, Icon, Loading, RelevanceChip, formatDate, toCategory, useAsync } from './common';
 
 const MAX_RENDERED_PAGES = 30;
 
@@ -169,11 +169,13 @@ export function CircularDetail({ number }: { number: number }) {
         {c.attachments.map((att) =>
           att.pdfKey ? (
             <a class="btn btn-ghost" href={pdfUrl(att.pdfKey)} target="_blank" rel="noopener" key={att.label}>
-              📎 {att.label}
+              <Icon name="attachment" />
+              {att.label}
             </a>
           ) : att.url ? (
             <a class="btn btn-ghost" href={att.url} target="_blank" rel="noopener noreferrer" key={att.label}>
-              ↗ {att.label}
+              <Icon name="external" />
+              {att.label}
             </a>
           ) : null
         )}
@@ -237,7 +239,7 @@ function Deadlines({ deadlines, circularNumber }: { deadlines: DeadlineDto[]; ci
           notes: `Dalla circolare n. ${circularNumber}`,
         },
       });
-      setStatus((s) => ({ ...s, [i]: res.warning ? `Non aggiunto: ${res.warning}` : 'Aggiunto ✓' }));
+      setStatus((s) => ({ ...s, [i]: res.warning ? `Non aggiunto: ${res.warning}` : 'Aggiunto al calendario' }));
     } catch (e) {
       setStatus((s) => ({ ...s, [i]: (e as Error).message }));
     }

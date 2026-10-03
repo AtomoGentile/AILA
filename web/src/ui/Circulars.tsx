@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { CircularAnalysisDto, CircularDto, CircularsResponse } from '@worker/contracts';
 import { api } from '../lib/api';
-import { Empty, ErrorBox, Loading, PageHeader, RelevanceChip, formatDate, useAsync } from './common';
+import { Empty, ErrorBox, Icon, Loading, PageHeader, RelevanceChip, formatDate, useAsync } from './common';
 
 const PAGE = 50;
 
@@ -47,12 +47,15 @@ export function Circulars() {
         class="search"
         type="search"
         placeholder="Cerca per titolo o numero"
+        aria-label="Cerca circolari"
         value={query}
         onInput={(e) => setQuery(e.currentTarget.value)}
       />
       {first.loading && items.length === 0 && <Loading />}
       {first.error && <ErrorBox message={first.error} onRetry={first.reload} />}
-      {!first.loading && !first.error && shown.length === 0 && <Empty>Nessuna circolare.</Empty>}
+      {!first.loading && !first.error && shown.length === 0 && (
+        <Empty>{q ? `Nessuna circolare per "${query.trim()}".` : 'Nessuna circolare.'}</Empty>
+      )}
       <ul class="list">
         {shown.map((c) => {
           const a = analyses.data?.get(c.number);
@@ -66,7 +69,12 @@ export function Circulars() {
                   {a && <RelevanceChip badge={a.badge} />}
                 </div>
                 <h3>{c.title}</h3>
-                {c.attachments.length > 0 && <span class="muted small">📎 {c.attachments.length} allegati</span>}
+                {c.attachments.length > 0 && (
+                  <span class="muted small row gap-xs">
+                    <Icon name="attachment" class="icon icon-sm" />
+                    {c.attachments.length === 1 ? '1 allegato' : `${c.attachments.length} allegati`}
+                  </span>
+                )}
               </a>
             </li>
           );
