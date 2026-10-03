@@ -294,6 +294,39 @@ object AppTheme {
     /** Testo secondario e velo bianco su un gradiente scuro, uguali in ogni stile (splash, pannelli). */
     val OnGradientSecondary = Color(0xCCFFFFFF)
     val OnGradientSurface = Color(0x2EFFFFFF)
+
+    // --- Onboarding ---------------------------------------------------------------------------
+    // Ogni pagina del tour ha un accento e un fondo a tre tappe. Valori fissi, uguali in chiaro e
+    // in scuro: l'illustrazione è un pannello scuro in entrambi i temi. Nomi per argomento della
+    // pagina e non per colore, perché alcuni valori coincidono con token di altro significato
+    // (BadgePotentialYellow, BadgeRelevantGreen) che non vanno legati a questi.
+    /** Pagina 1, circolari e "tutto in un posto". */
+    val OnboardingCircularsAccent = Color(0xFF5A9BFF)
+    val OnboardingCircularsGradient = listOf(Color(0xFF0B1330), Color(0xFF1B2E7A), Color(0xFF2F5BD8))
+    /** Pagina 2, scadenze nel calendario. */
+    val OnboardingCalendarAccent = Color(0xFF8B5CF6)
+    val OnboardingCalendarGradient = listOf(Color(0xFF0F1236), Color(0xFF2B2A80), Color(0xFF6D4FD8))
+    /** Pagina 3, bacheca e sondaggi ("la classe decide insieme"). */
+    val OnboardingBoardAccent = Color(0xFFF59E0B)
+    val OnboardingBoardGradient = listOf(Color(0xFF2A1408), Color(0xFF7A3B12), Color(0xFFD9822B))
+    /** Pagina 4, mappa dei posti. */
+    val OnboardingSeatsAccent = Color(0xFF10B981)
+    val OnboardingSeatsGradient = listOf(Color(0xFF06231B), Color(0xFF0E5C47), Color(0xFF2BA07E))
+    /** Pagina 5, AILA Assistant; lo riprende anche il passo "Scegli l'AI". È il ciano del brand. */
+    val OnboardingAssistantAccent = AccentCyan
+    val OnboardingAssistantGradient = listOf(Color(0xFF071A33), Color(0xFF0E4C6E), Color(0xFF2F7FB8))
+
+    /**
+     * Bianchi traslucidi sopra un gradiente scuro, come [OnGradientSurface] ma in sfumatura.
+     * [OnGradientHighlight]: riflesso di vetro su un disco (più chiaro in alto, poi si spegne).
+     * [OnGradientGlow]: alone di luce che sfuma nel nulla. L'ultima tappa è bianco trasparente e
+     * non Color.Transparent (nero trasparente), che sporcherebbe di grigio la sfumatura.
+     */
+    val OnGradientHighlight = listOf(Color(0x3DFFFFFF), Color(0x14FFFFFF))
+    val OnGradientGlow = listOf(Color(0x2AFFFFFF), Color(0x00FFFFFF))
+
+    /** Blu notte pieno dello splash di sistema (themes.xml su Android, LaunchBackground su iOS): va tenuto uguale a quelli. */
+    val SplashBackground = Color(0xFF0A1330)
 }
 
 /** Interpolazione lineare tra due colori (usata per derivare i toni dall'accento scelto). */

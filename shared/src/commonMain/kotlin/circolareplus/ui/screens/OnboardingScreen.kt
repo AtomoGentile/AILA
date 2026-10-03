@@ -6,6 +6,7 @@ import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
@@ -25,6 +26,9 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -55,7 +59,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import circolareplus.ai.LocalAiModel
 import circolareplus.ai.ModelDownloadState
+import circolareplus.design.AilaDuration
 import circolareplus.design.AilaLogoTile
+import circolareplus.design.ailaColorSpec
+import circolareplus.design.ailaFadeSpec
+import circolareplus.design.ailaMoveSpec
 import circolareplus.design.appSafeDrawingPadding
 import circolareplus.design.appContentWidth
 import circolareplus.design.MaxFormWidth
@@ -129,56 +137,72 @@ private val onboardingPages = listOf(
         title = "Tutto ciò che conta,\nin un unico posto.",
         body = "Circolari con notifica, calendario, bacheca e mappa dei posti: una sola app " +
             "invece di cinque chat. Facciamo un giro veloce.",
-        accent = Color(0xFF5A9BFF),
-        gradient = listOf(Color(0xFF0B1330), Color(0xFF1B2E7A), Color(0xFF2F5BD8))
+        // Colori da AppTheme (blocco "Onboarding"): prima erano scritti qui a mano.
+        accent = AppTheme.OnboardingCircularsAccent,
+        gradient = AppTheme.OnboardingCircularsGradient
     ),
     OnboardingPage(
         iconKind = OnboardingIcon.CALENDAR,
         title = "Le scadenze,\nnel calendario.",
         body = "Verifiche, pagamenti e uscite vengono letti dalle circolari e proposti come " +
             "eventi. Tu confermi con un tocco.",
-        accent = Color(0xFF8B5CF6),
-        gradient = listOf(Color(0xFF0F1236), Color(0xFF2B2A80), Color(0xFF6D4FD8))
+        accent = AppTheme.OnboardingCalendarAccent,
+        gradient = AppTheme.OnboardingCalendarGradient
     ),
     OnboardingPage(
         iconKind = OnboardingIcon.CHAT,
         title = "La classe\ndecide insieme.",
         body = "Proponi idee in bacheca, vota quelle degli altri e prenota le interrogazioni " +
             "con i sondaggi.",
-        accent = Color(0xFFF59E0B),
-        gradient = listOf(Color(0xFF2A1408), Color(0xFF7A3B12), Color(0xFFD9822B))
+        accent = AppTheme.OnboardingBoardAccent,
+        gradient = AppTheme.OnboardingBoardGradient
     ),
     OnboardingPage(
         iconKind = OnboardingIcon.CHAIR,
         title = "Banchi giusti\nper tutti.",
         body = "Il Rappresentante propone la disposizione dei posti. Tu esprimi le tue " +
             "preferenze, in modo riservato, e l'app ne tiene conto.",
-        accent = Color(0xFF10B981),
-        gradient = listOf(Color(0xFF06231B), Color(0xFF0E5C47), Color(0xFF2BA07E))
+        accent = AppTheme.OnboardingSeatsAccent,
+        gradient = AppTheme.OnboardingSeatsGradient
     ),
     OnboardingPage(
         iconKind = OnboardingIcon.SPARKLE,
         title = "Chiedi ad\nAILA Assistant.",
         body = "Una domanda in italiano e una risposta costruita sui dati della tua classe, " +
             "con le fonti da aprire. Nel prossimo passo scegli l'AI che la alimenta.",
-        accent = Color(0xFF06B6D4),
-        gradient = listOf(Color(0xFF071A33), Color(0xFF0E4C6E), Color(0xFF2F7FB8))
+        accent = AppTheme.OnboardingAssistantAccent,
+        gradient = AppTheme.OnboardingAssistantGradient
     )
 )
 
-private val aiStepAccent = Color(0xFF06B6D4)
+// Il passo AI prosegue la pagina dell'assistente ("Nel prossimo passo scegli l'AI"): stesso
+// colore, preso dallo stesso token invece di ripetere il valore.
+private val aiStepAccent = AppTheme.OnboardingAssistantAccent
 
 /** Durata e curva di ogni cambio pagina: una sola, così tutto ciò che si muove va a tempo. */
 private const val PAGE_MS = 340
 private val PageEasing = FastOutSlowInEasing
+/** Ritardo dell'entrata: il nuovo contenuto compare quando il vecchio ha già iniziato a sparire. */
+private const val PAGE_ENTER_DELAY_MS = 90
+
+/**
+ * Curva dei cambi pagina animati. Non usa il vocabolario di AilaMotion di proposito: testo,
+ * illustrazione e icona devono restare sincronizzati su [PAGE_MS] e [PageEasing], e con questo
+ * helper durata e curva stanno in un punto solo invece che in quattordici `tween` sparsi. Si usa
+ * solo nei rami senza "Riduci movimento" (quello ridotto è [reducedPageTransform]).
+ */
+private fun <T> pageSpec(durationMillis: Int = PAGE_MS, delayMillis: Int = 0): FiniteAnimationSpec<T> =
+    tween(durationMillis = durationMillis, delayMillis = delayMillis, easing = PageEasing)
 
 /**
  * Cambio pagina con "Riduci movimento" del sistema: solo dissolvenza incrociata, senza scorrimento
  * laterale ne' scala, e l'altezza che si adegua di colpo come nella versione animata.
+ * La dissolvenza viene da [ailaFadeSpec], che con il movimento ridotto la accorcia come nel resto
+ * dell'app.
  */
 private fun reducedPageTransform(): ContentTransform = ContentTransform(
-    targetContentEnter = fadeIn(tween(PAGE_MS / 2, easing = PageEasing)),
-    initialContentExit = fadeOut(tween(PAGE_MS / 2, easing = PageEasing)),
+    targetContentEnter = fadeIn(ailaFadeSpec(PAGE_MS / 2)),
+    initialContentExit = fadeOut(ailaFadeSpec(PAGE_MS / 2)),
     sizeTransform = SizeTransform(clip = false) { _, _ -> snap() }
 )
 
@@ -263,7 +287,7 @@ fun OnboardingScreen(
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
                         .clickable(enabled = !aiBusy) { stepIndex-- }
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8)
                 )
             }
             if (!isLast) {
@@ -275,7 +299,7 @@ fun OnboardingScreen(
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
                         .clickable(enabled = !aiBusy) { onFinish() }
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8)
                 )
             }
             }
@@ -292,10 +316,10 @@ fun OnboardingScreen(
                 transitionSpec = {
                     val dir = if (targetState) 1 else -1
                     if (AppTheme.reduceMotion) reducedPageTransform() else
-                    ((fadeIn(tween(PAGE_MS, delayMillis = 90, easing = PageEasing)) +
-                        slideInHorizontally(tween(PAGE_MS, easing = PageEasing)) { dir * (it / 8) }) togetherWith
-                        (fadeOut(tween(PAGE_MS / 2, easing = PageEasing)) +
-                            slideOutHorizontally(tween(PAGE_MS, easing = PageEasing)) { -dir * (it / 8) }))
+                    ((fadeIn(pageSpec(delayMillis = PAGE_ENTER_DELAY_MS)) +
+                        slideInHorizontally(pageSpec()) { dir * (it / 8) }) togetherWith
+                        (fadeOut(pageSpec(PAGE_MS / 2)) +
+                            slideOutHorizontally(pageSpec()) { -dir * (it / 8) }))
                         .using(SizeTransform(clip = false) { _, _ -> snap() })
                 },
                 label = "onboardingArea"
@@ -364,25 +388,36 @@ fun OnboardingScreen(
         ) {
             (0 until totalSteps).forEach { index ->
                 val isActive = index == stepIndex
+                // Larghezza (movimento) e colore con la stessa durata Standard: il pallino si
+                // allunga mentre si colora. Con "Riduci movimento" la larghezza scatta subito.
                 val dotWidth by animateDpAsState(
                     targetValue = if (isActive) 24.dp else 8.dp,
-                    animationSpec = tween(durationMillis = 240),
+                    animationSpec = ailaMoveSpec(AilaDuration.Standard),
                     label = "onboardingDotWidth"
                 )
                 val dotColor by animateColorAsState(
                     targetValue = if (isActive) accent else AppTheme.FieldOutline,
-                    animationSpec = tween(durationMillis = 240),
+                    animationSpec = ailaColorSpec(),
                     label = "onboardingDotColor"
                 )
+                // Il tocco sta su un'area alta 44dp intorno al pallino: prima era il pallino da 8dp,
+                // quasi impossibile da prendere. Il nome dice al lettore di schermo dove porta.
                 Box(
                     modifier = Modifier
-                        .padding(horizontal = 3.dp)
-                        .width(dotWidth)
-                        .height(8.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(dotColor)
+                        .heightIn(min = 44.dp)
                         .clickable(enabled = !aiBusy) { stepIndex = index }
-                )
+                        .semantics { contentDescription = "Pagina ${index + 1} di $totalSteps" }
+                        .padding(horizontal = AppTheme.Space8),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(dotWidth)
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(dotColor)
+                    )
+                }
             }
         }
 
@@ -418,10 +453,10 @@ private fun OnboardingCopy(pageIndex: Int) {
             transitionSpec = {
                 val dir = if (targetState > initialState) 1 else -1
                 if (AppTheme.reduceMotion) reducedPageTransform() else
-                ((fadeIn(tween(PAGE_MS, delayMillis = 90, easing = PageEasing)) +
-                    slideInHorizontally(tween(PAGE_MS, easing = PageEasing)) { dir * (it / 6) }) togetherWith
-                    (fadeOut(tween(PAGE_MS / 2, easing = PageEasing)) +
-                        slideOutHorizontally(tween(PAGE_MS, easing = PageEasing)) { -dir * (it / 6) }))
+                ((fadeIn(pageSpec(delayMillis = PAGE_ENTER_DELAY_MS)) +
+                    slideInHorizontally(pageSpec()) { dir * (it / 6) }) togetherWith
+                    (fadeOut(pageSpec(PAGE_MS / 2)) +
+                        slideOutHorizontally(pageSpec()) { -dir * (it / 6) }))
                     .using(SizeTransform(clip = false) { _, _ -> snap() })
             },
             label = "onboardingCopy"
@@ -792,14 +827,16 @@ private fun AiChoiceCard(
     // scheda scelta si apre e l'altra si richiude nello stesso istante, e anche le righe di esito
     // ("Chiave salvata", avanzamento) entrano allargando la scheda invece di spingere a scatti.
     // `animateContentSize` sta dopo sfondo e bordo e prima del padding, così anche loro seguono.
+    // Colori e apertura dal vocabolario di AilaMotion, con la stessa durata Standard così restano
+    // insieme; con "Riduci movimento" i colori sfumano più in fretta e l'altezza cambia di colpo.
     val background by animateColorAsState(
         targetValue = if (selected) AppTheme.TintBlue else AppTheme.SurfaceWhite,
-        animationSpec = tween(220, easing = PageEasing),
+        animationSpec = ailaColorSpec(),
         label = "aiCardBackground"
     )
     val borderColor by animateColorAsState(
         targetValue = if (selected) AppTheme.PrimaryBlue else AppTheme.FieldOutline,
-        animationSpec = tween(220, easing = PageEasing),
+        animationSpec = ailaColorSpec(),
         label = "aiCardBorder"
     )
     Column(
@@ -808,7 +845,7 @@ private fun AiChoiceCard(
             .clip(shape)
             .background(background)
             .border(if (selected) 2.dp else 1.dp, borderColor, shape)
-            .animateContentSize(tween(260, easing = PageEasing))
+            .animateContentSize(ailaMoveSpec(AilaDuration.Standard))
             .padding(AppTheme.Space16)
     ) {
         Row(
@@ -842,6 +879,8 @@ private fun AiChoiceCard(
                     fontWeight = FontWeight.Bold,
                     color = if (enabled || selected) AppTheme.TextDark else AppTheme.TextFaint
                 )
+                // 2dp voluti, sotto la griglia: titolo e sottotitolo si leggono come un blocco
+                // solo (come in Calendario e Posti); 4 li staccherebbe.
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = subtitle,
@@ -851,6 +890,8 @@ private fun AiChoiceCard(
                 )
                 if (badge != null) {
                     Spacer(modifier = Modifier.height(AppTheme.Space8))
+                    // Margini interni 8×4 come le etichette di Bacheca e Sondaggi (prima 6×2,
+                    // fuori griglia): stessa pillola in tutta l'app.
                     Text(
                         text = badge,
                         fontSize = 10.sp,
@@ -859,7 +900,7 @@ private fun AiChoiceCard(
                         modifier = Modifier
                             .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
                             .background(AppTheme.TintGreen)
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                            .padding(horizontal = AppTheme.Space8, vertical = AppTheme.Space4)
                     )
                 }
             }
@@ -937,6 +978,7 @@ private fun OnboardingModelRow(
                 else -> null
             }
             if (tag != null) {
+                // Stessa pillola 8×4 dell'etichetta in AiChoiceCard.
                 Text(
                     text = tag,
                     fontSize = 10.sp,
@@ -945,7 +987,7 @@ private fun OnboardingModelRow(
                     modifier = Modifier
                         .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
                         .background(if (isInstalled) AppTheme.TintGreen else AppTheme.TintSlate)
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                        .padding(horizontal = AppTheme.Space8, vertical = AppTheme.Space4)
                 )
             }
         }
@@ -978,10 +1020,11 @@ private fun OnboardingProgressBar(downloadedBytes: Long, totalBytes: Long) {
     } else {
         0f
     }
-    // I byte arrivano a blocchi: senza interpolazione la barra avanzerebbe a scatti.
+    // I byte arrivano a blocchi: senza interpolazione la barra avanzerebbe a scatti. Durata Slow
+    // (barre che crescono) e lineare; con "Riduci movimento" la barra salta al valore nuovo.
     val fraction by animateFloatAsState(
         targetValue = target,
-        animationSpec = tween(300, easing = LinearEasing),
+        animationSpec = ailaMoveSpec(AilaDuration.Slow, easing = LinearEasing),
         label = "downloadFraction"
     )
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -1041,6 +1084,9 @@ private fun OnboardingIllustration(page: OnboardingPage, height: Dp = 250.dp) {
         breath = rememberUpdatedState(1f)
         drift = rememberUpdatedState(0.5f)
     } else {
+        // Qui restano `tween` scritti a mano: `infiniteRepeatable` vuole una specifica a durata
+        // (il vocabolario di AilaMotion restituisce FiniteAnimationSpec) e questo ramo non esiste
+        // proprio con "Riduci movimento".
         val transition = rememberInfiniteTransition(label = "onboardingLoop")
         orbit = transition.animateFloat(
             initialValue = 0f,
@@ -1073,7 +1119,11 @@ private fun OnboardingIllustration(page: OnboardingPage, height: Dp = 250.dp) {
 
     // Cambio pagina: i colori del fondo scorrono dall'uno all'altro nello stesso tempo del testo.
     // Sono `State` non delegati apposta: si leggono solo nel disegno, vedi sopra.
-    val colorSpec = tween<Color>(durationMillis = PAGE_MS + 120, easing = PageEasing)
+    // Con "Riduci movimento" il testo cambia con la dissolvenza breve di reducedPageTransform:
+    // ailaColorSpec ha la stessa durata ridotta, così fondo e testo arrivano insieme.
+    val colorSpec: FiniteAnimationSpec<Color> =
+        if (reduceMotion) ailaColorSpec<Color>()
+        else pageSpec<Color>(durationMillis = PAGE_MS + 120)
     val gradient0 = animateColorAsState(page.gradient[0], colorSpec, label = "gradient0")
     val gradient1 = animateColorAsState(page.gradient[1], colorSpec, label = "gradient1")
     val gradient2 = animateColorAsState(page.gradient[2], colorSpec, label = "gradient2")
@@ -1106,7 +1156,7 @@ private fun OnboardingIllustration(page: OnboardingPage, height: Dp = 250.dp) {
                 )
                 drawRect(
                     Brush.radialGradient(
-                        colors = listOf(Color(0x2AFFFFFF), Color(0x00FFFFFF)),
+                        colors = AppTheme.OnGradientGlow,
                         center = Offset(w * (0.95f - drift.value * 0.6f), h * 0.95f),
                         radius = w * 0.65f
                     )
@@ -1138,7 +1188,7 @@ private fun OnboardingIllustration(page: OnboardingPage, height: Dp = 250.dp) {
                     scaleY = breath.value
                 }
                 .clip(CircleShape)
-                .background(Brush.linearGradient(listOf(Color(0x3DFFFFFF), Color(0x14FFFFFF)))),
+                .background(Brush.linearGradient(AppTheme.OnGradientHighlight)),
             contentAlignment = Alignment.Center
         ) {
             // L'icona cambia con scala e dissolvenza, non di colpo: è l'unica cosa che cambia
@@ -1147,14 +1197,15 @@ private fun OnboardingIllustration(page: OnboardingPage, height: Dp = 250.dp) {
                 targetState = page.iconKind,
                 transitionSpec = {
                     // Riduci movimento: l'icona sfuma senza crescere.
+                    // Stessa dissolvenza di reducedPageTransform, così icona e testo restano a tempo.
                     if (AppTheme.reduceMotion) {
-                        fadeIn(tween(PAGE_MS / 2, easing = PageEasing)) togetherWith
-                            fadeOut(tween(PAGE_MS / 2, easing = PageEasing))
+                        fadeIn(ailaFadeSpec(PAGE_MS / 2)) togetherWith
+                            fadeOut(ailaFadeSpec(PAGE_MS / 2))
                     } else
-                    (fadeIn(tween(PAGE_MS, delayMillis = 90, easing = PageEasing)) +
-                        scaleIn(tween(PAGE_MS, delayMillis = 90, easing = PageEasing), initialScale = 0.7f)) togetherWith
-                        (fadeOut(tween(PAGE_MS / 2, easing = PageEasing)) +
-                            scaleOut(tween(PAGE_MS / 2, easing = PageEasing), targetScale = 0.7f))
+                    (fadeIn(pageSpec(delayMillis = PAGE_ENTER_DELAY_MS)) +
+                        scaleIn(pageSpec(delayMillis = PAGE_ENTER_DELAY_MS), initialScale = 0.7f)) togetherWith
+                        (fadeOut(pageSpec(PAGE_MS / 2)) +
+                            scaleOut(pageSpec(PAGE_MS / 2), targetScale = 0.7f))
                 },
                 label = "onboardingIcon"
             ) { kind ->
