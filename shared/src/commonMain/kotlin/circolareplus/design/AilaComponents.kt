@@ -645,6 +645,14 @@ private fun ailaButtonTextStyle(large: Boolean, compact: Boolean) = when {
 private fun Modifier.ailaButtonMinHeight(large: Boolean, compact: Boolean) =
     heightIn(min = if (large) 48.dp else if (compact) 40.dp else 44.dp)
 
+/**
+ * Testo cliccabile usato come link ("Salta", "Scegli un altro modello"): almeno 44dp di altezza
+ * con il testo centrato. Come per i pulsanti, prima l'altezza la dava l'interlinea di 24sp
+ * ereditata da Material; con la scala tipografica un link da 13sp sarebbe alto 18dp più il padding.
+ * Va messo dopo `clickable`, così tutta l'area alta 44dp risponde al tocco.
+ */
+fun Modifier.ailaTextTouchTarget() = heightIn(min = 44.dp).wrapContentHeight()
+
 /** Pulsante secondario: stesso ingombro del primario ma solo contorno. */
 @Composable
 fun AilaSecondaryButton(
