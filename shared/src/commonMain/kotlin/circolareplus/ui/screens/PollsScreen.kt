@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,7 +26,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import circolareplus.algorithms.InterrogationVoteType
 import circolareplus.design.AilaCard
 import circolareplus.design.AilaDuration
@@ -150,9 +150,8 @@ fun PollsScreen(
             AilaCard(containerColor = AppTheme.TintSlate) {
                 Text(
                     text = "Questo sondaggio non è rivolto a te: puoi seguirne l'avanzamento, ma non votare.",
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = AppTheme.TextMuted,
-                    lineHeight = 18.sp,
                     modifier = Modifier.padding(AppTheme.Space16)
                 )
             }
@@ -162,8 +161,7 @@ fun PollsScreen(
                 Column(modifier = Modifier.padding(AppTheme.Space16)) {
                     Text(
                         text = "Come funziona",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleSmall,
                         color = AppTheme.TextDark
                     )
                     Spacer(modifier = Modifier.height(AppTheme.Space4))
@@ -172,9 +170,8 @@ fun PollsScreen(
                             "gli altri rifiutano guadagna un bonus per i sondaggi futuri. " +
                             "I \"meglio di no\" contano pieni fino al 40% delle date: " +
                             "se ne metti di più ognuno pesa meno, e vale meno bonus.",
-                        fontSize = 13.sp,
-                        color = AppTheme.TextMuted,
-                        lineHeight = 18.sp
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AppTheme.TextMuted
                     )
                     Spacer(modifier = Modifier.height(AppTheme.Space12))
                     VoteLegend(darkRedLeft = MAX_DARK_RED - darkRedCount)
@@ -196,15 +193,13 @@ fun PollsScreen(
                     Column {
                         Text(
                             text = "Bonus sacrificio attivo",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleSmall,
                             color = AppTheme.TintAmberInk
                         )
                         Text(
                             text = "Hai accettato date che gli altri rifiutavano: il tuo \"ci sto\" pesa di più.",
-                            fontSize = 12.sp,
-                            color = AppTheme.TintAmberInk,
-                            lineHeight = 16.sp
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AppTheme.TintAmberInk
                         )
                     }
                 }
@@ -345,16 +340,14 @@ private fun PollProgressHeader(
         ) {
             Text(
                 text = subjectName,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleSmall,
                 color = AppTheme.TextDark,
                 maxLines = 1,
                 modifier = Modifier.weight(1f)
             )
             Text(
                 text = if (isSubmitted) "Scelte inviate" else "$votedCount di $total",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelMedium,
                 color = if (isSubmitted) AppTheme.TintGreenInk else AppTheme.TextMuted
             )
         }
@@ -394,7 +387,7 @@ private fun PollProgressHeader(
                         } else {
                             "$submittedCount di $totalStudents compagni hanno inviato"
                         },
-                        fontSize = 11.sp,
+                        style = MaterialTheme.typography.labelSmall,
                         fontWeight = if (everyoneDone) FontWeight.Bold else FontWeight.Normal,
                         color = if (everyoneDone) AppTheme.TintGreenInk else AppTheme.TextFaint,
                         modifier = Modifier.weight(1f)
@@ -406,8 +399,7 @@ private fun PollProgressHeader(
                 if (isExpired) {
                     Text(
                         text = "Tempo scaduto",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelSmall,
                         color = AppTheme.TintRedInk,
                         modifier = Modifier
                             .clip(CircleShape)
@@ -417,8 +409,7 @@ private fun PollProgressHeader(
                 } else if (closesAtLabel != null) {
                     Text(
                         text = "Entro il $closesAtLabel",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelSmall,
                         color = AppTheme.TintAmberInk,
                         modifier = Modifier
                             .clip(CircleShape)
@@ -455,8 +446,8 @@ private fun LegendRow(color: Color, label: String, note: String) {
     ) {
         AilaDot(color = color)
         Spacer(modifier = Modifier.width(AppTheme.Space8))
-        Text(text = label, fontSize = 12.sp, color = AppTheme.TextDark, modifier = Modifier.weight(1f))
-        Text(text = note, fontSize = 11.sp, color = AppTheme.TextFaint)
+        Text(text = label, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextDark, modifier = Modifier.weight(1f))
+        Text(text = note, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Normal, color = AppTheme.TextFaint)
     }
 }
 
@@ -470,17 +461,15 @@ private fun PollManagementCard(onClose: () -> Unit, onDelete: () -> Unit) {
         Column(modifier = Modifier.padding(AppTheme.Space16)) {
             Text(
                 text = "Gestione del sondaggio",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleSmall,
                 color = AppTheme.TextDark
             )
             Spacer(modifier = Modifier.height(AppTheme.Space4))
             Text(
                 text = "Chiudi: calcola subito le date anche se manca qualcuno e sposta il sondaggio nello Storico. " +
                     "Elimina: lo cancella con tutti i voti.",
-                fontSize = 12.sp,
-                color = AppTheme.TextMuted,
-                lineHeight = 16.sp
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTheme.TextMuted
             )
             Spacer(modifier = Modifier.height(AppTheme.Space12))
             Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
@@ -530,7 +519,7 @@ private fun PollSubmitBar(
                     Text(
                         text = if (isSubmitted) "Scelte inviate. Il sondaggio è chiuso."
                         else "Il sondaggio è chiuso.",
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = AppTheme.TextMuted
                     )
                 }
@@ -542,8 +531,7 @@ private fun PollSubmitBar(
                     Spacer(modifier = Modifier.width(AppTheme.Space8))
                     Text(
                         text = "Scelte inviate",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelLarge,
                         color = AppTheme.TintGreenInk
                     )
                 }
@@ -555,7 +543,7 @@ private fun PollSubmitBar(
                     text = if (allVoted) "Hai votato tutte le date"
                     else if (missing == 1) "Manca 1 data"
                     else "Mancano $missing date",
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = AppTheme.TextMuted,
                     modifier = Modifier.weight(1f)
                 )
@@ -588,14 +576,12 @@ fun SlotRowItem(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = "${parsed.day}",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleSmall,
                             color = AppTheme.TintBlueInk
                         )
                         Text(
                             text = ITALIAN_MONTHS.getOrElse(parsed.month) { "" }.take(3).uppercase(),
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.labelSmall,
                             color = AppTheme.TintBlueInk
                         )
                     }
@@ -612,8 +598,7 @@ fun SlotRowItem(
                         // Il giorno della settimana al posto della data ISO: il numero e il mese
                         // sono già nel riquadro qui a sinistra, ripeterli non aggiungeva nulla.
                         text = weekdayName(slot.dateLabel).ifBlank { slot.dateLabel },
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleSmall,
                         color = AppTheme.TextDark
                     )
                     if (slot.isMandatory) {
@@ -626,8 +611,7 @@ fun SlotRowItem(
                         ) {
                             Text(
                                 text = "Fissata",
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = AppTheme.TintAmberInk
                             )
                         }
@@ -635,7 +619,7 @@ fun SlotRowItem(
                 }
                 Text(
                     text = if (slot.capacity == 1) "1 posto" else "${slot.capacity} posti",
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = AppTheme.TextMuted
                 )
             }
