@@ -2482,7 +2482,9 @@ fun MainAppShell(
                 // Altezza occupata dalla barra flottante (pillola + margini + barra di sistema):
                 // le schermate delle tab la lasciano libera in fondo alle liste.
                 // Con la barra laterale in fondo resta solo la barra di sistema.
-                val bottomBarPadding = (if (useRail) 0.dp else 84.dp) +
+                // 64 di pillola piu' il margine Space12 sopra e sotto (vedi FloatingTabBar): se
+                // cambia uno dei due va cambiato anche qui.
+                val bottomBarPadding = (if (useRail) 0.dp else 64.dp + AppTheme.Space12 * 2) +
                     WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 // Tastiera aperta = il suo inset in basso e' > 0. (`isImeVisible` esiste solo su
                 // Android: su iOS non compilava.)
@@ -2533,14 +2535,16 @@ fun MainAppShell(
                         val target = MainTab.entries.indexOf(selectedTab)
                         val alreadyThere = (tabPager.targetPage == target && tabPager.isScrollInProgress) ||
                             (tabPager.currentPage == target && tabPager.currentPageOffsetFraction == 0f)
+                        // Le durate restano quelle tarate per il fade through; ailaFadeSpec le
+                        // accorcia con "Riduci movimento" (e' solo opacita', resta anche li').
                         if (alreadyThere) {
                             // Un tocco rapido annullato a meta' non deve lasciare la pagina sbiadita.
-                            if (tabFade.value < 1f) tabFade.animateTo(1f, androidx.compose.animation.core.tween(140))
+                            if (tabFade.value < 1f) tabFade.animateTo(1f, circolareplus.design.ailaFadeSpec(140))
                             return@LaunchedEffect
                         }
-                        tabFade.animateTo(0f, androidx.compose.animation.core.tween(if (AppTheme.isGlass) 60 else 50))
+                        tabFade.animateTo(0f, circolareplus.design.ailaFadeSpec(if (AppTheme.isGlass) 60 else 50))
                         tabPager.scrollToPage(target)
-                        tabFade.animateTo(1f, androidx.compose.animation.core.tween(if (AppTheme.isGlass) 110 else 130))
+                        tabFade.animateTo(1f, circolareplus.design.ailaFadeSpec(if (AppTheme.isGlass) 110 else 130))
                     }
                     // Pagine -> barra, in tempo reale: mentre si scorre col dito la barra segue la
                     // pagina verso cui si sta andando (non solo a scorrimento finito).
@@ -2578,21 +2582,20 @@ fun MainAppShell(
                         // orizzontale lo prendono le pagine (il PDF accanto alla lista, le card).
                         userScrollEnabled = !useRail,
                         key = { it },
-                        // Al rilascio la pagina si posa con una molla. Pixel: appena elastica, come
-                        // le spatial spring di M3 Expressive. Glass: morbida e senza rimbalzo, come iOS.
+                        // Al rilascio la pagina si posa con la molla di navigazione: Pixel appena
+                        // elastica, Glass morbida e senza rimbalzo come iOS (la sceglie lo stile).
+                        // Con "Riduci movimento" si posa senza oscillare.
                         flingBehavior = androidx.compose.foundation.pager.PagerDefaults.flingBehavior(
                             state = tabPager,
-                            snapAnimationSpec = if (AppTheme.isGlass) {
-                                androidx.compose.animation.core.spring(dampingRatio = 1f, stiffness = 300f)
-                            } else {
-                                androidx.compose.animation.core.spring(dampingRatio = 0.82f, stiffness = 380f)
-                            }
+                            snapAnimationSpec = circolareplus.design.ailaNavigationSpring()
                         ),
                         modifier = Modifier.fillMaxSize()
                             .graphicsLayer {
                                 val f = tabFade.value
                                 alpha = f
-                                if (!AppTheme.isGlass) {
+                                // Con "Riduci movimento" resta solo la dissolvenza, senza il
+                                // piccolo rimpicciolimento di Material.
+                                if (!AppTheme.isGlass && !AppTheme.reduceMotion) {
                                     val scale = 0.94f + 0.06f * f
                                     scaleX = scale
                                     scaleY = scale
@@ -3454,8 +3457,11 @@ fun MainAppShell(
                 if (!useRail) androidx.compose.animation.AnimatedVisibility(
                     visible = !imeVisible,
                     modifier = Modifier.align(Alignment.BottomCenter),
-                    enter = androidx.compose.animation.slideInVertically { it } + androidx.compose.animation.fadeIn(),
-                    exit = androidx.compose.animation.slideOutVertically { it } + androidx.compose.animation.fadeOut()
+                    // Con "Riduci movimento" la barra compare e sparisce in dissolvenza, senza salire.
+                    enter = if (AppTheme.reduceMotion) androidx.compose.animation.fadeIn(circolareplus.design.ailaFadeSpec())
+                        else androidx.compose.animation.slideInVertically { it } + androidx.compose.animation.fadeIn(),
+                    exit = if (AppTheme.reduceMotion) androidx.compose.animation.fadeOut(circolareplus.design.ailaFadeSpec(circolareplus.design.AilaDuration.Quick))
+                        else androidx.compose.animation.slideOutVertically { it } + androidx.compose.animation.fadeOut()
                 ) {
                     FloatingTabBar(
                         selectedTab = selectedTab,
@@ -3610,10 +3616,15 @@ fun MainAppShell(
                             // La dissolvenza finisce prima della crescita: la pagina e' gia' leggibile
                             // mentre si sta ancora posando.
                             alpha = (p / 0.6f).coerceIn(0f, 1f)
-                            val scale = (MATERIAL_PAGE_SMALL + (1f - MATERIAL_PAGE_SMALL) * p) *
-                                (1f + (MATERIAL_PAGE_BEHIND - 1f) * b)
-                            scaleX = scale
-                            scaleY = scale
+                            // Le durate e la curva restano tarate a mano (MATERIAL_PAGE_*), ma con
+                            // "Riduci movimento" la pagina non cresce e non si allontana: solo la
+                            // dissolvenza. pageBehind allora non cambia nulla a schermo.
+                            if (!AppTheme.reduceMotion) {
+                                val scale = (MATERIAL_PAGE_SMALL + (1f - MATERIAL_PAGE_SMALL) * p) *
+                                    (1f + (MATERIAL_PAGE_BEHIND - 1f) * b)
+                                scaleX = scale
+                                scaleY = scale
+                            }
                         }
                     }
                     .then(
@@ -4785,8 +4796,10 @@ private fun AddCalendarEventDialog(
             ) {
                 androidx.compose.animation.AnimatedVisibility(
                     visible = step != EventCreationStep.MENU,
-                    enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.expandHorizontally(),
-                    exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.shrinkHorizontally()
+                    enter = androidx.compose.animation.fadeIn(circolareplus.design.ailaFadeSpec()) +
+                        androidx.compose.animation.expandHorizontally(circolareplus.design.ailaMoveSpec()),
+                    exit = androidx.compose.animation.fadeOut(circolareplus.design.ailaFadeSpec(circolareplus.design.AilaDuration.Quick)) +
+                        androidx.compose.animation.shrinkHorizontally(circolareplus.design.ailaMoveSpec())
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         EventSheetRoundButton(onClick = { step = EventCreationStep.MENU }) {
@@ -4801,10 +4814,10 @@ private fun AddCalendarEventDialog(
                     transitionSpec = {
                         androidx.compose.animation.ContentTransform(
                             targetContentEnter = androidx.compose.animation.fadeIn(
-                                androidx.compose.animation.core.tween(180, delayMillis = 60)
+                                circolareplus.design.ailaFadeSpec(180, delayMillis = 60)
                             ),
                             initialContentExit = androidx.compose.animation.fadeOut(
-                                androidx.compose.animation.core.tween(100)
+                                circolareplus.design.ailaFadeSpec(100)
                             )
                         )
                     },
@@ -4835,19 +4848,19 @@ private fun AddCalendarEventDialog(
                 modifier = Modifier.fillMaxWidth(),
                 transitionSpec = {
                     androidx.compose.animation.ContentTransform(
+                        // Dissolvenze con ailaFadeSpec, la piccola crescita con ailaMoveSpec (con
+                        // "Riduci movimento" non scala) e l'altezza con la molla di navigazione.
                         targetContentEnter = androidx.compose.animation.fadeIn(
-                            androidx.compose.animation.core.tween(190, delayMillis = 100)
+                            circolareplus.design.ailaFadeSpec(190, delayMillis = 100)
                         ) + androidx.compose.animation.scaleIn(
-                            androidx.compose.animation.core.tween(190, delayMillis = 100),
+                            circolareplus.design.ailaMoveSpec(190, delayMillis = 100),
                             initialScale = 0.94f
                         ),
                         initialContentExit = androidx.compose.animation.fadeOut(
-                            androidx.compose.animation.core.tween(90)
+                            circolareplus.design.ailaFadeSpec(90)
                         ),
                         sizeTransform = androidx.compose.animation.SizeTransform(clip = false) { _, _ ->
-                            androidx.compose.animation.core.spring<androidx.compose.ui.unit.IntSize>(
-                                dampingRatio = 0.9f, stiffness = 380f
-                            )
+                            circolareplus.design.ailaNavigationSpring<androidx.compose.ui.unit.IntSize>()
                         }
                     )
                 },
@@ -4928,7 +4941,7 @@ private fun AddCalendarEventDialog(
                                     .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
                                     .background(AppTheme.TintSlate)
                                     .clickable { aiPrompt = example }
-                                    .padding(horizontal = AppTheme.Space12, vertical = 10.dp),
+                                    .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space12),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 AppIcons.Sparkle(modifier = Modifier.size(13.dp), color = AppTheme.TintVioletInk)
@@ -5048,7 +5061,7 @@ private fun AddCalendarEventDialog(
                                 .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
                                 .border(1.dp, AppTheme.FieldOutline, RoundedCornerShape(AppTheme.SmallElementRadius))
                                 .clickable { showDatePicker = true }
-                                .padding(horizontal = AppTheme.Space12, vertical = 13.dp),
+                                .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space12),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             AppIcons.Calendar(modifier = Modifier.size(16.dp), color = AppTheme.PrimaryBlue)
@@ -5398,7 +5411,7 @@ private fun EventDetailDialog(
                     .clip(RoundedCornerShape(AppTheme.ButtonCornerRadius))
                     .background(AppTheme.TintRed)
                     .clickable { confirmDelete = true }
-                    .padding(vertical = 14.dp),
+                    .padding(vertical = AppTheme.Space16),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -5540,7 +5553,7 @@ private fun EventDetailPage(
                     .clip(RoundedCornerShape(AppTheme.ButtonCornerRadius))
                     .background(AppTheme.TintRed)
                     .clickable { confirmDelete = true }
-                    .padding(vertical = 14.dp),
+                    .padding(vertical = AppTheme.Space16),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -5561,7 +5574,7 @@ private fun EventDetailPage(
 private fun EventDetailRow(label: String, value: String, modifier: Modifier = Modifier) {
     Column(modifier = modifier.padding(bottom = AppTheme.Space12)) {
         Text(text = label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AppTheme.TextMuted)
-        Spacer(modifier = Modifier.height(2.dp))
+        Spacer(modifier = Modifier.height(AppTheme.Space4))
         Text(text = value, fontSize = 14.sp, color = AppTheme.TextDark)
     }
 }
@@ -5633,11 +5646,12 @@ private fun EventCreationOptionCard(
             fontWeight = FontWeight.Bold,
             color = if (highlighted) Color.White else AppTheme.TextDark
         )
-        Spacer(modifier = Modifier.height(2.dp))
+        Spacer(modifier = Modifier.height(AppTheme.Space4))
         Text(
             text = subtitle,
             fontSize = 11.sp,
-            color = if (highlighted) Color(0xCCFFFFFF) else AppTheme.TextMuted,
+            // Sulla card piena del primario: il testo secondario "su gradiente" del tema.
+            color = if (highlighted) AppTheme.OnGradientSecondary else AppTheme.TextMuted,
             lineHeight = 14.sp
         )
     }
@@ -5894,7 +5908,7 @@ private fun PollSlotDraftRow(
             modifier = Modifier
                 .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
                 .clickable { onRemove() }
-                .padding(6.dp),
+                .padding(AppTheme.Space8),
             contentAlignment = Alignment.Center
         ) {
             AppIcons.Trash(modifier = Modifier.size(15.dp), color = AppTheme.TintRedInk)
@@ -5965,10 +5979,10 @@ private fun CreateRankingPollDialog(
                         if (options.size > 2) {
                             Box(
                                 modifier = Modifier
-                                    .padding(start = 4.dp)
+                                    .padding(start = AppTheme.Space4)
                                     .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
                                     .clickable { options.removeAt(index) }
-                                    .padding(10.dp),
+                                    .padding(AppTheme.Space12),
                                 contentAlignment = Alignment.Center
                             ) {
                                 AppIcons.Trash(modifier = Modifier.size(16.dp), color = AppTheme.TintRedInk)
@@ -6149,11 +6163,11 @@ private fun OfflineBanner(
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))
                 .clickable { onRetry() }
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+                .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8),
             verticalAlignment = Alignment.CenterVertically
         ) {
             AppIcons.Refresh(modifier = Modifier.size(14.dp), color = AppTheme.TintAmberInk)
-            Spacer(modifier = Modifier.width(4.dp))
+            Spacer(modifier = Modifier.width(AppTheme.Space4))
             Text(
                 text = "Riprova",
                 fontSize = 12.sp,
@@ -6304,7 +6318,7 @@ private fun FloatingTabBar(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = AppTheme.Space16, vertical = 10.dp),
+            .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12),
         contentAlignment = Alignment.Center
     ) {
         Row(
@@ -6314,7 +6328,7 @@ private fun FloatingTabBar(
                 .fillMaxWidth()
                 .height(64.dp)
                 .tabBarSurface(shape, hazeState)
-                .padding(8.dp),
+                .padding(AppTheme.Space8),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (AppTheme.isGlass) {
@@ -6377,11 +6391,12 @@ private fun Modifier.tabBarSurface(
             .border(1.dp, AppTheme.GlassEdge, shape)
     } else {
         // Material Expressive: pillola piena "surface container", senza bordo,
-        // con l'ombra bassa delle barre flottanti di M3.
+        // con l'ombra bassa delle barre flottanti di M3. Il tono e' lo stesso di DeskFloor (il
+        // "surface container" del tema), invece di una sua copia quasi uguale scritta qui.
         Modifier
             .shadow(elevation = 6.dp, shape = shape)
             .clip(shape)
-            .background(if (AppTheme.isDarkMode) Color(0xFF22252C) else Color(0xFFECEDF7))
+            .background(AppTheme.DeskFloor)
     }
 )
 
@@ -6405,11 +6420,12 @@ private fun FloatingTabRail(
 ) {
     Column(
         modifier = modifier
-            .padding(start = 12.dp)
+            .padding(start = AppTheme.Space12)
             .width(80.dp)
             .tabBarSurface(RoundedCornerShape(36.dp), hazeState)
-            .padding(vertical = 10.dp, horizontal = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+            // Stesso margine interno su tutti i lati, come la pillola della barra in basso.
+            .padding(AppTheme.Space8),
+        verticalArrangement = Arrangement.spacedBy(AppTheme.Space4),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         MainTab.entries.forEach { tab ->
@@ -6422,7 +6438,8 @@ private fun FloatingTabRail(
 private fun FloatingRailItem(tab: MainTab, selected: Boolean, onClick: () -> Unit) {
     val progress by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (selected) 1f else 0f,
-        animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 520f),
+        // Molla viva da selezione, senza rimbalzo con "Riduci movimento".
+        animationSpec = circolareplus.design.ailaBouncySpring(),
         label = "railItem"
     )
     // Stessi colori delle voci della barra in basso (vedi FloatingTabItem).
@@ -6432,12 +6449,9 @@ private fun FloatingRailItem(tab: MainTab, selected: Boolean, onClick: () -> Uni
         activeInk,
         progress.coerceIn(0f, 1f)
     )
-    val tint = if (AppTheme.isGlass) {
-        if (AppTheme.isDarkMode) Color(0x33FFFFFF) else Color(0x1A767680)
-    } else {
-        if (AppTheme.accent != circolareplus.design.AilaAccent.BLUE) AppTheme.AccentContainer
-        else if (AppTheme.isDarkMode) Color(0xFF34457A) else Color(0xFFD9E2FF)
-    }
+    // Fondo della voce attiva: i token di selezione del tema, uguali nella barra in basso e in
+    // quella laterale (prima la stessa logica era copiata a mano nelle due voci).
+    val tint = if (AppTheme.isGlass) AppTheme.GlassSelectionTint else AppTheme.SelectionContainer
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -6452,7 +6466,7 @@ private fun FloatingRailItem(tab: MainTab, selected: Boolean, onClick: () -> Uni
                 role = Role.Tab
                 this.selected = selected
             }
-            .padding(vertical = 8.dp),
+            .padding(vertical = AppTheme.Space8),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // L'indicatore della voce attiva sta dietro l'icona, come nella navigation rail di M3.
@@ -6472,7 +6486,7 @@ private fun FloatingRailItem(tab: MainTab, selected: Boolean, onClick: () -> Uni
                 MainTab.POLLS -> AppIcons.Poll(modifier = iconModifier, color = ink)
             }
         }
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(AppTheme.Space4))
         Text(
             text = if (tab == MainTab.SEATMAP) "Posti" else tab.title,
             fontSize = 11.sp,
@@ -6546,12 +6560,13 @@ private fun RowScope.FloatingTabItem(
             settle.snapTo(lastDrag[0])
             lastDrag[0] = -1f
         }
-        // Material: molla un filo piu' lenta e meno elastica di quella generale, perche' la
-        // pillola che rimbalzava attraversando la barra risultava troppo vivace.
+        // Material: molla un filo piu' lenta e meno elastica di quella generale (ailaBouncySpring
+        // invece di ailaSpatialSpring), perche' la pillola che rimbalzava attraversando la barra
+        // risultava troppo vivace.
         settle.animateTo(
             if (selected) 1f else 0f,
             if (AppTheme.isGlass) ailaSpatialSpring()
-            else androidx.compose.animation.core.spring(dampingRatio = 0.75f, stiffness = 520f)
+            else circolareplus.design.ailaBouncySpring()
         )
     }
     val progress = dragProgress ?: if (lastDrag[0] >= 0f) lastDrag[0] else settle.value
@@ -6563,12 +6578,9 @@ private fun RowScope.FloatingTabItem(
         activeInk,
         progress.coerceIn(0f, 1f)
     )
-    val tint = if (AppTheme.isGlass) {
-        if (AppTheme.isDarkMode) Color(0x33FFFFFF) else Color(0x1A767680)
-    } else {
-        if (AppTheme.accent != circolareplus.design.AilaAccent.BLUE) AppTheme.AccentContainer
-        else if (AppTheme.isDarkMode) Color(0xFF34457A) else Color(0xFFD9E2FF)
-    }
+    // Fondo della voce attiva: i token di selezione del tema, uguali nella barra in basso e in
+    // quella laterale (prima la stessa logica era copiata a mano nelle due voci).
+    val tint = if (AppTheme.isGlass) AppTheme.GlassSelectionTint else AppTheme.SelectionContainer
     Row(
         modifier = Modifier
             .weight(1f + 1.8f * progress.coerceAtLeast(0f))
@@ -6585,7 +6597,7 @@ private fun RowScope.FloatingTabItem(
                 role = Role.Tab
                 this.selected = selected
             }
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = AppTheme.Space12),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -6614,7 +6626,7 @@ private fun RowScope.FloatingTabItem(
                     }
                     .graphicsLayer { alpha = ((labelT - 0.35f) / 0.65f).coerceIn(0f, 1f) }
             ) {
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(AppTheme.Space8))
                 Text(
                     text = tab.title,
                     fontSize = 13.sp,
@@ -6663,8 +6675,14 @@ private fun RowScope.GlassTabBarContent(selectedTab: MainTab, onSelect: (MainTab
                 rightAnim.snapTo(lastDrag[0] + 1f)
                 lastDrag[0] = -1f
             }
-            val fast = androidx.compose.animation.core.spring<Float>(dampingRatio = 1f, stiffness = 700f)
-            val slow = androidx.compose.animation.core.spring<Float>(dampingRatio = 1f, stiffness = 260f)
+            // Le due molle diverse sono la "goccia" che si stira: nel vocabolario di AilaMotion non
+            // c'e' una coppia veloce/lenta, quindi restano tarate qui. Con "Riduci movimento" i
+            // due bordi usano la stessa molla (quella di navigazione, senza oscillare): la lente
+            // si sposta compatta, senza stirarsi.
+            val fast = if (AppTheme.reduceMotion) circolareplus.design.ailaNavigationSpring<Float>()
+                else androidx.compose.animation.core.spring<Float>(dampingRatio = 1f, stiffness = 700f)
+            val slow = if (AppTheme.reduceMotion) circolareplus.design.ailaNavigationSpring<Float>()
+                else androidx.compose.animation.core.spring<Float>(dampingRatio = 1f, stiffness = 260f)
             launch { leftAnim.animateTo(index.toFloat(), if (movingRight[0]) slow else fast) }
             rightAnim.animateTo(index + 1f, if (movingRight[0]) fast else slow)
         }
@@ -6694,7 +6712,7 @@ private fun RowScope.GlassTabBarContent(selectedTab: MainTab, onSelect: (MainTab
                 val selected = tab == selectedTab
                 val animatedInk by androidx.compose.animation.animateColorAsState(
                     targetValue = if (selected) AppTheme.PrimaryBlue else AppTheme.TextDark.copy(alpha = 0.75f),
-                    animationSpec = androidx.compose.animation.core.tween(180),
+                    animationSpec = circolareplus.design.ailaColorSpec(),
                     label = "glassTabInk"
                 )
                 // Trascinando il colore segue la lente invece di scattare a meta' strada.
@@ -6729,7 +6747,7 @@ private fun RowScope.GlassTabBarContent(selectedTab: MainTab, onSelect: (MainTab
                         MainTab.SEATMAP -> AppIcons.Chair(modifier = iconModifier, color = ink)
                         MainTab.POLLS -> AppIcons.Poll(modifier = iconModifier, color = ink)
                     }
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height(AppTheme.Space4))
                     Text(
                         text = if (tab == MainTab.SEATMAP) "Posti" else tab.title,
                         fontSize = 10.sp,
