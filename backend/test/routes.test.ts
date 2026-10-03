@@ -1,5 +1,5 @@
 // Rotte vere su un D1 finto (test/d1shim.ts) con lo schema reale.
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import worker from '../src/index';
 import { createD1 } from './d1shim';
 import { anonymizePairs } from '../src/routes/preferences';
@@ -8,13 +8,32 @@ import { isDeadToken } from '../src/services/fcm';
 import { italianToday, upsertAnalysis } from '../src/services/summarizer';
 import type { Env } from '../src/types';
 
+// Le notifiche si registrano invece di partire: servono a controllare chi viene avvisato.
+const notified = vi.hoisted(() => [] as { userIds: string[]; title: string; data?: Record<string, string> }[]);
+vi.mock('../src/services/fcm', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/services/fcm')>()),
+  notifyUsers: async (_env: unknown, userIds: string[], title: string, _body: string, data?: Record<string, string>) => {
+    notified.push({ userIds, title, data });
+  },
+}));
+
 const ctx = { waitUntil() {}, passThroughOnException() {} } as never;
 let env: Env;
 
 beforeEach(() => {
   const { d1 } = createD1();
-  env = { DB: d1, JWT_SECRET: 'test-secret', REPRESENTATIVE_SIGNUP_CODE: 'REP-CODE' } as unknown as Env;
+  env = { DB: d1, JWT_SECRET: 'test-secret', ADMIN_SECRET: ADMIN } as unknown as Env;
+  notified.length = 0;
 });
+
+const ADMIN = 'admin-secret-di-prova-1234';
+
+/** Nuovo codice Rappresentante per la classe, emesso dalla rotta di amministrazione. */
+async function repCode(classLabel = '3 B', ttlDays?: number): Promise<string> {
+  const res = await call('POST', '/api/admin/representative-invites', { classLabel, ttlDays }, undefined, { 'X-Admin-Secret': ADMIN });
+  expect(res.status).toBe(201);
+  return res.json.code;
+}
 
 /** Codice della classe del Rappresentante (serve a chi si registra dopo di lui). */
 async function classCodeOf(repToken: string): Promise<string> {
@@ -57,7 +76,7 @@ describe('registrazione e codice classe', () => {
     // Nessun codice ancora: si entra come prima.
     expect((await register('secondo')).status).toBe(201);
 
-    const rep = await register('rappresentante', { representativeCode: 'REP-CODE' });
+    const rep = await register('rappresentante', { representativeCode: await repCode() });
     expect(rep.status).toBe(201);
     const code = await call('GET', '/api/users/class-code', undefined, rep.json.token);
     expect(code.status).toBe(200);
@@ -74,29 +93,118 @@ describe('registrazione e codice classe', () => {
   });
 
   it('al massimo due Rappresentanti per classe', async () => {
-    const rep1 = await register('rep1', { representativeCode: 'REP-CODE' });
-    const classCode = await classCodeOf(rep1.json.token);
-    expect((await register('rep2', { representativeCode: 'REP-CODE', classCode })).status).toBe(201);
-    expect((await register('rep3', { representativeCode: 'REP-CODE', classCode })).status).toBe(409);
+    expect((await register('rep1', { representativeCode: await repCode() })).status).toBe(201);
+    // Il secondo non deve chiedere il codice classe al primo: il suo codice vale gia' solo qui.
+    expect((await register('rep2', { representativeCode: await repCode() })).status).toBe(201);
+    expect((await register('rep3', { representativeCode: await repCode() })).status).toBe(409);
   });
 
   it('con un Rappresentante in classe il codice serve anche se lui non ha mai aperto la Scheda Classe', async () => {
-    expect((await register('rep1', { representativeCode: 'REP-CODE' })).status).toBe(201);
+    expect((await register('rep1', { representativeCode: await repCode() })).status).toBe(201);
     const stranger = await register('sconosciuto');
     expect(stranger.status).toBe(403);
     expect(stranger.json.classCodeRequired).toBe(true);
   });
+});
 
-  it('il codice Rappresentante non basta per entrare in una classe che ha gia\' un Rappresentante', async () => {
-    // Il codice Rappresentante e' uno solo per tutta la scuola: senza il codice classe, il
-    // Rappresentante di un'altra classe entrava come secondo Rappresentante di questa.
-    const rep = await register('rep1', { representativeCode: 'REP-CODE' });
-    const code = await call('GET', '/api/users/class-code', undefined, rep.json.token);
+describe('codici Rappresentante per classe e monouso', () => {
+  it('un codice di un\'altra classe viene rifiutato', async () => {
+    const other = await repCode('5 A');
+    const res = await register('estraneo', { representativeCode: other });
+    expect(res.status).toBe(400);
+    expect(res.json.error).toMatch(/altra classe/);
+    // Nella sua classe vale.
+    expect((await register('estraneo', { representativeCode: other, classLabel: '5 A' })).status).toBe(201);
+  });
 
-    const outsider = await register('estraneo', { representativeCode: 'REP-CODE' });
-    expect(outsider.status).toBe(403);
-    expect(outsider.json.classCodeRequired).toBe(true);
-    expect((await register('estraneo', { representativeCode: 'REP-CODE', classCode: code.json.code })).status).toBe(201);
+  it('un codice gia\' usato viene rifiutato', async () => {
+    const code = await repCode();
+    const first = await register('rep1', { representativeCode: code });
+    expect(first.status).toBe(201);
+    expect(first.json.user.role).toBe('REPRESENTATIVE');
+    const again = await register('rep2', { representativeCode: code });
+    expect(again.status).toBe(400);
+    expect(again.json.error).toMatch(/già usato/);
+  });
+
+  it('un codice scaduto viene rifiutato', async () => {
+    const code = await repCode();
+    await env.DB.prepare('UPDATE representative_invites SET expires_at = ?').bind(Math.floor(Date.now() / 1000) - 1).run();
+    const res = await register('rep1', { representativeCode: code });
+    expect(res.status).toBe(400);
+    expect(res.json.error).toMatch(/scaduto/);
+  });
+
+  it('un codice inventato viene rifiutato, minuscole e trattini non contano', async () => {
+    expect((await register('rep1', { representativeCode: 'AAAAA-AAAAA' })).status).toBe(400);
+    const code = await repCode();
+    const ok = await register('rep1', { representativeCode: ` ${code.toLowerCase().replace('-', ' ')} ` });
+    expect(ok.status).toBe(201);
+    expect(ok.json.user.role).toBe('REPRESENTATIVE');
+  });
+
+  it('se la registrazione fallisce il codice non si consuma', async () => {
+    await register('preso', { classLabel: '5 A' });
+    const code = await repCode();
+    expect((await register('preso', { representativeCode: code })).status).toBe(409);
+    expect((await register('libero', { representativeCode: code })).status).toBe(201);
+  });
+
+  it('solo con il segreto di amministrazione, mai con un token dell\'app', async () => {
+    const rep = await register('rep1', { representativeCode: await repCode() });
+    const issue = (headers: Record<string, string>, token?: string) =>
+      call('POST', '/api/admin/representative-invites', { classLabel: '3 B' }, token, headers);
+    expect((await issue({}, rep.json.token)).status).toBe(401);
+    expect((await issue({ 'X-Admin-Secret': 'sbagliato' })).status).toBe(401);
+    expect((await issue({ 'X-Admin-Secret': ADMIN })).status).toBe(201);
+    expect((await call('POST', '/api/admin/representative-invites', { classLabel: '3 B', ttlDays: 90 }, undefined, { 'X-Admin-Secret': ADMIN })).status).toBe(400);
+
+    env = { ...env, ADMIN_SECRET: undefined } as Env;
+    expect((await issue({ 'X-Admin-Secret': '' })).status).toBe(503);
+  });
+
+  it('elenco senza codici in chiaro e ritiro di un codice non usato', async () => {
+    const headers = { 'X-Admin-Secret': ADMIN };
+    const used = await repCode();
+    await register('rep1', { representativeCode: used });
+    const spare = await call('POST', '/api/admin/representative-invites', { classLabel: '3B' }, undefined, headers);
+
+    const list = await call('GET', '/api/admin/representative-invites?classLabel=3%20B', undefined, undefined, headers);
+    expect(list.status).toBe(200);
+    expect(list.json.invites).toHaveLength(2);
+    expect(JSON.stringify(list.json)).not.toContain(spare.json.code);
+    expect(list.json.invites.map((i: any) => i.usedBy)).toContain('rep1');
+
+    expect((await call('DELETE', `/api/admin/representative-invites/${spare.json.id}`, undefined, undefined, headers)).status).toBe(200);
+    expect((await register('rep2', { representativeCode: spare.json.code })).status).toBe(400);
+  });
+
+  it('avvisa i Rappresentanti e la Guardia della classe quando ne arriva uno nuovo', async () => {
+    const rep1 = await register('rep1', { representativeCode: await repCode() });
+    const guard = await register('guardia', { classCode: await classCodeOf(rep1.json.token) });
+    expect((await call('PUT', '/api/proposals/security-guard', { userId: guard.json.user.id }, rep1.json.token)).status).toBe(200);
+    await register('altrove', { classLabel: '5 A', representativeCode: await repCode('5 A') });
+    notified.length = 0;
+
+    const rep2 = await register('rep2', { representativeCode: await repCode() });
+    expect(rep2.status).toBe(201);
+    await new Promise((r) => setTimeout(r, 0));
+    const sent = notified.find((n) => n.data?.action === 'representative_joined');
+    expect(sent?.userIds.sort()).toEqual([rep1.json.user.id, guard.json.user.id].sort());
+  });
+
+  it('codice unico di transizione: solo fino alla data e solo in una classe senza Rappresentanti', async () => {
+    env = { ...env, REPRESENTATIVE_SIGNUP_CODE: 'VECCHIO', REPRESENTATIVE_GLOBAL_CODE_UNTIL: '2999-12-31' } as Env;
+    const first = await register('rep1', { representativeCode: 'VECCHIO' });
+    expect(first.status).toBe(201);
+    expect(first.json.user.role).toBe('REPRESENTATIVE');
+    // Il secondo, che chiude il quorum, no.
+    expect((await register('rep2', { representativeCode: 'VECCHIO' })).status).toBe(400);
+
+    env = { ...env, REPRESENTATIVE_GLOBAL_CODE_UNTIL: '2020-01-01' } as Env;
+    expect((await register('rep3', { representativeCode: 'VECCHIO', classLabel: '5 A' })).status).toBe(400);
+    env = { ...env, REPRESENTATIVE_GLOBAL_CODE_UNTIL: undefined } as Env;
+    expect((await register('rep3', { representativeCode: 'VECCHIO', classLabel: '5 A' })).status).toBe(400);
   });
 });
 
@@ -154,7 +262,7 @@ describe('password e token', () => {
 
   it('reset con il codice del Rappresentante, una volta sola', async () => {
     const student = await register('giulia');
-    const rep = await register('capo', { representativeCode: 'REP-CODE' });
+    const rep = await register('capo', { representativeCode: await repCode() });
     const reset = await call('POST', `/api/users/${student.json.user.id}/reset-code`, {}, rep.json.token);
     expect(reset.status).toBe(200);
     // Uno studente non puo' generarne.
@@ -173,8 +281,8 @@ describe('password e token', () => {
   it('un Rappresentante non genera il codice di reset per l\'altro Rappresentante', async () => {
     // Con l'account dell'altro Rappresentante una persona sola avrebbe due firme del quorum
     // (la terza, la Guardia, la nomina lei stessa) e potrebbe svelare gli anonimi da sola.
-    const rep1 = await register('rep1', { representativeCode: 'REP-CODE' });
-    const rep2 = await register('rep2', { representativeCode: 'REP-CODE', classCode: await classCodeOf(rep1.json.token) });
+    const rep1 = await register('rep1', { representativeCode: await repCode() });
+    const rep2 = await register('rep2', { representativeCode: await repCode() });
     expect((await call('POST', `/api/users/${rep2.json.user.id}/reset-code`, {}, rep1.json.token)).status).toBe(403);
   });
 
@@ -256,7 +364,7 @@ describe('analisi delle circolari', () => {
 
 describe('sondaggi interrogazioni', () => {
   it('calcolato il calendario non si ricalcola e non si ritira l\'invio', async () => {
-    const rep = await register('prof', { representativeCode: 'REP-CODE' });
+    const rep = await register('prof', { representativeCode: await repCode() });
     const s = await register('alunno', { classCode: await classCodeOf(rep.json.token) });
     const created = await call(
       'POST',

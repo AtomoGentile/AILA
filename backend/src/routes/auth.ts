@@ -17,6 +17,14 @@ import {
 } from '../auth';
 import { clearAttempts, clientIp, isRateLimited, recordAttempt } from '../rateLimit';
 import { classInviteCode } from '../services/classInvites';
+import { inBackground } from '../services/background';
+import { notifyUsers } from '../services/fcm';
+import {
+  checkRepresentativeInvite,
+  claimRepresentativeInvite,
+  matchesGlobalCode,
+  releaseRepresentativeInvite,
+} from '../services/representativeInvites';
 
 const auth = new Hono<{ Bindings: Env }>();
 
@@ -39,6 +47,21 @@ const RESET_WINDOW = 15 * 60;
 const RESET_MAX_FAILURES = 6;
 
 const TOO_MANY = 'Troppi tentativi: riprova fra qualche minuto';
+
+/** Notifica ai Rappresentanti e alla Guardia della classe, tranne il nuovo arrivato. */
+async function notifyNewRepresentative(env: Env, classId: string, newUserId: string, fullName: string, classLabel: string) {
+  const rows = await env.DB.prepare(
+    `SELECT u.id FROM users u JOIN classes cl ON cl.id = u.class_id
+     WHERE u.class_id = ? AND u.id != ? AND (u.role = 'REPRESENTATIVE' OR u.id = cl.security_guard_id)`
+  ).bind(classId, newUserId).all<{ id: string }>();
+  await notifyUsers(
+    env,
+    rows.results.map((r) => r.id),
+    'Nuovo Rappresentante in classe',
+    `${fullName} si è registrato come Rappresentante della ${classLabel}. Se non te lo aspettavi, avvisa subito chi gestisce l'app.`,
+    { action: 'representative_joined', user_id: newUserId }
+  );
+}
 
 // ---------------------------------------------------------------------------
 // POST /api/auth/register
@@ -104,40 +127,51 @@ auth.post('/register', async (c) => {
   }
   const classId = classIdFromLabel(normalizedLabel);
 
-  // Ruolo: STUDENT di default. Diventa REPRESENTATIVE solo se chi si registra conosce il codice
-  // segreto (impostato via `wrangler secret put REPRESENTATIVE_SIGNUP_CODE`), condiviso a voce/
-  // messaggio privato con chi viene eletto rappresentante — nessun pannello admin necessario.
-  let role: 'STUDENT' | 'REPRESENTATIVE' = 'STUDENT';
-  if (representativeCode && representativeCode.length > 0) {
-    if (!c.env.REPRESENTATIVE_SIGNUP_CODE) {
-      return c.json({ error: 'Codice rappresentante non configurato sul server' }, 400);
-    }
-    if (typeof representativeCode !== 'string' || !timingSafeEqual(representativeCode, c.env.REPRESENTATIVE_SIGNUP_CODE)) {
-      return c.json({ error: 'Codice rappresentante non valido' }, 400);
-    }
-    role = 'REPRESENTATIVE';
-  }
-
-  // Classe gia' esistente con degli iscritti: per entrarci serve il suo codice, che ha il
-  // Rappresentante. Prima bastava scrivere "4 CSA" per vedere nomi, bacheca e calendario della
-  // classe. Ne e' esente solo il primo Rappresentante (e' lui a dare il codice): il codice
-  // Rappresentante e' uno per tutta la scuola, e se bastasse quello il Rappresentante di
-  // un'altra classe entrerebbe qui come secondo Rappresentante, con i codici di reset delle
-  // password dei compagni e una firma del quorum per svelare gli anonimi.
+  // Ruolo: STUDENT di default. Diventa REPRESENTATIVE con un codice Rappresentante emesso per
+  // questa classe (POST /api/admin/representative-invites, vedi README): vale una volta sola e
+  // scade. Prima il codice era uno per tutta la scuola, e chi lo conosceva poteva registrare da solo
+  // il secondo Rappresentante della propria classe (o diventare il primo di una classe che non ne
+  // aveva) e, nominando la Guardia, avere le tre firme che svelano gli anonimi.
   const members = await c.env.DB.prepare(
     `SELECT COUNT(*) AS total, SUM(CASE WHEN role = 'REPRESENTATIVE' THEN 1 ELSE 0 END) AS reps
      FROM users WHERE class_id = ?`
   ).bind(classId).first<{ total: number; reps: number | null }>();
-  if (role === 'REPRESENTATIVE' && (members?.reps ?? 0) >= MAX_REPRESENTATIVES_PER_CLASS) {
+  const reps = members?.reps ?? 0;
+
+  let role: 'STUDENT' | 'REPRESENTATIVE' = 'STUDENT';
+  let inviteId: string | null = null;
+  if (representativeCode !== undefined && representativeCode !== null && representativeCode !== '') {
+    if (typeof representativeCode !== 'string') {
+      return c.json({ error: 'Codice Rappresentante non valido' }, 400);
+    }
+    if (matchesGlobalCode(c.env, representativeCode)) {
+      // Codice unico di prima, solo durante la transizione e solo dove non c'e' ancora nessun
+      // Rappresentante: il secondo, quello che chiude il quorum, entra solo con un codice di classe.
+      if (reps > 0) {
+        return c.json({
+          error: 'Questa classe ha già un Rappresentante: serve un codice Rappresentante emesso per la classe',
+        }, 400);
+      }
+    } else {
+      const check = await checkRepresentativeInvite(c.env, representativeCode, classId);
+      if (!check.ok) return c.json({ error: check.error }, check.status);
+      inviteId = check.id;
+    }
+    role = 'REPRESENTATIVE';
+  }
+  if (role === 'REPRESENTATIVE' && reps >= MAX_REPRESENTATIVES_PER_CLASS) {
     return c.json({ error: `La classe ha già ${MAX_REPRESENTATIVES_PER_CLASS} Rappresentanti` }, 409);
   }
-  const needsClassCode = role === 'STUDENT' ? (members?.total ?? 0) > 0 : (members?.reps ?? 0) > 0;
-  if (needsClassCode) {
+
+  // Classe gia' esistente con degli iscritti: per entrarci da studente serve il suo codice, che ha
+  // il Rappresentante. Prima bastava scrivere "4 CSA" per vedere nomi, bacheca e calendario della
+  // classe. Il Rappresentante non lo deve dare: il suo codice vale gia' solo per questa classe.
+  if (role === 'STUDENT' && (members?.total ?? 0) > 0) {
     // Con un Rappresentante in classe il codice si crea qui se manca: prima nasceva solo quando
     // lui apriva la Scheda Classe, e fino ad allora chiunque scrivesse "4 CSA" entrava. Chi resta
     // fuori lo chiede al Rappresentante, che lo trova gia' pronto. Senza Rappresentanti non c'e'
     // nessuno che possa darlo, quindi la classe resta aperta finche' non ne arriva uno.
-    const expected = await classInviteCode(c.env, classId, { createIfMissing: (members?.reps ?? 0) > 0 });
+    const expected = await classInviteCode(c.env, classId, { createIfMissing: reps > 0 });
     if (expected !== null) {
       const given = (classCode ?? '').trim().toUpperCase().replace(/[\s-]/g, '');
       if (!given) {
@@ -168,21 +202,38 @@ auth.post('/register', async (c) => {
 
   const userId = newUUID();
 
-  await c.env.DB.batch([
-    // OR IGNORE: se due studenti della stessa classe si registrano nello stesso momento, la
-    // seconda INSERT non deve far fallire la registrazione.
-    c.env.DB.prepare(
-      'INSERT OR IGNORE INTO classes (id, label) VALUES (?, ?)'
-    ).bind(classId, normalizedLabel),
+  // Il codice si segna come usato prima di creare l'account: se due registrazioni lo usano insieme
+  // ne passa una sola. Se poi la creazione fallisce, il codice torna libero.
+  if (inviteId && !(await claimRepresentativeInvite(c.env, inviteId, userId))) {
+    return c.json({ error: 'Codice Rappresentante già usato: ne serve uno nuovo' }, 400);
+  }
 
-    c.env.DB.prepare(
-      'INSERT INTO users (id, first_name, last_name, username, password_hash, role, class_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).bind(userId, firstName, lastName, usernameLower, storedHash, role, classId),
+  try {
+    await c.env.DB.batch([
+      // OR IGNORE: se due studenti della stessa classe si registrano nello stesso momento, la
+      // seconda INSERT non deve far fallire la registrazione.
+      c.env.DB.prepare(
+        'INSERT OR IGNORE INTO classes (id, label) VALUES (?, ?)'
+      ).bind(classId, normalizedLabel),
 
-    c.env.DB.prepare(
-      'INSERT INTO student_profiles (user_id, height_cm) VALUES (?, ?)'
-    ).bind(userId, heightCm),
-  ]);
+      c.env.DB.prepare(
+        'INSERT INTO users (id, first_name, last_name, username, password_hash, role, class_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).bind(userId, firstName, lastName, usernameLower, storedHash, role, classId),
+
+      c.env.DB.prepare(
+        'INSERT INTO student_profiles (user_id, height_cm) VALUES (?, ?)'
+      ).bind(userId, heightCm),
+    ]);
+  } catch (err) {
+    if (inviteId) await releaseRepresentativeInvite(c.env, inviteId, userId);
+    throw err;
+  }
+
+  if (role === 'REPRESENTATIVE') {
+    // Avvisa gli altri Rappresentanti e la Guardia della classe: un Rappresentante in piu' e' una
+    // firma in piu' nel quorum che svela gli anonimi, e chi non se lo aspettava lo deve sapere.
+    inBackground(c, notifyNewRepresentative(c.env, classId, userId, `${firstName} ${lastName}`, normalizedLabel));
+  }
 
   const token = await issueToken(c.env, { id: userId, username: usernameLower, role, classId, passwordHash: storedHash });
 

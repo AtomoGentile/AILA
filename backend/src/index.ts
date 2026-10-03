@@ -25,6 +25,7 @@ import pollsRoutes from './routes/polls';
 import rankingPollsRoutes from './routes/rankingPolls';
 import fcmRoutes from './routes/fcm';
 import webPushRoutes from './routes/webpush';
+import adminRoutes from './routes/admin';
 
 // ---------------------------------------------------------------------------
 // App Setup
@@ -71,6 +72,7 @@ app.route('/api/polls', pollsRoutes);
 app.route('/api/ranking-polls', rankingPollsRoutes);
 app.route('/api/fcm', fcmRoutes);
 app.route('/api/webpush', webPushRoutes);
+app.route('/api/admin', adminRoutes);
 
 // ---------------------------------------------------------------------------
 // 404 fallback

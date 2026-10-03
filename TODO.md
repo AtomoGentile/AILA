@@ -6,6 +6,40 @@ Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esist
 > **PWA (`web/`) dismessa (3/10)**: progetto morto, niente piu' lavoro su di lei. Le voci sulla PWA
 > qui sotto restano solo come storia.
 
+## 3/10: codici Rappresentante per classe e monouso
+
+**Da fare prima di tutto: applicare la migrazione con il workflow "Worker deploy"** (Actions →
+Worker deploy → Run workflow, campo "migrations": `017_representative_invites.sql`, deploy
+attivo). La migrazione e' solo `CREATE ... IF NOT EXISTS`, si puo' rilanciare. Poi impostare
+`ADMIN_SECRET` (README, "Codici Rappresentante"). Finche' manca la migrazione, chi prova a
+registrarsi come Rappresentante riceve un 503; finche' manca `ADMIN_SECRET` non si emettono codici.
+
+Perche': il codice Rappresentante era uno per tutta la scuola (`REPRESENTATIVE_SIGNUP_CODE`). Con
+quello e il codice classe una persona sola registrava il secondo account Rappresentante della
+propria classe e, nominando la Guardia, aveva tutte e tre le firme del quorum che svela gli
+anonimi; in una classe senza Rappresentanti chiunque avesse il codice diventava il primo.
+
+Fatto (Worker, test in `backend/test/routes.test.ts`):
+- tabella `representative_invites` (migrazione 017, anche in `schema.sql`): `class_id`, hash
+  SHA-256 del codice, scadenza, `used_by`/`used_at`;
+- `routes/admin.ts`: `POST/GET/DELETE /api/admin/representative-invites`, solo con l'header
+  `X-Admin-Secret` uguale ad `ADMIN_SECRET` (confronto a tempo costante, tentativi sbagliati
+  limitati per IP). Nessun token dell'app le apre, nemmeno quello del Rappresentante;
+- registrazione: il codice si verifica sulla classe scelta, vale una volta (segnato come usato
+  prima di creare l'account, restituito se la creazione fallisce) e scade. Il Rappresentante con
+  un codice valido non deve piu' chiedere il codice classe all'altro Rappresentante;
+- notifica "Nuovo Rappresentante in classe" agli altri Rappresentanti e alla Guardia;
+- transizione: il codice unico vale solo con `REPRESENTATIVE_GLOBAL_CODE_UNTIL="AAAA-MM-GG"` e solo
+  in una classe senza Rappresentanti. **Senza quella variabile il codice unico smette di valere al
+  deploy**: chi aspettava di registrarsi come Rappresentante deve ricevere un codice nuovo.
+- app: testo del campo "Codice Rappresentante della classe (facoltativo)" e messaggio per il
+  server non ancora aggiornato (`AuthScreen.kt`); gli altri errori arrivano gia' chiari dal
+  server (altra classe, gia' usato, scaduto). Kotlin non compilato qui: lo verifica la CI.
+
+Resta:
+- un Rappresentante che dimentica la password si recupera ancora solo a mano sul database;
+- dopo la transizione: `npx wrangler secret delete REPRESENTATIVE_SIGNUP_CODE`.
+
 ## 3/10: obiettivo "app perfetta" — secondo giro (sicurezza, coerenza, design, con subagenti)
 
 Sicurezza (Worker, test in `backend/test/routes.test.ts`):
@@ -33,7 +67,7 @@ Coerenza e design (app, audit di un subagente + correzioni):
 - testi: Rappresentante, Scheda Classe, mappa posti, "Scegli" al posto di "OK".
 
 Resta (scelte di progetto o lavori lunghi, non bug):
-- codice Rappresentante per classe al posto di quello unico di scuola (piano "Multi-classe");
+- ~~codice Rappresentante per classe al posto di quello unico di scuola~~: fatto, vedi sopra;
 - scala tipografica: 349 `fontSize` in 21 misure; proposta di `ailaTypography()` nel report;
 - ~60 spaziature `N.dp` da portare su `AppTheme.SpaceN`, ~70 `tween` fuori da `AilaMotion`,
   palette propria dell'onboarding; dialoghi con modulo ancora su `AlertDialog` grezzo.
@@ -85,7 +119,7 @@ Corretto (Worker, test in `backend/test/routes.test.ts`; nessuna migrazione):
 Da fare / da decidere:
 - **Media — codice classe facoltativo finche' il Rappresentante non apre la Scheda Classe**
   (`services/classInvites.ts`, gia' noto): fino ad allora chiunque scriva "4 CSA" entra nella classe.
-- **Media — quorum e Guardia**: la Guardia la sceglie un Rappresentante, quindi il quorum reale e'
+- ~~**Media — quorum e Guardia**~~ (risolto il 3/10 con i codici Rappresentante per classe e monouso, vedi sopra): la Guardia la sceglie un Rappresentante, quindi il quorum reale e'
   "2 Rappresentanti". Una classe con un solo Rappresentante: chi ha il codice Rappresentante puo'
   diventare il secondo (con il codice classe, che ha). Serve il codice Rappresentante per classe
   (piano "Multi-classe" qui sotto).

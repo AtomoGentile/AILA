@@ -116,11 +116,57 @@ Secrets richiesti (`npx wrangler secret put <NOME>`, da dentro `backend/`):
 | Secret | Obbligatorio | Descrizione |
 |---|---|---|
 | `JWT_SECRET` | Sì | Firma dei token di autenticazione |
-| `REPRESENTATIVE_SIGNUP_CODE` | No | Chi lo inserisce in registrazione ottiene il ruolo Rappresentante |
+| `ADMIN_SECRET` | Per i Rappresentanti | Almeno 16 caratteri: apre le rotte `/api/admin` che emettono i codici Rappresentante — vedi [Codici Rappresentante](#codici-rappresentante) |
+| `REPRESENTATIVE_SIGNUP_CODE` | No | Vecchio codice Rappresentante unico, solo per la transizione: vale con `REPRESENTATIVE_GLOBAL_CODE_UNTIL` (vedi sotto) |
 | `FCM_PROJECT_ID` | Per le push | ID progetto Firebase |
 | `FCM_SERVICE_ACCOUNT_KEY` | Per le push | JSON del Service Account Firebase — vedi [Notifiche push](#notifiche-push-firebase) |
 
 Senza i due secret FCM l'app funziona normalmente, semplicemente senza inviare notifiche push (nessun errore).
+
+#### Codici Rappresentante
+
+Per registrarsi come Rappresentante serve un codice **emesso per quella classe**, che vale **una
+volta sola** e scade (7 giorni di default, massimo 30). Lo emette solo chi ha `ADMIN_SECRET`,
+mai un Rappresentante dall'app: altrimenti una persona sola potrebbe registrare il secondo
+Rappresentante della propria classe e, nominando la Guardia, avere tutte e tre le firme che
+svelano gli anonimi della bacheca. Quando un Rappresentante si registra, gli altri Rappresentanti
+e la Guardia della classe ricevono una notifica.
+
+Una volta sola, da dentro `backend/`: applica la migrazione `017_representative_invites.sql`
+(workflow **Worker deploy**, campo "migrations") e imposta il segreto:
+
+```bash
+ADMIN_SECRET=$(openssl rand -hex 24)
+echo "$ADMIN_SECRET"   # conservalo in un gestore di password: serve per ogni codice
+printf '%s' "$ADMIN_SECRET" | npx wrangler secret put ADMIN_SECRET
+```
+
+Emettere un codice (il codice in chiaro compare solo in questa risposta, sul database resta
+l'hash SHA-256) e consegnarlo di persona al Rappresentante eletto:
+
+```bash
+API=https://circolare-plus-worker.circolareclass.workers.dev
+curl -s -X POST "$API/api/admin/representative-invites" \
+  -H "X-Admin-Secret: $ADMIN_SECRET" -H 'Content-Type: application/json' \
+  -d '{"classLabel": "4 CSA", "ttlDays": 7}'
+# → {"code":"ABCDE-FGHIJ","classLabel":"4 CSA","expiresAt":"…","representatives":1,…}
+```
+
+`representatives` dice quanti Rappresentanti ha gia' la classe (con 2 la registrazione risponde
+409). Elenco dei codici di una classe (senza i codici, con chi li ha usati) e ritiro di uno non
+ancora usato:
+
+```bash
+curl -s "$API/api/admin/representative-invites?classLabel=4%20CSA" -H "X-Admin-Secret: $ADMIN_SECRET"
+curl -s -X DELETE "$API/api/admin/representative-invites/<id>" -H "X-Admin-Secret: $ADMIN_SECRET"
+```
+
+**Transizione dal codice unico.** Il vecchio `REPRESENTATIVE_SIGNUP_CODE` vale ancora solo se
+c'e' anche la variabile `REPRESENTATIVE_GLOBAL_CODE_UNTIL` (`"AAAA-MM-GG"`, ultimo giorno
+incluso, ora italiana) e solo in una classe che non ha ancora Rappresentanti: il secondo
+Rappresentante entra sempre e solo con un codice della classe. Senza la data, o passata la data,
+il codice unico non vale piu'. Per toglierlo del tutto: `npx wrangler secret delete
+REPRESENTATIVE_SIGNUP_CODE`.
 
 ### 2. Android
 

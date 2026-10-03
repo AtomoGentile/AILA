@@ -436,3 +436,17 @@ CREATE TABLE IF NOT EXISTS password_reset_codes (
 CREATE INDEX IF NOT EXISTS idx_slots_grid ON interrogation_slots(grid_id);
 CREATE INDEX IF NOT EXISTS idx_comments_proposal ON proposal_comments(proposal_id);
 CREATE INDEX IF NOT EXISTS idx_fcm_token ON fcm_tokens(token);
+
+-- 14. CODICI RAPPRESENTANTE PER CLASSE E MONOUSO (migrazione 017): solo l'hash, li emette chi ha
+-- ADMIN_SECRET (routes/admin.ts). class_id e used_by senza REFERENCES, vedi la migrazione.
+CREATE TABLE IF NOT EXISTS representative_invites (
+    id TEXT PRIMARY KEY,
+    class_id TEXT NOT NULL,
+    code_hash TEXT NOT NULL UNIQUE,
+    expires_at INTEGER NOT NULL,
+    used_by TEXT,
+    used_at INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_representative_invites_class ON representative_invites(class_id);

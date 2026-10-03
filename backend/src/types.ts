@@ -11,10 +11,15 @@ export interface Env {
   FCM_PROJECT_ID?: string;
   FCM_SERVICE_ACCOUNT_KEY?: string;
   SPAGGIARI_URL?: string;
-  // Codice segreto opzionale: chi lo conosce e lo inserisce in fase di registrazione riceve il
-  // ruolo REPRESENTATIVE invece di STUDENT. Se non impostato, la registrazione con codice fallisce
-  // esplicitamente (nessun ruolo speciale "silenzioso" senza che il secret esista davvero).
+  // Vecchio codice Rappresentante unico per tutta la scuola, solo per la transizione ai codici per
+  // classe (tabella representative_invites): vale finche' non passa la data in
+  // REPRESENTATIVE_GLOBAL_CODE_UNTIL ("AAAA-MM-GG", ultimo giorno incluso, ora italiana) e solo in
+  // una classe che non ha ancora Rappresentanti. Senza la data il codice globale non vale piu'.
   REPRESENTATIVE_SIGNUP_CODE?: string;
+  REPRESENTATIVE_GLOBAL_CODE_UNTIL?: string;
+  // Segreto per le rotte /api/admin (emissione dei codici Rappresentante). Solo come secret,
+  // almeno 16 caratteri; se manca le rotte rispondono 503.
+  ADMIN_SECRET?: string;
   // Chiave Google AI Studio per il riassunto delle circolari fatto dal server (services/summarizer.ts).
   // Solo come secret (`wrangler secret put GEMINI_API_KEY`), mai in [vars]. Se assente, i riassunti
   // restano ai telefoni come prima.

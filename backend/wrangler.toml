@@ -27,10 +27,13 @@ WEB_ORIGINS = "https://aila-scuola.pages.dev"
 
 # Secrets (configurare con: wrangler secret put <NAME>)
 # JWT_SECRET               — chiave segreta per firma JWT (obbligatoria)
-# REPRESENTATIVE_SIGNUP_CODE — codice segreto opzionale: chi lo inserisce in fase di registrazione
-#                           riceve il ruolo REPRESENTATIVE invece di STUDENT. Senza questo secret
-#                           impostato, nessuno può registrarsi come rappresentante tramite l'app
-#                           (resta comunque possibile assegnare il ruolo a mano via D1, vedi TODO.md).
+# ADMIN_SECRET            — almeno 16 caratteri: apre /api/admin, da cui si emettono i codici
+#                           Rappresentante per classe e monouso (README, "Codici Rappresentante").
+#                           Senza, le rotte rispondono 503 e nessuno diventa Rappresentante dall'app
+#                           (resta possibile assegnare il ruolo a mano via D1, vedi TODO.md).
+# REPRESENTATIVE_SIGNUP_CODE — vecchio codice Rappresentante unico per la scuola, solo per la
+#                           transizione: vale solo con REPRESENTATIVE_GLOBAL_CODE_UNTIL="AAAA-MM-GG"
+#                           (in [vars] o come secret) e solo in una classe senza Rappresentanti.
 # FCM_PROJECT_ID          — ID progetto Firebase (es. "circolare-plus-xxxxx")
 # FCM_SERVICE_ACCOUNT_KEY — contenuto JSON del Service Account Firebase (Impostazioni progetto →
 #                           Account di servizio → Genera nuova chiave privata). Finché questi due
