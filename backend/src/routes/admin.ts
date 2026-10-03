@@ -14,8 +14,9 @@ import { classIdFromLabel, normalizeClassLabel, timingSafeEqual } from '../auth'
 import { clientIp, isRateLimited, recordAttempt } from '../rateLimit';
 import {
   INVITE_DEFAULT_TTL_DAYS,
+  INVITE_MAX_COUNT,
   INVITE_MAX_TTL_DAYS,
-  issueRepresentativeInvite,
+  issueRepresentativeInvites,
 } from '../services/representativeInvites';
 
 const admin = new Hono<{ Bindings: Env }>();
@@ -43,26 +44,31 @@ admin.use('*', async (c, next) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/admin/representative-invites — Nuovo codice Rappresentante per una classe
+// POST /api/admin/representative-invites — Nuovi codici Rappresentante per una classe
 //
-// Corpo: { classLabel: "4 CSA", ttlDays?: 1-30 (default 7) }. Il codice in chiaro c'e' solo in
+// Corpo: { classLabel: "4 CSA", count?: 1-2 (default 1), ttlDays?: 1-30 (default 7) }. Con
+// count 2 escono due codici diversi, uno per Rappresentante. I codici in chiaro ci sono solo in
 // questa risposta: sul database resta l'hash.
 // ---------------------------------------------------------------------------
 admin.post('/representative-invites', async (c) => {
-  const body = await c.req.json<{ classLabel?: unknown; ttlDays?: unknown }>();
+  const body = await c.req.json<{ classLabel?: unknown; ttlDays?: unknown; count?: unknown }>();
   const label = typeof body.classLabel === 'string' ? normalizeClassLabel(body.classLabel) : null;
   if (!label) {
     return c.json({ error: 'Classe non valida. Usa il formato anno + sezione, per esempio "4 CSA".' }, 400);
   }
-  const ttlDays = body.ttlDays === undefined ? INVITE_DEFAULT_TTL_DAYS : body.ttlDays;
+  const ttlDays = body.ttlDays === undefined || body.ttlDays === null ? INVITE_DEFAULT_TTL_DAYS : body.ttlDays;
   if (typeof ttlDays !== 'number' || !Number.isInteger(ttlDays) || ttlDays < 1 || ttlDays > INVITE_MAX_TTL_DAYS) {
     return c.json({ error: `ttlDays deve essere un numero intero da 1 a ${INVITE_MAX_TTL_DAYS}` }, 400);
   }
+  const count = body.count === undefined || body.count === null ? 1 : body.count;
+  if (typeof count !== 'number' || !Number.isInteger(count) || count < 1 || count > INVITE_MAX_COUNT) {
+    return c.json({ error: `count deve essere un numero intero da 1 a ${INVITE_MAX_COUNT}` }, 400);
+  }
 
   const classId = classIdFromLabel(label);
-  let invite;
+  let issued;
   try {
-    invite = await issueRepresentativeInvite(c.env, classId, ttlDays);
+    issued = await issueRepresentativeInvites(c.env, classId, ttlDays, count);
   } catch {
     return c.json({ error: 'Codici Rappresentante non ancora attivi sul server (manca la migrazione 017)' }, 503);
   }
@@ -72,11 +78,10 @@ admin.post('/representative-invites', async (c) => {
   ).bind(classId).first<{ n: number }>();
 
   return c.json({
-    id: invite.id,
-    code: invite.code,
+    codes: issued.codes,
     classId,
     classLabel: label,
-    expiresAt: new Date(invite.expiresAt * 1000).toISOString(),
+    expiresAt: new Date(issued.expiresAt * 1000).toISOString(),
     // Per accorgersi subito se la classe ha gia' i suoi due Rappresentanti (il codice non
     // servirebbe: la registrazione risponde 409).
     representatives: reps?.n ?? 0,
@@ -110,10 +115,13 @@ admin.get('/representative-invites', async (c) => {
     invites: rows.results.map((r) => ({
       id: r.id,
       classId: r.class_id,
+      // Inverso di classIdFromLabel ("CLASS_4_CSA" -> "4 CSA").
+      classLabel: r.class_id.replace(/^CLASS_/, '').replace(/_/g, ' '),
       expiresAt: new Date(r.expires_at * 1000).toISOString(),
       usedBy: r.used_by_username ?? r.used_by,
       usedAt: r.used_at ? new Date(r.used_at * 1000).toISOString() : null,
-      createdAt: r.created_at,
+      // CURRENT_TIMESTAMP di SQLite e' UTC senza fuso: "2026-10-03 21:00:00".
+      createdAt: r.created_at ? new Date(`${r.created_at.replace(' ', 'T')}Z`).toISOString() : null,
     })),
   });
 });

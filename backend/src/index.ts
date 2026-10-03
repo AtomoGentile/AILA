@@ -26,6 +26,7 @@ import rankingPollsRoutes from './routes/rankingPolls';
 import fcmRoutes from './routes/fcm';
 import webPushRoutes from './routes/webpush';
 import adminRoutes from './routes/admin';
+import { adminPage } from './routes/adminPage';
 
 // ---------------------------------------------------------------------------
 // App Setup
@@ -73,6 +74,8 @@ app.route('/api/ranking-polls', rankingPollsRoutes);
 app.route('/api/fcm', fcmRoutes);
 app.route('/api/webpush', webPushRoutes);
 app.route('/api/admin', adminRoutes);
+// Pagina per emettere i codici Rappresentante dal browser (routes/adminPage.ts).
+app.get('/admin', adminPage);
 
 // ---------------------------------------------------------------------------
 // 404 fallback
