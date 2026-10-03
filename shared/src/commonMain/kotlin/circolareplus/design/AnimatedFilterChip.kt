@@ -15,10 +15,12 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -29,7 +31,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 /**
  * Pulsantino / Chip filtro con animazioni fluide di selezione:
@@ -128,6 +129,9 @@ fun AnimatedFilterChip(
                 indication = null, // Pulito, senza ripple squadrato
                 onClick = onClick
             )
+            // 44dp come bersaglio di tocco: prima l'altezza veniva dall'interlinea di 24sp
+            // ereditata da Material, che la scala tipografica non ha più.
+            .heightIn(min = 44.dp)
             .padding(horizontal = AppTheme.Space16, vertical = 9.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -138,7 +142,7 @@ fun AnimatedFilterChip(
             }
             Text(
                 text = label,
-                fontSize = 13.sp,
+                style = MaterialTheme.typography.labelLarge,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                 color = textColor
             )
