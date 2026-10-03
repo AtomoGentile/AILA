@@ -15,6 +15,8 @@ import type { Env } from '../types';
 export const INVITE_CODE_LENGTH = 10;
 export const INVITE_DEFAULT_TTL_DAYS = 7;
 export const INVITE_MAX_TTL_DAYS = 30;
+// Al massimo un codice per ogni posto da Rappresentante della classe.
+export const INVITE_MAX_COUNT = 2;
 
 /** Maiuscole, senza spazi e trattini: "abcde-fghij" e "ABCDEFGHIJ" sono lo stesso codice. */
 export function normalizeInviteCode(code: string): string {
@@ -26,19 +28,31 @@ export function formatInviteCode(code: string): string {
   return `${code.slice(0, 5)}-${code.slice(5)}`;
 }
 
-/** Nuovo codice per la classe: si salva solo l'hash, il codice in chiaro lo vede solo chi lo emette. */
-export async function issueRepresentativeInvite(
+/**
+ * [count] codici nuovi e diversi per la classe, uno per ogni Rappresentante (mai un codice che vale
+ * due volte: chi lo riceve potrebbe usarlo per due account suoi). Si salva solo l'hash, il codice
+ * in chiaro lo vede solo chi lo emette.
+ */
+export async function issueRepresentativeInvites(
   env: Env,
   classId: string,
-  ttlDays: number
-): Promise<{ id: string; code: string; expiresAt: number }> {
-  const code = randomCode(INVITE_CODE_LENGTH);
-  const id = newUUID();
+  ttlDays: number,
+  count: number
+): Promise<{ codes: { id: string; code: string }[]; expiresAt: number }> {
   const expiresAt = Math.floor(Date.now() / 1000) + ttlDays * 24 * 60 * 60;
-  await env.DB.prepare(
-    'INSERT INTO representative_invites (id, class_id, code_hash, expires_at) VALUES (?, ?, ?, ?)'
-  ).bind(id, classId, await sha256Hex(code), expiresAt).run();
-  return { id, code: formatInviteCode(code), expiresAt };
+  const codes: { id: string; code: string }[] = [];
+  const inserts: D1PreparedStatement[] = [];
+  for (let i = 0; i < count; i++) {
+    const code = randomCode(INVITE_CODE_LENGTH);
+    const id = newUUID();
+    codes.push({ id, code: formatInviteCode(code) });
+    inserts.push(
+      env.DB.prepare('INSERT INTO representative_invites (id, class_id, code_hash, expires_at) VALUES (?, ?, ?, ?)')
+        .bind(id, classId, await sha256Hex(code), expiresAt)
+    );
+  }
+  await env.DB.batch(inserts);
+  return { codes, expiresAt };
 }
 
 export type InviteCheck =
