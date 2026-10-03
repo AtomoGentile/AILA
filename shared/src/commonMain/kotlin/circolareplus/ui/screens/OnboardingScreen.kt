@@ -176,10 +176,11 @@ private val PageEasing = FastOutSlowInEasing
  * Cambio pagina con "Riduci movimento" del sistema: solo dissolvenza incrociata, senza scorrimento
  * laterale ne' scala, e l'altezza che si adegua di colpo come nella versione animata.
  */
-private fun reducedPageTransform(): ContentTransform =
-    (fadeIn(tween(PAGE_MS / 2, easing = PageEasing)) togetherWith
-        fadeOut(tween(PAGE_MS / 2, easing = PageEasing)))
-        .using(SizeTransform(clip = false) { _, _ -> snap() })
+private fun reducedPageTransform(): ContentTransform = ContentTransform(
+    targetContentEnter = fadeIn(tween(PAGE_MS / 2, easing = PageEasing)),
+    initialContentExit = fadeOut(tween(PAGE_MS / 2, easing = PageEasing)),
+    sizeTransform = SizeTransform(clip = false) { _, _ -> snap() }
+)
 
 /** Le due strade del passo AI. Nessuna preselezionata: la scelta deve essere consapevole. */
 private enum class AiChoice { GOOGLE, LOCAL }
