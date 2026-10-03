@@ -8,6 +8,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -21,9 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import circolareplus.design.AilaGlyphBuilding
 import circolareplus.design.AilaMarkBuildSeconds
 import kotlin.math.PI
@@ -161,8 +160,7 @@ fun AilaLoadingScreen(
                 "AILA".forEachIndexed { i, letter ->
                     Text(
                         text = letter.toString(),
-                        fontSize = 40.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.displaySmall,
                         color = Color.White,
                         modifier = Modifier.graphicsLayer {
                             val p = 1f - (1f - reveal(0.9f + i * 0.09f, 0.7f)).let { q -> q * q * q * q * q }
@@ -175,7 +173,7 @@ fun AilaLoadingScreen(
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "La vita di classe, in un'app.",
-                fontSize = 15.sp,
+                style = MaterialTheme.typography.bodyLarge,
                 color = Color(0xCCFFFFFF),
                 modifier = Modifier.graphicsLayer {
                     val p = reveal(1.25f, 0.45f)
@@ -198,7 +196,7 @@ fun AilaLoadingScreen(
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = message,
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = Color(0xCCFFFFFF)
                 )
             }
