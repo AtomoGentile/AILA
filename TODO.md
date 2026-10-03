@@ -36,6 +36,21 @@ Da provare su un telefono con Gemini Nano (Pixel 9/10, Galaxy S25/S26...):
   errore 606-FEATURE_NOT_FOUND); la beta4 dice di correggere la compatibilita' con Gemini Nano v4
   e i telefoni non Pixel: da confermare in campo.
 
+Catalogo modelli (`LocalAiModels.android.kt`), **non cambiato**:
+- Ad aprile 2026 AICore ha aggiunto Gemma 4 (E2B "veloce", E4B "completo") in **developer
+  preview** (blog Android Developers, 2/4/2026): si sceglie con una configurazione del modello
+  nella Prompt API ed e' raggiungibile solo dai telefoni iscritti alla preview di AICore, non dagli
+  utenti normali. Sui telefoni con Gemini Nano 4 (attesi entro fine 2026) lo stesso codice usera'
+  il modello nuovo senza cambi. La voce AICore resta una sola e usa il modello di sistema di
+  default; non ho potuto leggere la documentazione di riferimento della configurazione del modello
+  (nomi di classi non verificabili da qui), quindi non l'ho aggiunta.
+- Gemma 4 E2B/E4B sono gia' nel catalogo via LiteRT-LM (download da Hugging Face) e la scelta
+  per fascia (fino a 4 GB e 4-8 GB → E2B, 8+ → E4B) resta com'e'.
+- Da rivalutare quando Gemini Nano 4 sara' sui telefoni o la preview diventera' stabile: una
+  voce "AICore (Gemma 4 E4B)" separata e, se si dimostra veloce, AICore come consigliato per la
+  fascia alta. Aggiunto `LocalAiCatalogTest` (id e file univoci, token coerenti, consigliato per
+  ogni fascia) per chi tocchera' il catalogo.
+
 ## Evento AI → circolare (migrazione 015)
 
 Gli eventi inseriti da AILA Assistant ricordano la circolare da cui nascono (`calendar_events.circular_number`,
