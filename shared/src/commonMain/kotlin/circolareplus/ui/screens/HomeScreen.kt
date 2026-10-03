@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -391,8 +392,7 @@ private fun HomeHeroPanel(
         ) {
             Text(
                 text = "Ciao, $studentFirstName",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.headlineMedium,
                 color = AppTheme.OnHeroPrimary,
                 maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
@@ -466,14 +466,15 @@ private fun EventRow(event: CalendarEvent, onClick: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.offset(y = if (AppTheme.isGlass) 0.dp else 3.dp)
             ) {
-                Text(text = day, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = AppTheme.TintBlueInk)
+                Text(text = day, style = MaterialTheme.typography.titleSmall, color = AppTheme.TintBlueInk)
                 // Material: il mese sale un poco (verso il giorno), il giorno resta dov'e'.
                 Text(
                     text = month,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelSmall,
                     color = AppTheme.TintBlueInk,
-                    modifier = Modifier.offset(y = if (AppTheme.isGlass) 0.dp else (-5.5).dp)
+                    // -2 e non piu' -5.5: con la scala tipografica le due righe sono gia' piu'
+                    // vicine (prima ciascuna era alta 24sp per l'interlinea ereditata).
+                    modifier = Modifier.offset(y = if (AppTheme.isGlass) 0.dp else (-2).dp)
                 )
             }
         }
@@ -481,15 +482,14 @@ private fun EventRow(event: CalendarEvent, onClick: () -> Unit) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = event.title,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleSmall,
                 color = AppTheme.TextDark,
                 maxLines = 1
             )
             Spacer(modifier = Modifier.height(1.dp))
             Text(
                 text = eventSubtitle(event),
-                fontSize = 13.sp,
+                style = MaterialTheme.typography.bodyMedium,
                 color = AppTheme.TextMuted,
                 maxLines = 1
             )
@@ -610,7 +610,7 @@ private fun HomeQuickIcon(
         Spacer(modifier = Modifier.height(7.dp))
         Text(
             text = label,
-            fontSize = 11.sp,
+            style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Medium,
             color = AppTheme.OnHeroSecondary,
             maxLines = 1,
