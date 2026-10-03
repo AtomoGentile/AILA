@@ -145,8 +145,7 @@ fun SeatMapEditorScreen(
                         containerColor = when {
                             glass -> androidx.compose.ui.graphics.Color.Transparent
                             isForbidden -> AppTheme.TintRed
-                            AppTheme.isDarkMode -> androidx.compose.ui.graphics.Color(0xFF22252C)
-                            else -> androidx.compose.ui.graphics.Color(0xFFECEEF8)
+                            else -> AppTheme.DeskFloor
                         }
                     ),
                     elevation = CardDefaults.cardElevation(defaultElevation = AppTheme.CardElevation),
@@ -156,7 +155,7 @@ fun SeatMapEditorScreen(
                     else Modifier
                 ) {
                     Column(
-                        modifier = Modifier.padding(8.dp),
+                        modifier = Modifier.padding(AppTheme.Space8),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
@@ -173,7 +172,7 @@ fun SeatMapEditorScreen(
                                 color = AppTheme.PollDarkRed
                             )
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(AppTheme.Space4))
                         SeatSlotLabel(
                             name = sA?.firstName,
                             isSelected = selectedSeat == EditableSeatRef(deskIndex, 0),
