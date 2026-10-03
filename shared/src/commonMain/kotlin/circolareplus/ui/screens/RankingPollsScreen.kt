@@ -2,7 +2,6 @@ package circolareplus.ui.screens
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -33,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import circolareplus.data.remote.dto.RankingPollDto
 import circolareplus.data.remote.dto.RankingPollResultDto
 import circolareplus.design.AilaCard
+import circolareplus.design.AilaDuration
 import circolareplus.design.AilaConfirmDialog
 import circolareplus.design.AilaEmptyState
 import circolareplus.design.AilaPrimaryButton
@@ -40,6 +40,7 @@ import circolareplus.design.AilaSecondaryButton
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
 import circolareplus.design.ailaAppear
+import circolareplus.design.ailaMoveSpec
 
 /**
  * Sondaggi a ordinamento: invece di votare un'opzione sola, ognuno mette in ordine tutte le
@@ -181,7 +182,7 @@ private fun RankingPollCard(
                 Spacer(modifier = Modifier.width(AppTheme.Space8))
                 StatusChip(isClosed = poll.isClosed)
             }
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(AppTheme.Space4))
             Text(
                 text = when {
                     totalStudents > 0 && poll.voterCount >= totalStudents -> "Hanno risposto tutti"
@@ -306,7 +307,7 @@ private fun StatusChip(isClosed: Boolean) {
         modifier = Modifier
             .clip(CircleShape)
             .background(if (isClosed) AppTheme.TintSlate else AppTheme.TintGreen)
-            .padding(horizontal = 8.dp, vertical = 3.dp)
+            .padding(horizontal = AppTheme.Space8, vertical = AppTheme.Space4)
     )
 }
 
@@ -324,7 +325,9 @@ private fun DraggableRankingList(
     enabled: Boolean,
     onOrderChange: (List<String>) -> Unit
 ) {
-    val spacing = 6.dp
+    // Fra una riga e l'altra lo stesso stacco delle altre liste; il calcolo dello scambio sotto
+    // legge questo stesso valore, quindi resta coerente.
+    val spacing = AppTheme.Space8
     val spacingPx = with(LocalDensity.current) { spacing.toPx() }
     var draggedId by remember { mutableStateOf<String?>(null) }
     var dragOffset by remember { mutableStateOf(0f) }
@@ -431,7 +434,7 @@ private fun RankingDraftRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
             .background(if (isDragged) AppTheme.TintBlue else AppTheme.TintSlate)
-            .padding(end = 4.dp, top = 4.dp, bottom = 4.dp),
+            .padding(end = AppTheme.Space4, top = AppTheme.Space4, bottom = AppTheme.Space4),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Maniglia: tre righe orizzontali, area di tocco generosa.
@@ -503,7 +506,7 @@ private fun RankingResults(results: List<RankingPollResultDto>, maxPoints: Int, 
             val fraction = if (maxPoints > 0) result.points.toFloat() / maxPoints else 0f
             val animated by animateFloatAsState(
                 targetValue = fraction.coerceIn(0f, 1f),
-                animationSpec = tween(durationMillis = 480),
+                animationSpec = ailaMoveSpec(AilaDuration.Slow),
                 label = "rankingResultBar"
             )
             Column {
@@ -519,7 +522,7 @@ private fun RankingResults(results: List<RankingPollResultDto>, maxPoints: Int, 
                     )
                     if (result.optionId == myFirstId) {
                         AppIcons.Star(modifier = Modifier.size(13.dp), color = AppTheme.TintAmberInk)
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(AppTheme.Space4))
                     }
                     Text(
                         text = if (result.points == 1) "1 pt" else "${result.points} pt",
@@ -528,7 +531,7 @@ private fun RankingResults(results: List<RankingPollResultDto>, maxPoints: Int, 
                         color = AppTheme.TextMuted
                     )
                 }
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(AppTheme.Space4))
                 Box(
                     modifier = Modifier
                         .padding(start = 34.dp)
@@ -550,7 +553,7 @@ private fun RankingResults(results: List<RankingPollResultDto>, maxPoints: Int, 
         if (myFirstId != null) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AppIcons.Star(modifier = Modifier.size(11.dp), color = AppTheme.TintAmberInk)
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(AppTheme.Space4))
                 Text(text = "il tuo primo posto", fontSize = 11.sp, color = AppTheme.TextFaint)
             }
         }

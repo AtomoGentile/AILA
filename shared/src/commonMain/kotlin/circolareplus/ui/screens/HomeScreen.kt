@@ -580,8 +580,11 @@ private fun HomeQuickIcon(
     val pressed by interactionSource.collectIsPressedAsState()
     val corner by androidx.compose.animation.core.animateDpAsState(
         targetValue = if (!glass && pressed) 10.dp else if (glass) 18.dp else 22.dp,
-        animationSpec = if (pressed) androidx.compose.animation.core.spring(stiffness = 1400f)
-            else androidx.compose.animation.core.spring(dampingRatio = 0.5f, stiffness = 600f),
+        // Entrata rigida e quasi senza rimbalzo (la molla piu' ferma del vocabolario), rilascio
+        // con il rimbalzo della molla "viva": stesso carattere di prima, ma con "Riduci
+        // movimento" entrambe diventano rapide e senza rimbalzo.
+        animationSpec = if (pressed) circolareplus.design.ailaNavigationSpring()
+            else circolareplus.design.ailaSpatialSpring(),
         label = "quickIconCorner"
     )
     val shape = RoundedCornerShape(corner)
@@ -607,7 +610,7 @@ private fun HomeQuickIcon(
         ) {
             icon()
         }
-        Spacer(modifier = Modifier.height(7.dp))
+        Spacer(modifier = Modifier.height(AppTheme.Space8))
         Text(
             text = label,
             fontSize = 11.sp,

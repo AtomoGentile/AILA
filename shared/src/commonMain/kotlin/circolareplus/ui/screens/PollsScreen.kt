@@ -2,10 +2,7 @@ package circolareplus.ui.screens
 
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -31,12 +28,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import circolareplus.algorithms.InterrogationVoteType
 import circolareplus.design.AilaCard
+import circolareplus.design.AilaDuration
 import circolareplus.design.AilaDot
 import circolareplus.design.AilaEmptyState
 import circolareplus.design.AilaIconTile
 import circolareplus.design.AilaPrimaryButton
 import circolareplus.design.AilaSecondaryButton
 import circolareplus.design.ailaAppear
+import circolareplus.design.ailaBouncySpring
+import circolareplus.design.ailaColorSpec
+import circolareplus.design.ailaMoveSpec
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
 import circolareplus.util.ITALIAN_MONTHS
@@ -165,7 +166,7 @@ fun PollsScreen(
                         fontWeight = FontWeight.Bold,
                         color = AppTheme.TextDark
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(AppTheme.Space4))
                     Text(
                         text = "Per ogni data dici quanto ti va bene. Chi accetta le date che " +
                             "gli altri rifiutano guadagna un bonus per i sondaggi futuri. " +
@@ -186,7 +187,9 @@ fun PollsScreen(
                     modifier = Modifier.padding(AppTheme.Space16),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    AilaIconTile(tint = Color(0x33FFFFFF)) {
+                    // Velo bianco costante sopra la card ambra: e' lo stesso di OnGradientSurface
+                    // (18% invece del 20% scritto a mano, a occhio non si distingue).
+                    AilaIconTile(tint = AppTheme.OnGradientSurface) {
                         AppIcons.Star(modifier = Modifier.size(20.dp), color = AppTheme.TintAmberInk)
                     }
                     Spacer(modifier = Modifier.width(AppTheme.Space12))
@@ -325,7 +328,7 @@ private fun PollProgressHeader(
 ) {
     val animatedProgress by animateFloatAsState(
         targetValue = progress.coerceIn(0f, 1f),
-        animationSpec = tween(durationMillis = 420),
+        animationSpec = ailaMoveSpec(AilaDuration.Slow),
         label = "pollProgress"
     )
 
@@ -409,7 +412,7 @@ private fun PollProgressHeader(
                         modifier = Modifier
                             .clip(CircleShape)
                             .background(AppTheme.TintRed)
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                            .padding(horizontal = AppTheme.Space8, vertical = AppTheme.Space4)
                     )
                 } else if (closesAtLabel != null) {
                     Text(
@@ -420,7 +423,7 @@ private fun PollProgressHeader(
                         modifier = Modifier
                             .clip(CircleShape)
                             .background(AppTheme.TintAmber)
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                            .padding(horizontal = AppTheme.Space8, vertical = AppTheme.Space4)
                     )
                 }
             }
@@ -447,7 +450,7 @@ private fun VoteLegend(darkRedLeft: Int) {
 @Composable
 private fun LegendRow(color: Color, label: String, note: String) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = AppTheme.Space4),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AilaDot(color = color)
@@ -471,7 +474,7 @@ private fun PollManagementCard(onClose: () -> Unit, onDelete: () -> Unit) {
                 fontWeight = FontWeight.Bold,
                 color = AppTheme.TextDark
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(AppTheme.Space4))
             Text(
                 text = "Chiudi: calcola subito le date anche se manca qualcuno e sposta il sondaggio nello Storico. " +
                     "Elimina: lo cancella con tutti i voti.",
@@ -614,12 +617,12 @@ fun SlotRowItem(
                         color = AppTheme.TextDark
                     )
                     if (slot.isMandatory) {
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(AppTheme.Space8))
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(5.dp))
                                 .background(AppTheme.TintAmber)
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                .padding(horizontal = AppTheme.Space8, vertical = AppTheme.Space4)
                         ) {
                             Text(
                                 text = "Fissata",
@@ -639,7 +642,7 @@ fun SlotRowItem(
 
             Spacer(modifier = Modifier.width(AppTheme.Space8))
 
-            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
                 val selected = slot.currentVote
                 VoteCircle(
                     color = AppTheme.PollGreen,
@@ -695,12 +698,14 @@ private fun VoteCircle(
             !enabled -> AppTheme.TintSlate
             else -> color.copy(alpha = 0.14f)
         },
-        animationSpec = tween(durationMillis = 160),
+        animationSpec = ailaColorSpec(),
         label = "voteCircleFill"
     )
+    // La molla "giocosa" dei pallini che rispondono al dito: con "Riduci movimento" perde il
+    // rimbalzo da sola, la molla scritta a mano non lo sapeva.
     val scale by animateFloatAsState(
         targetValue = if (isPressed && enabled) 0.88f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh),
+        animationSpec = ailaBouncySpring(),
         label = "voteCircleScale"
     )
 

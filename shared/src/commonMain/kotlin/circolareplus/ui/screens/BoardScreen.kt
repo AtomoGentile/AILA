@@ -323,7 +323,7 @@ fun ProposalCardItem(
                         modifier = Modifier
                             .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
                             .background(statusColor.copy(alpha = 0.15f))
-                            .padding(horizontal = AppTheme.Space8, vertical = 3.dp)
+                            .padding(horizontal = AppTheme.Space8, vertical = AppTheme.Space4)
                     ) {
                         Text(
                             text = statusLabel,
@@ -359,9 +359,10 @@ fun ProposalCardItem(
                             fontWeight = FontWeight.Bold,
                             color = AppTheme.TintAmberInk,
                             modifier = Modifier
-                                .clip(RoundedCornerShape(999.dp))
+                                // ButtonCornerRadius e' gia' una capsula (100dp).
+                                .clip(RoundedCornerShape(AppTheme.ButtonCornerRadius))
                                 .background(AppTheme.TintAmber)
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                                .padding(horizontal = AppTheme.Space8, vertical = AppTheme.Space4)
                         )
                         Spacer(modifier = Modifier.width(AppTheme.Space4))
                     }
@@ -677,7 +678,7 @@ private fun UnlockLink(text: String, onClick: () -> Unit) {
             .padding(end = AppTheme.Space12)
     ) {
         AppIcons.Lock(modifier = Modifier.size(16.dp), color = AppTheme.PrimaryBlue)
-        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(modifier = Modifier.width(AppTheme.Space4))
         Text(text = text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AppTheme.PrimaryBlue)
     }
 }
@@ -689,7 +690,7 @@ private fun UnlockStatusNote(text: String) {
         modifier = Modifier.heightIn(min = 32.dp)
     ) {
         AppIcons.Lock(modifier = Modifier.size(15.dp), color = AppTheme.TintAmberInk)
-        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(modifier = Modifier.width(AppTheme.Space4))
         Text(text = text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AppTheme.TintAmberInk)
     }
 }
@@ -717,7 +718,7 @@ private fun UnlockRequestsPanel(
                     color = AppTheme.TintAmberInk
                 )
             }
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(AppTheme.Space4))
             Text(
                 text = "Servono 2 Rappresentanti e 1 Guardia di Sicurezza. L'autore lo vedono solo i tre che firmano.",
                 fontSize = 12.sp,
@@ -743,13 +744,13 @@ private fun UnlockRequestsPanel(
                         color = AppTheme.TextMuted
                     )
                 }
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(AppTheme.Space4))
                 Text(
                     text = "Motivo (${request.requestedByName}): ${request.reason}",
                     fontSize = 13.sp,
                     color = AppTheme.TextMuted
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(AppTheme.Space4))
                 Text(
                     text = "Rappresentanti ${request.representativeApprovals}/${request.representativesNeeded}" +
                         " · Guardia ${request.guardApprovals}/${request.guardsNeeded}",

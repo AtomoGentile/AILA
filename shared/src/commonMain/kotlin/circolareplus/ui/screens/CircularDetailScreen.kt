@@ -196,7 +196,7 @@ fun CircularDetailScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         AilaDot(color = badgeColor)
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(AppTheme.Space8))
                         Text(
                             text = badgeText,
                             fontSize = 13.sp,
@@ -434,7 +434,7 @@ fun CircularDetailScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 AppIcons.Document(modifier = Modifier.size(14.dp), color = AppTheme.TextMuted)
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(AppTheme.Space4))
                                 Text(
                                     text = "Allegato: ${section.label}",
                                     fontSize = 13.sp,
@@ -490,7 +490,7 @@ fun CircularDetailScreen(
                                 fontWeight = FontWeight.Bold,
                                 color = AppTheme.TextDark
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(AppTheme.Space4))
                             Text(
                                 text = pdfError ?: "Apri il documento nel visualizzatore del telefono.",
                                 fontSize = 13.sp,
@@ -586,7 +586,7 @@ private fun ProposedDeadlineRow(
             color = AppTheme.TextDark,
             lineHeight = 18.sp
         )
-        Spacer(modifier = Modifier.height(2.dp))
+        Spacer(modifier = Modifier.height(AppTheme.Space4))
         Text(
             text = buildString {
                 append(readableDate(deadline.dueDate))

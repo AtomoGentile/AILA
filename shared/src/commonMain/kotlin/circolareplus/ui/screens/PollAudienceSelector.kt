@@ -20,7 +20,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import circolareplus.data.AppContainer
 import circolareplus.design.AnimatedFilterChip
@@ -118,7 +117,7 @@ fun PollAudienceSelector(
                             .clickable {
                                 onSelectionChange(if (allSelected) emptyList() else candidates.map { it.id })
                             }
-                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                            .padding(horizontal = AppTheme.Space4, vertical = AppTheme.Space4)
                     )
                 }
             }
