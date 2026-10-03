@@ -14,6 +14,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -211,12 +215,18 @@ private fun ProposalCard(
                 }
 
                 // L'occhio: guarda la mappa senza scegliere. Pieno quando l'anteprima è aperta.
+                // 44dp di tocco e un nome che segue lo stato: il colore pieno si vede soltanto,
+                // il lettore di schermo deve sapere se il tocco apre o chiude l'anteprima.
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(44.dp)
                         .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
                         .background(if (isPreviewed) AppTheme.PrimaryBlue else AppTheme.TintSlate)
-                        .ailaPressable(pressedScale = 0.92f) { onToggleView() },
+                        .ailaPressable(pressedScale = 0.92f) { onToggleView() }
+                        .semantics {
+                            contentDescription = if (isPreviewed) "Chiudi anteprima" else "Mostra anteprima"
+                            role = Role.Button
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     AppIcons.Eye(

@@ -287,17 +287,28 @@ fun SettingsScreen(
                                 enabled = syncProgress == null
                             )
                             Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            var confirmClearOffline by remember { mutableStateOf(false) }
                             AilaSecondaryButton(
                                 text = "Svuota dati offline",
-                                onClick = {
-                                    circolareplus.platform.OfflineStore.clear()
-                                    circolareplus.data.AppContainer.settings.lastFullOfflineSyncMillis = 0L
-                                    lastFullSync = 0L
-                                    offlineBytes = circolareplus.platform.OfflineStore.totalBytes()
-                                },
+                                onClick = { confirmClearOffline = true },
                                 compact = true,
                                 modifier = Modifier.fillMaxWidth()
                             )
+                            if (confirmClearOffline) {
+                                circolareplus.design.AilaConfirmDialog(
+                                    title = "Svuotare i dati offline?",
+                                    message = "Senza rete non vedrai circolari, calendario e bacheca finché non li scarichi di nuovo.",
+                                    onDismiss = { confirmClearOffline = false },
+                                    onConfirm = {
+                                        confirmClearOffline = false
+                                        circolareplus.platform.OfflineStore.clear()
+                                        circolareplus.data.AppContainer.settings.lastFullOfflineSyncMillis = 0L
+                                        lastFullSync = 0L
+                                        offlineBytes = circolareplus.platform.OfflineStore.totalBytes()
+                                    },
+                                    confirmLabel = "Svuota"
+                                )
+                            }
                         }
                     }
             
@@ -650,15 +661,26 @@ fun SettingsScreen(
                                         // dell'app: non c'e' niente da eliminare, e il pulsante dichiarava
                                         // "hai liberato 0 MB" senza fare nulla.
                                         if (activeModel?.isSystemModel != true) {
+                                            // Riscaricarlo costa tempo e giga: si chiede prima.
+                                            var confirmDeleteModel by remember { mutableStateOf(false) }
                                             AilaIconButton(
                                                 contentDescription = "Elimina il modello dal telefono",
-                                                onClick = {
-                                                    activeModel?.let(onDeleteLocalModel)
-                                                    downloadStatus = "Modello eliminato: hai liberato " +
-                                                        "${activeModel?.readableSize ?: ""}."
-                                                    modelsRevision++
-                                                }
+                                                onClick = { confirmDeleteModel = true }
                                             ) { tint -> AppIcons.Trash(modifier = Modifier.size(19.dp), color = tint) }
+                                            if (confirmDeleteModel) {
+                                                circolareplus.design.AilaConfirmDialog(
+                                                    title = "Eliminare il modello?",
+                                                    message = "Liberi ${activeModel?.readableSize ?: "spazio"}; per usare di nuovo l'AI sul telefono andrà riscaricato.",
+                                                    onDismiss = { confirmDeleteModel = false },
+                                                    onConfirm = {
+                                                        confirmDeleteModel = false
+                                                        activeModel?.let(onDeleteLocalModel)
+                                                        downloadStatus = "Modello eliminato: hai liberato " +
+                                                            "${activeModel?.readableSize ?: ""}."
+                                                        modelsRevision++
+                                                    }
+                                                )
+                                            }
                                         }
                                     } else if (isDownloading && activeModel != null) {
                                         // Il download va fermato da qui, non solo dalla notifica: chi

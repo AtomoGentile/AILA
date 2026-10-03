@@ -16,6 +16,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -154,13 +158,19 @@ fun SearchScreen(
                 },
                 trailingIcon = {
                     if (query.isNotEmpty()) {
-                        // Area di tocco di 40dp: il carattere "✕" di prima era largo pochi pixel.
+                        // Area di tocco di 44dp (il minimo consigliato): il carattere "✕" di
+                        // prima era largo pochi pixel. Il nome serve al lettore di schermo, che
+                        // altrimenti annunciava solo "pulsante".
                         Box(
                             modifier = Modifier
                                 .padding(end = AppTheme.Space4)
-                                .size(40.dp)
+                                .size(44.dp)
                                 .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                                .clickable { query = "" },
+                                .clickable { query = "" }
+                                .semantics {
+                                    contentDescription = "Svuota la ricerca"
+                                    role = Role.Button
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             AppIcons.Close(modifier = Modifier.size(16.dp), color = AppTheme.TextFaint)

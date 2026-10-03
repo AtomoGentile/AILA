@@ -180,14 +180,15 @@ fun CircularListItem(
     modifier: Modifier = Modifier,
     isAnalyzing: Boolean = false
 ) {
-    val (badgeColor, badgeText) = when (classification?.badge) {
-        CircularRelevanceBadge.RELEVANT -> Pair(AppTheme.BadgeRelevantGreen, "Ti riguarda")
-        CircularRelevanceBadge.POTENTIAL -> Pair(AppTheme.BadgePotentialYellow, "Potenziale interesse")
-        CircularRelevanceBadge.NOT_RELEVANT -> Pair(AppTheme.BadgeNotRelevantGray, "Non sembra riguardarti")
+    // Pallino con la tinta, testo con l'inchiostro leggibile (vedi AppTheme.Badge*Ink).
+    val (badgeColor, badgeInk, badgeText) = when (classification?.badge) {
+        CircularRelevanceBadge.RELEVANT -> Triple(AppTheme.BadgeRelevantGreen, AppTheme.BadgeRelevantInk, "Ti riguarda")
+        CircularRelevanceBadge.POTENTIAL -> Triple(AppTheme.BadgePotentialYellow, AppTheme.BadgePotentialInk, "Potenziale interesse")
+        CircularRelevanceBadge.NOT_RELEVANT -> Triple(AppTheme.BadgeNotRelevantGray, AppTheme.BadgeNotRelevantInk, "Non sembra riguardarti")
         null -> if (isAnalyzing) {
-            Pair(AppTheme.PrimaryBlue, "Analisi in corso\u2026")
+            Triple(AppTheme.PrimaryBlue, AppTheme.PrimaryBlue, "Analisi in corso\u2026")
         } else {
-            Pair(AppTheme.TextFaint, "Da classificare")
+            Triple(AppTheme.TextFaint, AppTheme.TextMuted, "Da classificare")
         }
     }
 
@@ -213,7 +214,7 @@ fun CircularListItem(
                         text = badgeText,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        color = badgeColor
+                        color = badgeInk
                     )
                 }
                 Text(

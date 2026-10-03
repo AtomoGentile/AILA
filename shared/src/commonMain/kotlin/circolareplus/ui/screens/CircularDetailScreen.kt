@@ -162,11 +162,12 @@ fun CircularDetailScreen(
         }
     }
 
-    val (badgeColor, badgeText) = when (classification?.badge) {
-        CircularRelevanceBadge.RELEVANT -> AppTheme.BadgeRelevantGreen to "Ti riguarda"
-        CircularRelevanceBadge.POTENTIAL -> AppTheme.BadgePotentialYellow to "Potenziale interesse"
-        CircularRelevanceBadge.NOT_RELEVANT -> AppTheme.BadgeNotRelevantGray to "Non sembra riguardarti"
-        null -> AppTheme.TextFaint to "Da classificare"
+    // Pallino con la tinta, testo con l'inchiostro leggibile (vedi AppTheme.Badge*Ink).
+    val (badgeColor, badgeInk, badgeText) = when (classification?.badge) {
+        CircularRelevanceBadge.RELEVANT -> Triple(AppTheme.BadgeRelevantGreen, AppTheme.BadgeRelevantInk, "Ti riguarda")
+        CircularRelevanceBadge.POTENTIAL -> Triple(AppTheme.BadgePotentialYellow, AppTheme.BadgePotentialInk, "Potenziale interesse")
+        CircularRelevanceBadge.NOT_RELEVANT -> Triple(AppTheme.BadgeNotRelevantGray, AppTheme.BadgeNotRelevantInk, "Non sembra riguardarti")
+        null -> Triple(AppTheme.TextFaint, AppTheme.TextMuted, "Da classificare")
     }
 
     Column(
@@ -200,7 +201,7 @@ fun CircularDetailScreen(
                             text = badgeText,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = badgeColor
+                            color = badgeInk
                         )
                     }
                     Text(text = circular.publishDate, fontSize = 13.sp, color = AppTheme.TextMuted)

@@ -422,7 +422,7 @@ fun AuthScreen(
                             AuthField(
                                 value = representativeCode,
                                 onValueChange = { representativeCode = it },
-                                placeholder = "Codice rappresentante (facoltativo)",
+                                placeholder = "Codice Rappresentante (facoltativo)",
                                 modifier = Modifier.fillMaxWidth(),
                                 keyboardOptions = KeyboardOptions(
                                     capitalization = KeyboardCapitalization.None,
@@ -678,7 +678,7 @@ private fun HeightPicker(
         )
 
         Text(
-            text = "Serve solo a calcolare la visuale verso la cattedra nella mappa dei posti.",
+            text = "Serve solo a calcolare la visuale verso la cattedra nella mappa posti.",
             fontSize = 11.sp,
             color = AppTheme.TextFaint,
             lineHeight = 15.sp

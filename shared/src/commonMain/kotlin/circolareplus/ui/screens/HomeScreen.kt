@@ -20,6 +20,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -66,7 +70,10 @@ fun HomeScreen(
     onNavigateToCirculars: () -> Unit = {},
     onNavigateToNotifications: () -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
-    hasUnreadNotifications: Boolean = false
+    hasUnreadNotifications: Boolean = false,
+    // Primo caricamento in corso: le card vuote dicono "carico" invece di "non c'e' niente".
+    isCircularsLoading: Boolean = false,
+    isEventsLoading: Boolean = false
 ) {
     val scrollState = rememberScrollState()
 
@@ -115,6 +122,7 @@ fun HomeScreen(
             LatestCircularCard(
                 latestCircular = latestCircular,
                 onClick = openLatestCircular,
+                isLoading = isCircularsLoading,
                 modifier = Modifier.ailaAppear(0)
             )
         }
@@ -130,6 +138,7 @@ fun HomeScreen(
                 nextEvents = nextEvents,
                 onNavigateToCalendar = onNavigateToCalendar,
                 onEventClick = onEventClick,
+                isLoading = isEventsLoading,
                 modifier = Modifier.ailaAppear(2)
             )
         }
@@ -186,6 +195,7 @@ fun HomeScreen(
                         RecentCircularsCard(
                             circulars = recentCirculars,
                             onCircularClick = onNavigateToCircularDetail,
+                            isLoading = isCircularsLoading,
                             modifier = Modifier.ailaAppear(1)
                         )
                     }
@@ -253,12 +263,14 @@ fun HomeScreen(
 private fun LatestCircularCard(
     latestCircular: Circular?,
     onClick: (() -> Unit)?,
+    isLoading: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     AilaCard(onClick = onClick, modifier = modifier, transformKey = latestCircular?.let { "circular:${it.number}" }) {
         AilaListRow(
             title = if (latestCircular != null) "Circolare n. ${latestCircular.number}" else "Nuova circolare",
-            subtitle = latestCircular?.title ?: "Nessuna circolare disponibile al momento",
+            subtitle = latestCircular?.title
+                ?: if (isLoading) "Carico le circolari\u2026" else "Nessuna circolare disponibile al momento",
             tint = AppTheme.TintBlue,
             showChevron = latestCircular != null,
             icon = {
@@ -273,10 +285,11 @@ private fun LatestCircularCard(
 private fun RecentCircularsCard(
     circulars: List<Circular>,
     onCircularClick: (Int) -> Unit,
+    isLoading: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     if (circulars.isEmpty()) {
-        LatestCircularCard(latestCircular = null, onClick = null, modifier = modifier)
+        LatestCircularCard(latestCircular = null, onClick = null, isLoading = isLoading, modifier = modifier)
         return
     }
     AilaCard(modifier = modifier) {
@@ -303,12 +316,13 @@ private fun NextEventsCard(
     nextEvents: List<CalendarEvent>,
     onNavigateToCalendar: () -> Unit,
     onEventClick: (CalendarEvent) -> Unit,
+    isLoading: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     if (nextEvents.isEmpty()) {
         AilaCard(modifier = modifier) {
             AilaListRow(
-                title = "Nessuna scadenza",
+                title = if (isLoading) "Carico il calendario\u2026" else "Nessuna scadenza",
                 subtitle = "Le verifiche e le scadenze della classe compaiono qui.",
                 tint = AppTheme.TintSlate,
                 onClick = onNavigateToCalendar,
@@ -387,10 +401,14 @@ private fun HomeHeroPanel(
             Spacer(modifier = Modifier.width(AppTheme.Space12))
             // Lente e campanella: la ricerca globale prima non aveva alcun punto d'ingresso.
             Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
-                HeroIconButton(onClick = onNavigateToSearch) {
+                HeroIconButton(contentDescription = "Cerca", onClick = onNavigateToSearch) {
                     AppIcons.Search(modifier = Modifier.size(21.dp), color = AppTheme.OnHeroPrimary)
                 }
-                HeroIconButton(onClick = onNavigateToNotifications) {
+                // Il pallino delle novita' si vede soltanto: lo diciamo anche a voce al lettore di schermo.
+                HeroIconButton(
+                    contentDescription = if (hasUnreadNotifications) "Notifiche, ci sono novità" else "Notifiche",
+                    onClick = onNavigateToNotifications
+                ) {
                     AppIcons.Bell(
                         modifier = Modifier.size(21.dp),
                         color = AppTheme.OnHeroPrimary,
@@ -509,7 +527,12 @@ private val heroTonalFill: Color
 
 /** Tasto quadrato translucido nel pannello a gradiente (ricerca, notifiche). */
 @Composable
-private fun HeroIconButton(onClick: () -> Unit, icon: @Composable () -> Unit) {
+private fun HeroIconButton(contentDescription: String, onClick: () -> Unit, icon: @Composable () -> Unit) {
+    // Solo icona: senza un nome il lettore di schermo annunciava un pulsante muto.
+    val a11y = Modifier.semantics {
+        this.contentDescription = contentDescription
+        role = Role.Button
+    }
     if (!AppTheme.isGlass) {
         // Material Expressive: pulsante tonale pieno (un tono piu' scuro del pannello), tondo,
         // che alla pressione si schiaccia in un quadrato arrotondato. Niente vetro ne' bordo.
@@ -521,7 +544,8 @@ private fun HeroIconButton(onClick: () -> Unit, icon: @Composable () -> Unit) {
                 .ailaTransformOrigin(22.dp, buttonColor = heroTonalFill)
                 .ailaMorphClip(interactionSource, pressedPercent = 28)
                 .background(heroTonalFill)
-                .clickable(interactionSource = interactionSource, indication = null) { onClick() },
+                .clickable(interactionSource = interactionSource, indication = null) { onClick() }
+                .then(a11y),
             contentAlignment = Alignment.Center
         ) {
             icon()
@@ -533,7 +557,8 @@ private fun HeroIconButton(onClick: () -> Unit, icon: @Composable () -> Unit) {
         modifier = Modifier
             .size(44.dp)
             .ailaGlassSurface(shape)
-            .ailaGlassPressable(tint = AppTheme.PrimaryBlue) { onClick() },
+            .ailaGlassPressable(tint = AppTheme.PrimaryBlue) { onClick() }
+            .then(a11y),
         contentAlignment = Alignment.Center
     ) {
         icon()
