@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,7 +30,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import circolareplus.data.remote.dto.RankingPollDto
 import circolareplus.data.remote.dto.RankingPollResultDto
 import circolareplus.design.AilaCard
@@ -172,10 +172,8 @@ private fun RankingPollCard(
             Row(verticalAlignment = Alignment.Top) {
                 Text(
                     text = poll.question,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleSmall,
                     color = AppTheme.TextDark,
-                    lineHeight = 20.sp,
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(modifier = Modifier.width(AppTheme.Space8))
@@ -189,14 +187,15 @@ private fun RankingPollCard(
                     poll.voterCount == 1 -> "1 risposta"
                     else -> "${poll.voterCount} risposte"
                 },
-                fontSize = 12.sp,
+                style = MaterialTheme.typography.bodySmall,
                 color = AppTheme.TextMuted
             )
             if (poll.audienceUserIds != null) {
                 Text(
                     text = if (poll.isTarget) "Rivolto solo ad alcune persone, tra cui tu"
                     else "Rivolto solo ad alcune persone: non puoi rispondere",
-                    fontSize = 11.sp,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Normal,
                     color = AppTheme.TextFaint
                 )
             }
@@ -206,7 +205,7 @@ private fun RankingPollCard(
             if (canEdit) {
                 Text(
                     text = "Trascina le opzioni (o usa le frecce): in cima quella che preferisci.",
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = AppTheme.TextMuted
                 )
                 Spacer(modifier = Modifier.height(AppTheme.Space8))
@@ -249,7 +248,7 @@ private fun RankingPollCard(
                 } else {
                     // Il server manda sempre i risultati a chi ha risposto o a sondaggio chiuso:
                     // qui si arriva solo in casi limite, e lo si dice invece di lasciare la card vuota.
-                    Text(text = "Risultati non disponibili.", fontSize = 12.sp, color = AppTheme.TextMuted)
+                    Text(text = "Risultati non disponibili.", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
                 }
                 if (!poll.isClosed && poll.myRanking != null) {
                     Spacer(modifier = Modifier.height(AppTheme.Space12))
@@ -267,9 +266,9 @@ private fun RankingPollCard(
                     text = if (poll.isClosed) "Elimina: cancella il sondaggio e la sua classifica."
                     else "Chiudi: nessuno può più rispondere, la classifica diventa definitiva e passa nello Storico. " +
                         "Elimina: cancella il sondaggio con tutte le risposte.",
-                    fontSize = 11.sp,
-                    color = AppTheme.TextFaint,
-                    lineHeight = 15.sp
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Normal,
+                    color = AppTheme.TextFaint
                 )
                 Spacer(modifier = Modifier.height(AppTheme.Space8))
                 Row(
@@ -300,8 +299,7 @@ private fun RankingPollCard(
 private fun StatusChip(isClosed: Boolean) {
     Text(
         text = if (isClosed) "Chiuso" else "Aperto",
-        fontSize = 10.sp,
-        fontWeight = FontWeight.Bold,
+        style = MaterialTheme.typography.labelSmall,
         color = if (isClosed) AppTheme.TintSlateInk else AppTheme.TintGreenInk,
         modifier = Modifier
             .clip(CircleShape)
@@ -447,7 +445,7 @@ private fun RankingDraftRow(
         Spacer(modifier = Modifier.width(AppTheme.Space12))
         Text(
             text = label,
-            fontSize = 14.sp,
+            style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
             color = AppTheme.TextDark,
             modifier = Modifier.weight(1f)
@@ -484,8 +482,7 @@ private fun PositionBadge(position: Int, highlighted: Boolean) {
     ) {
         Text(
             text = "$position",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelMedium,
             color = if (highlighted) Color.White else AppTheme.TextDark
         )
     }
@@ -512,7 +509,7 @@ private fun RankingResults(results: List<RankingPollResultDto>, maxPoints: Int, 
                     Spacer(modifier = Modifier.width(AppTheme.Space8))
                     Text(
                         text = result.label,
-                        fontSize = 14.sp,
+                        style = MaterialTheme.typography.titleSmall,
                         fontWeight = if (index == 0) FontWeight.Bold else FontWeight.Normal,
                         color = AppTheme.TextDark,
                         modifier = Modifier.weight(1f)
@@ -523,8 +520,7 @@ private fun RankingResults(results: List<RankingPollResultDto>, maxPoints: Int, 
                     }
                     Text(
                         text = if (result.points == 1) "1 pt" else "${result.points} pt",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelMedium,
                         color = AppTheme.TextMuted
                     )
                 }
@@ -551,7 +547,7 @@ private fun RankingResults(results: List<RankingPollResultDto>, maxPoints: Int, 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AppIcons.Star(modifier = Modifier.size(11.dp), color = AppTheme.TintAmberInk)
                 Spacer(modifier = Modifier.width(4.dp))
-                Text(text = "il tuo primo posto", fontSize = 11.sp, color = AppTheme.TextFaint)
+                Text(text = "il tuo primo posto", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Normal, color = AppTheme.TextFaint)
             }
         }
     }
