@@ -4,11 +4,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import circolareplus.PrivacyPolicy
 import circolareplus.design.AppTheme
 
@@ -21,8 +21,8 @@ fun PrivacyPolicyContent(modifier: Modifier = Modifier) {
     ) {
         PrivacyPolicy.sections.forEach { (title, text) ->
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(text = title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AppTheme.TextDark)
-                Text(text = text, fontSize = 12.sp, lineHeight = 17.sp, color = AppTheme.TextMuted)
+                Text(text = title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = AppTheme.TextDark)
+                Text(text = text, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
             }
         }
     }
