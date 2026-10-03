@@ -13,6 +13,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -183,8 +184,7 @@ fun AssistantChatScreen(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Modalità ragionamento",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelLarge,
                         color = AppTheme.TextDark
                     )
                     Text(
@@ -193,9 +193,9 @@ fun AssistantChatScreen(
                         } else {
                             "Spenta: risposte rapide. Vale per l'AI sul telefono."
                         },
-                        fontSize = 10.sp,
-                        color = AppTheme.TextMuted,
-                        lineHeight = 14.sp
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Normal,
+                        color = AppTheme.TextMuted
                     )
                 }
                 circolareplus.design.AilaSwitch(
@@ -224,7 +224,7 @@ fun AssistantChatScreen(
                         value = draft,
                         onValueChange = { draft = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Chiedi qualsiasi cosa…", fontSize = 14.sp) },
+                        placeholder = { Text("Chiedi qualsiasi cosa…", style = MaterialTheme.typography.bodyLarge) },
                         maxLines = 4,
                         shape = fieldShape,
                         // Il fondo lo da' il contenitore (vetro o pillola tonale): il campo e'
@@ -250,7 +250,8 @@ fun AssistantChatScreen(
             Text(
                 text = "Usa i dati di AILA per la scuola e le sue conoscenze per il resto. Può " +
                     "sbagliare: per le cose importanti apri la circolare.",
-                fontSize = 10.sp,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Normal,
                 color = AppTheme.TextFaint,
                 modifier = Modifier.padding(horizontal = AppTheme.Space8)
             )
@@ -342,16 +343,14 @@ private fun AssistantHistorySheet(
         ) {
             Text(
                 text = "Le tue conversazioni",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge,
                 color = AppTheme.TextDark
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "Restano su questo telefono: non passano dal server della classe.",
-                fontSize = 12.sp,
-                color = AppTheme.TextMuted,
-                lineHeight = 17.sp
+                style = MaterialTheme.typography.bodyMedium,
+                color = AppTheme.TextMuted
             )
             Spacer(modifier = Modifier.height(AppTheme.Space16))
 
@@ -389,17 +388,16 @@ private fun AssistantHistorySheet(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = conversation.title,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelLarge,
                                 color = AppTheme.TextDark,
-                                maxLines = 2,
-                                lineHeight = 18.sp
+                                maxLines = 2
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = "${conversation.messages.size} messaggi \u2022 " +
                                     relativeTimeLabel(conversation.updatedAtMillis),
-                                fontSize = 11.sp,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Normal,
                                 color = AppTheme.TextFaint
                             )
                         }
@@ -444,13 +442,12 @@ private fun AssistantWelcome(onPick: (String) -> Unit) {
             Column {
                 Text(
                     text = "AILA Assistant",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge,
                     color = AppTheme.TextDark
                 )
                 Text(
                     text = "Cerca per te in circolari, calendario, bacheca, sondaggi e mappa posti.",
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = AppTheme.TextMuted
                 )
             }
@@ -459,8 +456,7 @@ private fun AssistantWelcome(onPick: (String) -> Unit) {
         Spacer(modifier = Modifier.height(AppTheme.Space24))
         Text(
             text = "PROVA A CHIEDERE",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelSmall,
             color = AppTheme.TextFaint
         )
         Spacer(modifier = Modifier.height(AppTheme.Space8))
@@ -477,7 +473,7 @@ private fun AssistantWelcome(onPick: (String) -> Unit) {
             ) {
                 AppIcons.Sparkle(modifier = Modifier.size(15.dp), color = AppTheme.PrimaryBlue)
                 Spacer(modifier = Modifier.width(AppTheme.Space8))
-                Text(text = question, fontSize = 13.sp, color = AppTheme.TextDark)
+                Text(text = question, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextDark)
             }
         }
     }
@@ -508,9 +504,8 @@ private fun UserBubble(text: String) {
         ) {
             Text(
                 text = text,
-                fontSize = 14.sp,
-                color = if (AppTheme.isGlass) Color.White else AppTheme.TintBlueInk,
-                lineHeight = 20.sp
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (AppTheme.isGlass) Color.White else AppTheme.TintBlueInk
             )
         }
     }
@@ -575,9 +570,8 @@ private fun AssistantBubble(
             ) {
                 Text(
                     text = formatAssistantText(message.text),
-                    fontSize = 14.sp,
-                    color = AppTheme.TextDark,
-                    lineHeight = 21.sp
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = AppTheme.TextDark
                 )
             }
 
@@ -595,7 +589,7 @@ private fun AssistantBubble(
 
             message.modelLabel?.let { label ->
                 Spacer(modifier = Modifier.height(6.dp))
-                Text(text = label, fontSize = 10.sp, color = AppTheme.TextFaint)
+                Text(text = label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Normal, color = AppTheme.TextFaint)
             }
         }
         }
@@ -620,15 +614,14 @@ private fun AssistantErrorBubble(text: String) {
                 Column {
                     Text(
                         text = "Non sono riuscito a rispondere",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelLarge,
                         color = AppTheme.TintRedInk
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     // Il motivo vero, non una frase generica: quasi sempre e' una chiave AI
                     // mancante o una quota esaurita, cioe' qualcosa che l'utente puo' sistemare
                     // dalle Impostazioni — ma solo se gli si dice quale dei due.
-                    Text(text = text, fontSize = 12.sp, color = AppTheme.TintRedInk, lineHeight = 17.sp)
+                    Text(text = text, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TintRedInk)
                 }
             }
         }
@@ -701,8 +694,7 @@ private fun SourceChip(source: AssistantSource, onClick: () -> Unit) {
         Spacer(modifier = Modifier.width(6.dp))
         Text(
             text = source.label,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelSmall,
             color = ink,
             maxLines = 1
         )
