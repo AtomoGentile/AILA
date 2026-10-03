@@ -3,6 +3,10 @@
 > Letto per primo dalla skill generica `/impeccable` (`.claude/skills/impeccable/`): qui ci sono
 > le parti specifiche di AILA, che hanno la precedenza sulle indicazioni generiche.
 
+> **La PWA (`web/`) è un progetto dismesso**: non va più controllata, corretta né tenuta allineata
+> all'app. Le indicazioni qui sotto che la riguardano restano solo come storia; il lavoro va
+> sull'app (Compose) e sul Worker. (Decisione di Simone, 3/10.)
+
 ## Il design system da rispettare
 
 **App (Compose Multiplatform)** — `shared/src/commonMain/kotlin/circolareplus/design/`

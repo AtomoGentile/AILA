@@ -3,6 +3,9 @@
 Elenco vivo dei problemi aperti e del lavoro ancora mancante, aggiornato mano a mano.
 Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esistente.
 
+> **PWA (`web/`) dismessa (3/10)**: progetto morto, niente piu' lavoro su di lei. Le voci sulla PWA
+> qui sotto restano solo come storia.
+
 ## 3/10: obiettivo "app perfetta" — secondo giro (sicurezza, coerenza, design, con subagenti)
 
 Sicurezza (Worker, test in `backend/test/routes.test.ts`):

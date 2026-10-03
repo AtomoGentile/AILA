@@ -3,6 +3,10 @@
 > Letto per primo dalla skill generica `/security-audit` (`.claude/skills/security-audit/`): qui ci sono
 > le parti specifiche di AILA, che hanno la precedenza sulle indicazioni generiche.
 
+> **La PWA (`web/`) è un progetto dismesso**: non va più controllata, corretta né tenuta allineata
+> all'app. Le indicazioni qui sotto che la riguardano restano solo come storia; il lavoro va
+> sull'app (Compose) e sul Worker. (Decisione di Simone, 3/10.)
+
 ## Mappa delle superfici
 
 | Area | Dove | Cosa conta di più |
@@ -10,7 +14,7 @@
 | Worker | `backend/src/index.ts`, `auth.ts`, `rateLimit.ts`, `routes/*.ts`, `services/*.ts` | Autorizzazione per ruolo e per classe, anonimato, SQL, segreti |
 | Schema | `backend/schema.sql`, `backend/migrations/*.sql` | Vincoli, colonne `class_id`, indici di unicità |
 | Contratto | `backend/src/contracts.ts` (condiviso con la PWA) | Campi esposti al client |
-| PWA | `web/src/**`, `web/public/_headers`, `web/src/sw.ts` | XSS, CSP, token in IndexedDB, cache del service worker |
+| ~~PWA~~ | `web/` — **dismessa, non auditare** | — |
 | App KMP | `shared/src/commonMain/kotlin/circolareplus/**`, `androidApp/`, `iosApp/` | Dove stanno token e chiave Gemini, backup, deep link, log |
 | CI | `.github/workflows/*.yml` | Input non fidati nei `run:`, permessi, segreti nei log |
 
