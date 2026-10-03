@@ -174,7 +174,7 @@ fun CalendarScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(AppTheme.Space8))
 
                     // Cambiando mese (frecce, o un evento appena creato in un altro mese) la griglia
                     // scorre di lato e l'altezza segue con una molla: sei righe o cinque, senza
@@ -186,17 +186,17 @@ fun CalendarScreen(
                             val forward = targetState > initialState
                             androidx.compose.animation.ContentTransform(
                                 targetContentEnter = androidx.compose.animation.fadeIn(
-                                    androidx.compose.animation.core.tween(220, delayMillis = 60)
+                                    circolareplus.design.ailaFadeSpec(220, delayMillis = 60)
                                 ) + androidx.compose.animation.slideInHorizontally(
-                                    androidx.compose.animation.core.spring(dampingRatio = 0.9f, stiffness = 400f)
+                                    circolareplus.design.ailaNavigationSpring()
                                 ) { w -> if (forward) w / 4 else -w / 4 },
                                 initialContentExit = androidx.compose.animation.fadeOut(
-                                    androidx.compose.animation.core.tween(120)
+                                    circolareplus.design.ailaFadeSpec(120)
                                 ) + androidx.compose.animation.slideOutHorizontally(
-                                    androidx.compose.animation.core.spring(dampingRatio = 0.9f, stiffness = 400f)
+                                    circolareplus.design.ailaNavigationSpring()
                                 ) { w -> if (forward) -w / 4 else w / 4 },
                                 sizeTransform = androidx.compose.animation.SizeTransform(clip = false) { _, _ ->
-                                    androidx.compose.animation.core.spring(dampingRatio = 0.9f, stiffness = 400f)
+                                    circolareplus.design.ailaNavigationSpring()
                                 }
                             )
                         },
@@ -286,7 +286,7 @@ fun CalendarScreen(
             // card sotto scendono, invece di saltare.
             Column(
                 modifier = Modifier.fillMaxWidth().animateContentSize(
-                    androidx.compose.animation.core.spring(dampingRatio = 0.85f, stiffness = 380f)
+                    circolareplus.design.ailaNavigationSpring()
                 )
             ) {
                 if (selectedEvents.isEmpty()) {
@@ -329,27 +329,27 @@ fun CalendarScreen(
                                 visibleState.targetState = true
                                 if (animateIn) {
                                     delay(300)
-                                    highlight.animateTo(0f, androidx.compose.animation.core.tween(1500))
+                                    highlight.animateTo(0f, circolareplus.design.ailaFadeSpec(1500))
                                 }
                             }
                             val highlightColor = AppTheme.PrimaryBlue
                             val highlightRadius = AppTheme.CardCornerRadius
                             androidx.compose.animation.AnimatedVisibility(
                                 visibleState = visibleState,
-                                exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(180)) +
+                                exit = androidx.compose.animation.fadeOut(circolareplus.design.ailaFadeSpec(180)) +
                                     androidx.compose.animation.shrinkVertically(
-                                        androidx.compose.animation.core.spring(dampingRatio = 0.9f, stiffness = 420f)
+                                        circolareplus.design.ailaNavigationSpring()
                                     ) +
                                     androidx.compose.animation.scaleOut(
-                                        androidx.compose.animation.core.tween(220),
+                                        circolareplus.design.ailaMoveSpec(220),
                                         targetScale = 0.92f
                                     ),
-                                enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220)) +
+                                enter = androidx.compose.animation.fadeIn(circolareplus.design.ailaFadeSpec(220)) +
                                     androidx.compose.animation.expandVertically(
-                                        androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 380f)
+                                        circolareplus.design.ailaBouncySpring()
                                     ) +
                                     androidx.compose.animation.scaleIn(
-                                        androidx.compose.animation.core.spring(dampingRatio = 0.75f, stiffness = 420f),
+                                        circolareplus.design.ailaBouncySpring(),
                                         initialScale = 0.9f
                                     )
                             ) {
@@ -488,10 +488,10 @@ private fun MonthNavigator(
             transitionSpec = {
                 androidx.compose.animation.ContentTransform(
                     targetContentEnter = androidx.compose.animation.fadeIn(
-                        androidx.compose.animation.core.tween(200, delayMillis = 60)
+                        circolareplus.design.ailaFadeSpec(200, delayMillis = 60)
                     ),
                     initialContentExit = androidx.compose.animation.fadeOut(
-                        androidx.compose.animation.core.tween(100)
+                        circolareplus.design.ailaFadeSpec(100)
                     )
                 )
             },
@@ -607,7 +607,7 @@ private fun DayCell(
                     else -> AppTheme.TextDark
                 }
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(AppTheme.Space4))
             AilaDot(
                 color = when {
                     !hasEvents -> Color.Transparent

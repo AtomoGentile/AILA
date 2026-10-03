@@ -139,7 +139,7 @@ fun SeatMapProposalsScreen(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
                         .background(AppTheme.HeroGradient)
-                        .padding(vertical = 10.dp),
+                        .padding(vertical = AppTheme.Space12),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -288,7 +288,7 @@ internal fun StatChip(label: String, value: Int, modifier: Modifier = Modifier) 
         modifier = modifier
             .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
             .background(AppTheme.TintSlate)
-            .padding(vertical = 6.dp),
+            .padding(vertical = AppTheme.Space8),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(

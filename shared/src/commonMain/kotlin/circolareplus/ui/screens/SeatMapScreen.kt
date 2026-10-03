@@ -6,7 +6,6 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -185,9 +184,9 @@ fun SeatMapScreen(
                         // tagliando i due elementi a meta' della dissolvenza. Ora non si ritaglia,
                         // la misura segue una molla e i due si scambiano con scala + dissolvenza.
                         transitionSpec = {
-                            (fadeIn(tween(180, delayMillis = 60)) +
+                            (fadeIn(circolareplus.design.ailaFadeSpec(180, delayMillis = 60)) +
                                 scaleIn(circolareplus.design.ailaSpatialSpring(), initialScale = 0.6f)) togetherWith
-                                (fadeOut(tween(90)) + scaleOut(tween(120), targetScale = 0.6f)) using
+                                (fadeOut(circolareplus.design.ailaFadeSpec(90)) + scaleOut(circolareplus.design.ailaMoveSpec(120), targetScale = 0.6f)) using
                                 androidx.compose.animation.SizeTransform(clip = false) { _, _ ->
                                     circolareplus.design.ailaSpatialSpring()
                                 }
@@ -239,8 +238,8 @@ fun SeatMapScreen(
                 // Si apre con la molla dello stile e il testo compare quando c'e' gia' spazio,
                 // invece di sovrapporsi all'apertura.
                 enter = expandVertically(circolareplus.design.ailaSpatialSpring()) +
-                    fadeIn(tween(200, delayMillis = 80)),
-                exit = fadeOut(tween(100)) + shrinkVertically(circolareplus.design.ailaSpatialSpring())
+                    fadeIn(circolareplus.design.ailaFadeSpec(200, delayMillis = 80)),
+                exit = fadeOut(circolareplus.design.ailaFadeSpec(100)) + shrinkVertically(circolareplus.design.ailaSpatialSpring())
             ) {
                 Row(
                     modifier = Modifier.padding(top = AppTheme.Space8),
@@ -250,13 +249,13 @@ fun SeatMapScreen(
                         modifier = Modifier.size(14.dp),
                         color = if (found) AppTheme.TintAmberInk else AppTheme.TextFaint
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(AppTheme.Space8))
                     // Cambiando compagno cercato il testo scorre al nuovo invece di cambiare di colpo.
                     AnimatedContent(
                         targetState = lastStatus[0],
                         transitionSpec = {
-                            (fadeIn(tween(180)) + slideInVertically(circolareplus.design.ailaSpatialSpring()) { it / 2 }) togetherWith
-                                (fadeOut(tween(100)) + slideOutVertically(tween(140)) { -it / 2 })
+                            (fadeIn(circolareplus.design.ailaFadeSpec(180)) + slideInVertically(circolareplus.design.ailaSpatialSpring()) { it / 2 }) togetherWith
+                                (fadeOut(circolareplus.design.ailaFadeSpec(100)) + slideOutVertically(circolareplus.design.ailaMoveSpec(140)) { -it / 2 })
                         },
                         label = "seatStatusText"
                     ) { text ->
@@ -296,17 +295,17 @@ fun SeatMapScreen(
                     ) {
                         val windowColor by animateColorAsState(
                             targetValue = if (isPreferencesOpen) AppTheme.PollGreen else AppTheme.PollDarkRed,
-                            animationSpec = tween(250),
+                            animationSpec = circolareplus.design.ailaColorSpec(),
                             label = "prefWindowColor"
                         )
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                             AilaDot(color = windowColor)
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(AppTheme.Space8))
                             AnimatedContent(
                                 targetState = isPreferencesOpen,
                                 transitionSpec = {
-                                    (fadeIn(tween(200)) + slideInVertically(tween(220)) { it / 2 }) togetherWith
-                                        (fadeOut(tween(120)) + slideOutVertically(tween(160)) { -it / 2 })
+                                    (fadeIn(circolareplus.design.ailaFadeSpec(200)) + slideInVertically(circolareplus.design.ailaMoveSpec(220)) { it / 2 }) togetherWith
+                                        (fadeOut(circolareplus.design.ailaFadeSpec(120)) + slideOutVertically(circolareplus.design.ailaMoveSpec(160)) { -it / 2 })
                                 },
                                 label = "prefWindowLabel"
                             ) { open ->
@@ -367,7 +366,7 @@ fun SeatMapScreen(
                         fontWeight = FontWeight.Bold,
                         color = AppTheme.TextDark
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(AppTheme.Space4))
                     // Selettore a pillole (connected button group in Material, segmented
                     // control in Glass) invece di due riquadri separati.
                     val seatOptions = listOf(SeatMapOptimizer.SEATS_PER_DESK_PAIR, SeatMapOptimizer.SEATS_PER_DESK_TRIO)
@@ -460,7 +459,7 @@ fun SeatMapScreen(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
                     .background(AppTheme.HeroGradient)
-                    .padding(vertical = 10.dp),
+                    .padding(vertical = AppTheme.Space12),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -512,12 +511,12 @@ fun SeatMapScreen(
 @Composable
 private fun MySeatPill(active: Boolean, onClick: () -> Unit) {
     val ink by animateColorAsState(
-        if (active) Color.White else AppTheme.TintBlueInk, tween(200), label = "mySeatInk"
+        if (active) Color.White else AppTheme.TintBlueInk, circolareplus.design.ailaColorSpec(), label = "mySeatInk"
     )
-    val fill by animateFloatAsState(if (active) 1f else 0f, tween(220), label = "mySeatFill")
+    val fill by animateFloatAsState(if (active) 1f else 0f, circolareplus.design.ailaMoveSpec(220), label = "mySeatFill")
     Row(
         modifier = Modifier
-            .padding(end = 6.dp)
+            .padding(end = AppTheme.Space8)
             .ailaPressable(pressedScale = 0.92f, onClick = onClick)
             .clip(RoundedCornerShape(50))
             .background(AppTheme.TintBlue)
@@ -526,11 +525,11 @@ private fun MySeatPill(active: Boolean, onClick: () -> Unit) {
                 drawRect(brush = AppTheme.PrimaryGradient, alpha = fill)
             }
             .semantics { contentDescription = if (active) "Nascondi il mio posto" else "Trova il mio posto" }
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AppIcons.Chair(modifier = Modifier.size(15.dp), color = ink)
-        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(modifier = Modifier.width(AppTheme.Space8))
         Text(text = "Il mio posto", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ink, maxLines = 1)
     }
 }
@@ -550,7 +549,7 @@ private fun PreferencesProgressBlock(progress: circolareplus.data.remote.dto.Pre
     LaunchedEffect(Unit) { started = true }
     val fraction by animateFloatAsState(
         targetValue = if (started) targetFraction else 0f,
-        animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing),
+        animationSpec = circolareplus.design.ailaMoveSpec(600, easing = FastOutSlowInEasing),
         label = "prefProgress"
     )
 
@@ -594,13 +593,13 @@ private fun PreferencesProgressBlock(progress: circolareplus.data.remote.dto.Pre
                 color = if (progress.allVoted) AppTheme.TintGreenInk else AppTheme.TextMuted
             )
         }
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(AppTheme.Space8))
         circolareplus.design.AilaProgressBar(
             progress = fraction,
             color = if (progress.allVoted) AppTheme.PollGreen else AppTheme.PrimaryBlue
         )
         if (!progress.allVoted && progress.pending.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(AppTheme.Space8))
             Text(
                 text = "Non hanno ancora votato: " +
                     progress.pending.joinToString(", ") { "${it.firstName} ${it.lastName.take(1)}." },

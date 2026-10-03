@@ -1,10 +1,7 @@
 package circolareplus.ui.screens
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -64,7 +61,7 @@ fun SeatMapDeskCard(
             isFocusedDesk -> 26.dp
             else -> 16.dp
         },
-        animationSpec = spring(dampingRatio = 0.55f, stiffness = 500f),
+        animationSpec = circolareplus.design.ailaBouncySpring(),
         label = "deskCorner"
     )
     val shape = RoundedCornerShape(cornerDp)
@@ -76,24 +73,24 @@ fun SeatMapDeskCard(
     val containerColor by animateColorAsState(
         when {
             glass -> if (isFocusedDesk) AppTheme.TintAmber else AppTheme.SurfaceWhite
-            isFocusedDesk -> if (AppTheme.isDarkMode) Color(0xFF5C4200) else Color(0xFFFFDDB3)
-            else -> if (AppTheme.isDarkMode) Color(0xFF22252C) else Color(0xFFECEEF8)
+            isFocusedDesk -> AppTheme.DeskFocused
+            else -> AppTheme.DeskFloor
         },
-        tween(240), label = "deskBg"
+        circolareplus.design.ailaColorSpec(), label = "deskBg"
     )
     val borderColor by animateColorAsState(
-        if (isFocusedDesk) AppTheme.TintAmberInk else AppTheme.FieldOutline, tween(240), label = "deskBorder"
+        if (isFocusedDesk) AppTheme.TintAmberInk else AppTheme.FieldOutline, circolareplus.design.ailaColorSpec(), label = "deskBorder"
     )
     val focusScale = animateFloatAsState(
         targetValue = if (isFocusedDesk) 1.06f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+        animationSpec = circolareplus.design.ailaBouncySpring(),
         label = "deskScale"
     )
 
     // Liquid Glass: il banco e' un riquadro di vetro (velo traslucido, riflesso, filo di luce);
     // quello evidenziato diventa vetro ambra con il bordo pieno.
     val glassTint by animateColorAsState(
-        if (isFocusedDesk) AppTheme.TintAmber.copy(alpha = 0.6f) else Color.Transparent, tween(240), label = "deskGlassTint"
+        if (isFocusedDesk) AppTheme.TintAmber.copy(alpha = 0.6f) else Color.Transparent, circolareplus.design.ailaColorSpec(), label = "deskGlassTint"
     )
     Card(
         shape = shape,
@@ -112,7 +109,7 @@ fun SeatMapDeskCard(
             )
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space8, vertical = AppTheme.Space8)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
