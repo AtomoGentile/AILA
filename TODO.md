@@ -3,6 +3,35 @@
 Elenco vivo dei problemi aperti e del lavoro ancora mancante, aggiornato mano a mano.
 Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esistente.
 
+## 3/10: rifinitura del design (`/impeccable`)
+
+PWA (verificata con screenshot a 390×844 e 1280×800, chiaro e scuro, API simulate):
+- **Contrasto**: badge delle circolari e chip delle categorie con tinta + inchiostro per tema
+  (prima pastelli fissi, abbaglianti in scuro, e testo categoria sotto 3:1 in chiaro); testo
+  bianco su `--accent-grad-strong` (toni 600 del brand, 5.2:1) per pulsanti primari, filtri e
+  "Il tuo posto"; viola attivo `--accent-ink`; "Elimina" leggibile in scuro (`--danger` chiaro).
+- **Icone**: linee SVG (`Icon` in `common.tsx`) al posto delle emoji in tab bar, voti, commenti,
+  allegati; tab bar raccolta al centro su schermi larghi; tab "Opzioni" → "Impostazioni" come la pagina.
+- **Stati**: voti, cambi di stato e invio commento non partono due volte; commenti vuoti spiegati;
+  vuoti di ricerca e filtro che dicono cosa manca; Mappa posti con titolo anche in caricamento/errore.
+- **Accessibilita'**: focus da tastiera visibile ovunque, target di 44px per pulsanti piccoli e
+  filtri, nomi per i pulsanti di voto/commento e per la ricerca, `aria-pressed` sui filtri,
+  `prefers-reduced-motion` rispettato.
+- **Testi**: "Pubblica proposta", "Aggiungi evento", "Invia commento", "Salva la chiave", "Esci
+  dall'account" con conferma (l'uscita cancella anche chiave AI e dati offline).
+
+App (solo dal codice: niente emulatore ne' Gradle in questo ambiente, la verifica la fa la CI):
+- Bacheca: matita e cestino con nome per lo screen reader. Scheda Classe: "+/−" delle
+  valutazioni da 28 a 44dp, spenti ai limiti, con nome.
+
+Da fare (app):
+- L'app non rispetta "Riduci movimento" (iOS) / "Rimuovi animazioni" (Android): serve un
+  `expect` di piattaforma letto da `AilaMotion`; l'onboarding ha tre animazioni infinite.
+- `OnboardingScreen.kt` ha palette e durate proprie (13 `Color(0x…)`, 21 `tween`) e
+  `MainAppShell.kt` 10 colori e 14 `tween` scritti a mano: da portare in `AppTheme`/`AilaMotion`.
+- Molti `fontSize = …sp` sparsi (Settings 29, Board 26, Roster 24, Shell 48) invece di
+  `MaterialTheme.typography`.
+
 ## 3/10: audit di sicurezza (`/security-audit`)
 
 Corretto (Worker, test in `backend/test/routes.test.ts`; nessuna migrazione):

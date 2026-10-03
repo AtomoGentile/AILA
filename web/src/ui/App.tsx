@@ -6,18 +6,20 @@ import { Board } from './Board';
 import { Calendar } from './Calendar';
 import { CircularDetail } from './CircularDetail';
 import { Circulars } from './Circulars';
-import { Loading } from './common';
+import { Icon, Loading } from './common';
+import type { IconName } from './common';
 import { InstallGuide } from './InstallGuide';
 import { Login } from './Login';
 import { SeatMap } from './SeatMap';
 import { Settings } from './Settings';
 
-const TABS = [
-  { path: 'circolari', label: 'Circolari', icon: '📄' },
-  { path: 'bacheca', label: 'Bacheca', icon: '💡' },
-  { path: 'calendario', label: 'Calendario', icon: '📅' },
-  { path: 'mappa', label: 'Posti', icon: '🪑' },
-  { path: 'impostazioni', label: 'Opzioni', icon: '⚙️' },
+// "Impostazioni" come il titolo della pagina e la voce dell'app (prima la tab diceva "Opzioni").
+const TABS: { path: string; label: string; icon: IconName }[] = [
+  { path: 'circolari', label: 'Circolari', icon: 'circulars' },
+  { path: 'bacheca', label: 'Bacheca', icon: 'board' },
+  { path: 'calendario', label: 'Calendario', icon: 'calendar' },
+  { path: 'mappa', label: 'Posti', icon: 'seats' },
+  { path: 'impostazioni', label: 'Impostazioni', icon: 'settings' },
 ];
 
 function useHashRoute(): string[] {
@@ -106,12 +108,14 @@ export function App({ updateReady, onUpdate }: { updateReady: boolean; onUpdate:
       )}
       <main class="content">{page}</main>
       <nav class="tabbar" aria-label="Sezioni">
-        {TABS.map((t) => (
-          <a key={t.path} href={`#/${t.path}`} class={section === t.path ? 'active' : ''} aria-current={section === t.path ? 'page' : undefined}>
-            <span aria-hidden="true">{t.icon}</span>
-            <span class="tab-label">{t.label}</span>
-          </a>
-        ))}
+        <div class="tabbar-inner">
+          {TABS.map((t) => (
+            <a key={t.path} href={`#/${t.path}`} class={section === t.path ? 'active' : ''} aria-current={section === t.path ? 'page' : undefined}>
+              <Icon name={t.icon} class="tab-icon" />
+              <span class="tab-label">{t.label}</span>
+            </a>
+          ))}
+        </div>
       </nav>
       {guide}
     </>

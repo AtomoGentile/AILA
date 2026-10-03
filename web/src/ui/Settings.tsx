@@ -27,8 +27,14 @@ export function Settings() {
       <ApiKeySettings />
       <NotificationSettings />
       <StorageInfo />
-      <button class="btn btn-block danger" onClick={() => void logout()}>
-        Esci
+      <button
+        class="btn btn-block danger"
+        onClick={() => {
+          // L'uscita cancella anche chiave AI e dati offline di questo dispositivo: meglio dirlo prima.
+          if (confirm('Uscire da AILA? Su questo dispositivo verranno cancellati anche la chiave AI e i dati offline.')) void logout();
+        }}
+      >
+        Esci dall'account
       </button>
     </section>
   );
@@ -70,13 +76,17 @@ function ApiKeySettings() {
       </label>
       <div class="row gap">
         <button class="btn btn-primary" onClick={save}>
-          {saved ? 'Salvata ✓' : 'Salva'}
+          {saved ? 'Chiave salvata' : 'Salva la chiave'}
         </button>
         <button class="btn" onClick={test} disabled={testing || !key.trim()}>
           {testing ? 'Provo…' : 'Prova la chiave'}
         </button>
       </div>
-      {result && <p class="small">{result}</p>}
+      {result && (
+        <p class="small" role="status">
+          {result}
+        </p>
+      )}
     </div>
   );
 }

@@ -13,6 +13,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -375,11 +377,19 @@ private fun RatingStepper(label: String, value: Int, onValueChange: (Int) -> Uni
     ) {
         Text(text = label, fontSize = 14.sp, color = AppTheme.TextMuted)
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // 44dp come gli altri pulsanti-icona (erano 28: troppo piccoli per il pollice), spenti ai
+            // limiti della scala e con un nome per lo screen reader al posto di "meno"/"più".
             IconButton(
-                onClick = { if (value > 1) onValueChange(value - 1) },
-                modifier = Modifier.size(28.dp)
+                onClick = { onValueChange(value - 1) },
+                enabled = value > 1,
+                modifier = Modifier.size(44.dp).semantics { contentDescription = "$label: diminuisci" }
             ) {
-                Text(text = "−", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = AppTheme.PrimaryBlue)
+                Text(
+                    text = "−",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (value > 1) AppTheme.PrimaryBlue else AppTheme.TextFaint
+                )
             }
             Text(
                 text = "$value",
@@ -389,10 +399,16 @@ private fun RatingStepper(label: String, value: Int, onValueChange: (Int) -> Uni
                 modifier = Modifier.padding(horizontal = AppTheme.Space8)
             )
             IconButton(
-                onClick = { if (value < 5) onValueChange(value + 1) },
-                modifier = Modifier.size(28.dp)
+                onClick = { onValueChange(value + 1) },
+                enabled = value < 5,
+                modifier = Modifier.size(44.dp).semantics { contentDescription = "$label: aumenta" }
             ) {
-                Text(text = "+", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = AppTheme.PrimaryBlue)
+                Text(
+                    text = "+",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (value < 5) AppTheme.PrimaryBlue else AppTheme.TextFaint
+                )
             }
         }
     }

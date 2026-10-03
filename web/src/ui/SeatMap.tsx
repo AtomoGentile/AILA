@@ -16,8 +16,23 @@ export function SeatMap() {
   );
   const me = getSession()?.user;
 
-  if (data.loading && !data.data) return <Loading />;
-  if (data.error) return <ErrorBox message={data.error} onRetry={data.reload} />;
+  // Titolo sempre presente, anche mentre carica o in errore: la pagina non "salta".
+  if (data.loading && !data.data) {
+    return (
+      <section>
+        <PageHeader title="Mappa posti" />
+        <Loading />
+      </section>
+    );
+  }
+  if (data.error) {
+    return (
+      <section>
+        <PageHeader title="Mappa posti" />
+        <ErrorBox message={data.error} onRetry={data.reload} />
+      </section>
+    );
+  }
   const [current, classmates] = data.data!;
 
   const names = new Map(classmates.users.map((u) => [u.id, `${u.firstName} ${u.lastName.charAt(0)}.`]));
@@ -26,7 +41,7 @@ export function SeatMap() {
     return (
       <section>
         <PageHeader title="Mappa posti" />
-        <Empty>Il Rappresentante non ha ancora pubblicato una mappa.</Empty>
+        <Empty>Il Rappresentante non ha ancora pubblicato una mappa: quando lo fa, qui trovi il tuo posto.</Empty>
       </section>
     );
   }

@@ -4,7 +4,7 @@ import { useState } from 'preact/hooks';
 import type { CommentsResponse, ProposalDto, ProposalOutcome, ProposalStatus, ProposalsResponse, VoteResponse } from '@worker/contracts';
 import { api } from '../lib/api';
 import { getSession } from '../lib/session';
-import { Empty, ErrorBox, Loading, PageHeader, formatDate, useAsync } from './common';
+import { Empty, ErrorBox, Icon, Loading, PageHeader, formatDate, useAsync } from './common';
 
 const COLUMNS: { status: ProposalStatus; label: string }[] = [
   { status: 'NUOVA', label: 'Nuove' },
@@ -99,7 +99,7 @@ function NewProposal({ onDone }: { onDone: () => void }) {
       </p>
       {error && <p class="form-error">{error}</p>}
       <button class="btn btn-primary" disabled={busy}>
-        {busy ? 'Pubblico…' : 'Pubblica'}
+        {busy ? 'Pubblico…' : 'Pubblica proposta'}
       </button>
     </form>
   );
@@ -112,24 +112,36 @@ function ProposalCard({ proposal: p, onChanged }: { proposal: ProposalDto; onCha
   const [votes, setVotes] = useState({ up: p.upVotes, down: p.downVotes, mine: p.myVote });
   const [showComments, setShowComments] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Un'azione alla volta: due tocchi rapidi sullo stesso voto lo mettevano e toglievano.
+  const [busy, setBusy] = useState(false);
   const closed = p.status === 'CHIUSA';
 
   async function vote(v: 1 | -1) {
+    if (busy) return;
     const next = votes.mine === v ? 0 : v;
+    setBusy(true);
+    setError(null);
     try {
       const r = await api<VoteResponse>(`/api/proposals/${p.id}/vote`, { method: 'POST', body: { voteType: next } });
       setVotes({ up: r.upVotes, down: r.downVotes, mine: next === 0 ? null : next });
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setBusy(false);
     }
   }
 
   async function setStatus(status: ProposalStatus, outcome?: ProposalOutcome) {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
     try {
       await api(`/api/proposals/${p.id}/status`, { method: 'PUT', body: { status, outcome: outcome ?? null } });
       onChanged();
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -154,14 +166,34 @@ function ProposalCard({ proposal: p, onChanged }: { proposal: ProposalDto; onCha
       {closed && p.outcome && <span class={`chip chip-${p.outcome === 'ACCETTATA' ? 'relevant' : 'not_relevant'}`}>{p.outcome === 'ACCETTATA' ? 'Accettata' : 'Rifiutata'}</span>}
       <p class="proposal-text">{p.description}</p>
       <div class="row gap wrap">
-        <button class={`btn btn-small ${votes.mine === 1 ? 'btn-on' : ''}`} disabled={closed} onClick={() => vote(1)} aria-pressed={votes.mine === 1}>
-          👍 {votes.up}
+        <button
+          class={`btn btn-small ${votes.mine === 1 ? 'btn-on' : ''}`}
+          disabled={closed || busy}
+          onClick={() => vote(1)}
+          aria-pressed={votes.mine === 1}
+          aria-label={`Favorevole, ${votes.up} voti`}
+        >
+          <Icon name="up" />
+          {votes.up}
         </button>
-        <button class={`btn btn-small ${votes.mine === -1 ? 'btn-on' : ''}`} disabled={closed} onClick={() => vote(-1)} aria-pressed={votes.mine === -1}>
-          👎 {votes.down}
+        <button
+          class={`btn btn-small ${votes.mine === -1 ? 'btn-on' : ''}`}
+          disabled={closed || busy}
+          onClick={() => vote(-1)}
+          aria-pressed={votes.mine === -1}
+          aria-label={`Contrario, ${votes.down} voti`}
+        >
+          <Icon name="down" />
+          {votes.down}
         </button>
-        <button class="btn btn-small btn-ghost" onClick={() => setShowComments((v) => !v)}>
-          💬 {p.commentCount}
+        <button
+          class="btn btn-small btn-ghost"
+          onClick={() => setShowComments((v) => !v)}
+          aria-expanded={showComments}
+          aria-label={`Commenti, ${p.commentCount}`}
+        >
+          <Icon name="comment" />
+          {p.commentCount}
         </button>
         {(isAuthor || isRep) && (
           <button class="btn btn-small btn-ghost danger" onClick={remove}>
@@ -172,22 +204,22 @@ function ProposalCard({ proposal: p, onChanged }: { proposal: ProposalDto; onCha
       {isRep && (
         <div class="row gap wrap rep-actions">
           {p.status === 'NUOVA' && (
-            <button class="btn btn-small" onClick={() => setStatus('IN_ANALISI')}>
+            <button class="btn btn-small" disabled={busy} onClick={() => setStatus('IN_ANALISI')}>
               In analisi
             </button>
           )}
           {!closed && (
             <>
-              <button class="btn btn-small" onClick={() => setStatus('CHIUSA', 'ACCETTATA')}>
+              <button class="btn btn-small" disabled={busy} onClick={() => setStatus('CHIUSA', 'ACCETTATA')}>
                 Accetta
               </button>
-              <button class="btn btn-small" onClick={() => setStatus('CHIUSA', 'RIFIUTATA')}>
+              <button class="btn btn-small" disabled={busy} onClick={() => setStatus('CHIUSA', 'RIFIUTATA')}>
                 Rifiuta
               </button>
             </>
           )}
           {closed && (
-            <button class="btn btn-small" onClick={() => setStatus('NUOVA')}>
+            <button class="btn btn-small" disabled={busy} onClick={() => setStatus('NUOVA')}>
               Riapri
             </button>
           )}
@@ -204,9 +236,12 @@ function Comments({ proposalId }: { proposalId: string }) {
   const [text, setText] = useState('');
   const [anonymous, setAnonymous] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
 
   async function send(e: Event) {
     e.preventDefault();
+    if (sending) return;
+    setSending(true);
     setError(null);
     try {
       await api(`/api/proposals/${proposalId}/comments`, { method: 'POST', body: { content: text.trim(), isAnonymous: anonymous } });
@@ -214,6 +249,8 @@ function Comments({ proposalId }: { proposalId: string }) {
       list.reload();
     } catch (err) {
       setError((err as Error).message);
+    } finally {
+      setSending(false);
     }
   }
 
@@ -221,6 +258,7 @@ function Comments({ proposalId }: { proposalId: string }) {
     <div class="comments">
       {list.loading && !list.data && <Loading />}
       {list.error && <ErrorBox message={list.error} onRetry={list.reload} />}
+      {list.data && list.data.comments.length === 0 && <p class="muted small">Ancora nessun commento: scrivi il primo.</p>}
       {list.data?.comments.map((c) => (
         <div class="comment" key={c.id}>
           <p class="small">
@@ -230,13 +268,23 @@ function Comments({ proposalId }: { proposalId: string }) {
         </div>
       ))}
       <form onSubmit={send} class="comment-form">
-        <textarea value={text} rows={2} maxLength={1000} required placeholder="Scrivi un commento" onInput={(e) => setText(e.currentTarget.value)} />
+        <textarea
+          value={text}
+          rows={2}
+          maxLength={1000}
+          required
+          placeholder="Scrivi un commento"
+          aria-label="Commento"
+          onInput={(e) => setText(e.currentTarget.value)}
+        />
         <div class="row between">
           <label class="check small">
             <input type="checkbox" checked={anonymous} onChange={(e) => setAnonymous(e.currentTarget.checked)} />
             Anonimo
           </label>
-          <button class="btn btn-small btn-primary">Invia</button>
+          <button class="btn btn-small btn-primary" disabled={sending}>
+            {sending ? 'Invio…' : 'Invia commento'}
+          </button>
         </div>
         {error && <p class="form-error">{error}</p>}
       </form>
