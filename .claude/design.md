@@ -21,7 +21,7 @@
 - Movimento: `AilaMotion.kt` (`ailaAppear`, `ailaPressable`, `ailaPushTransition`,
   `ailaTabTransition`, molle `ailaNavigationSpring`/`ailaSpatialSpring`). Niente `tween` e
   durate inventate nelle schermate.
-- Insets: `PlatformInsets.kt` (`iosSafeDrawingPadding`, `iosImePadding`) su ogni schermata con
+- Insets: `PlatformInsets.kt` (`appSafeDrawingPadding`, `appImePadding`) su ogni schermata con
   campi di testo o a tutto schermo.
 
 **PWA (Preact)** — `web/src/styles.css`, `web/src/ui/*.tsx`
@@ -79,8 +79,10 @@ Segna ogni punto come ok / da correggere, con file e riga.
 - Aree di tocco almeno 48dp (Android) / 44pt (iOS) / 44px (PWA).
 - `contentDescription` su icone che fanno qualcosa, `null` su quelle decorative; `aria-label`
   sui pulsanti-icona della PWA; focus visibile da tastiera nella PWA.
-- Movimento: animazioni brevi e con uno scopo. La PWA oggi non rispetta
-  `prefers-reduced-motion`: ogni animazione CSS nuova o toccata va disattivata lì dentro.
+- Movimento: animazioni brevi e con uno scopo, e "riduci movimento" rispettato: nella PWA il
+  blocco `prefers-reduced-motion` in fondo a `styles.css` (ogni animazione nuova va coperta lì),
+  nell'app `AppTheme.reduceMotion`, letto dagli helper di `AilaMotion.kt` (niente `tween` nelle
+  schermate, che lo salterebbero).
 - Tastiera: `KeyboardOptions` giuste (tipo, azione "Avanti/Fatto"), il campo attivo non resta
   sotto la tastiera.
 

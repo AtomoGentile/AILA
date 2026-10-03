@@ -22,9 +22,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import circolareplus.design.AilaPrimaryButton
 import circolareplus.design.AppTheme
 import circolareplus.domain.model.SocialPreference
 import circolareplus.domain.model.SocialPreferenceScore
@@ -141,7 +144,9 @@ fun SocialPreferencesVotingScreen(
 
                     Spacer(modifier = Modifier.height(AppTheme.Space8))
 
-                    // Bottoni per i 5 valori (+2, +1, 0, -1, -2)
+                    // Bottoni per i 5 valori (+2, +1, 0, -1, -2). I pastelli di +1/0/-1/-2 non
+                    // hanno un token identico in AppTheme (i Tint*Ink cambiano col tema), quindi
+                    // restano qui; il testo sopra e' sempre AppTheme.OnPollColor.
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -150,7 +155,7 @@ fun SocialPreferencesVotingScreen(
                             label = "+2",
                             isSelected = currentScore == SocialPreferenceScore.STRONG_AFFINITY,
                             enabled = currentScore == SocialPreferenceScore.STRONG_AFFINITY || plusTwoCount < 2,
-                            activeColor = Color(0xFF22C55E),
+                            activeColor = AppTheme.PollGreen,
                             onClick = { onVoteChanged(classmate.id, SocialPreferenceScore.STRONG_AFFINITY) }
                         )
                         SocialScoreButton(
@@ -185,19 +190,16 @@ fun SocialPreferencesVotingScreen(
 
         Spacer(modifier = Modifier.height(AppTheme.Space12))
 
-        Button(
+        // Pulsante di sistema al posto del Button di Material: stesso gradiente, stessa forma e
+        // stesso feedback al tocco degli altri pulsanti principali. "large": testo a 15sp come
+        // prima e altezza minima di 48dp, e' l'azione che chiude la schermata.
+        AilaPrimaryButton(
+            text = if (missingVotes == 0) "Salva preferenze" else "Vota ancora $missingVotes ${if (missingVotes == 1) "compagno" else "compagni"}",
             onClick = onSubmitVotes,
             enabled = missingVotes == 0,
-            shape = RoundedCornerShape(AppTheme.ButtonCornerRadius),
-            colors = ButtonDefaults.buttonColors(containerColor = AppTheme.PrimaryBlue),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = if (missingVotes == 0) "Salva preferenze" else "Vota ancora $missingVotes ${if (missingVotes == 1) "compagno" else "compagni"}",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
+            fillMaxWidth = true,
+            large = true
+        )
     }
 }
 
@@ -242,6 +244,8 @@ fun RowScope.SocialScoreButton(
     Box(
         modifier = Modifier
             .weight(1f)
+            // 44dp minimi: con solo 10dp sopra e sotto il bottone era alto circa 38dp.
+            .heightIn(min = 44.dp)
             .graphicsLayer { scaleX = animatedScale; scaleY = animatedScale }
             .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
             .background(animatedBgColor)
@@ -252,6 +256,8 @@ fun RowScope.SocialScoreButton(
                 indication = null,
                 onClick = onClick
             )
+            // Il voto scelto si distingue solo dal colore: lo diciamo anche al lettore di schermo.
+            .semantics { selected = isSelected }
             .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -259,7 +265,8 @@ fun RowScope.SocialScoreButton(
             text = label,
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
-            color = if (isSelected) Color.White else if (!enabled) AppTheme.TextFaint else AppTheme.TextDark
+            // Testo scuro fisso sui colori dei voti: il bianco sui pastelli scendeva fino a 1.4:1.
+            color = if (isSelected) AppTheme.OnPollColor else if (!enabled) AppTheme.TextFaint else AppTheme.TextDark
         )
     }
 }

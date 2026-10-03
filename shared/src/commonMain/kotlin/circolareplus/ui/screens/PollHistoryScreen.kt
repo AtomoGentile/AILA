@@ -13,6 +13,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -129,7 +131,14 @@ fun PollHistoryScreen(
                                     }
                                 }
                             }
-                            IconButton(onClick = { pendingDeleteId = poll.id }, modifier = Modifier.size(36.dp)) {
+                            // 44dp e un nome: a 36dp senza descrizione era un cestino muto e
+                            // difficile da centrare. Il nome dice anche quale sondaggio si elimina.
+                            IconButton(
+                                onClick = { pendingDeleteId = poll.id },
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .semantics { contentDescription = "Elimina sondaggio ${poll.subject}" }
+                            ) {
                                 AppIcons.Trash(modifier = Modifier.size(16.dp), color = AppTheme.TintRedInk)
                             }
                         }

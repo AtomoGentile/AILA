@@ -81,6 +81,14 @@ object AppTheme {
     /** Tema scuro attivo. Lo imposta la schermata Impostazioni; persiste in LocalSettingsManager. */
     var isDarkMode by mutableStateOf(false)
 
+    /**
+     * "Riduci movimento" del sistema (iOS: Accessibilità > Movimento; Android: "Rimuovi
+     * animazioni"). Non si sceglie nell'app: lo copia AilaTheme dal sistema a ogni ricomposizione.
+     * Sta qui come stato globale perché le molle e le transizioni di AilaMotion non sono
+     * @Composable e non possono leggere il sistema da sole.
+     */
+    var reduceMotion by mutableStateOf(false)
+
     /** Stile grafico scelto (Impostazioni); persiste in LocalSettingsManager. */
     var uiStyle by mutableStateOf(UiStyle.AUTO)
 
@@ -251,10 +259,19 @@ object AppTheme {
     val BadgePotentialYellow = Color(0xFFF59E0B)   // "Potenziale interesse"
     val BadgeNotRelevantGray = Color(0xFF94A3B8)   // "Non sembra riguardarti"
 
+    // Testo dei badge: le tinte sopra vanno bene per i pallini e in scuro, ma su sfondo chiaro
+    // come testo stanno fra 2.1 e 2.6:1. In chiaro i toni 700-800 della stessa tinta (oltre 4.9:1).
+    val BadgeRelevantInk get() = if (isDarkMode) BadgeRelevantGreen else Color(0xFF047857)
+    val BadgePotentialInk get() = if (isDarkMode) BadgePotentialYellow else Color(0xFF92400E)
+    val BadgeNotRelevantInk get() = if (isDarkMode) BadgeNotRelevantGray else Color(0xFF475569)
+
     val PollGreen = Color(0xFF22C55E)
     val PollYellow = Color(0xFFEAB308)
     val PollLightRed = Color(0xFFF87171)
     val PollDarkRed = Color(0xFFDC2626)
+    /** Testo sopra i colori dei sondaggi e delle preferenze (pastelli e rossi): scuro fisso in
+     *  ogni tema, perche' il bianco sui pastelli stava a 1.5:1. */
+    val OnPollColor = Color(0xFF0F172A)
 }
 
 /** Interpolazione lineare tra due colori (usata per derivare i toni dall'accento scelto). */

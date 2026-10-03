@@ -607,7 +607,7 @@ fun MainAppShell(
                 if (settings.isNotificationKindEnabled(NotificationKind.SEATMAP.key)) {
                     settings.addNotification(
                         "Nuova disposizione dei banchi",
-                        "Il Rappresentante ha pubblicato una nuova mappa dei posti.",
+                        "Il Rappresentante ha pubblicato una nuova mappa posti.",
                         NotificationKind.SEATMAP.key
                     )
                     wroteSomething = true
@@ -927,6 +927,8 @@ fun MainAppShell(
     var disciplinePairs by remember { mutableStateOf<List<circolareplus.data.remote.dto.DisciplinePairDto>>(emptyList()) }
     var isClassRosterLoading by remember { mutableStateOf(false) }
     var classRosterError by remember { mutableStateOf<String?>(null) }
+    // "Riprova" della Scheda Classe: prima l'errore restava li' finche' non si usciva e rientrava.
+    var classRosterRetry by remember { mutableStateOf(0) }
     // Errore di una singola azione (stepper/switch), separato dall'errore di caricamento iniziale:
     // prima entrambi finivano nella stessa variabile passata a LoadableContent, che sostituisce
     // TUTTO il contenuto con il messaggio di errore — un salvataggio fallito faceva sparire
@@ -1530,7 +1532,7 @@ fun MainAppShell(
             // Notifica di apertura votazione preferenze
             if (AppContainer.settings.isNotificationKindEnabled(NotificationKind.SEATMAP.key)) {
                 AppContainer.settings.addNotification(
-                    "Votazione Preferenze Aperta",
+                    "Votazione delle preferenze aperta",
                     "Esprimi i tuoi voti sulle preferenze di seduta",
                     NOTIFICATION_CATEGORY_SEATMAP_PREFERENCES
                 )
@@ -1850,15 +1852,18 @@ fun MainAppShell(
     }
 
     // Ingresso nella Scheda Classe: carica le valutazioni correnti (solo Rappresentante).
-    LaunchedEffect(isInClassRosterScreen) {
+    LaunchedEffect(isInClassRosterScreen, classRosterRetry) {
         if (isInClassRosterScreen) {
             isClassRosterLoading = true
             classRosterError = null
             classRosterActionError = null
             try {
                 classRosterEntries = AppContainer.ratingsRepository.listRatings()
+            } catch (e: CancellationException) {
+                // "Riprova" riavvia l'effetto: il giro annullato non deve scrivere un errore.
+                throw e
             } catch (e: Exception) {
-                classRosterError = "Impossibile caricare la scheda classe."
+                classRosterError = "Impossibile caricare la Scheda Classe: controlla la connessione e riprova."
             } finally {
                 isClassRosterLoading = false
             }
@@ -2674,7 +2679,9 @@ fun MainAppShell(
                                 },
                                 onNavigateToNotifications = { isInNotificationsScreen = true },
                                 onNavigateToSearch = { isInSearchScreen = true },
-                                hasUnreadNotifications = hasUnreadNotifications
+                                hasUnreadNotifications = hasUnreadNotifications,
+                                isCircularsLoading = isCircularsLoading && !circularsLoadedOnce,
+                                isEventsLoading = isCalendarLoading && calendarEvents.isEmpty()
                             )
                         }
                         MainTab.CALENDAR -> {
@@ -3866,7 +3873,7 @@ fun MainAppShell(
                                 AppIcons.Close(modifier = Modifier.size(15.dp), color = AppTheme.TintRedInk)
                             }
                         }
-                        LoadableContent(isLoading = isClassRosterLoading, error = classRosterError) {
+                        LoadableContent(isLoading = isClassRosterLoading, error = classRosterError, onRetry = { classRosterRetry++ }) {
                             ClassRosterScreen(
                                 entries = classRosterEntries,
                                 currentUserId = user.id,
@@ -4347,8 +4354,9 @@ private fun LoadableContent(
 ) {
     when {
         isLoading -> {
+            // Lo stesso loader del resto dell'app (era lo spinner di Material, solo qui).
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AppTheme.PrimaryBlue)
+                circolareplus.design.AilaMorphingLoader(size = 48.dp)
             }
         }
         error != null -> {
@@ -4743,7 +4751,7 @@ private fun AddCalendarEventDialog(
         circolareplus.design.AilaDatePickerDialog(
             state = datePickerState,
             onDismiss = { showDatePicker = false },
-            confirmLabel = "OK"
+            confirmLabel = "Scegli"
         ) {
             selectedDateMillis = datePickerState.selectedDateMillis
             showDatePicker = false
@@ -5256,6 +5264,22 @@ private fun EventDetailDialog(
         }
     }
 
+    // Eliminare un evento lo toglie dal calendario di tutti quelli che lo vedono e non si annulla:
+    // prima partiva al primo tocco.
+    var confirmDelete by remember { mutableStateOf(false) }
+    if (confirmDelete) {
+        circolareplus.design.AilaConfirmDialog(
+            title = "Eliminare l'evento?",
+            message = "\"${event.title}\" sparisce dal calendario di tutti quelli che lo vedono.",
+            onDismiss = { confirmDelete = false },
+            onConfirm = {
+                confirmDelete = false
+                closeAnimated(onDelete)
+            },
+            confirmLabel = "Elimina evento"
+        )
+    }
+
     val dateLabel = remember(event.date) {
         val civil = circolareplus.util.parseIsoDate(event.date)
         if (civil != null) {
@@ -5369,7 +5393,7 @@ private fun EventDetailDialog(
                     .ailaSheetReveal(6)
                     .clip(RoundedCornerShape(AppTheme.ButtonCornerRadius))
                     .background(AppTheme.TintRed)
-                    .clickable { closeAnimated(onDelete) }
+                    .clickable { confirmDelete = true }
                     .padding(vertical = 14.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
@@ -5401,6 +5425,22 @@ private fun EventDetailPage(
     onBack: () -> Unit,
     onDelete: () -> Unit
 ) {
+
+    // Eliminare un evento lo toglie dal calendario di tutti quelli che lo vedono e non si annulla:
+    // prima partiva al primo tocco.
+    var confirmDelete by remember { mutableStateOf(false) }
+    if (confirmDelete) {
+        circolareplus.design.AilaConfirmDialog(
+            title = "Eliminare l'evento?",
+            message = "\"${event.title}\" sparisce dal calendario di tutti quelli che lo vedono.",
+            onDismiss = { confirmDelete = false },
+            onConfirm = {
+                confirmDelete = false
+                onDelete()
+            },
+            confirmLabel = "Elimina evento"
+        )
+    }
     val dateLabel = remember(event.date) {
         val civil = circolareplus.util.parseIsoDate(event.date)
         if (civil != null) {
@@ -5495,7 +5535,7 @@ private fun EventDetailPage(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(AppTheme.ButtonCornerRadius))
                     .background(AppTheme.TintRed)
-                    .clickable { onDelete() }
+                    .clickable { confirmDelete = true }
                     .padding(vertical = 14.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically

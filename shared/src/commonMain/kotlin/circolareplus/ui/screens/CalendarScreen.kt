@@ -480,7 +480,7 @@ private fun MonthNavigator(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        MonthArrow(onClick = onPrevious) {
+        MonthArrow(contentDescription = "Mese precedente", onClick = onPrevious) {
             AppIcons.ChevronLeft(modifier = Modifier.size(18.dp), color = AppTheme.TextDark)
         }
         androidx.compose.animation.AnimatedContent(
@@ -504,22 +504,20 @@ private fun MonthNavigator(
                 color = AppTheme.TextDark
             )
         }
-        MonthArrow(onClick = onNext) {
+        MonthArrow(contentDescription = "Mese successivo", onClick = onNext) {
             AppIcons.ChevronRight(modifier = Modifier.size(18.dp), color = AppTheme.TextDark)
         }
     }
 }
 
+/**
+ * Freccia del mese: era un riquadro da 36dp senza nome (il lettore di schermo diceva solo
+ * "pulsante"). Ora e' l'AilaIconButton di sistema: 44dp di tocco, nome parlato e lo stesso
+ * aspetto del "+" nell'intestazione della stessa schermata.
+ */
 @Composable
-private fun MonthArrow(onClick: () -> Unit, icon: @Composable () -> Unit) {
-    Box(
-        modifier = Modifier
-            .size(36.dp)
-            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-            .background(AppTheme.TintSlate)
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center
-    ) {
+private fun MonthArrow(contentDescription: String, onClick: () -> Unit, icon: @Composable () -> Unit) {
+    AilaIconButton(contentDescription = contentDescription, onClick = onClick) { _ ->
         icon()
     }
 }

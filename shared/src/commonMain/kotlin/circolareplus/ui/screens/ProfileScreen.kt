@@ -55,6 +55,7 @@ fun ProfileScreen(
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showPasswordDialog by remember { mutableStateOf(false) }
+    var showLogoutConfirm by remember { mutableStateOf(false) }
     val isRepresentative = user.role == UserRole.REPRESENTATIVE
     // Classe e anno: prima erano il sottotitolo dell'intestazione, ora stanno nella card identita'.
     val classLine = buildString {
@@ -157,7 +158,7 @@ fun ProfileScreen(
                             Spacer(modifier = Modifier.width(6.dp))
                         }
                         Text(
-                            text = if (isRepresentative) "Rappresentante di Classe" else "Studente",
+                            text = if (isRepresentative) "Rappresentante" else "Studente",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = AppTheme.OnHeroPrimary
@@ -242,7 +243,7 @@ fun ProfileScreen(
                 AilaListRow(
                     title = "Esci dall'account",
                     tint = AppTheme.TintRed,
-                    onClick = onLogoutClick,
+                    onClick = { showLogoutConfirm = true },
                     icon = {
                         // Era il carattere "→", disegnato dal sistema: stessa incoerenza delle
                         // altre frecce di testo sostituite nel kit.
@@ -252,7 +253,7 @@ fun ProfileScreen(
                 HorizontalDivider(color = AppTheme.Hairline, modifier = Modifier.padding(start = 72.dp))
                 AilaListRow(
                     title = "Elimina account",
-                    subtitle = "Cancella definitivamente il tuo account e i tuoi dati",
+                    subtitle = "Elimina definitivamente il tuo account e i tuoi dati",
                     tint = AppTheme.TintRed,
                     onClick = { showDeleteDialog = true },
                     icon = {
@@ -298,6 +299,21 @@ fun ProfileScreen(
             onConfirm = onDeleteAccount
         )
     }
+    // L'uscita cancella anche chiave Gemini, conversazioni con l'assistente e analisi salvate su
+    // questo telefono: meglio dirlo prima (come nella PWA).
+    if (showLogoutConfirm) {
+        circolareplus.design.AilaConfirmDialog(
+            title = "Uscire da AILA?",
+            message = "Su questo telefono verranno cancellati anche la chiave AI, le conversazioni con l'assistente e i dati offline.",
+            onDismiss = { showLogoutConfirm = false },
+            onConfirm = {
+                showLogoutConfirm = false
+                onLogoutClick()
+            },
+            confirmLabel = "Esci"
+        )
+    }
+
     if (showPasswordDialog) {
         ChangePasswordDialog(onDismiss = { showPasswordDialog = false })
     }

@@ -471,8 +471,7 @@ private fun DisciplinePairsCard(
                     }
                     AilaIconButton(
                         contentDescription = "Rimuovi la coppia",
-                        onClick = { onRemove(pair.id) },
-                        size = 36.dp
+                        onClick = { onRemove(pair.id) }
                     ) { tint -> AppIcons.Trash(modifier = Modifier.size(18.dp), color = tint) }
                 }
             }
