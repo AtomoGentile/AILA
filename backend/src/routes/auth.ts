@@ -133,7 +133,11 @@ auth.post('/register', async (c) => {
   }
   const needsClassCode = role === 'STUDENT' ? (members?.total ?? 0) > 0 : (members?.reps ?? 0) > 0;
   if (needsClassCode) {
-    const expected = await classInviteCode(c.env, classId, { createIfMissing: false });
+    // Con un Rappresentante in classe il codice si crea qui se manca: prima nasceva solo quando
+    // lui apriva la Scheda Classe, e fino ad allora chiunque scrivesse "4 CSA" entrava. Chi resta
+    // fuori lo chiede al Rappresentante, che lo trova gia' pronto. Senza Rappresentanti non c'e'
+    // nessuno che possa darlo, quindi la classe resta aperta finche' non ne arriva uno.
+    const expected = await classInviteCode(c.env, classId, { createIfMissing: (members?.reps ?? 0) > 0 });
     if (expected !== null) {
       const given = (classCode ?? '').trim().toUpperCase().replace(/[\s-]/g, '');
       if (!given) {
@@ -249,6 +253,9 @@ auth.post('/login', async (c) => {
   }>();
 
   if (!user) {
+    // Stesso lavoro di una password sbagliata: altrimenti dal tempo di risposta si capiva quali
+    // username esistono.
+    await verifyPassword(password, '', 'nessun-utente');
     return failed();
   }
 

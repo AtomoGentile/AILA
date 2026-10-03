@@ -59,6 +59,10 @@ export async function verifyJWT(token: string, secret: string): Promise<JWTPaylo
     if (parts.length !== 3) return null;
 
     const [header, body, signature] = parts;
+    // Solo i token che emettiamo noi: HS256 e una scadenza. Un token senza `exp` varrebbe per
+    // sempre (prima `undefined < adesso` era falso e passava).
+    const head = JSON.parse(new TextDecoder().decode(base64url.decode(header))) as { alg?: unknown };
+    if (head.alg !== 'HS256') return null;
     const key = await getHmacKey(secret);
     const valid = await crypto.subtle.verify(
       'HMAC',
@@ -70,7 +74,7 @@ export async function verifyJWT(token: string, secret: string): Promise<JWTPaylo
     if (!valid) return null;
 
     const payload = JSON.parse(new TextDecoder().decode(base64url.decode(body))) as JWTPayload;
-    if (payload.exp < Math.floor(Date.now() / 1000)) return null;
+    if (typeof payload.exp !== 'number' || payload.exp < Math.floor(Date.now() / 1000)) return null;
 
     return payload;
   } catch {

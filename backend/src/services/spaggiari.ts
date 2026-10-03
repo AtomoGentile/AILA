@@ -53,7 +53,11 @@ function extractLinks(cellHtml: string, baseUrl: string): ScrapedAttachment[] {
     const label = decodeHtmlEntities(match[2].replace(/<[^>]+>/g, ''));
     let url: string;
     try {
-      url = new URL(match[1], baseUrl).toString();
+      const parsed = new URL(match[1], baseUrl);
+      // Solo link web: l'app li apre nel browser, e un "javascript:" o "intent:" arrivato dal sito
+      // della scuola (o da chi lo ha compromesso) non deve finire in mano ai telefoni.
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') continue;
+      url = parsed.toString();
     } catch {
       continue;
     }

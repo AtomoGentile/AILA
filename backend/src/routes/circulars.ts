@@ -15,6 +15,12 @@ import {
   upsertAnalysis,
 } from '../services/summarizer';
 import { inBackground } from '../services/background';
+import { isRateLimited, recordAttempt } from '../rateLimit';
+
+// Analisi inviate da un telefono: le legge tutta la scuola e il livello lo dichiara il client,
+// quindi un account non puo' riscriverne a raffica.
+const ANALYSIS_WRITES_WINDOW = 60 * 60;
+const ANALYSIS_WRITES_PER_USER = 30;
 
 // `attachments_json` è sempre valido JSON (scritto solo da syncSpaggiariCirculars, default
 // '[]' per le righe precedenti alla colonna) — un parse fallito è un bug, non un caso da
@@ -283,6 +289,11 @@ circulars.put('/:number/analysis', authMiddleware(), async (c) => {
   }
 
   const payload = c.get('jwtPayload') as JWTPayload;
+  const writesKey = `analysis:user:${payload.sub}`;
+  if (await isRateLimited(c.env, writesKey, ANALYSIS_WRITES_PER_USER, ANALYSIS_WRITES_WINDOW)) {
+    return c.json({ error: 'Troppe analisi inviate: riprova fra un po\'' }, 429);
+  }
+  await recordAttempt(c.env, writesKey, ANALYSIS_WRITES_WINDOW);
   const modelLabel = body.modelLabel ?? 'Sconosciuto';
   const isFallback = !!body.isFallback;
   const tier = tierOf(isFallback, modelLabel);
