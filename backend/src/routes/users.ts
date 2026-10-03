@@ -147,10 +147,15 @@ users.post('/:id/reset-code', requireRole('REPRESENTATIVE'), async (c) => {
   if (targetId === payload.sub) {
     return c.json({ error: 'Per la tua password usa "Cambia password" nel profilo' }, 400);
   }
-  const target = await c.env.DB.prepare('SELECT id, username FROM users WHERE id = ? AND class_id = ?')
+  const target = await c.env.DB.prepare('SELECT id, username, role FROM users WHERE id = ? AND class_id = ?')
     .bind(targetId, await resolveClassId(c))
-    .first<{ id: string; username: string }>();
+    .first<{ id: string; username: string; role: UserRole }>();
   if (!target) return c.json({ error: 'Compagno non trovato nella tua classe' }, 404);
+  // Non sull'altro Rappresentante: entrando nel suo account una persona sola avrebbe le due firme
+  // da Rappresentante del quorum (la Guardia la nomina lei stessa) e svelerebbe gli anonimi da sola.
+  if (target.role === 'REPRESENTATIVE') {
+    return c.json({ error: "Non puoi reimpostare la password dell'altro Rappresentante" }, 403);
+  }
 
   const code = randomCode(8);
   const expiresAt = Math.floor(Date.now() / 1000) + RESET_CODE_TTL_SECONDS;

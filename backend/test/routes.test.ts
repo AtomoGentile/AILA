@@ -73,6 +73,18 @@ describe('registrazione e codice classe', () => {
     expect((await register('rep2', { representativeCode: 'REP-CODE' })).status).toBe(201);
     expect((await register('rep3', { representativeCode: 'REP-CODE' })).status).toBe(409);
   });
+
+  it('il codice Rappresentante non basta per entrare in una classe che ha gia\' un Rappresentante', async () => {
+    // Il codice Rappresentante e' uno solo per tutta la scuola: senza il codice classe, il
+    // Rappresentante di un'altra classe entrava come secondo Rappresentante di questa.
+    const rep = await register('rep1', { representativeCode: 'REP-CODE' });
+    const code = await call('GET', '/api/users/class-code', undefined, rep.json.token);
+
+    const outsider = await register('estraneo', { representativeCode: 'REP-CODE' });
+    expect(outsider.status).toBe(403);
+    expect(outsider.json.classCodeRequired).toBe(true);
+    expect((await register('estraneo', { representativeCode: 'REP-CODE', classCode: code.json.code })).status).toBe(201);
+  });
 });
 
 describe('login', () => {
@@ -125,6 +137,14 @@ describe('password e token', () => {
     // Il token di prima del reset non vale piu', il codice non si riusa.
     expect((await call('GET', '/api/users/me', undefined, student.json.token)).status).toBe(401);
     expect((await call('POST', '/api/auth/reset-password', { username: 'giulia', code: reset.json.code, newPassword: 'altrapass1' })).status).toBe(400);
+  });
+
+  it('un Rappresentante non genera il codice di reset per l\'altro Rappresentante', async () => {
+    // Con l'account dell'altro Rappresentante una persona sola avrebbe due firme del quorum
+    // (la terza, la Guardia, la nomina lei stessa) e potrebbe svelare gli anonimi da sola.
+    const rep1 = await register('rep1', { representativeCode: 'REP-CODE' });
+    const rep2 = await register('rep2', { representativeCode: 'REP-CODE' });
+    expect((await call('POST', `/api/users/${rep2.json.user.id}/reset-code`, {}, rep1.json.token)).status).toBe(403);
   });
 
   it('un account eliminato non entra piu\' con il token vecchio', async () => {
