@@ -53,7 +53,9 @@ Resta:
   `AilaPillTextField` + `ailaFocusRing` (campo a capsula con anello viola-blu-verde al focus,
   uguale in chat e ricerca), `ailaPulse()`. Colori del marchio in `AilaLogo.kt`
   (`AilaAssistantViolet/Blue/Teal`).
-- Chat: benvenuto centrato con domande che hanno l'icona dell'argomento (colori delle fonti),
+- Chat: benvenuto centrato SENZA domande suggerite (generiche, inutili): mostra le ultime 3
+  conversazioni da riprendere e le fonti da cui l'Assistant legge; esempi di domande che ruotano
+  nel placeholder del campo (`rotatingPlaceholders`),
   attesa con "Sto cercando in AILA...", elenchi con rientro "appeso", chip delle fonti a capsula
   con titolo che non esce piu' dallo schermo, Invia col gradiente primario.
 - Ricerca: campo a capsula, aurora sul pulsante Assistant, tre tessere colorate con i conteggi

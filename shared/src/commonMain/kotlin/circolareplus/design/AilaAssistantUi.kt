@@ -1,5 +1,6 @@
 package circolareplus.design
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -22,7 +23,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +39,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -190,6 +195,8 @@ fun AilaPillTextField(
     onValueChange: (String) -> Unit,
     placeholder: String,
     modifier: Modifier = Modifier,
+    /** Esempi che si alternano al posto di [placeholder] (fermi con "Riduci movimento"). */
+    rotatingPlaceholders: List<String> = emptyList(),
     shape: Shape = RoundedCornerShape(100.dp),
     singleLine: Boolean = false,
     maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
@@ -210,7 +217,13 @@ fun AilaPillTextField(
             value = value,
             onValueChange = onValueChange,
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text(placeholder, style = MaterialTheme.typography.bodyLarge) },
+            placeholder = {
+                if (rotatingPlaceholders.isEmpty()) {
+                    Text(placeholder, style = MaterialTheme.typography.bodyLarge)
+                } else {
+                    RotatingPlaceholder(placeholder, rotatingPlaceholders)
+                }
+            },
             leadingIcon = leadingIcon,
             trailingIcon = trailingIcon,
             singleLine = singleLine,
@@ -249,4 +262,32 @@ fun Modifier.ailaPulse(): Modifier {
         label = "pulseAlpha"
     )
     return this.graphicsLayer { this.alpha = alpha.value }
+}
+
+/**
+ * "Chiedi qualsiasi cosa…" e, dopo qualche secondo, un esempio dopo l'altro che si dissolvono l'uno
+ * nell'altro ("Chiedi: Quando è la prossima verifica?"). Sparisce da solo appena si scrive: il
+ * placeholder del campo non si vede piu'.
+ */
+@Composable
+private fun RotatingPlaceholder(base: String, examples: List<String>) {
+    var index by remember { mutableIntStateOf(-1) }
+    LaunchedEffect(examples, AppTheme.reduceMotion) {
+        if (AppTheme.reduceMotion) return@LaunchedEffect
+        while (true) {
+            delay(3500)
+            index = (index + 1) % examples.size
+        }
+    }
+    Crossfade(
+        targetState = index,
+        animationSpec = ailaFadeSpec(AilaDuration.Slow),
+        label = "placeholderExamples"
+    ) { i ->
+        Text(
+            text = if (i < 0) base else "Chiedi: ${examples[i]}",
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = 1
+        )
+    }
 }

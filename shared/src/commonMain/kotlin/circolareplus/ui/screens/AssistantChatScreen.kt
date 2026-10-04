@@ -43,7 +43,6 @@ import circolareplus.design.AilaAssistantHalo
 import circolareplus.design.AilaIconTile
 import circolareplus.design.ailaPulse
 import androidx.compose.ui.unit.dp
-import circolareplus.ai.assistant.AilaAssistant
 import circolareplus.ai.assistant.AssistantAuthor
 import circolareplus.ai.assistant.AssistantConversation
 import circolareplus.ai.assistant.AssistantMessage
@@ -171,7 +170,7 @@ fun AssistantChatScreen(
             verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)
         ) {
             if (messages.isEmpty() && !isThinking) {
-                item { AssistantWelcome(onPick = { onSend(it) }) }
+                item { AssistantWelcome(conversations = conversations, onOpenConversation = onOpenConversation) }
             }
 
             items(messages, key = { it.id }) { message ->
@@ -259,6 +258,7 @@ fun AssistantChatScreen(
                     value = draft,
                     onValueChange = { draft = it },
                     placeholder = "Chiedi qualsiasi cosa…",
+                    rotatingPlaceholders = if (messages.isEmpty()) ExamplePlaceholders else emptyList(),
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(24.dp),
                     maxLines = 4
@@ -478,9 +478,17 @@ private fun relativeTimeLabel(atMillis: Long): String {
     }
 }
 
-/** Schermata vuota: spiega cosa sa fare e propone le prime domande. */
+/**
+ * Schermata vuota. Niente domande suggerite (erano frasi uguali per tutti, che nessuno toccava):
+ * mostra cio' che e' vero per chi la apre — le sue ultime conversazioni, da riprendere — e da
+ * dove l'Assistant prende le risposte. Gli esempi di domande stanno nel campo di testo, come
+ * suggerimento che ruota, non come pulsanti.
+ */
 @Composable
-private fun AssistantWelcome(onPick: (String) -> Unit) {
+private fun AssistantWelcome(
+    conversations: List<AssistantConversation>,
+    onOpenConversation: (AssistantConversation) -> Unit
+) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = AppTheme.Space12),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -496,63 +504,118 @@ private fun AssistantWelcome(onPick: (String) -> Unit) {
         )
         Spacer(modifier = Modifier.height(AppTheme.Space4))
         Text(
-            text = "Cerca per te in circolari, calendario, bacheca, sondaggi e mappa posti.",
+            text = "Chiedimi come lo chiederesti a un compagno: cerco io fra i dati della tua scuola.",
             style = MaterialTheme.typography.bodyMedium,
             color = AppTheme.TextMuted,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = AppTheme.Space16)
         )
 
-        Spacer(modifier = Modifier.height(AppTheme.Space24))
-        Text(
-            text = "PROVA A CHIEDERE",
-            style = MaterialTheme.typography.labelSmall,
-            color = AppTheme.TextFaint,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space4)
-        )
-        Spacer(modifier = Modifier.height(AppTheme.Space8))
-        AilaAssistant.SUGGESTED_QUESTIONS.forEachIndexed { index, question ->
-            val topic = suggestionTopic(question)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = AppTheme.Space8)
-                    .chatSurface(RoundedCornerShape(AppTheme.CardCornerRadius))
-                    .ailaPressable(pressedScale = 0.98f) { onPick(question) }
-                    .padding(start = AppTheme.Space12, end = AppTheme.Space16, top = AppTheme.Space12, bottom = AppTheme.Space12)
-                    .ailaAppear(index),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // L'icona dice di cosa parla la domanda, con lo stesso colore delle fonti sotto
-                // le risposte (circolari blu, calendario ambra, bacheca viola).
-                AilaIconTile(tint = topic.kind.tint(), size = 40.dp) { topic.kind.Icon(topic.kind.ink(), 18.dp) }
-                Spacer(modifier = Modifier.width(AppTheme.Space12))
-                Text(
-                    text = question,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = AppTheme.TextDark,
-                    modifier = Modifier.weight(1f)
-                )
+        val recent = conversations.sortedByDescending { it.updatedAtMillis }.take(3)
+        if (recent.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(AppTheme.Space24))
+            WelcomeLabel("RIPRENDI")
+            recent.forEach { conversation ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = AppTheme.Space8)
+                        .chatSurface(RoundedCornerShape(AppTheme.CardCornerRadius))
+                        .ailaPressable(pressedScale = 0.98f) { onOpenConversation(conversation) }
+                        .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AilaAssistantMark(size = 20.dp)
+                    Spacer(modifier = Modifier.width(AppTheme.Space12))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = conversation.title,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = AppTheme.TextDark,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = relativeTimeLabel(conversation.updatedAtMillis),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Normal,
+                            color = AppTheme.TextFaint
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(AppTheme.Space8))
+                    AppIcons.ChevronRight(modifier = Modifier.size(16.dp), color = AppTheme.TextFaint)
+                }
             }
         }
+
+        Spacer(modifier = Modifier.height(AppTheme.Space16))
+        WelcomeLabel("DA DOVE PRENDO LE RISPOSTE")
+        // Inerti di proposito (niente freccia, niente pressione): dicono dove guarda l'Assistant,
+        // non portano da nessuna parte.
+        WelcomeSources.chunked(2).forEach { pair ->
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = AppTheme.Space8),
+                horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+            ) {
+                pair.forEach { (kind, label) ->
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(AppTheme.ButtonCornerRadius))
+                            .background(kind.tint())
+                            .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        kind.Icon(kind.ink(), 16.dp)
+                        Spacer(modifier = Modifier.width(AppTheme.Space8))
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = kind.ink(),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+        Text(
+            text = "Per tutto il resto risponde con le sue conoscenze.",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Normal,
+            color = AppTheme.TextFaint,
+            textAlign = TextAlign.Center
+        )
     }
 }
 
-private class SuggestionTopic(val kind: AssistantSourceKind)
-
-/** L'argomento di una domanda suggerita, dalle parole che contiene: serve solo a scegliere l'icona. */
-private fun suggestionTopic(question: String): SuggestionTopic {
-    val q = question.lowercase()
-    return SuggestionTopic(
-        when {
-            "circolar" in q -> AssistantSourceKind.CIRCULAR
-            "banco" in q || "seduto" in q -> AssistantSourceKind.SEAT_MAP
-            "bacheca" in q || "propost" in q -> AssistantSourceKind.BOARD
-            "sondagg" in q -> AssistantSourceKind.POLL
-            else -> AssistantSourceKind.CALENDAR
-        }
+@Composable
+private fun WelcomeLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = AppTheme.TextFaint,
+        modifier = Modifier.fillMaxWidth().padding(start = AppTheme.Space4, bottom = AppTheme.Space8)
     )
 }
+
+private val WelcomeSources = listOf(
+    AssistantSourceKind.CIRCULAR to "Circolari",
+    AssistantSourceKind.CALENDAR to "Calendario",
+    AssistantSourceKind.BOARD to "Bacheca",
+    AssistantSourceKind.POLL to "Sondaggi",
+    AssistantSourceKind.SEAT_MAP to "Mappa posti",
+    AssistantSourceKind.CLASS to "La tua classe"
+)
+
+/** Esempi di domande nel campo di testo, finche' la chat e' vuota. */
+private val ExamplePlaceholders = listOf(
+    "Quando è la prossima verifica?",
+    "Cosa c'è da pagare questo mese?",
+    "Riassumi l'ultima circolare",
+    "Dove sono seduto in aula?",
+    "Ci sono sondaggi ancora aperti?"
+)
 
 /** Angoli dei fumetti: tondi, con l'angolo verso chi parla appena accennato. */
 private val BubbleRadius = 20.dp
