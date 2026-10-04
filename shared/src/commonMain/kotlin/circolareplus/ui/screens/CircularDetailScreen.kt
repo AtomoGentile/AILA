@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,7 +18,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import circolareplus.design.AilaIconButton
 import circolareplus.design.AilaAssistantBadge
 import circolareplus.design.AilaBackBar
@@ -199,22 +199,19 @@ fun CircularDetailScreen(
                         Spacer(modifier = Modifier.width(AppTheme.Space8))
                         Text(
                             text = badgeText,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.labelLarge,
                             color = badgeInk
                         )
                     }
-                    Text(text = circular.publishDate, fontSize = 13.sp, color = AppTheme.TextMuted)
+                    Text(text = circular.publishDate, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
                 }
             }
 
             item {
                 Text(
                     text = circular.title,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge,
                     color = AppTheme.TextDark,
-                    lineHeight = 26.sp,
                     modifier = Modifier.ailaAppear(1)
                 )
             }
@@ -259,7 +256,7 @@ fun CircularDetailScreen(
                                         analysisOnDevice -> "Analisi del documento in corso sul dispositivo…"
                                         else -> "Analisi del documento in corso con Gemini…"
                                     },
-                                    fontSize = 13.sp,
+                                    style = MaterialTheme.typography.bodyMedium,
                                     color = AppTheme.TextMuted
                                 )
                             }
@@ -274,9 +271,8 @@ fun CircularDetailScreen(
                                     } else {
                                         "Nessuna analisi disponibile per questa circolare."
                                     },
-                                fontSize = 13.sp,
-                                color = AppTheme.TextMuted,
-                                lineHeight = 19.sp
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = AppTheme.TextMuted
                             )
                             // Questa analisi può arrivare dalla cache condivisa sul server, cioè
                             // prodotta da un altro utente: mostrare il modello che l'ha fatta
@@ -286,7 +282,8 @@ fun CircularDetailScreen(
                                 Spacer(modifier = Modifier.height(AppTheme.Space4))
                                 Text(
                                     text = "Analisi a cura di: ${it.modelLabel}",
-                                    fontSize = 11.sp,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Normal,
                                     color = AppTheme.TextMuted
                                 )
                             }
@@ -306,8 +303,7 @@ fun CircularDetailScreen(
                                     deadlines.size == 1 -> "Ho trovato una scadenza"
                                     else -> "Ho trovato ${deadlines.size} scadenze"
                                 },
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelLarge,
                                 color = AppTheme.TextDark
                             )
                             Spacer(modifier = Modifier.height(AppTheme.Space8))
@@ -345,8 +341,7 @@ fun CircularDetailScreen(
                 item {
                     Text(
                         text = if (externalAttachments.size == 1) "Allegato" else "Allegati",
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium,
                         color = AppTheme.TextDark,
                         modifier = Modifier.padding(top = AppTheme.Space8)
                     )
@@ -368,8 +363,7 @@ fun CircularDetailScreen(
                             Spacer(modifier = Modifier.width(AppTheme.Space12))
                             Text(
                                 text = attachment.label,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelLarge,
                                 color = AppTheme.TextDark,
                                 modifier = Modifier.weight(1f)
                             )
@@ -391,14 +385,14 @@ fun CircularDetailScreen(
                 ) {
                     Text(
                         text = "Documento",
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium,
                         color = AppTheme.TextDark
                     )
                     if (totalPages > 0) {
                         Text(
                             text = if (totalPages == 1) "1 pagina" else "$totalPages pagine",
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Normal,
                             color = AppTheme.TextFaint
                         )
                     }
@@ -416,7 +410,7 @@ fun CircularDetailScreen(
                             Spacer(modifier = Modifier.height(AppTheme.Space16))
                             Text(
                                 text = "Preparazione del documento…",
-                                fontSize = 13.sp,
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = AppTheme.TextMuted
                             )
                         }
@@ -437,8 +431,7 @@ fun CircularDetailScreen(
                                 Spacer(modifier = Modifier.width(AppTheme.Space4))
                                 Text(
                                     text = "Allegato: ${section.label}",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.labelLarge,
                                     color = AppTheme.TextMuted
                                 )
                             }
@@ -462,7 +455,8 @@ fun CircularDetailScreen(
                                 )
                                 Text(
                                     text = "Pagina ${index + 1} di ${section.pages.size}",
-                                    fontSize = 11.sp,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Normal,
                                     color = AppTheme.TextFaint,
                                     modifier = Modifier
                                         .align(Alignment.CenterHorizontally)
@@ -486,16 +480,14 @@ fun CircularDetailScreen(
                             Spacer(modifier = Modifier.height(AppTheme.Space12))
                             Text(
                                 text = "Anteprima non disponibile",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium,
                                 color = AppTheme.TextDark
                             )
                             Spacer(modifier = Modifier.height(AppTheme.Space4))
                             Text(
                                 text = pdfError ?: "Apri il documento nel visualizzatore del telefono.",
-                                fontSize = 13.sp,
-                                color = AppTheme.TextMuted,
-                                lineHeight = 18.sp
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = AppTheme.TextMuted
                             )
                             Spacer(modifier = Modifier.height(AppTheme.Space16))
                             AilaPrimaryButton(text = "Apri il PDF", onClick = onDownloadPdfClick)
@@ -581,10 +573,8 @@ private fun ProposedDeadlineRow(
     ) {
         Text(
             text = deadline.title,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            color = AppTheme.TextDark,
-            lineHeight = 18.sp
+            style = MaterialTheme.typography.labelLarge,
+            color = AppTheme.TextDark
         )
         Spacer(modifier = Modifier.height(AppTheme.Space4))
         Text(
@@ -594,24 +584,23 @@ private fun ProposedDeadlineRow(
                 append(" \u00B7 ")
                 append(readableCategory(deadline.category))
             },
-            fontSize = 11.sp,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Normal,
             color = AppTheme.TextMuted
         )
         Spacer(modifier = Modifier.height(AppTheme.Space8))
         if (outcome != null) {
             Text(
                 text = outcome,
-                fontSize = 11.sp,
-                color = AppTheme.TextMuted,
-                lineHeight = 15.sp
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Normal,
+                color = AppTheme.TextMuted
             )
         } else if (existingEvent != null) {
             Text(
                 text = "Gia' in calendario: ${existingEvent.title}",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = AppTheme.TintGreenInk,
-                lineHeight = 15.sp
+                style = MaterialTheme.typography.labelSmall,
+                color = AppTheme.TintGreenInk
             )
         } else {
             AilaSecondaryButton(

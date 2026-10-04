@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
@@ -25,6 +26,8 @@ import androidx.compose.ui.unit.sp
 import circolareplus.algorithms.DeskAssignment
 import circolareplus.design.AppTheme
 import circolareplus.design.ailaGlassSurface
+import circolareplus.design.ailaDeskLabel
+import circolareplus.design.ailaDeskBadge
 import circolareplus.domain.model.User
 
 /**
@@ -118,15 +121,13 @@ fun SeatMapDeskCard(
             ) {
                 Text(
                     text = "F${desk.row + 1}C${desk.column + 1}",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.ailaDeskLabel,
                     color = AppTheme.TextMuted
                 )
                 if (showThirdSeat) {
                     Text(
                         text = "TRIO",
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.ailaDeskBadge,
                         color = AppTheme.TintBlueInk,
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
@@ -176,8 +177,8 @@ private fun SeatRow(number: Int, name: String?, isFocused: Boolean) {
             Text(
                 text = number.toString(),
                 modifier = Modifier.padding(horizontal = 3.dp),
-                fontSize = if (expressive) 9.sp else 8.sp,
-                fontWeight = FontWeight.Bold,
+                // Prima 8sp in Glass e 9 in Material: ora 9 in entrambi, il cerchio cresce col testo.
+                style = MaterialTheme.typography.ailaDeskBadge,
                 color = when {
                     expressive && name != null -> Color.White
                     name == null -> AppTheme.TextFaint
@@ -188,7 +189,7 @@ private fun SeatRow(number: Int, name: String?, isFocused: Boolean) {
         Spacer(modifier = Modifier.width(5.dp))
         Text(
             text = name ?: "Vuoto",
-            fontSize = 12.sp,
+            style = MaterialTheme.typography.labelMedium,
             fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Normal,
             color = if (name == null) AppTheme.TextFaint else AppTheme.TextDark,
             maxLines = 1,

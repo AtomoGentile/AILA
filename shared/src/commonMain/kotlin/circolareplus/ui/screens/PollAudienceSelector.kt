@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -20,10 +21,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
 import circolareplus.data.AppContainer
 import circolareplus.design.AnimatedFilterChip
 import circolareplus.design.AppTheme
+import circolareplus.design.ailaTextTouchTarget
 import circolareplus.domain.model.User
 import kotlinx.coroutines.CancellationException
 
@@ -67,8 +68,7 @@ fun PollAudienceSelector(
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
             text = "A chi è rivolto",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelMedium,
             color = AppTheme.TextMuted,
             modifier = Modifier.padding(bottom = AppTheme.Space8)
         )
@@ -102,7 +102,8 @@ fun PollAudienceSelector(
                         1 -> "1 persona selezionata"
                         else -> "${selected.size} persone selezionate"
                     },
-                    fontSize = 11.sp,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Normal,
                     color = if (selected.isEmpty()) AppTheme.TintRedInk else AppTheme.TextFaint,
                     modifier = Modifier.weight(1f)
                 )
@@ -110,24 +111,24 @@ fun PollAudienceSelector(
                     val allSelected = selected.size >= candidates.size
                     Text(
                         text = if (allSelected) "Nessuno" else "Tutti",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelMedium,
                         color = AppTheme.PrimaryBlue,
                         modifier = Modifier
                             .clickable {
                                 onSelectionChange(if (allSelected) emptyList() else candidates.map { it.id })
                             }
-                            .padding(horizontal = AppTheme.Space4, vertical = AppTheme.Space4)
+                            .ailaTextTouchTarget()
+                            .padding(horizontal = AppTheme.Space4)
                     )
                 }
             }
             Spacer(modifier = Modifier.height(AppTheme.Space8))
             when {
-                isLoading -> Text("Carico l'elenco della classe...", fontSize = 12.sp, color = AppTheme.TextMuted)
-                error != null -> Text(error ?: "", fontSize = 12.sp, color = AppTheme.TintRedInk)
+                isLoading -> Text("Carico l'elenco della classe...", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+                error != null -> Text(error ?: "", style = MaterialTheme.typography.bodySmall, color = AppTheme.TintRedInk)
                 candidates.isEmpty() -> Text(
                     "Nessun compagno registrato ancora.",
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = AppTheme.TextMuted
                 )
                 else -> FlowRow(

@@ -16,9 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import circolareplus.design.AilaEmptyState
 import circolareplus.design.AilaAssistantBadge
 import circolareplus.design.AilaDot
@@ -59,7 +57,7 @@ fun CircularsScreen(
             value = searchQuery,
             onValueChange = { searchQuery = it },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Cerca per numero o titolo\u2026", fontSize = 14.sp) },
+            placeholder = { Text("Cerca per numero o titolo\u2026", style = MaterialTheme.typography.bodyLarge) },
             leadingIcon = {
                 AppIcons.Search(modifier = Modifier.size(18.dp), color = AppTheme.TextFaint)
             },
@@ -213,14 +211,13 @@ fun CircularListItem(
                     Spacer(modifier = Modifier.width(AppTheme.Space8))
                     Text(
                         text = badgeText,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelMedium,
                         color = badgeInk
                     )
                 }
                 Text(
                     text = circular.publishDate,
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = AppTheme.TextMuted
                 )
             }
@@ -229,8 +226,7 @@ fun CircularListItem(
 
             Text(
                 text = "Circolare n. ${circular.number} \u2014 ${circular.title}",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium,
                 color = AppTheme.TextDark
             )
 
@@ -242,9 +238,8 @@ fun CircularListItem(
                         Spacer(modifier = Modifier.height(AppTheme.Space8))
                         Text(
                             text = classification.personalSummary,
-                            fontSize = 13.sp,
-                            color = AppTheme.TextMuted,
-                            lineHeight = 18.sp
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = AppTheme.TextMuted
                         )
                     }
                 }

@@ -162,6 +162,19 @@ private fun ailaTypography() = Typography(
 )
 
 /**
+ * Eccezione alla scala: etichette dentro i banchi della mappa posti ("F1C2", "Banco F1C2").
+ * Il banco ha una larghezza fissa che dipende da quanti banchi ci sono per fila, quindi qui si
+ * resta sotto il minimo di 11sp della scala. È un'eccezione con un nome, invece di `fontSize`
+ * sparsi, così se un giorno i banchi si allargano basta cambiarla qui.
+ */
+val Typography.ailaDeskLabel: TextStyle
+    get() = labelSmall.copy(fontSize = 10.sp, lineHeight = 12.sp)
+
+/** Come [ailaDeskLabel], un gradino sotto: numero del posto e pastiglie ("TRIO", "Coppia vietata"). */
+val Typography.ailaDeskBadge: TextStyle
+    get() = labelSmall.copy(fontSize = 9.sp, lineHeight = 11.sp)
+
+/**
  * Avvolge l'intera app. Va applicato nei punti d'ingresso di piattaforma (MainActivity su
  * Android, MainViewController su iOS) e non dentro le singole schermate, così vale anche per
  * login, caricamento e onboarding.

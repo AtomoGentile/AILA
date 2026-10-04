@@ -17,7 +17,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import circolareplus.data.remote.dto.PollAssignmentDto
 import circolareplus.data.remote.dto.PollSummaryDto
 import circolareplus.design.AilaCard
@@ -110,8 +109,7 @@ fun PollHistoryScreen(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         poll.subject,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.titleSmall,
                                         color = AppTheme.TextDark,
                                         maxLines = 1
                                     )
@@ -163,17 +161,17 @@ fun PollHistoryScreen(
                             when {
                                 isLoadingResults -> Text(
                                     "Calcolo risultati…",
-                                    fontSize = 12.sp,
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = AppTheme.TextFaint
                                 )
                                 resultsError != null -> Text(
                                     resultsError,
-                                    fontSize = 12.sp,
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = AppTheme.TintRedInk
                                 )
                                 assignments.isEmpty() -> Text(
                                     "Nessuna assegnazione (nessun voto ricevuto ancora).",
-                                    fontSize = 12.sp,
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = AppTheme.TextFaint
                                 )
                                 else -> Column {
@@ -208,8 +206,7 @@ fun PollHistoryScreen(
 private fun StatusPill(text: String, tint: Color, ink: Color) {
     Text(
         text = text,
-        fontSize = 10.sp,
-        fontWeight = FontWeight.Bold,
+        style = MaterialTheme.typography.labelSmall,
         color = ink,
         modifier = Modifier
             // ButtonCornerRadius e' gia' una capsula (100dp): stessa forma dei pulsanti.
@@ -240,15 +237,14 @@ private fun AssignmentRow(assignment: PollAssignmentDto) {
         ) {
             Text(
                 text = initials.ifEmpty { "?" },
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelSmall,
                 color = AppTheme.TintVioletInk
             )
         }
         Spacer(modifier = Modifier.width(AppTheme.Space8))
         Text(
             text = name,
-            fontSize = 13.sp,
+            style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
             color = AppTheme.TextDark,
             modifier = Modifier.weight(1f),
@@ -288,8 +284,7 @@ private fun CalendarSyncAction(
             Spacer(modifier = Modifier.width(AppTheme.Space8))
             Text(
                 text = if (isLoading) "Aggiunta in corso…" else "Aggiungi tutte le date al calendario",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelMedium,
                 color = AppTheme.TintVioletInk,
                 modifier = Modifier.weight(1f)
             )
@@ -305,7 +300,7 @@ private fun CalendarSyncAction(
             Spacer(modifier = Modifier.height(AppTheme.Space8))
             Text(
                 text = message,
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = if (isError) AppTheme.TintRedInk else AppTheme.TintGreenInk
             )

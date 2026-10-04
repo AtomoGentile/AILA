@@ -1,7 +1,17 @@
 package circolareplus.design
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameMillis
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -308,28 +318,120 @@ fun AilaAssistantMark(
     brush: Brush = AilaAssistantBrush
 ) {
     Canvas(modifier = modifier.size(size)) {
-        val w = this.size.width
-        val h = this.size.height
-        val barWidth = w * 0.15f
-        val gap = w * 0.093f
-        val bars = AssistantBarHeights.size
-        // Il gruppo di barre sta al centro del riquadro: quello che resta diventa margine ai lati,
-        // cosi' il marchio resta centrato qualunque sia la misura richiesta.
-        val firstCenter = (w - (bars * barWidth + (bars - 1) * gap)) / 2f + barWidth / 2f
-        val cy = h * 0.5f
+        drawAssistantBars(brush) { index -> AssistantBarHeights[index] }
+    }
+}
 
-        AssistantBarHeights.forEachIndexed { index, heightFactor ->
-            val cx = firstCenter + index * (barWidth + gap)
-            // La linea e' piu' corta della barra di mezzo spessore per capo: con StrokeCap.Round
-            // sono i capi tondi a completare l'altezza voluta.
-            val half = (h * heightFactor - barWidth) / 2f
-            drawLine(
-                brush = brush,
-                start = Offset(cx, cy - half),
-                end = Offset(cx, cy + half),
-                strokeWidth = barWidth,
-                cap = StrokeCap.Round
-            )
+/**
+ * Le quattro barre del marchio, con l'altezza di ciascuna (in frazione del lato) data da
+ * [heightOf]. Una sola geometria per il marchio fermo e per l'onda animata, cosi' a riposo
+ * [AilaAssistantWave] e' identica ad [AilaAssistantMark].
+ */
+private fun DrawScope.drawAssistantBars(brush: Brush, alpha: Float = 1f, heightOf: (Int) -> Float) {
+    val w = size.width
+    val h = size.height
+    val barWidth = w * 0.15f
+    val gap = w * 0.093f
+    val bars = AssistantBarHeights.size
+    // Il gruppo di barre sta al centro del riquadro: quello che resta diventa margine ai lati,
+    // cosi' il marchio resta centrato qualunque sia la misura richiesta.
+    val firstCenter = (w - (bars * barWidth + (bars - 1) * gap)) / 2f + barWidth / 2f
+    val cy = h * 0.5f
+
+    for (index in 0 until bars) {
+        val cx = firstCenter + index * (barWidth + gap)
+        // La linea e' piu' corta della barra di mezzo spessore per capo: con StrokeCap.Round
+        // sono i capi tondi a completare l'altezza voluta. Mai negativa: una barra "a zero" e'
+        // un puntino, non sparisce.
+        val half = ((h * heightOf(index) - barWidth) / 2f).coerceAtLeast(0f)
+        drawLine(
+            brush = brush,
+            start = Offset(cx, cy - half),
+            end = Offset(cx, cy + half),
+            strokeWidth = barWidth,
+            cap = StrokeCap.Round,
+            alpha = alpha
+        )
+    }
+}
+
+/** Periodo dell'onda mentre AILA Assistant lavora: lento abbastanza da non sembrare un allarme. */
+private const val WAVE_PERIOD_MS = 1100L
+
+/**
+ * Il marchio di AILA Assistant che "parla": mentre [active] le barre salgono e scendono come
+ * l'onda di una voce, e quando [active] torna falso l'onda si calma con una molla e si posa sulle
+ * altezze del marchio fermo. Prende il posto dei tre puntini (Glass) e della forma che cambia
+ * (Material) nell'attesa della risposta: il segno dell'assistente diventa anche il suo stato.
+ *
+ * L'onda segue l'orologio dei fotogrammi, che e' lo stesso per tutta l'app: l'indicatore di attesa
+ * e l'icona della risposta che lo sostituisce sono due elementi diversi della lista, ma l'onda
+ * prosegue dall'uno all'altro senza ripartire da capo.
+ *
+ * Tutto si legge nel disegno ([Canvas]), quindi l'animazione non ricompone niente.
+ *
+ * Con "Riduci movimento" le barre restano ferme alle altezze del marchio e, solo mentre
+ * l'assistente lavora, pulsano piano in opacita'.
+ *
+ * @param intro all'ingresso le barre si alzano una dopo l'altra (schermata di benvenuto).
+ */
+@Composable
+fun AilaAssistantWave(
+    active: Boolean,
+    size: Dp = 24.dp,
+    modifier: Modifier = Modifier,
+    brush: Brush = AilaAssistantBrush,
+    intro: Boolean = false
+) {
+    val reduceMotion = AppTheme.reduceMotion
+    // 1 = onda piena, 0 = marchio fermo. Se nasce gia' attiva parte dall'onda, senza rincorsa.
+    val activity = remember { Animatable(if (active) 1f else 0f) }
+    val clock = remember { mutableLongStateOf(0L) }
+    LaunchedEffect(active) {
+        if (!active && activity.value == 0f) return@LaunchedEffect
+        // Modulo un multiplo del periodo: il conto resta piccolo (precisione dei float) e l'onda
+        // non fa salti quando il modulo riparte.
+        val ticker = launch {
+            while (true) withFrameMillis { clock.longValue = it % (WAVE_PERIOD_MS * 1000L) }
+        }
+        // Si accende con la molla della navigazione (niente rimbalzo), si posa con quella "viva":
+        // le barre oltrepassano di poco le altezze del marchio e ci tornano, come un respiro finale.
+        activity.animateTo(
+            if (active) 1f else 0f,
+            if (active) ailaNavigationSpring() else ailaSpatialSpring()
+        )
+        if (!active) ticker.cancel()
+    }
+
+    val doIntro = intro && !reduceMotion
+    val rises = remember { List(AssistantBarHeights.size) { Animatable(if (doIntro) 0f else 1f) } }
+    if (doIntro) {
+        LaunchedEffect(Unit) {
+            rises.forEachIndexed { index, rise ->
+                launch {
+                    delay(90L + index * 70L)
+                    rise.animateTo(1f, ailaSpatialSpring())
+                }
+            }
+        }
+    }
+
+    Canvas(modifier = modifier.size(size)) {
+        val act = activity.value
+        val phase = clock.longValue.toFloat() / WAVE_PERIOD_MS * 2f * PI.toFloat()
+        if (reduceMotion) {
+            val pulse = 0.5f + 0.5f * cos(phase * 0.6f)
+            drawAssistantBars(brush, alpha = 1f - act.coerceIn(0f, 1f) * 0.55f * pulse) { index ->
+                AssistantBarHeights[index] * rises[index].value
+            }
+        } else {
+            drawAssistantBars(brush) { index ->
+                // Due sinusoidi sfasate per barra: con una sola l'onda sembrava un metronomo.
+                val wave = 0.5f + 0.5f * (0.7f * sin(phase + index * 1.25f) + 0.3f * sin(2.1f * phase + index * 2.6f))
+                val target = 0.26f + 0.68f * wave
+                val rest = AssistantBarHeights[index]
+                (rest + (target - rest) * act) * rises[index].value
+            }
         }
     }
 }

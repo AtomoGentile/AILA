@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,7 +24,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.SolidColor
 import circolareplus.design.AilaAssistantMark
 import circolareplus.design.AilaBackBar
@@ -152,7 +152,7 @@ fun SearchScreen(
                     if (it.trim().length >= 2) onSubmitQuery(it)
                 },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Circolari, eventi, proposte…", fontSize = 14.sp) },
+                placeholder = { Text("Circolari, eventi, proposte…", style = MaterialTheme.typography.bodyLarge) },
                 leadingIcon = {
                     AppIcons.Search(modifier = Modifier.size(18.dp), color = AppTheme.TextFaint)
                 },
@@ -234,7 +234,7 @@ fun SearchScreen(
                 header = {
                     Text(
                         text = if (hits.size == 1) "1 risultato" else "${hits.size} risultati",
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = AppTheme.TextFaint
                     )
                 }
@@ -376,8 +376,7 @@ private fun AskAilaButton(query: String, onClick: () -> Unit) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = if (hasQuery) "Chiedi ad AILA Assistant: «$query»" else "Chiedi ad AILA Assistant",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleSmall,
                 color = Color.White,
                 maxLines = 1
             )
@@ -387,7 +386,8 @@ private fun AskAilaButton(query: String, onClick: () -> Unit) {
                 } else {
                     "Circolari, calendario, bacheca e altro"
                 },
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Normal,
                 color = AppTheme.OnGradientSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis

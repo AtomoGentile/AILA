@@ -437,6 +437,43 @@ fun Modifier.ailaSheetReveal(index: Int): Modifier {
     }
 }
 
+/**
+ * Un fumetto di chat appena scritto (la domanda all'Assistant): sale di qualche punto dal campo
+ * di testo e si allarga dall'angolo in basso dalla parte di chi parla ([fromEnd] = destra), come
+ * in Messaggi. Solo nel livello grafico: la lista lo misura subito alla sua altezza vera, quindi lo
+ * scorrimento in fondo non salta.
+ *
+ * [enabled] va deciso una volta sola, quando il messaggio nasce: un fumetto gia' visto non deve
+ * rientrare quando torna a schermo scorrendo. Con "Riduci movimento" solo dissolvenza.
+ */
+@Composable
+fun Modifier.ailaBubbleEnter(enabled: Boolean, fromEnd: Boolean): Modifier {
+    val reduce = AppTheme.reduceMotion
+    val progress = remember { Animatable(if (enabled) 0f else 1f) }
+    if (enabled) LaunchedEffect(Unit) { progress.animateTo(1f, ailaSpatialSpring()) }
+    if (!enabled) return this
+    return graphicsLayer {
+        val p = progress.value
+        alpha = (p * 2f).coerceIn(0f, 1f)
+        if (!reduce) {
+            translationY = (1f - p) * 28.dp.toPx()
+            val s = 0.88f + 0.12f * p
+            scaleX = s
+            scaleY = s
+            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(if (fromEnd) 1f else 0f, 1f)
+        }
+    }
+}
+
+/**
+ * Apertura di un contenuto che arriva dopo un'attesa (la risposta dell'Assistant): si allarga
+ * dall'alto con la molla "viva" mentre si dissolve. Con "Riduci movimento" solo dissolvenza breve.
+ */
+fun ailaRevealEnter(): EnterTransition =
+    if (AppTheme.reduceMotion) fadeIn(tween(durationMillis = REDUCED_FADE_MS))
+    else fadeIn(spring(stiffness = Spring.StiffnessMediumLow)) +
+        androidx.compose.animation.expandVertically(ailaSpatialSpring(), expandFrom = androidx.compose.ui.Alignment.Top)
+
 /** Si ricorda se il riscaldamento delle pagine e' gia' stato fatto in questo avvio dell'app. */
 private object AilaWarmUpMemory {
     var done = false

@@ -52,10 +52,13 @@ Fatto (un commit per schermata, compilato con `:shared:compileDebugKotlinAndroid
   displaySmall 34, headlineMedium 28 (26 Medium in Material), titleLarge 20, titleMedium 17,
   titleSmall/bodyLarge 15, bodyMedium/labelLarge 13, bodySmall/labelMedium 12, labelSmall 11.
   "body" normale, "title"/"label" in grassetto; interlinea propria; tracking 0.
-- Migrati: `AilaComponents`, `AnimatedFilterChip`, Sondaggi (8 misure → 4), Onboarding (9 → 4
-  più la scritta "AILA"), Impostazioni (4 → 3), Bacheca (7 → 4), `MainAppShell` (fogli e
-  dialoghi con al massimo 4 misure ciascuno). `fontSize` nell'app: da 349 a 198.
-- Eccezione documentata: etichette della tab bar a 10sp (come iOS), in `GlassTabBarContent`.
+- Migrate **tutte** le schermate: nessun `fontSize = N.sp` scritto a mano (erano 349). Al
+  massimo 4 misure per schermata; i dialoghi hanno titolo `titleLarge` e testo 13/15 ovunque.
+  Le schermate che ne avevano di più: Sondaggi 8 → 4, Onboarding 9 → 4 (più la scritta "AILA"),
+  Dettaglio circolare 7 → 4, Profilo 7 → 4, Assistant 7 → 4, Bacheca 7 → 4.
+- Eccezioni documentate: etichette della tab bar a 10sp (come iOS, in `GlassTabBarContent`);
+  dentro i banchi della mappa posti `ailaDeskLabel` (10sp) e `ailaDeskBadge` (9sp), in
+  `AilaTheme.kt`.
 
 Da sapere (cambia l'aspetto anche dove le misure sono rimaste uguali):
 - Prima ogni `Text` ereditava `bodyLarge` di Material: **24sp di interlinea** anche per un testo
@@ -69,13 +72,24 @@ Da sapere (cambia l'aspetto anche dove le misure sono rimaste uguali):
   card, tab bar, foglio "Nuovo evento", passo AI dell'Onboarding.
 
 Resta:
-- Schermate ancora con `fontSize` a mano: ClassRoster (24), CircularDetail (20), Auth (18),
-  AssistantChat (18), Profile (15), SeatMap (13), RankingPolls (12), SeatMapProposals (10),
-  PollHistory (9), SocialPreferencesVoting (8) e altre 11 con meno di 7. Stesso metodo: misura
-  e peso → stile, al massimo 4 misure, testi cliccabili con `ailaTextTouchTarget()`.
-- Nella mappa posti le etichette dei banchi (9–10sp) possono restare piccole: spazio fisso.
-- Link "azione" di `AilaSectionTitle` e "−/+" della capienza negli slot dei sondaggi
-  (26dp) sotto i 44dp di tocco: lo erano già, allargarli cambia l'impaginazione delle sezioni.
+- Link "azione" di `AilaSectionTitle` e "−/+" della capienza negli slot dei sondaggi (26dp)
+  sotto i 44dp di tocco: lo erano già prima, e allargarli cambia l'impaginazione di tutte le
+  sezioni. Da decidere guardandoli su un telefono.
+- Nuove schermate: `style = MaterialTheme.typography.X`, mai `fontSize`; testi cliccabili con
+  `ailaTextTouchTarget()`.
+
+## 4/10: animazioni di AILA Assistant
+
+- `AilaAssistantWave` (`design/AilaLogo.kt`): il marchio a quattro barre che si muove come
+  un'onda vocale mentre l'Assistant lavora e si posa con una molla sul marchio fermo. È
+  l'indicatore di attesa della chat (al posto di puntini/forma che cambia) e del foglio
+  "Nuovo evento > AILA Assistant"; la risposta nasce dalla stessa onda che si calma.
+- Chat: domanda che sale dal campo di testo (`ailaBubbleEnter`), risposta che si apre
+  (`ailaRevealEnter`) seguita da fonti e modello, barre del benvenuto che si alzano, pulsante
+  Invia che si accende in dissolvenza con un "pop", storico con righe che scorrono al loro posto.
+- "Riduci movimento": solo dissolvenze; l'onda resta ferma e pulsa in opacità mentre aspetta.
+- **Non visto a schermo** (niente emulatore qui): da provare in Glass e Material, con e senza
+  "Riduci movimento", e aprendo una conversazione dallo storico (non deve animare i vecchi messaggi).
 
 ## 3/10: obiettivo "app perfetta" — secondo giro (sicurezza, coerenza, design, con subagenti)
 
