@@ -5,6 +5,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.Brush
+import circolareplus.design.AilaAssistantTeal
+import circolareplus.design.AilaAssistantViolet
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
@@ -141,25 +146,15 @@ fun AssistantChatScreen(
             .fillMaxSize()
             .background(AppTheme.BackgroundLight)
     ) {
-        AilaBackBar(
-            title = "AILA Assistant",
+        AssistantHeader(
+            isThinking = isThinking,
+            hasMessages = messages.isNotEmpty(),
+            statusLabel = messages.lastOrNull { it.author != AssistantAuthor.USER && !it.isError }?.modelLabel,
             onBackClick = onBackClick,
-            action = {
-                Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
-                    // Lo storico resta raggiungibile anche a chat vuota: e' proprio quando non
-                    // c'e' niente a schermo che si va a cercare la conversazione di ieri.
-                    if (conversations.isNotEmpty()) {
-                        AilaIconButton(contentDescription = "Cronologia chat", onClick = { isHistoryOpen = true }) { tint ->
-                            AppIcons.History(modifier = Modifier.size(20.dp), color = tint)
-                        }
-                    }
-                    if (messages.isNotEmpty()) {
-                        AilaIconButton(contentDescription = "Nuova chat", onClick = onClearChat) { tint ->
-                            AppIcons.NewChat(modifier = Modifier.size(20.dp), color = tint)
-                        }
-                    }
-                }
-            }
+            // Lo storico resta raggiungibile anche a chat vuota: e' proprio quando non c'e'
+            // niente a schermo che si va a cercare la conversazione di ieri.
+            onHistoryClick = if (conversations.isNotEmpty()) ({ isHistoryOpen = true }) else null,
+            onNewChatClick = if (messages.isNotEmpty()) onClearChat else null
         )
 
         LazyColumn(
@@ -168,7 +163,8 @@ fun AssistantChatScreen(
                 .weight(1f)
                 .fillMaxWidth(),
             contentPadding = PaddingValues(AppTheme.Space16),
-            verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)
+            // Material: le risposte sono testo libero, serve piu' aria fra un turno e l'altro.
+            verticalArrangement = Arrangement.spacedBy(if (AppTheme.isGlass) AppTheme.Space12 else AppTheme.Space20)
         ) {
             if (messages.isEmpty() && !isThinking) {
                 item { AssistantWelcome(conversations = conversations, onOpenConversation = onOpenConversation) }
@@ -289,6 +285,7 @@ fun AssistantChatScreen(
                 onOpenConversation(conversation)
             },
             onDelete = onDeleteConversation,
+            onNewChat = if (messages.isNotEmpty()) ({ isHistoryOpen = false; onClearChat() }) else null,
             onDismiss = { isHistoryOpen = false }
         )
     }
@@ -346,8 +343,12 @@ private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
 }
 
 /**
- * Lo storico delle conversazioni: titolo (la prima domanda), quando, quanti messaggi, e il
- * cestino per buttarne una.
+ * Lo storico delle conversazioni: raggruppate per quanto sono recenti, con la prima domanda come
+ * titolo, un'anteprima dell'ultima risposta e il cestino per buttarne una. Da sei in su si puo'
+ * cercare.
+ *
+ * Material: righe "a gruppo" come le liste di Material 3 Expressive (angoli grandi solo in cima e
+ * in fondo al gruppo, quasi squadrati in mezzo). Glass: righe di vetro separate e tonde.
  *
  * Le conversazioni arrivano dal dispositivo, non dal server — vedi
  * [circolareplus.data.local.LocalSettingsManager.listAssistantConversations].
@@ -359,9 +360,30 @@ private fun AssistantHistorySheet(
     canOpen: Boolean,
     onPick: (AssistantConversation) -> Unit,
     onDelete: (String) -> Unit,
+    onNewChat: (() -> Unit)?,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var query by remember { mutableStateOf("") }
+    val trimmed = query.trim()
+    val groups = remember(conversations, trimmed) {
+        val now = circolareplus.platform.currentTimeMillis()
+        conversations
+            .filter { c ->
+                trimmed.isEmpty() || c.title.contains(trimmed, ignoreCase = true) ||
+                    c.messages.any { it.text.contains(trimmed, ignoreCase = true) }
+            }
+            .sortedByDescending { it.updatedAtMillis }
+            .groupBy { c ->
+                val hours = (now - c.updatedAtMillis).coerceAtLeast(0) / (60L * 60 * 1000)
+                when {
+                    hours < 24 -> "Ultime 24 ore"
+                    hours < 24 * 7 -> "Questa settimana"
+                    else -> "Prima"
+                }
+            }
+            .toList()
+    }
 
     circolareplus.design.AilaBottomSheet(
         onDismissRequest = onDismiss,
@@ -373,96 +395,180 @@ private fun AssistantHistorySheet(
                 .padding(horizontal = AppTheme.Space20)
                 .padding(bottom = AppTheme.Space32)
         ) {
-            Text(
-                text = "Le tue conversazioni",
-                style = MaterialTheme.typography.titleLarge,
-                color = AppTheme.TextDark
-            )
-            Spacer(modifier = Modifier.height(AppTheme.Space4))
-            Text(
-                text = "Restano su questo telefono: non passano dal server della classe.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = AppTheme.TextMuted
-            )
-            Spacer(modifier = Modifier.height(AppTheme.Space16))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Conversazioni",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = AppTheme.TextDark
+                    )
+                    Spacer(modifier = Modifier.height(AppTheme.Space4))
+                    Text(
+                        text = "${conversations.size} su questo telefono, non passano dal server della classe.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AppTheme.TextMuted
+                    )
+                }
+                if (onNewChat != null) {
+                    Spacer(modifier = Modifier.width(AppTheme.Space12))
+                    circolareplus.design.AilaPrimaryButton(
+                        text = "Nuova",
+                        onClick = onNewChat,
+                        compact = true,
+                        icon = { color -> AppIcons.NewChat(modifier = Modifier.size(16.dp), color = color) }
+                    )
+                }
+            }
+            if (conversations.size >= 6) {
+                Spacer(modifier = Modifier.height(AppTheme.Space16))
+                circolareplus.design.AilaPillTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = "Cerca nelle conversazioni",
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    leadingIcon = { AppIcons.Search(modifier = Modifier.size(18.dp), color = AppTheme.TextFaint) }
+                )
+            }
+            Spacer(modifier = Modifier.height(AppTheme.Space8))
+
+            if (groups.isEmpty()) {
+                Text(
+                    text = "Nessuna conversazione contiene \"$trimmed\".",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AppTheme.TextMuted,
+                    modifier = Modifier.padding(vertical = AppTheme.Space24)
+                )
+            }
 
             // Il foglio non deve crescere oltre lo schermo quando le conversazioni sono venti:
             // scorre da solo, con l'altezza limitata.
-            LazyColumn(
-                modifier = Modifier.heightIn(max = 380.dp),
-                verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
-            ) {
-                items(conversations, key = { it.id }) { conversation ->
-                    Row(
-                        modifier = Modifier
-                            // Eliminando una conversazione le altre scorrono al loro posto invece
-                            // di saltare, e quella eliminata svanisce.
-                            .animateItem(
+            LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
+                groups.forEach { (label, group) ->
+                    item(key = "header-$label") {
+                        Text(
+                            text = label.uppercase(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = AppTheme.TextFaint,
+                            modifier = Modifier.padding(top = AppTheme.Space12, bottom = AppTheme.Space8, start = AppTheme.Space4)
+                        )
+                    }
+                    itemsIndexed(group, key = { _, c -> c.id }) { index, conversation ->
+                        ConversationRow(
+                            conversation = conversation,
+                            position = when {
+                                group.size == 1 -> RowPosition.Single
+                                index == 0 -> RowPosition.First
+                                index == group.lastIndex -> RowPosition.Last
+                                else -> RowPosition.Middle
+                            },
+                            canOpen = canOpen,
+                            onPick = onPick,
+                            onDelete = onDelete,
+                            modifier = Modifier.animateItem(
                                 fadeInSpec = null,
                                 placementSpec = ailaNavigationSpring(),
                                 fadeOutSpec = ailaNavigationSpring()
                             )
-                            .fillMaxWidth()
-                            // Glass: le righe piene dei gruppi di iOS sul foglio (di vetro quasi
-                            // invisibile non si leggevano). Material: il tono "container" sopra
-                            // il foglio pieno (CardSurface in scuro e' uguale al foglio).
-                            // Glass: righe di vetro come il resto (dietro l'app e' sfocata, vedi
-                            // AilaSheetBackdrop). Material: il tono "container" sopra il foglio.
-                            .then(
-                                if (AppTheme.isGlass) Modifier.ailaGlassSurface(RoundedCornerShape(AppTheme.SmallElementRadius))
-                                else Modifier.clip(RoundedCornerShape(AppTheme.SmallElementRadius)).background(AppTheme.TrackFill)
-                            )
-                            .then(
-                                if (canOpen) {
-                                    Modifier.ailaPressable(pressedScale = 0.98f) { onPick(conversation) }
-                                } else {
-                                    Modifier.alpha(0.5f)
-                                }
-                            )
-                            // Margini piu' stretti a destra e in verticale: il cestino da 44dp ha gia'
-                            // il suo spazio intorno all'icona, e la riga resta alta come prima.
-                            .padding(start = AppTheme.Space12, end = AppTheme.Space4, top = AppTheme.Space8, bottom = AppTheme.Space8),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        AilaAssistantMark(size = 18.dp)
-                        Spacer(modifier = Modifier.width(AppTheme.Space12))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = conversation.title,
-                                style = MaterialTheme.typography.labelLarge,
-                                color = AppTheme.TextDark,
-                                maxLines = 2
-                            )
-                            Spacer(modifier = Modifier.height(AppTheme.Space4))
-                            Text(
-                                text = "${conversation.messages.size} messaggi \u2022 " +
-                                    relativeTimeLabel(conversation.updatedAtMillis),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Normal,
-                                color = AppTheme.TextFaint
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(AppTheme.Space8))
-                        Box(
-                            modifier = Modifier
-                                // 44dp di tocco (prima 28): il cestino sta accanto alla riga che
-                                // apre la conversazione, mancarlo voleva dire aprirla.
-                                .size(44.dp)
-                                .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                                .ailaPressable(pressedScale = 0.9f) { onDelete(conversation.id) }
-                                // 8 e non 6: sta sulla griglia e allarga un poco l'area di tocco
-                                // del cestino, che era piccola.
-                                .padding(AppTheme.Space8)
-                                .semantics { contentDescription = "Elimina conversazione" },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            AppIcons.Trash(modifier = Modifier.size(16.dp), color = AppTheme.TextFaint)
-                        }
+                        )
                     }
                 }
             }
         }
     }
+}
+
+private enum class RowPosition { Single, First, Middle, Last }
+
+@Composable
+private fun ConversationRow(
+    conversation: AssistantConversation,
+    position: RowPosition,
+    canOpen: Boolean,
+    onPick: (AssistantConversation) -> Unit,
+    onDelete: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val glass = AppTheme.isGlass
+    val big = AppTheme.CardCornerRadius
+    val small = 6.dp
+    val shape = if (glass) RoundedCornerShape(AppTheme.CardCornerRadius) else when (position) {
+        RowPosition.Single -> RoundedCornerShape(big)
+        RowPosition.First -> RoundedCornerShape(topStart = big, topEnd = big, bottomStart = small, bottomEnd = small)
+        RowPosition.Middle -> RoundedCornerShape(small)
+        RowPosition.Last -> RoundedCornerShape(topStart = small, topEnd = small, bottomStart = big, bottomEnd = big)
+    }
+    val preview = remember(conversation) { conversationPreview(conversation) }
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            // Glass: righe di vetro separate (dietro l'app e' sfocata, vedi AilaSheetBackdrop).
+            // Material: gruppo di righe tonali, separate da un filo di fondo.
+            .padding(bottom = if (glass) AppTheme.Space8 else 2.dp)
+            .then(
+                if (glass) Modifier.ailaGlassSurface(shape)
+                else Modifier.clip(shape).background(AppTheme.TrackFill)
+            )
+            .then(
+                if (canOpen) Modifier.ailaPressable(pressedScale = 0.98f) { onPick(conversation) }
+                else Modifier.alpha(0.5f)
+            )
+            .padding(start = AppTheme.Space12, end = AppTheme.Space4, top = AppTheme.Space12, bottom = AppTheme.Space12),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        circolareplus.design.AilaIconTile(tint = AppTheme.TintBlue, size = 44.dp) {
+            AilaAssistantMark(size = 22.dp)
+        }
+        Spacer(modifier = Modifier.width(AppTheme.Space12))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = conversation.title,
+                style = MaterialTheme.typography.titleSmall,
+                color = AppTheme.TextDark,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (preview.isNotEmpty()) {
+                Text(
+                    text = preview,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AppTheme.TextMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.height(AppTheme.Space4))
+            Text(
+                text = "${relativeTimeLabel(conversation.updatedAtMillis)} \u2022 ${conversation.messages.size} messaggi",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Normal,
+                color = AppTheme.TextFaint
+            )
+        }
+        Box(
+            modifier = Modifier
+                // 44dp di tocco: il cestino sta accanto alla riga che apre la conversazione,
+                // mancarlo voleva dire aprirla.
+                .size(44.dp)
+                .clip(CircleShape)
+                .ailaPressable(pressedScale = 0.9f) { onDelete(conversation.id) }
+                .padding(AppTheme.Space12)
+                .semantics { contentDescription = "Elimina conversazione" },
+            contentAlignment = Alignment.Center
+        ) {
+            AppIcons.Trash(modifier = Modifier.size(18.dp), color = AppTheme.TextFaint)
+        }
+    }
+}
+
+/** La prima riga dell'ultima risposta, senza i simboli del markdown: e' l'anteprima della riga. */
+private fun conversationPreview(conversation: AssistantConversation): String {
+    val answer = conversation.messages.lastOrNull { it.author != AssistantAuthor.USER && !it.isError } ?: return ""
+    return answer.text.lines()
+        .map { it.trim().removePrefix("- ").removePrefix("* ").replace("**", "") }
+        .firstOrNull { it.isNotEmpty() }
+        .orEmpty()
+        .take(90)
 }
 
 /** "adesso", "X min fa", "X h fa", "X g fa": come nello storico notifiche, senza librerie data/ora. */
@@ -617,9 +723,86 @@ private val ExamplePlaceholders = listOf(
     "Ci sono sondaggi ancora aperti?"
 )
 
+/**
+ * Intestazione della chat: indietro, il marchio (che "parla" mentre l'Assistant lavora), nome e una
+ * riga di stato — "Sto cercando…" in attesa, altrimenti il modello che ha risposto — e le azioni.
+ * Il marchio compare con la prima domanda: a chat vuota c'e' gia' quello grande del benvenuto.
+ */
+@Composable
+private fun AssistantHeader(
+    isThinking: Boolean,
+    hasMessages: Boolean,
+    statusLabel: String?,
+    onBackClick: () -> Unit,
+    onHistoryClick: (() -> Unit)?,
+    onNewChatClick: (() -> Unit)?
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = AppTheme.Space12, end = AppTheme.Space16, top = AppTheme.Space20, bottom = AppTheme.Space12),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AilaIconButton(contentDescription = "Indietro", onClick = onBackClick) { tint ->
+            AppIcons.ChevronLeft(modifier = Modifier.size(19.dp), color = tint)
+        }
+        Spacer(modifier = Modifier.width(AppTheme.Space12))
+        androidx.compose.animation.AnimatedVisibility(
+            visible = hasMessages || isThinking,
+            enter = androidx.compose.animation.fadeIn(ailaFadeSpec()) +
+                androidx.compose.animation.expandHorizontally(ailaSpatialSpring())
+        ) {
+            Row {
+                AilaAssistantWave(active = isThinking, size = 30.dp)
+                Spacer(modifier = Modifier.width(AppTheme.Space12))
+            }
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "AILA Assistant",
+                style = MaterialTheme.typography.titleLarge,
+                color = AppTheme.TextDark,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Crossfade(
+                targetState = when {
+                    isThinking -> "Sto cercando…"
+                    hasMessages && statusLabel != null -> statusLabel
+                    else -> "Circolari, calendario, bacheca e altro"
+                },
+                animationSpec = ailaFadeSpec(),
+                label = "assistantStatus"
+            ) { status ->
+                Text(
+                    text = status,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Normal,
+                    color = if (isThinking) AppTheme.PrimaryBlue else AppTheme.TextFaint,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(AppTheme.Space8))
+        Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+            if (onHistoryClick != null) {
+                AilaIconButton(contentDescription = "Cronologia chat", onClick = onHistoryClick) { tint ->
+                    AppIcons.History(modifier = Modifier.size(20.dp), color = tint)
+                }
+            }
+            if (onNewChatClick != null) {
+                AilaIconButton(contentDescription = "Nuova chat", onClick = onNewChatClick) { tint ->
+                    AppIcons.NewChat(modifier = Modifier.size(20.dp), color = tint)
+                }
+            }
+        }
+    }
+}
+
 /** Angoli dei fumetti: tondi, con l'angolo verso chi parla appena accennato. */
-private val BubbleRadius = 20.dp
-private val BubbleTail get() = if (AppTheme.isGlass) 6.dp else 4.dp
+private val BubbleRadius get() = if (AppTheme.isGlass) 24.dp else 28.dp
+private val BubbleTail get() = if (AppTheme.isGlass) 6.dp else 6.dp
 
 @Composable
 private fun UserBubble(text: String, animateSend: Boolean = false, onShown: () -> Unit = {}) {
@@ -641,11 +824,15 @@ private fun UserBubble(text: String, animateSend: Boolean = false, onShown: () -
                         bottomEnd = BubbleTail
                     )
                 )
-                // Glass: blu pieno come i fumetti di Messaggi. Material: "primary container",
-                // tonale, come le chat di Android (il blu pieno e' riservato al pulsante di invio).
+                // Glass: blu col gradiente dei pulsanti e un riflesso chiaro in alto (vetro
+                // colorato). Material: "primary container", tonale; il blu pieno e' del pulsante
+                // di invio.
                 .then(
-                    if (AppTheme.isGlass) Modifier.background(AppTheme.PrimaryGradient)
-                    else Modifier.background(AppTheme.TintBlue)
+                    if (AppTheme.isGlass) {
+                        Modifier
+                            .background(AppTheme.PrimaryGradient)
+                            .background(Brush.verticalGradient(0f to Color.White.copy(alpha = 0.18f), 0.5f to Color.Transparent))
+                    } else Modifier.background(AppTheme.TintBlue)
                 )
                 .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12)
         ) {
@@ -666,8 +853,8 @@ private fun AssistantBubble(
     onArrived: () -> Unit = {}
 ) {
     // Arrivo: l'icona parte come onda in movimento, la stessa dell'attesa (ThinkingBubble), e si
-    // calma fino al marchio fermo mentre il fumetto con la risposta si apre sotto. Prima l'icona
-    // sostituiva l'indicatore con uno scambio di forme; ora e' un solo segno che smette di parlare.
+    // calma fino al marchio fermo mentre la risposta si apre sotto. E' un solo segno che smette
+    // di parlare, in entrambi gli stili.
     val arriving = remember(message.id) { animateArrival }
     var revealed by remember(message.id) { mutableStateOf(!arriving) }
     if (arriving) {
@@ -679,65 +866,121 @@ private fun AssistantBubble(
             onArrived()
         }
     }
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        AilaAssistantWave(
-            active = !revealed,
-            size = 26.dp,
-            modifier = Modifier.padding(top = 4.dp)
-        )
-        Spacer(modifier = Modifier.width(AppTheme.Space8))
-        androidx.compose.animation.AnimatedVisibility(
-            visible = revealed,
-            enter = ailaRevealEnter(),
-            modifier = Modifier.weight(1f)
-        ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Box(
-                modifier = Modifier
-                    .chatSurface(
-                        RoundedCornerShape(
-                            topStart = BubbleTail,
-                            topEnd = BubbleRadius,
-                            bottomStart = BubbleRadius,
-                            bottomEnd = BubbleRadius
-                        )
-                    )
-                    .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12)
+    if (AppTheme.isGlass) {
+        // Liquid Glass: marchio accanto e risposta in una lastra di vetro, col filo di luce del
+        // marchio (viola in alto a sinistra, verde acqua in basso a destra) sul bordo.
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+            AilaAssistantWave(active = !revealed, size = 26.dp, modifier = Modifier.padding(top = 4.dp))
+            Spacer(modifier = Modifier.width(AppTheme.Space8))
+            androidx.compose.animation.AnimatedVisibility(
+                visible = revealed,
+                enter = ailaRevealEnter(),
+                modifier = Modifier.weight(1f)
             ) {
-                Text(
-                    text = formatAssistantText(message.text),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = AppTheme.TextDark
-                )
-            }
-
-            if (message.sources.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(AppTheme.Space8))
-                Row(
-                    modifier = Modifier
-                        // Le fonti salgono subito dopo il fumetto: prima la risposta, poi da dove
-                        // viene. Solo all'arrivo, non riaprendo una conversazione.
-                        .then(if (arriving) Modifier.ailaSheetReveal(4) else Modifier)
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
-                ) {
-                    message.sources.forEach { source ->
-                        SourceChip(source = source, onClick = { onOpenSource(source) })
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    val shape = RoundedCornerShape(
+                        topStart = BubbleTail,
+                        topEnd = BubbleRadius,
+                        bottomStart = BubbleRadius,
+                        bottomEnd = BubbleRadius
+                    )
+                    Box(
+                        modifier = Modifier
+                            .chatSurface(shape)
+                            .border(
+                                1.dp,
+                                Brush.linearGradient(
+                                    0f to AilaAssistantViolet.copy(alpha = 0.55f),
+                                    0.45f to Color.Transparent,
+                                    0.75f to Color.Transparent,
+                                    1f to AilaAssistantTeal.copy(alpha = 0.45f)
+                                ),
+                                shape
+                            )
+                            .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12)
+                    ) {
+                        Text(
+                            text = formatAssistantText(message.text),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = AppTheme.TextDark
+                        )
                     }
+                    AnswerExtras(message, arriving, onOpenSource)
                 }
             }
-
-            message.modelLabel?.let { label ->
-                Spacer(modifier = Modifier.height(AppTheme.Space8))
+        }
+    } else {
+        // Material Expressive: la risposta non sta in un fumetto ma e' testo libero a tutta
+        // larghezza, come un documento (piu' leggibile quando e' lunga); solo la domanda
+        // dell'utente e' in un contenitore tonale. Il marchio sta sopra, con il nome.
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(modifier = Modifier.padding(top = AppTheme.Space4), verticalAlignment = Alignment.CenterVertically) {
+                AilaAssistantWave(active = !revealed, size = 22.dp)
+                Spacer(modifier = Modifier.width(AppTheme.Space8))
                 Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Normal,
-                    color = AppTheme.TextFaint,
-                    modifier = if (arriving) Modifier.ailaSheetReveal(6) else Modifier
+                    text = "AILA Assistant",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = AppTheme.TextMuted
                 )
             }
+            androidx.compose.animation.AnimatedVisibility(
+                visible = revealed,
+                enter = ailaRevealEnter(),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(top = AppTheme.Space8)) {
+                    Text(
+                        text = formatAssistantText(message.text),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = AppTheme.TextDark,
+                        modifier = Modifier.padding(horizontal = AppTheme.Space4)
+                    )
+                    AnswerExtras(message, arriving, onOpenSource)
+                }
+            }
         }
+    }
+}
+
+/** Sotto la risposta: da dove viene (le fonti) e quale modello l'ha scritta. */
+@Composable
+private fun AnswerExtras(
+    message: AssistantMessage,
+    arriving: Boolean,
+    onOpenSource: (AssistantSource) -> Unit
+) {
+    if (message.sources.isNotEmpty()) {
+        Spacer(modifier = Modifier.height(AppTheme.Space12))
+        Row(
+            modifier = Modifier
+                // Le fonti salgono subito dopo la risposta: prima la risposta, poi da dove viene.
+                // Solo all'arrivo, non riaprendo una conversazione.
+                .then(if (arriving) Modifier.ailaSheetReveal(4) else Modifier)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+        ) {
+            message.sources.forEach { source ->
+                SourceChip(source = source, onClick = { onOpenSource(source) })
+            }
+        }
+    }
+    message.modelLabel?.let { label ->
+        Spacer(modifier = Modifier.height(AppTheme.Space8))
+        Row(
+            modifier = (if (arriving) Modifier.ailaSheetReveal(6) else Modifier)
+                .padding(horizontal = AppTheme.Space4),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AppIcons.Sparkle(modifier = Modifier.size(11.dp), color = AppTheme.TextFaint)
+            Spacer(modifier = Modifier.width(AppTheme.Space4))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Normal,
+                color = AppTheme.TextFaint,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -775,23 +1018,24 @@ private fun AssistantErrorBubble(text: String) {
 }
 
 /**
- * Mentre il modello lavora: il marchio di AILA Assistant che "parla" (l'onda in movimento), al posto
- * dell'icona e senza fumetto. Quando arriva la risposta la stessa onda si calma nella sua icona (vedi
- * AssistantBubble). Prima erano tre puntini in Glass e la forma che cambia in Material: due segni
- * diversi per la stessa cosa, e nessuno dei due era l'Assistant.
+ * Mentre il modello lavora: il marchio di AILA Assistant che "parla" (l'onda in movimento). Quando
+ * arriva la risposta la stessa onda si calma nella sua icona (vedi AssistantBubble), alla stessa
+ * posizione: per questo qui la riga e' costruita come quella dell'intestazione della risposta.
  */
 @Composable
 private fun ThinkingBubble() {
+    val glass = AppTheme.isGlass
     Row(
-        modifier = Modifier.padding(top = 4.dp).semantics { contentDescription = "AILA Assistant sta cercando" },
+        modifier = Modifier
+            .padding(top = if (glass) 4.dp else AppTheme.Space4)
+            .semantics { contentDescription = "AILA Assistant sta cercando" },
         verticalAlignment = Alignment.CenterVertically
     ) {
-        AilaAssistantWave(active = true, size = 26.dp)
+        AilaAssistantWave(active = true, size = if (glass) 26.dp else 22.dp)
         Spacer(modifier = Modifier.width(AppTheme.Space8))
         // Una sola frase, onesta: non finge i passaggi (leggo le circolari, controllo il
-        // calendario…) che il modello fa tutti insieme. Solo respira, come l'onda.
-        // Glass: l'etichetta sta in una capsula di vetro, come un avviso di iOS; Material: solo
-        // testo accanto all'onda.
+        // calendario…) che il modello fa tutti insieme. Solo respira, come l'onda. Glass: in una
+        // capsula di vetro, come un avviso di iOS; Material: solo testo accanto all'onda.
         Text(
             text = "Sto cercando in AILA…",
             style = MaterialTheme.typography.labelLarge,
@@ -799,7 +1043,7 @@ private fun ThinkingBubble() {
             color = AppTheme.TextMuted,
             modifier = Modifier
                 .then(
-                    if (AppTheme.isGlass) {
+                    if (glass) {
                         Modifier
                             .ailaGlassSurface(RoundedCornerShape(AppTheme.ButtonCornerRadius))
                             .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space4)

@@ -65,6 +65,13 @@ Resta:
   "bagnata" con riflesso e bordo di vetro, capsule delle fonti in vetro con velo colorato, attesa
   in capsula di vetro, anello al focus da 1,5dp; **Material** = cookie tonale che ruota, aurora
   piena, capsule tonali, anello da 2dp.
+- Conversazione e cronologia (secondo giro, la prima versione toccava solo benvenuto e campo):
+  intestazione propria (`AssistantHeader`: marchio che parla, riga di stato "Sto cercando..." /
+  modello); **Material** = risposte come testo libero a tutta larghezza con marchio e nome sopra
+  (solo la domanda e' in bolla tonale), cronologia a gruppi come le liste M3 Expressive (angoli
+  grandi solo in cima/in fondo); **Glass** = risposta in lastra di vetro col filo viola/verde
+  acqua, domanda blu con riflesso, righe di vetro separate. Cronologia: gruppi per periodo,
+  anteprima dell'ultima risposta, ricerca da 6 conversazioni, pulsante "Nuova".
 - "Riduci movimento": cookie, riflesso, alone, aurora e pulsazione fermi.
 - **Non compilato ne' visto a schermo** (niente Android SDK qui): lo verifica la CI. Da guardare
   su un telefono in Glass e Material, chiaro/scuro, testo al 130% (le tre tessere della Ricerca
