@@ -12,6 +12,7 @@ import circolareplus.design.AilaAssistantTeal
 import circolareplus.design.AilaAssistantViolet
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -74,6 +75,7 @@ import circolareplus.design.ailaSelectionPop
 import circolareplus.design.ailaSheetReveal
 import circolareplus.design.ailaSpatialSpring
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.lerp
@@ -134,7 +136,13 @@ fun AssistantChatScreen(
     }
     newMessages.forEach { seenIds.add(it.id) }
 
-    LaunchedEffect(messages.size, isThinking) {
+    val showWelcome = messages.isEmpty() && !isThinking
+    // Mentre la conversazione svanisce (indietro alla schermata iniziale) i messaggi sono gia'
+    // stati svuotati: la lista che esce deve poter mostrare ancora gli ultimi che c'erano.
+    val lastShown = remember { arrayOf(emptyList<AssistantMessage>()) }
+    if (messages.isNotEmpty()) lastShown[0] = messages.toList()
+
+    LaunchedEffect(messages.size, isThinking, showWelcome) {
         // Il benvenuto occupa la lista solo quando non c'e' nient'altro, quindi quando c'e'
         // qualcosa da scorrere gli elementi sono esattamente i messaggi piu' l'indicatore.
         val itemCount = messages.size + if (isThinking) 1 else 0
@@ -157,33 +165,44 @@ fun AssistantChatScreen(
             onNewChatClick = if (messages.isNotEmpty()) onClearChat else null
         )
 
-        LazyColumn(
+        // Schermata iniziale e conversazione sono due "pagine" della stessa schermata. Tornando
+        // dalla conversazione alla schermata iniziale la conversazione si rimpicciolisce e svanisce
+        // e quella iniziale arriva da un poco piu' grande (come un indietro fra pagine, ma breve);
+        // dall'iniziale alla conversazione solo una dissolvenza rapida: lo sposta il fumetto che
+        // sale dal campo di testo.
+        androidx.compose.animation.AnimatedContent(
+            targetState = showWelcome,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            transitionSpec = {
+                if (targetState) {
+                    (androidx.compose.animation.fadeIn(ailaFadeSpec(AilaDuration.Standard, delayMillis = 40)) +
+                        androidx.compose.animation.scaleIn(ailaMoveSpec(AilaDuration.Standard), initialScale = 1.05f)) togetherWith
+                        (androidx.compose.animation.fadeOut(ailaFadeSpec(AilaDuration.Quick)) +
+                            androidx.compose.animation.scaleOut(ailaMoveSpec(AilaDuration.Quick), targetScale = 0.95f))
+                } else {
+                    androidx.compose.animation.fadeIn(ailaFadeSpec(AilaDuration.Quick)) togetherWith
+                        androidx.compose.animation.fadeOut(ailaFadeSpec(AilaDuration.Quick))
+                }
+            },
+            label = "assistantContent"
+        ) { welcome ->
+        if (welcome) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(AppTheme.Space16)
+            ) {
+                AssistantWelcome(conversations = conversations, onOpenConversation = onOpenConversation)
+            }
+        } else LazyColumn(
             state = listState,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(AppTheme.Space16),
             // Material: le risposte sono testo libero, serve piu' aria fra un turno e l'altro.
             verticalArrangement = Arrangement.spacedBy(if (AppTheme.isGlass) AppTheme.Space12 else AppTheme.Space20)
         ) {
-            if (messages.isEmpty() && !isThinking) {
-                // Tornando dalla conversazione alla schermata iniziale i messaggi si dissolvono e
-                // il benvenuto compare subito dopo (ritardo = durata della dissolvenza), invece di
-                // sostituirsi di colpo.
-                item(key = "welcome") {
-                    Box(
-                        modifier = Modifier.animateItem(
-                            fadeInSpec = ailaFadeSpec(AilaDuration.Standard, delayMillis = AilaDuration.Quick + 20),
-                            placementSpec = null,
-                            fadeOutSpec = null
-                        )
-                    ) {
-                        AssistantWelcome(conversations = conversations, onOpenConversation = onOpenConversation)
-                    }
-                }
-            }
-
-            items(messages, key = { it.id }) { message ->
+            items(if (messages.isEmpty()) lastShown[0] else messages, key = { it.id }) { message ->
                 Box(
                     modifier = Modifier.animateItem(
                         fadeInSpec = null,
@@ -213,6 +232,7 @@ fun AssistantChatScreen(
             if (isThinking) {
                 item { ThinkingBubble() }
             }
+        }
         }
 
         // Barra per scrivere. Glass: niente fascia piena ne' riga divisoria, solo una capsula di

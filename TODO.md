@@ -55,8 +55,13 @@ Resta:
   (Calendario, Bacheca, Sondaggi, Mappa posti, elenco Circolari) `openTabFromOverlay` ricorda da
   dove si veniva (`ReturnPoint`) e indietro dalla tab riapre Ricerca/Assistant e la tab di prima.
   Il ritorno decade se si cambia tab. Notifiche: chiudono anche l'Assistant.
-- **Animazione pagine Material** (shared axis Z): entrata 320 ms (era 380), uscita/ritorno 240 ms
-  (era 300).
+- **Animazione pagine Material** (shared axis Z): entrata 260 ms (era 380), uscita/ritorno 190 ms
+  (era 300). Container transform dei pulsanti: apertura 260 ms, chiusura 220 ms.
+- **Ritorno dalla conversazione**: `AnimatedContent` fra schermata iniziale e conversazione: indietro
+  la conversazione si rimpicciolisce (95%) e svanisce, l'iniziale arriva da 105%; avanti solo una
+  dissolvenza rapida. Prima c'era solo una dissolvenza con ritardo (sembrava lenta e senza ritorno).
+- **ASSISTANT ha profondita' 2** (SEARCH 1): a parita' di profondita' aprire l'Assistant dalla
+  Ricerca veniva animato come un "indietro".
 - **Risposte**: `AssistantAbout` risponde in codice a "cos'e' AILA?", "e cosa fa?", "cosa sai
   fare?" (Gemini Nano rispondeva "AILA e' l'app scolastica." anche al seguito). Test in
   `AssistantAboutTest`. Le altre risposte restano al modello: con un motore da 4096 token non si

@@ -6304,8 +6304,8 @@ private const val ADD_EVENT_KEY = "addEventSheet"
  * quasi non si notava. [MATERIAL_PAGE_HOLD_MS] e' quanto resta composta la pagina che esce, piu'
  * dell'animazione anche se i primi fotogrammi sono lenti.
  */
-private const val MATERIAL_PAGE_ENTER_MS = 320
-private const val MATERIAL_PAGE_EXIT_MS = 240
+private const val MATERIAL_PAGE_ENTER_MS = 260
+private const val MATERIAL_PAGE_EXIT_MS = 190
 private const val MATERIAL_PAGE_HOLD_MS = 900
 private const val MATERIAL_PAGE_SMALL = 0.85f
 private const val MATERIAL_PAGE_BEHIND = 1.08f
@@ -6328,7 +6328,9 @@ private enum class ShellRoute(val depth: Int) {
     SETTINGS(2),
     BACKGROUND_DEBUG(3),
     CLASS_ROSTER(2),
-    ASSISTANT(1),
+    // Piu' profonda di SEARCH: si apre anche dalla Ricerca, e a parita' di profondita' l'apertura
+    // sembrava un "indietro" (pagina che arriva da dietro invece che da davanti).
+    ASSISTANT(2),
     SEARCH(1),
     NOTIFICATIONS(1),
     SEATMAP_PROPOSALS(1),
