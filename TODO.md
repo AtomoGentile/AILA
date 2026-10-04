@@ -45,6 +45,16 @@ Resta:
 - un Rappresentante che dimentica la password si recupera ancora solo a mano sul database;
 - dopo la transizione: `npx wrangler secret delete REPRESENTATIVE_SIGNUP_CODE`.
 
+## 4/10: apertura dei pulsanti tondi della Home meno scattosa
+
+`AilaMotion.kt`: `awaitCalmFrames()` (l'apertura parte quando due fotogrammi di fila durano
+meno di 24 ms, al massimo dopo 220 ms; prima: due fotogrammi alla cieca) e
+`animateContainerOpen()` (500 ms, curva morbida in partenza, **orologio a passo limitato**: un
+fotogramma lungo avanza il tempo di al piu' 32 ms, quindi la forma non salta in avanti come con
+la molla, che usava il tempo vero). Usato per `openProgress` in `MainAppShell` (ricerca,
+notifiche, profilo). La chiusura non e' toccata. **Non provato su un telefono**: se scatta ancora,
+il collo di bottiglia e' la composizione della pagina nuova (profilarla), non la curva.
+
 ## 4/10: Assistant e Ricerca ridisegnati (`AilaAssistantUi.kt`)
 
 - Nuovo `design/AilaAssistantUi.kt`: `AilaAssistantHalo` (icona del benvenuto: cookie che ruota

@@ -67,6 +67,7 @@ import circolareplus.design.ailaSpatialSpring
 import circolareplus.design.ailaPushTransition
 import circolareplus.design.ailaTabTransition
 import circolareplus.design.ailaContainerReveal
+import circolareplus.design.animateContainerOpen
 import androidx.compose.ui.layout.onGloballyPositioned
 import circolareplus.design.ailaMorphClip
 import circolareplus.design.ailaSheetReveal
@@ -3580,9 +3581,10 @@ fun MainAppShell(
             }
             LaunchedEffect(Unit) {
                 if (openProgress.value < 1f) {
-                    androidx.compose.runtime.withFrameNanos { }
-                    androidx.compose.runtime.withFrameNanos { }
-                    openProgress.animateTo(1f, circolareplus.design.ailaContainerFloatSpring())
+                    // Parte quando la pagina nuova ha smesso di lavorare, e va a passo limitato:
+                    // un fotogramma lungo non fa saltare la forma (vedi animateContainerOpen).
+                    circolareplus.design.awaitCalmFrames()
+                    openProgress.animateContainerOpen()
                     // Solo se la pagina e' ancora quella aperta (non si e' gia' tornati indietro).
                     if (transition.targetState == androidx.compose.animation.EnterExitState.Visible) shellRevealDone.value = true
                 }

@@ -742,6 +742,51 @@ fun ailaContainerCloseSpec(): androidx.compose.animation.core.FiniteAnimationSpe
 )
 
 /**
+ * Aspetta che la pagina appena composta si "calmi" prima di far partire l'apertura: due
+ * fotogrammi di fila entro [calmMs] (a 60 Hz ne bastano ~17), ma non oltre [maxWaitMs]. Prima si
+ * aspettavano due fotogrammi alla cieca: se la pagina nuova aveva ancora lavoro da fare (liste,
+ * campo di testo, immagini) l'animazione partiva proprio sul fotogramma lungo e la forma saltava.
+ * Il lavoro lo si fa con la forma ancora ferma sul pulsante.
+ */
+suspend fun awaitCalmFrames(minCalmFrames: Int = 2, maxWaitMs: Long = 220, calmMs: Long = 24) {
+    val start = androidx.compose.runtime.withFrameNanos { it }
+    var last = start
+    var calm = 0
+    while (calm < minCalmFrames && last - start < maxWaitMs * 1_000_000L) {
+        val now = androidx.compose.runtime.withFrameNanos { it }
+        if (now - last <= calmMs * 1_000_000L) calm++ else calm = 0
+        last = now
+    }
+}
+
+/**
+ * Apertura del container transform a durata fissa, con un orologio "a passo limitato": ogni
+ * fotogramma fa avanzare il tempo di al massimo 32 ms, anche se in realta' e' durato di piu'.
+ * La molla di prima calcolava la posizione dal tempo vero, quindi un fotogramma lungo a meta'
+ * corsa (la pagina che si disegna, un dato che arriva) faceva saltare la forma in avanti: era lo
+ * "scatto". Cosi' un fotogramma lungo si vede come una breve pausa, non come uno strappo, e
+ * l'animazione dura al massimo un poco di piu'. La curva parte morbida (come la chiusura), cosi'
+ * i primi fotogrammi, che sono i piu' fragili, si muovono di poco.
+ */
+suspend fun androidx.compose.animation.core.Animatable<Float, androidx.compose.animation.core.AnimationVector1D>.animateContainerOpen(
+    target: Float = 1f
+) {
+    val from = value
+    val totalNanos = (if (AppTheme.reduceMotion) 150L else 500L) * 1_000_000L
+    val easing = androidx.compose.animation.core.CubicBezierEasing(0.3f, 0f, 0f, 1f)
+    var elapsed = 0L
+    var last = androidx.compose.runtime.withFrameNanos { it }
+    while (elapsed < totalNanos) {
+        val now = androidx.compose.runtime.withFrameNanos { it }
+        elapsed += minOf(now - last, 32_000_000L)
+        last = now
+        val fraction = easing.transform((elapsed.toFloat() / totalNanos).coerceIn(0f, 1f))
+        snapTo(from + (target - from) * fraction)
+    }
+    snapTo(target)
+}
+
+/**
  * Disegna il contenuto dentro un "contenitore" che cresce dall'origine fino a tutto lo schermo
  * mentre [progress] va da 0 a 1: prima si vede il fondo del contenitore (come se la card si
  * allungasse), poi il contenuto della pagina compare in dissolvenza.
