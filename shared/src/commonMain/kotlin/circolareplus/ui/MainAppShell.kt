@@ -67,6 +67,7 @@ import circolareplus.design.ailaSpatialSpring
 import circolareplus.design.ailaPushTransition
 import circolareplus.design.ailaTabTransition
 import circolareplus.design.ailaContainerReveal
+import circolareplus.design.ailaExplodeOut
 import circolareplus.design.animateContainerClose
 import circolareplus.design.animateContainerOpen
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -2134,7 +2135,13 @@ fun MainAppShell(
     // scritta e la chat a meta'. Quando la destinazione e' una tab (Calendario, Bacheca...) le
     // schermate si chiudono, e ReturnPoint ricorda da dove si veniva: indietro dalla tab le riapre.
     var returnPoint by remember { mutableStateOf<ReturnPoint?>(null) }
-    fun openTabFromOverlay(target: MainTab, setup: () -> Unit = {}) {
+    // Tessera della Ricerca toccata per andare a una tab: la Ricerca si chiude "esplodendo" dalla
+    // tessera nella destinazione (vedi ailaExplodeOut). Si azzera quando la Ricerca si riapre.
+    var explode by remember { mutableStateOf<ExplodeInfo?>(null) }
+    fun openTabFromOverlay(target: MainTab, explodeColor: Color? = null, setup: () -> Unit = {}) {
+        explode = if (explodeColor != null && isInSearchScreen && !AppTheme.isGlass) {
+            circolareplus.design.AilaContainerTransform.takeFresh()?.let { ExplodeInfo(it, explodeColor) }
+        } else null
         returnPoint = ReturnPoint(
             search = isInSearchScreen,
             assistant = isInAssistantScreen,
@@ -2149,6 +2156,9 @@ fun MainAppShell(
     // Se dalla tab di destinazione si passa a un'altra (tocco sulla barra), il ritorno non vale piu'.
     LaunchedEffect(selectedTab) {
         if (returnPoint?.targetTab != selectedTab) returnPoint = null
+    }
+    LaunchedEffect(isInSearchScreen) {
+        if (isInSearchScreen) explode = null
     }
     val shellRoute = when {
         isInSettingsScreen && isInBackgroundDebugScreen -> ShellRoute.BACKGROUND_DEBUG
@@ -2403,6 +2413,20 @@ fun MainAppShell(
     // nascoste, a app ferma: cosi' la prima apertura vera non paga il caricamento delle classi.
     circolareplus.design.AilaWarmUp(
         listOf<@Composable () -> Unit>(
+            {
+                // L'Assistant si apre dalla Ricerca e dal pulsante AILA: stessa cosa, pagina fredda.
+                AssistantChatScreen(
+                    messages = emptyList(),
+                    isThinking = false,
+                    conversations = assistantConversations,
+                    onSend = {},
+                    onBackClick = {},
+                    onClearChat = {},
+                    onOpenConversation = {},
+                    onDeleteConversation = {},
+                    onOpenSource = {}
+                )
+            },
             {
                 SearchScreen(
                     circulars = circulars,
@@ -3140,7 +3164,8 @@ fun MainAppShell(
                                             onClick = {
                                                 if (pollsSection == 1) showCreateRankingPollDialog = true else showCreatePollDialog = true
                                             },
-                                            primary = true
+                                            primary = true,
+                                            opensPage = true
                                         ) { tint -> AppIcons.Plus(modifier = Modifier.size(18.dp), color = tint) }
                                     }
                                 }
@@ -3582,8 +3607,14 @@ fun MainAppShell(
             // true il livello grafico si invalida e comincia a leggere closeProgress. Con un flag
             // semplice la lambda non si iscriveva mai a closeProgress e la forma restava ferma.
             val closeDriven = remember { mutableStateOf(false) }
+            val explodeInfo = explode
+            val explodeActive = !AppTheme.isGlass && route == ShellRoute.SEARCH && closingNow && explodeInfo != null
+            val explodeProgress = remember { androidx.compose.animation.core.Animatable(0f) }
+            LaunchedEffect(explodeActive) {
+                if (explodeActive) explodeProgress.animateContainerOpen()
+            }
             LaunchedEffect(closingNow) {
-                if (!closingNow || containerOrigin == null) return@LaunchedEffect
+                if (!closingNow || containerOrigin == null || explodeActive) return@LaunchedEffect
                 // Parte da dove la forma e' adesso (anche a meta' apertura), senza salti.
                 closeProgress.snapTo(openProgress.value)
                 closeDriven.value = true
@@ -3676,12 +3707,19 @@ fun MainAppShell(
                         }
                     }
                     .then(
+                        if (explodeActive && explodeInfo != null) Modifier.ailaExplodeOut(
+                            progress = { explodeProgress.value },
+                            origin = explodeInfo.origin,
+                            color = explodeInfo.color
+                        ) else Modifier
+                    )
+                    .then(
                         if (containerOrigin != null) Modifier.ailaContainerReveal(
                             // Il minimo dei due: aprendo comanda openProgress (in ritardo di due
                             // fotogrammi), chiudendo la curva della transizione, senza salti se si
                             // torna indietro a meta' apertura.
                             progress = {
-                                if (!revealing) 1f
+                                if (!revealing || explodeActive) 1f
                                 else if (closingNow && closeDriven.value) closeProgress.value
                                 else openProgress.value
                             },
@@ -4130,9 +4168,9 @@ fun MainAppShell(
                         // filtro, risultati): indietro la ritrova. Le tab invece si aprono sotto e
                         // "indietro" riapre la Ricerca (vedi openTabFromOverlay).
                         onOpenCircular = { circular -> selectedCircularForDetail = circular },
-                        onOpenCirculars = { openTabFromOverlay(MainTab.CLASS) { classSection = ClassSection.CIRCULARS } },
-                        onOpenCalendar = { openTabFromOverlay(MainTab.CALENDAR) },
-                        onOpenBoard = { openTabFromOverlay(MainTab.CLASS) { classSection = ClassSection.BOARD } }
+                        onOpenCirculars = { openTabFromOverlay(MainTab.CLASS, AppTheme.TintBlue) { classSection = ClassSection.CIRCULARS } },
+                        onOpenCalendar = { openTabFromOverlay(MainTab.CALENDAR, AppTheme.TintAmber) },
+                        onOpenBoard = { openTabFromOverlay(MainTab.CLASS, AppTheme.TintViolet) { classSection = ClassSection.BOARD } }
                     )
                 }
                 ShellRoute.NOTIFICATIONS -> {
@@ -5788,8 +5826,6 @@ private fun CreatePollDialog(
     onConfirm: (String, List<CreatePollSlotRequestDto>, List<String>?) -> Unit,
     closeRequested: Boolean = false
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val closeAnimated = rememberSheetCloseAnimated(sheetState, onDismiss, closeRequested)
     var subject by remember { mutableStateOf("") }
     // null = tutta la classe; altrimenti solo chi deve essere interrogato.
     var audience by remember { mutableStateOf<List<String>?>(null) }
@@ -5813,11 +5849,12 @@ private fun CreatePollDialog(
 
     // Col selettore data aperto (in Glass) il foglio si dissolve: la card e' vetro trasparente e
     // i testi del foglio, dietro, la rendevano illeggibile.
-    circolareplus.design.AilaBottomSheet(
-        onDismissRequest = onDismiss,
-        faded = showDatePicker,
-        sheetState = sheetState
-    ) {
+    circolareplus.design.AilaOriginSheet(
+        originKey = "pollCreateSheet",
+        onDismiss = onDismiss,
+        closeRequested = closeRequested,
+        faded = showDatePicker
+    ) { closeAnimated ->
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -5966,8 +6003,6 @@ private fun CreateRankingPollDialog(
     onConfirm: (String, List<String>, List<String>?) -> Unit,
     closeRequested: Boolean = false
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val closeAnimated = rememberSheetCloseAnimated(sheetState, onDismiss, closeRequested)
     var question by remember { mutableStateOf("") }
     val options = remember { mutableStateListOf("", "") }
     // null = tutta la classe.
@@ -5977,10 +6012,11 @@ private fun CreateRankingPollDialog(
     val canSubmit = !isSubmitting && question.isNotBlank() && filled.size >= 2 && !hasDuplicates &&
         audience?.isEmpty() != true
 
-    circolareplus.design.AilaBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState
-    ) {
+    circolareplus.design.AilaOriginSheet(
+        originKey = "pollCreateSheet",
+        onDismiss = onDismiss,
+        closeRequested = closeRequested
+    ) { closeAnimated ->
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -6082,16 +6118,15 @@ private fun AddProposalDialog(
     onConfirm: (String, String, String, Boolean) -> Unit,
     closeRequested: Boolean = false
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val closeAnimated = rememberSheetCloseAnimated(sheetState, onDismiss, closeRequested)
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var isAnonymous by remember { mutableStateOf(false) }
 
-    circolareplus.design.AilaBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState
-    ) {
+    circolareplus.design.AilaOriginSheet(
+        originKey = "proposalCreateSheet",
+        onDismiss = onDismiss,
+        closeRequested = closeRequested
+    ) { closeAnimated ->
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -6317,6 +6352,9 @@ private const val MATERIAL_PAGE_BEHIND = 1.08f
 private val MaterialEmphasizedDecelerate = androidx.compose.animation.core.CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
 
 /** Da dove si e' arrivati a una tab aprendola da Ricerca o Assistant: serve a "indietro". */
+/** Tessera da cui la Ricerca "esplode" verso una tab: dove e com'e' fatta, e il suo colore. */
+private class ExplodeInfo(val origin: circolareplus.design.AilaTransformOrigin, val color: Color)
+
 private class ReturnPoint(
     val search: Boolean,
     val assistant: Boolean,

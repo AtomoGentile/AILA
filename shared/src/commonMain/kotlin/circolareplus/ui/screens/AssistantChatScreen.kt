@@ -404,8 +404,10 @@ private fun AssistantHistorySheet(
     onNewChat: (() -> Unit)?,
     onDismiss: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var query by remember { mutableStateOf("") }
+    // Scelta fatta nel foglio (apri una conversazione, nuova chat): si esegue a foglio chiuso, cosi'
+    // il foglio rientra nel pulsante e poi cambia la chat, invece di sparire di colpo.
+    var pending by remember { mutableStateOf<(() -> Unit)?>(null) }
     val trimmed = query.trim()
     val groups = remember(conversations, trimmed) {
         val now = circolareplus.platform.currentTimeMillis()
@@ -426,10 +428,13 @@ private fun AssistantHistorySheet(
             .toList()
     }
 
-    circolareplus.design.AilaBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState
-    ) {
+    circolareplus.design.AilaOriginSheet(
+        originKey = "assistantHistory",
+        onDismiss = {
+            onDismiss()
+            pending?.invoke()
+        }
+    ) { close ->
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -454,7 +459,7 @@ private fun AssistantHistorySheet(
                     Spacer(modifier = Modifier.width(AppTheme.Space12))
                     circolareplus.design.AilaPrimaryButton(
                         text = "Nuova",
-                        onClick = onNewChat,
+                        onClick = { pending = onNewChat; close() },
                         compact = true,
                         icon = { color -> AppIcons.NewChat(modifier = Modifier.size(16.dp), color = color) }
                     )
@@ -504,7 +509,7 @@ private fun AssistantHistorySheet(
                                 else -> RowPosition.Middle
                             },
                             canOpen = canOpen,
-                            onPick = onPick,
+                            onPick = { picked -> pending = { onPick(picked) }; close() },
                             onDelete = onDelete,
                             modifier = Modifier.animateItem(
                                 fadeInSpec = null,
@@ -828,7 +833,7 @@ private fun AssistantHeader(
         Spacer(modifier = Modifier.width(AppTheme.Space8))
         Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
             if (onHistoryClick != null) {
-                AilaIconButton(contentDescription = "Cronologia chat", onClick = onHistoryClick) { tint ->
+                AilaIconButton(contentDescription = "Cronologia chat", onClick = onHistoryClick, opensPage = true) { tint ->
                     AppIcons.History(modifier = Modifier.size(20.dp), color = tint)
                 }
             }

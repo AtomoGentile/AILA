@@ -1,5 +1,6 @@
 package circolareplus.ui.screens
 
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
@@ -141,6 +142,13 @@ private fun ClassCodeRow() {
         }
     }
 
+    // Il codice e' nascosto finche' non si tocca l'occhio: arrivava un secondo dopo l'apertura della
+    // pagina (e' una richiesta al server) e il riquadro cambiava aspetto proprio mentre ci si
+    // guardava. Ora il riquadro ha sempre la stessa forma (pallini finche' e' nascosto, o in
+    // arrivo) e il codice si rivela carattere per carattere solo su richiesta. E' anche il codice
+    // d'accesso alla classe: non deve restare a vista di chiunque guardi lo schermo.
+    var revealed by remember { mutableStateOf(false) }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -151,25 +159,35 @@ private fun ClassCodeRow() {
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(text = "Codice classe", style = MaterialTheme.typography.bodySmall, color = AppTheme.TintBlueInk)
+            if (error != null && code == null) {
+                Text(text = error ?: "", style = MaterialTheme.typography.labelMedium, color = AppTheme.TintBlueInk)
+            } else {
+                ClassCodeDigits(code = code, revealed = revealed)
+            }
             Text(
-                text = code ?: error ?: "…",
-                style = if (code != null) MaterialTheme.typography.titleLarge else MaterialTheme.typography.labelMedium,
-                letterSpacing = if (code != null) 3.sp else 0.sp,
-                color = AppTheme.TintBlueInk
+                text = "Serve ai compagni per registrarsi in questa classe.",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Normal,
+                color = AppTheme.TintBlueInk.copy(alpha = 0.8f)
             )
-            if (code != null) {
-                Text(
-                    text = "Serve ai compagni per registrarsi in questa classe.",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Normal,
-                    color = AppTheme.TintBlueInk.copy(alpha = 0.8f)
-                )
+        }
+        circolareplus.design.AilaIconButton(
+            contentDescription = if (revealed) "Nascondi il codice" else "Mostra il codice",
+            onClick = { revealed = !revealed },
+            enabled = code != null,
+            size = 40.dp
+        ) { tint ->
+            androidx.compose.animation.Crossfade(
+                targetState = revealed,
+                animationSpec = circolareplus.design.ailaFadeSpec(circolareplus.design.AilaDuration.Quick),
+                label = "codeEye"
+            ) { shown ->
+                if (shown) circolareplus.design.AppIcons.EyeOff(modifier = Modifier.size(19.dp), color = tint)
+                else circolareplus.design.AppIcons.Eye(modifier = Modifier.size(19.dp), color = tint)
             }
         }
-        if (code != null) {
-            TextButton(enabled = !busy, onClick = { confirmRegenerate = true }) {
-                Text(if (busy) "…" else "Rigenera", color = AppTheme.TintBlueInk)
-            }
+        TextButton(enabled = code != null && !busy, onClick = { confirmRegenerate = true }) {
+            Text(if (busy) "…" else "Rigenera", color = AppTheme.TintBlueInk)
         }
     }
 
@@ -195,6 +213,46 @@ private fun ClassCodeRow() {
             },
             confirmLabel = "Rigenera"
         )
+    }
+}
+
+/**
+ * Le cifre del codice classe: pallini finche' [revealed] e' falso (o il codice non e' ancora
+ * arrivato), poi ogni carattere si rivela a turno, con una piccola crescita, da sinistra a destra.
+ * Carattere a larghezza fissa: pallino e lettera occupano lo stesso spazio, quindi rivelando non si
+ * sposta niente.
+ */
+@Composable
+private fun ClassCodeDigits(code: String?, revealed: Boolean) {
+    val count = maxOf(code?.length ?: 0, 6)
+    val shown = revealed && code != null
+    Row {
+        for (index in 0 until count) {
+            val char = code?.getOrNull(index)?.toString() ?: "•"
+            androidx.compose.animation.AnimatedContent(
+                targetState = shown,
+                transitionSpec = {
+                    val delay = index * 35
+                    (androidx.compose.animation.fadeIn(
+                        circolareplus.design.ailaFadeSpec(circolareplus.design.AilaDuration.Standard, delayMillis = delay)
+                    ) + androidx.compose.animation.scaleIn(
+                        circolareplus.design.ailaMoveSpec(circolareplus.design.AilaDuration.Standard, delayMillis = delay),
+                        initialScale = 0.5f
+                    )) togetherWith androidx.compose.animation.fadeOut(
+                        circolareplus.design.ailaFadeSpec(circolareplus.design.AilaDuration.Quick)
+                    )
+                },
+                label = "classCodeChar"
+            ) { visible ->
+                Text(
+                    text = if (visible) char else "•",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    color = AppTheme.TintBlueInk,
+                    modifier = Modifier.padding(end = 3.dp)
+                )
+            }
+        }
     }
 }
 

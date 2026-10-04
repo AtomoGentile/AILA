@@ -164,22 +164,23 @@ fun AilaTopSheet(
         // Parte dopo i primi due fotogrammi: comporre il contenuto la prima volta e' pesante, e la
         // forma non deve saltare avanti. Da un pulsante la molla dei container transform; dal bordo
         // smorzamento critico (niente rimbalzo, che lascerebbe uno spazio vuoto sopra il pannello).
-        withFrameNanos { }
-        withFrameNanos { }
-        progress.animateTo(
-            1f,
-            if (origin != null) ailaContainerFloatSpring() else spring(dampingRatio = 1f, stiffness = 500f)
-        )
+        if (origin != null) {
+            // Dal pulsante: stesso motore del container transform delle pagine (parte appena la
+            // pagina si calma, orologio a passo limitato, niente salti sul fotogramma lungo).
+            awaitCalmFrames()
+            progress.animateContainerOpen()
+        } else {
+            withFrameNanos { }
+            withFrameNanos { }
+            progress.animateTo(1f, spring(dampingRatio = 1f, stiffness = 500f))
+        }
     }
     val requestClose: () -> Unit = {
         if (!closing.value) {
             closing.value = true
             scope.launch {
-                progress.animateTo(
-                    0f,
-                    if (origin != null) ailaContainerCloseSpec()
-                    else tween(260, easing = androidx.compose.animation.core.FastOutLinearInEasing)
-                )
+                if (origin != null) progress.animateContainerClose()
+                else progress.animateTo(0f, tween(260, easing = androidx.compose.animation.core.FastOutLinearInEasing))
                 onClosed()
             }
         }
@@ -318,5 +319,61 @@ fun AilaDatePickerDialog(
             state = state,
             colors = if (glass) clear else androidx.compose.material3.DatePickerDefaults.colors()
         )
+    }
+}
+
+/**
+ * Foglio dei moduli di creazione (nuova proposta, nuovo sondaggio, cronologia chat): Material = il
+ * foglio nasce dal pulsante toccato (cerchio o "+") e ci rientra, come ricerca e notifiche nella
+ * Home ([AilaTopSheet] con l'origine); Liquid Glass = il foglio dal basso di sempre.
+ *
+ * [originKey] lega l'origine al foglio: l'elemento che lo apre deve aver registrato il tocco
+ * ([ailaTransformOrigin], `opensPage = true` sui pulsanti). Il contenuto riceve `close`, che chiude
+ * con l'animazione e a fine corsa chiama [onDismiss]; [closeRequested] la chiede dall'esterno
+ * (operazione finita).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AilaOriginSheet(
+    originKey: Any,
+    onDismiss: () -> Unit,
+    closeRequested: Boolean = false,
+    faded: Boolean = false,
+    content: @Composable ColumnScope.(close: () -> Unit) -> Unit
+) {
+    if (AppTheme.isGlass) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        val scope = rememberCoroutineScope()
+        val currentOnDismiss by androidx.compose.runtime.rememberUpdatedState(onDismiss)
+        val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+        val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+        // Una sola chiusura per volta: un doppio tocco sulla X o X + fine operazione insieme
+        // lanciavano due hide() e due onDismiss.
+        val closing = remember { booleanArrayOf(false) }
+        val close: () -> Unit = {
+            if (!closing[0]) {
+                closing[0] = true
+                scope.launch {
+                    // Prima la tastiera: chiusa insieme al foglio, il contenuto la seguiva e saltava.
+                    keyboard?.hide()
+                    focusManager.clearFocus(force = true)
+                    sheetState.hide()
+                    currentOnDismiss()
+                }
+            }
+        }
+        LaunchedEffect(closeRequested) { if (closeRequested) close() }
+        AilaBottomSheet(onDismissRequest = onDismiss, faded = faded, sheetState = sheetState) { content(close) }
+    } else {
+        val origin = remember(originKey) {
+            AilaContainerTransform.assignFreshTo(originKey)
+            AilaContainerTransform.originOf(originKey)
+        }
+        AilaTopSheet(origin = origin, onClosed = onDismiss) { requestClose ->
+            LaunchedEffect(closeRequested) { if (closeRequested) requestClose() }
+            androidx.compose.runtime.CompositionLocalProvider(LocalAilaSheetReveal provides false) {
+                content(requestClose)
+            }
+        }
     }
 }

@@ -495,12 +495,15 @@ fun AilaWarmUp(pages: List<@Composable () -> Unit>) {
     if (AilaWarmUpMemory.done) return
     var index by remember { mutableStateOf(-1) }
     LaunchedEffect(Unit) {
-        delay(2500)
+        // Prima: 2,5 s di attesa e 1,2 s per pagina, quindi i primi tocchi (che arrivano subito)
+        // trovavano ancora le pagine "fredde". Ora si parte quasi subito e ogni pagina resta il
+        // tempo di comporsi e disegnarsi una volta.
+        delay(700)
         for (i in pages.indices) {
             index = i
-            delay(600)
+            delay(350)
             index = -1
-            delay(600)
+            delay(120)
         }
         AilaWarmUpMemory.done = true
     }
@@ -623,6 +626,19 @@ object AilaContainerTransform {
     fun recordTap(origin: AilaTransformOrigin) {
         fresh = origin
         freshMark = kotlin.time.TimeSource.Monotonic.markNow()
+    }
+
+    /**
+     * Prende (e consuma) l'origine toccata da poco, senza legarla a una schermata: serve a
+     * "ailaExplodeOut", dove l'elemento toccato non apre una pagina ma "esplode" nella schermata
+     * sotto. `null` se l'ultimo tocco registrato e' vecchio di piu' di un secondo.
+     */
+    fun takeFresh(): AilaTransformOrigin? {
+        val mark = freshMark
+        val origin = fresh
+        fresh = null
+        freshMark = null
+        return if (origin != null && mark != null && mark.elapsedNow().inWholeMilliseconds < 1000) origin else null
     }
 
     /** Assegna l'origine toccata da poco (meno di un secondo fa) alla schermata [key]. */
@@ -826,6 +842,48 @@ private suspend fun androidx.compose.animation.core.Animatable<Float, androidx.c
         snapTo(from + (target - from) * fraction)
     }
     snapTo(target)
+}
+
+/**
+ * "Esplosione" verso la schermata che sta sotto (Material): l'elemento toccato (una tessera) cresce
+ * dal suo rettangolo fino a coprire lo schermo, poi si dissolve e lascia vedere la destinazione.
+ * E' il container transform al contrario: non una pagina che nasce dall'elemento, ma l'elemento
+ * che diventa la schermata. Si applica alla pagina che si sta chiudendo (la Ricerca), sopra il
+ * suo contenuto; [color] e' quello dell'elemento. Il contenuto della pagina svanisce nel primo
+ * 40% della corsa. Disegna con i Path a curve (niente drawRoundRect, vedi [ailaRoundRectPath]).
+ */
+@Composable
+fun Modifier.ailaExplodeOut(
+    progress: () -> Float,
+    origin: AilaTransformOrigin,
+    color: Color
+): Modifier {
+    val selfOffset = remember { arrayOf(Offset.Zero) }
+    val path = remember { Path() }
+    return this
+        .onGloballyPositioned {
+            val position = it.positionInRoot()
+            // Pagina in chiusura (vedi ailaNoTouchWhile): conta dove si vede, non il layout.
+            selfOffset[0] = Offset(visibleXInRoot(position.x), position.y)
+        }
+        .drawWithContent {
+            drawContent()
+            val p = progress().coerceIn(0f, 1f)
+            if (p <= 0f) return@drawWithContent
+            val o = origin.bounds.translate(-selfOffset[0])
+            fun lerp(a: Float, b: Float) = a + (b - a) * p
+            val left = lerp(o.left, 0f)
+            val top = lerp(o.top, 0f)
+            val right = lerp(o.right, size.width)
+            val bottom = lerp(o.bottom, size.height)
+            val radius = lerp(origin.cornerRadiusPx, 0f).coerceIn(0f, minOf(right - left, bottom - top) / 2f)
+            ailaRoundRectPathInto(path, left, top, right - left, bottom - top, radius)
+            // Pieno finche' cresce, poi si dissolve sulla schermata che c'e' sotto.
+            val fadeIn = (p / 0.12f).coerceIn(0f, 1f)
+            val fadeOut = (1f - ((p - 0.55f) / 0.45f)).coerceIn(0f, 1f)
+            drawPath(path, color = color, alpha = fadeIn * fadeOut)
+        }
+        .graphicsLayer { alpha = (1f - progress() / 0.4f).coerceIn(0f, 1f) }
 }
 
 /**

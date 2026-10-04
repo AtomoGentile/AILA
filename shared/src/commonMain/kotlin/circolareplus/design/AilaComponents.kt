@@ -1310,6 +1310,8 @@ fun AilaFab(
     Box(
         modifier = modifier
             .size(56.dp)
+            // Material: il foglio "Nuova proposta" nasce da qui e ci rientra (container transform).
+            .then(if (glass) Modifier else Modifier.ailaTransformOrigin(17.dp, buttonColor = AppTheme.TintBlue))
             .then(if (glass) Modifier.ailaPressScale(interactionSource, 0.9f) else Modifier)
             .shadow(if (glass) 8.dp else 6.dp, shape, ambientColor = Color.Black.copy(alpha = 0.12f), spotColor = Color.Black.copy(alpha = 0.18f))
             .clip(shape)

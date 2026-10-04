@@ -45,6 +45,25 @@ Resta:
 - un Rappresentante che dimentica la password si recupera ancora solo a mano sul database;
 - dopo la transizione: `npx wrangler secret delete REPRESENTATIVE_SIGNUP_CODE`.
 
+## 4/10: tessere della Ricerca che "esplodono", pulsanti tondi Pixel, codice classe nascosto
+
+- **Ricerca, tessere** Circolari/Calendario/Bacheca (Material): `ailaExplodeOut` (AilaMotion) - la
+  tessera cresce dal suo rettangolo a tutto schermo e si dissolve sulla tab di destinazione; il
+  contenuto della Ricerca svanisce nel primo 40%. Info in `ExplodeInfo` (shell), origine presa con
+  `AilaContainerTransform.takeFresh()`; azzerata quando la Ricerca si riapre. Solo Material.
+- **Fogli dai pulsanti tondi**: `AilaOriginSheet` (AilaSheet.kt) - Material: il foglio nasce dal
+  pulsante e ci rientra (`AilaTopSheet` con origine); Glass: foglio dal basso come prima. Usato per
+  "Nuova proposta" (FAB, ora registra l'origine), "Nuovo sondaggio" (+ primary, `opensPage`),
+  "Nuovo sondaggio a ordinamento" e cronologia chat (pulsante dell'intestazione). `AilaTopSheet` con
+  origine usa ora lo stesso motore delle pagine (`awaitCalmFrames` + `animateContainerOpen/Close`).
+- **Codice classe** (`ClassRosterScreen`): nascosto (pallini a larghezza fissa) finche' non si tocca
+  l'occhio; si rivela carattere per carattere (scala+dissolvenza a scaglioni), l'occhio cambia con
+  una dissolvenza. Il riquadro ha sempre la stessa forma: niente scatto quando il codice arriva.
+- **Primi tocchi**: il riscaldamento (`AilaWarmUp`) parte dopo 0,7 s (era 2,5 s) e tiene ogni pagina
+  470 ms (era 1,2 s); aggiunto l'Assistant alle pagine scaldate.
+- Non compilato ne' provato su un telefono. Da guardare: tessera che esplode nei tre colori (chiaro
+  e scuro), foglio "Nuova proposta" dal FAB, cronologia dal pulsante, tastiera aperta nei fogli.
+
 ## 4/10: bug della chiusura dei pulsanti tondi (introdotto col passo limitato)
 
 `closeDriven` era un flag normale: la lambda dell'avanzamento non lo "leggeva" come stato, quindi
