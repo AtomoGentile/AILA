@@ -45,6 +45,14 @@ Resta:
 - un Rappresentante che dimentica la password si recupera ancora solo a mano sul database;
 - dopo la transizione: `npx wrangler secret delete REPRESENTATIVE_SIGNUP_CODE`.
 
+## 4/10: bug della chiusura dei pulsanti tondi (introdotto col passo limitato)
+
+`closeDriven` era un flag normale: la lambda dell'avanzamento non lo "leggeva" come stato, quindi
+non si iscriveva mai a `closeProgress` e la forma restava ferma a schermo intero per tutta la
+durata del keep-alive (500 ms) per poi sparire: nessun ritorno, lento e a scatto. Ora e'
+`mutableStateOf` e la lambda lo legge. Regola da ricordare: **cio' che decide quale stato leggere
+in una lambda grafica deve essere esso stesso uno stato.**
+
 ## 4/10: "indietro" torna alla schermata precedente; risposte su AILA
 
 - **Assistant**: indietro (gesto, freccia) da una conversazione torna alla schermata iniziale

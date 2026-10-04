@@ -3578,12 +3578,15 @@ fun MainAppShell(
             }
             val closingNow = transition.targetState == androidx.compose.animation.EnterExitState.PostExit
             val closeProgress = remember { androidx.compose.animation.core.Animatable(1f) }
-            val closeDriven = remember { arrayOf(false) }
+            // Stato vero (non un flag): la lambda dell'avanzamento lo LEGGE, quindi quando passa a
+            // true il livello grafico si invalida e comincia a leggere closeProgress. Con un flag
+            // semplice la lambda non si iscriveva mai a closeProgress e la forma restava ferma.
+            val closeDriven = remember { mutableStateOf(false) }
             LaunchedEffect(closingNow) {
                 if (!closingNow || containerOrigin == null) return@LaunchedEffect
                 // Parte da dove la forma e' adesso (anche a meta' apertura), senza salti.
                 closeProgress.snapTo(openProgress.value)
-                closeDriven[0] = true
+                closeDriven.value = true
                 closeProgress.animateContainerClose()
             }
             // Material fra due schermate ("shared axis Z", vedi il transitionSpec qui sopra).
@@ -3679,7 +3682,7 @@ fun MainAppShell(
                             // torna indietro a meta' apertura.
                             progress = {
                                 if (!revealing) 1f
-                                else if (closingNow && closeDriven[0]) closeProgress.value
+                                else if (closingNow && closeDriven.value) closeProgress.value
                                 else openProgress.value
                             },
                             origin = containerOrigin,
