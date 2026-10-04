@@ -8,8 +8,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -26,12 +26,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.SolidColor
 import circolareplus.design.AilaAssistantMark
+import circolareplus.design.AilaIconTile
+import circolareplus.design.AilaPillTextField
+import circolareplus.design.ailaAssistantAurora
 import circolareplus.design.AilaBackBar
 import circolareplus.design.AilaCard
 import circolareplus.design.AilaEmptyState
 import circolareplus.design.AilaListRow
 import circolareplus.design.AilaSectionTitle
-import circolareplus.design.ailaFieldColors
 import circolareplus.design.AnimatedFilterChip
 import circolareplus.design.ailaAppear
 import circolareplus.design.ailaGlassPressable
@@ -145,27 +147,28 @@ fun SearchScreen(
         Column(modifier = Modifier.padding(horizontal = AppTheme.Space16)) {
             Spacer(modifier = Modifier.height(AppTheme.Space16))
 
-            OutlinedTextField(
+            // Capsula con l'anello dell'Assistant al focus: stessa della chat.
+            AilaPillTextField(
                 value = query,
                 onValueChange = {
                     query = it
                     if (it.trim().length >= 2) onSubmitQuery(it)
                 },
+                placeholder = "Circolari, eventi, proposte…",
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Circolari, eventi, proposte…", style = MaterialTheme.typography.bodyLarge) },
+                singleLine = true,
                 leadingIcon = {
                     AppIcons.Search(modifier = Modifier.size(18.dp), color = AppTheme.TextFaint)
                 },
                 trailingIcon = {
                     if (query.isNotEmpty()) {
-                        // Area di tocco di 44dp (il minimo consigliato): il carattere "✕" di
-                        // prima era largo pochi pixel. Il nome serve al lettore di schermo, che
-                        // altrimenti annunciava solo "pulsante".
+                        // Area di tocco di 44dp (il minimo consigliato). Il nome serve al lettore
+                        // di schermo, che altrimenti annunciava solo "pulsante".
                         Box(
                             modifier = Modifier
                                 .padding(end = AppTheme.Space4)
                                 .size(44.dp)
-                                .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                                .clip(CircleShape)
                                 .clickable { query = "" }
                                 .semantics {
                                     contentDescription = "Svuota la ricerca"
@@ -176,10 +179,7 @@ fun SearchScreen(
                             AppIcons.Close(modifier = Modifier.size(16.dp), color = AppTheme.TextFaint)
                         }
                     }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
-                colors = ailaFieldColors()
+                }
             )
 
             Spacer(modifier = Modifier.height(AppTheme.Space12))
@@ -211,6 +211,9 @@ fun SearchScreen(
             // Meno di due lettere: si mostrano le ricerche recenti e dove si può guardare.
             trimmed.length < 2 -> SearchIdleContent(
                 recentSearches = recentSearches,
+                circularCount = circulars.size,
+                eventCount = calendarEvents.size,
+                proposalCount = proposals.size,
                 onPickRecent = { query = it },
                 onOpenCirculars = onOpenCirculars,
                 onOpenCalendar = onOpenCalendar,
@@ -219,7 +222,10 @@ fun SearchScreen(
 
             hits.isEmpty() -> AilaEmptyState(
                 title = "Nessun risultato",
-                message = "Niente che corrisponda a \"$trimmed\" tra circolari, calendario e bacheca.",
+                message = "Niente che corrisponda a \"$trimmed\" tra circolari, calendario e bacheca. " +
+                    "L'Assistant può provare a rispondere alla domanda.",
+                actionLabel = "Chiedi all'Assistant",
+                onAction = { onOpenAssistant(trimmed) },
                 icon = { AppIcons.Search(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
             )
 
@@ -257,6 +263,9 @@ fun SearchScreen(
 @Composable
 private fun SearchIdleContent(
     recentSearches: List<String>,
+    circularCount: Int,
+    eventCount: Int,
+    proposalCount: Int,
     onPickRecent: (String) -> Unit,
     onOpenCirculars: () -> Unit,
     onOpenCalendar: () -> Unit,
@@ -277,7 +286,7 @@ private fun SearchIdleContent(
                         tint = AppTheme.TintSlate,
                         onClick = { onPickRecent(recent) },
                         icon = {
-                            AppIcons.Search(modifier = Modifier.size(19.dp), color = AppTheme.TintSlateInk)
+                            AppIcons.History(modifier = Modifier.size(19.dp), color = AppTheme.TintSlateInk)
                         }
                     )
                 }
@@ -287,27 +296,78 @@ private fun SearchIdleContent(
 
         AilaSectionTitle(text = "Dove posso cercare")
         Spacer(modifier = Modifier.height(AppTheme.Space12))
-        AilaCard {
-            AilaListRow(
+        // Tre tessere affiancate, ognuna col colore della sua sezione (lo stesso di fonti e
+        // risultati) e quanti elementi ci sono da cercare: la lista di righe uguali non diceva
+        // niente di piu' dei filtri sopra.
+        Row(
+            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
+            horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+        ) {
+            SearchSectionTile(
                 title = "Circolari",
                 subtitle = "Per numero o titolo",
+                count = circularCount,
                 tint = AppTheme.TintBlue,
+                ink = AppTheme.TintBlueInk,
                 onClick = onOpenCirculars,
-                icon = { AppIcons.Document(modifier = Modifier.size(20.dp), color = AppTheme.TintBlueInk) }
-            )
-            AilaListRow(
+                modifier = Modifier.weight(1f).fillMaxHeight()
+            ) { AppIcons.Document(modifier = Modifier.size(20.dp), color = AppTheme.TintBlueInk) }
+            SearchSectionTile(
                 title = "Calendario",
-                subtitle = "Verifiche, pagamenti, uscite",
+                subtitle = "Verifiche e scadenze",
+                count = eventCount,
                 tint = AppTheme.TintAmber,
+                ink = AppTheme.TintAmberInk,
                 onClick = onOpenCalendar,
-                icon = { AppIcons.Calendar(modifier = Modifier.size(20.dp), color = AppTheme.TintAmberInk) }
-            )
-            AilaListRow(
+                modifier = Modifier.weight(1f).fillMaxHeight()
+            ) { AppIcons.Calendar(modifier = Modifier.size(20.dp), color = AppTheme.TintAmberInk) }
+            SearchSectionTile(
                 title = "Bacheca",
                 subtitle = "Proposte della classe",
+                count = proposalCount,
                 tint = AppTheme.TintViolet,
+                ink = AppTheme.TintVioletInk,
                 onClick = onOpenBoard,
-                icon = { AppIcons.ChatBubble(modifier = Modifier.size(20.dp), color = AppTheme.TintVioletInk) }
+                modifier = Modifier.weight(1f).fillMaxHeight()
+            ) { AppIcons.ChatBubble(modifier = Modifier.size(20.dp), color = AppTheme.TintVioletInk) }
+        }
+    }
+}
+
+@Composable
+private fun SearchSectionTile(
+    title: String,
+    subtitle: String,
+    count: Int,
+    tint: Color,
+    ink: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: @Composable () -> Unit
+) {
+    AilaCard(onClick = onClick, containerColor = tint, modifier = modifier) {
+        Column(modifier = Modifier.fillMaxWidth().padding(AppTheme.Space12)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Il riquadro dell'icona e' del colore dell'inchiostro, molto chiaro: sopra una
+                // tessera gia' colorata il tono pieno della lista non si leggeva come un rilievo.
+                AilaIconTile(tint = ink.copy(alpha = 0.14f), size = 40.dp, icon = icon)
+                Spacer(modifier = Modifier.weight(1f))
+                if (count > 0) {
+                    Text(text = count.toString(), style = MaterialTheme.typography.titleMedium, color = ink)
+                }
+            }
+            Spacer(modifier = Modifier.height(AppTheme.Space12))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                color = AppTheme.TextDark,
+                maxLines = 1
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Normal,
+                color = AppTheme.TextMuted
             )
         }
     }
@@ -353,7 +413,8 @@ private fun AskAilaButton(query: String, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(AppTheme.CardCornerRadius))
-            .background(AppTheme.PrimaryGradient)
+            // Aurora: l'unico elemento animato della schermata, e l'unico che fa una cosa diversa.
+            .ailaAssistantAurora()
             .ailaGlassPressable { onClick() }
             .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12),
         verticalAlignment = Alignment.CenterVertically

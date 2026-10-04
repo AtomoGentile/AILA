@@ -45,6 +45,25 @@ Resta:
 - un Rappresentante che dimentica la password si recupera ancora solo a mano sul database;
 - dopo la transizione: `npx wrangler secret delete REPRESENTATIVE_SIGNUP_CODE`.
 
+## 4/10: Assistant e Ricerca ridisegnati (`AilaAssistantUi.kt`)
+
+- Nuovo `design/AilaAssistantUi.kt`: `AilaAssistantHalo` (icona del benvenuto: cookie che ruota
+  in 40 s, alone che respira, onda al centro), `ailaAssistantAurora()` (sfondo del pulsante
+  "Chiedi ad AILA Assistant": blu primario con due macchie viola/blu-verde scure che scivolano),
+  `AilaPillTextField` + `ailaFocusRing` (campo a capsula con anello viola-blu-verde al focus,
+  uguale in chat e ricerca), `ailaPulse()`. Colori del marchio in `AilaLogo.kt`
+  (`AilaAssistantViolet/Blue/Teal`).
+- Chat: benvenuto centrato con domande che hanno l'icona dell'argomento (colori delle fonti),
+  attesa con "Sto cercando in AILA...", elenchi con rientro "appeso", chip delle fonti a capsula
+  con titolo che non esce piu' dallo schermo, Invia col gradiente primario.
+- Ricerca: campo a capsula, aurora sul pulsante Assistant, tre tessere colorate con i conteggi
+  al posto della lista "Dove posso cercare", "Nessun risultato" con azione "Chiedi all'Assistant".
+- "Riduci movimento": cookie, alone, aurora e pulsazione fermi.
+- **Non compilato ne' visto a schermo** (niente Android SDK qui): lo verifica la CI. Da guardare
+  su un telefono in Glass e Material, chiaro/scuro, testo al 130% (le tre tessere della Ricerca
+  sono strette: se i titoli vanno a capo male, passare a una lista), contrasto del testo bianco
+  sull'aurora.
+
 ## 4/10: scala tipografica dell'app (`ailaTypography()`)
 
 Fatto (un commit per schermata, compilato con `:shared:compileDebugKotlinAndroid`):

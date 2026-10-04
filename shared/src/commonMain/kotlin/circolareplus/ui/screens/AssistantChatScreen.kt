@@ -33,6 +33,15 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.ParagraphStyle
+import androidx.compose.ui.text.style.TextIndent
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import circolareplus.design.AilaAssistantHalo
+import circolareplus.design.AilaIconTile
+import circolareplus.design.ailaPulse
 import androidx.compose.ui.unit.dp
 import circolareplus.ai.assistant.AilaAssistant
 import circolareplus.ai.assistant.AssistantAuthor
@@ -245,37 +254,15 @@ fun AssistantChatScreen(
                 onSend(question)
             }
             Row(verticalAlignment = Alignment.Bottom) {
-                val fieldShape = RoundedCornerShape(24.dp)
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .then(
-                            if (AppTheme.isGlass) Modifier.ailaGlassSurface(fieldShape)
-                            else Modifier.clip(fieldShape).background(AppTheme.TrackFill)
-                        )
-                ) {
-                    OutlinedTextField(
-                        value = draft,
-                        onValueChange = { draft = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Chiedi qualsiasi cosa…", style = MaterialTheme.typography.bodyLarge) },
-                        maxLines = 4,
-                        shape = fieldShape,
-                        // Il fondo lo da' il contenitore (vetro o pillola tonale): il campo e'
-                        // trasparente e senza contorno.
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            focusedBorderColor = Color.Transparent,
-                            unfocusedBorderColor = Color.Transparent,
-                            cursorColor = AppTheme.PrimaryBlue,
-                            focusedTextColor = AppTheme.TextDark,
-                            unfocusedTextColor = AppTheme.TextDark,
-                            focusedPlaceholderColor = AppTheme.TextFaint,
-                            unfocusedPlaceholderColor = AppTheme.TextFaint
-                        )
-                    )
-                }
+                // Capsula con l'anello dell'Assistant al focus: stessa della ricerca.
+                circolareplus.design.AilaPillTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    placeholder = "Chiedi qualsiasi cosa…",
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(24.dp),
+                    maxLines = 4
+                )
                 Spacer(modifier = Modifier.width(AppTheme.Space8))
                 SendButton(enabled = canSend, onClick = send)
             }
@@ -330,7 +317,7 @@ private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
         animationSpec = ailaNavigationSpring(),
         label = "sendButtonOn"
     )
-    val blue = AppTheme.PrimaryBlue
+    val fill = AppTheme.PrimaryGradient
     Box(
         modifier = Modifier
             .padding(bottom = AppTheme.Space4)
@@ -342,7 +329,7 @@ private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
                 else Modifier.clip(shape).background(AppTheme.TrackFill)
             )
             .clip(shape)
-            .drawBehind { drawRect(blue, alpha = on) }
+            .drawBehind { drawRect(fill, alpha = on) }
             .clickable(interactionSource = interactionSource, indication = null, enabled = enabled) { onClick() }
             .semantics { contentDescription = "Invia" },
         contentAlignment = Alignment.Center
@@ -494,50 +481,77 @@ private fun relativeTimeLabel(atMillis: Long): String {
 /** Schermata vuota: spiega cosa sa fare e propone le prime domande. */
 @Composable
 private fun AssistantWelcome(onPick: (String) -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth().padding(top = AppTheme.Space24)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // Le barre del marchio si alzano una dopo l'altra: e' l'unico elemento che si muove,
-            // il resto della pagina e' gia' al suo posto (niente cascate, come nel resto dell'app).
-            AilaAssistantWave(active = false, size = 34.dp, intro = true)
-            Spacer(modifier = Modifier.width(AppTheme.Space12))
-            Column {
-                Text(
-                    text = "AILA Assistant",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = AppTheme.TextDark
-                )
-                Text(
-                    text = "Cerca per te in circolari, calendario, bacheca, sondaggi e mappa posti.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = AppTheme.TextMuted
-                )
-            }
-        }
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = AppTheme.Space12),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // L'unico elemento che si muove (cookie che ruota piano, alone che respira, barre che si
+        // alzano): il resto della pagina e' gia' al suo posto, niente cascate.
+        AilaAssistantHalo(size = 80.dp, intro = true)
+        Text(
+            text = "AILA Assistant",
+            style = MaterialTheme.typography.headlineMedium,
+            color = AppTheme.TextDark,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(AppTheme.Space4))
+        Text(
+            text = "Cerca per te in circolari, calendario, bacheca, sondaggi e mappa posti.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = AppTheme.TextMuted,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = AppTheme.Space16)
+        )
 
         Spacer(modifier = Modifier.height(AppTheme.Space24))
         Text(
             text = "PROVA A CHIEDERE",
             style = MaterialTheme.typography.labelSmall,
-            color = AppTheme.TextFaint
+            color = AppTheme.TextFaint,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space4)
         )
         Spacer(modifier = Modifier.height(AppTheme.Space8))
         AilaAssistant.SUGGESTED_QUESTIONS.forEachIndexed { index, question ->
+            val topic = suggestionTopic(question)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = AppTheme.Space8)
-                    .chatSurface(RoundedCornerShape(AppTheme.SmallElementRadius))
+                    .chatSurface(RoundedCornerShape(AppTheme.CardCornerRadius))
                     .ailaPressable(pressedScale = 0.98f) { onPick(question) }
-                    .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space12)
+                    .padding(start = AppTheme.Space12, end = AppTheme.Space16, top = AppTheme.Space12, bottom = AppTheme.Space12)
                     .ailaAppear(index),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                AppIcons.Sparkle(modifier = Modifier.size(15.dp), color = AppTheme.PrimaryBlue)
-                Spacer(modifier = Modifier.width(AppTheme.Space8))
-                Text(text = question, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextDark)
+                // L'icona dice di cosa parla la domanda, con lo stesso colore delle fonti sotto
+                // le risposte (circolari blu, calendario ambra, bacheca viola).
+                AilaIconTile(tint = topic.kind.tint(), size = 40.dp) { topic.kind.Icon(topic.kind.ink(), 18.dp) }
+                Spacer(modifier = Modifier.width(AppTheme.Space12))
+                Text(
+                    text = question,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = AppTheme.TextDark,
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
     }
+}
+
+private class SuggestionTopic(val kind: AssistantSourceKind)
+
+/** L'argomento di una domanda suggerita, dalle parole che contiene: serve solo a scegliere l'icona. */
+private fun suggestionTopic(question: String): SuggestionTopic {
+    val q = question.lowercase()
+    return SuggestionTopic(
+        when {
+            "circolar" in q -> AssistantSourceKind.CIRCULAR
+            "banco" in q || "seduto" in q -> AssistantSourceKind.SEAT_MAP
+            "bacheca" in q || "propost" in q -> AssistantSourceKind.BOARD
+            "sondagg" in q -> AssistantSourceKind.POLL
+            else -> AssistantSourceKind.CALENDAR
+        }
+    )
 }
 
 /** Angoli dei fumetti: tondi, con l'angolo verso chi parla appena accennato. */
@@ -566,7 +580,10 @@ private fun UserBubble(text: String, animateSend: Boolean = false, onShown: () -
                 )
                 // Glass: blu pieno come i fumetti di Messaggi. Material: "primary container",
                 // tonale, come le chat di Android (il blu pieno e' riservato al pulsante di invio).
-                .background(if (AppTheme.isGlass) AppTheme.PrimaryBlue else AppTheme.TintBlue)
+                .then(
+                    if (AppTheme.isGlass) Modifier.background(AppTheme.PrimaryGradient)
+                    else Modifier.background(AppTheme.TintBlue)
+                )
                 .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12)
         ) {
             Text(
@@ -702,13 +719,22 @@ private fun AssistantErrorBubble(text: String) {
  */
 @Composable
 private fun ThinkingBubble() {
-    AilaAssistantWave(
-        active = true,
-        size = 26.dp,
-        modifier = Modifier
-            .padding(top = 4.dp)
-            .semantics { contentDescription = "AILA Assistant sta cercando" }
-    )
+    Row(
+        modifier = Modifier.padding(top = 4.dp).semantics { contentDescription = "AILA Assistant sta cercando" },
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AilaAssistantWave(active = true, size = 26.dp)
+        Spacer(modifier = Modifier.width(AppTheme.Space8))
+        // Una sola frase, onesta: non finge i passaggi (leggo le circolari, controllo il
+        // calendario…) che il modello fa tutti insieme. Solo respira, come l'onda.
+        Text(
+            text = "Sto cercando in AILA…",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Normal,
+            color = AppTheme.TextMuted,
+            modifier = Modifier.ailaPulse().clearAndSetSemantics { }
+        )
+    }
 }
 
 @Composable
@@ -717,20 +743,26 @@ private fun SourceChip(source: AssistantSource, onClick: () -> Unit) {
     val ink = source.kind.ink()
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+            .clip(RoundedCornerShape(AppTheme.ButtonCornerRadius))
             .background(tint)
             .ailaPressable(pressedScale = 0.95f) { onClick() }
-            .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8),
+            .padding(start = AppTheme.Space12, end = AppTheme.Space12, top = AppTheme.Space8, bottom = AppTheme.Space8),
         verticalAlignment = Alignment.CenterVertically
     ) {
         source.kind.Icon(ink)
-        Spacer(modifier = Modifier.width(AppTheme.Space4))
+        Spacer(modifier = Modifier.width(AppTheme.Space8))
+        // Il titolo lungo non esce piu' dallo schermo con il fondo tagliato: sta in un massimo
+        // di larghezza e finisce con i puntini.
         Text(
             text = source.label,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelMedium,
             color = ink,
-            maxLines = 1
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(max = 200.dp)
         )
+        Spacer(modifier = Modifier.width(AppTheme.Space4))
+        AppIcons.ChevronRight(modifier = Modifier.size(12.dp), color = ink)
     }
 }
 
@@ -753,8 +785,8 @@ private fun AssistantSourceKind.ink(): Color = when (this) {
 }
 
 @Composable
-private fun AssistantSourceKind.Icon(color: Color) {
-    val size = Modifier.size(13.dp)
+private fun AssistantSourceKind.Icon(color: Color, iconSize: androidx.compose.ui.unit.Dp = 14.dp) {
+    val size = Modifier.size(iconSize)
     when (this) {
         AssistantSourceKind.CIRCULAR -> AppIcons.Document(modifier = size, color = color)
         AssistantSourceKind.CALENDAR -> AppIcons.Calendar(modifier = size, color = color)
@@ -775,14 +807,9 @@ private fun AssistantSourceKind.Icon(color: Color) {
  */
 private fun formatAssistantText(raw: String): AnnotatedString = buildAnnotatedString {
     val lines = raw.trim().lines()
-    lines.forEachIndexed { lineIndex, rawLine ->
-        var line = rawLine
-        val trimmed = line.trimStart()
-        if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
-            val indent = line.length - trimmed.length
-            line = " ".repeat(indent) + "•" + trimmed.substring(1)
-        }
+    fun isBullet(line: String) = line.trimStart().let { it.startsWith("- ") || it.startsWith("* ") }
 
+    fun appendLine(line: String) {
         var index = 0
         var bold = false
         while (index < line.length) {
@@ -795,7 +822,23 @@ private fun formatAssistantText(raw: String): AnnotatedString = buildAnnotatedSt
             bold = !bold
             index = marker + 2
         }
-        if (lineIndex < lines.lastIndex) append("\n")
+    }
+
+    lines.forEachIndexed { lineIndex, line ->
+        if (isBullet(line)) {
+            // Il punto elenco e' un paragrafo a se' con l'andata a capo "appesa": la seconda riga
+            // parte sotto il testo e non sotto il pallino. Un paragrafo va a capo da solo, quindi
+            // niente "\n" dopo (ne' prima di un altro paragrafo).
+            val body = line.trimStart().substring(2)
+            withStyle(ParagraphStyle(textIndent = TextIndent(firstLine = 0.sp, restLine = 14.sp))) {
+                append("•  ")
+                appendLine(body)
+            }
+        } else {
+            appendLine(line)
+            val next = lines.getOrNull(lineIndex + 1)
+            if (next != null && !isBullet(next)) append("\n")
+        }
     }
 }
 

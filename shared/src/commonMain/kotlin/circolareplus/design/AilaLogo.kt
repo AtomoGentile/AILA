@@ -282,13 +282,12 @@ private fun DrawScope.drawAilaMark(g: AilaMarkGeometry, brush: Brush?, sparkleCo
  * sfumatura) si passa un `SolidColor` al parametro `brush`, che e' la versione monocromatica
  * prevista dalle linee guida del logo.
  */
+val AilaAssistantViolet = Color(0xFF8B5CF6)
+val AilaAssistantBlue = Color(0xFF3B82F6)
+val AilaAssistantTeal = Color(0xFF14B8A6)
+
 val AilaAssistantBrush: Brush = Brush.linearGradient(
-    listOf(
-        Color(0xFF8B5CF6),
-        Color(0xFF3B82F6),
-        Color(0xFF3B82F6),
-        Color(0xFF14B8A6)
-    )
+    listOf(AilaAssistantViolet, AilaAssistantBlue, AilaAssistantBlue, AilaAssistantTeal)
 )
 
 /** Altezze delle quattro barre in frazione del lato: e' questa sequenza a fare l'onda. */
