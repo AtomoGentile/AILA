@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -28,7 +30,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
@@ -150,6 +155,12 @@ object AilaSheetBackdrop {
 @Composable
 fun AilaTopSheet(
     origin: AilaTransformOrigin? = null,
+    /**
+     * Pannello agganciato al bordo BASSO (cresce verso l'alto, maniglia in cima, sopra la
+     * tastiera): per i pulsanti che stanno in basso, come il "+" flottante della Bacheca. Da un
+     * pulsante in basso un pannello che cresce verso il bordo alto non ha senso.
+     */
+    fromBottom: Boolean = false,
     onClosed: () -> Unit,
     content: @Composable ColumnScope.(requestClose: () -> Unit) -> Unit
 ) {
@@ -190,6 +201,8 @@ fun AilaTopSheet(
     // L'altezza della tastiera si legge in fase di layout (vedi il pannello piu' sotto): letta qui,
     // ogni fotogramma dell'animazione della tastiera ricomponeva tutto il contenuto del foglio.
     val imeInsets = WindowInsets.ime
+    val statusInsets = WindowInsets.statusBars
+    val navInsets = WindowInsets.navigationBars
     Box(modifier = Modifier.ailaNoTouchWhile(closing.value).fillMaxSize()) {
         // Scrim: tocco fuori = chiudi.
         Box(
@@ -212,7 +225,12 @@ fun AilaTopSheet(
                             closing = { closing.value },
                             // Il rettangolo del pannello, esteso sopra lo schermo di un raggio: gli
                             // angoli alti arrotondati durante la corsa non devono vedersi.
-                            targetRect = { panelBounds.value?.let { Rect(it.left, it.top - bottomRadiusPx, it.right, it.bottom) } },
+                            targetRect = {
+                                panelBounds.value?.let {
+                                    if (fromBottom) Rect(it.left, it.top, it.right, it.bottom + bottomRadiusPx)
+                                    else Rect(it.left, it.top - bottomRadiusPx, it.right, it.bottom)
+                                }
+                            },
                             targetRadiusPx = bottomRadiusPx
                         )
                         .graphicsLayer {}
@@ -221,10 +239,11 @@ fun AilaTopSheet(
         ) {
             Column(
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
+                    .align(if (fromBottom) Alignment.BottomCenter else Alignment.TopCenter)
                     .fillMaxWidth()
                     .layout { measurable, constraints ->
-                        val maxSheetHeight = (constraints.maxHeight - imeInsets.getBottom(this) - 24.dp.roundToPx())
+                        val maxSheetHeight = (constraints.maxHeight - imeInsets.getBottom(this) -
+                            (if (fromBottom) statusInsets.getTop(this) else 0) - 24.dp.roundToPx())
                             .coerceAtLeast(240.dp.roundToPx())
                             .coerceAtMost(constraints.maxHeight)
                         val placeable = measurable.measure(
@@ -232,30 +251,51 @@ fun AilaTopSheet(
                         )
                         layout(placeable.width, placeable.height) { placeable.place(0, 0) }
                     }
+                    // Dal basso il pannello sale sopra la tastiera (le insets non ridimensionano la finestra).
                     .then(
-                        if (origin == null) Modifier.graphicsLayer { translationY = -(1f - progress.value) * size.height }
-                        else Modifier
+                        if (fromBottom) Modifier.offset { IntOffset(0, -imeInsets.getBottom(this)) } else Modifier
+                    )
+                    .then(
+                        if (origin == null) Modifier.graphicsLayer {
+                            translationY = (if (fromBottom) 1f else -1f) * (1f - progress.value) * size.height
+                        } else Modifier
                     )
                     .onGloballyPositioned { panelBounds.value = it.boundsInParent() }
-                    .clip(RoundedCornerShape(bottomStart = bottomRadius, bottomEnd = bottomRadius))
+                    .clip(
+                        if (fromBottom) RoundedCornerShape(topStart = bottomRadius, topEnd = bottomRadius)
+                        else RoundedCornerShape(bottomStart = bottomRadius, bottomEnd = bottomRadius)
+                    )
                     .background(AppTheme.SurfaceWhite)
                     // Il pannello prende i tocchi: senza, quelli sulle zone vuote arriverebbero allo
                     // scrim sotto e lo chiuderebbero.
                     .pointerInput(Unit) { detectTapGestures { } }
-                    .statusBarsPadding()
+                    .then(
+                        if (fromBottom) Modifier.layout { measurable, constraints ->
+                            // Spazio della barra di navigazione, ma non quando c'e' la tastiera (che
+                            // la copre gia'): letto in fase di layout, non ricompone.
+                            val extra = (navInsets.getBottom(this) - imeInsets.getBottom(this)).coerceAtLeast(0)
+                            val placeable = measurable.measure(constraints.copy(minHeight = 0))
+                            layout(placeable.width, placeable.height + extra) { placeable.place(0, 0) }
+                        } else Modifier.statusBarsPadding()
+                    )
             ) {
-                // Il contenuto scorre da solo se non ci sta; la maniglia sta sotto, fuori dallo scorrimento.
+                val handle: @Composable ColumnScope.(Dp, Dp) -> Unit = { top, bottom ->
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .padding(top = top, bottom = bottom)
+                            .size(width = 36.dp, height = 5.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(AppTheme.TextFaint.copy(alpha = 0.5f))
+                    )
+                }
+                // Dal bordo alto la maniglia sta sotto; dal basso in cima. Il contenuto scorre da solo
+                // se non ci sta e la maniglia resta fuori dallo scorrimento.
+                if (fromBottom) handle(10.dp, 4.dp)
                 Column(modifier = Modifier.weight(1f, fill = false)) {
                     content(requestClose)
                 }
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .padding(top = 4.dp, bottom = 10.dp)
-                        .size(width = 36.dp, height = 5.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(AppTheme.TextFaint.copy(alpha = 0.5f))
-                )
+                if (!fromBottom) handle(4.dp, 10.dp)
             }
         }
     }
@@ -339,6 +379,8 @@ fun AilaOriginSheet(
     onDismiss: () -> Unit,
     closeRequested: Boolean = false,
     faded: Boolean = false,
+    /** Il pulsante che lo apre sta in basso (FAB): il foglio si aggancia al fondo e cresce verso l'alto. */
+    fromBottom: Boolean = false,
     content: @Composable ColumnScope.(close: () -> Unit) -> Unit
 ) {
     if (AppTheme.isGlass) {
@@ -369,7 +411,7 @@ fun AilaOriginSheet(
             AilaContainerTransform.assignFreshTo(originKey)
             AilaContainerTransform.originOf(originKey)
         }
-        AilaTopSheet(origin = origin, onClosed = onDismiss) { requestClose ->
+        AilaTopSheet(origin = origin, fromBottom = fromBottom, onClosed = onDismiss) { requestClose ->
             LaunchedEffect(closeRequested) { if (closeRequested) requestClose() }
             androidx.compose.runtime.CompositionLocalProvider(LocalAilaSheetReveal provides false) {
                 content(requestClose)

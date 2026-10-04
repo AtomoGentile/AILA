@@ -6133,7 +6133,9 @@ private fun AddProposalDialog(
     circolareplus.design.AilaOriginSheet(
         originKey = "proposalCreateSheet",
         onDismiss = onDismiss,
-        closeRequested = closeRequested
+        closeRequested = closeRequested,
+        // Il "+" della Bacheca sta in basso a destra: il foglio sale dal fondo.
+        fromBottom = true
     ) { closeAnimated ->
         Column(
             modifier = Modifier

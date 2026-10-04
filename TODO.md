@@ -45,6 +45,15 @@ Resta:
 - un Rappresentante che dimentica la password si recupera ancora solo a mano sul database;
 - dopo la transizione: `npx wrangler secret delete REPRESENTATIVE_SIGNUP_CODE`.
 
+## 4/10: foglio "Nuova proposta" dal fondo
+
+Il FAB della Bacheca sta in basso a destra, ma `AilaTopSheet` era agganciato al bordo alto: la
+forma cresceva verso l'alto lontano dal pulsante. Nuovo parametro `fromBottom` (anche su
+`AilaOriginSheet`): pannello ancorato al fondo, angoli alti tondi, maniglia in cima, sopra la
+tastiera (offset di `ime`) e la barra di navigazione. Usato da `AddProposalDialog`. I fogli da
+pulsanti in alto ("+" sondaggi, cronologia chat, "+" Calendario) restano dal bordo alto. **Non
+provato su un telefono**: guardare con la tastiera aperta e con la barra a gesti.
+
 ## 4/10: fix - sondaggi e bacheca non si aprivano piu' (Material)
 
 I moduli di creazione (proposta, sondaggi) sono passati da `ModalBottomSheet` (una finestra, va
