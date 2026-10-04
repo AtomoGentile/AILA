@@ -45,6 +45,14 @@ Resta:
 - un Rappresentante che dimentica la password si recupera ancora solo a mano sul database;
 - dopo la transizione: `npx wrangler secret delete REPRESENTATIVE_SIGNUP_CODE`.
 
+## 4/10: fix - sondaggi e bacheca non si aprivano piu' (Material)
+
+I moduli di creazione (proposta, sondaggi) sono passati da `ModalBottomSheet` (una finestra, va
+bene ovunque) a `AilaOriginSheet`, un pannello DENTRO l'app: ma erano composti prima dello
+Scaffold, quindi finivano dietro le tab. Ora `creationDialogs` si compone in fondo, accanto a
+"Nuovo evento" (Material), e dov'era prima solo in Glass. **Regola: un pannello in-tree va composto
+in fondo alla shell.**
+
 ## 4/10: tessere della Ricerca che "esplodono", pulsanti tondi Pixel, codice classe nascosto
 
 - **Ricerca, tessere** Circolari/Calendario/Bacheca (Material): `ailaExplodeOut` (AilaMotion) - la

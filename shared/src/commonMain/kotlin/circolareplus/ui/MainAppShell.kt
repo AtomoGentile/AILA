@@ -2029,6 +2029,11 @@ fun MainAppShell(
         )
     }
 
+    // Moduli di creazione (proposta, sondaggi). Glass: fogli di sistema (finestre), si compongono
+    // qui. Material: pannelli DENTRO l'app che nascono dal pulsante (AilaOriginSheet), quindi vanno
+    // composti in fondo, sopra tab e schermate, come "Nuovo evento": composti qui finivano DIETRO
+    // le tab (lo Scaffold viene dopo) e non si vedevano.
+    val creationDialogs: @Composable () -> Unit = {
     if (showAddProposalDialog) {
         AddProposalDialog(
             closeRequested = closeAddProposalRequested,
@@ -2110,6 +2115,8 @@ fun MainAppShell(
             }
         )
     }
+    }
+    if (AppTheme.isGlass) creationDialogs()
 
     if (seatMapActionError != null) {
         AlertDialog(
@@ -4346,6 +4353,7 @@ fun MainAppShell(
         // Nuovo evento (Material): il foglio scende dall'alto. Sopra le tab e i
         // dettagli; in Glass e' il foglio di sistema (vedi addEventDialog).
         if (!AppTheme.isGlass) addEventDialog()
+        if (!AppTheme.isGlass) creationDialogs()
         // Dettaglio di un evento (Material): la card si allarga nella pagina e ci si richiude.
         androidx.compose.animation.AnimatedVisibility(
             visible = eventDetailToShow != null && !AppTheme.isGlass,
