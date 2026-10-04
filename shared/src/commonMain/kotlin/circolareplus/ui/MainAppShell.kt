@@ -1267,6 +1267,7 @@ fun MainAppShell(
     fun navigateForNotificationCategory(category: String) {
         isInNotificationsScreen = false
         isInSearchScreen = false
+        isInAssistantScreen = false
         isInSettingsScreen = false
         isInBackgroundDebugScreen = false
         isInClassRosterScreen = false
@@ -2127,6 +2128,28 @@ fun MainAppShell(
     // ...): vivono in un livello SOPRA lo Scaffold, cosi' scorrono sopra anche la barra in basso
     // invece di farla sparire di colpo. La nuova entra da destra con una molla, le tab sotto
     // scivolano di un terzo a sinistra e si scuriscono; indietro l'inverso.
+    // "Indietro" torna alla schermata da cui si e' arrivati, non all'inizio. Le schermate sopra
+    // le tab (Ricerca, Assistant) restano aperte sotto quello che apri da loro, quando e' un livello
+    // sopra (dettaglio circolare, elenco classe): chiuderlo le ritrova com'erano, con la domanda
+    // scritta e la chat a meta'. Quando la destinazione e' una tab (Calendario, Bacheca...) le
+    // schermate si chiudono, e ReturnPoint ricorda da dove si veniva: indietro dalla tab le riapre.
+    var returnPoint by remember { mutableStateOf<ReturnPoint?>(null) }
+    fun openTabFromOverlay(target: MainTab, setup: () -> Unit = {}) {
+        returnPoint = ReturnPoint(
+            search = isInSearchScreen,
+            assistant = isInAssistantScreen,
+            fromTab = selectedTab,
+            targetTab = target
+        )
+        isInAssistantScreen = false
+        isInSearchScreen = false
+        setup()
+        selectedTab = target
+    }
+    // Se dalla tab di destinazione si passa a un'altra (tocco sulla barra), il ritorno non vale piu'.
+    LaunchedEffect(selectedTab) {
+        if (returnPoint?.targetTab != selectedTab) returnPoint = null
+    }
     val shellRoute = when {
         isInSettingsScreen && isInBackgroundDebugScreen -> ShellRoute.BACKGROUND_DEBUG
         isInSettingsScreen -> ShellRoute.SETTINGS
@@ -2511,9 +2534,16 @@ fun MainAppShell(
                     // l'app), coerente con le altre app che usano una bottom bar. Caso speciale:
                     // dentro "Preferenze Sociali" (sotto-schermata di Mappa Posti) il back torna
                     // prima alla mappa, non subito a Home.
-                    circolareplus.platform.PlatformBackHandler(enabled = selectedTab != MainTab.HOME) {
+                    circolareplus.platform.PlatformBackHandler(enabled = selectedTab != MainTab.HOME || returnPoint != null) {
+                        val ret = returnPoint
                         if (selectedTab == MainTab.SEATMAP && seatMapMode == "VOTE_PREFERENCES") {
                             seatMapMode = "MAP"
+                        } else if (ret != null && selectedTab == ret.targetTab) {
+                            // Si era arrivati dalla Ricerca o dall'Assistant: si torna li', com'erano.
+                            returnPoint = null
+                            selectedTab = ret.fromTab
+                            isInSearchScreen = ret.search
+                            isInAssistantScreen = ret.assistant
                         } else {
                             selectedTab = MainTab.HOME
                         }
@@ -4003,7 +4033,18 @@ fun MainAppShell(
                     }
                 }
                 ShellRoute.ASSISTANT -> {
-                    circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { isInAssistantScreen = false }
+                    // Indietro da una conversazione torna alla schermata iniziale dell'Assistant
+                    // (marchio e ultime chat), non a quella da cui si e' arrivati: la conversazione
+                    // e' gia' nello storico. Solo da li' si esce.
+                    val assistantBack = {
+                        if (assistantMessages.isNotEmpty()) {
+                            assistantMessages.clear()
+                            assistantConversationId = "c${currentTimeMillis()}"
+                        } else {
+                            isInAssistantScreen = false
+                        }
+                    }
+                    circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { assistantBack() }
                     AssistantChatScreen(
                         messages = assistantMessages,
                         isThinking = isAssistantThinking,
@@ -4015,7 +4056,7 @@ fun MainAppShell(
                             AppContainer.settings.assistantThinkingEnabled = enabled
                             assistantThinking = enabled
                         },
-                        onBackClick = { isInAssistantScreen = false },
+                        onBackClick = { assistantBack() },
                         onClearChat = {
                             // "Nuova chat" archivia, non cancella: quella di prima e' gia' nello
                             // storico, qui basta ripartire con un id nuovo.
@@ -4044,23 +4085,20 @@ fun MainAppShell(
                             }
                         },
                         onOpenSource = { source ->
-                            isInAssistantScreen = false
-                            isInSearchScreen = false
                             when (source.kind) {
                                 AssistantSourceKind.CIRCULAR -> {
-                                    val number = source.circularNumber
-                                    val circular = circulars.firstOrNull { it.number == number }
+                                    val circular = circulars.firstOrNull { it.number == source.circularNumber }
+                                    // Il dettaglio si apre sopra la chat, che resta com'e': indietro la ritrova.
                                     if (circular != null) selectedCircularForDetail = circular
-                                    classSection = ClassSection.CIRCULARS
-                                    selectedTab = MainTab.CLASS
+                                    else openTabFromOverlay(MainTab.CLASS) { classSection = ClassSection.CIRCULARS }
                                 }
-                                AssistantSourceKind.CALENDAR -> selectedTab = MainTab.CALENDAR
-                                AssistantSourceKind.BOARD -> {
+                                AssistantSourceKind.CALENDAR -> openTabFromOverlay(MainTab.CALENDAR)
+                                AssistantSourceKind.BOARD -> openTabFromOverlay(MainTab.CLASS) {
                                     classSection = ClassSection.BOARD
-                                    selectedTab = MainTab.CLASS
                                 }
-                                AssistantSourceKind.POLL -> selectedTab = MainTab.POLLS
-                                AssistantSourceKind.SEAT_MAP -> selectedTab = MainTab.SEATMAP
+                                AssistantSourceKind.POLL -> openTabFromOverlay(MainTab.POLLS)
+                                AssistantSourceKind.SEAT_MAP -> openTabFromOverlay(MainTab.SEATMAP)
+                                // L'elenco classe e' un livello sopra la chat: indietro torna alla chat.
                                 AssistantSourceKind.CLASS -> isInClassRosterScreen = true
                             }
                         }
@@ -4085,26 +4123,13 @@ fun MainAppShell(
                             // riscrivere in chat sarebbe un passaggio in piu' e basta.
                             if (question.isNotBlank()) askAssistant(question)
                         },
-                        onOpenCircular = { circular ->
-                            isInSearchScreen = false
-                            selectedCircularForDetail = circular
-                            classSection = ClassSection.CIRCULARS
-                            selectedTab = MainTab.CLASS
-                        },
-                        onOpenCirculars = {
-                            isInSearchScreen = false
-                            classSection = ClassSection.CIRCULARS
-                            selectedTab = MainTab.CLASS
-                        },
-                        onOpenCalendar = {
-                            isInSearchScreen = false
-                            selectedTab = MainTab.CALENDAR
-                        },
-                        onOpenBoard = {
-                            isInSearchScreen = false
-                            classSection = ClassSection.BOARD
-                            selectedTab = MainTab.CLASS
-                        }
+                        // Il dettaglio si apre sopra la Ricerca, che resta com'era (testo scritto,
+                        // filtro, risultati): indietro la ritrova. Le tab invece si aprono sotto e
+                        // "indietro" riapre la Ricerca (vedi openTabFromOverlay).
+                        onOpenCircular = { circular -> selectedCircularForDetail = circular },
+                        onOpenCirculars = { openTabFromOverlay(MainTab.CLASS) { classSection = ClassSection.CIRCULARS } },
+                        onOpenCalendar = { openTabFromOverlay(MainTab.CALENDAR) },
+                        onOpenBoard = { openTabFromOverlay(MainTab.CLASS) { classSection = ClassSection.BOARD } }
                     )
                 }
                 ShellRoute.NOTIFICATIONS -> {
@@ -6279,14 +6304,22 @@ private const val ADD_EVENT_KEY = "addEventSheet"
  * quasi non si notava. [MATERIAL_PAGE_HOLD_MS] e' quanto resta composta la pagina che esce, piu'
  * dell'animazione anche se i primi fotogrammi sono lenti.
  */
-private const val MATERIAL_PAGE_ENTER_MS = 380
-private const val MATERIAL_PAGE_EXIT_MS = 300
+private const val MATERIAL_PAGE_ENTER_MS = 320
+private const val MATERIAL_PAGE_EXIT_MS = 240
 private const val MATERIAL_PAGE_HOLD_MS = 900
 private const val MATERIAL_PAGE_SMALL = 0.85f
 private const val MATERIAL_PAGE_BEHIND = 1.08f
 
 /** Curva "emphasized decelerate" di Material 3: parte decisa e si posa piano. */
 private val MaterialEmphasizedDecelerate = androidx.compose.animation.core.CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
+
+/** Da dove si e' arrivati a una tab aprendola da Ricerca o Assistant: serve a "indietro". */
+private class ReturnPoint(
+    val search: Boolean,
+    val assistant: Boolean,
+    val fromTab: MainTab,
+    val targetTab: MainTab
+)
 
 /** Le schermate a tutto schermo della shell; `depth` decide il verso del push/pop. */
 private enum class ShellRoute(val depth: Int) {

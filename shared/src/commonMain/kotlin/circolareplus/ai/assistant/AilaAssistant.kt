@@ -91,6 +91,8 @@ class AilaAssistant(
         AssistantBoard.answer(knowledge, question)?.let { return it }
         // "Puoi creare un sondaggio?": dove si fa nell'app, vedi [AssistantCapabilities].
         AssistantCapabilities.answer(knowledge, question)?.let { return it }
+        // "Che cos'e' AILA?", "cosa sai fare?": la risposta la sa il codice, non il modello.
+        AssistantAbout.answer(question, history)?.let { return it }
         // "Riassumimi le ultime circolari": i riassunti ci sono gia', vedi [AssistantDigest].
         AssistantDigest.answer(knowledge, question)?.let { return it }
 

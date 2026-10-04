@@ -45,6 +45,24 @@ Resta:
 - un Rappresentante che dimentica la password si recupera ancora solo a mano sul database;
 - dopo la transizione: `npx wrangler secret delete REPRESENTATIVE_SIGNUP_CODE`.
 
+## 4/10: "indietro" torna alla schermata precedente; risposte su AILA
+
+- **Assistant**: indietro (gesto, freccia) da una conversazione torna alla schermata iniziale
+  (marchio, ultime chat), che si dissolve in entrata; da li' si esce verso Ricerca/Home. La
+  conversazione e' gia' nello storico. `assistantBack` in `MainAppShell`.
+- **Fonti dall'Assistant e risultati dalla Ricerca**: il dettaglio circolare e l'elenco classe si
+  aprono SOPRA la chat/Ricerca, che restano com'erano (testo scritto, conversazione). Per le tab
+  (Calendario, Bacheca, Sondaggi, Mappa posti, elenco Circolari) `openTabFromOverlay` ricorda da
+  dove si veniva (`ReturnPoint`) e indietro dalla tab riapre Ricerca/Assistant e la tab di prima.
+  Il ritorno decade se si cambia tab. Notifiche: chiudono anche l'Assistant.
+- **Animazione pagine Material** (shared axis Z): entrata 320 ms (era 380), uscita/ritorno 240 ms
+  (era 300).
+- **Risposte**: `AssistantAbout` risponde in codice a "cos'e' AILA?", "e cosa fa?", "cosa sai
+  fare?" (Gemini Nano rispondeva "AILA e' l'app scolastica." anche al seguito). Test in
+  `AssistantAboutTest`. Le altre risposte restano al modello: con un motore da 4096 token non si
+  puo' fare molto di piu' senza altre risposte "da codice" (come Agenda, Bacheca, Digest).
+- **Non compilato ne' provato su un telefono**: lo verifica la CI.
+
 ## 4/10: apertura e chiusura dei pulsanti tondi della Home (ricerca, notifiche, profilo)
 
 `AilaMotion.kt`, `MainAppShell.kt`. Primo giro (orologio a passo limitato: un fotogramma lungo

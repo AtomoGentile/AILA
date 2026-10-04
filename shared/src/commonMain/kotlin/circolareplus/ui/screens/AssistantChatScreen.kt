@@ -167,10 +167,30 @@ fun AssistantChatScreen(
             verticalArrangement = Arrangement.spacedBy(if (AppTheme.isGlass) AppTheme.Space12 else AppTheme.Space20)
         ) {
             if (messages.isEmpty() && !isThinking) {
-                item { AssistantWelcome(conversations = conversations, onOpenConversation = onOpenConversation) }
+                // Tornando dalla conversazione alla schermata iniziale i messaggi si dissolvono e
+                // il benvenuto compare subito dopo (ritardo = durata della dissolvenza), invece di
+                // sostituirsi di colpo.
+                item(key = "welcome") {
+                    Box(
+                        modifier = Modifier.animateItem(
+                            fadeInSpec = ailaFadeSpec(AilaDuration.Standard, delayMillis = AilaDuration.Quick + 20),
+                            placementSpec = null,
+                            fadeOutSpec = null
+                        )
+                    ) {
+                        AssistantWelcome(conversations = conversations, onOpenConversation = onOpenConversation)
+                    }
+                }
             }
 
             items(messages, key = { it.id }) { message ->
+                Box(
+                    modifier = Modifier.animateItem(
+                        fadeInSpec = null,
+                        placementSpec = null,
+                        fadeOutSpec = ailaFadeSpec(AilaDuration.Quick)
+                    )
+                ) {
                 when {
                     message.author == AssistantAuthor.USER -> UserBubble(
                         text = message.text,
@@ -186,6 +206,7 @@ fun AssistantChatScreen(
                         animateArrival = message.id == arrivalHolder[0],
                         onArrived = { if (arrivalHolder[0] == message.id) arrivalHolder[0] = null }
                     )
+                }
                 }
             }
 
