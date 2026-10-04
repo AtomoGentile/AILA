@@ -3552,7 +3552,7 @@ fun MainAppShell(
             LaunchedEffect(closingNow) {
                 if (!closingNow || containerOrigin == null) return@LaunchedEffect
                 // Parte da dove la forma e' adesso (anche a meta' apertura), senza salti.
-                closeProgress.snapTo(minOf(openProgress.value, containerProgress.value))
+                closeProgress.snapTo(openProgress.value)
                 closeDriven[0] = true
                 closeProgress.animateContainerClose()
             }
@@ -3650,7 +3650,7 @@ fun MainAppShell(
                             progress = {
                                 if (!revealing) 1f
                                 else if (closingNow && closeDriven[0]) closeProgress.value
-                                else minOf(openProgress.value, containerProgress.value)
+                                else openProgress.value
                             },
                             origin = containerOrigin,
                             containerColor = AppTheme.CardSurface,

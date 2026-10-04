@@ -45,18 +45,21 @@ Resta:
 - un Rappresentante che dimentica la password si recupera ancora solo a mano sul database;
 - dopo la transizione: `npx wrangler secret delete REPRESENTATIVE_SIGNUP_CODE`.
 
-## 4/10: apertura dei pulsanti tondi della Home meno scattosa
+## 4/10: apertura e chiusura dei pulsanti tondi della Home (ricerca, notifiche, profilo)
 
-`AilaMotion.kt`: `awaitCalmFrames()` (l'apertura parte quando due fotogrammi di fila durano
-meno di 24 ms, al massimo dopo 220 ms; prima: due fotogrammi alla cieca) e
-`animateContainerOpen()` (500 ms, curva morbida in partenza, **orologio a passo limitato**: un
-fotogramma lungo avanza il tempo di al piu' 32 ms, quindi la forma non salta in avanti come con
-la molla, che usava il tempo vero). Usato per `openProgress` in `MainAppShell` (ricerca,
-notifiche, profilo). Anche la chiusura: `animateContainerClose()` (520 ms in proporzione a quanto
-resta, attende al massimo 80 ms un fotogramma calmo invece dei 40 ms fissi) guida `closeProgress`
-in `MainAppShell`; la transizione resta solo a tenere viva la pagina (`ailaContainerKeepAliveSpec`,
-900 ms). `ailaContainerCloseSpec` serve ancora a `shellProgress` (tab sotto) e al dettaglio circolare. **Non provato su un telefono**: se scatta ancora,
-il collo di bottiglia e' la composizione della pagina nuova (profilarla), non la curva.
+`AilaMotion.kt`, `MainAppShell.kt`. Primo giro (orologio a passo limitato: un fotogramma lungo
+avanza il tempo di al piu' 32 ms, la forma non salta) ma 500 ms con curva morbida in partenza e
+attesa fino a 220 ms: troppo lenta a partire e a finire. Secondo giro:
+- apertura 320 ms, curva `(0.2, 0.1, 0.05, 1)` che parte subito e non ha coda; attesa di un
+  fotogramma calmo al massimo 50 ms (`awaitCalmFrames`);
+- chiusura 280 ms (in proporzione a quanto resta, minimo meta'), curva `(0.4, 0, 0.2, 1)`, nessuna
+  attesa (`animateContainerClose`); la transizione tiene viva la pagina 500 ms
+  (`ailaContainerKeepAliveSpec`);
+- la forma segue solo `openProgress`/`closeProgress`: prima era il minimo con la molla della
+  transizione, che restava a 0,99 per altri ~150 ms (la "coda" che si trascinava).
+**Non provato su un telefono.** Se resta un po' di lag, il costo e' nella pagina che si apre
+(composizione/disegno): profilarla. `ailaContainerCloseSpec` serve ancora a `shellProgress` e al
+dettaglio circolare.
 
 ## 4/10: Assistant e Ricerca ridisegnati (`AilaAssistantUi.kt`)
 

@@ -741,6 +741,15 @@ fun ailaContainerCloseSpec(): androidx.compose.animation.core.FiniteAnimationSpe
     easing = androidx.compose.animation.core.CubicBezierEasing(0.3f, 0f, 0f, 1f)
 )
 
+// Durate e curve del container transform. Corte e decise: la forma deve arrivare, non trascinarsi.
+// L'apertura parte subito e rallenta solo nell'ultimo tratto; la chiusura e' un po' piu' rapida
+// (si torna indietro, non si scopre niente) e simmetrica, senza coda lunga.
+private const val OPEN_MS = 320L
+private const val CLOSE_MS = 280L
+private val ContainerOpenEasing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0.1f, 0.05f, 1f)
+private val ContainerCloseEasing = androidx.compose.animation.core.CubicBezierEasing(0.4f, 0f, 0.2f, 1f)
+
+
 /**
  * Aspetta che la pagina appena composta si "calmi" prima di far partire l'apertura: due
  * fotogrammi di fila entro [calmMs] (a 60 Hz ne bastano ~17), ma non oltre [maxWaitMs]. Prima si
@@ -748,7 +757,7 @@ fun ailaContainerCloseSpec(): androidx.compose.animation.core.FiniteAnimationSpe
  * campo di testo, immagini) l'animazione partiva proprio sul fotogramma lungo e la forma saltava.
  * Il lavoro lo si fa con la forma ancora ferma sul pulsante.
  */
-suspend fun awaitCalmFrames(minCalmFrames: Int = 2, maxWaitMs: Long = 220, calmMs: Long = 24) {
+suspend fun awaitCalmFrames(minCalmFrames: Int = 1, maxWaitMs: Long = 50, calmMs: Long = 24) {
     val start = androidx.compose.runtime.withFrameNanos { it }
     var last = start
     var calm = 0
@@ -771,7 +780,7 @@ suspend fun awaitCalmFrames(minCalmFrames: Int = 2, maxWaitMs: Long = 220, calmM
 suspend fun androidx.compose.animation.core.Animatable<Float, androidx.compose.animation.core.AnimationVector1D>.animateContainerOpen(
     target: Float = 1f
 ) {
-    animateSteppedTo(target, (if (AppTheme.reduceMotion) 150L else 500L) * 1_000_000L)
+    animateSteppedTo(target, (if (AppTheme.reduceMotion) 150L else OPEN_MS) * 1_000_000L, ContainerOpenEasing)
 }
 
 /**
@@ -785,10 +794,11 @@ suspend fun androidx.compose.animation.core.Animatable<Float, androidx.compose.a
 suspend fun androidx.compose.animation.core.Animatable<Float, androidx.compose.animation.core.AnimationVector1D>.animateContainerClose(
     target: Float = 0f
 ) {
-    awaitCalmFrames(minCalmFrames = 1, maxWaitMs = 80)
-    val travel = kotlin.math.abs(value - target).coerceIn(0.4f, 1f)
-    val base = if (AppTheme.reduceMotion) 200L else 520L
-    animateSteppedTo(target, (base * travel).toLong() * 1_000_000L)
+    // Niente attesa: al tocco "indietro" la forma parte subito; il primo fotogramma lungo lo
+    // assorbe il passo limitato dell'orologio.
+    val travel = kotlin.math.abs(value - target).coerceIn(0.5f, 1f)
+    val base = if (AppTheme.reduceMotion) 150L else CLOSE_MS
+    animateSteppedTo(target, (base * travel).toLong() * 1_000_000L, ContainerCloseEasing)
 }
 
 /**
@@ -798,14 +808,14 @@ suspend fun androidx.compose.animation.core.Animatable<Float, androidx.compose.a
  * pagina e' invisibile e non prende i tocchi.
  */
 fun ailaContainerKeepAliveSpec(): androidx.compose.animation.core.FiniteAnimationSpec<Float> =
-    tween(durationMillis = if (AppTheme.reduceMotion) 300 else 900)
+    tween(durationMillis = if (AppTheme.reduceMotion) 300 else 500)
 
 private suspend fun androidx.compose.animation.core.Animatable<Float, androidx.compose.animation.core.AnimationVector1D>.animateSteppedTo(
     target: Float,
-    totalNanos: Long
+    totalNanos: Long,
+    easing: androidx.compose.animation.core.Easing
 ) {
     val from = value
-    val easing = androidx.compose.animation.core.CubicBezierEasing(0.3f, 0f, 0f, 1f)
     var elapsed = 0L
     var last = androidx.compose.runtime.withFrameNanos { it }
     while (elapsed < totalNanos) {
