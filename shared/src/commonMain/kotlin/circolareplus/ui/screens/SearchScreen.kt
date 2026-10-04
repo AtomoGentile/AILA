@@ -414,7 +414,7 @@ private fun AskAilaButton(query: String, onClick: () -> Unit) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(AppTheme.CardCornerRadius))
             // Aurora: l'unico elemento animato della schermata, e l'unico che fa una cosa diversa.
-            .ailaAssistantAurora()
+            .ailaAssistantAurora(RoundedCornerShape(AppTheme.CardCornerRadius))
             .ailaGlassPressable { onClick() }
             .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12),
         verticalAlignment = Alignment.CenterVertically

@@ -42,6 +42,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import circolareplus.design.AilaAssistantHalo
 import circolareplus.design.AilaIconTile
 import circolareplus.design.ailaPulse
+import circolareplus.design.ailaTopicSurface
 import androidx.compose.ui.unit.dp
 import circolareplus.ai.assistant.AssistantAuthor
 import circolareplus.ai.assistant.AssistantConversation
@@ -561,8 +562,7 @@ private fun AssistantWelcome(
                     Row(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(AppTheme.ButtonCornerRadius))
-                            .background(kind.tint())
+                            .ailaTopicSurface(RoundedCornerShape(AppTheme.ButtonCornerRadius), kind.tint(), kind.ink())
                             .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -790,12 +790,23 @@ private fun ThinkingBubble() {
         Spacer(modifier = Modifier.width(AppTheme.Space8))
         // Una sola frase, onesta: non finge i passaggi (leggo le circolari, controllo il
         // calendario…) che il modello fa tutti insieme. Solo respira, come l'onda.
+        // Glass: l'etichetta sta in una capsula di vetro, come un avviso di iOS; Material: solo
+        // testo accanto all'onda.
         Text(
             text = "Sto cercando in AILA…",
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Normal,
             color = AppTheme.TextMuted,
-            modifier = Modifier.ailaPulse().clearAndSetSemantics { }
+            modifier = Modifier
+                .then(
+                    if (AppTheme.isGlass) {
+                        Modifier
+                            .ailaGlassSurface(RoundedCornerShape(AppTheme.ButtonCornerRadius))
+                            .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space4)
+                    } else Modifier
+                )
+                .ailaPulse()
+                .clearAndSetSemantics { }
         )
     }
 }
@@ -806,8 +817,7 @@ private fun SourceChip(source: AssistantSource, onClick: () -> Unit) {
     val ink = source.kind.ink()
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(AppTheme.ButtonCornerRadius))
-            .background(tint)
+            .ailaTopicSurface(RoundedCornerShape(AppTheme.ButtonCornerRadius), tint, ink)
             .ailaPressable(pressedScale = 0.95f) { onClick() }
             .padding(start = AppTheme.Space12, end = AppTheme.Space12, top = AppTheme.Space8, bottom = AppTheme.Space8),
         verticalAlignment = Alignment.CenterVertically

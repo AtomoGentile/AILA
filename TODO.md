@@ -60,7 +60,12 @@ Resta:
   con titolo che non esce piu' dallo schermo, Invia col gradiente primario.
 - Ricerca: campo a capsula, aurora sul pulsante Assistant, tre tessere colorate con i conteggi
   al posto della lista "Dove posso cercare", "Nessun risultato" con azione "Chiedi all'Assistant".
-- "Riduci movimento": cookie, alone, aurora e pulsazione fermi.
+- Due versioni (lo sfondo sfocato di Glass, `ailaGlassBackdrop`, non e' toccato): **Glass** = icona
+  a lente di vetro (riflesso, filo di luce, un riflesso piu' vivo che le gira intorno), aurora
+  "bagnata" con riflesso e bordo di vetro, capsule delle fonti in vetro con velo colorato, attesa
+  in capsula di vetro, anello al focus da 1,5dp; **Material** = cookie tonale che ruota, aurora
+  piena, capsule tonali, anello da 2dp.
+- "Riduci movimento": cookie, riflesso, alone, aurora e pulsazione fermi.
 - **Non compilato ne' visto a schermo** (niente Android SDK qui): lo verifica la CI. Da guardare
   su un telefono in Glass e Material, chiaro/scuro, testo al 130% (le tre tessere della Ricerca
   sono strette: se i titoli vanno a capo male, passare a una lista), contrasto del testo bianco

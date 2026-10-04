@@ -102,21 +102,62 @@ fun AilaAssistantHalo(
                     )
                 )
         )
-        Box(
-            modifier = Modifier
-                .size(size)
-                .graphicsLayer { if (!reduce) rotationZ = spin.value }
-                .clip(ailaCookieShape(lobes = 9, depth = 0.09f))
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            AilaAssistantViolet.copy(alpha = 0.22f),
-                            AilaAssistantBlue.copy(alpha = 0.20f),
-                            AilaAssistantTeal.copy(alpha = 0.22f)
+        if (AppTheme.isGlass) {
+            // Liquid Glass: una lente. Sfera di vetro con i colori del marchio "rifratti" dentro, il
+            // riflesso in alto e il filo di luce del bordo; un riflesso piu' vivo le gira intorno
+            // sul bordo. Lo sfondo sfocato dell'app passa attraverso l'alone e il corpo trasparente.
+            Box(
+                modifier = Modifier
+                    .size(size)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                AilaAssistantViolet.copy(alpha = 0.16f),
+                                AilaAssistantBlue.copy(alpha = 0.12f),
+                                AilaAssistantTeal.copy(alpha = 0.18f)
+                            )
                         )
                     )
-                )
-        )
+                    .background(Brush.verticalGradient(0f to Color.White.copy(alpha = 0.30f), 0.55f to Color.Transparent))
+                    .border(1.dp, AppTheme.GlassEdge, CircleShape)
+            )
+            Box(
+                modifier = Modifier
+                    .size(size)
+                    .graphicsLayer { if (!reduce) rotationZ = spin.value * 3f }
+                    .border(
+                        2.dp,
+                        Brush.sweepGradient(
+                            listOf(
+                                Color.Transparent,
+                                Color.Transparent,
+                                Color.White.copy(alpha = 0.9f),
+                                AilaAssistantViolet.copy(alpha = 0.55f),
+                                Color.Transparent
+                            )
+                        ),
+                        CircleShape
+                    )
+            )
+        } else {
+            // Material Expressive: la forma "cookie" a 9 lobi, tonale, che ruota piano.
+            Box(
+                modifier = Modifier
+                    .size(size)
+                    .graphicsLayer { if (!reduce) rotationZ = spin.value }
+                    .clip(ailaCookieShape(lobes = 9, depth = 0.09f))
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                AilaAssistantViolet.copy(alpha = 0.22f),
+                                AilaAssistantBlue.copy(alpha = 0.20f),
+                                AilaAssistantTeal.copy(alpha = 0.22f)
+                            )
+                        )
+                    )
+            )
+        }
         AilaAssistantWave(active = active, size = size * 0.5f, intro = intro)
     }
 }
@@ -130,8 +171,9 @@ fun AilaAssistantHalo(
  * Va messo dopo il `clip` della forma: le macchie escono dal riquadro e le ritaglia il chiamante.
  */
 @Composable
-fun Modifier.ailaAssistantAurora(): Modifier {
+fun Modifier.ailaAssistantAurora(shape: Shape = RoundedCornerShape(AppTheme.CardCornerRadius)): Modifier {
     val reduce = AppTheme.reduceMotion
+    val glass = AppTheme.isGlass
     val transition = rememberInfiniteTransition(label = "assistantAurora")
     val phase = transition.animateFloat(
         initialValue = 0f,
@@ -141,6 +183,10 @@ fun Modifier.ailaAssistantAurora(): Modifier {
     )
     val violet = AppTheme.OnboardingCalendarGradient.last()
     val deepTeal = AppTheme.OnboardingAssistantGradient[1]
+    // Glass: blu "bagnato", macchie piu' tenui, riflesso chiaro in alto (dietro al testo, quindi
+    // abbastanza leggero da non togliere contrasto al bianco) e il filo di luce del vetro sul
+    // bordo. Material: blu pieno e macchie decise, nessun riflesso.
+    val blobAlpha = if (glass) 0.6f else 0.9f
     return this
         .background(AppTheme.PrimaryGradient)
         .drawBehind {
@@ -149,17 +195,37 @@ fun Modifier.ailaAssistantAurora(): Modifier {
             val a = Offset(size.width * (0.5f + 0.38f * sin(angle)), size.height * 0.15f)
             val b = Offset(size.width * (0.5f - 0.38f * sin(angle + 0.8f)), size.height * 0.95f)
             drawCircle(
-                brush = Brush.radialGradient(listOf(violet.copy(alpha = 0.85f), Color.Transparent), center = a, radius = radius),
+                brush = Brush.radialGradient(listOf(violet.copy(alpha = blobAlpha), Color.Transparent), center = a, radius = radius),
                 radius = radius,
                 center = a
             )
             drawCircle(
-                brush = Brush.radialGradient(listOf(deepTeal.copy(alpha = 0.9f), Color.Transparent), center = b, radius = radius),
+                brush = Brush.radialGradient(listOf(deepTeal.copy(alpha = blobAlpha), Color.Transparent), center = b, radius = radius),
                 radius = radius,
                 center = b
             )
+            if (glass) {
+                drawRect(
+                    Brush.verticalGradient(
+                        0f to Color.White.copy(alpha = 0.20f),
+                        0.5f to Color.Transparent,
+                        startY = 0f,
+                        endY = size.height
+                    )
+                )
+            }
         }
+        .then(if (glass) Modifier.border(1.dp, AppTheme.GlassEdge, shape) else Modifier)
 }
+
+/**
+ * Superficie tonale per le capsule colorate per argomento (fonti, "da dove prendo le risposte"):
+ * Glass = vetro con un velo del colore dell'argomento, Material = riempimento tonale pieno.
+ */
+@Composable
+fun Modifier.ailaTopicSurface(shape: Shape, tint: Color, ink: Color): Modifier =
+    if (AppTheme.isGlass) ailaGlassSurface(shape, tint = ink.copy(alpha = 0.10f))
+    else clip(shape).background(tint)
 
 /**
  * Anello sfumato (viola → blu → verde acqua) che si accende in dissolvenza quando un campo ha il
@@ -181,7 +247,9 @@ fun Modifier.ailaFocusRing(focused: Boolean, shape: Shape): Modifier {
             AilaAssistantTeal.copy(alpha = progress)
         )
     )
-    return this.border(2.dp, ring, shape)
+    // Glass: un filo sottile, come i bordi del vetro. Material: piu' spesso, come il contorno di
+    // un campo Material al focus.
+    return this.border(if (AppTheme.isGlass) 1.5.dp else 2.dp, ring, shape)
 }
 
 /**
