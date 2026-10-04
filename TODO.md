@@ -50,7 +50,9 @@ Resta:
 Il FAB della Bacheca sta in basso a destra, ma `AilaTopSheet` era agganciato al bordo alto: la
 forma cresceva verso l'alto lontano dal pulsante. Nuovo parametro `fromBottom` (anche su
 `AilaOriginSheet`): pannello ancorato al fondo, angoli alti tondi, maniglia in cima, sopra la
-tastiera (offset di `ime`) e la barra di navigazione. Usato da `AddProposalDialog`. I fogli da
+tastiera (offset di `ime`) e la barra di navigazione. Il contenuto consuma le insets della tastiera
+(`consumeWindowInsets`), altrimenti il suo `appImePadding` le contava due volte e stirava il
+pannello. Durate del container transform: apertura 210 ms, chiusura 170 ms. Usato da `AddProposalDialog`. I fogli da
 pulsanti in alto ("+" sondaggi, cronologia chat, "+" Calendario) restano dal bordo alto. **Non
 provato su un telefono**: guardare con la tastiera aperta e con la barra a gesti.
 

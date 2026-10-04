@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -292,7 +293,14 @@ fun AilaTopSheet(
                 // Dal bordo alto la maniglia sta sotto; dal basso in cima. Il contenuto scorre da solo
                 // se non ci sta e la maniglia resta fuori dallo scorrimento.
                 if (fromBottom) handle(10.dp, 4.dp)
-                Column(modifier = Modifier.weight(1f, fill = false)) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        // Dal fondo il pannello sale GIA' sopra la tastiera (offset di sopra): i moduli
+                        // dentro mettono un loro `appImePadding`, che qui contava la tastiera una seconda
+                        // volta e stirava il pannello con un vuoto bianco sopra la tastiera.
+                        .then(if (fromBottom) Modifier.consumeWindowInsets(imeInsets) else Modifier)
+                ) {
                     content(requestClose)
                 }
                 if (!fromBottom) handle(4.dp, 10.dp)

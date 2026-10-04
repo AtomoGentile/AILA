@@ -760,8 +760,8 @@ fun ailaContainerCloseSpec(): androidx.compose.animation.core.FiniteAnimationSpe
 // Durate e curve del container transform. Corte e decise: la forma deve arrivare, non trascinarsi.
 // L'apertura parte subito e rallenta solo nell'ultimo tratto; la chiusura e' un po' piu' rapida
 // (si torna indietro, non si scopre niente) e simmetrica, senza coda lunga.
-private const val OPEN_MS = 260L
-private const val CLOSE_MS = 220L
+private const val OPEN_MS = 210L
+private const val CLOSE_MS = 170L
 private val ContainerOpenEasing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0.1f, 0.05f, 1f)
 private val ContainerCloseEasing = androidx.compose.animation.core.CubicBezierEasing(0.4f, 0f, 0.2f, 1f)
 
