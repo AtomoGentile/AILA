@@ -67,6 +67,7 @@ import circolareplus.design.ailaSpatialSpring
 import circolareplus.design.ailaPushTransition
 import circolareplus.design.ailaTabTransition
 import circolareplus.design.ailaContainerReveal
+import circolareplus.design.animateContainerClose
 import circolareplus.design.animateContainerOpen
 import androidx.compose.ui.layout.onGloballyPositioned
 import circolareplus.design.ailaMorphClip
@@ -3524,8 +3525,10 @@ fun MainAppShell(
                 else largeOrigin(circolareplus.design.AilaContainerTransform.originOf(route))
             val containerProgress = transition.animateFloat(
                 // Aprendo la molla, chiudendo la curva a durata fissa (vedi ailaContainerCloseSpec).
+                // In chiusura questa animazione serve solo a tenere viva la pagina: il disegno lo
+                // guida closeProgress, a passo limitato (vedi animateContainerClose).
                 transitionSpec = {
-                    if (targetState == androidx.compose.animation.EnterExitState.PostExit) circolareplus.design.ailaContainerCloseSpec()
+                    if (targetState == androidx.compose.animation.EnterExitState.PostExit) circolareplus.design.ailaContainerKeepAliveSpec()
                     else circolareplus.design.ailaContainerFloatSpring()
                 },
                 label = "containerTransform"
@@ -3542,6 +3545,16 @@ fun MainAppShell(
                 androidx.compose.animation.core.Animatable(
                     if (containerOrigin != null && transition.currentState == androidx.compose.animation.EnterExitState.PreEnter) 0f else 1f
                 )
+            }
+            val closingNow = transition.targetState == androidx.compose.animation.EnterExitState.PostExit
+            val closeProgress = remember { androidx.compose.animation.core.Animatable(1f) }
+            val closeDriven = remember { arrayOf(false) }
+            LaunchedEffect(closingNow) {
+                if (!closingNow || containerOrigin == null) return@LaunchedEffect
+                // Parte da dove la forma e' adesso (anche a meta' apertura), senza salti.
+                closeProgress.snapTo(minOf(openProgress.value, containerProgress.value))
+                closeDriven[0] = true
+                closeProgress.animateContainerClose()
             }
             // Material fra due schermate ("shared axis Z", vedi il transitionSpec qui sopra).
             // pagePresence: 1 = c'e', 0 = piccola e trasparente (prima di entrare, dopo essersi
@@ -3634,7 +3647,11 @@ fun MainAppShell(
                             // Il minimo dei due: aprendo comanda openProgress (in ritardo di due
                             // fotogrammi), chiudendo la curva della transizione, senza salti se si
                             // torna indietro a meta' apertura.
-                            progress = { if (revealing) minOf(openProgress.value, containerProgress.value) else 1f },
+                            progress = {
+                                if (!revealing) 1f
+                                else if (closingNow && closeDriven[0]) closeProgress.value
+                                else minOf(openProgress.value, containerProgress.value)
+                            },
                             origin = containerOrigin,
                             containerColor = AppTheme.CardSurface,
                             pageColor = AppTheme.BackgroundLight,

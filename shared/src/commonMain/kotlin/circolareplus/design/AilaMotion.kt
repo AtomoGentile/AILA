@@ -771,8 +771,40 @@ suspend fun awaitCalmFrames(minCalmFrames: Int = 2, maxWaitMs: Long = 220, calmM
 suspend fun androidx.compose.animation.core.Animatable<Float, androidx.compose.animation.core.AnimationVector1D>.animateContainerOpen(
     target: Float = 1f
 ) {
+    animateSteppedTo(target, (if (AppTheme.reduceMotion) 150L else 500L) * 1_000_000L)
+}
+
+/**
+ * Chiusura del container transform, con lo stesso orologio a passo limitato dell'apertura (vedi
+ * [animateContainerOpen]). Prima la chiusura era una `tween` della transizione, il cui orologio e'
+ * quello vero: al tocco "indietro" il primo fotogramma e' lungo (si ricompone mezza app) e la
+ * forma saltava avanti. Aspetta un fotogramma calmo (al massimo 80 ms, al posto dei 40 ms fissi di
+ * ritardo di prima) e poi si stringe senza strappi. Se si torna indietro a meta' apertura la corsa
+ * e' proporzionale a quanto resta da fare.
+ */
+suspend fun androidx.compose.animation.core.Animatable<Float, androidx.compose.animation.core.AnimationVector1D>.animateContainerClose(
+    target: Float = 0f
+) {
+    awaitCalmFrames(minCalmFrames = 1, maxWaitMs = 80)
+    val travel = kotlin.math.abs(value - target).coerceIn(0.4f, 1f)
+    val base = if (AppTheme.reduceMotion) 200L else 520L
+    animateSteppedTo(target, (base * travel).toLong() * 1_000_000L)
+}
+
+/**
+ * Quanto la transizione tiene viva la pagina che si chiude con [animateContainerClose]: la sua
+ * animazione serve solo a questo (il disegno lo guida l'orologio a passo limitato, che con un
+ * fotogramma lungo dura un poco di piu' dei 520 ms). Alla fine la forma e' gia' sul pulsante, la
+ * pagina e' invisibile e non prende i tocchi.
+ */
+fun ailaContainerKeepAliveSpec(): androidx.compose.animation.core.FiniteAnimationSpec<Float> =
+    tween(durationMillis = if (AppTheme.reduceMotion) 300 else 900)
+
+private suspend fun androidx.compose.animation.core.Animatable<Float, androidx.compose.animation.core.AnimationVector1D>.animateSteppedTo(
+    target: Float,
+    totalNanos: Long
+) {
     val from = value
-    val totalNanos = (if (AppTheme.reduceMotion) 150L else 500L) * 1_000_000L
     val easing = androidx.compose.animation.core.CubicBezierEasing(0.3f, 0f, 0f, 1f)
     var elapsed = 0L
     var last = androidx.compose.runtime.withFrameNanos { it }

@@ -52,7 +52,10 @@ meno di 24 ms, al massimo dopo 220 ms; prima: due fotogrammi alla cieca) e
 `animateContainerOpen()` (500 ms, curva morbida in partenza, **orologio a passo limitato**: un
 fotogramma lungo avanza il tempo di al piu' 32 ms, quindi la forma non salta in avanti come con
 la molla, che usava il tempo vero). Usato per `openProgress` in `MainAppShell` (ricerca,
-notifiche, profilo). La chiusura non e' toccata. **Non provato su un telefono**: se scatta ancora,
+notifiche, profilo). Anche la chiusura: `animateContainerClose()` (520 ms in proporzione a quanto
+resta, attende al massimo 80 ms un fotogramma calmo invece dei 40 ms fissi) guida `closeProgress`
+in `MainAppShell`; la transizione resta solo a tenere viva la pagina (`ailaContainerKeepAliveSpec`,
+900 ms). `ailaContainerCloseSpec` serve ancora a `shellProgress` (tab sotto) e al dettaglio circolare. **Non provato su un telefono**: se scatta ancora,
 il collo di bottiglia e' la composizione della pagina nuova (profilarla), non la curva.
 
 ## 4/10: Assistant e Ricerca ridisegnati (`AilaAssistantUi.kt`)
