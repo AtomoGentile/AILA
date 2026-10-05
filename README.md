@@ -69,11 +69,11 @@ Navigazione a tab: Calendario · Classe (Circolari e Bacheca) · Home · Sondagg
 AILA/
 ├── backend/                       # Cloudflare Worker (TypeScript / Hono)
 │   ├── schema.sql                 # Schema Cloudflare D1
-│   ├── wrangler.toml              # Config Cloudflare (D1, R2, Cron Trigger, secrets richiesti)
+│   ├── wrangler.toml              # Config Cloudflare (D1, R2, Cron Trigger)
 │   ├── package.json
 │   └── src/
 │       ├── index.ts               # Entry point, mount delle route + cron Spaggiari
-│       ├── routes/                # auth, admin (+ pagina /admin), users, circulars, calendar,
+│       ├── routes/                # auth, admin, users, circulars, calendar,
 │       │                          # proposals, polls, rankingPolls, preferences, ratings, seatmap, fcm
 │       └── services/               # spaggiari.ts (scraping+cache), fcm.ts (invio push)
 │
@@ -119,73 +119,10 @@ npx wrangler deploy
 npx wrangler d1 execute circolare_d1 --remote --file=./schema.sql
 ```
 
-Secrets richiesti (`npx wrangler secret put <NOME>`, da dentro `backend/`):
-
-| Secret | Obbligatorio | Descrizione |
-|---|---|---|
-| `JWT_SECRET` | Sì | Firma dei token di autenticazione |
-| `ADMIN_SECRET` | Per i Rappresentanti | Almeno 16 caratteri: apre le rotte `/api/admin` che emettono i codici Rappresentante — vedi [Codici Rappresentante](#codici-rappresentante) |
-| `REPRESENTATIVE_SIGNUP_CODE` | No | Vecchio codice Rappresentante unico, solo per la transizione: vale con `REPRESENTATIVE_GLOBAL_CODE_UNTIL` (vedi sotto) |
-| `GEMINI_API_KEY` | Per l'analisi sul server | Chiave Google AI Studio: con questa il cron riassume e classifica ogni circolare nuova; senza, lo fanno i telefoni. Usata solo dal cron, mai da una rotta HTTP |
-| `FCM_PROJECT_ID` | Per le push | ID progetto Firebase |
-| `FCM_SERVICE_ACCOUNT_KEY` | Per le push | JSON del Service Account Firebase — vedi [Notifiche push](#notifiche-push-firebase) |
-
-Senza i due secret FCM l'app funziona normalmente, semplicemente senza inviare notifiche push (nessun errore).
-
-#### Codici Rappresentante
-
-Per registrarsi come Rappresentante serve un codice **emesso per quella classe**, che vale **una
-volta sola** e scade (7 giorni di default, massimo 30). Lo emette solo chi ha `ADMIN_SECRET`,
-mai un Rappresentante dall'app: altrimenti una persona sola potrebbe registrare il secondo
-Rappresentante della propria classe e, nominando la Guardia, avere tutte e tre le firme che
-svelano gli anonimi della bacheca. Quando un Rappresentante si registra, gli altri Rappresentanti
-e la Guardia della classe ricevono una notifica.
-
-Una volta sola, da dentro `backend/`: applica la migrazione `017_representative_invites.sql`
-(workflow **Worker deploy**, campo "migrations") e imposta il segreto:
-
-```bash
-ADMIN_SECRET=$(openssl rand -hex 24)
-echo "$ADMIN_SECRET"   # conservalo in un gestore di password: serve per ogni codice
-printf '%s' "$ADMIN_SECRET" | npx wrangler secret put ADMIN_SECRET
-```
-
-**Dal browser (anche dal telefono)**: apri
-``https://<tuo-worker>.workers.dev/admin``, scrivi il segreto, scegli la
-classe, quanti codici (2 = uno per Rappresentante) e per quanti giorni valgono (1-30, di default
-7), poi "Crea codici". Dalla stessa pagina vedi i codici gia' emessi (liberi, usati da chi,
-scaduti) e ritiri quelli non ancora usati. La pagina non contiene niente di segreto: il segreto lo
-scrivi tu ogni volta (o lo ricorda il gestore di password del browser).
-
-Ogni Rappresentante riceve il **suo** codice, di persona o in privato: mai un codice solo per due,
-e mai tutti e due i codici alla stessa persona, altrimenti potrebbe usarli per due account suoi.
-I codici in chiaro compaiono solo appena creati: sul database resta l'hash SHA-256.
-
-**Dal terminale**, se preferisci:
-
-```bash
-API=https://<tuo-worker>.workers.dev
-curl -s -X POST "$API/api/admin/representative-invites" \
-  -H "X-Admin-Secret: $ADMIN_SECRET" -H 'Content-Type: application/json' \
-  -d '{"classLabel": "<classe>", "count": 2, "ttlDays": 7}'
-# → {"codes":[{"id":"…","code":"ABCDE-FGHIJ"},{"id":"…","code":"KLMNP-QRSTU"}],"classLabel":"<classe>","expiresAt":"…","representatives":0,…}
-```
-
-`representatives` dice quanti Rappresentanti ha gia' la classe (con 2 la registrazione risponde
-409). Elenco dei codici di una classe (senza i codici, con chi li ha usati) e ritiro di uno non
-ancora usato:
-
-```bash
-curl -s "$API/api/admin/representative-invites?classLabel=<classe>" -H "X-Admin-Secret: $ADMIN_SECRET"
-curl -s -X DELETE "$API/api/admin/representative-invites/<id>" -H "X-Admin-Secret: $ADMIN_SECRET"
-```
-
-**Transizione dal codice unico.** Il vecchio `REPRESENTATIVE_SIGNUP_CODE` vale ancora solo se
-c'e' anche la variabile `REPRESENTATIVE_GLOBAL_CODE_UNTIL` (`"AAAA-MM-GG"`, ultimo giorno
-incluso, ora italiana) e solo in una classe che non ha ancora Rappresentanti: il secondo
-Rappresentante entra sempre e solo con un codice della classe. Senza la data, o passata la data,
-il codice unico non vale piu'. Per toglierlo del tutto: `npx wrangler secret delete
-REPRESENTATIVE_SIGNUP_CODE`.
+La configurazione (database D1, bucket R2, cron e variabili d'ambiente) è in `backend/wrangler.toml`, dove sono
+elencati e commentati anche i secret richiesti. I secret non vanno mai committati: si impostano con
+`npx wrangler secret put <NOME>`. Senza i secret opzionali (analisi AI sul server, notifiche push) l'app funziona
+lo stesso, con meno funzioni.
 
 ### 2. Android
 
@@ -226,15 +163,11 @@ Copre principalmente gli algoritmi (`SeatMapOptimizer`, `SondaggiEngine`) in `sh
 
 Entrambi i file escono dalla CI di GitHub Actions, senza account a pagamento.
 
-- **APK** (`AILA.apk`): il workflow *Android Build* lo produce a ogni push su `shared/` o `androidApp/` e lo
-  salva come artifact `AILA-apk`. Per pubblicarlo: `git tag v0.0.1 && git push origin v0.0.1`; l'APK viene
-  allegato alla Release di GitHub, da cui si scarica e si installa. Senza secret è firmato con la chiave debug;
-  per una chiave di rilascio propria si impostano `ANDROID_RELEASE_KEYSTORE` (base64),
-  `ANDROID_RELEASE_STORE_PASSWORD`, `ANDROID_RELEASE_KEY_ALIAS` e `ANDROID_RELEASE_KEY_PASSWORD`. Per le push
-  serve anche `GOOGLE_SERVICES_JSON` (base64), altrimenti l'APK si installa ma senza notifiche.
+- **APK** (`AILA.apk`): lo produce il workflow *Android Build* a ogni push su `shared/` o `androidApp/` (artifact
+  `AILA-apk`). Creando un tag `v*` (per esempio `v0.0.1`) viene allegato anche alla Release di GitHub.
 - **IPA** (`AILA.ipa`, non firmata, per SideStore): si lancia a mano da *Actions → iOS IPA (SideStore) → Run
-  workflow* e si scarica dall'artifact `AILA-ipa`; sui tag `v*` viene allegata alla Release. La firma la fa
-  SideStore sul dispositivo con l'Apple ID gratuito.
+  workflow* (artifact `AILA-ipa`; sui tag `v*` finisce anche nella Release). La firma la fa SideStore sul
+  dispositivo con l'Apple ID gratuito.
 
 ---
 
