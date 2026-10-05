@@ -1,8 +1,9 @@
 name: Worker deploy
 
 # Deploy del Worker Cloudflare, solo a mano (Actions → Worker deploy → Run workflow).
-# Secret richiesti: CLOUDFLARE_API_TOKEN (permessi Workers Scripts Edit + D1 Edit) e
-# CLOUDFLARE_ACCOUNT_ID. I secret del Worker (JWT_SECRET, GEMINI_API_KEY, FCM...) restano su
+# Secret richiesti: CLOUDFLARE_API_TOKEN (permessi Workers Scripts Edit + D1 Edit),
+# CLOUDFLARE_ACCOUNT_ID e WRANGLER_TOML (contenuto intero di backend/wrangler.toml, che non e'
+# nel repository: e' in .gitignore e il workflow lo ricrea a ogni lancio). I secret del Worker (JWT_SECRET, GEMINI_API_KEY, FCM...) restano su
 # Cloudflare: il deploy non li tocca.
 on:
   workflow_dispatch:
@@ -52,6 +53,17 @@ jobs:
           echo "::add-mask::$account"
           echo "CLOUDFLARE_API_TOKEN=$token" >> "$GITHUB_ENV"
           echo "CLOUDFLARE_ACCOUNT_ID=$account" >> "$GITHUB_ENV"
+
+      # backend/wrangler.toml non e' nel repository: lo ricostruisce questo passo dal secret.
+      - name: Write wrangler.toml
+        env:
+          WRANGLER_TOML: ${{ secrets.WRANGLER_TOML }}
+        run: |
+          if [ -z "$WRANGLER_TOML" ]; then
+            echo "::error::Manca il secret WRANGLER_TOML (contenuto di backend/wrangler.toml)"
+            exit 1
+          fi
+          printf '%s\n' "$WRANGLER_TOML" > wrangler.toml
 
       - name: Set up Node
         uses: actions/setup-node@v4
