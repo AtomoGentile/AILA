@@ -411,6 +411,11 @@ describe('sondaggi interrogazioni', () => {
 
     expect((await call('POST', `/api/polls/${id}/assignments/run?force=1`, {}, rep.json.token)).status).toBe(409);
     expect((await call('DELETE', `/api/polls/${id}/submit`, undefined, s.json.token)).status).toBe(409);
+
+    // Lo storico e' di tutta la classe: anche lo studente legge i risultati calcolati.
+    const asStudent = await call('GET', `/api/polls/${id}/assignments`, undefined, s.json.token);
+    expect(asStudent.status).toBe(200);
+    expect(asStudent.json.assignments.length).toBeGreaterThan(0);
   });
 });
 

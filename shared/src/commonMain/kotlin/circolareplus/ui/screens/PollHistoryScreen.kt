@@ -29,7 +29,7 @@ import circolareplus.util.formatDayMonth
 import circolareplus.util.weekdayName
 
 /**
- * Storico dei sondaggi interrogazioni (solo Rappresentante): prima non esisteva alcun modo di
+ * Storico dei sondaggi interrogazioni (visibile a tutta la classe; elimina e calendario solo al Rappresentante): prima non esisteva alcun modo di
  * vedere i sondaggi passati, i loro risultati (assegnazioni calcolate) o di eliminarne uno.
  * `PollsRepository.getAssignments()`/`runAssignments()`/`deletePoll()` esistevano lato client e
  * backend ma non erano richiamati da nessuna schermata.
@@ -42,6 +42,8 @@ import circolareplus.util.weekdayName
 @Composable
 fun PollHistoryScreen(
     polls: List<PollSummaryDto>,
+    /** Solo il Rappresentante elimina i sondaggi e porta le date sul calendario; il resto della classe legge. */
+    canManage: Boolean = true,
     expandedPollId: String?,
     isLoadingResults: Boolean,
     resultsError: String?,
@@ -131,7 +133,7 @@ fun PollHistoryScreen(
                             }
                             // 44dp e un nome: a 36dp senza descrizione era un cestino muto e
                             // difficile da centrare. Il nome dice anche quale sondaggio si elimina.
-                            IconButton(
+                            if (canManage) IconButton(
                                 onClick = { pendingDeleteId = poll.id },
                                 modifier = Modifier
                                     .size(44.dp)
@@ -181,15 +183,17 @@ fun PollHistoryScreen(
                                         }
                                     }
 
-                                    Spacer(modifier = Modifier.height(AppTheme.Space16))
-                                    HorizontalDivider(color = AppTheme.Hairline)
-                                    Spacer(modifier = Modifier.height(AppTheme.Space12))
-                                    CalendarSyncAction(
-                                        isLoading = isAddingToCalendar,
-                                        message = calendarAddMessage,
-                                        isError = calendarAddIsError,
-                                        onClick = { onAddToCalendar(poll, assignments) }
-                                    )
+                                    if (canManage) {
+                                        Spacer(modifier = Modifier.height(AppTheme.Space16))
+                                        HorizontalDivider(color = AppTheme.Hairline)
+                                        Spacer(modifier = Modifier.height(AppTheme.Space12))
+                                        CalendarSyncAction(
+                                            isLoading = isAddingToCalendar,
+                                            message = calendarAddMessage,
+                                            isError = calendarAddIsError,
+                                            onClick = { onAddToCalendar(poll, assignments) }
+                                        )
+                                    }
                                 }
                             }
                         }

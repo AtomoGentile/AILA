@@ -3,6 +3,20 @@
 Elenco vivo dei problemi aperti e del lavoro ancora mancante, aggiornato mano a mano.
 Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esistente.
 
+## 5/10: giro di segnalazioni dall'uso (iOS + Android)
+
+- Barra delle tab: su iOS l'inset del home indicator (34dp) la sollevava troppo; ora `tabBarSystemInset()`
+  ne toglie 18dp su iOS. "Invia le mie scelte" non finisce piu' sotto la barra (la barra "Invia" sta
+  sopra la pillola, la lista non lascia spazio doppio).
+- Storico sondaggi visibile a tutta la classe (prima solo Rappresentante): `GET /api/polls/:id/assignments`
+  aperto ai destinatari del sondaggio; elimina e "aggiungi al calendario" restano al Rappresentante.
+- Bacheca: "Tutte" non mostra piu' le proposte chiuse (stanno in "Chiuse").
+- Preferenze sociali: voto ottimistico (compare subito, torna indietro se il server rifiuta),
+  animazioni dei pulsanti senza rimbalzo.
+- Sondaggi e bacheca quasi in tempo reale: rilettura ogni 6s nella tab (sondaggi: solo avanzamento,
+  senza toccare i voti locali) e sui push.
+- Selettore data (iOS, vetro): colori espliciti per giorni, anni e pulsanti (non si leggeva).
+- Non fatto: "1 ora ecc" (nota ambigua, da chiarire).
 > **PWA (`web/`) dismessa (3/10)**: progetto morto, niente piu' lavoro su di lei. Le voci sulla PWA
 > qui sotto restano solo come storia.
 

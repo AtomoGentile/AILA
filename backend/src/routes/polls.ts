@@ -661,15 +661,22 @@ async function computeAndPersistAssignments(
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/polls/:id/assignments — Risultati assegnazione (solo REPRESENTATIVE)
+// GET /api/polls/:id/assignments — Risultati assegnazione (storico: tutta la classe)
 // ---------------------------------------------------------------------------
-polls.get('/:id/assignments', requireRole('REPRESENTATIVE'), async (c) => {
+polls.get('/:id/assignments', async (c) => {
   const gridId = c.req.param('id');
+  const payload = c.get('jwtPayload');
 
-  // AND class_id: senza, un rappresentante di un'altra classe poteva leggere le assegnazioni altrui.
-  const grid = await c.env.DB.prepare('SELECT id, subject FROM interrogation_grids WHERE id = ? AND class_id = ?')
-    .bind(gridId, await resolveClassId(c)).first<{ id: string; subject: string }>();
+  // AND class_id: senza, uno di un'altra classe poteva leggere le assegnazioni altrui.
+  const grid = await c.env.DB.prepare(
+    'SELECT id, subject, audience_json FROM interrogation_grids WHERE id = ? AND class_id = ?'
+  ).bind(gridId, await resolveClassId(c)).first<{ id: string; subject: string; audience_json: string | null }>();
   if (!grid) return c.json({ error: 'Griglia non trovata' }, 404);
+  // Lo storico e' di tutta la classe, ma chi non era fra i destinatari del sondaggio non lo vede
+  // (come nell'elenco, vedi GET /).
+  if (payload.role !== 'REPRESENTATIVE' && !isInAudience(parseAudience(grid.audience_json), payload.sub)) {
+    return c.json({ error: 'Griglia non trovata' }, 404);
+  }
 
   const assignments = await c.env.DB.prepare(
     `SELECT a.id, a.slot_id, a.student_id, a.assigned_at,

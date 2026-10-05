@@ -334,14 +334,27 @@ fun AilaDatePickerDialog(
         }
     }
     val shape = RoundedCornerShape(if (glass) 32.dp else 28.dp)
-    // Vetro chiaro: titoli e intestazioni scuri come i giorni, non il grigio tenue di Material.
+    // Colori espliciti per ogni elemento: su iOS (vetro) i giorni, gli anni e i pulsanti prendevano
+    // il colore dal tema Material, che non segue il chiaro/scuro dell'app, e restavano bianchi su
+    // vetro chiaro (o scuri su scuro): il calendario non si leggeva.
     val clear = androidx.compose.material3.DatePickerDefaults.colors(
-        containerColor = Color.Transparent,
+        containerColor = if (glass) Color.Transparent else AppTheme.SurfaceWhite,
         titleContentColor = AppTheme.TextDark,
         headlineContentColor = AppTheme.TextDark,
-        weekdayContentColor = AppTheme.TextDark,
+        weekdayContentColor = AppTheme.TextMuted,
         subheadContentColor = AppTheme.TextDark,
-        navigationContentColor = AppTheme.TextDark
+        navigationContentColor = AppTheme.TextDark,
+        yearContentColor = AppTheme.TextDark,
+        disabledYearContentColor = AppTheme.TextFaint,
+        currentYearContentColor = AppTheme.PrimaryBlue,
+        selectedYearContentColor = Color.White,
+        selectedYearContainerColor = AppTheme.PrimaryBlue,
+        dayContentColor = AppTheme.TextDark,
+        disabledDayContentColor = AppTheme.TextFaint,
+        selectedDayContentColor = Color.White,
+        selectedDayContainerColor = AppTheme.PrimaryBlue,
+        todayContentColor = AppTheme.PrimaryBlue,
+        todayDateBorderColor = AppTheme.PrimaryBlue
     )
     androidx.compose.material3.DatePickerDialog(
         onDismissRequest = onDismiss,
@@ -355,21 +368,21 @@ fun AilaDatePickerDialog(
         } else Modifier,
         shape = shape,
         tonalElevation = if (glass) 0.dp else 6.dp,
-        colors = if (glass) clear else androidx.compose.material3.DatePickerDefaults.colors(),
+        colors = clear,
         confirmButton = {
             androidx.compose.material3.TextButton(onClick = onConfirm) {
-                androidx.compose.material3.Text(confirmLabel)
+                androidx.compose.material3.Text(confirmLabel, color = AppTheme.PrimaryBlue)
             }
         },
         dismissButton = {
             androidx.compose.material3.TextButton(onClick = onDismiss) {
-                androidx.compose.material3.Text("Annulla")
+                androidx.compose.material3.Text("Annulla", color = AppTheme.TextMuted)
             }
         }
     ) {
         androidx.compose.material3.DatePicker(
             state = state,
-            colors = if (glass) clear else androidx.compose.material3.DatePickerDefaults.colors()
+            colors = clear
         )
     }
 }

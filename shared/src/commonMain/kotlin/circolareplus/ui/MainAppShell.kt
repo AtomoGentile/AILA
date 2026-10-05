@@ -1810,6 +1810,66 @@ fun MainAppShell(
         }
     }
 
+    // Tempo quasi reale per sondaggi e bacheca: finche' si e' nella tab (e l'app e' in primo piano)
+    // le liste si rileggono ogni pochi secondi, e subito quando arriva un push o l'app torna
+    // davanti. Prima si caricavano solo entrando nella tab: un voto, un invio o una proposta dei
+    // compagni comparivano solo uscendo e rientrando. Il caricamento e' silenzioso (lo spinner
+    // vale solo alla prima lettura), quindi le card non lampeggiano.
+    LaunchedEffect(isInPollsScreen, user.id) {
+        if (!isInPollsScreen) return@LaunchedEffect
+        while (isActive) {
+            delay(6_000L)
+            circolareplus.platform.awaitForeground()
+            try {
+                val polls = AppContainer.pollsRepository.listPolls()
+                val target = polls.filter { it.isPublished }.firstOrNull { !it.isCalculated }
+                    ?: polls.firstOrNull { !it.isCalculated }
+                if (target?.id != currentPoll?.id) {
+                    // Sondaggio nuovo, chiuso o eliminato: rilettura completa.
+                    pollsRefreshTrigger++
+                } else {
+                    allPolls = polls
+                    if (target != null) {
+                        // Solo l'avanzamento della classe (e le date, se cambiate): i voti locali non
+                        // si toccano, altrimenti la selezione tornerebbe indietro mentre si vota
+                        // (vedi onCastVote).
+                        val loaded = AppContainer.pollsRepository.getPollWithProgress(target.id)
+                        pollProgress = loaded.progress
+                        val shape = { slots: List<circolareplus.data.remote.dto.PollSlotDto> ->
+                            slots.map { Triple(it.id, it.slotDate, it.capacity) }
+                        }
+                        val local = currentPoll
+                        if (local != null && shape(local.slots) != shape(loaded.detail.slots)) {
+                            currentPoll = loaded.detail
+                        }
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Rete assente: si riprova al giro dopo, senza mostrare errori per una lettura in sottofondo.
+            }
+            rankingRefreshTrigger++
+        }
+    }
+    LaunchedEffect(selectedTab, user.id) {
+        if (selectedTab != MainTab.CLASS) return@LaunchedEffect
+        while (isActive) {
+            delay(6_000L)
+            circolareplus.platform.awaitForeground()
+            proposalsRefreshTrigger++
+        }
+    }
+    LaunchedEffect(user.id) {
+        circolareplus.push.DataRefreshEvents.requests.collect {
+            if (selectedTab == MainTab.POLLS) {
+                pollsRefreshTrigger++
+                rankingRefreshTrigger++
+            }
+            if (selectedTab == MainTab.CLASS) proposalsRefreshTrigger++
+        }
+    }
+
     // Espande/carica i risultati (assegnazioni) di un sondaggio dello storico: li calcola al volo
     // con l'algoritmo già esistente (`assignments/run`) invece di richiedere un passaggio separato.
     // Scaricati appena si apre la tab Sondaggi, non solo passando a "Ordinamento": prima il primo
@@ -2540,8 +2600,11 @@ fun MainAppShell(
                 // Con la barra laterale in fondo resta solo la barra di sistema.
                 // 64 di pillola piu' il margine Space12 sopra e sotto (vedi FloatingTabBar): se
                 // cambia uno dei due va cambiato anche qui.
-                val bottomBarPadding = (if (useRail) 0.dp else 64.dp + AppTheme.Space12 * 2) +
+                val bottomBarPadding = if (useRail) {
                     WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                } else {
+                    64.dp + AppTheme.Space12 * 2 + circolareplus.design.tabBarSystemInset()
+                }
                 // Tastiera aperta = il suo inset in basso e' > 0. (`isImeVisible` esiste solo su
                 // Android: su iOS non compilava.)
                 val imeVisible = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
@@ -2805,11 +2868,19 @@ fun MainAppShell(
                                                 classmates = classmates.filter { it.id != user.id },
                                                 currentVotes = socialVotes,
                                                 onVoteChanged = { targetId, score ->
+                                                    // Aggiornamento ottimistico: la scelta si vede subito e la
+                                                    // richiesta parte in background. Prima il voto compariva solo
+                                                    // a risposta del server arrivata, e sembrava che l'app laggasse.
+                                                    val previousScore = socialVotes[targetId]
+                                                    socialVotes[targetId] = score
                                                     coroutineScope.launch {
                                                         try {
                                                             AppContainer.preferencesRepository.vote(targetId, score)
-                                                            socialVotes[targetId] = score
+                                                        } catch (e: CancellationException) {
+                                                            throw e
                                                         } catch (e: Exception) {
+                                                            if (previousScore == null) socialVotes.remove(targetId)
+                                                            else socialVotes[targetId] = previousScore
                                                             seatMapActionError = "Voto non registrato: ${e.message}"
                                                         }
                                                     }
@@ -3240,19 +3311,10 @@ fun MainAppShell(
                                             onCreatePoll = { showCreateRankingPollDialog = true }
                                         )
                                     }
-                                } else if (showPollHistory && !isRepresentative) {
-                                    // Le assegnazioni complete le legge solo il Rappresentante: agli altri
-                                    // si dice dove trovare le proprie date invece di una lista vuota.
-                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-                                        circolareplus.design.AilaEmptyState(
-                                            title = "Le tue interrogazioni",
-                                            message = "Quando il Rappresentante chiude un sondaggio e ne pubblica le date, quella assegnata a te compare nel tuo Calendario.",
-                                            icon = { AppIcons.Calendar(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
-                                        )
-                                    }
                                 } else if (showPollHistory) {
                                     PollHistoryScreen(
                                         polls = allPolls,
+                                        canManage = isRepresentative,
                                         expandedPollId = expandedResultsPollId,
                                         isLoadingResults = isLoadingPollResults,
                                         resultsError = pollResultsError,
@@ -6410,7 +6472,7 @@ private fun FloatingTabBar(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .navigationBarsPadding()
+            .padding(bottom = circolareplus.design.tabBarSystemInset())
             .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12),
         contentAlignment = Alignment.Center
     ) {

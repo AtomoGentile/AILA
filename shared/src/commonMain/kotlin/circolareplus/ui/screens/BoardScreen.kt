@@ -98,8 +98,13 @@ fun BoardScreen(
         Spacer(modifier = Modifier.height(AppTheme.Space16))
 
         // Ricalcolato solo quando cambiano le proposte o il filtro, non a ogni ricomposizione.
+        // "Tutte" non include le chiuse: restano raccolte nel filtro "Chiuse", cosi' la bacheca
+        // mostra solo quello su cui c'e' ancora qualcosa da dire.
         val filtered = remember(proposals, selectedStatusFilter) {
-            proposals.filter { selectedStatusFilter == null || it.status == selectedStatusFilter }
+            proposals.filter {
+                if (selectedStatusFilter == null) it.status != ProposalStatus.CHIUSA
+                else it.status == selectedStatusFilter
+            }
         }
 
         val contentPadding = PaddingValues(bottom = AppTheme.Space24 + 72.dp + circolareplus.design.LocalBottomBarPadding.current)

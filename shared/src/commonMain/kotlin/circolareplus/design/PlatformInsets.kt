@@ -1,5 +1,6 @@
 package circolareplus.design
 
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -77,3 +78,16 @@ fun Modifier.appContentWidth(max: Dp = MaxContentWidth): Modifier =
  * fuori dalle tab vale 0.
  */
 val LocalBottomBarPadding = androidx.compose.runtime.compositionLocalOf { 0.dp }
+
+/**
+ * Margine sotto la barra flottante dovuto alla barra di sistema. Su iOS l'inset del home indicator
+ * (34dp sugli iPhone con Face ID) e' molto piu' alto dello spazio che serve davvero: la barra di
+ * sistema di iOS sta molto piu' vicina al bordo, e con l'inset intero la pillola risultava
+ * sollevata e sembrava troppo alta. Android resta com'era (barra gesti o a tre tasti).
+ */
+@androidx.compose.runtime.Composable
+fun tabBarSystemInset(): Dp {
+    val inset = androidx.compose.foundation.layout.WindowInsets.navigationBars
+        .asPaddingValues().calculateBottomPadding()
+    return if (circolareplus.platform.isIos()) (inset - 18.dp).coerceAtLeast(0.dp) else inset
+}

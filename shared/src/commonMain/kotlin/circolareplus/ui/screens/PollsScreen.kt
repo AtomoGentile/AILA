@@ -212,7 +212,10 @@ fun PollsScreen(
                 icon = { AppIcons.Calendar(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
             )
         }
-        val listBottom = AppTheme.Space16 + circolareplus.design.LocalBottomBarPadding.current
+        // Con la barra "Invia" in fondo e' lei a stare sopra la barra delle tab (vedi sotto): la
+        // lista non deve lasciare altro spazio. Prima la barra "Invia" finiva sotto la pillola.
+        val listBottom = AppTheme.Space16 +
+            if (canVote) 0.dp else circolareplus.design.LocalBottomBarPadding.current
         if (circolareplus.design.LocalWideLayout.current) {
             // Tablet e iPad larghi: spiegazione, bonus e gestione a sinistra, le date da votare
             // a destra; si vota senza far scorrere via la legenda dei colori.
@@ -506,7 +509,13 @@ private fun PollSubmitBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(AppTheme.SurfaceWhite)
-            .padding(AppTheme.Space16),
+            .padding(
+                start = AppTheme.Space16,
+                end = AppTheme.Space16,
+                top = AppTheme.Space16,
+                // Sopra la barra flottante delle tab, che altrimenti copre il pulsante.
+                bottom = AppTheme.Space16 + circolareplus.design.LocalBottomBarPadding.current
+            ),
         verticalAlignment = Alignment.CenterVertically
     ) {
         when {
