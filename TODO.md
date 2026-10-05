@@ -13,7 +13,7 @@ Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esist
 - Bacheca: "Tutte" non mostra piu' le proposte chiuse (stanno in "Chiuse").
 - Preferenze sociali: voto ottimistico (compare subito, torna indietro se il server rifiuta),
   animazioni dei pulsanti senza rimbalzo.
-- Sondaggi e bacheca quasi in tempo reale: rilettura ogni 6s nella tab (sondaggi: solo avanzamento,
+- Sondaggi e bacheca quasi in tempo reale: rilettura ogni 3s nella tab (sondaggi: solo avanzamento,
   senza toccare i voti locali) e sui push.
 - Selettore data (iOS, vetro): colori espliciti per giorni, anni e pulsanti (non si leggeva).
 - Nuovo evento: l'orario non e' piu' un campo libero ("8:00") ma due menu "Da" / "A" con le ore di lezione 1-6 ("Dalla 2ª alla 4ª ora").

@@ -394,7 +394,8 @@ private fun HomeHeroPanel(
                 text = "Ciao, $studentFirstName",
                 style = MaterialTheme.typography.headlineMedium,
                 color = AppTheme.OnHeroPrimary,
-                maxLines = 1,
+                // Fino a due righe: sugli iPhone piccoli, con tre pulsanti accanto, il nome veniva tagliato.
+                maxLines = 2,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )

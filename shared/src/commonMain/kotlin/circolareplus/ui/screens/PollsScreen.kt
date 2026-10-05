@@ -212,10 +212,7 @@ fun PollsScreen(
                 icon = { AppIcons.Calendar(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
             )
         }
-        // Con la barra "Invia" in fondo e' lei a stare sopra la barra delle tab (vedi sotto): la
-        // lista non deve lasciare altro spazio. Prima la barra "Invia" finiva sotto la pillola.
-        val listBottom = AppTheme.Space16 +
-            if (canVote) 0.dp else circolareplus.design.LocalBottomBarPadding.current
+        val listBottom = AppTheme.Space16 + circolareplus.design.LocalBottomBarPadding.current
         if (circolareplus.design.LocalWideLayout.current) {
             // Tablet e iPad larghi: spiegazione, bonus e gestione a sinistra, le date da votare
             // a destra; si vota senza far scorrere via la legenda dei colori.
@@ -258,6 +255,16 @@ fun PollsScreen(
                             modifier = Modifier.ailaAppear(index + 2)
                         )
                     }
+                    // In fondo alla pagina, dopo l'ultima data (non una barra fissa sotto la lista).
+                    if (canVote) item { PollSubmitBar(
+                            isSubmitted = isSubmitted,
+                            allVoted = slots.isNotEmpty() && votedCount == slots.size,
+                            missing = slots.size - votedCount,
+                            isExpired = isExpired,
+                            isSubmitting = isSubmitting,
+                            onSubmit = onSubmit,
+                            onReopen = onReopen
+                        ) }
                 }
             }
         } else {
@@ -296,18 +303,19 @@ fun PollsScreen(
                     modifier = Modifier.ailaAppear(index + 2)
                 )
             }
+            // In fondo alla pagina, dopo l'ultima data (non una barra fissa sotto la lista).
+            if (canVote) item { PollSubmitBar(
+                            isSubmitted = isSubmitted,
+                            allVoted = slots.isNotEmpty() && votedCount == slots.size,
+                            missing = slots.size - votedCount,
+                            isExpired = isExpired,
+                            isSubmitting = isSubmitting,
+                            onSubmit = onSubmit,
+                            onReopen = onReopen
+                        ) }
         }
         }
 
-        if (canVote) PollSubmitBar(
-            isSubmitted = isSubmitted,
-            allVoted = slots.isNotEmpty() && votedCount == slots.size,
-            missing = slots.size - votedCount,
-            isExpired = isExpired,
-            isSubmitting = isSubmitting,
-            onSubmit = onSubmit,
-            onReopen = onReopen
-        )
     }
 }
 
@@ -504,18 +512,12 @@ private fun PollSubmitBar(
     onSubmit: () -> Unit,
     onReopen: () -> Unit
 ) {
-    HorizontalDivider(color = AppTheme.Hairline)
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(AppTheme.CardCornerRadius))
             .background(AppTheme.SurfaceWhite)
-            .padding(
-                start = AppTheme.Space16,
-                end = AppTheme.Space16,
-                top = AppTheme.Space16,
-                // Sopra la barra flottante delle tab, che altrimenti copre il pulsante.
-                bottom = AppTheme.Space16 + circolareplus.design.LocalBottomBarPadding.current
-            ),
+            .padding(AppTheme.Space16),
         verticalAlignment = Alignment.CenterVertically
     ) {
         when {

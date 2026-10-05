@@ -1819,7 +1819,7 @@ fun MainAppShell(
     LaunchedEffect(isInPollsScreen, user.id) {
         if (!isInPollsScreen) return@LaunchedEffect
         while (isActive) {
-            delay(6_000L)
+            delay(3_000L)
             circolareplus.platform.awaitForeground()
             try {
                 val polls = AppContainer.pollsRepository.listPolls()
@@ -1856,7 +1856,7 @@ fun MainAppShell(
     LaunchedEffect(selectedTab, user.id) {
         if (selectedTab != MainTab.CLASS) return@LaunchedEffect
         while (isActive) {
-            delay(6_000L)
+            delay(3_000L)
             circolareplus.platform.awaitForeground()
             proposalsRefreshTrigger++
         }
@@ -3364,16 +3364,16 @@ fun MainAppShell(
                                                     var failed = 0
                                                     byDate.forEach { (date, group) ->
                                                         val studentNames = group.map { it.studentName ?: it.studentId }
-                                                        val studentIds = group.map { it.studentId }.distinct()
                                                         try {
                                                             val response = AppContainer.calendarRepository.createEvent(
                                                                 title = "Interrogazione di ${poll.subject}",
                                                                 eventDate = date,
                                                                 startTime = null,
                                                                 category = CalendarEventCategory.INTERROGAZIONE,
-                                                                isForAll = false,
+                                                                // Tutta la classe vede le interrogazioni di tutti.
+                                                                isForAll = true,
                                                                 isAiGenerated = true,
-                                                                visibleToUserIds = studentIds,
+                                                                visibleToUserIds = null,
                                                                 notes = "Studenti: ${studentNames.joinToString(", ")}"
                                                             )
                                                             if (response.warning != null) skipped++ else added++

@@ -300,10 +300,10 @@ fun AilaTopSheet(
                 Column(
                     modifier = Modifier
                         .weight(1f, fill = false)
-                        // Dal fondo il pannello sale GIA' sopra la tastiera (offset di sopra): i moduli
+                        // Il pannello sta GIA' sopra la tastiera (offset dal fondo, o altezza ridotta dall'alto): i moduli
                         // dentro mettono un loro `appImePadding`, che qui contava la tastiera una seconda
                         // volta e stirava il pannello con un vuoto bianco sopra la tastiera.
-                        .then(if (fromBottom) Modifier.consumeWindowInsets(imeInsets) else Modifier)
+                        .consumeWindowInsets(imeInsets)
                 ) {
                     content(requestClose)
                 }
@@ -363,7 +363,7 @@ fun AilaDatePickerDialog(
         modifier = if (glass) {
             Modifier.ailaGlassSurface(
                 shape,
-                tint = if (AppTheme.isDarkMode) Color.Black.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.42f)
+                tint = if (AppTheme.isDarkMode) Color(0xFF1C1C1E).copy(alpha = 0.92f) else Color.White.copy(alpha = 0.42f)
             )
         } else Modifier,
         shape = shape,

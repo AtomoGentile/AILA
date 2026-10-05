@@ -81,7 +81,8 @@ fun BoardScreen(
         circolareplus.design.AilaSlidingChipRow(
             selectedIndex = statusFilterOptions.indexOf(selectedStatusFilter),
             itemCount = statusFilterOptions.size,
-            scrollable = false,
+            // Scorrevole: sugli iPhone piccoli quattro chip non ci stanno e "Chiuse" veniva tagliato.
+            scrollable = true,
             modifier = Modifier.fillMaxWidth()
         ) { chipModifier ->
             statusFilterOptions.forEachIndexed { index, status ->
