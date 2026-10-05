@@ -6,6 +6,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
@@ -293,6 +295,8 @@ fun AilaTopSheet(
                 // Dal bordo alto la maniglia sta sotto; dal basso in cima. Il contenuto scorre da solo
                 // se non ci sta e la maniglia resta fuori dallo scorrimento.
                 if (fromBottom) handle(10.dp, 4.dp)
+                // Dal bordo alto il contenuto non deve toccare il margine dello schermo.
+                else Spacer(modifier = Modifier.height(16.dp))
                 Column(
                     modifier = Modifier
                         .weight(1f, fill = false)
