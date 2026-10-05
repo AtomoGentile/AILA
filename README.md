@@ -1,8 +1,8 @@
 # AILA — Guida Operativa di Sviluppo e Deployment
 
 **AILA** (ex "Circolare+") è un'app multipiattaforma per la gestione della vita di classe scolastica: circolari con
-analisi AI, calendario condiviso, bacheca proposte, sondaggi per le interrogazioni, mappa posti in aula e notifiche
-push in tempo reale.
+analisi AI, assistente conversazionale, calendario condiviso, bacheca proposte, sondaggi, mappa posti in aula e
+notifiche push in tempo reale.
 
 Target: **Android**, **iOS** / **iPadOS**, backend **Cloudflare Serverless**.
 
@@ -11,6 +11,7 @@ Target: **Android**, **iOS** / **iPadOS**, backend **Cloudflare Serverless**.
 ## Indice
 
 - [Cosa fa l'app](#cosa-fa-lapp)
+- [Ultimi aggiornamenti](#ultimi-aggiornamenti)
 - [Stack tecnologico](#stack-tecnologico)
 - [Struttura del repository](#struttura-del-repository)
 - [Setup e build](#setup-e-build)
@@ -29,15 +30,29 @@ Target: **Android**, **iOS** / **iPadOS**, backend **Cloudflare Serverless**.
 | Modulo | Descrizione |
 |---|---|
 | **Circolari** | Il backend controlla il portale Spaggiari della scuola ogni 10-15 minuti, mette in cache i PDF nuovi e notifica la classe. Ogni dispositivo scarica il PDF e lo classifica **in locale** (vedi [Privacy & AI](#privacy--ai)) in una delle categorie *Ti riguarda / Potenziale interesse / Non ti riguarda*, con estrazione automatica di eventuali scadenze. |
-| **AILA Assistant** | L'assistente dell'app: una domanda in italiano e una risposta costruita solo sui dati che AILA ha già (circolari e loro analisi, calendario, bacheca, sondaggi, mappa posti), con i riferimenti cliccabili delle fonti. Gira con la stessa chiave AI personale della classificazione (vedi [Privacy & AI](#privacy--ai)). |
-| **Calendario** | Eventi scolastici, anche generati automaticamente dalle scadenze estratte dalle circolari. |
+| **AILA Assistant e Ricerca** | L'assistente dell'app: una domanda in italiano e una risposta costruita solo sui dati che AILA ha già (circolari e loro analisi, calendario, bacheca, sondaggi, mappa posti), con i riferimenti cliccabili delle fonti, cronologia delle conversazioni e ricerca globale. Gira con la stessa chiave AI personale della classificazione (vedi [Privacy & AI](#privacy--ai)). |
+| **Calendario** | Eventi scolastici, anche generati automaticamente dalle scadenze estratte dalle circolari. L'orario si sceglie in ore di lezione (menu "Da" / "A", 1ª-6ª ora); il server accetta anche formule come "3ª ora" o "Dalla 2ª alla 4ª ora". |
 | **Bacheca proposte** | Proposte della classe con voti, commenti e possibilità di pubblicare in forma anonima (con quorum di governance per lo sblocco identità in caso di abuso: 2 Rappresentanti + 1 Guardia di Sicurezza scelta dal Rappresentante nella Scheda Classe, ciascuno approva dal proprio account; vale anche per i commenti anonimi). Le proposte chiuse sono accettate o rifiutate. |
-| **Sondaggi interrogazioni** | Prenotazione delle date d'interrogazione con un sistema a budget di voti (verde/giallo/rosso chiaro/rosso scuro) e "bonus sacrificio" per chi rinuncia più spesso alla data preferita, per prevenire il gaming del sistema. |
+| **Sondaggi interrogazioni** | Storico visibile a tutta la classe; elimina e "aggiungi al calendario" restano al Rappresentante. Prenotazione delle date d'interrogazione con un sistema a budget di voti (verde/giallo/rosso chiaro/rosso scuro) e "bonus sacrificio" per chi rinuncia più spesso alla data preferita, per prevenire il gaming del sistema. |
 | **Sondaggi a ordinamento** | Il Rappresentante propone da 2 a 10 opzioni e ognuno le mette in ordine. La classifica della classe è a punti (Borda: con N opzioni il primo posto vale N-1, l'ultimo 0) ed è sempre aggiornata; si vede dopo aver inviato la propria o a sondaggio chiuso. |
-| **Mappa posti** | Il Rappresentante genera 3 proposte di disposizione banchi con l'algoritmo `SeatMapOptimizer`, che bilancia preferenze sociali, tutoring tra pari, livello di chiasso e altezza — con blindatura dei rifiuti assoluti e prevenzione del "burnout" per chi fa sempre da tutor. |
-| **Preferenze sociali** | Votazione di gradimento reciproco fra compagni (-2…+2), aperta e chiusa esplicitamente dal Rappresentante (mai raccolta di nascosto), usata come input dell'algoritmo mappa posti. |
+| **Mappa posti** | Il Rappresentante genera 3 proposte di disposizione banchi con l'algoritmo `SeatMapOptimizer`, che bilancia preferenze sociali, tutoring tra pari, livello di chiasso e altezza — con blindatura dei rifiuti assoluti e prevenzione del "burnout" per chi fa sempre da tutor. La mappa è personalizzabile: tipo di banco preferito, numero di file e posti per fila (es. 8, 7, 7); i posti riempiti sono quanti gli iscritti, i posti in più si tolgono da dietro e coppie e trii restano misti. |
+| **Preferenze sociali** | Votazione di gradimento reciproco fra compagni (-2…+2), aperta e chiusa esplicitamente dal Rappresentante (mai raccolta di nascosto), usata come input dell'algoritmo mappa posti. Il voto compare subito e torna indietro se il server lo rifiuta. |
 | **Notifiche push** | Firebase Cloud Messaging avvisa in tempo reale per nuove circolari, sondaggi, proposte, apertura preferenze e aggiornamenti mappa posti. |
 | **Multi-classe** | Ogni classe ha i propri dati (utenti, circolari, bacheca, ecc.) isolati nello stesso database. |
+| **Aspetto** | Due stili grafici, **Glass** (vetro, iOS) e **Material**, con scala tipografica e animazioni condivise dal design system, container transform tra pulsanti e fogli, e rispetto di "Riduci movimento". |
+
+Navigazione a tab: Calendario · Classe (Circolari e Bacheca) · Home · Sondaggi · Mappa posti.
+
+---
+
+## Ultimi aggiornamenti
+
+- **Ottobre 2026** — Mappa posti personalizzata; orario degli eventi a ore di lezione; storico sondaggi per tutta la classe; sondaggi e bacheca quasi in tempo reale; "Invia" dei sondaggi sempre raggiungibile; correzioni alla barra delle tab su iOS.
+- **Assistant e Ricerca** — nuove schermate, cronologia e fonti cliccabili, versioni distinte Glass e Material.
+- **Design system** — scala tipografica `ailaTypography()`, token di colore e movimento, contrasti AA, target da 44dp.
+- **Sicurezza** — codici Rappresentante per classe, monouso e a scadenza (emessi solo con `ADMIN_SECRET`); chiave Gemini e token nel Portachiavi su iOS; JWT solo HS256 con scadenza.
+- **Sondaggi a classifica** (Borda) e **preferenze sociali** come input della mappa posti.
+- **PWA dismessa** — la cartella `web/` resta solo come storia, non è più mantenuta.
 
 ---
 
@@ -67,8 +82,8 @@ AILA/
 │   ├── package.json
 │   └── src/
 │       ├── index.ts               # Entry point, mount delle route + cron Spaggiari
-│       ├── routes/                # auth, users, circulars, calendar, proposals, polls,
-│       │                          # preferences, ratings, seatmap, fcm
+│       ├── routes/                # auth, admin (+ pagina /admin), users, circulars, calendar,
+│       │                          # proposals, polls, rankingPolls, preferences, ratings, seatmap, fcm
 │       └── services/               # spaggiari.ts (scraping+cache), fcm.ts (invio push)
 │
 ├── shared/src/commonMain/kotlin/circolareplus/   # Codice condiviso Android + iOS
@@ -79,12 +94,14 @@ AILA/
 │   ├── design/                    # Design system (colori, tipografia, componenti condivisi)
 │   └── ui/
 │       ├── MainAppShell.kt        # Navigazione a tab
-│       └── screens/               # Home, Calendario, Circolari, Bacheca, Sondaggi,
-│                                   # Mappa Posti, Profilo, Impostazioni, ...
+│       └── screens/               # Home, Calendario, Circolari, Bacheca, Sondaggi, Assistant,
+│                                   # Ricerca, Mappa Posti, Profilo, Impostazioni, ...
 │
 ├── androidApp/                    # Wrapper Android (Jetpack Compose, servizi nativi, FCM)
 ├── iosApp/                        # Progetto iOS (XcodeGen + SwiftUI/Compose entrypoint)
 │   └── project.yml                # Config XcodeGen — unica fonte di verità del progetto Xcode
+├── web/                           # PWA (dismessa, solo storia)
+├── design/ · video-presentazione/ # Logo e video di presentazione
 │
 ├── settings.gradle.kts / build.gradle.kts / gradle/   # Config Gradle e version catalog
 └── *.pdf                          # Documenti di specifica tecnica originali (vedi in fondo)
@@ -142,7 +159,7 @@ printf '%s' "$ADMIN_SECRET" | npx wrangler secret put ADMIN_SECRET
 ```
 
 **Dal browser (anche dal telefono)**: apri
-`https://circolare-plus-worker.circolareclass.workers.dev/admin`, scrivi il segreto, scegli la
+``https://<tuo-worker>.workers.dev/admin``, scrivi il segreto, scegli la
 classe, quanti codici (2 = uno per Rappresentante) e per quanti giorni valgono (1-30, di default
 7), poi "Crea codici". Dalla stessa pagina vedi i codici gia' emessi (liberi, usati da chi,
 scaduti) e ritiri quelli non ancora usati. La pagina non contiene niente di segreto: il segreto lo
@@ -155,11 +172,11 @@ I codici in chiaro compaiono solo appena creati: sul database resta l'hash SHA-2
 **Dal terminale**, se preferisci:
 
 ```bash
-API=https://circolare-plus-worker.circolareclass.workers.dev
+API=https://<tuo-worker>.workers.dev
 curl -s -X POST "$API/api/admin/representative-invites" \
   -H "X-Admin-Secret: $ADMIN_SECRET" -H 'Content-Type: application/json' \
-  -d '{"classLabel": "4 CSA", "count": 2, "ttlDays": 7}'
-# → {"codes":[{"id":"…","code":"ABCDE-FGHIJ"},{"id":"…","code":"KLMNP-QRSTU"}],"classLabel":"4 CSA","expiresAt":"…","representatives":0,…}
+  -d '{"classLabel": "<classe>", "count": 2, "ttlDays": 7}'
+# → {"codes":[{"id":"…","code":"ABCDE-FGHIJ"},{"id":"…","code":"KLMNP-QRSTU"}],"classLabel":"<classe>","expiresAt":"…","representatives":0,…}
 ```
 
 `representatives` dice quanti Rappresentanti ha gia' la classe (con 2 la registrazione risponde
@@ -167,7 +184,7 @@ curl -s -X POST "$API/api/admin/representative-invites" \
 ancora usato:
 
 ```bash
-curl -s "$API/api/admin/representative-invites?classLabel=4%20CSA" -H "X-Admin-Secret: $ADMIN_SECRET"
+curl -s "$API/api/admin/representative-invites?classLabel=<classe>" -H "X-Admin-Secret: $ADMIN_SECRET"
 curl -s -X DELETE "$API/api/admin/representative-invites/<id>" -H "X-Admin-Secret: $ADMIN_SECRET"
 ```
 
@@ -213,11 +230,10 @@ Ogni modifica alla configurazione del progetto va fatta in `project.yml`, poi si
 
 Copre principalmente gli algoritmi (`SeatMapOptimizer`, `SondaggiEngine`) in `shared/src/commonTest/`.
 
-### 5. PWA (web/)
+### 5. PWA (web/) — dismessa
 
-Versione web installabile per chi usa iPhone/iPad senza SideStore: affianca l'app nativa, stesso login e stesse API.
-Pubblicata su https://aila-scuola.pages.dev dal workflow **PWA deploy**. Dettagli, secret e prove in
-[web/README.md](web/README.md).
+La versione web è stata dismessa e non è più mantenuta; il codice resta in `web/` solo come riferimento
+([web/README.md](web/README.md)).
 
 ---
 
