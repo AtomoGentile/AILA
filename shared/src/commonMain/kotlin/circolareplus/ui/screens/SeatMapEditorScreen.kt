@@ -53,8 +53,7 @@ fun SeatMapEditorScreen(
     seatsPerDesk: Int = SeatMapOptimizer.SEATS_PER_DESK_PAIR
 ) {
     var selectedSeat by remember { mutableStateOf<EditableSeatRef?>(null) }
-    val hasTrioDesks = seatsPerDesk == SeatMapOptimizer.SEATS_PER_DESK_TRIO ||
-        assignments.any { it.seats >= 3 || it.studentCId != null }
+    val (deskColumns, deskCells) = remember(assignments) { deskGridCells(assignments) }
 
     // Uno scambio può cambiare la composizione dei banchi: se la selezione punta a un indice
     // ormai fuori range, la si azzera invece di lasciarla puntare a un posto inesistente.
@@ -113,7 +112,7 @@ fun SeatMapEditorScreen(
         }
 
         LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
+            columns = GridCells.Fixed(deskColumns),
             horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12),
             verticalArrangement = Arrangement.spacedBy(AppTheme.Space12),
             contentPadding = PaddingValues(
@@ -123,8 +122,14 @@ fun SeatMapEditorScreen(
             ),
             modifier = Modifier.fillMaxSize()
         ) {
-            items(count = assignments.size) { deskIndex ->
-                val desk = assignments[deskIndex]
+            items(count = deskCells.size) { cellIndex ->
+                val cell = deskCells[cellIndex]
+                if (cell == null) {
+                    Spacer(modifier = Modifier)
+                    return@items
+                }
+                val deskIndex = cell.index
+                val desk = cell.value
                 val sA = desk.studentAId?.let { studentsMap[it] }
                 val sB = desk.studentBId?.let { studentsMap[it] }
                 val sC = desk.studentCId?.let { studentsMap[it] }
@@ -196,7 +201,7 @@ fun SeatMapEditorScreen(
                                 )
                             }
                         )
-                        if (hasTrioDesks) {
+                        if (desk.hasThirdSeat) {
                             HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), color = AppTheme.Hairline)
                             SeatSlotLabel(
                                 name = sC?.firstName,

@@ -57,8 +57,11 @@ fun SeatMapProposalsScreen(
     var previewIndex by remember { mutableStateOf<Int?>(null) }
     val safePreview = previewIndex?.takeIf { it in proposals.indices }
 
+    val previewCells = remember(safePreview, proposals) {
+        safePreview?.let { deskGridCells(proposals[it].assignments) } ?: (3 to emptyList())
+    }
     LazyVerticalGrid(
-        columns = GridCells.Fixed(3),
+        columns = GridCells.Fixed(previewCells.first),
         horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12),
         verticalArrangement = Arrangement.spacedBy(AppTheme.Space12),
         contentPadding = PaddingValues(
@@ -102,7 +105,12 @@ fun SeatMapProposalsScreen(
 
         if (safePreview != null) {
             val proposal = proposals[safePreview]
-            val hasTrio = seatsPerDesk == SeatMapOptimizer.SEATS_PER_DESK_TRIO
+            val trioCount = proposal.assignments.count { it.hasThirdSeat }
+            val deskKind = when {
+                trioCount == 0 -> "banchi da due"
+                trioCount == proposal.assignments.size -> "banchi da tre"
+                else -> "$trioCount trii e ${proposal.assignments.size - trioCount} coppie"
+            }
 
             fullRow {
                 Column {
@@ -124,7 +132,7 @@ fun SeatMapProposalsScreen(
                     Text(
                         text = "Proposta ${safePreview + 1} • " +
                             (proposal.satisfaction?.let { "${it.percentage.toInt()}% soddisfazione" } ?: "nessun voto") +
-                            " • " + if (hasTrio) "banchi da tre" else "banchi da due",
+                            " • " + deskKind,
                         style = MaterialTheme.typography.bodySmall,
                         color = AppTheme.TextMuted
                     )
@@ -149,10 +157,14 @@ fun SeatMapProposalsScreen(
             }
 
             itemsIndexed(
-                items = proposal.assignments,
+                items = previewCells.second,
                 key = { index, _ -> "$safePreview-$index" }
-            ) { _, desk ->
-                SeatMapDeskCard(desk = desk, studentsMap = studentsMap, showThirdSeat = hasTrio)
+            ) { _, cell ->
+                if (cell != null) {
+                    SeatMapDeskCard(desk = cell.value, studentsMap = studentsMap, showThirdSeat = cell.value.hasThirdSeat)
+                } else {
+                    Spacer(modifier = Modifier)
+                }
             }
 
             fullRow {

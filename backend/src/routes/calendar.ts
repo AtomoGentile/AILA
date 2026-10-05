@@ -6,6 +6,16 @@ import { Hono } from 'hono';
 import type { Env, JWTPayload, EventCategory } from '../types';
 import { authMiddleware, requireRole, newUUID, resolveClassId } from '../auth';
 
+/** HH:MM oppure un'''ora di lezione 1-6: "3ª ora" o "Dalla 2ª alla 4ª ora". */
+function isValidEventTime(value: string): boolean {
+  if (/^([01]?\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(value)) return true;
+  const single = /^([1-6])ª ora$/.exec(value);
+  if (single) return true;
+  const range = /^Dalla ([1-6])ª alla ([1-6])ª ora$/.exec(value);
+  return range !== null && Number(range[1]) <= Number(range[2]);
+}
+
+
 const calendar = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();
 
 calendar.use('*', authMiddleware());
@@ -59,7 +69,8 @@ calendar.get('/', async (c) => {
     params.push(to);
   }
 
-  query += ' ORDER BY event_date ASC, start_time ASC';
+  // Le ore di lezione ("3ª ora", "Dalla 2ª alla 4ª ora") si ordinano per ora d'inizio, prima degli orari.
+  query += " ORDER BY event_date ASC, CASE WHEN start_time LIKE 'Dalla %' THEN '0' || substr(start_time, 7, 1) WHEN start_time LIKE '_ª ora' THEN '0' || substr(start_time, 1, 1) ELSE start_time END ASC";
 
   const rows = await c.env.DB.prepare(query).bind(...params).all<{
     id: string;
@@ -142,8 +153,8 @@ calendar.post('/', async (c) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
     return c.json({ error: 'eventDate deve essere nel formato yyyy-mm-dd' }, 400);
   }
-  if (startTime != null && !/^([01]?\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(startTime)) {
-    return c.json({ error: 'startTime deve essere nel formato HH:MM' }, 400);
+  if (startTime != null && !isValidEventTime(startTime)) {
+    return c.json({ error: 'startTime deve essere HH:MM oppure ora di lezione (es. 3ª ora)' }, 400);
   }
   if (title.length > MAX_TITLE_LENGTH || (notes ?? '').length > MAX_NOTES_LENGTH) {
     return c.json({ error: 'Titolo o note troppo lunghi' }, 400);
@@ -251,8 +262,8 @@ calendar.put('/:id', async (c) => {
   if (body.eventDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(body.eventDate)) {
     return c.json({ error: 'eventDate deve essere nel formato yyyy-mm-dd' }, 400);
   }
-  if (body.startTime != null && !/^([01]?\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(body.startTime)) {
-    return c.json({ error: 'startTime deve essere nel formato HH:MM' }, 400);
+  if (body.startTime != null && !isValidEventTime(body.startTime)) {
+    return c.json({ error: 'startTime deve essere HH:MM oppure ora di lezione (es. 3ª ora)' }, 400);
   }
   if (body.category !== undefined && !VALID_CATEGORIES.includes(body.category)) {
     return c.json({ error: 'Categoria non valida' }, 400);

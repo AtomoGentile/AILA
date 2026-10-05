@@ -88,8 +88,11 @@ class SeatMapRepository(private val api: ApiClient? = null) {
         // 2 = banchi da coppia, 3 = banchi da trio (stesso algoritmo, vedi SeatMapOptimizer.optimize).
         seatsPerDesk: Int = SeatMapOptimizer.SEATS_PER_DESK_PAIR,
         // Coppie da separare per disciplina (Scheda Classe): penalizzate, non vietate.
-        disciplinePairs: Set<Pair<String, String>> = emptySet()
+        disciplinePairs: Set<Pair<String, String>> = emptySet(),
+        // Posti di ogni fila (da davanti a dietro), es. [7, 8, 7]. Vuoto = disposizione automatica.
+        rowSeats: List<Int> = emptyList()
     ): List<SeatMapProposal> {
+        val slots = if (rowSeats.isEmpty()) null else SeatMapOptimizer.buildDeskSlots(rowSeats, seatsPerDesk, students.size)
         val isSmallClass = students.size < 22
         val baseSeed = kotlin.random.Random.nextLong()
 
@@ -105,7 +108,8 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                 isSmallClass = isSmallClass,
                 seed = seed,
                 seatsPerDesk = seatsPerDesk,
-                disciplinePairs = disciplinePairs
+                disciplinePairs = disciplinePairs,
+                slots = slots
             )
             val breakdown = SeatMapOptimizer.scoreLayout(
                 assignments = assignments,

@@ -2943,7 +2943,7 @@ fun MainAppShell(
                                                         }
                                                     }
                                                 },
-                                                onGenerateProposals = { weights, seatsPerDesk ->
+                                                onGenerateProposals = { weights, seatsPerDesk, rowSeats ->
                                                     coroutineScope.launch {
                                                         isGeneratingProposals = true
                                                         lastRequestedSeatsPerDesk = seatsPerDesk
@@ -3002,7 +3002,8 @@ fun MainAppShell(
                                                                     history = history,
                                                                     weights = weights,
                                                                     seatsPerDesk = seatsPerDesk,
-                                                                    disciplinePairs = disciplinePairs
+                                                                    disciplinePairs = disciplinePairs,
+                                                                    rowSeats = rowSeats
                                                                 )
                                                             }
                                                             // La pagina delle proposte si apre dal pulsante "Calcola":

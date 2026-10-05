@@ -390,4 +390,33 @@ class SeatMapOptimizerTest {
         // Marco con un altro compagno non e' penalizzato.
         assertEquals(0.0, discipline(setOf("marco" to "anna")))
     }
+
+    @Test
+    fun disposizionePersonalizzataRiempieEsattamenteGliIscritti() {
+        assertEquals(listOf(3, 2, 2), SeatMapOptimizer.partitionRow(7, 3))
+        assertEquals(listOf(3, 3, 2), SeatMapOptimizer.partitionRow(8, 3))
+        assertEquals(listOf(2, 2, 2, 2), SeatMapOptimizer.partitionRow(8, 2))
+        assertEquals(listOf(2, 2, 3), SeatMapOptimizer.partitionRow(7, 2))
+
+        val students = (1..22).map { User(id = "s$it", firstName = "N$it", lastName = "C$it", username = "s$it") }
+        val slots = SeatMapOptimizer.buildDeskSlots(listOf(8, 7, 7), SeatMapOptimizer.SEATS_PER_DESK_TRIO, students.size)
+        assertEquals(22, slots.sumOf { it.seats })
+        val layout = SeatMapOptimizer.optimize(
+            students = students,
+            profiles = emptyMap(),
+            ratings = emptyMap(),
+            socialPreferences = emptyMap(),
+            history = emptyList(),
+            weights = OptimizerWeights(),
+            isSmallClass = false,
+            seed = 7L,
+            seatsPerDesk = SeatMapOptimizer.SEATS_PER_DESK_TRIO,
+            slots = slots
+        )
+        val seated = layout.flatMap { listOfNotNull(it.studentAId, it.studentBId, it.studentCId) }
+        assertEquals(22, seated.size)
+        assertEquals(22, seated.toSet().size)
+        // Le file hanno i posti richiesti.
+        assertEquals(listOf(8, 7, 7), layout.groupBy { it.row }.toList().sortedBy { it.first }.map { (_, d) -> d.sumOf { it.seats } })
+    }
 }

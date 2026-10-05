@@ -610,7 +610,12 @@ object SeatMapOptimizer {
      * a caso due posti da scambiare — mai il terzo posto quando si genera in modalità coppia,
      * altrimenti l'ottimizzatore "inventerebbe" trii anche quando non richiesto. */
     private fun allSeats(assignments: List<DeskAssignment>, seatsPerDesk: Int): List<SeatRef> =
-        assignments.indices.flatMap { deskIndex -> (0 until seatsPerDesk).map { SeatRef(deskIndex, it) } }
+        assignments.flatMapIndexed { deskIndex, desk ->
+            // Con una disposizione personalizzata i banchi hanno capienze diverse (coppie e trii
+            // nella stessa mappa): vale la capienza del banco, non quella richiesta in generale.
+            (0 until (if (desk.seats in SEATS_PER_DESK_PAIR..SEATS_PER_DESK_TRIO) desk.seats else seatsPerDesk))
+                .map { SeatRef(deskIndex, it) }
+        }
 
     /** Scambia gli occupanti di due posti (anche di banchi diversi, anche il terzo posto di un
      * trio). Usata sia dalla ricerca locale sia dall'editor manuale (swap-by-tap) per applicare
@@ -636,6 +641,98 @@ object SeatMapOptimizer {
                 else -> desk
             }
         }
+    }
+
+    /** Un banco della disposizione richiesta dal Rappresentante: dove sta e quanti posti ha. */
+    data class DeskSlot(val row: Int, val column: Int, val seats: Int)
+
+    /**
+     * Divide una fila di [n] posti in banchi da 2 o 3, il piu' vicino possibile al tipo
+     * preferito ([preferred]): con trii, 7 posti diventano 3+2+2 e 8 diventano 3+3+2; con
+     * coppie, 8 diventano 2+2+2+2 e 7 diventano 2+2+3. Mai banchi singoli (n >= 2).
+     */
+    fun partitionRow(n: Int, preferred: Int): List<Int> {
+        if (n <= 0) return emptyList()
+        if (n < 4) return listOf(n.coerceAtLeast(2))
+        return if (preferred >= SEATS_PER_DESK_TRIO) {
+            val desks = (n + 2) / 3
+            val base = n / desks
+            val extra = n % desks
+            List(desks) { if (it < extra) base + 1 else base }
+        } else {
+            val desks = n / 2
+            List(desks) { if (n % 2 == 1 && it == desks - 1) 3 else 2 }
+        }
+    }
+
+    /**
+     * Banchi di una disposizione personalizzata: [rowSeats] sono i posti di ogni fila (da davanti
+     * a dietro), [preferred] il tipo di banco preferito. Se i posti superano gli studenti, i trii
+     * dell'ultima fila diventano coppie (da dietro verso davanti) finche' i conti tornano; i posti
+     * che avanzano restano vuoti. Se non bastano, [IllegalArgumentException].
+     */
+    fun buildDeskSlots(rowSeats: List<Int>, preferred: Int, studentCount: Int): List<DeskSlot> {
+        val capacity = rowSeats.sumOf { it }
+        require(capacity >= studentCount) {
+            "Posti insufficienti: la disposizione ne ha $capacity, ma gli iscritti sono $studentCount"
+        }
+        val slots = mutableListOf<DeskSlot>()
+        rowSeats.forEachIndexed { row, seats ->
+            partitionRow(seats, preferred).forEachIndexed { column, size -> slots.add(DeskSlot(row, column, size)) }
+        }
+        var surplus = capacity - studentCount
+        var i = slots.lastIndex
+        while (surplus > 0 && i >= 0) {
+            if (slots[i].seats == SEATS_PER_DESK_TRIO) {
+                slots[i] = slots[i].copy(seats = SEATS_PER_DESK_PAIR)
+                surplus--
+            }
+            i--
+        }
+        return slots
+    }
+
+    /**
+     * Disposizione iniziale sui banchi dati: studenti mescolati, assegnati posto per posto
+     * evitando le coppie vietate quando possibile. Nessuno resta fuori: chi non trova un posto
+     * compatibile va in un posto libero qualsiasi (la ricerca locale poi lo sposta).
+     */
+    private fun buildInitialLayoutFromSlots(
+        students: List<User>,
+        socialPreferences: Map<Pair<String, String>, SocialPreferenceScore>,
+        random: Random,
+        slots: List<DeskSlot>
+    ): List<DeskAssignment> {
+        val queue = students.shuffled(random).toMutableList()
+        val desks = slots.map { slot ->
+            val members = mutableListOf<User>()
+            while (members.size < slot.seats && queue.isNotEmpty()) {
+                val idx = queue.indexOfFirst { c -> members.none { isForbiddenPair(it.id, c.id, socialPreferences) } }
+                if (idx < 0) break
+                members.add(queue.removeAt(idx))
+            }
+            DeskAssignment(
+                row = slot.row, column = slot.column,
+                studentAId = members.getOrNull(0)?.id,
+                studentBId = members.getOrNull(1)?.id,
+                studentCId = members.getOrNull(2)?.id,
+                seats = slot.seats
+            )
+        }.toMutableList()
+        // Chi e' rimasto in coda (incompatibile con tutti i banchi visti): primo posto libero.
+        for (student in queue) {
+            val di = desks.indexOfFirst { d ->
+                (d.studentAId == null) || (d.studentBId == null) || (d.seats >= 3 && d.studentCId == null)
+            }
+            if (di < 0) break
+            val d = desks[di]
+            desks[di] = when {
+                d.studentAId == null -> d.copy(studentAId = student.id)
+                d.studentBId == null -> d.copy(studentBId = student.id)
+                else -> d.copy(studentCId = student.id)
+            }
+        }
+        return desks
     }
 
     /**
@@ -708,7 +805,10 @@ object SeatMapOptimizer {
         // (stesse funzioni di punteggio, stesso hill-climbing): cambia solo quante persone per
         // banco costruisce buildInitialLayout e quanti posti esplora la ricerca locale.
         seatsPerDesk: Int = SEATS_PER_DESK_PAIR,
-        disciplinePairs: Set<Pair<String, String>> = emptySet()
+        disciplinePairs: Set<Pair<String, String>> = emptySet(),
+        // Banchi personalizzati (file con posti diversi, coppie e trii insieme): se presenti
+        // sostituiscono la disposizione automatica a 3 banchi per fila.
+        slots: List<DeskSlot>? = null
     ): List<DeskAssignment> {
         require(seatsPerDesk == SEATS_PER_DESK_PAIR || seatsPerDesk == SEATS_PER_DESK_TRIO) {
             "seatsPerDesk deve essere $SEATS_PER_DESK_PAIR (coppia) o $SEATS_PER_DESK_TRIO (trio), ricevuto $seatsPerDesk"
@@ -719,7 +819,8 @@ object SeatMapOptimizer {
         fun score(layout: List<DeskAssignment>) =
             scoreLayout(layout, profiles, ratings, socialPreferences, history, weights, isSmallClass, disciplinePairs).total
 
-        var current = buildInitialLayout(students, socialPreferences, random, seatsPerDesk)
+        var current = if (slots != null) buildInitialLayoutFromSlots(students, socialPreferences, random, slots)
+        else buildInitialLayout(students, socialPreferences, random, seatsPerDesk)
         var currentScore = score(current)
         var best = current
         var bestScore = currentScore

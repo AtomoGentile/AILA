@@ -19,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -65,7 +66,7 @@ fun SeatMapScreen(
     /** Quanti hanno votato le preferenze; null finche' non e' stato caricato. */
     preferencesProgress: circolareplus.data.remote.dto.PreferencesProgressDto? = null,
     onTogglePreferencesWindow: (Boolean) -> Unit = {},
-    onGenerateProposals: (OptimizerWeights, seatsPerDesk: Int) -> Unit = { _, _ -> },
+    onGenerateProposals: (OptimizerWeights, seatsPerDesk: Int, rowSeats: List<Int>) -> Unit = { _, _, _ -> },
     isExportingPdf: Boolean = false,
     onExportPdf: () -> Unit = {},
     /** Proposte in calcolo: il pulsante mostra l'attesa e non si puo' ripremere. */
@@ -76,6 +77,7 @@ fun SeatMapScreen(
     // un'icona di localizzazione (sembrava chiedere il GPS) e la ricerca non faceva nulla.
     var focusedStudentId by remember { mutableStateOf<String?>(null) }
     val gridState = rememberLazyGridState()
+    val (deskColumns, deskCells) = remember(assignments) { deskGridCells(assignments) }
     val coroutineScope = rememberCoroutineScope()
 
     // Il compagno cercato: basta l'inizio del nome o del cognome (maiuscole indifferenti).
@@ -102,7 +104,8 @@ fun SeatMapScreen(
         if (deskIndex < 0) return
         coroutineScope.launch {
             val total = gridState.layoutInfo.totalItemsCount
-            val target = (total - assignments.size + deskIndex).coerceAtLeast(0)
+            val cellIndex = deskCells.indexOfFirst { it?.index == deskIndex }.coerceAtLeast(0)
+            val target = (total - deskCells.size + cellIndex).coerceAtLeast(0)
             gridState.animateScrollToItem(target)
         }
     }
@@ -116,10 +119,14 @@ fun SeatMapScreen(
     var wDidactic by remember { mutableStateOf(1.0f) }
     // Banchi da coppia (2) o da trio (3): stesso algoritmo, vedi SeatMapOptimizer.optimize.
     var seatsPerDesk by remember { mutableStateOf(SeatMapOptimizer.SEATS_PER_DESK_PAIR) }
+    // Disposizione dell'aula: automatica (3 banchi per fila) o personalizzata, con i posti di
+    // ogni fila scelti dal Rappresentante (es. 8, 7, 7).
+    val studentCount = studentsMap.size
+    var customLayout by remember { mutableStateOf(false) }
+    var rowSeats by remember { mutableStateOf(defaultRowSeats(studentCount)) }
 
     // Una disposizione pubblicata usa banchi da trio se un banco ha capienza 3 (campo `seats`,
     // salvato nel JSON) o, per le mappe vecchie senza il campo, un terzo occupante.
-    val hasTrioDesks = remember(assignments) { assignments.any { it.seats >= 3 || it.studentCId != null } }
 
     Column(
         modifier = Modifier
@@ -359,7 +366,7 @@ fun SeatMapScreen(
                     // punteggio, applicate a tutte le coppie del banco), cambia solo quante
                     // persone ci mette insieme.
                     Text(
-                        text = "Posti per banco",
+                        text = if (customLayout) "Tipo di banco preferito" else "Posti per banco",
                         style = MaterialTheme.typography.labelLarge,
                         color = AppTheme.TextDark
                     )
@@ -374,11 +381,37 @@ fun SeatMapScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+
+                    // Disposizione dell'aula: automatica oppure scelta fila per fila.
+                    Text(
+                        text = "Disposizione dell'aula",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = AppTheme.TextDark
+                    )
+                    Spacer(modifier = Modifier.height(AppTheme.Space4))
+                    AilaSegmentedTabs(
+                        labels = listOf("Automatica", "Personalizzata"),
+                        selectedIndex = if (customLayout) 1 else 0,
+                        onSelect = { customLayout = it == 1 },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    val layoutOk = !customLayout || (rowSeats.sum() >= studentCount && rowSeats.all { it >= 2 })
+                    if (customLayout) {
+                        Spacer(modifier = Modifier.height(AppTheme.Space8))
+                        RowSeatsEditor(
+                            rowSeats = rowSeats,
+                            onChange = { rowSeats = it },
+                            studentCount = studentCount,
+                            preferredDeskSeats = seatsPerDesk
+                        )
+                    }
+
                     Spacer(modifier = Modifier.height(AppTheme.Space8))
 
                     AilaPrimaryButton(
                         text = if (isGeneratingProposals) "Calcolo in corso…" else "Calcola 3 proposte",
-                        enabled = !isGeneratingProposals,
+                        enabled = !isGeneratingProposals && layoutOk,
                         // Mentre calcola: la forma che cambia (Material) o i puntini (Glass),
                         // invece di un pulsante che non reagisce per qualche secondo.
                         icon = if (isGeneratingProposals) {
@@ -401,7 +434,8 @@ fun SeatMapScreen(
                                     wDiscipline = wDiscipline.toDouble(),
                                     wDidactic = wDidactic.toDouble()
                                 ),
-                                seatsPerDesk
+                                seatsPerDesk,
+                                if (customLayout) rowSeats else emptyList()
                             )
                         },
                         fillMaxWidth = true
@@ -431,7 +465,7 @@ fun SeatMapScreen(
             }
         }
         LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
+            columns = GridCells.Fixed(deskColumns),
             horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12),
             verticalArrangement = Arrangement.spacedBy(AppTheme.Space12),
             contentPadding = PaddingValues(
@@ -486,14 +520,18 @@ fun SeatMapScreen(
             // I banchi entrano a cascata (prime file) e quello evidenziato "pulsa" al centro della
             // scena: prima la mappa compariva tutta di colpo e il banco trovato cambiava colore
             // e basta, facile da non notare.
-            itemsIndexed(assignments) { index, desk ->
-                SeatMapDeskCard(
-                    modifier = Modifier.ailaAppear(3 + index),
-                    desk = desk,
-                    studentsMap = studentsMap,
-                    showThirdSeat = hasTrioDesks,
-                    focusedStudentId = highlightedId
-                )
+            itemsIndexed(deskCells) { cellIndex, cell ->
+                if (cell != null) {
+                    SeatMapDeskCard(
+                        modifier = Modifier.ailaAppear(3 + cellIndex),
+                        desk = cell.value,
+                        studentsMap = studentsMap,
+                        showThirdSeat = cell.value.hasThirdSeat,
+                        focusedStudentId = highlightedId
+                    )
+                } else {
+                    Spacer(modifier = Modifier)
+                }
             }
         }
         }
@@ -652,4 +690,111 @@ private fun androidx.compose.foundation.lazy.grid.LazyGridScope.fullRow(
     content: @Composable () -> Unit
 ) {
     item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) { content() }
+}
+
+/** File predefinite per [students] studenti: tre file, posti il piu' possibile uguali (22 -> 8, 7, 7). */
+internal fun defaultRowSeats(students: Int): List<Int> {
+    val n = students.coerceAtLeast(2)
+    val rows = 3
+    val base = n / rows
+    val extra = n % rows
+    return List(rows) { if (it < extra) base + 1 else base }.map { it.coerceAtLeast(2) }
+}
+
+/**
+ * Editor della disposizione personalizzata: numero di file e posti di ognuna. Sotto, il conteggio
+ * dei posti rispetto agli iscritti e come verranno formati i banchi di ogni fila (es. "3 + 2 + 2").
+ */
+@Composable
+private fun RowSeatsEditor(
+    rowSeats: List<Int>,
+    onChange: (List<Int>) -> Unit,
+    studentCount: Int,
+    preferredDeskSeats: Int
+) {
+    val capacity = rowSeats.sum()
+    Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space4)) {
+        Stepper(
+            label = "File",
+            value = rowSeats.size,
+            min = 1,
+            max = 10,
+            onValueChange = { rows ->
+                onChange(
+                    if (rows > rowSeats.size) rowSeats + List(rows - rowSeats.size) { rowSeats.lastOrNull() ?: 6 }
+                    else rowSeats.take(rows)
+                )
+            }
+        )
+        rowSeats.forEachIndexed { index, seats ->
+            Stepper(
+                label = "Fila ${index + 1}",
+                value = seats,
+                min = 2,
+                max = 16,
+                suffix = SeatMapOptimizer.partitionRow(seats, preferredDeskSeats).joinToString(" + "),
+                onValueChange = { v -> onChange(rowSeats.toMutableList().also { it[index] = v }) }
+            )
+        }
+        val ok = capacity >= studentCount
+        Text(
+            text = when {
+                capacity < studentCount -> "Posti: $capacity. Ne servono almeno $studentCount (ne mancano ${studentCount - capacity})"
+                capacity == studentCount -> "Posti: $capacity, esattamente gli iscritti"
+                else -> "Posti: $capacity, ${capacity - studentCount} resteranno vuoti"
+            },
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = if (ok) AppTheme.TintGreenInk else AppTheme.PollDarkRed,
+            modifier = Modifier.padding(top = AppTheme.Space4)
+        )
+    }
+}
+
+/** Riga "etichetta  [-] valore [+]" con un'annotazione facoltativa (come si dividono i banchi). */
+@Composable
+private fun Stepper(
+    label: String,
+    value: Int,
+    min: Int,
+    max: Int,
+    onValueChange: (Int) -> Unit,
+    suffix: String? = null
+) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = label, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextDark)
+            if (suffix != null) {
+                Text(text = "banchi: $suffix", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
+            }
+        }
+        StepperButton(text = "\u2212", description = "Meno $label", enabled = value > min) { onValueChange(value - 1) }
+        Text(
+            text = "$value",
+            style = MaterialTheme.typography.titleSmall,
+            color = AppTheme.TextDark,
+            modifier = Modifier.widthIn(min = 32.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+        StepperButton(text = "+", description = "Più $label", enabled = value < max) { onValueChange(value + 1) }
+    }
+}
+
+@Composable
+private fun StepperButton(text: String, description: String, enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(if (enabled) AppTheme.TintBlue else AppTheme.TintSlate)
+            .clickable(enabled = enabled, onClick = onClick)
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleMedium,
+            color = if (enabled) AppTheme.TintBlueInk else AppTheme.TextFaint
+        )
+    }
 }
