@@ -1,0 +1,101 @@
+name: Update SideStore source
+
+# Aggiorna source.json (versione, data, size, sha256, downloadURL) con l'ultima release che ha AILA.ipa.
+# L'IPA viene allegata DOPO la creazione della release (workflow "iOS IPA (SideStore)"), e gli upload
+# fatti con GITHUB_TOKEN non fanno scattare gli eventi release: per questo si parte anche da workflow_run.
+on:
+  release:
+    types: [published, edited]
+  workflow_run:
+    workflows: ["iOS IPA (SideStore)"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag della release (vuoto = ultima con AILA.ipa)"
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-sidestore-source
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Aggiorna source.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ github.event.inputs.tag || github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+
+          if [ -n "$INPUT_TAG" ]; then
+            REL=$(gh api "repos/$REPO/releases/tags/$INPUT_TAG")
+          else
+            REL=$(gh api "repos/$REPO/releases?per_page=30" \
+              --jq '[.[] | select(.draft|not) | select(any(.assets[]; .name=="AILA.ipa"))][0]')
+          fi
+          [ -n "$REL" ] && [ "$REL" != "null" ] || { echo "Nessuna release con AILA.ipa: niente da fare"; exit 0; }
+
+          TAG=$(jq -r .tag_name <<<"$REL")
+          ASSET=$(jq -c '.assets[] | select(.name=="AILA.ipa")' <<<"$REL")
+          [ -n "$ASSET" ] || { echo "La release $TAG non ha ancora AILA.ipa: niente da fare"; exit 0; }
+          URL=$(jq -r .browser_download_url <<<"$ASSET")
+          SIZE=$(jq -r .size <<<"$ASSET")
+          DATE=$(jq -r .updated_at <<<"$ASSET")
+          NOTES=$(jq -r '.name // .tag_name' <<<"$REL")
+
+          curl -fsSL -o AILA.ipa "$URL"
+          [ "$(stat -c%s AILA.ipa)" = "$SIZE" ] || { echo "Dimensione scaricata diversa da quella dell'asset"; exit 1; }
+          SHA=$(sha256sum AILA.ipa | cut -d' ' -f1)
+
+          unzip -p AILA.ipa 'Payload/*.app/Info.plist' > Info.plist
+          read -r BUNDLE VERSION BUILD MINOS < <(python3 - <<'PY'
+          import plistlib
+          p = plistlib.load(open("Info.plist", "rb"))
+          print(p["CFBundleIdentifier"], p["CFBundleShortVersionString"], p["CFBundleVersion"], p.get("MinimumOSVersion", "17.0"))
+          PY
+          )
+
+          # Il bundle id non deve cambiare mai: altrimenti i compagni consumano App ID (limite 10/settimana).
+          EXPECTED=$(jq -r '.apps[0].bundleIdentifier' source.json)
+          if [ "$BUNDLE" != "$EXPECTED" ]; then
+            echo "::error::Bundle id dell'IPA ($BUNDLE) diverso da source.json ($EXPECTED): stop."
+            exit 1
+          fi
+
+          jq --arg v "$VERSION" --arg b "$BUILD" --arg d "$DATE" --arg u "$URL" --argjson s "$SIZE" \
+             --arg sha "$SHA" --arg min "$MINOS" --arg n "$NOTES" '
+            .apps[0] |= (
+              .version = $v | .versionDate = $d | .downloadURL = $u | .size = $s
+              | .versions = (
+                  [{version:$v, buildVersion:$b, date:$d, localizedDescription:$n,
+                    downloadURL:$u, size:$s, sha256:$sha, minOSVersion:$min}]
+                  + [(.versions // [])[] | select(.version != $v)]
+                )
+            )' source.json > source.new && mv source.new source.json
+
+          rm -f AILA.ipa Info.plist
+          echo "Source aggiornata a $VERSION ($TAG)"
+
+      - name: Commit e push su main
+        run: |
+          if git diff --quiet -- source.json; then
+            echo "source.json già aggiornato"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add source.json
+          git commit -m "Aggiorna source SideStore"
+          git push origin HEAD:main
