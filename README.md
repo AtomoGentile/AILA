@@ -225,7 +225,7 @@ Copre principalmente gli algoritmi (`SeatMapOptimizer`, `SondaggiEngine`) in `sh
 Entrambi i file escono dalla CI di GitHub Actions, senza account a pagamento.
 
 - **APK** (`AILA.apk`): il workflow *Android Build* lo produce a ogni push su `shared/` o `androidApp/` e lo
-  salva come artifact `AILA-apk`. Per pubblicarlo: `git tag v1.0.0 && git push origin v1.0.0`; l'APK viene
+  salva come artifact `AILA-apk`. Per pubblicarlo: `git tag v0.0.1 && git push origin v0.0.1`; l'APK viene
   allegato alla Release di GitHub, da cui si scarica e si installa. Senza secret è firmato con la chiave debug;
   per una chiave di rilascio propria si impostano `ANDROID_RELEASE_KEYSTORE` (base64),
   `ANDROID_RELEASE_STORE_PASSWORD`, `ANDROID_RELEASE_KEY_ALIAS` e `ANDROID_RELEASE_KEY_PASSWORD`. Per le push

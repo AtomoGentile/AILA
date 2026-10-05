@@ -49,7 +49,7 @@ targets:
       properties:
         CFBundleDisplayName: AILA
         CFBundleName: AILA
-        CFBundleShortVersionString: "1.0.0"
+        CFBundleShortVersionString: "0.0.1"
         CFBundleVersion: "1"
         LSRequiresIPhoneOS: true
         UIApplicationSupportsIndirectInputEvents: true
