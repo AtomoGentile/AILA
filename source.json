@@ -1,0 +1,36 @@
+{
+  "name": "AILA",
+  "identifier": "com.circolareplus.source",
+  "subtitle": "La tua scuola, sincronizzata",
+  "description": "Source di AILA per SideStore: la tua scuola, sincronizzata.",
+  "website": "https://github.com/AtomoGentile/AILA",
+  "tintColor": "#0A1330",
+  "apps": [
+    {
+      "name": "AILA",
+      "bundleIdentifier": "com.circolareplus",
+      "developerName": "Simone Bianchin",
+      "subtitle": "La tua scuola, sincronizzata",
+      "localizedDescription": "AILA – La tua scuola, sincronizzata.\n\nL'app che tiene tutta la scuola in un posto solo: circolari e comunicazioni sempre aggiornate sul telefono, con notifiche anche quando l'app è chiusa.\n\nVersione Beta: potresti trovare qualche imprecisione.",
+      "iconURL": "https://raw.githubusercontent.com/AtomoGentile/AILA/main/iosApp/iosApp/Assets.xcassets/AppIcon.appiconset/Icon-1024.png",
+      "tintColor": "#0A1330",
+      "version": "0.0.1",
+      "versionDate": "2026-10-05T21:21:08Z",
+      "downloadURL": "https://github.com/AtomoGentile/AILA/releases/download/v0.0.1/AILA.ipa",
+      "size": 18780679,
+      "versions": [
+        {
+          "version": "0.0.1",
+          "buildVersion": "1",
+          "date": "2026-10-05T21:21:08Z",
+          "localizedDescription": "AILA version 0.0.1 Beta",
+          "downloadURL": "https://github.com/AtomoGentile/AILA/releases/download/v0.0.1/AILA.ipa",
+          "size": 18780679,
+          "sha256": "0332cf4d1066e3609a94e5dfabd61cf2582753c133670119e19d7172088d8591",
+          "minOSVersion": "17.0"
+        }
+      ]
+    }
+  ],
+  "news": []
+}
