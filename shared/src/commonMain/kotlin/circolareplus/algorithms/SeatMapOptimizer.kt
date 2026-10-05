@@ -680,14 +680,25 @@ object SeatMapOptimizer {
         rowSeats.forEachIndexed { row, seats ->
             partitionRow(seats, preferred).forEachIndexed { column, size -> slots.add(DeskSlot(row, column, size)) }
         }
+        // Posti in piu': si tolgono da dietro, banco per banco (un banco intero se il surplus lo
+        // copre, un trio diventa coppia per l'ultimo posto). Cosi' gli studenti restano nei banchi
+        // davanti e non vengono sparsi in posti vuoti, e i trii dei primi banchi restano trii.
         var surplus = capacity - studentCount
-        var i = slots.lastIndex
-        while (surplus > 0 && i >= 0) {
-            if (slots[i].seats == SEATS_PER_DESK_TRIO) {
-                slots[i] = slots[i].copy(seats = SEATS_PER_DESK_PAIR)
-                surplus--
+        while (surplus > 0 && slots.isNotEmpty()) {
+            val last = slots.last()
+            if (surplus >= last.seats) {
+                surplus -= last.seats
+                slots.removeAt(slots.lastIndex)
+            } else if (last.seats == SEATS_PER_DESK_TRIO) {
+                slots[slots.lastIndex] = last.copy(seats = SEATS_PER_DESK_PAIR)
+                surplus -= 1
+            } else {
+                // Un posto solo di troppo e l'ultimo banco e' una coppia: l'ultimo trio la assorbe.
+                val trio = slots.indexOfLast { it.seats == SEATS_PER_DESK_TRIO }
+                if (trio < 0) break
+                slots[trio] = slots[trio].copy(seats = SEATS_PER_DESK_PAIR)
+                surplus -= 1
             }
-            i--
         }
         return slots
     }

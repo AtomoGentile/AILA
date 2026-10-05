@@ -124,6 +124,7 @@ fun SeatMapScreen(
     val studentCount = studentsMap.size
     var customLayout by remember { mutableStateOf(false) }
     var rowSeats by remember { mutableStateOf(defaultRowSeats(studentCount)) }
+    var rowsEdited by remember { mutableStateOf(false) }
 
     // Una disposizione pubblicata usa banchi da trio se un banco ha capienza 3 (campo `seats`,
     // salvato nel JSON) o, per le mappe vecchie senza il campo, un terzo occupante.
@@ -393,7 +394,12 @@ fun SeatMapScreen(
                     AilaSegmentedTabs(
                         labels = listOf("Automatica", "Personalizzata"),
                         selectedIndex = if (customLayout) 1 else 0,
-                        onSelect = { customLayout = it == 1 },
+                        onSelect = {
+                            customLayout = it == 1
+                            // Gli iscritti possono arrivare dopo il primo disegno: i valori proposti si
+                            // ricalcolano finche' non li si e' toccati a mano.
+                            if (customLayout && !rowsEdited) rowSeats = defaultRowSeats(studentCount)
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
                     val layoutOk = !customLayout || (rowSeats.sum() >= studentCount && rowSeats.all { it >= 2 })
@@ -401,7 +407,10 @@ fun SeatMapScreen(
                         Spacer(modifier = Modifier.height(AppTheme.Space8))
                         RowSeatsEditor(
                             rowSeats = rowSeats,
-                            onChange = { rowSeats = it },
+                            onChange = {
+                                rowsEdited = true
+                                rowSeats = it
+                            },
                             studentCount = studentCount,
                             preferredDeskSeats = seatsPerDesk
                         )
@@ -695,10 +704,15 @@ private fun androidx.compose.foundation.lazy.grid.LazyGridScope.fullRow(
 /** File predefinite per [students] studenti: tre file, posti il piu' possibile uguali (22 -> 8, 7, 7). */
 internal fun defaultRowSeats(students: Int): List<Int> {
     val n = students.coerceAtLeast(2)
-    val rows = 3
+    // Poche persone: meno file, cosi' non restano posti inutili e si siede insieme.
+    val rows = when {
+        n >= 6 -> 3
+        n >= 4 -> 2
+        else -> 1
+    }
     val base = n / rows
     val extra = n % rows
-    return List(rows) { if (it < extra) base + 1 else base }.map { it.coerceAtLeast(2) }
+    return List(rows) { if (it < extra) base + 1 else base }
 }
 
 /**

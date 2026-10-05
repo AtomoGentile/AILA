@@ -419,4 +419,16 @@ class SeatMapOptimizerTest {
         // Le file hanno i posti richiesti.
         assertEquals(listOf(8, 7, 7), layout.groupBy { it.row }.toList().sortedBy { it.first }.map { (_, d) -> d.sumOf { it.seats } })
     }
+
+    @Test
+    fun postiInPiuSiTolgonoDaDietroSenzaSpezzareITrii() {
+        // 3 persone in 3 file da 6: restano i trii davanti, il resto dei banchi sparisce.
+        val slots = SeatMapOptimizer.buildDeskSlots(listOf(6, 6, 6), SeatMapOptimizer.SEATS_PER_DESK_TRIO, 3)
+        assertEquals(1, slots.size)
+        assertEquals(3, slots.first().seats)
+        // 22 iscritti, 23 posti con trii: un solo trio diventa coppia, gli altri restano.
+        val s2 = SeatMapOptimizer.buildDeskSlots(listOf(8, 8, 7), SeatMapOptimizer.SEATS_PER_DESK_TRIO, 22)
+        assertEquals(22, s2.sumOf { it.seats })
+        assertTrue(s2.count { it.seats == 3 } >= 4)
+    }
 }
