@@ -36,6 +36,12 @@ Per registrarti serve il codice della tua classe; i Rappresentanti ricevono un c
 
 ---
 
+## Servizi usati
+
+AILA usa **Firebase** (notifiche) e **Cloudflare** (server e dati).
+
+---
+
 ## Privacy
 
 L'AI riceve solo i PDF pubblici delle circolari, mai i tuoi dati personali. Le preferenze sociali e le valutazioni

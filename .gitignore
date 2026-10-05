@@ -178,3 +178,6 @@ FIREBASE_SETUP.md.local
 
 # === File locali di una singola macchina / strumenti ===
 gradle/config.properties
+
+# Configurazione del Worker Cloudflare: resta solo sul computer di chi pubblica
+backend/wrangler.toml
