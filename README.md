@@ -11,7 +11,6 @@ Target: **Android**, **iOS** / **iPadOS**, backend **Cloudflare Serverless**.
 ## Indice
 
 - [Cosa fa l'app](#cosa-fa-lapp)
-- [Ultimi aggiornamenti](#ultimi-aggiornamenti)
 - [Stack tecnologico](#stack-tecnologico)
 - [Struttura del repository](#struttura-del-repository)
 - [Setup e build](#setup-e-build)
@@ -19,6 +18,7 @@ Target: **Android**, **iOS** / **iPadOS**, backend **Cloudflare Serverless**.
   - [Android](#2-android)
   - [iOS](#3-ios)
   - [Test unitari condivisi](#4-test-unitari-condivisi)
+  - [Pubblicare APK e IPA](#5-pubblicare-apk-e-ipa)
 - [Notifiche push (Firebase)](#notifiche-push-firebase)
 - [Privacy & AI](#privacy--ai)
 - [Documentazione di riferimento](#documentazione-di-riferimento)
@@ -43,16 +43,6 @@ Target: **Android**, **iOS** / **iPadOS**, backend **Cloudflare Serverless**.
 
 Navigazione a tab: Calendario · Classe (Circolari e Bacheca) · Home · Sondaggi · Mappa posti.
 
----
-
-## Ultimi aggiornamenti
-
-- **Ottobre 2026** — Mappa posti personalizzata; orario degli eventi a ore di lezione; storico sondaggi per tutta la classe; sondaggi e bacheca quasi in tempo reale; "Invia" dei sondaggi sempre raggiungibile; correzioni alla barra delle tab su iOS.
-- **Assistant e Ricerca** — nuove schermate, cronologia e fonti cliccabili, versioni distinte Glass e Material.
-- **Design system** — scala tipografica `ailaTypography()`, token di colore e movimento, contrasti AA, target da 44dp.
-- **Sicurezza** — codici Rappresentante per classe, monouso e a scadenza (emessi solo con `ADMIN_SECRET`); chiave Gemini e token nel Portachiavi su iOS; JWT solo HS256 con scadenza.
-- **Sondaggi a classifica** (Borda) e **preferenze sociali** come input della mappa posti.
-- **PWA dismessa** — la cartella `web/` resta solo come storia, non è più mantenuta.
 
 ---
 
@@ -100,7 +90,7 @@ AILA/
 ├── androidApp/                    # Wrapper Android (Jetpack Compose, servizi nativi, FCM)
 ├── iosApp/                        # Progetto iOS (XcodeGen + SwiftUI/Compose entrypoint)
 │   └── project.yml                # Config XcodeGen — unica fonte di verità del progetto Xcode
-├── web/                           # PWA (dismessa, solo storia)
+├── web/                           # PWA (non mantenuta)
 ├── design/ · video-presentazione/ # Logo e video di presentazione
 │
 ├── settings.gradle.kts / build.gradle.kts / gradle/   # Config Gradle e version catalog
@@ -230,10 +220,19 @@ Ogni modifica alla configurazione del progetto va fatta in `project.yml`, poi si
 
 Copre principalmente gli algoritmi (`SeatMapOptimizer`, `SondaggiEngine`) in `shared/src/commonTest/`.
 
-### 5. PWA (web/) — dismessa
+### 5. Pubblicare APK e IPA
 
-La versione web è stata dismessa e non è più mantenuta; il codice resta in `web/` solo come riferimento
-([web/README.md](web/README.md)).
+Entrambi i file escono dalla CI di GitHub Actions, senza account a pagamento.
+
+- **APK** (`AILA.apk`): il workflow *Android Build* lo produce a ogni push su `shared/` o `androidApp/` e lo
+  salva come artifact `AILA-apk`. Per pubblicarlo: `git tag v1.0.0 && git push origin v1.0.0`; l'APK viene
+  allegato alla Release di GitHub, da cui si scarica e si installa. Senza secret è firmato con la chiave debug;
+  per una chiave di rilascio propria si impostano `ANDROID_RELEASE_KEYSTORE` (base64),
+  `ANDROID_RELEASE_STORE_PASSWORD`, `ANDROID_RELEASE_KEY_ALIAS` e `ANDROID_RELEASE_KEY_PASSWORD`. Per le push
+  serve anche `GOOGLE_SERVICES_JSON` (base64), altrimenti l'APK si installa ma senza notifiche.
+- **IPA** (`AILA.ipa`, non firmata, per SideStore): si lancia a mano da *Actions → iOS IPA (SideStore) → Run
+  workflow* e si scarica dall'artifact `AILA-ipa`; sui tag `v*` viene allegata alla Release. La firma la fa
+  SideStore sul dispositivo con l'Apple ID gratuito.
 
 ---
 
