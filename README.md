@@ -29,7 +29,7 @@ Target: **Android**, **iOS** / **iPadOS**, backend **Cloudflare Serverless**.
 
 | Modulo | Descrizione |
 |---|---|
-| **Circolari** | Il backend controlla il portale Spaggiari della scuola ogni 10-15 minuti, mette in cache i PDF nuovi e notifica la classe. Ogni dispositivo scarica il PDF e lo classifica **in locale** (vedi [Privacy & AI](#privacy--ai)) in una delle categorie *Ti riguarda / Potenziale interesse / Non ti riguarda*, con estrazione automatica di eventuali scadenze. |
+| **Circolari** | Il backend controlla il portale Spaggiari della scuola ogni 10-15 minuti, mette in cache i PDF nuovi e notifica la classe. Il **server** riassume ogni circolare nuova una sola volta con Google Gemini, per tutte le classi, e assegna a ciascuna classe una categoria (*Ti riguarda / Potenziale interesse / Non ti riguarda*) e una nota, con estrazione automatica delle scadenze. Il risultato è condiviso: chi apre la circolare lo trova già pronto. Se il server non l'ha ancora analizzata, il telefono ripiega sull'AI locale o su una chiave personale (vedi [Privacy & AI](#privacy--ai)). |
 | **AILA Assistant e Ricerca** | L'assistente dell'app: una domanda in italiano e una risposta costruita solo sui dati che AILA ha già (circolari e loro analisi, calendario, bacheca, sondaggi, mappa posti), con i riferimenti cliccabili delle fonti, cronologia delle conversazioni e ricerca globale. Gira con la stessa chiave AI personale della classificazione (vedi [Privacy & AI](#privacy--ai)). |
 | **Calendario** | Eventi scolastici, anche generati automaticamente dalle scadenze estratte dalle circolari. L'orario si sceglie in ore di lezione (menu "Da" / "A", 1ª-6ª ora); il server accetta anche formule come "3ª ora" o "Dalla 2ª alla 4ª ora". |
 | **Bacheca proposte** | Proposte della classe con voti, commenti e possibilità di pubblicare in forma anonima (con quorum di governance per lo sblocco identità in caso di abuso: 2 Rappresentanti + 1 Guardia di Sicurezza scelta dal Rappresentante nella Scheda Classe, ciascuno approva dal proprio account; vale anche per i commenti anonimi). Le proposte chiuse sono accettate o rifiutate. |
@@ -52,12 +52,13 @@ Navigazione a tab: Calendario · Classe (Circolari e Bacheca) · Home · Sondagg
 - **Kotlin Multiplatform (KMP)** + **Compose Multiplatform** — codice condiviso tra Android e iOS
 - Piattaforme: Android, iOS, iPadOS
 - Architettura modulare: `domain` (modelli), `data` (repository/API), `algorithms`, `ai`, `design` (design system), `ui` (screen Compose)
-- AI di classificazione **client-side**: gira sul dispositivo, non sul server (vedi sotto)
+- Classificazione AI **ibrida**: di norma la fa il server con Gemini; il telefono interviene come riserva con l'AI locale o una chiave personale (vedi sotto)
 
 **Backend (serverless)**
 - **Cloudflare Workers** (TypeScript + [Hono](https://hono.dev)) con **Cron Trigger** ogni 15 minuti
 - **Cloudflare D1** — database SQL relazionale
 - **Cloudflare R2** — cache centralizzata dei PDF delle circolari
+- **Google Gemini** — riassunto e classificazione delle circolari, eseguiti dal cron del Worker
 - **Firebase Cloud Messaging (HTTP v1 API)** — notifiche push
 
 ---
@@ -78,7 +79,7 @@ AILA/
 │
 ├── shared/src/commonMain/kotlin/circolareplus/   # Codice condiviso Android + iOS
 │   ├── algorithms/                # SeatMapOptimizer, SondaggiEngine
-│   ├── ai/                        # Classificazione AI locale delle circolari (client-side)
+│   ├── ai/                        # Classificazione AI di riserva sul telefono (AI locale / chiave personale)
 │   ├── domain/model/              # Modelli di dominio (User, Circular, Proposal, SeatMap, ...)
 │   ├── data/                      # Repository, client API (Ktor), cache/preferenze locali
 │   ├── design/                    # Design system (colori, tipografia, componenti condivisi)
@@ -125,6 +126,7 @@ Secrets richiesti (`npx wrangler secret put <NOME>`, da dentro `backend/`):
 | `JWT_SECRET` | Sì | Firma dei token di autenticazione |
 | `ADMIN_SECRET` | Per i Rappresentanti | Almeno 16 caratteri: apre le rotte `/api/admin` che emettono i codici Rappresentante — vedi [Codici Rappresentante](#codici-rappresentante) |
 | `REPRESENTATIVE_SIGNUP_CODE` | No | Vecchio codice Rappresentante unico, solo per la transizione: vale con `REPRESENTATIVE_GLOBAL_CODE_UNTIL` (vedi sotto) |
+| `GEMINI_API_KEY` | Per l'analisi sul server | Chiave Google AI Studio: con questa il cron riassume e classifica ogni circolare nuova; senza, lo fanno i telefoni. Usata solo dal cron, mai da una rotta HTTP |
 | `FCM_PROJECT_ID` | Per le push | ID progetto Firebase |
 | `FCM_SERVICE_ACCOUNT_KEY` | Per le push | JSON del Service Account Firebase — vedi [Notifiche push](#notifiche-push-firebase) |
 
@@ -251,10 +253,14 @@ configurazione dei secret sul Worker.
 
 ## Privacy & AI
 
-La classificazione AI delle circolari (rilevanza, scadenze) gira **esclusivamente sul dispositivo dello studente**,
-usando una API Key personale di Google AI Studio inserita dall'utente stesso. Il testo delle circolari e i riassunti
-non passano mai dal server di AILA. Se la chiave non è impostata o la chiamata fallisce, l'app ricade su una
-classificazione euristica locale a parole chiave — resta utilizzabile senza configurare nulla.
+La classificazione delle circolari (rilevanza per classe, scadenze) la fa di norma il **server**: il cron del Worker
+manda a Google Gemini il PDF già in cache e salva un'analisi condivisa dalla classe. La chiave sta solo nei secret
+di Cloudflare, mai nell'app né in una rotta HTTP, e l'AI non riceve dati personali degli utenti.
+
+Se il server non ha ancora analizzato una circolare (o non ha `GEMINI_API_KEY`), il telefono la analizza da sé, con
+l'AI sul dispositivo oppure con una chiave personale di Google AI Studio inserita dall'utente, e può condividere il
+risultato. Se anche questo fallisce, l'app usa una classificazione euristica a parole chiave: resta utilizzabile
+senza configurare nulla. L'informativa completa è in [PRIVACY.md](PRIVACY.md).
 
 ---
 
