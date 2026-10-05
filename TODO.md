@@ -16,7 +16,7 @@ Non è un elenco di feature nuove: sono buchi o rischi concreti nel codice esist
 - Sondaggi e bacheca quasi in tempo reale: rilettura ogni 6s nella tab (sondaggi: solo avanzamento,
   senza toccare i voti locali) e sui push.
 - Selettore data (iOS, vetro): colori espliciti per giorni, anni e pulsanti (non si leggeva).
-- Non fatto: "1 ora ecc" (nota ambigua, da chiarire).
+- Nuovo evento: l'orario non e' piu' un campo libero ("8:00") ma due menu "Da" / "A" con le ore di lezione 1-6 ("Dalla 2ª alla 4ª ora").
 > **PWA (`web/`) dismessa (3/10)**: progetto morto, niente piu' lavoro su di lei. Le voci sulla PWA
 > qui sotto restano solo come storia.
 

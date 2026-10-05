@@ -1,6 +1,8 @@
 package circolareplus.design
 
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -87,7 +89,7 @@ val LocalBottomBarPadding = androidx.compose.runtime.compositionLocalOf { 0.dp }
  */
 @androidx.compose.runtime.Composable
 fun tabBarSystemInset(): Dp {
-    val inset = androidx.compose.foundation.layout.WindowInsets.navigationBars
+    val inset = WindowInsets.navigationBars
         .asPaddingValues().calculateBottomPadding()
     return if (circolareplus.platform.isIos()) (inset - 18.dp).coerceAtLeast(0.dp) else inset
 }

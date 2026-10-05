@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.ui.draw.rotate
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -4792,7 +4793,10 @@ private fun AddCalendarEventDialog(
     // Anche una data arrivata dall'assistente (es. "la verifica di ieri") puo' essere passata.
     val isPastDate = selectedDateMillis?.let { it < todayMillis } == true
     var showDatePicker by remember { mutableStateOf(false) }
-    var time by remember { mutableStateOf("") }
+    var fromHour by remember { mutableStateOf<Int?>(null) }
+    var toHour by remember { mutableStateOf<Int?>(null) }
+    // Le ore di lezione scelte, scritte come le vede la classe: "3ª ora" o "Dalla 2ª alla 4ª ora".
+    val time = remember(fromHour, toHour) { lessonHoursLabel(fromHour, toHour) }
     var category by remember { mutableStateOf(CalendarEventCategory.VERIFICA) }
     var aiPrompt by remember { mutableStateOf("") }
     var aiFilled by remember { mutableStateOf(false) }
@@ -5131,8 +5135,7 @@ private fun AddCalendarEventDialog(
                                     subject = draft.subject
                                     category = draft.category
                                     selectedDateMillis = draft.dateMillis
-                                    draft.time?.let { time = it }
-                                    draft.notes?.let { notes = it }
+                                                    draft.notes?.let { notes = it }
                                     aiFilled = fromAi != null
                                     aiFallbackNotice = fromAi == null
                                     step = EventCreationStep.MANUAL
@@ -5234,13 +5237,27 @@ private fun AddCalendarEventDialog(
                                 maxLines = 1
                             )
                         }
-                        OutlinedTextField(
-                            value = time,
-                            onValueChange = { time = it },
-                            placeholder = { Text("Ora") },
-                            singleLine = true,
-                            colors = circolareplus.design.ailaFieldColors(),
-                            shape = RoundedCornerShape(AppTheme.SmallElementRadius),
+                    }
+                    Spacer(modifier = Modifier.height(AppTheme.Space8))
+                    // Orario a ore di lezione (1-6) invece di un'ora libera tipo "8:00".
+                    Row(
+                        modifier = Modifier.fillMaxWidth().ailaSheetReveal(3),
+                        horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+                    ) {
+                        HourDropdown(
+                            label = "Da",
+                            value = fromHour,
+                            onSelect = {
+                                fromHour = it
+                                if (toHour != null && toHour!! < it) toHour = it
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                        HourDropdown(
+                            label = "A",
+                            value = toHour,
+                            minHour = fromHour ?: 1,
+                            onSelect = { toHour = it },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -5389,6 +5406,61 @@ private fun AddCalendarEventDialog(
                 circolareplus.design.LocalAilaSheetReveal provides false
             ) {
                 sheetContent()
+            }
+        }
+    }
+}
+
+/** "3ª ora" o "Dalla 2ª alla 4ª ora"; vuoto se non e' stata scelta nessuna ora. */
+private fun lessonHoursLabel(from: Int?, to: Int?): String = when {
+    from == null && to == null -> ""
+    from == null -> "${to}ª ora"
+    to == null || to == from -> "${from}ª ora"
+    else -> "Dalla ${from}ª alla ${to}ª ora"
+}
+
+/** Menu a discesa "Da / A" per scegliere un'ora di lezione da 1 a 6. */
+@Composable
+private fun HourDropdown(
+    label: String,
+    value: Int?,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    minHour: Int = 1
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                .border(1.dp, AppTheme.FieldOutline, RoundedCornerShape(AppTheme.SmallElementRadius))
+                .clickable { expanded = true }
+                .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space12),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (value != null) "$label: ${value}ª ora" else "$label: scegli",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Medium,
+                color = if (value != null) AppTheme.TextDark else AppTheme.TextFaint,
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
+            )
+            AppIcons.ChevronRight(
+                modifier = Modifier.size(14.dp).rotate(90f),
+                color = AppTheme.TextMuted
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            (minHour..6).forEach { hour ->
+                DropdownMenuItem(
+                    text = { Text("${hour}ª ora") },
+                    onClick = {
+                        onSelect(hour)
+                        expanded = false
+                    }
+                )
             }
         }
     }
