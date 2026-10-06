@@ -40,17 +40,18 @@ I nomi, le circolari e le date sono inventati. La versione web (PWA) non viene c
 
 ## Intro "presentazione della squadra"
 
-Circa 1:40, ispirata alle presentazioni dei piloti prima di una stagione di corse ma senza riprenderne
-marchi, grafica o musica: 144 BPM, atmosfera "aura"/phonk (808, campanaccio, coro), bande cinema, grana,
-fumo e lampi di luce.
+Circa 1:13, con l'energia di una sigla di gara ma senza riprenderne marchi, grafica o musica: 144 BPM, un
+taglio o un cambio d'inquadratura a ogni quarto, strisce di luce in velocità, inquadratura che pompa sulla
+cassa, cronometro e scritte da diretta, bande cinema e grana. Musica: cassa dritta, basso a sedicesimi,
+archi in ostinato, coro, colpi orchestrali e il rombo di un motore.
 
 | Tempo | Battute | Scena |
 |---|---|---|
-| 0:00 | 0–8 | Linea di luce, "AILA presenta", quattro dettagli "macro" dell'app, "Quest'anno si cambia passo." |
-| 0:13 | 8–10 | Drop: logo, "La squadra · Stagione 2026/27" |
-| 0:17 | 10–34 | Le sei funzioni come piloti: numero gigante, nome, descrizione e tre "statistiche", telefono illuminato da dietro |
-| 0:57 | 34–40 | "Su ogni schermo": Android, iPhone, Tablet, iPadOS, poi tutti in fila |
-| 1:07 | 40–44 | Livree: stile (Liquid Glass, Material), tema (chiaro, scuro), i sei colori |
-| 1:13 | 44–48 | Griglia di partenza con le 24 combinazioni |
-| 1:20 | 48–50 | Semaforo: i sei banchi del logo si accendono uno per quarto, poi si spengono |
-| 1:23 | 50–60 | Via: logo, QR code e piattaforme |
+| 0:00 | 0–4 | Linea di luce, "AILA presenta", poi lampi dell'app sempre più fitti (quarti, ottavi, sedicesimi) mentre sale il motore |
+| 0:07 | 4–6 | Drop: logo, "La squadra · Stagione 2026/27" |
+| 0:10 | 6–24 | Le sei funzioni, tre battute ciascuna: numero a tutto schermo, dettaglio dello schermo, telefono e nome, tre statistiche a raffica |
+| 0:40 | 24–27 | "Su ogni schermo": Android, iPhone, Tablet, iPadOS a mezza battuta l'uno, poi tutti in fila |
+| 0:45 | 27–30 | Livree: stile, tema e i sei colori, uno a ogni quarto |
+| 0:50 | 30–33 | Griglia di partenza con le 24 combinazioni |
+| 0:55 | 33–35 | Semaforo: i sei banchi del logo si accendono, il motore scalpita, poi si spengono |
+| 0:58 | 35–44 | Via: logo, QR code e piattaforme |
