@@ -2,14 +2,18 @@
   "name": "aila-video-trailer",
   "version": "1.0.0",
   "private": true,
-  "description": "Trailer di AILA (HTML animato esportato in MP4)",
+  "description": "Trailer e intro di AILA (HTML animato esportato in MP4)",
   "scripts": {
     "icons": "node build-icons.js",
     "qr": "node build-qr.js",
     "video": "node render.js frames",
     "music": "node render.js sfx && node music.js",
     "mux": "node mux.js",
-    "build": "node render.js frames && node music.js && node mux.js"
+    "build": "node render.js frames && node music.js && node mux.js",
+    "intro:video": "node render.js frames --page=intro",
+    "intro:music": "node render.js sfx --page=intro && node intro-music.js",
+    "intro:mux": "node mux.js intro",
+    "intro:build": "node render.js frames --page=intro && node intro-music.js && node mux.js intro"
   },
   "dependencies": {
     "lucide-static": "^0.577.0",

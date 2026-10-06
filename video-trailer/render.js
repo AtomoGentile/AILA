@@ -2,6 +2,7 @@
 //   node render.js snap 5 17.5 30     -> snaps/t_5.png ... (controllo veloce di singoli istanti)
 //   node render.js sfx                -> sfx.json (tempi degli effetti sonori, letti da music.js)
 //   node render.js frames             -> build/video.mp4 (muto) + sfx.json
+// Con --page=intro (o PAGE=intro) lavora su intro.html: sfx-intro.json, build/intro/video.mp4, snaps/intro_*.png.
 // Variabili: CHROME (eseguibile di Chrome/Chromium), FFMPEG (default "ffmpeg"), WORKERS (pagine in parallelo).
 const { chromium } = require('playwright-core');
 const fs = require('fs');
@@ -17,7 +18,10 @@ const CHROME = process.env.CHROME || [
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
 ].find(p => fs.existsSync(p));
-const URL = pathToFileURL(path.join(__dirname, 'index.html')).href + '?capture';
+const PAGE = (process.argv.find(a => a.startsWith('--page=')) || '').slice(7) || process.env.PAGE || 'index';
+const URL = pathToFileURL(path.join(__dirname, PAGE + '.html')).href + '?capture';
+const SFX_FILE = PAGE === 'index' ? 'sfx.json' : `sfx-${PAGE}.json`;
+const PREFIX = PAGE === 'index' ? 't' : PAGE;
 
 async function openPage(browser) {
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
@@ -29,26 +33,26 @@ async function openPage(browser) {
 }
 
 (async () => {
-  const [mode, ...args] = process.argv.slice(2);
+  const [mode, ...args] = process.argv.slice(2).filter(a => !a.startsWith('--page='));
   const browser = await chromium.launch({ executablePath: CHROME, args: ['--force-color-profile=srgb', '--hide-scrollbars'] });
   if (mode === 'sfx') {
     const page = await openPage(browser);
-    fs.writeFileSync('sfx.json', JSON.stringify(await page.evaluate(() => window.SFX)));
+    fs.writeFileSync(SFX_FILE, JSON.stringify(await page.evaluate(() => window.SFX)));
   } else if (mode === 'snap') {
     const page = await openPage(browser);
     fs.mkdirSync('snaps', { recursive: true });
     for (const a of args) {
       await page.evaluate(t => seek(t), +a);
-      await page.screenshot({ path: `snaps/t_${a}.png` });
+      await page.screenshot({ path: `snaps/${PREFIX}_${a}.png` });
     }
   } else if (mode === 'frames') {
     // ogni pagina codifica un pezzo contiguo del video in un segmento H.264 (niente PNG su disco),
     // poi i segmenti vengono uniti senza ricodifica
-    const dir = process.env.OUT || 'build';
+    const dir = process.env.OUT || (PAGE === 'index' ? 'build' : `build/${PAGE}`);
     fs.mkdirSync(dir, { recursive: true });
     const probe = await openPage(browser);
     const duration = await probe.evaluate(() => window.DURATION);
-    fs.writeFileSync('sfx.json', JSON.stringify(await probe.evaluate(() => window.SFX)));
+    fs.writeFileSync(SFX_FILE, JSON.stringify(await probe.evaluate(() => window.SFX)));
     await probe.close();
     const total = Math.round(duration * FPS);
     const per = Math.ceil(total / WORKERS);
