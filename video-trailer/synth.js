@@ -170,6 +170,87 @@ module.exports = function createSynth(DUR) {
   }
 
 
+  const SUB = new Float32Array(N);   // 808 (non passa dal riverbero)
+  const CHL = new Float32Array(N), CHR = new Float32Array(N); // coro grezzo, filtrato dopo
+  // 808: sinusoide con scivolata iniziale, lunga coda, saturata
+  function e808(t0, dur, midi, amp, glideFrom = 7) {
+    const i0 = Math.round(t0 * SR), len = Math.round((dur + .05) * SR), f = mtof(midi);
+    let ph = 0;
+    for (let k = 0; k < len; k++) {
+      const t = k / SR;
+      const fr = f * Math.pow(2, glideFrom * Math.exp(-t * 28) / 12);
+      ph += 2 * Math.PI * fr / SR;
+      const env = Math.min(1, t / .004) * Math.exp(-t * .9) * (t < dur ? 1 : Math.exp(-(t - dur) * 60));
+      const i = i0 + k; if (i < N) SUB[i] += Math.tanh(Math.sin(ph) * 2.2) * env * amp;
+    }
+  }
+  // coro: tre seghe scordate per nota, inviluppo lento (le vocali "ah" le fanno i filtri nel mix)
+  function choirChord(t0, dur, notes, amp) {
+    const i0 = Math.round(t0 * SR), len = Math.round((dur + .9) * SR);
+    notes.forEach((m, ni) => [-11, 0, 11].forEach((c, vi) => {
+      const f = mtof(m) * Math.pow(2, (c + 4 * Math.sin(ni * 1.7 + vi)) / 1200), pan = (vi - 1) * .6;
+      let ph = (ni * .31 + vi * .17) % 1;
+      for (let k = 0; k < len; k++) {
+        const t = k / SR, i = i0 + k; if (i >= N) break;
+        ph += f * (1 + .003 * Math.sin(2 * Math.PI * 5.2 * t + ni)) / SR; if (ph >= 1) ph -= 1;
+        const env = Math.min(1, t / .45) * (t < dur ? 1 : Math.exp(-(t - dur) * 3.5));
+        const v = (2 * ph - 1) * env * amp;
+        CHL[i] += v * (1 - pan) * .5; CHR[i] += v * (1 + pan) * .5;
+      }
+    }));
+  }
+  // braam: ottoni bassi con filtro che si apre e si richiude
+  function braam(t0, amp = 1) {
+    const len = Math.round(2.2 * SR), i0 = Math.round(t0 * SR), lp = biquad('lp', 200, 1.4);
+    const fs_ = [mtof(26), mtof(38), mtof(45), mtof(50)];
+    const ph = fs_.map(() => 0);
+    for (let k = 0; k < len; k++) {
+      const t = k / SR;
+      if (k % 32 === 0) lp.set(180 + 2200 * Math.exp(-Math.pow((t - .18) / .35, 2)) + 300 * Math.exp(-t * 2), 1.4);
+      let v = 0; fs_.forEach((f, j) => { ph[j] += f * (1 + j * .0015) / SR; if (ph[j] >= 1) ph[j] -= 1; v += (2 * ph[j] - 1) * (j ? .6 : 1); });
+      const env = Math.min(1, t / .03) * Math.exp(-t * 1.3);
+      put(i0 + k, Math.tanh(lp.p(v) * 1.5) * env * .55 * amp, 0, .35);
+    }
+  }
+  // coro: due formanti di "ah" più un passa-basso, con un filo di riverbero in più (duck: sidechain)
+  function mixChoir(duck, gain = 1, rev = .6) {
+    const fl = [biquad('bp', 720, 3.5), biquad('bp', 1180, 4.5), biquad('lp', 2600, .7)], fr = [biquad('bp', 720, 3.5), biquad('bp', 1180, 4.5), biquad('lp', 2600, .7)];
+    const body = [biquad('lp', 500, .7), biquad('lp', 500, .7)];
+    for (let i = 0; i < N; i++) {
+      const l = (fl[0].p(CHL[i]) * 1.6 + fl[1].p(CHL[i]) + body[0].p(CHL[i]) * .5), r = (fr[0].p(CHR[i]) * 1.6 + fr[1].p(CHR[i]) + body[1].p(CHR[i]) * .5);
+      const vl = fl[2].p(l) * duck[i] * gain, vr = fr[2].p(r) * duck[i] * gain;
+      L[i] += vl; R[i] += vr; VL[i] += vl * rev; VR[i] += vr * rev;
+    }
+  }
+  // 808 e sub: al centro, senza riverbero
+  function mixSub(gain) {
+    const hp = biquad('hp', 28);
+    for (let i = 0; i < N; i++) { const v = hp.p(SUB[i]) * gain; L[i] += v; R[i] += v; }
+  }
+
+  // taiko: membrana grave con colpo di bacchetta, coda lunga e tanto riverbero
+  function taiko(t0, amp = 1, f0 = 62) {
+    const i0 = Math.round(t0 * SR), len = Math.round(1.1 * SR), lp = biquad('lp', 1800, .7);
+    let p1 = 0, p2 = 0;
+    for (let k = 0; k < len; k++) {
+      const t = k / SR, f = f0 * (1 + .45 * Math.exp(-t * 30));
+      p1 += 2 * Math.PI * f / SR; p2 += 2 * Math.PI * f * 1.58 / SR;
+      const body = Math.sin(p1) * Math.exp(-t * 4.2) + .35 * Math.sin(p2) * Math.exp(-t * 9);
+      const stick = lp.p(noise()) * Math.exp(-t * 55) * .8;
+      put(i0 + k, Math.tanh((body + stick) * 1.4) * .75 * amp, 0, .45);
+    }
+  }
+  // archi "spiccato": tre seghe scordate, colpo d'arco breve, filtro morbido
+  function spic(t0, dur, midi, amp, pan = 0, bright = 2400) {
+    const i0 = Math.round(t0 * SR), len = Math.round((dur + .25) * SR), f = mtof(midi), lp = biquad('lp', bright, .8);
+    const ph = [0, .37, .71], det = [-7, 0, 7].map(c => f * Math.pow(2, c / 1200));
+    for (let k = 0; k < len; k++) {
+      const t = k / SR;
+      let v = 0; for (let j = 0; j < 3; j++) { ph[j] += det[j] / SR; if (ph[j] >= 1) ph[j] -= 1; v += 2 * ph[j] - 1; }
+      const env = Math.min(1, t / .008) * (t < dur ? Math.exp(-t * 3) : Math.exp(-dur * 3) * Math.exp(-(t - dur) * 22));
+      put(i0 + k, lp.p(v) * env * amp, pan, .35);
+    }
+  }
   // ritardo ping-pong sulla mandata DL/DR (d = ritardo in secondi)
   function pingPong(dsec, fb = .38, wet = .45, rev = .2) {
     const d = Math.round(dsec * SR);
@@ -219,5 +300,6 @@ module.exports = function createSynth(DUR) {
   }
 
   return { SR, N, L, R, VL, VR, DL, DR, PL, PR, BS, mtof, noise, has, clamp, put, biquad,
-    kick, clap, hat, crash, pluck, bassNote, leadNote, bell, piano, sweep, boom, impact, click, blip, buzz, pingPong, finish };
+    kick, clap, hat, crash, pluck, bassNote, leadNote, bell, piano, sweep, boom, impact, click, blip, buzz,
+    SUB, CHL, CHR, e808, choirChord, braam, mixChoir, mixSub, taiko, spic, pingPong, finish };
 };

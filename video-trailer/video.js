@@ -199,19 +199,16 @@ const FT = i => B(12 + i * 4); // inizio della funzione i
   const t0 = FT(0), s = st('glass', false, 'blue');
   const { CARDS, BUL, inner } = scrCircolari();
   const S = addScene(t0 - .05, FT(1) + .05, `<div class="layer" id="g">
-    ${featText(1, 'Circolari', 'Circolari?<br><em>Riassunte</em> <em>dall\'AI.</em>', 'Ti avvisa subito, ti dice se ti riguarda e salva le scadenze nel calendario.', 150, FEAT_COL[0])}
+    ${featText(1, 'Circolari', 'Circolari?<br><em>Riassunte</em> <em>dall\'AI.</em>', 'Te la riassume, ti dice se ti riguarda e salva le scadenze nel calendario.', 150, FEAT_COL[0])}
     <div class="a" id="ph" style="left:1230px;top:90px">${devHTML('iphone', s, inner)}</div></div>`);
   const cc = S.qa('.cc'), bl = S.qa('.bl');
-  const tBan = t0 + Q * 2, tNew = B(13), tAn = B(13) + Q * 2, tDet = B(14);
-  sfx(tBan, 'notify'); sfx(tAn, 'success'); cc.slice(1).forEach((_, i) => sfx(tAn + (i + 1) * Q / 4, 'blip'));
+  const tNew = B(13), tAn = B(13) + Q * 2, tDet = B(14);
+  sfx(tNew, 'blip'); sfx(tAn, 'success'); cc.slice(1).forEach((_, i) => sfx(tAn + (i + 1) * Q / 4, 'blip'));
   sfx(tDet, 'swoosh'); bl.forEach((_, i) => sfx(tDet + (i + 1) * Q, 'blip')); sfx(B(15) + Q * 2, 'success');
   S.render = t => {
     whip(S.q('#g'), t, t0, FT(1));
     featTextRender(S, t, t0, [t0, t0 + Q * 2, t0 + Q * 3]);
     phoneIn(S.q('#ph'), t, t0, 1);
-    // banner: scende e risale
-    const pb = P(t, tBan, .4, E.back), pbo = P(t, tNew - .15, .3, E.in);
-    pose(S.q('.bn'), { y: lerp(-140, 0, pb) - pbo * 150, o: t >= tBan ? 1 : 0 });
     // la nuova circolare entra in cima e spinge giù le altre
     const pn = P(t, tNew, .45, E.out5);
     cc.forEach((c, i) => {
@@ -395,18 +392,18 @@ const FT = i => B(12 + i * 4); // inizio della funzione i
     <div class="a center big" id="b1" style="left:0;width:1920px;top:440px">Un'app.</div>
     <div class="a center big" id="b2" style="left:0;width:1920px;top:440px"><em class="grad">Ogni schermo.</em></div>
     ${DEV.map((d, i) => `<div class="a dv" style="left:${960 - W[d[0]][0] / 2}px;top:${540 - W[d[0]][1] / 2}px;z-index:${d[0] === 'droid' || d[0] === 'iphone' ? 3 : 1}">
-      ${devHTML(d[0], d[1], d[2] + banner('Nuova circolare', "n. 113 — Variazione d'orario", d[0] !== 'iphone' && d[0] !== 'ipad', 'sync'))}</div>`).join('')}
+      ${devHTML(d[0], d[1], d[2])}</div>`).join('')}
     ${DEV.map((d, i) => d[0] === 'ipad' || d[0] === 'tab'
       ? `<div class="a dl slam center" style="left:0;width:1920px;top:46px;font-size:120px">${d[3]}</div>`
       : `<div class="a dl slam" style="${i % 2 ? 'left:1200px' : 'left:0;width:720px;text-align:right'};top:470px;font-size:130px">${d[3]}</div>`).join('')}
     <div class="a center" id="ttl" style="left:0;width:1920px;top:56px;font-size:64px;font-weight:800;letter-spacing:-.03em">Stessa app. <em class="grad">Ovunque.</em></div>
-    <div class="a center" id="cap" style="left:0;width:1920px;top:972px;font-size:36px;font-weight:600;color:#DCE3FF">${I('bell-ring', 'style="width:36px;height:36px;vertical-align:-6px;color:#9DB6FF"')}&nbsp; Tutta la classe, nello stesso istante.</div>
+    <div class="a center" id="cap" style="left:0;width:1920px;top:972px;font-size:36px;font-weight:600;color:#DCE3FF">${I('users', 'style="width:36px;height:36px;vertical-align:-6px;color:#9DB6FF"')}&nbsp; Tutta la classe, sempre aggiornata.</div>
     ${DEV.map(() => `<div class="a rip" style="left:0;top:0;width:300px;height:300px;margin:-150px 0 0 -150px;border-radius:50%;border:3px solid rgba(160,200,255,.8)"></div>`).join('')}`);
-  const dv = S.qa('.dv'), dl = S.qa('.dl'), rip = S.qa('.rip'), syncB = S.qa('.sync');
+  const dv = S.qa('.dv'), dl = S.qa('.dl'), rip = S.qa('.rip');
   const TIN = DEV.map((_, i) => B(38 + i)); // ognuno arriva su una battuta
   TIN.forEach(tt => sfx(tt, 'hit'));
   sfx(B(36), 'slam'); sfx(B(37), 'slam'); sfx(B(38) - .3, 'whoosh');
-  sfx(B(44), 'notify'); sfx(B(44), 'impactS');
+  sfx(B(44), 'success'); sfx(B(44), 'impactS');
   S.render = t => {
     // pausa: contorno che passa da telefono a tablet e "Un'app. Ogni schermo."
     const ph = (t - B(36)) / Q, k = Math.floor(ph), pk = E.inOut(clamp((ph - k) / .6));
@@ -432,9 +429,7 @@ const FT = i => B(12 + i * 4); // inizio della funzione i
         o: clamp(pin * 2) * lerp(1, dimmed, P(t, TIN[i] + BAR, .3)) * (1 - pout), b: pout * 16 });
       el.style.zIndex = hero === i ? 10 : (d[0] === 'droid' || d[0] === 'iphone' ? 3 : 1);
       slam(dl[i], t, TIN[i] + .05, TIN[i] + BAR - .15, { dy: 0 });
-      // la stessa notifica arriva su tutti insieme
-      const pb = P(t, B(44), .4, E.back);
-      pose(syncB[i], { y: lerp(-150, 0, pb), o: t >= B(44) ? 1 : 0 });
+      // un'onda di luce parte da tutti insieme: stessi dati per tutta la classe
       const pr = P(t, B(44), 1.2, E.out);
       pose(rip[i], { x: d[6][0], y: d[6][1] - (d[0] === 'ipad' || d[0] === 'tab' ? 230 : 240), s: lerp(.2, 3, pr), o: (1 - pr) * (t >= B(44) ? 1 : 0) });
     });
@@ -527,7 +522,7 @@ const FT = i => B(12 + i * 4); // inizio della funzione i
 // 6 · FIDUCIA (battute 56–59)
 // =====================================================================================
 {
-  const ROWS = [['bell-ring', 'Notifiche in tempo reale.', '#60A5FA'], ['shield-check', 'Ogni classe ha i suoi dati, separati.', '#34D399'],
+  const ROWS = [['smartphone', "Se vuoi, l'AI gira sul tuo telefono.", '#60A5FA'], ['shield-check', 'Ogni classe ha i suoi dati, separati.', '#34D399'],
     ['lock', "L'AI non riceve mai i tuoi dati personali.", '#C4B5FD']];
   const S = addScene(B(56), B(59) + .05, `<div class="layer" id="tg">${ROWS.map(([ic, tx, c], i) => `<div class="a tr" style="left:0;width:1920px;top:${300 + i * 170}px;display:flex;justify-content:center">
     <div style="display:flex;align-items:center;gap:34px"><div style="width:110px;height:110px;border-radius:32px;display:grid;place-items:center;background:${c}22;border:2px solid ${c}66;color:${c}">${I(ic, 'style="width:54px;height:54px"')}</div>

@@ -80,7 +80,7 @@ function spec(root, t, t0, w) { const p = P(t, t0, .8, E.inOut); pose(root.query
 
 // ---------- stato finale delle sei schermate (nel trailer sono animate, qui posano ferme) ----------
 const FIN = [
-  r => { r.querySelector('.bn').style.display = 'none'; r.querySelector('#lst').style.display = 'none'; },
+  r => { r.querySelector('#lst').style.display = 'none'; },
   (r, d) => { ['#sugg', '#think', '#qc', '#ac'].forEach(s => r.querySelector(s).style.display = 'none'); r.querySelector('#at').textContent = d.ATXT; },
   (r, d) => r.querySelectorAll('.dc').forEach(el => { const e = d.EV.find(e => e[0] === +el.dataset.d); if (e) el.querySelector('.edot').style.background = e[3]; }),
   r => { r.querySelectorAll('.ok').forEach(el => el.style.opacity = 1); },

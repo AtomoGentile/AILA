@@ -8,8 +8,8 @@ const { BAR, BEAT, S } = TL;
 const B = n => n * BAR;
 const DUR = TL.DURATION;
 const SFX = JSON.parse(fs.readFileSync('sfx-intro.json', 'utf8'));
-const { SR, N, L, R, VL, VR, mtof, noise, has, put, biquad,
-  kick, clap, hat, crash, bell, sweep, boom, impact, click, blip, pingPong, finish } = require('./synth')(DUR);
+const { SR, N, mtof, noise, has, put, biquad, kick, clap, hat, crash, bell, sweep, boom, impact, click, blip,
+  e808, choirChord, braam, mixChoir, mixSub, pingPong, finish } = require('./synth')(DUR);
 const STEP = BEAT / 4; // sedicesimo
 
 // ---------------- armonia: Dm – B♭ – Gm – A ----------------
@@ -37,20 +37,6 @@ const BELL_MEL = [ // 16 sedicesimi per battuta, 0 = pausa
 ];
 
 // ---------------- strumenti propri dell'intro ----------------
-const SUB = new Float32Array(N);   // 808 (non passa dal riverbero)
-const CHL = new Float32Array(N), CHR = new Float32Array(N); // coro grezzo, filtrato dopo
-// 808: sinusoide con scivolata iniziale, lunga coda, saturata
-function e808(t0, dur, midi, amp, glideFrom = 7) {
-  const i0 = Math.round(t0 * SR), len = Math.round((dur + .05) * SR), f = mtof(midi);
-  let ph = 0;
-  for (let k = 0; k < len; k++) {
-    const t = k / SR;
-    const fr = f * Math.pow(2, glideFrom * Math.exp(-t * 28) / 12);
-    ph += 2 * Math.PI * fr / SR;
-    const env = Math.min(1, t / .004) * Math.exp(-t * .9) * (t < dur ? 1 : Math.exp(-(t - dur) * 60));
-    const i = i0 + k; if (i < N) SUB[i] += Math.tanh(Math.sin(ph) * 2.2) * env * amp;
-  }
-}
 // campanaccio intonato (due onde quadre in rapporto 1:1,48 come quello di una drum machine)
 function cowbell(t0, midi, amp, pan = 0) {
   const i0 = Math.round(t0 * SR), len = Math.round(.32 * SR), f = mtof(midi), bp = biquad('bp', f * 1.25, 2.2);
@@ -61,34 +47,6 @@ function cowbell(t0, midi, amp, pan = 0) {
     const v = (p1 < .5 ? 1 : -1) + (p2 < .5 ? 1 : -1);
     const env = Math.min(1, t / .002) * (Math.exp(-t * 26) * .7 + Math.exp(-t * 7) * .3);
     put(i0 + k, bp.p(v) * env * amp, pan, .3, .25);
-  }
-}
-// coro: tre seghe scordate per nota, inviluppo lento (le vocali "ah" le fanno i filtri nel mix)
-function choirChord(t0, dur, notes, amp) {
-  const i0 = Math.round(t0 * SR), len = Math.round((dur + .9) * SR);
-  notes.forEach((m, ni) => [-11, 0, 11].forEach((c, vi) => {
-    const f = mtof(m) * Math.pow(2, (c + 4 * Math.sin(ni * 1.7 + vi)) / 1200), pan = (vi - 1) * .6;
-    let ph = (ni * .31 + vi * .17) % 1;
-    for (let k = 0; k < len; k++) {
-      const t = k / SR, i = i0 + k; if (i >= N) break;
-      ph += f * (1 + .003 * Math.sin(2 * Math.PI * 5.2 * t + ni)) / SR; if (ph >= 1) ph -= 1;
-      const env = Math.min(1, t / .45) * (t < dur ? 1 : Math.exp(-(t - dur) * 3.5));
-      const v = (2 * ph - 1) * env * amp;
-      CHL[i] += v * (1 - pan) * .5; CHR[i] += v * (1 + pan) * .5;
-    }
-  }));
-}
-// braam: ottoni bassi con filtro che si apre e si richiude
-function braam(t0, amp = 1) {
-  const len = Math.round(2.2 * SR), i0 = Math.round(t0 * SR), lp = biquad('lp', 200, 1.4);
-  const fs_ = [mtof(26), mtof(38), mtof(45), mtof(50)];
-  const ph = fs_.map(() => 0);
-  for (let k = 0; k < len; k++) {
-    const t = k / SR;
-    if (k % 32 === 0) lp.set(180 + 2200 * Math.exp(-Math.pow((t - .18) / .35, 2)) + 300 * Math.exp(-t * 2), 1.4);
-    let v = 0; fs_.forEach((f, j) => { ph[j] += f * (1 + j * .0015) / SR; if (ph[j] >= 1) ph[j] -= 1; v += (2 * ph[j] - 1) * (j ? .6 : 1); });
-    const env = Math.min(1, t / .03) * Math.exp(-t * 1.3);
-    put(i0 + k, Math.tanh(lp.p(v) * 1.5) * env * .55 * amp, 0, .35);
   }
 }
 function glitch(t0) { // balbettio digitale a trentaduesimi
@@ -173,16 +131,7 @@ for (const tk of kicks) {
   const i0 = Math.round(tk * SR), n = Math.round(.3 * SR);
   for (let k = 0; k < n && i0 + k < N; k++) duck[i0 + k] = Math.min(duck[i0 + k], 1 - .5 * Math.exp(-k / SR / .09));
 }
-{ // coro: due formanti di "ah" più un passa-basso, con un filo di riverbero in più
-  const fl = [biquad('bp', 720, 3.5), biquad('bp', 1180, 4.5), biquad('lp', 2600, .7)], fr = [biquad('bp', 720, 3.5), biquad('bp', 1180, 4.5), biquad('lp', 2600, .7)];
-  const body = [biquad('lp', 500, .7), biquad('lp', 500, .7)];
-  for (let i = 0; i < N; i++) {
-    const l = (fl[0].p(CHL[i]) * 1.6 + fl[1].p(CHL[i]) + body[0].p(CHL[i]) * .5), r = (fr[0].p(CHR[i]) * 1.6 + fr[1].p(CHR[i]) + body[1].p(CHR[i]) * .5);
-    const vl = fl[2].p(l) * duck[i], vr = fr[2].p(r) * duck[i];
-    L[i] += vl; R[i] += vr; VL[i] += vl * .6; VR[i] += vr * .6;
-  }
-  const hp = biquad('hp', 28);
-  for (let i = 0; i < N; i++) { const v = hp.p(SUB[i]) * .42; L[i] += v; R[i] += v; }
-}
+mixChoir(duck);
+mixSub(.42);
 pingPong(BEAT * .75, .35, .35);
 finish('build/intro/music.wav', { revWet: .36, fadeOut: 2.4 });

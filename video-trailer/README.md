@@ -28,10 +28,10 @@ Per l'intro: `npm run intro:build` (→ `AILA_intro.mp4`); `node render.js snap 
 | 0:00 | 0–8 | Il caos: notifiche del registro e del gruppo classe, parole a tempo, "E se la tua classe avesse un superpotere?" |
 | 0:15 | 8–12 | Drop: il logo esplode, "La tua scuola, sincronizzata." e i sei moduli |
 | 0:22 | 12–36 | Sei funzioni, quattro battute ciascuna: Circolari, AILA Assistant, Calendario, Sondaggi interrogazioni, Mappa posti, Bacheca e sondaggi a classifica |
-| 1:07 | 36–46 | "Un'app. Ogni schermo.": Android, iPhone, tablet e iPadOS, poi la stessa notifica su tutti insieme |
+| 1:07 | 36–46 | "Un'app. Ogni schermo.": Android, iPhone, tablet e iPadOS, poi un'onda di luce parte da tutti insieme ("Tutta la classe, sempre aggiornata.") |
 | 1:26 | 46–52 | Temi: Liquid Glass e Material, chiaro e scuro, i sei colori d'accento (come in Impostazioni > Aspetto) |
 | 1:37 | 52–56 | Il muro delle 24 combinazioni (2 stili × chiaro/scuro × 6 colori) |
-| 1:45 | 56–59 | Notifiche in tempo reale, dati separati per classe, l'AI non riceve i dati personali |
+| 1:45 | 56–59 | L'AI può girare sul telefono, dati separati per classe, l'AI non riceve i dati personali |
 | 1:51 | 59–66 | Finale con il QR code della pagina Releases per installarla |
 
 Ogni funzione è mostrata su un dispositivo e in un tema diversi, così la varietà si vede già prima della

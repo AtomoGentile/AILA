@@ -189,13 +189,6 @@ const homeWide = (name, glass) => `<div class="hero" style="padding:58px 34px 26
 function devHTML(kind, s, inner, attrs = '') {
   return `<div class="dev ${kind}" ${attrs}><div class="frame"></div><div class="scr"><div class="${appCls(s, kind === 'droid' || kind === 'tab' ? 'droidsb' : '')}" style="${appVars(s)}">${inner}</div></div><div class="cam"></div></div>`;
 }
-/* banner di notifica nell'app (stile di sistema: chiaro su iOS, tonale su Android) */
-const banner = (title, text, droid = false, cls = 'bn') => `<div class="a ${cls}" style="left:10px;right:10px;top:${droid ? 12 : 14}px;z-index:30;display:flex;gap:12px;align-items:center;padding:13px 15px;
-  border-radius:${droid ? 26 : 28}px;background:${droid ? 'rgba(236,239,250,.97)' : 'rgba(245,246,252,.92)'};box-shadow:0 14px 34px rgba(0,0,0,.28);color:#111">
-  <div style="width:42px;height:42px;border-radius:11px;flex:none;background:linear-gradient(150deg,#0B1330,#1B2E7A);padding:5px">${logoSVG('n' + Math.random().toString(36).slice(2, 7))}</div>
-  <div style="min-width:0;flex:1"><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700"><span>AILA · ${title}</span><span style="font-weight:500;color:#777">ora</span></div>
-  <div style="font-size:14px;font-weight:500;line-height:1.3;margin-top:2px;color:#222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${text}</div></div></div>`;
-
 // ---------- schermate delle sei funzioni (usate dal trailer e dall'intro) ----------
 // Ogni funzione restituisce l'HTML della schermata (inner) e i dati che servono per animarla.
 function scrCircolari() {
@@ -220,8 +213,7 @@ function scrCircolari() {
           <div style="font-size:13px;font-weight:700;color:var(--faint);letter-spacing:.08em">SCADENZE</div>
           <div style="display:flex;align-items:center;gap:12px;margin-top:10px"><div class="dt"><b>23</b><s>OTT</s></div><div style="flex:1"><div style="font-size:15px;font-weight:700">Consegna autorizzazione</div><div style="font-size:12.5px;color:var(--faint);margin-top:3px">Al coordinatore di classe</div></div></div>
           <div id="added" style="margin-top:12px;display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:700;color:#047857;background:rgba(16,185,129,.16);padding:8px 14px;border-radius:999px">${I('circle-check', 'style="width:17px;height:17px"')}Aggiunta al calendario</div></div>
-      </div>
-      ${banner('Nuova circolare', "n. 112 — Viaggio d'istruzione a Praga")}`;
+      </div>`;
     return { CARDS, BUL, inner };
 }
 
