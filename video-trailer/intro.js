@@ -31,20 +31,13 @@ stage.appendChild(world);
 const topLayer = document.createElement('div');
 topLayer.className = 'layer';
 topLayer.style.zIndex = 50;
-topLayer.innerHTML = `<div class="flare" id="fl"></div><div id="vig"></div><div class="lbx" id="lb1" style="top:0"></div><div class="lbx" id="lb2" style="bottom:0"></div><div id="grain"></div>
+topLayer.innerHTML = `<div class="flare" id="fl"></div><div id="vig"></div><div class="lbx" id="lb1" style="top:0"></div><div class="lbx" id="lb2" style="bottom:0"></div>
   <div class="a tag" id="hud1" style="left:60px;top:44px;z-index:65">AILA &nbsp;·&nbsp; <b>Stagione 2026/27</b></div>
   <div class="a" id="hud2" style="right:60px;top:36px;z-index:65;display:flex;align-items:center;gap:14px;font-size:30px;font-weight:700;letter-spacing:.04em;font-variant-numeric:tabular-nums">
     <i id="hdot" style="width:12px;height:12px;border-radius:50%;background:#5A8CFF;box-shadow:0 0 14px #5A8CFF"></i><span id="clk">00:00.000</span></div>
   <div class="a tag" id="hud3" style="left:60px;bottom:44px;z-index:65"></div>
   <div class="layer" id="flash" style="background:radial-gradient(circle at 50% 45%,rgba(235,240,255,.95),rgba(150,170,255,.35) 45%,transparent 75%);z-index:80"></div>`;
 stage.appendChild(topLayer);
-// grana: quattro fotogrammi di rumore generati una volta sola (stesso seme, stesse immagini a ogni esportazione)
-const GRAIN = [0, 1, 2, 3].map(k => {
-  const c = document.createElement('canvas'); c.width = 480; c.height = 270;
-  const g = c.getContext('2d'), img = g.createImageData(480, 270), R = rng(31 + k);
-  for (let i = 0; i < img.data.length; i += 4) { const v = R() * 255; img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255; }
-  g.putImageData(img, 0, 0); return `url(${c.toDataURL()})`;
-});
 // palette della nebbia per sezione: [inizio, tre colori, intensità]
 const FOG = [[0, ['#1E293B', '#312E81', '#0F172A'], .35], [B(4), ['#3B82F6', '#8B5CF6', '#06B6D4'], .95]];
 // velocità delle strisce (px/s) a tratti: [inizio, fine, velocità]
@@ -74,7 +67,6 @@ function renderAtmo(t) {
   const lb = (t < B(4) ? 1 - P(t, B(4), .3, E.inOut) : 0) + (t >= B(33) - .3 && t < B(35) ? P(t, B(33) - .3, .3, E.inOut) : 0);
   const h = 140 * clamp(lb);
   document.getElementById('lb1').style.height = h + 'px'; document.getElementById('lb2').style.height = h + 'px';
-  document.getElementById('grain').style.backgroundImage = GRAIN[Math.floor(t * 24) % 4];
   let f = 0, shake = 0;
   for (const [tf, a] of FLASHES) if (t >= tf) { f = Math.max(f, a * (1 - P(t, tf, .35, E.out))); shake = Math.max(shake, a * Math.exp(-(t - tf) * 10)); }
   const fe = document.getElementById('flash'); fe.style.opacity = f.toFixed(3); fe.style.display = f > .002 ? '' : 'none';

@@ -42,7 +42,7 @@ I nomi, le circolari e le date sono inventati. La versione web (PWA) non viene c
 
 Circa 1:13, con l'energia di una sigla di gara ma senza riprenderne marchi, grafica o musica: 144 BPM, un
 taglio o un cambio d'inquadratura a ogni quarto, strisce di luce in velocità, inquadratura che pompa sulla
-cassa, cronometro e scritte da diretta, bande cinema e grana. Musica: cassa dritta, basso a sedicesimi,
+cassa, cronometro e scritte da diretta, bande cinema. Musica: cassa dritta, basso a sedicesimi,
 archi in ostinato, coro, colpi orchestrali e il rombo di un motore.
 
 | Tempo | Battute | Scena |
