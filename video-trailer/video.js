@@ -14,9 +14,6 @@ const B = n => n * BAR;
 const bg = document.createElement('div');
 bg.className = 'layer';
 bg.innerHTML = `<div class="blob" id="b1"></div><div class="blob" id="b2"></div><div class="blob" id="b3"></div>
-  <div class="layer" id="rays" style="inset:auto;left:-440px;top:-1000px;width:2800px;height:2800px;border-radius:50%;
-    background:repeating-conic-gradient(from 0deg,rgba(150,170,255,.10) 0deg 5deg,transparent 5deg 15deg);
-    -webkit-mask-image:radial-gradient(circle,#000 0,transparent 55%);mask-image:radial-gradient(circle,#000 0,transparent 55%)"></div>
   <div class="dots"></div><div class="layer" id="bgdim" style="background:#020409"></div>`;
 stage.appendChild(bg);
 const FEAT_COL = [['#3B82F6', '#6366F1', '#06B6D4'], ['#0EA5E9', '#14B8A6', '#6366F1'], ['#8B5CF6', '#A855F7', '#3B82F6'],
@@ -38,7 +35,6 @@ function renderBg(t) {
     if (el._bg !== bgs) { el.style.background = bgs; el._bg = bgs; }
     pose(el, { x, y, o: t < B(8) ? .55 : .95 });
   });
-  pose(b('rays'), { r: t * 6, o: (P(t, B(8), .3) * (1 - P(t, B(12) - .5, 1))) + P(t, B(59), .5) * .8 });
   // scuro all'inizio e nella pausa prima del drop
   const dim = (1 - P(t, B(1), BAR * 2)) * .85 + (t >= B(6) && t < B(8) ? .7 : 0);
   b('bgdim').style.opacity = clamp(dim).toFixed(3);

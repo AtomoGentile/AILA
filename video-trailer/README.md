@@ -13,7 +13,7 @@ sintetizzata in codice, ma è più veloce: 128 BPM, un taglio su ogni battuta, d
 | `mux.js` | Unisce video e musica in `AILA_trailer.mp4` |
 | `common.js`, `common.css` | Parti condivise dai due video: logo, temi dell'app (Glass/Material, chiaro/scuro, accenti), dispositivi e le sei schermate |
 | `synth.js` | Sintetizzatore condiviso dalle due colonne sonore (strumenti, riverbero, mastering) |
-| `intro.html` + `intro.js`, `intro-timeline.js`, `intro-music.js` | L'intro "presentazione della squadra" (vedi sotto) |
+| `intro.html` + `intro.js`, `intro-timeline.js`, `intro-music.js` | L'intro (vedi sotto) |
 | `build-icons.js`, `build-qr.js` | Rigenerano `icons.js` (icone Lucide) e `qr.js` (QR code della pagina Releases) |
 
 Per rigenerare il trailer: `npm install`, poi `npm run build` (circa 25 minuti con 3 pagine in parallelo; si cambia con
@@ -38,20 +38,20 @@ Ogni funzione è mostrata su un dispositivo e in un tema diversi, così la varie
 scena dedicata. I colori dei temi vengono da `shared/.../design/AppTheme.kt` e `AilaGlass.kt`.
 I nomi, le circolari e le date sono inventati. La versione web (PWA) non viene citata.
 
-## Intro "presentazione della squadra"
+## Intro
 
-Circa 1:13, con l'energia di una sigla di gara ma senza riprenderne marchi, grafica o musica: 144 BPM, un
-taglio o un cambio d'inquadratura a ogni quarto, strisce di luce in velocità, inquadratura che pompa sulla
-cassa, cronometro e scritte da diretta, bande cinema. Musica: cassa dritta, basso a sedicesimi,
-archi in ostinato, coro, colpi orchestrali e il rombo di un motore.
+Lunga quanto il trailer (circa 2:03), con più energia: 144 BPM, cambi d'inquadratura ogni due o tre quarti,
+strisce di luce sullo sfondo, inquadratura che pompa sulla cassa, bande cinema nell'apertura. I testi sono
+frasi normali, come le direbbe uno di classe. Musica: cassa dritta e basso a sedicesimi nei momenti forti,
+metà tempo sotto le funzioni, archi in ostinato, coro e colpi orchestrali.
 
 | Tempo | Battute | Scena |
 |---|---|---|
-| 0:00 | 0–4 | Linea di luce, "AILA presenta", poi lampi dell'app sempre più fitti (quarti, ottavi, sedicesimi) mentre sale il motore |
-| 0:07 | 4–6 | Drop: logo, "La squadra · Stagione 2026/27" |
-| 0:10 | 6–24 | Le sei funzioni, tre battute ciascuna: numero a tutto schermo, dettaglio dello schermo, telefono e nome, tre statistiche a raffica |
-| 0:40 | 24–27 | "Su ogni schermo": Android, iPhone, Tablet, iPadOS a mezza battuta l'uno, poi tutti in fila |
-| 0:45 | 27–30 | Livree: stile, tema e i sei colori, uno a ogni quarto |
-| 0:50 | 30–33 | Griglia di partenza con le 24 combinazioni |
-| 0:55 | 33–35 | Semaforo: i sei banchi del logo si accendono, il motore scalpita, poi si spengono |
-| 0:58 | 35–44 | Via: logo, QR code e piattaforme |
+| 0:00 | 0–6 | Linea di luce, "Anno scolastico 2026/27", poi dettagli dell'app sempre più fitti |
+| 0:10 | 6–9 | Drop: logo, "L'app per la vita di classe" |
+| 0:15 | 9–45 | Le sei funzioni, sei battute ciascuna: numero a tutto schermo, dettaglio dello schermo, telefono, nome e una frase |
+| 1:15 | 45–51 | "Va sul telefono e sul tablet, Android o Apple che sia", poi Android, iPhone, Tablet, iPadOS e tutti insieme |
+| 1:25 | 51–57 | Temi: stile, tema e i sei colori, come in Impostazioni › Aspetto |
+| 1:35 | 57–61 | Il muro delle 24 versioni |
+| 1:42 | 61–64 | Privacy: l'AI legge solo le circolari, e può girare sul telefono |
+| 1:47 | 64–74 | Finale: logo, QR code e piattaforme |
