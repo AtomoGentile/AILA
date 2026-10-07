@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>AILA per SideStore</title>
+  <link rel="icon" href="/icons/favicon-32.png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="/sidestore.css">
+</head>
+<body>
+  <!-- Pagina statica, niente script (CSP): i link sidestore:// li gestisce SideStore
+       (SideStore/DeepLinks/URLHandler.swift, host "source" e "install" con parametro url).
+       releases/latest/download punta sempre all'IPA dell'ultima release non pre-release. -->
+  <main>
+    <img class="logo" src="/icons/icon-192.png" alt="" width="96" height="96">
+    <h1>AILA per SideStore</h1>
+    <p class="lead">Aggiungi la source di AILA a SideStore: da lì installi l'app e ricevi ogni nuova versione.</p>
+
+    <a class="button" href="sidestore://source?url=https%3A%2F%2Fraw.githubusercontent.com%2FAtomoGentile%2FAILA%2Fmain%2Fsource.json">Apri in SideStore</a>
+    <a class="button secondary" href="sidestore://install?url=https%3A%2F%2Fgithub.com%2FAtomoGentile%2FAILA%2Freleases%2Flatest%2Fdownload%2FAILA.ipa">Installa l'ultima versione</a>
+
+    <ol>
+      <li>Tocca <strong>Apri in SideStore</strong> e conferma l'aggiunta della source.</li>
+      <li>Nella source AILA tocca <strong>Free</strong> (o <strong>Get</strong>) per installare l'app.</li>
+      <li>Quando esce una versione nuova la trovi in <strong>My Apps</strong>: tocca <strong>Update</strong>.</li>
+    </ol>
+
+    <details>
+      <summary>Il pulsante non funziona?</summary>
+      <p>In SideStore vai su <strong>Sources</strong>, tocca <strong>+</strong> e incolla questo indirizzo:</p>
+      <p class="url">https://raw.githubusercontent.com/AtomoGentile/AILA/main/source.json</p>
+    </details>
+  </main>
+</body>
+</html>

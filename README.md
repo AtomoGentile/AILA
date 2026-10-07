@@ -3,7 +3,7 @@
 **AILA** (ex "Circolare+") è l'app per la vita di classe: circolari spiegate dall'AI, calendario condiviso, bacheca
 delle proposte, sondaggi, mappa dei posti in aula e notifiche in tempo reale. Per Android e iPhone/iPad.
 
-> **Versione beta 0.0.1** — l'app è in fase di prova: qualcosa potrebbe non funzionare come previsto.
+> **Versione 1.0.0**
 
 ---
 
@@ -30,7 +30,10 @@ Due stili grafici a scelta, **Glass** e **Material**, e rispetto dell'impostazio
 Scarica l'ultima versione dalla pagina **Releases** del repository.
 
 - **Android**: scarica `AILA.apk` dal telefono e aprilo. Se richiesto, consenti l'installazione da fonti sconosciute.
-- **iPhone / iPad**: scarica `AILA.ipa` e aprila con [SideStore](https://sidestore.io), che la firma con il tuo Apple ID.
+- **iPhone / iPad**: con [SideStore](https://sidestore.io) installato, apri dal telefono
+  [aila-scuola.pages.dev/sidestore](https://aila-scuola.pages.dev/sidestore) e tocca **Apri in SideStore**: si aggiunge la
+  source di AILA e da lì installi l'app e ricevi gli aggiornamenti. In alternativa scarica `AILA.ipa` e aprila con SideStore,
+  che la firma con il tuo Apple ID.
 
 Per registrarti serve il codice della tua classe; i Rappresentanti ricevono un codice personale.
 

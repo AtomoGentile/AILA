@@ -11,7 +11,7 @@
       "bundleIdentifier": "com.circolareplus",
       "developerName": "Simone Bianchin",
       "subtitle": "La tua scuola, sincronizzata",
-      "localizedDescription": "AILA – La tua scuola, sincronizzata.\n\nL'app che tiene tutta la scuola in un posto solo: circolari e comunicazioni sempre aggiornate sul telefono, con notifiche anche quando l'app è chiusa.\n\nVersione Beta: potresti trovare qualche imprecisione.",
+      "localizedDescription": "AILA – La tua scuola, sincronizzata.\n\nL'app che tiene tutta la scuola in un posto solo: circolari e comunicazioni sempre aggiornate sul telefono, con notifiche anche quando l'app è chiusa.",
       "iconURL": "https://raw.githubusercontent.com/AtomoGentile/AILA/main/iosApp/iosApp/Assets.xcassets/AppIcon.appiconset/Icon-1024.png",
       "tintColor": "#0A1330",
       "version": "0.0.1",

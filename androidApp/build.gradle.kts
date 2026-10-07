@@ -109,7 +109,7 @@ android {
         val ciRun = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
         val ciSha = System.getenv("GITHUB_SHA")?.take(7)
         versionCode = ciRun ?: 1
-        versionName = if (ciRun != null) "0.0.1 (build $ciRun, $ciSha)" else "0.0.1"
+        versionName = if (ciRun != null) "1.0.0 (build $ciRun, $ciSha)" else "1.0.0"
 
         ndk {
             // Le librerie native del motore di AI locale esistono per quattro ABI e da sole
