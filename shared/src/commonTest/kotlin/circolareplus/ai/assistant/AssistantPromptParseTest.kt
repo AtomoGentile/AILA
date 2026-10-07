@@ -56,6 +56,27 @@ class AssistantPromptParseTest {
         assertEquals("Il pullman parte alle 7:30.", parsed.answer)
     }
 
+    /** Risposta reale di Apple Intelligence: "answer" come array di eventi invece che stringa. */
+    @Test
+    fun answerComeArrayDiAppleIntelligenceDiventaElenco() {
+        val raw = """{"answer":[{"data":"mercoledì 7 ottobre 2026","title":"Italiano: Tema (verifica). Note: Studiare Letteratura"},{"data":"giovedì 8 ottobre 2026","title":"Incontro per elezioni e Patto"}],"sources":[18,17],"needsCircularText":[]}"""
+        val parsed = AssistantPrompt.parse(raw)
+        assertEquals(
+            "- mercoledì 7 ottobre 2026 — Italiano: Tema (verifica). Note: Studiare Letteratura\n" +
+                "- giovedì 8 ottobre 2026 — Incontro per elezioni e Patto",
+            parsed.answer
+        )
+        assertEquals(listOf(18, 17), parsed.sources.map { it.circularNumber })
+    }
+
+    @Test
+    fun answerComeArrayInJsonRottoNonFinisceInChat() {
+        val raw = """{"answer":[{"data":"giovedì 8 ottobre","title":"Adesione progetti"}],"sources":["{"kind":"CIRCULAR","circularNumber":18}"]}"""
+        val parsed = AssistantPrompt.parse(raw)
+        assertEquals("- giovedì 8 ottobre — Adesione progetti", parsed.answer)
+        assertEquals(listOf(18), parsed.sources.map { it.circularNumber })
+    }
+
     @Test
     fun testoLiberoRestaTestoLibero() {
         val parsed = AssistantPrompt.parse("Ciao! Come posso aiutarti?")

@@ -119,7 +119,7 @@ STILE
 FORMATO DELLA RISPOSTA
 Rispondi SOLO con un oggetto JSON, senza testo prima o dopo, con questa struttura:
 {
-  "answer": "la risposta in italiano, testo normale, a capo con \n",
+  "answer": "la risposta in italiano, testo normale, a capo con \n (sempre una stringa, mai un array)",
   "sources": [],
   "needsCircularText": []
 }
@@ -153,6 +153,8 @@ Se la domanda chiede regole, divieti o obblighi su un argomento, riporta subito 
 Momenti scritti a parole ("l'ultima ora", "la terza ora") riportali cosi' come sono, senza trasformarli in orari. Non copiare date o orari da risposte precedenti o da altre circolari.
 Rispondi SOLO con questo oggetto JSON, senza altro testo:
 {"answer":"...","sources":[7,4],"needsCircularText":[]}
+"answer" e' SEMPRE una stringa di testo (mai un array o un oggetto): gli elenchi vanno dentro la stringa, una riga per voce, separate da \n.
+A un saluto ("ciao", "buongiorno") rispondi con un saluto breve e chiedi come puoi aiutare: non elencare eventi, scadenze o circolari se non sono stati chiesti.
 "sources" contiene SOLO i numeri (interi, senza virgolette) delle circolari del CONTESTO che hai usato; per saluti e domande generali resta []. "needsCircularText": al massimo 2 numeri di circolari di cui ti serve il testo integrale, altrimenti [].
 """
 
@@ -327,7 +329,7 @@ Rispondi SOLO con questo oggetto JSON, senza altro testo:
             }
         } ?: return lenientParse(raw)
 
-        val answer = root["answer"]?.let { (it as? JsonPrimitive)?.contentOrNull }?.trim()
+        val answer = root["answer"]?.let(::answerText)?.trim()
         if (answer.isNullOrBlank()) return lenientParse(raw)
 
         val sources = try {
@@ -348,6 +350,27 @@ Rispondi SOLO con questo oggetto JSON, senza altro testo:
         }
 
         return ParsedAnswer(tidyAnswer(answer), sources, needs)
+    }
+
+    /**
+     * Il testo di "answer" in qualunque forma arrivi. Apple Intelligence, davanti a una lista di
+     * eventi nel contesto, a volte scrive "answer" come array di oggetti
+     * (`[{"data":"mercoledi' 7 ottobre","title":"Verifica"}]`) invece che come stringa: senza
+     * questa lettura il parser ripiegava sul testo grezzo e in chat finiva il JSON intero.
+     * Ogni elemento diventa una riga d'elenco con i suoi valori uniti da " — ", nell'ordine in
+     * cui il modello li ha scritti (di solito data e poi titolo, la forma che chiede il prompt).
+     */
+    private fun answerText(element: JsonElement): String? = when (element) {
+        is JsonPrimitive -> element.contentOrNull
+        is JsonArray -> element.mapNotNull { item ->
+            answerText(item)?.trim()?.takeIf { it.isNotEmpty() }?.let { text ->
+                if (item is JsonObject || item is JsonPrimitive) "- $text" else text
+            }
+        }.joinToString("\n").takeIf { it.isNotEmpty() }
+        is JsonObject -> (element["answer"] ?: element["text"])?.let(::answerText)
+            ?: element.values.mapNotNull { value ->
+                (value as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+            }.joinToString(" — ").takeIf { it.isNotEmpty() }
     }
 
     /**
@@ -417,6 +440,7 @@ Rispondi SOLO con questo oggetto JSON, senza altro testo:
     internal fun lenientParse(raw: String): ParsedAnswer {
         val text = cleanPlainText(raw)
         val answer = lenientStringField(text, "answer")
+            ?: lenientListField(text, "answer")
             ?: return ParsedAnswer(tidyAnswer(text), emptyList(), emptyList())
 
         val sourcesStart = text.indexOf("\"sources\"").takeIf { it >= 0 }
@@ -462,7 +486,26 @@ Rispondi SOLO con questo oggetto JSON, senza altro testo:
         return decoded.trim().takeIf { it.isNotEmpty() }
     }
 
-    private val isoWithReadable = Regex("(?<!\\d)(\\d{3,4})-(\\d{1,2})-(\\d{1,2})(?!\\d)(\\s*\\(([^)]*)\\))?")
+    /**
+     * Il valore di [key] scritto come array di oggetti (vedi [answerText]) in un JSON rotto:
+     * ogni oggetto diventa una riga d'elenco con i suoi valori stringa uniti da " — ".
+     */
+    private fun lenientListField(text: String, key: String): String? {
+        val open = Regex("\"$key\"\\s*:\\s*\\[").find(text) ?: return null
+        val start = open.range.last + 1
+        val end = Regex("\\]\\s*,\\s*\"[A-Za-z_]+\"\\s*:").find(text, start)?.range?.first ?: text.length
+        val lines = Regex("\\{[^{}]*\\}").findAll(text.substring(start, end)).mapNotNull { obj ->
+            Regex("\"[A-Za-z_]+\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").findAll(obj.value)
+                .map { it.groupValues[1].replace("\\\"", "\"").replace("\\n", " ").trim() }
+                .filter { it.isNotEmpty() }
+                .joinToString(" — ")
+                .takeIf { it.isNotEmpty() }
+                ?.let { "- $it" }
+        }.toList()
+        return lines.joinToString("\n").takeIf { it.isNotEmpty() }
+    }
+
+    private val isoWithReadable =Regex("(?<!\\d)(\\d{3,4})-(\\d{1,2})-(\\d{1,2})(?!\\d)(\\s*\\(([^)]*)\\))?")
     private val trailingCategory =
         Regex("\\s*\\|\\s*(VERIFICA|INTERROGAZIONE|PAGAMENTO|USCITA_DIDATTICA|AVVISO|ALTRO)\\b\\s*(?=\\||$)")
 
