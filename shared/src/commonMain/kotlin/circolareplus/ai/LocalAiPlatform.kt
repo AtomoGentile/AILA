@@ -134,7 +134,14 @@ expect class LocalLlm() {
         timeoutMillis: Long,
         stopWhen: (String) -> Boolean,
         /** Lascia ragionare il modello (blocco `<think>`) prima della risposta. Solo motori che lo supportano. */
-        enableThinking: Boolean = false
+        enableThinking: Boolean = false,
+        /**
+         * La generazione e' una risposta dell'assistente (oggetto JSON con "answer", "sources",
+         * "needsCircularText"). Apple Intelligence la genera vincolata a quello schema: senza,
+         * scriveva "answer" come array di eventi invece che come testo. Gli altri motori la
+         * ignorano: seguono il formato del prompt da soli.
+         */
+        assistantAnswer: Boolean = false
     ): String
 
     /**

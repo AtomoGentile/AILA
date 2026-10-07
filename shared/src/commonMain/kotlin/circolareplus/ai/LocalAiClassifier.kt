@@ -276,6 +276,7 @@ class LocalAiClassifier(
                 },
                 timeoutMillis = if (thinking) THINKING_TIMEOUT_MILLIS else GENERATION_TIMEOUT_MILLIS,
                 enableThinking = thinking,
+                assistantAnswer = true,
                 // Appena la risposta JSON e' completa si smette: il resto sarebbe scartato.
                 stopWhen = { partial ->
                     circolareplus.ai.assistant.AssistantPrompt.isCompleteAnswer(partial)

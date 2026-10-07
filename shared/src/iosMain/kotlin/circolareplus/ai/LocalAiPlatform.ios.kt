@@ -118,6 +118,7 @@ actual class LocalModelStore actual constructor() {
                     timeoutMillis = 30_000L,
                     maxOutputTokens = 16,
                     temperature = 0.1,
+                    assistantAnswer = false,
                     stopWhen = { false }
                 )
                 onProgress(1, 1)
@@ -185,7 +186,8 @@ actual class LocalLlm actual constructor() {
         userPrompt: String,
         timeoutMillis: Long,
         stopWhen: (String) -> Boolean,
-        enableThinking: Boolean
+        enableThinking: Boolean,
+        assistantAnswer: Boolean
     ): String {
         // enableThinking è ignorato: né il modello Apple né MLX hanno (per ora) un blocco di
         // ragionamento da accendere. Stesso tetto ai token e stessa temperatura bassa di Android:
@@ -201,6 +203,7 @@ actual class LocalLlm actual constructor() {
                     timeoutMillis = timeoutMillis,
                     maxOutputTokens = maxOutputTokens,
                     temperature = JSON_TEMPERATURE,
+                    assistantAnswer = assistantAnswer,
                     stopWhen = stopWhen
                 )
             }

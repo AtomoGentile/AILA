@@ -79,7 +79,8 @@ actual class LocalLlm actual constructor() {
         userPrompt: String,
         timeoutMillis: Long,
         stopWhen: (String) -> Boolean,
-        enableThinking: Boolean
+        enableThinking: Boolean,
+        assistantAnswer: Boolean
     ): String {
         // Tier 1: AICore (Gemini Nano di sistema) invece di LiteRT-LM. Non condivide il motore
         // caricato in `engine`, ma passa comunque dallo stesso mutex: due generazioni AICore in

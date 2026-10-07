@@ -39,6 +39,9 @@ interface AppleIntelligenceBridge {
      *   senza, il modello puo' continuare fino a riempire la finestra di contesto.
      * @param temperature Temperatura di campionamento. Bassa (0.1) per produrre sempre lo stesso
      *   JSON ben formato, come sul motore Android.
+     * @param assistantAnswer true per la risposta dell'assistente: si genera con lo schema
+     *   {answer: stringa, sources: [interi], needsCircularText: [interi]} (guided generation di
+     *   FoundationModels), cosi' "answer" non puo' uscire come array o oggetto.
      * @param stopWhen Lambda che decide quando interrompere la generazione basandosi sul testo accumulato
      * @return Stringa generata dal modello
      * @throws Exception Se la generazione fallisce o scade il timeout
@@ -49,6 +52,7 @@ interface AppleIntelligenceBridge {
         timeoutMillis: Long,
         maxOutputTokens: Int,
         temperature: Double,
+        assistantAnswer: Boolean,
         stopWhen: (String) -> Boolean
     ): String
 

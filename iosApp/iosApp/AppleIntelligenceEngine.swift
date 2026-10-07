@@ -72,6 +72,7 @@ class AppleIntelligenceEngine: AppleIntelligenceBridge {
         timeoutMillis: Int64,
         maxOutputTokens: Int32,
         temperature: Double,
+        assistantAnswer: Bool,
         stopWhen: @escaping (String) -> KotlinBoolean
     ) async throws -> String {
         guard #available(iOS 26, *) else {
@@ -90,6 +91,7 @@ class AppleIntelligenceEngine: AppleIntelligenceBridge {
                 timeoutMillis: timeoutMillis,
                 maxOutputTokens: maxOutputTokens,
                 temperature: temperature,
+                assistantAnswer: assistantAnswer,
                 stopWhen: stopWhen
             )
         }
@@ -164,6 +166,7 @@ private enum FoundationModelsEngine {
         timeoutMillis: Int64,
         maxOutputTokens: Int32,
         temperature: Double,
+        assistantAnswer: Bool,
         stopWhen: @escaping (String) -> KotlinBoolean
     ) async throws -> String {
         // Timeout in secondi
@@ -187,6 +190,21 @@ private enum FoundationModelsEngine {
             // Task 1: Generazione vera
             group.addTask {
                 do {
+                    // Risposta dell'assistente: generazione vincolata allo schema, in un colpo
+                    // solo. Il modello non puo' scrivere "answer" come array di eventi (lo
+                    // faceva, e in chat finiva il JSON), e la risposta finisce da sola alla
+                    // graffa di chiusura, quindi stopWhen non serve. Niente streaming: uno
+                    // snapshot parziale e' gia' un JSON "completo" con la risposta a meta', e
+                    // stopWhen lo prenderebbe per buono.
+                    if assistantAnswer {
+                        let response = try await session.respond(
+                            to: userPrompt,
+                            schema: try FoundationModelsEngine.assistantAnswerSchema(),
+                            options: options
+                        )
+                        return response.content.jsonString
+                    }
+
                     // Genera in streaming: ogni elemento e' uno snapshot con il testo
                     // CUMULATIVO prodotto finora (non un delta), quindi si sostituisce
                     // accumulatedText invece di concatenarla.
@@ -231,6 +249,41 @@ private enum FoundationModelsEngine {
                 userInfo: [NSLocalizedDescriptionKey: "Errore sconosciuto nella generazione"]
             )
         }
+    }
+
+    /**
+     * Lo schema della risposta dell'assistente, lo stesso oggetto che chiede il prompt e che
+     * legge AssistantPrompt.parse (Kotlin): {"answer": "...", "sources": [7], "needsCircularText": []}.
+     */
+    static func assistantAnswerSchema() throws -> GenerationSchema {
+        let numbers = { (maximum: Int) in
+            DynamicGenerationSchema(
+                arrayOf: DynamicGenerationSchema(type: Int.self),
+                minimumElements: 0,
+                maximumElements: maximum
+            )
+        }
+        let root = DynamicGenerationSchema(
+            name: "AssistantAnswer",
+            properties: [
+                DynamicGenerationSchema.Property(
+                    name: "answer",
+                    description: "La risposta in italiano, testo normale. Gli elenchi vanno qui dentro, una voce per riga.",
+                    schema: DynamicGenerationSchema(type: String.self)
+                ),
+                DynamicGenerationSchema.Property(
+                    name: "sources",
+                    description: "Numeri delle circolari del CONTESTO usate davvero; vuoto per saluti e domande generali.",
+                    schema: numbers(6)
+                ),
+                DynamicGenerationSchema.Property(
+                    name: "needsCircularText",
+                    description: "Numeri delle circolari di cui serve il testo integrale; di solito vuoto.",
+                    schema: numbers(2)
+                )
+            ]
+        )
+        return try GenerationSchema(root: root, dependencies: [])
     }
 
     /**
