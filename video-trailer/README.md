@@ -25,18 +25,19 @@ Per l'intro: `npm run intro:build` (→ `AILA_intro.mp4`); `node render.js snap 
 
 | Tempo | Battute | Scena |
 |---|---|---|
-| 0:00 | 0–8 | Il caos: notifiche del registro e del gruppo classe, parole a tempo, "E se la tua classe avesse un superpotere?" |
-| 0:15 | 8–12 | Drop: il logo esplode, "La tua scuola, sincronizzata." e i sei moduli |
+| 0:00 | 0–8 | Il caos: notifiche del registro e del gruppo classe, le domande di tutti i giorni ("Ma la verifica è giovedì?"), "E se ci fosse un posto solo per tutto questo?" |
+| 0:15 | 8–12 | Drop: il logo, "L'app per la vita di classe" e i sei moduli |
 | 0:22 | 12–36 | Sei funzioni, quattro battute ciascuna: Circolari, AILA Assistant, Calendario, Sondaggi interrogazioni, Mappa posti, Bacheca e sondaggi a classifica |
-| 1:07 | 36–46 | "Un'app. Ogni schermo.": Android, iPhone, tablet e iPadOS, poi un'onda di luce parte da tutti insieme ("Tutta la classe, sempre aggiornata.") |
+| 1:07 | 36–46 | "Va sul telefono e anche sul tablet": Android, iPhone, tablet e iPadOS, poi un'onda di luce parte da tutti insieme |
 | 1:26 | 46–52 | Temi: Liquid Glass e Material, chiaro e scuro, i sei colori d'accento (come in Impostazioni > Aspetto) |
 | 1:37 | 52–56 | Il muro delle 24 combinazioni (2 stili × chiaro/scuro × 6 colori) |
-| 1:45 | 56–59 | L'AI può girare sul telefono, dati separati per classe, l'AI non riceve i dati personali |
+| 1:45 | 56–59 | Privacy: l'AI legge solo le circolari e, se vuoi, gira sul telefono |
 | 1:51 | 59–66 | Finale con il QR code della pagina Releases per installarla |
 
 Ogni funzione è mostrata su un dispositivo e in un tema diversi, così la varietà si vede già prima della
 scena dedicata. I colori dei temi vengono da `shared/.../design/AppTheme.kt` e `AilaGlass.kt`.
-I nomi, le circolari e le date sono inventati. La versione web (PWA) non viene citata.
+I testi sono frasi normali, senza slogan a frammenti. I nomi, le circolari e le date sono inventati.
+La versione web (PWA) non viene citata.
 
 ## Intro
 

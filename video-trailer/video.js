@@ -68,8 +68,8 @@ const addFlash = (t, a = 1) => FLASHES.push([t, a]);
   const TIMES = N.map((_, i) => B(1) + B(4.6) * Math.pow(i / (N.length - 1), .62));
   TIMES.forEach((tt, i) => sfx(tt, N[i][0] === 'r' ? 'ping' : 'ping2'));
   const SL = [ // [testo, battuta d'ingresso, classe]
-    ['Circolari.', 2, ''], ['Scadenze.', 2.5, ''], ['Interrogazioni.', 3, ''], ['Chat infinite.', 3.5, ''],
-    ['E le cose importanti', 4, 'small'], ['si perdono.', 4.5, 'red'],
+    ['Ma la verifica è giovedì?', 2, 'small'], ["Chi l'ha letta la circolare?", 2.5, 'small'], ['Lunedì chi va interrogato?', 3, 'small'], ['Domani dove mi siedo?', 3.5, 'small'],
+    ['Così le cose importanti', 4, 'small'], ['si perdono per strada', 4.5, 'red'],
   ];
   const S = addScene(0, B(8) + .1, `
     <div class="a center" id="clock" style="left:0;width:1920px;top:290px;font-size:250px;font-weight:300;letter-spacing:-.04em;line-height:1">7:42</div>
@@ -79,9 +79,9 @@ const addFlash = (t, a = 1) => FLASHES.push([t, a]);
       <div style="flex:1;min-width:0"><div class="nap">${k === 'r' ? 'Registro elettronico' : 'Gruppo classe'}<span>ora</span></div><div class="tx">${txt}</div></div></div>`).join('')}
     <div class="a center" id="cnt" style="left:0;width:1920px;top:56px"><span class="chip" style="background:rgba(239,68,68,.18);border-color:rgba(248,113,113,.5);color:#FECACA">${I('bell-ring')}<span id="cntn">0</span>&nbsp;notifiche</span></div>
     <div class="layer" id="dim1" style="background:radial-gradient(ellipse at center,rgba(2,4,9,.94) 25%,rgba(2,4,9,.55) 85%)"></div>
-    ${SL.map(([txt, , c], i) => `<div class="a center slam sl" style="left:0;width:1920px;top:${c === 'small' ? 430 : 455}px;${c === 'small' ? 'font-size:110px;font-weight:700' : ''}${c === 'red' ? ';top:560px' : ''}">${c === 'red' ? `<em class="grad" style="--g:linear-gradient(95deg,#FCA5A5,#F87171 50%,#FB923C)">${txt}</em>` : txt}</div>`).join('')}
-    <div class="a center big" id="q1" style="left:0;width:1920px;top:330px">E se la tua classe avesse</div>
-    <div class="a center" id="q2" style="left:0;width:1920px;top:470px;font-size:190px;font-weight:800;letter-spacing:-.045em;line-height:1"><em class="grad">un superpotere?</em></div>`);
+    ${SL.map(([txt, , c], i) => `<div class="a center slam sl" style="left:0;width:1920px;top:${c === 'small' ? 430 : 455}px;${c === 'small' || c === 'red' ? 'font-size:110px;font-weight:700' : ''}${c === 'red' ? ';top:560px' : ''}">${c === 'red' ? `<em class="grad" style="--g:linear-gradient(95deg,#FCA5A5,#F87171 50%,#FB923C)">${txt}</em>` : txt}</div>`).join('')}
+    <div class="a center big" id="q1" style="left:0;width:1920px;top:330px">E se ci fosse un posto solo</div>
+    <div class="a center" id="q2" style="left:0;width:1920px;top:470px;font-size:170px;font-weight:800;letter-spacing:-.045em;line-height:1"><em class="grad">per tutto questo?</em></div>`);
   const cards = S.qa('.n'), sl = S.qa('.sl');
   sfx(Q, 'buzz'); sfx(Q * 3, 'buzz');
   SL.forEach(([, bt]) => sfx(B(bt), 'slam'));
@@ -136,7 +136,7 @@ const addFlash = (t, a = 1) => FLASHES.push([t, a]);
     <div id="grp" class="layer">
       <div class="a" id="logo" style="left:800px;top:160px;width:320px;height:320px">${logoSVG('A')}</div>
       <div class="a center" id="wm" style="left:0;width:1920px;top:500px;font-size:230px;font-weight:800;letter-spacing:.05em;line-height:1"></div>
-      <div class="a center" id="tag" style="left:0;width:1920px;top:760px;font-size:48px;color:#DCE3FF;font-weight:500">La tua scuola, <em class="grad" style="font-weight:700">sincronizzata.</em></div>
+      <div class="a center" id="tag" style="left:0;width:1920px;top:760px;font-size:48px;color:#DCE3FF;font-weight:500">L'app per la <em class="grad" style="font-weight:700">vita di classe</em></div>
       <div class="a" id="mods" style="left:0;width:1920px;top:880px;display:flex;justify-content:center;gap:16px">${MODS.map(([ic, l]) => `<span class="chip md">${I(ic, 'style="color:#A5B8FF"')}${l}</span>`).join('')}</div>
     </div>`);
   const wm = S.q('#wm'); wm.innerHTML = 'AILA'.split('').map(c => `<span class="w">${c}</span>`).join(''); wm._w = [...wm.querySelectorAll('.w')];
@@ -195,7 +195,7 @@ const FT = i => B(12 + i * 4); // inizio della funzione i
   const t0 = FT(0), s = st('glass', false, 'blue');
   const { CARDS, BUL, inner } = scrCircolari();
   const S = addScene(t0 - .05, FT(1) + .05, `<div class="layer" id="g">
-    ${featText(1, 'Circolari', 'Circolari?<br><em>Riassunte</em> <em>dall\'AI.</em>', 'Te la riassume, ti dice se ti riguarda e salva le scadenze nel calendario.', 150, FEAT_COL[0])}
+    ${featText(1, 'Circolari', 'La circolare<br><em>te la riassume</em> <em>lei</em>', 'E ti dice anche se ti riguarda davvero, poi ti segna le scadenze sul calendario.', 150, FEAT_COL[0])}
     <div class="a" id="ph" style="left:1230px;top:90px">${devHTML('iphone', s, inner)}</div></div>`);
   const cc = S.qa('.cc'), bl = S.qa('.bl');
   const tNew = B(13), tAn = B(13) + Q * 2, tDet = B(14);
@@ -230,7 +230,7 @@ const FT = i => B(12 + i * 4); // inizio della funzione i
   const t0 = FT(1), s = st('mat', true, 'blue');
   const { QTXT, ATXT, inner } = scrAssistant();
   const S = addScene(t0 - .05, FT(2) + .05, `<div class="layer" id="g">
-    ${featText(2, 'AILA Assistant', 'Chiedi.<br><em>AILA</em> <em>risponde.</em>', 'Risposte basate solo sui dati della tua classe, con le fonti da aprire.', 820, FEAT_COL[1])}
+    ${featText(2, 'AILA Assistant', 'Chiedi quello<br><em>che ti</em> <em>serve</em>', 'Ti risponde con quello che c\'è nell\'app della tua classe e ti fa vedere da dove l\'ha preso.', 820, FEAT_COL[1])}
     <div class="a" id="ph" style="left:250px;top:90px">${devHTML('droid', s, inner)}</div></div>`);
   const tType = t0 + Q, tSend = B(17) + Q * 2, tAns = B(18), tSrc = B(19) + Q;
   const cps = QTXT.length / (tSend - .15 - tType);
@@ -261,7 +261,7 @@ const FT = i => B(12 + i * 4); // inizio della funzione i
   const t0 = FT(2), s = st('glass', true, 'violet');
   const { EV, days, cw, inner } = scrCalendario();
   const S = addScene(t0 - .05, FT(3) + .05, `<div class="layer" id="g">
-    ${featText(3, 'Calendario', 'Ogni scadenza.<br><em>Al</em> <em>suo</em> <em>posto.</em>', 'Eventi della scuola e della classe, anche presi dalle circolari. In ore di lezione, dalla 1ª alla 6ª.', 150, FEAT_COL[2])}
+    ${featText(3, 'Calendario', 'Tutte le date<br><em>in un posto</em> <em>solo</em>', 'Ci finiscono anche le scadenze delle circolari, segnate con l\'ora di lezione giusta.', 150, FEAT_COL[2])}
     <div class="a" id="ph" style="left:1230px;top:90px">${devHTML('iphone', s, inner)}</div></div>`);
   const evr = S.qa('.evr'), dc = S.qa('.dc');
   const TE = EV.map((_, i) => B(21) + i * Q * 2); // dalla battuta 21, un evento ogni due quarti
@@ -286,7 +286,7 @@ const FT = i => B(12 + i * 4); // inizio della funzione i
   const t0 = FT(3), s = st('mat', false, 'green');
   const { DATES, inner } = scrSondaggi();
   const S = addScene(t0 - .05, FT(4) + .05, `<div class="layer" id="g">
-    ${featText(4, 'Sondaggi', 'Interrogazioni?<br><em>Decidete</em> <em>voi.</em>', 'Prenoti le date con un sistema di voti equo, pensato per non poter essere aggirato.', 820, FEAT_COL[3])}
+    ${featText(4, 'Sondaggi', 'Le interrogazioni<br><em>le decidiamo</em> <em>noi</em>', 'Le date si prenotano con un sistema di voti fatto apposta perché nessuno faccia il furbo.', 820, FEAT_COL[3])}
     <div class="a" id="ph" style="left:250px;top:90px">${devHTML('droid', s, inner)}</div></div>`);
   const av = S.qa('.pav'), ok = S.qa('.ok');
   const order = [0, 3, 6, 1, 4, 7, 2, 5, 8]; // ordine d'arrivo (riga per riga, mescolate)
@@ -308,7 +308,7 @@ const FT = i => B(12 + i * 4); // inizio della funzione i
   const t0 = FT(4), s = st('glass', false, 'teal');
   const { R, perm, LAY, seatXY, inner } = scrMappaPosti();
   const S = addScene(t0 - .05, FT(5) + .05, `<div class="layer" id="g">
-    ${featText(5, 'Mappa posti', 'Il posto giusto.<br><em>Per</em> <em>tutti.</em>', 'Il Rappresentante sceglie tra 3 disposizioni dei banchi: contano affinità, aiuto tra compagni, rumore e altezza.', 150, FEAT_COL[4])}
+    ${featText(5, 'Mappa posti', 'I posti in aula<br><em>senza</em> <em>litigare</em>', 'Il rappresentante sceglie tra tre disposizioni dei banchi, pensate su affinità, aiuto tra compagni, rumore e altezza.', 150, FEAT_COL[4])}
     <div class="a" id="ph" style="left:1230px;top:90px">${devHTML('iphone', s, inner)}</div></div>`);
   const seats = S.qa('.seat'), fc = S.qa('.fc'), pp = S.qa('.pp');
   const TS = [t0, B(30), B(31)]; // cambio di proposta
@@ -339,7 +339,7 @@ const FT = i => B(12 + i * 4); // inizio della funzione i
   const t0 = FT(5), s = st('mat', true, 'orange');
   const { PR, RK, inner } = scrBacheca();
   const S = addScene(t0 - .05, B(36) + .05, `<div class="layer" id="g">
-    ${featText(6, 'Bacheca', 'La tua voce.<br><em>Conta.</em>', 'Proponi, vota e commenta, anche in anonimo. E i sondaggi a classifica si aggiornano da soli.', 820, FEAT_COL[5])}
+    ${featText(6, 'Bacheca', 'Hai un\'idea?<br><em>Mettila ai</em> <em>voti</em>', 'Si vota e si commenta, anche in anonimo, e i sondaggi a classifica si aggiornano da soli.', 820, FEAT_COL[5])}
     <div class="a" id="ph" style="left:250px;top:90px">${devHTML('droid', s, inner)}</div></div>`);
   const vn = S.qa('.vn'), up = S.qa('.up'), rkr = S.qa('.rkr'), rb = S.qa('.rb'), rp = S.qa('.rp'), rn = S.qa('.rn');
   const tV = t0 + Q * 2, tRk = B(34);
@@ -385,15 +385,15 @@ const FT = i => B(12 + i * 4); // inizio della funzione i
   const W = { droid: [420, 900], iphone: [430, 900], ipad: [1180, 830], tab: [1240, 790] };
   const S = addScene(B(36), B(46) + .05, `
     <div class="a" id="outl" style="left:0;top:0;border:5px solid rgba(190,205,255,.85);box-shadow:0 0 40px rgba(120,150,255,.5),inset 0 0 40px rgba(120,150,255,.25)"></div>
-    <div class="a center big" id="b1" style="left:0;width:1920px;top:440px">Un'app.</div>
-    <div class="a center big" id="b2" style="left:0;width:1920px;top:440px"><em class="grad">Ogni schermo.</em></div>
+    <div class="a center big" id="b1" style="left:0;width:1920px;top:440px">Va sul telefono</div>
+    <div class="a center big" id="b2" style="left:0;width:1920px;top:440px"><em class="grad">e anche sul tablet</em></div>
     ${DEV.map((d, i) => `<div class="a dv" style="left:${960 - W[d[0]][0] / 2}px;top:${540 - W[d[0]][1] / 2}px;z-index:${d[0] === 'droid' || d[0] === 'iphone' ? 3 : 1}">
       ${devHTML(d[0], d[1], d[2])}</div>`).join('')}
     ${DEV.map((d, i) => d[0] === 'ipad' || d[0] === 'tab'
       ? `<div class="a dl slam center" style="left:0;width:1920px;top:46px;font-size:120px">${d[3]}</div>`
       : `<div class="a dl slam" style="${i % 2 ? 'left:1200px' : 'left:0;width:720px;text-align:right'};top:470px;font-size:130px">${d[3]}</div>`).join('')}
-    <div class="a center" id="ttl" style="left:0;width:1920px;top:56px;font-size:64px;font-weight:800;letter-spacing:-.03em">Stessa app. <em class="grad">Ovunque.</em></div>
-    <div class="a center" id="cap" style="left:0;width:1920px;top:972px;font-size:36px;font-weight:600;color:#DCE3FF">${I('users', 'style="width:36px;height:36px;vertical-align:-6px;color:#9DB6FF"')}&nbsp; Tutta la classe, sempre aggiornata.</div>
+    <div class="a center" id="ttl" style="left:0;width:1920px;top:56px;font-size:64px;font-weight:800;letter-spacing:-.03em">Android o Apple, <em class="grad">è la stessa app</em></div>
+    <div class="a center" id="cap" style="left:0;width:1920px;top:972px;font-size:36px;font-weight:600;color:#DCE3FF">${I('users', 'style="width:36px;height:36px;vertical-align:-6px;color:#9DB6FF"')}&nbsp; E tutta la classe vede le stesse cose, aggiornate.</div>
     ${DEV.map(() => `<div class="a rip" style="left:0;top:0;width:300px;height:300px;margin:-150px 0 0 -150px;border-radius:50%;border:3px solid rgba(160,200,255,.8)"></div>`).join('')}`);
   const dv = S.qa('.dv'), dl = S.qa('.dl'), rip = S.qa('.rip');
   const TIN = DEV.map((_, i) => B(38 + i)); // ognuno arriva su una battuta
@@ -401,7 +401,7 @@ const FT = i => B(12 + i * 4); // inizio della funzione i
   sfx(B(36), 'slam'); sfx(B(37), 'slam'); sfx(B(38) - .3, 'whoosh');
   sfx(B(44), 'success'); sfx(B(44), 'impactS');
   S.render = t => {
-    // pausa: contorno che passa da telefono a tablet e "Un'app. Ogni schermo."
+    // pausa: contorno che passa da telefono a tablet e "Va sul telefono e anche sul tablet"
     const ph = (t - B(36)) / Q, k = Math.floor(ph), pk = E.inOut(clamp((ph - k) / .6));
     const shapes = [[330, 680, 56], [880, 600, 44], [600, 600, 40], [1040, 640, 40]];
     const a = shapes[k % 4], b = shapes[(k + 1) % 4], sh = a.map((v, i) => lerp(v, b[i], pk));
@@ -447,7 +447,7 @@ const FT = i => B(12 + i * 4); // inizio della funzione i
   ];
   const SW = ACC_KEYS.map(k => ACC[k][1][0]);
   const S = addScene(B(46), B(56) + .05, `
-    <div class="a center" id="tt" style="left:0;width:1920px;top:44px;font-size:76px;font-weight:800;letter-spacing:-.03em">Fatta <em class="grad">a modo tuo.</em></div>
+    <div class="a center" id="tt" style="left:0;width:1920px;top:44px;font-size:76px;font-weight:800;letter-spacing:-.03em">Te la imposti <em class="grad">come ti piace</em></div>
     <div class="a" id="ph" style="left:470px;top:150px">${devHTML('iphone', SEQ[0][0], `<div class="app" id="la" style="position:absolute;inset:0">${homePhone('Chiara')}</div><div class="app" id="lb" style="position:absolute;inset:0">${homePhone('Chiara')}</div>`)}</div>
     <div class="a panel" id="pn" style="left:1010px;top:250px;width:640px;padding:34px 36px">
       <div style="font-size:20px;font-weight:700;letter-spacing:.16em;color:#9FB0E8">STILE</div>
@@ -457,12 +457,12 @@ const FT = i => B(12 + i * 4); // inizio della funzione i
       <div style="display:flex;justify-content:space-between;margin-top:34px"><span style="font-size:20px;font-weight:700;letter-spacing:.16em;color:#9FB0E8">COLORE</span><span id="cn" style="font-size:22px;font-weight:700"></span></div>
       <div style="display:flex;justify-content:space-between;margin-top:20px;padding:0 10px">${SW.map(c => `<div class="sw" style="background:${c}"><div class="ring"></div></div>`).join('')}</div>
     </div>
-    <div class="a center" id="eq" style="left:1010px;width:640px;top:770px;font-size:31px;font-weight:600;color:#DCE3FF">2 stili <span style="color:var(--faint)">×</span> chiaro e scuro <span style="color:var(--faint)">×</span> 6 colori</div>
+    <div class="a center" id="eq" style="left:1010px;width:640px;top:770px;font-size:31px;font-weight:600;color:#DCE3FF">Lo trovi in Impostazioni › Aspetto</div>
     <div class="layer" id="wall"></div>
     <div class="layer" id="wdim" style="background:radial-gradient(ellipse at center,rgba(2,4,9,.88) 22%,rgba(2,4,9,.2) 70%)"></div>
     <div class="a center" id="n24" style="left:0;width:1920px;top:250px;font-size:330px;font-weight:800;letter-spacing:-.06em;line-height:1"><em class="grad">24</em></div>
-    <div class="a center big" id="w1" style="left:0;width:1920px;top:590px;font-size:84px">combinazioni.</div>
-    <div class="a center" id="w2" style="left:0;width:1920px;top:710px;font-size:60px;font-weight:600;color:#DCE3FF">Una è la tua.</div>`);
+    <div class="a center big" id="w1" style="left:0;width:1920px;top:590px;font-size:84px">versioni diverse,</div>
+    <div class="a center" id="w2" style="left:0;width:1920px;top:710px;font-size:60px;font-weight:600;color:#DCE3FF">e quella giusta la scegli tu</div>`);
   // il muro: righe = stile e tema, colonne = colore
   const ROWS = [st('glass', false), st('glass', true), st('mat', false), st('mat', true)];
   const wall = S.q('#wall');
@@ -518,11 +518,11 @@ const FT = i => B(12 + i * 4); // inizio della funzione i
 // 6 · FIDUCIA (battute 56–59)
 // =====================================================================================
 {
-  const ROWS = [['smartphone', "Se vuoi, l'AI gira sul tuo telefono.", '#60A5FA'], ['shield-check', 'Ogni classe ha i suoi dati, separati.', '#34D399'],
-    ['lock', "L'AI non riceve mai i tuoi dati personali.", '#C4B5FD']];
-  const S = addScene(B(56), B(59) + .05, `<div class="layer" id="tg">${ROWS.map(([ic, tx, c], i) => `<div class="a tr" style="left:0;width:1920px;top:${300 + i * 170}px;display:flex;justify-content:center">
+  const ROWS = [['lock', "L'AI legge solo le circolari della scuola, i tuoi dati personali non li vede mai.", '#C4B5FD'],
+    ['smartphone', 'E se preferisci, la fai girare direttamente sul tuo telefono.', '#60A5FA']];
+  const S = addScene(B(56), B(59) + .05, `<div class="layer" id="tg">${ROWS.map(([ic, tx, c], i) => `<div class="a tr" style="left:0;width:1920px;top:${330 + i * 220}px;display:flex;justify-content:center">
     <div style="display:flex;align-items:center;gap:34px"><div style="width:110px;height:110px;border-radius:32px;display:grid;place-items:center;background:${c}22;border:2px solid ${c}66;color:${c}">${I(ic, 'style="width:54px;height:54px"')}</div>
-    <div style="font-size:62px;font-weight:700;letter-spacing:-.02em">${tx}</div></div></div>`).join('')}</div>`);
+    <div style="font-size:52px;font-weight:700;letter-spacing:-.02em;line-height:1.25;max-width:1300px">${tx}</div></div></div>`).join('')}</div>`);
   const tr = S.qa('.tr');
   ROWS.forEach((_, i) => sfx(B(56 + i), 'slam'));
   sfx(B(58.5), 'riser');
@@ -544,16 +544,15 @@ const FT = i => B(12 + i * 4); // inizio della funzione i
     <div class="layer" id="lg">
       <div class="a" id="logo2" style="left:820px;top:150px;width:280px;height:280px">${logoSVG('F')}</div>
       <div class="a center" id="wm2" style="left:0;width:1920px;top:450px;font-size:200px;font-weight:800;letter-spacing:.05em;line-height:1"><span class="w">A</span><span class="w">I</span><span class="w">L</span><span class="w">A</span></div>
-      <div class="a center" id="tag2" style="left:0;width:1920px;top:690px;font-size:46px;font-weight:500;color:#DCE3FF">La tua scuola, <em class="grad" style="font-weight:700">sincronizzata.</em></div>
+      <div class="a center" id="tag2" style="left:0;width:1920px;top:690px;font-size:46px;font-weight:500;color:#DCE3FF">L'app per la <em class="grad" style="font-weight:700">vita di classe</em></div>
       <div class="a" id="plat" style="left:0;width:1920px;top:800px;display:flex;justify-content:center;gap:16px">
         ${[['smartphone', 'Android'], ['smartphone', 'iPhone'], ['tablet', 'Tablet'], ['tablet', 'iPadOS']].map(([ic, l]) => `<span class="chip pl">${I(ic, 'style="color:#A5B8FF"')}${l}</span>`).join('')}</div>
     </div>
     <div class="a" id="qr" style="left:1210px;top:190px;width:520px">
-      <div class="center" style="font-size:54px;font-weight:800;letter-spacing:-.02em">Installala <em class="grad">ora.</em></div>
+      <div class="center" style="font-size:44px;font-weight:700;letter-spacing:-.01em;line-height:1.2">Inquadra il codice<br>e <em class="grad">scaricala</em></div>
       <div class="qrbox" style="padding:40px;margin:30px auto 0;width:${size + 80}px;position:relative;overflow:hidden">${qrSVG}
         <div id="scan" class="a" style="left:0;right:0;top:0;height:70px;background:linear-gradient(180deg,transparent,rgba(90,140,255,.28),transparent)"></div></div>
-      <div class="center" style="font-size:27px;font-weight:600;color:#DCE3FF;margin-top:30px">${I('scan-line', 'style="width:30px;height:30px;vertical-align:-7px;color:#9DB6FF"')}&nbsp; Inquadra il codice</div>
-      <div class="center" style="font-size:22px;color:var(--muted);margin-top:10px">Ti serve solo il codice della tua classe.</div>
+      <div class="center" style="font-size:24px;color:#C9D3FF;margin-top:28px;line-height:1.4">Per registrarti ti serve<br>il codice della tua classe.</div>
     </div>
     <div class="a center" id="cred" style="left:0;width:1920px;top:1000px;font-size:23px;color:var(--faint)">Un progetto di Simone Bianchin</div>`);
   const wm = S.q('#wm2'); wm._w = [...wm.querySelectorAll('.w')];
