@@ -52,7 +52,7 @@ class AilaAssistant(
         private const val MAX_PDF_CHARS_PER_CIRCULAR = 150_000
 
         /** Attesa massima di una risposta di Gemini, dalla domanda alla risposta in chat. */
-        private const val TARGET_REPLY_MS = 19_000L
+        private const val TARGET_REPLY_MS = 30_000L
 
         /** Tempo concesso ai PDF letti prima della domanda: il resto va al modello. */
         private const val PREFETCH_BUDGET_MS = 4_000L
