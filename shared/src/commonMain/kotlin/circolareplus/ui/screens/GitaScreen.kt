@@ -2,30 +2,40 @@
 
 package circolareplus.ui.screens
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -40,12 +50,15 @@ import circolareplus.design.AilaConfirmDialog
 import circolareplus.design.AilaEmptyState
 import circolareplus.design.AilaErrorState
 import circolareplus.design.AilaFab
+import circolareplus.design.AilaListRow
+import circolareplus.design.AilaPillTextField
 import circolareplus.design.AilaPrimaryButton
-import circolareplus.design.AilaSecondaryButton
 import circolareplus.design.AilaSectionTitle
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
+import circolareplus.design.ailaAppear
 import circolareplus.domain.model.GitaCategory
+import circolareplus.domain.model.GitaCircular
 import circolareplus.domain.model.GitaFeed
 import circolareplus.domain.model.GitaItem
 import circolareplus.domain.model.GitaReport
@@ -55,24 +68,36 @@ import circolareplus.platform.sharePdfFile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
-/** Quale finestra è aperta sopra la schermata Gita. */
+/** Finestra aperta sopra la schermata Gita. */
 private sealed interface GitaSheet {
-    data class AddDocument(val fileName: String, val bytes: ByteArray) : GitaSheet
+    data object Choose : GitaSheet
+    data class NewDocument(val fileName: String, val bytes: ByteArray) : GitaSheet
     data class ReplaceDocument(val item: GitaItem, val fileName: String, val bytes: ByteArray) : GitaSheet
-    data object AddLink : GitaSheet
+    data object NewLink : GitaSheet
     data class ReplaceLink(val item: GitaItem) : GitaSheet
-    data class EditItem(val item: GitaItem) : GitaSheet
+    data class Detail(val item: GitaItem) : GitaSheet
+    data class Edit(val item: GitaItem) : GitaSheet
     data class Versions(val item: GitaItem) : GitaSheet
     data class Report(val item: GitaItem) : GitaSheet
 }
 
+/** Colori di ogni categoria: sfondo tenue per la riga e colore pieno per la selezione. */
+private data class CategoryTint(val tint: Color, val ink: Color, val label: String)
+
+private fun GitaCategory.look(): CategoryTint = when (this) {
+    GitaCategory.PROGRAMMA -> CategoryTint(AppTheme.TintBlue, AppTheme.TintBlueInk, label)
+    GitaCategory.PREVENTIVO -> CategoryTint(AppTheme.TintAmber, AppTheme.TintAmberInk, label)
+    GitaCategory.SCADENZA -> CategoryTint(AppTheme.TintRed, AppTheme.TintRedInk, label)
+    GitaCategory.REGOLAMENTO -> CategoryTint(AppTheme.TintViolet, AppTheme.TintVioletInk, label)
+    GitaCategory.PAGAMENTO -> CategoryTint(AppTheme.TintGreen, AppTheme.TintGreenInk, label)
+    GitaCategory.ALTRO -> CategoryTint(AppTheme.TintSlate, AppTheme.TintSlateInk, label)
+}
+
 /**
- * Gita: documenti e link della classe, con lo storico delle versioni. Chiunque legge; solo il
- * Rappresentante carica, sostituisce, modifica e ritira. Ogni utente può segnalare una voce, e il
- * segnalante vede lo stato della segnalazione.
- *
- * Il pulsante AILA Assistant in basso a destra apre la chat dell'assistente: quella chat risponde
- * solo con il materiale della gita (vedi [onOpenAssistant]).
+ * Gita: documenti, link e circolari della classe, con lo storico delle versioni.
+ * Chiunque legge; solo il Rappresentante carica, sostituisce, modifica, ritira e sceglie le
+ * circolari. Ogni utente può segnalare una voce e vede lo stato della sua segnalazione.
+ * Il pulsante AILA Assistant apre la chat che risponde solo con il materiale della gita.
  */
 @Composable
 fun GitaScreen(
@@ -83,8 +108,8 @@ fun GitaScreen(
     onMaterialChanged: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val uriHandler = LocalUriHandler.current
     var feed by remember { mutableStateOf<GitaFeed?>(null) }
-    var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
     var sheet by remember { mutableStateOf<GitaSheet?>(null) }
@@ -94,26 +119,26 @@ fun GitaScreen(
     // Voce da sostituire mentre si sceglie il file: il picker torna con il file, non con la voce.
     var replaceTarget by remember { mutableStateOf<GitaItem?>(null) }
 
-    fun failure(e: Throwable): String? = when (e) {
-        is CancellationException -> throw e
-        is ApiException -> e.message
+    fun messageOf(e: Throwable): String = when (e) {
+        is ApiException -> e.message ?: "Operazione non riuscita."
         else -> "Operazione non riuscita. Riprova."
     }
 
-    /** Esegue una scrittura: occupato durante l'attesa, poi ricarica e avvisa l'assistente. */
-    fun write(successMessage: String, action: suspend () -> Unit) {
+    /** Una scrittura: occupato durante l'attesa, poi ricarica e chiude la finestra. */
+    fun write(message: String, action: suspend () -> Unit) {
         scope.launch {
             busy = true
+            notice = null
             try {
                 action()
-                notice = successMessage
+                notice = message
                 sheet = null
                 onMaterialChanged()
                 reloadKey++
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                notice = failure(e)
+                notice = messageOf(e)
             } finally {
                 busy = false
             }
@@ -123,225 +148,179 @@ fun GitaScreen(
     val pickPdf = rememberPdfFilePicker { fileName, bytes ->
         val target = replaceTarget
         sheet = if (target != null) GitaSheet.ReplaceDocument(target, fileName, bytes)
-        else GitaSheet.AddDocument(fileName, bytes)
+        else GitaSheet.NewDocument(fileName, bytes)
         replaceTarget = null
     }
 
     LaunchedEffect(reloadKey) {
-        loading = feed == null
         try {
             feed = repository.feed()
             error = null
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            error = failure(e)
-        } finally {
-            loading = false
+            error = messageOf(e)
         }
     }
 
-    val canEdit = feed?.canEdit == true
+    val current = feed
+    val canEdit = current?.canEdit == true
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            AilaBackBar(title = "Gita", onBackClick = onBackClick)
-            val current = feed
+            AilaBackBar(
+                title = "Gita",
+                onBackClick = onBackClick,
+                action = if (canEdit) {
+                    {
+                        AilaPrimaryButton(
+                            text = "Nuovo",
+                            compact = true,
+                            enabled = !busy,
+                            onClick = { sheet = GitaSheet.Choose }
+                        )
+                    }
+                } else null
+            )
             when {
-                current == null && loading -> Box(Modifier.fillMaxSize()) {
-                    AilaEmptyState(title = "Caricamento della gita…")
+                current == null && error == null -> Box(Modifier.fillMaxSize()) {
+                    AilaEmptyState(title = "Carico la gita…")
                 }
-                current == null -> AilaErrorState(
-                    message = error ?: "Gita non disponibile.",
-                    onRetry = { reloadKey++ }
+                current == null -> AilaErrorState(message = error ?: "Gita non disponibile.", onRetry = { reloadKey++ })
+                else -> GitaList(
+                    feed = current,
+                    notice = notice,
+                    onOpen = { sheet = GitaSheet.Detail(it) },
+                    onReport = { sheet = GitaSheet.Report(it) },
+                    onPinCircular = { circular, pinned ->
+                        write(if (pinned) "Circolare aggiunta alla gita." else "Circolare tolta dalla gita.") {
+                            repository.setCircularPinned(circular.number, pinned)
+                        }
+                    },
+                    onResolveReport = { report ->
+                        write("Segnalazione risolta.") { repository.setReportResolved(report.id, resolved = true) }
+                    },
+                    canEdit = canEdit,
+                    busy = busy,
                 )
-                else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = AppTheme.Space16),
-                    verticalArrangement = Arrangement.spacedBy(AppTheme.Space12),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 120.dp, top = AppTheme.Space8)
-                ) {
-                    notice?.let { text ->
-                        item(key = "notice") {
-                            Text(text, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
-                        }
-                    }
-                    if (canEdit) {
-                        item(key = "rep-actions") {
-                            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
-                                AilaPrimaryButton(
-                                    text = "Carica PDF",
-                                    compact = true,
-                                    onClick = {
-                                        replaceTarget = null
-                                        pickPdf()
-                                    }
-                                )
-                                AilaSecondaryButton(
-                                    text = "Aggiungi link",
-                                    compact = true,
-                                    onClick = { sheet = GitaSheet.AddLink }
-                                )
-                            }
-                        }
-                    }
-
-                    val documents = current.items.filter { !it.isLink }
-                    val links = current.items.filter { it.isLink }
-
-                    item(key = "docs-title") { AilaSectionTitle(text = "Documenti") }
-                    if (documents.isEmpty()) {
-                        item(key = "docs-empty") {
-                            Text("Nessun documento caricato.", style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
-                        }
-                    }
-                    items(documents, key = { "doc-${it.id}" }) { item ->
-                        GitaItemCard(
-                            item = item,
-                            canEdit = canEdit,
-                            onOpen = {
-                                scope.launch {
-                                    try {
-                                        val version = item.current ?: return@launch
-                                        val bytes = repository.downloadPdf(version.id)
-                                        sharePdfFile(bytes, pdfFileName(item.title))
-                                    } catch (e: CancellationException) {
-                                        throw e
-                                    } catch (e: Exception) {
-                                        notice = failure(e)
-                                    }
-                                }
-                            },
-                            onVersions = { sheet = GitaSheet.Versions(item) },
-                            onReport = { sheet = GitaSheet.Report(item) },
-                            onReplace = {
-                                replaceTarget = item
-                                pickPdf()
-                            },
-                            onEdit = { sheet = GitaSheet.EditItem(item) },
-                            onWithdraw = { toWithdraw = item }
-                        )
-                    }
-
-                    item(key = "links-title") { AilaSectionTitle(text = "Link utili") }
-                    if (links.isEmpty()) {
-                        item(key = "links-empty") {
-                            Text("Nessun link.", style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
-                        }
-                    }
-                    items(links, key = { "link-${it.id}" }) { item ->
-                        GitaLinkCard(
-                            item = item,
-                            canEdit = canEdit,
-                            onVersions = { sheet = GitaSheet.Versions(item) },
-                            onReport = { sheet = GitaSheet.Report(item) },
-                            onReplace = { sheet = GitaSheet.ReplaceLink(item) },
-                            onEdit = { sheet = GitaSheet.EditItem(item) },
-                            onWithdraw = { toWithdraw = item }
-                        )
-                    }
-
-                    if (canEdit) {
-                        val open = current.reports.filter { !it.isResolved }
-                        if (open.isNotEmpty()) {
-                            item(key = "reports-title") { AilaSectionTitle(text = "Segnalazioni da gestire") }
-                            items(open, key = { "rep-${it.id}" }) { report ->
-                                GitaReportCard(
-                                    report = report,
-                                    showAction = true,
-                                    onResolve = {
-                                        write("Segnalazione risolta") { repository.setReportResolved(report.id, resolved = true) }
-                                    }
-                                )
-                            }
-                        }
-                    }
-
-                    val mine = current.reports.filter { canEdit.not() || it.isResolved }
-                    if (mine.isNotEmpty()) {
-                        item(key = "mine-title") {
-                            AilaSectionTitle(text = if (canEdit) "Segnalazioni risolte" else "Le tue segnalazioni")
-                        }
-                        items(mine, key = { "mine-${it.id}" }) { report ->
-                            GitaReportCard(report = report, showAction = false, onResolve = {})
-                        }
-                    }
-                }
             }
         }
 
-        // Pulsante AILA Assistant in basso a destra, come quello della Bacheca ma con il marchio.
+        // AILA Assistant in basso a destra: stessa origine del container transform della lente.
         AilaFab(
             contentDescription = "Chiedi ad AILA Assistant della gita",
             onClick = onOpenAssistant,
+            transformInGlass = true,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = AppTheme.Space16, bottom = AppTheme.Space16)
         ) { tint ->
-            AilaAssistantMark(size = 22.dp, brush = androidx.compose.ui.graphics.SolidColor(tint))
+            AilaAssistantMark(size = 22.dp, brush = SolidColor(tint))
         }
     }
 
     when (val open = sheet) {
-        is GitaSheet.AddDocument -> GitaDocumentSheet(
+        GitaSheet.Choose -> ChooseSheet(
+            onDocument = {
+                replaceTarget = null
+                sheet = null
+                pickPdf()
+            },
+            onLink = { sheet = GitaSheet.NewLink },
+            onDismiss = { sheet = null }
+        )
+        is GitaSheet.NewDocument -> DocumentSheet(
             title = "Nuovo documento",
-            defaultTitle = pdfTitle(open.fileName),
+            fileName = open.fileName,
+            defaultTitle = open.fileName.removeSuffix(".pdf").removeSuffix(".PDF").replace('_', ' ').trim(),
             busy = busy,
             onDismiss = { sheet = null },
             onSave = { title, category, note ->
-                write("Documento caricato") { repository.addDocument(title, category, open.fileName, open.bytes, note) }
+                write("Documento caricato.") {
+                    repository.addDocument(title, category, open.fileName, open.bytes, note)
+                }
             }
         )
-        is GitaSheet.ReplaceDocument -> GitaReplaceSheet(
+        is GitaSheet.ReplaceDocument -> ReplaceSheet(
             item = open.item,
             fileName = open.fileName,
             busy = busy,
             onDismiss = { sheet = null },
             onSave = { note ->
-                write("Nuova versione caricata") {
+                write("Nuova versione caricata.") {
                     repository.replaceDocument(open.item.id, open.fileName, open.bytes, note)
                 }
             }
         )
-        GitaSheet.AddLink -> GitaLinkSheet(
+        GitaSheet.NewLink -> LinkSheet(
             title = "Nuovo link",
             initialTitle = "",
             initialUrl = "",
+            titleEditable = true,
             busy = busy,
             onDismiss = { sheet = null },
-            onSave = { title, url, note ->
-                write("Link aggiunto") { repository.addLink(title, url, note) }
-            }
+            onSave = { title, url, note -> write("Link aggiunto.") { repository.addLink(title, url, note) } }
         )
-        is GitaSheet.ReplaceLink -> GitaLinkSheet(
+        is GitaSheet.ReplaceLink -> LinkSheet(
             title = "Nuovo indirizzo",
             initialTitle = open.item.title,
             initialUrl = open.item.current?.url.orEmpty(),
             titleEditable = false,
             busy = busy,
             onDismiss = { sheet = null },
-            onSave = { _, url, note ->
-                write("Link aggiornato") { repository.replaceLink(open.item.id, url, note) }
+            onSave = { _, url, note -> write("Indirizzo aggiornato.") { repository.replaceLink(open.item.id, url, note) } }
+        )
+        is GitaSheet.Detail -> DetailSheet(
+            item = open.item,
+            canEdit = canEdit,
+            onDismiss = { sheet = null },
+            onOpen = {
+                val version = open.item.current
+                if (open.item.isLink) {
+                    version?.url?.let { uriHandler.openUri(it) }
+                } else if (version != null) {
+                    scope.launch { openPdfVersion(repository, version.id, open.item.title, version.versionNo, onError = { notice = it }) }
+                }
+                sheet = null
+            },
+            onVersions = { sheet = GitaSheet.Versions(open.item) },
+            onReport = { sheet = GitaSheet.Report(open.item) },
+            onReplace = {
+                if (open.item.isLink) {
+                    sheet = GitaSheet.ReplaceLink(open.item)
+                } else {
+                    replaceTarget = open.item
+                    sheet = null
+                    pickPdf()
+                }
+            },
+            onEdit = { sheet = GitaSheet.Edit(open.item) },
+            onWithdraw = {
+                sheet = null
+                toWithdraw = open.item
             }
         )
-        is GitaSheet.EditItem -> GitaEditSheet(
+        is GitaSheet.Edit -> EditSheet(
             item = open.item,
             busy = busy,
             onDismiss = { sheet = null },
             onSave = { title, category ->
-                write("Modifiche salvate") { repository.updateItem(open.item.id, title, category) }
+                write("Modifiche salvate.") { repository.updateItem(open.item.id, title, category) }
             }
         )
-        is GitaSheet.Versions -> GitaVersionsSheet(
+        is GitaSheet.Versions -> VersionsSheet(
             item = open.item,
             repository = repository,
-            onDismiss = { sheet = null }
+            onDismiss = { sheet = null },
+            onNotice = { notice = it },
+            onOpenUrl = { uriHandler.openUri(it) }
         )
-        is GitaSheet.Report -> GitaReportSheet(
+        is GitaSheet.Report -> ReportSheet(
             item = open.item,
             busy = busy,
             onDismiss = { sheet = null },
             onSend = { reason ->
-                write("Segnalazione inviata: grazie") { repository.report(open.item.id, reason) }
+                write("Segnalazione inviata: riceverai lo stato.") { repository.report(open.item.id, reason) }
             }
         )
         null -> Unit
@@ -350,127 +329,239 @@ fun GitaScreen(
     toWithdraw?.let { item ->
         AilaConfirmDialog(
             title = "Ritirare «${item.title}»?",
-            message = "La voce non sarà più visibile in classe. Le versioni precedenti restano consultabili dal Rappresentante.",
+            message = "La voce non sarà più visibile in classe. Lo storico resta consultabile dal Rappresentante.",
             confirmLabel = "Ritira",
             onDismiss = { toWithdraw = null },
             onConfirm = {
                 toWithdraw = null
-                write("Voce ritirata") { repository.withdraw(item.id) }
+                write("Voce ritirata.") { repository.withdraw(item.id) }
             }
         )
     }
 }
 
 @Composable
-private fun GitaItemCard(
+private fun GitaList(
+    feed: GitaFeed,
+    notice: String?,
+    onOpen: (GitaItem) -> Unit,
+    onReport: (GitaItem) -> Unit,
+    onPinCircular: (GitaCircular, Boolean) -> Unit,
+    onResolveReport: (GitaReport) -> Unit,
+    canEdit: Boolean,
+    busy: Boolean,
+) {
+    val documents = feed.items.filter { !it.isLink }
+    val links = feed.items.filter { it.isLink }
+    val openReports = feed.reports.count { !it.isResolved }
+    val lastUpdate = feed.items.mapNotNull { it.current?.uploadedAt }.maxOrNull()
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = AppTheme.Space16, end = AppTheme.Space16, top = AppTheme.Space8, bottom = 120.dp),
+        verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+    ) {
+        item(key = "summary") {
+            AilaCard(modifier = Modifier.fillMaxWidth().ailaAppear(0)) {
+                Text("${documents.size} documenti · ${links.size} link · ${feed.circulars.size} circolari", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(AppTheme.Space4))
+                Text(
+                    lastUpdate?.let { "Ultimo aggiornamento il ${formatDay(it)}" } ?: "Nessun materiale ancora caricato",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTheme.TextMuted
+                )
+                if (openReports > 0) {
+                    Spacer(Modifier.height(AppTheme.Space4))
+                    Text(
+                        if (canEdit) "$openReports segnalazioni da leggere" else "$openReports segnalazioni in attesa",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTheme.TintAmberInk
+                    )
+                }
+            }
+        }
+        notice?.let { text ->
+            item(key = "notice") {
+                Text(text, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TintGreenInk, modifier = Modifier.padding(horizontal = AppTheme.Space4))
+            }
+        }
+
+        item(key = "circulars-title") { AilaSectionTitle(text = "Circolari della gita") }
+        if (feed.circulars.isEmpty()) {
+            item(key = "circulars-empty") { SubtleLine("Nessuna circolare sulla gita per questa classe.") }
+        }
+        itemsIndexed(feed.circulars, key = { _, c -> "circular-${c.number}" }) { index, circular ->
+            AilaListRow(
+                title = "Circolare n. ${circular.number}",
+                subtitle = "${circular.title} · ${formatDay(circular.publishDate)}",
+                tint = AppTheme.TintBlue,
+                icon = { AppIcons.Document(modifier = Modifier.size(20.dp), color = AppTheme.TintBlueInk) },
+                trailing = if (canEdit) {
+                    {
+                        AilaRowText(
+                            text = if (circular.pinned) "Togli" else "Aggiungi",
+                            enabled = !busy,
+                            onClick = { onPinCircular(circular, !circular.pinned) }
+                        )
+                    }
+                } else null,
+                modifier = Modifier.fillMaxWidth().ailaAppear(index + 1)
+            )
+        }
+
+        item(key = "docs-title") { AilaSectionTitle(text = "Documenti") }
+        if (documents.isEmpty()) item(key = "docs-empty") { SubtleLine("Nessun documento caricato.") }
+        itemsIndexed(documents, key = { _, i -> "doc-${i.id}" }) { index, item ->
+            ItemRow(item = item, onClick = { onOpen(item) }, modifier = Modifier.ailaAppear(index + 1))
+        }
+
+        item(key = "links-title") { AilaSectionTitle(text = "Link utili") }
+        if (links.isEmpty()) item(key = "links-empty") { SubtleLine("Nessun link.") }
+        itemsIndexed(links, key = { _, i -> "link-${i.id}" }) { index, item ->
+            ItemRow(item = item, onClick = { onOpen(item) }, modifier = Modifier.ailaAppear(index + 1))
+        }
+
+        if (feed.reports.isNotEmpty()) {
+            item(key = "reports-title") { AilaSectionTitle(text = if (canEdit) "Segnalazioni" else "Le tue segnalazioni") }
+            items(feed.reports, key = { "report-${it.id}" }) { report ->
+                ReportRow(
+                    report = report,
+                    showResolve = canEdit && !report.isResolved,
+                    busy = busy,
+                    onResolve = { onResolveReport(report) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ItemRow(item: GitaItem, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val look = if (item.isLink) CategoryTint(AppTheme.TintSlate, AppTheme.TintSlateInk, "Link") else item.category.look()
+    val version = item.current
+    val subtitle = if (item.isLink) {
+        "Link · aggiornato il ${formatDay(version?.uploadedAt ?: item.createdAt)}"
+    } else {
+        "${look.label} · ${formatDay(version?.uploadedAt ?: item.createdAt)}" + (version?.let { " · v${it.versionNo}" } ?: "")
+    }
+    AilaListRow(
+        title = item.title,
+        subtitle = subtitle,
+        tint = look.tint,
+        onClick = onClick,
+        icon = {
+            if (item.isLink) AppIcons.ExternalLink(modifier = Modifier.size(20.dp), color = look.ink)
+            else AppIcons.Document(modifier = Modifier.size(20.dp), color = look.ink)
+        },
+        modifier = modifier.fillMaxWidth()
+    )
+}
+
+@Composable
+private fun ReportRow(report: GitaReport, showResolve: Boolean, busy: Boolean, onResolve: () -> Unit) {
+    AilaCard(modifier = Modifier.fillMaxWidth()) {
+        Text(report.itemTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.height(AppTheme.Space4))
+        Text(report.reason, style = MaterialTheme.typography.bodyMedium)
+        Spacer(Modifier.height(AppTheme.Space4))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            StatusChip(
+                text = if (report.isResolved) "Risolta" else "In attesa",
+                tint = if (report.isResolved) AppTheme.TintGreen else AppTheme.TintAmber,
+                ink = if (report.isResolved) AppTheme.TintGreenInk else AppTheme.TintAmberInk,
+            )
+            Spacer(Modifier.size(AppTheme.Space8))
+            Text(formatDay(report.createdAt), style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+            if (showResolve) {
+                Spacer(Modifier.weight(1f))
+                AilaRowText(text = "Risolvi", enabled = !busy, onClick = onResolve)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailSheet(
     item: GitaItem,
     canEdit: Boolean,
+    onDismiss: () -> Unit,
     onOpen: () -> Unit,
     onVersions: () -> Unit,
     onReport: () -> Unit,
     onReplace: () -> Unit,
     onEdit: () -> Unit,
-    onWithdraw: () -> Unit
+    onWithdraw: () -> Unit,
 ) {
-    AilaCard(modifier = Modifier.fillMaxWidth()) {
-        Text(item.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        Spacer(Modifier.height(AppTheme.Space4))
-        Text(
-            "${item.category.label} · caricato il ${formatUploadDate(item.current?.uploadedAt ?: item.createdAt)}" +
-                (item.current?.versionNo?.let { " · versione $it" } ?: ""),
-            style = MaterialTheme.typography.bodySmall,
-            color = AppTheme.TextMuted
-        )
-        Spacer(Modifier.height(AppTheme.Space12))
-        Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
-            AilaPrimaryButton(text = "Apri", compact = true, onClick = onOpen, enabled = item.current?.hasFile == true)
-            AilaSecondaryButton(text = "Storico", compact = true, onClick = onVersions)
-            AilaSecondaryButton(text = "Segnala", compact = true, onClick = onReport)
-        }
-        if (canEdit) {
-            Spacer(Modifier.height(AppTheme.Space8))
-            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
-                AilaSecondaryButton(text = "Sostituisci", compact = true, onClick = onReplace)
-                AilaSecondaryButton(text = "Modifica", compact = true, onClick = onEdit)
-                AilaSecondaryButton(text = "Ritira", compact = true, onClick = onWithdraw)
+    val look = if (item.isLink) CategoryTint(AppTheme.TintSlate, AppTheme.TintSlateInk, "Link") else item.category.look()
+    AilaBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space20), verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
+            StatusChip(text = look.label, tint = look.tint, ink = look.ink)
+            Text(item.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text(
+                "Aggiornato il ${formatDay(item.current?.uploadedAt ?: item.createdAt)}" + (item.current?.let { " · versione ${it.versionNo}" } ?: ""),
+                style = MaterialTheme.typography.bodyMedium,
+                color = AppTheme.TextMuted
+            )
+            AilaPrimaryButton(
+                text = if (item.isLink) "Apri il link" else "Apri il PDF",
+                fillMaxWidth = true,
+                enabled = if (item.isLink) item.current?.url != null else item.current?.hasFile == true,
+                onClick = onOpen
+            )
+            AilaCard(modifier = Modifier.fillMaxWidth()) {
+                AilaListRow(title = "Storico versioni", tint = AppTheme.TintBlue, onClick = onVersions,
+                    icon = { AppIcons.History(modifier = Modifier.size(20.dp), color = AppTheme.TintBlueInk) })
+                AilaListRow(title = "Segnala un errore", subtitle = "Dati sbagliati o non aggiornati", tint = AppTheme.TintAmber, onClick = onReport,
+                    icon = { AppIcons.Warning(modifier = Modifier.size(20.dp), color = AppTheme.TintAmberInk) })
+                if (canEdit) {
+                    AilaListRow(title = if (item.isLink) "Nuovo indirizzo" else "Sostituisci il file", tint = AppTheme.TintBlue, onClick = onReplace,
+                        icon = { AppIcons.Refresh(modifier = Modifier.size(20.dp), color = AppTheme.TintBlueInk) })
+                    AilaListRow(title = "Modifica", tint = AppTheme.TintSlate, onClick = onEdit,
+                        icon = { AppIcons.Pencil(modifier = Modifier.size(20.dp), color = AppTheme.TintSlateInk) })
+                    AilaListRow(title = "Ritira", subtitle = "Non sarà più visibile in classe", tint = AppTheme.TintRed, onClick = onWithdraw,
+                        icon = { AppIcons.Trash(modifier = Modifier.size(20.dp), color = AppTheme.TintRedInk) })
+                }
             }
+            Spacer(Modifier.height(AppTheme.Space16))
         }
     }
 }
 
 @Composable
-private fun GitaLinkCard(
-    item: GitaItem,
-    canEdit: Boolean,
-    onVersions: () -> Unit,
-    onReport: () -> Unit,
-    onReplace: () -> Unit,
-    onEdit: () -> Unit,
-    onWithdraw: () -> Unit
-) {
-    val uriHandler = LocalUriHandler.current
-    AilaCard(modifier = Modifier.fillMaxWidth()) {
-        Text(item.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        Spacer(Modifier.height(AppTheme.Space4))
-        Text(
-            "Aggiornato il ${formatUploadDate(item.current?.uploadedAt ?: item.createdAt)}",
-            style = MaterialTheme.typography.bodySmall,
-            color = AppTheme.TextMuted
-        )
-        Spacer(Modifier.height(AppTheme.Space12))
-        Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
-            AilaPrimaryButton(text = "Apri", compact = true, onClick = { item.current?.url?.let { uriHandler.openUri(it) } })
-            AilaSecondaryButton(text = "Storico", compact = true, onClick = onVersions)
-            AilaSecondaryButton(text = "Segnala", compact = true, onClick = onReport)
-        }
-        if (canEdit) {
-            Spacer(Modifier.height(AppTheme.Space8))
-            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
-                AilaSecondaryButton(text = "Nuovo indirizzo", compact = true, onClick = onReplace)
-                AilaSecondaryButton(text = "Modifica", compact = true, onClick = onEdit)
-                AilaSecondaryButton(text = "Ritira", compact = true, onClick = onWithdraw)
+private fun ChooseSheet(onDocument: () -> Unit, onLink: () -> Unit, onDismiss: () -> Unit) {
+    AilaBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space20), verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+            Text("Aggiungi alla gita", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            AilaCard(modifier = Modifier.fillMaxWidth()) {
+                AilaListRow(title = "Carica un PDF", subtitle = "Programma, preventivo, scadenze, regolamento", tint = AppTheme.TintBlue, onClick = onDocument,
+                    icon = { AppIcons.Document(modifier = Modifier.size(20.dp), color = AppTheme.TintBlueInk) })
+                AilaListRow(title = "Aggiungi un link", subtitle = "Sito dell'agenzia o altre pagine", tint = AppTheme.TintSlate, onClick = onLink,
+                    icon = { AppIcons.ExternalLink(modifier = Modifier.size(20.dp), color = AppTheme.TintSlateInk) })
             }
+            Spacer(Modifier.height(AppTheme.Space16))
         }
     }
 }
 
 @Composable
-private fun GitaReportCard(report: GitaReport, showAction: Boolean, onResolve: () -> Unit) {
-    AilaCard(modifier = Modifier.fillMaxWidth()) {
-        Text(report.itemTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        Spacer(Modifier.height(AppTheme.Space4))
-        Text(report.reason, style = MaterialTheme.typography.bodyMedium)
-        Spacer(Modifier.height(AppTheme.Space4))
-        Text(
-            if (report.isResolved) "Risolta il ${formatUploadDate(report.resolvedAt ?: report.createdAt)}"
-            else "In attesa · inviata il ${formatUploadDate(report.createdAt)}",
-            style = MaterialTheme.typography.bodySmall,
-            color = if (report.isResolved) AppTheme.TintGreenInk else AppTheme.TextMuted
-        )
-        if (showAction) {
-            Spacer(Modifier.height(AppTheme.Space8))
-            AilaPrimaryButton(text = "Segna come risolta", compact = true, onClick = onResolve)
-        }
-    }
-}
-
-@Composable
-private fun GitaDocumentSheet(
+private fun DocumentSheet(
     title: String,
+    fileName: String,
     defaultTitle: String,
     busy: Boolean,
     onDismiss: () -> Unit,
-    onSave: (String, GitaCategory, String?) -> Unit
+    onSave: (String, GitaCategory, String?) -> Unit,
 ) {
     var docTitle by remember { mutableStateOf(defaultTitle) }
     var category by remember { mutableStateOf(GitaCategory.PROGRAMMA) }
     var note by remember { mutableStateOf("") }
     AilaBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16), verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            OutlinedTextField(value = docTitle, onValueChange = { docTitle = it }, label = { Text("Titolo") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            CategoryPicker(selected = category, onSelect = { category = it })
-            OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Nota (facoltativa)") }, modifier = Modifier.fillMaxWidth())
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space20), verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
+            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text(fileName, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            AilaPillTextField(value = docTitle, onValueChange = { docTitle = it }, placeholder = "Titolo", singleLine = true, modifier = Modifier.fillMaxWidth())
+            CategoryChips(selected = category, onSelect = { category = it })
+            AilaPillTextField(value = note, onValueChange = { note = it }, placeholder = "Nota (facoltativa)", modifier = Modifier.fillMaxWidth())
             AilaPrimaryButton(
                 text = "Carica",
                 fillMaxWidth = true,
@@ -483,53 +574,40 @@ private fun GitaDocumentSheet(
 }
 
 @Composable
-private fun GitaReplaceSheet(
-    item: GitaItem,
-    fileName: String,
-    busy: Boolean,
-    onDismiss: () -> Unit,
-    onSave: (String?) -> Unit
-) {
+private fun ReplaceSheet(item: GitaItem, fileName: String, busy: Boolean, onDismiss: () -> Unit, onSave: (String?) -> Unit) {
     var note by remember { mutableStateOf("") }
     AilaBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16), verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
-            Text("Sostituisci «${item.title}»", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text("File scelto: $fileName. La versione attuale resta nello storico.", style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
-            OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Nota (facoltativa)") }, modifier = Modifier.fillMaxWidth())
-            AilaPrimaryButton(text = "Carica nuova versione", fillMaxWidth = true, enabled = !busy, onClick = { onSave(note.trim().ifEmpty { null }) })
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space20), verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
+            Text("Sostituisci «${item.title}»", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text("Nuovo file: $fileName. La versione attuale resta nello storico.", style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
+            AilaPillTextField(value = note, onValueChange = { note = it }, placeholder = "Nota (facoltativa)", modifier = Modifier.fillMaxWidth())
+            AilaPrimaryButton(text = "Carica la nuova versione", fillMaxWidth = true, enabled = !busy, onClick = { onSave(note.trim().ifEmpty { null }) })
             Spacer(Modifier.height(AppTheme.Space16))
         }
     }
 }
 
 @Composable
-private fun GitaLinkSheet(
+private fun LinkSheet(
     title: String,
     initialTitle: String,
     initialUrl: String,
-    titleEditable: Boolean = true,
+    titleEditable: Boolean,
     busy: Boolean,
     onDismiss: () -> Unit,
-    onSave: (String, String, String?) -> Unit
+    onSave: (String, String, String?) -> Unit,
 ) {
     var linkTitle by remember { mutableStateOf(initialTitle) }
     var url by remember { mutableStateOf(initialUrl) }
     var note by remember { mutableStateOf("") }
     AilaBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16), verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space20), verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
+            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             if (titleEditable) {
-                OutlinedTextField(value = linkTitle, onValueChange = { linkTitle = it }, label = { Text("Titolo") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                AilaPillTextField(value = linkTitle, onValueChange = { linkTitle = it }, placeholder = "Titolo", singleLine = true, modifier = Modifier.fillMaxWidth())
             }
-            OutlinedTextField(
-                value = url,
-                onValueChange = { url = it },
-                label = { Text("Indirizzo (https://…)") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri),
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Nota (facoltativa)") }, modifier = Modifier.fillMaxWidth())
+            AilaPillTextField(value = url, onValueChange = { url = it }, placeholder = "https://…", singleLine = true, modifier = Modifier.fillMaxWidth())
+            AilaPillTextField(value = note, onValueChange = { note = it }, placeholder = "Nota (facoltativa)", modifier = Modifier.fillMaxWidth())
             AilaPrimaryButton(
                 text = "Salva",
                 fillMaxWidth = true,
@@ -542,14 +620,14 @@ private fun GitaLinkSheet(
 }
 
 @Composable
-private fun GitaEditSheet(item: GitaItem, busy: Boolean, onDismiss: () -> Unit, onSave: (String, GitaCategory) -> Unit) {
+private fun EditSheet(item: GitaItem, busy: Boolean, onDismiss: () -> Unit, onSave: (String, GitaCategory) -> Unit) {
     var title by remember { mutableStateOf(item.title) }
     var category by remember { mutableStateOf(item.category) }
     AilaBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16), verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
-            Text("Modifica", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Titolo") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            if (!item.isLink) CategoryPicker(selected = category, onSelect = { category = it })
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space20), verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
+            Text("Modifica", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            AilaPillTextField(value = title, onValueChange = { title = it }, placeholder = "Titolo", singleLine = true, modifier = Modifier.fillMaxWidth())
+            if (!item.isLink) CategoryChips(selected = category, onSelect = { category = it })
             AilaPrimaryButton(text = "Salva", fillMaxWidth = true, enabled = !busy && title.isNotBlank(), onClick = { onSave(title.trim(), category) })
             Spacer(Modifier.height(AppTheme.Space16))
         }
@@ -557,7 +635,13 @@ private fun GitaEditSheet(item: GitaItem, busy: Boolean, onDismiss: () -> Unit, 
 }
 
 @Composable
-private fun GitaVersionsSheet(item: GitaItem, repository: GitaRepository, onDismiss: () -> Unit) {
+private fun VersionsSheet(
+    item: GitaItem,
+    repository: GitaRepository,
+    onDismiss: () -> Unit,
+    onNotice: (String) -> Unit,
+    onOpenUrl: (String) -> Unit,
+) {
     val scope = rememberCoroutineScope()
     var versions by remember { mutableStateOf<List<GitaVersion>?>(null) }
     var failed by remember { mutableStateOf<String?>(null) }
@@ -571,36 +655,28 @@ private fun GitaVersionsSheet(item: GitaItem, repository: GitaRepository, onDism
         }
     }
     AilaBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16), verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
-            Text("Storico · ${item.title}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space20), verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+            Text("Storico", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text(item.title, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
             val list = versions
             when {
-                failed != null -> Text(failed!!, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
-                list == null -> Text("Caricamento…", style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
-                list.isEmpty() -> Text("Nessuna versione.", style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
-                else -> list.forEach { v ->
-                    AilaCard(modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            "Versione ${v.versionNo}${if (v.id == item.current?.id) " (attuale)" else ""}",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text("Caricata il ${formatUploadDate(v.uploadedAt)}", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
-                        v.note?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                        if (v.hasFile) {
-                            Spacer(Modifier.height(AppTheme.Space8))
-                            AilaSecondaryButton(text = "Apri questa versione", compact = true, onClick = {
-                                scope.launch {
-                                    try {
-                                        sharePdfFile(repository.downloadPdf(v.id), pdfFileName(item.title, v.versionNo))
-                                    } catch (e: CancellationException) {
-                                        throw e
-                                    } catch (e: Exception) {
-                                        failed = (e as? ApiException)?.message ?: "File non disponibile."
-                                    }
+                failed != null -> SubtleLine(failed!!)
+                list == null -> SubtleLine("Caricamento…")
+                list.isEmpty() -> SubtleLine("Nessuna versione.")
+                else -> AilaCard(modifier = Modifier.fillMaxWidth()) {
+                    list.forEachIndexed { index, v ->
+                        AilaListRow(
+                            title = "Versione ${v.versionNo}${if (v.id == item.current?.id) " · attuale" else ""}",
+                            subtitle = listOfNotNull("Caricata il ${formatDay(v.uploadedAt)}", v.note).joinToString(" · "),
+                            tint = AppTheme.TintBlue,
+                            onClick = if (v.hasFile || v.url != null) {
+                                {
+                                    if (v.url != null) onOpenUrl(v.url)
+                                    else scope.launch { openPdfVersion(repository, v.id, item.title, v.versionNo, onError = onNotice) }
                                 }
-                            })
-                        }
+                            } else null,
+                            modifier = Modifier.ailaAppear(index),
+                        )
                     }
                 }
             }
@@ -610,44 +686,100 @@ private fun GitaVersionsSheet(item: GitaItem, repository: GitaRepository, onDism
 }
 
 @Composable
-private fun GitaReportSheet(item: GitaItem, busy: Boolean, onDismiss: () -> Unit, onSend: (String) -> Unit) {
+private fun ReportSheet(item: GitaItem, busy: Boolean, onDismiss: () -> Unit, onSend: (String) -> Unit) {
     var reason by remember { mutableStateOf("") }
     AilaBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16), verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
-            Text("Segnala «${item.title}»", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text("Dici cosa non va: errore, data o importo sbagliati, o un documento vecchio. Il Rappresentante la vede e tu ricevi lo stato.",
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space20), verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
+            Text("Segnala un errore", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text("«${item.title}» · errore, data o importo sbagliati, documento vecchio. Il Rappresentante la vede e tu ricevi lo stato.",
                 style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
-            OutlinedTextField(value = reason, onValueChange = { reason = it }, label = { Text("Cosa non va") }, modifier = Modifier.fillMaxWidth(), maxLines = 4)
+            AilaPillTextField(value = reason, onValueChange = { reason = it }, placeholder = "Cosa non va?", modifier = Modifier.fillMaxWidth(), maxLines = 4)
             AilaPrimaryButton(text = "Invia segnalazione", fillMaxWidth = true, enabled = !busy && reason.isNotBlank(), onClick = { onSend(reason.trim()) })
             Spacer(Modifier.height(AppTheme.Space16))
         }
     }
 }
 
+/** Categorie come chip colorati: il selezionato si riempie del colore della categoria, senza spunte. */
 @Composable
-private fun CategoryPicker(selected: GitaCategory, onSelect: (GitaCategory) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space4)) {
-        Text("Tipo", style = MaterialTheme.typography.labelLarge, color = AppTheme.TextMuted)
+private fun CategoryChips(selected: GitaCategory, onSelect: (GitaCategory) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+    ) {
         GitaCategory.entries.forEach { category ->
-            AilaSecondaryButton(
-                text = if (category == selected) "✓ ${category.label}" else category.label,
-                compact = true,
-                onClick = { onSelect(category) },
-                modifier = Modifier.fillMaxWidth()
+            val look = category.look()
+            CategoryChip(
+                label = category.label,
+                tint = look.tint,
+                ink = look.ink,
+                selected = category == selected,
+                onClick = { onSelect(category) }
             )
         }
     }
 }
 
-/** "2026-10-10 12:30:00" o "2026-10-10" → "10/10/2026": la data che legge chi usa l'app. */
-internal fun formatUploadDate(raw: String): String {
+@Composable
+private fun CategoryChip(label: String, tint: Color, ink: Color, selected: Boolean, onClick: () -> Unit) {
+    val background by animateColorAsState(if (selected) ink else tint, label = "gitaChipBg")
+    val text by animateColorAsState(if (selected) Color.White else ink, label = "gitaChipText")
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(100.dp))
+            .background(background)
+            .clickable(onClick = onClick)
+            .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space8),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, style = MaterialTheme.typography.labelLarge, color = text, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+    }
+}
+
+@Composable
+private fun StatusChip(text: String, tint: Color, ink: Color) {
+    Box(
+        modifier = Modifier.clip(RoundedCornerShape(100.dp)).background(tint).padding(horizontal = AppTheme.Space8, vertical = AppTheme.Space4),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text, style = MaterialTheme.typography.labelMedium, color = ink)
+    }
+}
+
+/** Azione di testo dentro una riga o una card, con area di tocco di 44dp. */
+@Composable
+private fun AilaRowText(text: String, enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier.clickable(enabled = enabled, onClick = onClick).padding(horizontal = AppTheme.Space8).height(44.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text, style = MaterialTheme.typography.labelLarge, color = if (enabled) AppTheme.PrimaryBlue else AppTheme.TextMuted, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun SubtleLine(text: String) {
+    Text(text, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted, modifier = Modifier.padding(horizontal = AppTheme.Space4))
+}
+
+/** Scarica il PDF di una versione con il login e apre il foglio di condivisione del sistema. */
+private suspend fun openPdfVersion(repository: GitaRepository, versionId: String, title: String, versionNo: Int, onError: (String) -> Unit) {
+    try {
+        sharePdfFile(repository.downloadPdf(versionId), pdfFileName(title, versionNo))
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        onError((e as? ApiException)?.message ?: "Impossibile aprire il file.")
+    }
+}
+
+/** "2026-10-10 12:30:00" o "2026-10-10" → "10/10/2026". */
+internal fun formatDay(raw: String): String {
     val day = raw.take(10).split("-")
     return if (day.size == 3 && day.all { it.isNotEmpty() }) "${day[2]}/${day[1]}/${day[0]}" else raw
 }
 
-private fun pdfTitle(fileName: String): String = fileName.removeSuffix(".pdf").removeSuffix(".PDF").replace('_', ' ').trim()
-
-private fun pdfFileName(title: String, versionNo: Int? = null): String {
+private fun pdfFileName(title: String, versionNo: Int): String {
     val base = title.replace(Regex("[^A-Za-z0-9 _-]"), "").trim().replace(' ', '_').ifEmpty { "gita" }
-    return if (versionNo == null) "$base.pdf" else "${base}_v$versionNo.pdf"
+    return "${base}_v$versionNo.pdf"
 }

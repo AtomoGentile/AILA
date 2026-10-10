@@ -37,7 +37,8 @@ class GitaRepository(
         return GitaFeed(
             items = dto.items.map { it.toDomain() },
             reports = dto.reports.map { it.toDomain() },
-            canEdit = dto.canEdit
+            canEdit = dto.canEdit,
+            circulars = dto.circulars.map { GitaCircular(it.number, it.title, it.publishDate, it.pinned) }
         )
     }
 
@@ -118,6 +119,12 @@ class GitaRepository(
             if (versionId != null) put("versionId", versionId)
         }
         api.post<Map<String, String>, GitaReportCreatedDto>("/api/gita/items/$itemId/reports", body)
+    }
+
+    /** Aggiunge o toglie una circolare dalla gita della classe. Solo Rappresentante. */
+    suspend fun setCircularPinned(number: Int, pinned: Boolean) {
+        if (pinned) api.post<Map<String, Int>, GitaOkDto>("/api/gita/circulars", mapOf("number" to number))
+        else api.delete<GitaOkDto>("/api/gita/circulars/$number")
     }
 
     /** Il Rappresentante segna la segnalazione come risolta (o la riapre). */

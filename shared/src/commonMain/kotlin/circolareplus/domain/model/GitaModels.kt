@@ -49,8 +49,12 @@ data class GitaReport(
 data class GitaFeed(
     val items: List<GitaItem>,
     val reports: List<GitaReport>,
-    val canEdit: Boolean
+    val canEdit: Boolean,
+    val circulars: List<GitaCircular> = emptyList()
 )
+
+/** Circolare che riguarda la gita di questa classe. [pinned]: aggiunta a mano dal Rappresentante. */
+data class GitaCircular(val number: Int, val title: String, val publishDate: String, val pinned: Boolean)
 
 /** Documento della gita come lo legge l'assistente: testo già estratto dal PDF. */
 data class GitaSourceDoc(

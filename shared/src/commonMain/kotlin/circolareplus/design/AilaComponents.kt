@@ -1291,6 +1291,8 @@ fun AilaFab(
     contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Vale solo in Glass: fa partire e tornare la schermata con il container transform come in Material. */
+    transformInGlass: Boolean = false,
     icon: @Composable (Color) -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -1311,7 +1313,7 @@ fun AilaFab(
         modifier = modifier
             .size(56.dp)
             // Material: il foglio "Nuova proposta" nasce da qui e ci rientra (container transform).
-            .then(if (glass) Modifier else Modifier.ailaTransformOrigin(17.dp, buttonColor = AppTheme.TintBlue))
+            .then(if (glass && !transformInGlass) Modifier else Modifier.ailaTransformOrigin(17.dp, buttonColor = AppTheme.TintBlue))
             .then(if (glass) Modifier.ailaPressScale(interactionSource, 0.9f) else Modifier)
             .shadow(if (glass) 8.dp else 6.dp, shape, ambientColor = Color.Black.copy(alpha = 0.12f), spotColor = Color.Black.copy(alpha = 0.18f))
             .clip(shape)

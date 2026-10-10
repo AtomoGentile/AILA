@@ -6,6 +6,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class GitaFeedDto(
     val items: List<GitaItemDto> = emptyList(),
+    val circulars: List<GitaCircularDto> = emptyList(),
     val reports: List<GitaReportDto> = emptyList(),
     val canEdit: Boolean = false
 )
@@ -83,3 +84,12 @@ data class GitaOkDto(val ok: Boolean = false)
 
 @Serializable
 data class GitaReportCreatedDto(val id: String = "", val status: String = "OPEN")
+
+/** Circolare della gita per questa classe: aggiunta dal Rappresentante o col titolo che ne parla. */
+@Serializable
+data class GitaCircularDto(
+    val number: Int,
+    val title: String = "",
+    val publishDate: String = "",
+    val pinned: Boolean = false
+)
