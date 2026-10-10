@@ -218,7 +218,7 @@ private fun importLibrary(libraryUrl: String, workerUrl: String): Promise<JsAny?
 // useWorkerFetch: font e wasm li scarica direttamente il worker, senza rimbalzare dal thread
 // principale. Niente cMapUrl: vedi il commento di [PdfJs].
 private fun createLoadingTask(lib: JsAny, data: JsAny, wasmUrl: String, fontsUrl: String): JsAny = js(
-    "lib.getDocument({ data: data, wasmUrl: wasmUrl, standardFontDataUrl: fontsUrl, useWorkerFetch: true, verbosity: 0 })"
+    "lib.getDocument({ data: data, wasmUrl: wasmUrl, standardFontDataUrl: fontsUrl, useWorkerFetch: true, isEvalSupported: false, verbosity: 0 })"
 )
 
 private fun documentOf(task: JsAny): Promise<JsAny?> = js("task.promise")
