@@ -1,4 +1,4 @@
-// Tastiera su iOS fuori da Safari (Chrome/Firefox/Edge per iOS e PWA installata).
+// Tastiera su iOS (Safari, Chrome/Firefox/Edge per iOS e PWA installata).
 //
 // Compose mette a fuoco il suo campo di testo nascosto DOPO aver elaborato il tocco (al
 // fotogramma successivo), non dentro il gesto. Safari in una scheda lo tollera; i WKWebView
@@ -15,17 +15,65 @@
   var ua = navigator.userAgent || '';
   var isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   if (!isIOS) return;
-  var standalone = navigator.standalone === true ||
-    (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
-  var otherBrowser = /CriOS|FxiOS|EdgiOS|OPiOS|GSA\//.test(ua);
-  // Safari in una scheda funziona gia' cosi' com'e': non si tocca.
-  if (!standalone && !otherBrowser) return;
 
   var TAP_SLOP_PX = 12;
   var TAP_MAX_MS = 600;
   var decoy = null;
   var root = null;
   var down = null;
+
+
+  // Diagnosi: aprire l'app con ?kbddebug=1 (una volta sola: poi resta attiva finche' non si apre
+  // con ?kbddebug=0). Scrive in alto cosa succede a ogni tocco su un campo di testo.
+  var debug = false;
+  try {
+    var q = /[?&]kbddebug=([01])/.exec(location.search);
+    if (q) localStorage.setItem('aila-kbddebug', q[1]);
+    debug = localStorage.getItem('aila-kbddebug') === '1';
+  } catch (err) { debug = !!/[?&]kbddebug=1/.test(location.search); }
+
+  var logEl = null;
+  var logLines = [];
+  function log(msg) {
+    if (!debug) return;
+    if (!logEl) {
+      logEl = document.createElement('pre');
+      var ls = logEl.style;
+      ls.position = 'fixed'; ls.left = '0'; ls.top = '0'; ls.right = '0'; ls.margin = '0';
+      ls.padding = 'env(safe-area-inset-top) 6px 4px'; ls.zIndex = '2147483647';
+      ls.pointerEvents = 'none'; ls.font = '10px/1.25 ui-monospace, Menlo, monospace';
+      ls.color = '#0f0'; ls.background = 'rgba(0,0,0,0.78)'; ls.whiteSpace = 'pre-wrap';
+      document.body.appendChild(logEl);
+    }
+    var t = new Date();
+    logLines.push(('0' + t.getMinutes()).slice(-2) + ':' + ('0' + t.getSeconds()).slice(-2) + '.' +
+      ('00' + t.getMilliseconds()).slice(-3) + ' ' + msg);
+    if (logLines.length > 18) logLines.shift();
+    logEl.textContent = logLines.join('\n');
+  }
+  function who(el) {
+    if (!el) return 'null';
+    return el.tagName + (el.getAttribute && el.getAttribute('role') ? '[' + el.getAttribute('role') + ']' : '');
+  }
+  function vv() {
+    var v = window.visualViewport;
+    return v ? Math.round(v.height) + 'x' + Math.round(v.width) : '?';
+  }
+  function snapshot(label) {
+    var r = getRoot();
+    log(label + ' doc=' + who(document.activeElement) + ' sr=' + (r ? who(r.activeElement) : 'noroot') + ' vv=' + vv());
+  }
+  if (debug) {
+    window.addEventListener('DOMContentLoaded', function () {
+      log('debug ok; ua=' + (/CriOS/.test(ua) ? 'Chrome' : /FxiOS/.test(ua) ? 'Firefox' : 'Safari/PWA') +
+        ' standalone=' + (navigator.standalone === true) + ' vv=' + vv());
+    });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', function () { log('viewport resize vv=' + vv()); });
+    }
+    document.addEventListener('focusin', function (e) { log('focusin ' + who(e.target)); }, true);
+    document.addEventListener('focusout', function (e) { log('focusout ' + who(e.target)); }, true);
+  }
 
   function getDecoy() {
     if (decoy) return decoy;
@@ -95,6 +143,10 @@
     el.style.top = Math.max(0, box.top) + 'px';
     el.style.height = Math.max(1, box.height) + 'px';
     try { el.focus({ preventScroll: true }); } catch (err) { el.focus(); }
+    snapshot('appoggio a fuoco ->');
+    if (debug) {
+      [100, 300, 700, 1500].forEach(function (ms) { setTimeout(function () { snapshot('+' + ms + 'ms'); }, ms); });
+    }
 
     // Se Compose non ha preso il fuoco (tocco che non apre la tastiera), l'appoggio si toglie.
     setTimeout(function () {
@@ -129,8 +181,12 @@
     if (Math.abs(e.clientX - d.x) > TAP_SLOP_PX || Math.abs(e.clientY - d.y) > TAP_SLOP_PX) return;
 
     var r = getRoot();
-    if (!r) return;
+    if (!r) { log('tap: nessuna radice shadow di Compose'); return; }
     var box = textboxAt(r, e.clientX, e.clientY);
+    if (debug) {
+      log('tap ' + Math.round(e.clientX) + ',' + Math.round(e.clientY) + ' textbox nel DOM=' +
+        r.querySelectorAll('[role="textbox"]').length + ' sotto il dito=' + !!box);
+    }
     if (!box) return;
 
     // Gia' in modifica proprio su questo campo (spostare il cursore): non si ruba il fuoco.
