@@ -65,6 +65,14 @@ const gita = new Hono<Ctx>();
 
 gita.use('*', authMiddleware());
 
+/**
+ * Data e ora di Roma nel formato "AAAA-MM-GG HH:MM:SS". CURRENT_TIMESTAMP di SQLite è in UTC: un
+ * caricamento dopo mezzanotte italiana risulterebbe del giorno prima.
+ */
+export function romeNow(): string {
+  return new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Rome' });
+}
+
 function clean(value: unknown, max: number): string | null {
   if (typeof value !== 'string') return null;
   const t = value.trim();
@@ -209,13 +217,14 @@ async function storeVersion(
     });
   }
   await env.DB.prepare(
-    `INSERT INTO gita_versions (id, item_id, version_no, uploaded_by, file_r2_key, file_mime, file_size,
-       text_r2_key, text_chars, url, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO gita_versions (id, item_id, version_no, uploaded_by, uploaded_at, file_r2_key, file_mime, file_size,
+       text_r2_key, text_chars, url, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     versionId,
     args.itemId,
     versionNo,
     args.uploadedBy,
+    romeNow(),
     fileKey,
     args.file ? 'application/pdf' : null,
     args.file ? args.file.size : null,
@@ -343,8 +352,8 @@ gita.post('/items', requireRole('REPRESENTATIVE'), async (c) => {
     if (!category) return c.json({ error: 'Categoria non valida' }, 400);
     const itemId = newUUID();
     await c.env.DB.prepare(
-      'INSERT INTO gita_items (id, class_id, kind, category, title, created_by) VALUES (?, ?, ?, ?, ?, ?)'
-    ).bind(itemId, classId, 'DOCUMENT', category, title, me).run();
+      'INSERT INTO gita_items (id, class_id, kind, category, title, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).bind(itemId, classId, 'DOCUMENT', category, title, me, romeNow()).run();
     const version = await storeVersion(c.env, {
       classId, itemId, uploadedBy: me, file: form.file, text: form.text, url: null, note: form.note,
     });
@@ -359,8 +368,8 @@ gita.post('/items', requireRole('REPRESENTATIVE'), async (c) => {
   const note = clean(body?.note, MAX_NOTE);
   const itemId = newUUID();
   await c.env.DB.prepare(
-    'INSERT INTO gita_items (id, class_id, kind, category, title, created_by) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(itemId, classId, 'LINK', 'ALTRO', title, me).run();
+    'INSERT INTO gita_items (id, class_id, kind, category, title, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).bind(itemId, classId, 'LINK', 'ALTRO', title, me, romeNow()).run();
   const version = await storeVersion(c.env, {
     classId, itemId, uploadedBy: me, file: null, text: '', url, note,
   });
@@ -446,8 +455,8 @@ gita.post('/items/:id/reports', async (c) => {
   }
   const id = newUUID();
   await c.env.DB.prepare(
-    'INSERT INTO gita_reports (id, class_id, item_id, version_id, reported_by, reason) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(id, classId, item.id, versionId, me, reason).run();
+    'INSERT INTO gita_reports (id, class_id, item_id, version_id, reported_by, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).bind(id, classId, item.id, versionId, me, reason, romeNow()).run();
 
   const reps = await classMemberIds(c.env, classId, ['REPRESENTATIVE']);
   if (reps.length > 0) {
@@ -473,7 +482,7 @@ gita.patch('/reports/:id', requireRole('REPRESENTATIVE'), async (c) => {
   const resolving = status === 'RESOLVED' && report.status !== 'RESOLVED';
   await c.env.DB.prepare(
     'UPDATE gita_reports SET status = ?, resolved_at = ?, resolved_by = ? WHERE id = ?'
-  ).bind(status, status === 'RESOLVED' ? new Date().toISOString() : null, status === 'RESOLVED' ? me : null, report.id).run();
+  ).bind(status, status === 'RESOLVED' ? romeNow() : null, status === 'RESOLVED' ? me : null, report.id).run();
   if (resolving) {
     inBackground(c, notifyUsers(c.env, [report.reported_by], 'Gita: segnalazione risolta', `Abbiamo aggiornato «${report.item_title}»`, { type: 'gita_report' }));
   }

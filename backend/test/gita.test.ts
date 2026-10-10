@@ -237,3 +237,13 @@ describe('gita: materiale per l\'assistente', () => {
     expect(corpus.json.documents[0].text).toBe('Partenza ore 8:00');
   });
 });
+
+describe('gita: date', () => {
+  it('le date sono nell\'ora italiana, non in UTC', async () => {
+    const { rep } = await cast();
+    const created = await call('POST', '/api/gita/items', documentForm(pdf()), rep);
+    const expected = new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Rome' }).slice(0, 10);
+    expect(created.json.version.uploadedAt.slice(0, 10)).toBe(expected);
+    expect(created.json.version.uploadedAt).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+  });
+});
