@@ -69,9 +69,8 @@ fun HomeScreen(
     /** Evento toccato in "Prossimi eventi": apre il calendario su quel giorno. */
     onEventClick: (CalendarEvent) -> Unit = { onNavigateToCalendar() },
     onNavigateToCirculars: () -> Unit = {},
-    onNavigateToNotifications: () -> Unit = {},
+    onNavigateToGita: () -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
-    hasUnreadNotifications: Boolean = false,
     // Primo caricamento in corso: le card vuote dicono "carico" invece di "non c'e' niente".
     isCircularsLoading: Boolean = false,
     isEventsLoading: Boolean = false
@@ -110,8 +109,7 @@ fun HomeScreen(
     ) {
         HomeHeroPanel(
             studentFirstName = studentFirstName,
-            hasUnreadNotifications = hasUnreadNotifications,
-            onNavigateToNotifications = onNavigateToNotifications,
+            onNavigateToGita = onNavigateToGita,
             onNavigateToSearch = onNavigateToSearch,
             onNavigateToCirculars = onNavigateToCirculars,
             onNavigateToCalendar = onNavigateToCalendar,
@@ -351,8 +349,7 @@ private fun NextEventsCard(
 @Composable
 private fun HomeHeroPanel(
     studentFirstName: String,
-    hasUnreadNotifications: Boolean,
-    onNavigateToNotifications: () -> Unit,
+    onNavigateToGita: () -> Unit,
     onNavigateToSearch: () -> Unit,
     onNavigateToCirculars: () -> Unit,
     onNavigateToCalendar: () -> Unit,
@@ -405,16 +402,10 @@ private fun HomeHeroPanel(
                 HeroIconButton(contentDescription = "Cerca", onClick = onNavigateToSearch) {
                     AppIcons.Search(modifier = Modifier.size(21.dp), color = AppTheme.OnHeroPrimary)
                 }
-                // Il pallino delle novita' si vede soltanto: lo diciamo anche a voce al lettore di schermo.
-                HeroIconButton(
-                    contentDescription = if (hasUnreadNotifications) "Notifiche, ci sono novità" else "Notifiche",
-                    onClick = onNavigateToNotifications
-                ) {
-                    AppIcons.Bell(
-                        modifier = Modifier.size(21.dp),
-                        color = AppTheme.OnHeroPrimary,
-                        hasBadge = hasUnreadNotifications
-                    )
+                // Gita: documenti e link della classe, al posto della campanella. Le notifiche
+                // ora stanno nella scheda account (vedi ProfileScreen).
+                HeroIconButton(contentDescription = "Gita", onClick = onNavigateToGita) {
+                    AppIcons.Bus(modifier = Modifier.size(21.dp), color = AppTheme.OnHeroPrimary)
                 }
                 // Profilo e impostazioni (prima erano la tab "Altro").
                 circolareplus.design.LocalProfileEntry.current?.let { entry ->

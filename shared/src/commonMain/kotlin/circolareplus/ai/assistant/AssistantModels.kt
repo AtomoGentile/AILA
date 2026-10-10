@@ -12,7 +12,14 @@ enum class AssistantAuthor { USER, ASSISTANT }
  * che cita "Circolare n. 214" e non permette di aprirla costringe l'utente a rifare a mano la
  * ricerca che ha appena delegato all'AI.
  */
-enum class AssistantSourceKind { CIRCULAR, CALENDAR, BOARD, POLL, SEAT_MAP, CLASS }
+enum class AssistantSourceKind { CIRCULAR, CALENDAR, BOARD, POLL, SEAT_MAP, CLASS, GITA }
+
+/**
+ * Da dove arriva la domanda. [GENERAL] e' l'assistente di sempre, generalista, con le fonti
+ * dell'app. [GITA_ONLY] e' la chat aperta dalla sezione Gita: risponde solo con il materiale
+ * della gita e con le circolari, senza conoscenze generali (vedi AssistantPrompt).
+ */
+enum class AssistantMode { GENERAL, GITA_ONLY }
 
 @Serializable
 data class AssistantSource(

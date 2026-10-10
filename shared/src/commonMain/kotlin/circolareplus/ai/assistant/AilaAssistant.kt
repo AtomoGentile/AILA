@@ -82,21 +82,26 @@ class AilaAssistant(
     suspend fun ask(
         question: String,
         history: List<AssistantMessage>,
-        knowledge: AssistantKnowledge
+        knowledge: AssistantKnowledge,
+        mode: AssistantMode = AssistantMode.GENERAL
     ): AssistantReply {
         // "Ciao", "grazie": niente dati e niente modello, vedi [AssistantGreeting].
         AssistantGreeting.answer(question)?.let { return it }
-        // Scadenze, pagamenti, "cosa ho questa settimana": l'elenco lo fa il codice, esatto e
-        // subito. Il modello sul telefono lo ricopiava storpiato (vedi [AssistantAgenda]).
-        AssistantAgenda.answer(knowledge, question)?.let { return it }
-        // Stessa cosa per "quali proposte sono aperte?": vedi [AssistantBoard].
-        AssistantBoard.answer(knowledge, question)?.let { return it }
-        // "Puoi creare un sondaggio?": dove si fa nell'app, vedi [AssistantCapabilities].
-        AssistantCapabilities.answer(knowledge, question)?.let { return it }
-        // "Che cos'e' AILA?", "cosa sai fare?": la risposta la sa il codice, non il modello.
-        AssistantAbout.answer(question, history)?.let { return it }
-        // "Riassumimi le ultime circolari": i riassunti ci sono gia', vedi [AssistantDigest].
-        AssistantDigest.answer(knowledge, question)?.let { return it }
+        // Le risposte pronte del codice rispondono sull'app intera: nella chat della Gita no,
+        // li' l'unica fonte e' il materiale della gita e il modello la legge tutta.
+        if (mode == AssistantMode.GENERAL) {
+            // Scadenze, pagamenti, "cosa ho questa settimana": l'elenco lo fa il codice, esatto e
+            // subito. Il modello sul telefono lo ricopiava storpiato (vedi [AssistantAgenda]).
+            AssistantAgenda.answer(knowledge, question)?.let { return it }
+            // Stessa cosa per "quali proposte sono aperte?": vedi [AssistantBoard].
+            AssistantBoard.answer(knowledge, question)?.let { return it }
+            // "Puoi creare un sondaggio?": dove si fa nell'app, vedi [AssistantCapabilities].
+            AssistantCapabilities.answer(knowledge, question)?.let { return it }
+            // "Che cos'e' AILA?", "cosa sai fare?": la risposta la sa il codice, non il modello.
+            AssistantAbout.answer(question, history)?.let { return it }
+            // "Riassumimi le ultime circolari": i riassunti ci sono gia', vedi [AssistantDigest].
+            AssistantDigest.answer(knowledge, question)?.let { return it }
+        }
 
         val classifier = classifierFactory()
         val startedAt = currentTimeMillis()
@@ -115,7 +120,7 @@ class AilaAssistant(
 
         val firstRaw = when (
             val result = classifier.generateAnswer(
-                AssistantPrompt.builderFor(knowledge, history, question, prefetched, searchQuery)
+                AssistantPrompt.builderFor(knowledge, history, question, prefetched, searchQuery, mode)
             )
         ) {
             is AiTextResult.Failure -> return AssistantReply(
@@ -154,7 +159,7 @@ class AilaAssistant(
             return firstReply
         }
 
-        val secondPrompt = AssistantPrompt.builderFor(knowledge, history, question, deepTexts, searchQuery)
+        val secondPrompt = AssistantPrompt.builderFor(knowledge, history, question, deepTexts, searchQuery, mode)
         val secondResult = if (isCloud) {
             val left = TARGET_REPLY_MS - (currentTimeMillis() - startedAt)
             if (left <= 0) return firstReply
@@ -202,6 +207,16 @@ class AilaAssistant(
             AssistantContext.circularNumbersIn(question) +
             AssistantContext.mostRelevantCirculars(knowledge, question, limit = 6)
         return parsed.sources.mapNotNull { source ->
+            if (source.kind == AssistantSourceKind.GITA) {
+                // Una fonte Gita vale solo se il titolo esiste davvero nel materiale: la sua
+                // etichetta si ricostruisce dai dati, come per le circolari.
+                val doc = knowledge.gita.firstOrNull { source.label.contains(it.title, ignoreCase = true) }
+                    ?: return@mapNotNull null
+                return@mapNotNull AssistantSource(
+                    AssistantSourceKind.GITA,
+                    AssistantContext.gitaSourceLabel(doc, knowledge.todayIso)
+                )
+            }
             if (source.kind != AssistantSourceKind.CIRCULAR) return@mapNotNull source
             val number = source.circularNumber ?: return@mapNotNull null
             val circular = byNumber[number] ?: return@mapNotNull null

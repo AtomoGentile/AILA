@@ -42,7 +42,9 @@ data class AssistantKnowledge(
     val classifications: Map<Int, CircularAiClassification> = emptyMap(),
     val calendarEvents: List<CalendarEvent> = emptyList(),
     val proposals: List<Proposal> = emptyList(),
-    val dynamic: AssistantDynamicKnowledge = AssistantDynamicKnowledge()
+    val dynamic: AssistantDynamicKnowledge = AssistantDynamicKnowledge(),
+    /** Documenti della Gita con il testo estratto, versione corrente (vedi GitaRepository). */
+    val gita: List<circolareplus.domain.model.GitaSourceDoc> = emptyList()
 ) {
     val role: UserRole get() = user?.role ?: UserRole.STUDENT
 

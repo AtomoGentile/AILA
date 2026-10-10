@@ -126,7 +126,7 @@ Rispondi SOLO con un oggetto JSON, senza testo prima o dopo, con questa struttur
 - "sources": le fonti che hai davvero usato, al massimo 6, ognuna nella forma
   {"kind": "CIRCULAR", "label": "Circolare n. <numero> - <titolo>", "circularNumber": <numero>}
   con numero e titolo presi dal CONTESTO. "kind" vale CIRCULAR, CALENDAR, BOARD, POLL,
-  SEAT_MAP o CLASS. "circularNumber" solo quando kind e' CIRCULAR. Per saluti, chiacchiere e
+  SEAT_MAP, CLASS o GITA. "circularNumber" solo quando kind e' CIRCULAR. Per saluti, chiacchiere e
   domande generali "sources" resta vuoto.
 - "needsCircularText": numeri di circolare di cui ti serve il TESTO INTEGRALE per rispondere
   bene, al massimo 2, fra quelle di cui il testo integrale non c'e' gia' nel CONTESTO. Usalo solo se il riassunto che hai non basta davvero, per esempio quando
@@ -170,10 +170,28 @@ A un saluto ("ciao", "buongiorno") rispondi con un saluto breve e chiedi come pu
         history: List<AssistantMessage>,
         question: String,
         deepTexts: Map<Int, String>,
-        searchQuery: String = question
+        searchQuery: String = question,
+        mode: AssistantMode = AssistantMode.GENERAL
     ): AiPromptBuilder = AiPromptBuilder { maxChars ->
-        build(maxChars, knowledge, history, question, deepTexts, searchQuery)
+        build(maxChars, knowledge, history, question, deepTexts, searchQuery, mode)
     }
+
+    /** La versione corta delle regole sulla gita, per i modelli con la finestra stretta. */
+    private const val COMPACT_GITA_RULE: String =
+        "\nGITA: sulla gita usa SOLO il materiale del CONTESTO; se manca scrivi \"Non lo trovo nel materiale disponibile\" e cita la fonte con kind GITA.\n"
+
+    /** Regole sulla gita, aggiunte al prompt solo se il materiale della gita c'e'. */
+    private const val GITA_RULES: String = """
+GITA (sezione GITA del CONTESTO: documenti caricati dai rappresentanti, con data di caricamento):
+- Sulla gita rispondi SOLO con quel materiale e con le circolari del CONTESTO.
+- Ogni risposta sulla gita cita la fonte in "sources" con kind GITA, usando il titolo e la data di caricamento scritti nel CONTESTO.
+- Se l'informazione non c'e', scrivi esattamente: "Non lo trovo nel materiale disponibile", e suggerisci di chiedere ai rappresentanti. Non inventare cifre, date o scadenze.
+- Se due fonti dicono cose diverse, dillo esplicitamente, citale entrambe, e privilegia quella caricata piu' di recente.
+"""
+
+    private const val GITA_ONLY_RULES: String = """
+MODALITA' SOLO MATERIALE: questa chat e' aperta dalla sezione Gita. Non usare conoscenze generali, nemmeno per domande di contorno. Se la domanda non riguarda il materiale della gita o le circolari, dillo e chiedi di riformulare.
+"""
 
     /**
      * Ripartisce [maxChars] fra istruzioni, cronologia, domanda e contesto.
@@ -190,9 +208,16 @@ A un saluto ("ciao", "buongiorno") rispondi con un saluto breve e chiedi come pu
         history: List<AssistantMessage>,
         question: String,
         deepTexts: Map<Int, String>,
-        searchQuery: String = question
+        searchQuery: String = question,
+        mode: AssistantMode = AssistantMode.GENERAL
     ): AiPrompt {
-        val systemPrompt = if (maxChars < COMPACT_THRESHOLD) COMPACT_SYSTEM_PROMPT else SYSTEM_PROMPT
+        val basePrompt = if (maxChars < COMPACT_THRESHOLD) COMPACT_SYSTEM_PROMPT else SYSTEM_PROMPT
+        val systemPrompt = when {
+            maxChars < COMPACT_THRESHOLD -> if (knowledge.gita.isEmpty()) basePrompt else basePrompt + COMPACT_GITA_RULE
+            knowledge.gita.isEmpty() && mode == AssistantMode.GENERAL -> basePrompt
+            mode == AssistantMode.GITA_ONLY -> basePrompt + GITA_RULES + GITA_ONLY_RULES
+            else -> basePrompt + GITA_RULES
+        }
         val trimmedQuestion = question.take(MAX_QUESTION_CHARS)
         val historyText = renderHistory(
             history,
@@ -205,7 +230,7 @@ A un saluto ("ciao", "buongiorno") rispondi con un saluto breve e chiedi come pu
                 historyText.length - FRAME_OVERHEAD_CHARS
             ).coerceAtLeast(MIN_CONTEXT_CHARS)
 
-        val context = AssistantContext.render(knowledge, question, deepTexts, contextBudget, searchQuery)
+        val context = AssistantContext.render(knowledge, question, deepTexts, contextBudget, searchQuery, mode)
         val userPrompt = assemble(context, historyText, trimmedQuestion, deepTexts.isNotEmpty())
 
         // Correzione finale: se i conti non tornano (istruzioni piu' lunghe dello spazio, budget

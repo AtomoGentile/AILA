@@ -90,6 +90,7 @@ import circolareplus.ai.assistant.AssistantConversation
 import circolareplus.ai.assistant.AssistantDynamicKnowledge
 import circolareplus.ai.assistant.AssistantKnowledge
 import circolareplus.ai.assistant.AssistantMessage
+import circolareplus.ai.assistant.AssistantMode
 import circolareplus.ai.assistant.AssistantSourceKind
 import circolareplus.ai.EventDraft
 import circolareplus.ai.HeuristicClassification
@@ -913,6 +914,16 @@ fun MainAppShell(
     var isInProfileScreen by rememberSaveable { mutableStateOf(false) }
     var isInClassRosterScreen by rememberSaveable { mutableStateOf(false) }
     var isInNotificationsScreen by rememberSaveable { mutableStateOf(false) }
+    var isInGitaScreen by rememberSaveable { mutableStateOf(false) }
+    // Le notifiche aperte dal profilo tornano al profilo, non alla Home.
+    var notificationsOpenedFromProfile by rememberSaveable { mutableStateOf(false) }
+    fun closeNotifications() {
+        isInNotificationsScreen = false
+        if (notificationsOpenedFromProfile) {
+            notificationsOpenedFromProfile = false
+            isInProfileScreen = true
+        }
+    }
     var isInSettingsScreen by rememberSaveable { mutableStateOf(false) }
     // Diagnostica background (iOS), aperta dalle Impostazioni.
     var isInBackgroundDebugScreen by rememberSaveable { mutableStateOf(false) }
@@ -1007,6 +1018,10 @@ fun MainAppShell(
     // quando le apri, e rifarle a ogni domanda sarebbe traffico per dati che non cambiano
     // durante una chat.
     var assistantDynamic by remember { mutableStateOf<AssistantDynamicKnowledge?>(null) }
+    // Materiale della Gita per l'assistente: letto una volta per sessione, poi riletto dopo ogni modifica.
+    var assistantGita by remember { mutableStateOf<List<circolareplus.domain.model.GitaSourceDoc>?>(null) }
+    // La chat aperta dalla Gita resta "solo materiale"; dalla Ricerca e' l'assistente generalista.
+    var assistantMode by rememberSaveable { mutableStateOf(AssistantMode.GENERAL) }
     var assistantMessageCounter by remember { mutableStateOf(0) }
     // Ragionamento del modello locale: la scelta e' salvata nelle impostazioni, qui se ne tiene
     // una copia perche' l'interruttore deve muoversi al tocco.
@@ -1210,9 +1225,20 @@ fun MainAppShell(
                     }
                 }
 
+                // Il materiale della gita: una lettura per sessione. Se fallisce (rete) la chat
+                // risponde senza, e lo dice la sezione "non caricata" del contesto.
+                val gita = assistantGita ?: try {
+                    AppContainer.gitaRepository.sourceDocuments().also { assistantGita = it }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyList()
+                }
+
                 val reply = AppContainer.newAssistant().ask(
                     question = trimmed,
                     history = history,
+                    mode = assistantMode,
                     knowledge = AssistantKnowledge(
                         todayIso = circolareplus.util.today().toIso(),
                         user = currentUser,
@@ -1222,7 +1248,8 @@ fun MainAppShell(
                         classifications = classifications.toMap(),
                         calendarEvents = calendarEvents,
                         proposals = boardProposals,
-                        dynamic = boardUnavailable?.let { dynamic.copy(unavailable = dynamic.unavailable + it) } ?: dynamic
+                        dynamic = boardUnavailable?.let { dynamic.copy(unavailable = dynamic.unavailable + it) } ?: dynamic,
+                        gita = gita
                     )
                 )
 
@@ -2236,6 +2263,7 @@ fun MainAppShell(
         isInAssistantScreen -> ShellRoute.ASSISTANT
         isInSearchScreen -> ShellRoute.SEARCH
         isInNotificationsScreen -> ShellRoute.NOTIFICATIONS
+        isInGitaScreen -> ShellRoute.GITA
         proposalOptions.isNotEmpty() && editingSeatMapProposal == null -> ShellRoute.SEATMAP_PROPOSALS
         editingSeatMapProposal != null -> ShellRoute.SEATMAP_EDITOR
         else -> ShellRoute.TABS
@@ -2803,9 +2831,8 @@ fun MainAppShell(
                                     classSection = ClassSection.CIRCULARS
                                     selectedTab = MainTab.CLASS
                                 },
-                                onNavigateToNotifications = { isInNotificationsScreen = true },
+                                onNavigateToGita = { isInGitaScreen = true },
                                 onNavigateToSearch = { isInSearchScreen = true },
-                                hasUnreadNotifications = hasUnreadNotifications,
                                 isCircularsLoading = isCircularsLoading && !circularsLoadedOnce,
                                 isEventsLoading = isCalendarLoading && calendarEvents.isEmpty()
                             )
@@ -3980,6 +4007,12 @@ fun MainAppShell(
                                 isInSettingsScreen = true
                             },
                             onManageClassRoster = { isInClassRosterScreen = true },
+                            onOpenNotifications = {
+                                isInProfileScreen = false
+                                notificationsOpenedFromProfile = true
+                                isInNotificationsScreen = true
+                            },
+                            hasUnreadNotifications = hasUnreadNotifications,
                             onLogoutClick = {
                                 // Toglie il token push dal server (con la sessione ancora valida)
                                 // e poi chiude quella locale, dati dell'account compresi.
@@ -4212,6 +4245,8 @@ fun MainAppShell(
                                 AssistantSourceKind.SEAT_MAP -> openTabFromOverlay(MainTab.SEATMAP)
                                 // L'elenco classe e' un livello sopra la chat: indietro torna alla chat.
                                 AssistantSourceKind.CLASS -> isInClassRosterScreen = true
+                                // Il materiale della gita si legge nella sezione Gita, sopra la chat.
+                                AssistantSourceKind.GITA -> isInGitaScreen = true
                             }
                         }
                     )
@@ -4229,6 +4264,7 @@ fun MainAppShell(
                             recentSearches = AppContainer.settings.recentSearches
                         },
                         onOpenAssistant = { question ->
+                            assistantMode = AssistantMode.GENERAL
                             isInAssistantScreen = true
                             // La domanda parte da sola: chi ha gia' scritto "gita a Milano" e ha
                             // premuto il pulsante AI la sua domanda l'ha gia' fatta, farla
@@ -4244,10 +4280,23 @@ fun MainAppShell(
                         onOpenBoard = { openTabFromOverlay(MainTab.CLASS, AppTheme.TintViolet) { classSection = ClassSection.BOARD } }
                     )
                 }
+                ShellRoute.GITA -> {
+                    circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { isInGitaScreen = false }
+                    circolareplus.ui.screens.GitaScreen(
+                        repository = AppContainer.gitaRepository,
+                        onBackClick = { isInGitaScreen = false },
+                        onOpenAssistant = {
+                            // La chat aperta dalla Gita risponde solo con il materiale della gita.
+                            assistantMode = AssistantMode.GITA_ONLY
+                            isInAssistantScreen = true
+                        },
+                        onMaterialChanged = { assistantGita = null }
+                    )
+                }
                 ShellRoute.NOTIFICATIONS -> {
-                    circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { isInNotificationsScreen = false }
+                    circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { closeNotifications() }
                     Column(modifier = Modifier.fillMaxSize()) {
-                        ScreenBackBar(title = "Notifiche", onBackClick = { isInNotificationsScreen = false })
+                        ScreenBackBar(title = "Notifiche", onBackClick = { closeNotifications() })
                         NotificationsScreen(
                             notifications = notificationLog,
                             onNotificationClick = { entry -> navigateForNotificationCategory(entry.category) }
@@ -6519,6 +6568,7 @@ private enum class ShellRoute(val depth: Int) {
     ASSISTANT(2),
     SEARCH(1),
     NOTIFICATIONS(1),
+    GITA(1),
     SEATMAP_PROPOSALS(1),
     SEATMAP_EDITOR(2)
 }

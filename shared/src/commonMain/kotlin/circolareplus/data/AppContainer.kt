@@ -24,6 +24,7 @@ import circolareplus.data.repository.AuthRepository
 import circolareplus.data.repository.CalendarRepository
 import circolareplus.data.repository.CircularsRepository
 import circolareplus.data.repository.FcmRepository
+import circolareplus.data.repository.GitaRepository
 import circolareplus.data.repository.PollsRepository
 import circolareplus.data.repository.PreferencesRepository
 import circolareplus.data.repository.ProposalsRepository
@@ -62,6 +63,7 @@ object AppContainer {
     val ratingsRepository: RatingsRepository by lazy { RatingsRepository(api) }
     val seatMapRepository: SeatMapRepository by lazy { SeatMapRepository(api) }
     val pollsRepository: PollsRepository by lazy { PollsRepository(api) }
+    val gitaRepository: GitaRepository by lazy { GitaRepository(api, pdfTextExtractor) }
     val rankingPollsRepository: RankingPollsRepository by lazy { RankingPollsRepository(api) }
     val fcmRepository: FcmRepository by lazy { FcmRepository(api, settings, pushTokenProvider) }
 

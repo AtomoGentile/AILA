@@ -757,7 +757,8 @@ private val WelcomeSources = listOf(
     AssistantSourceKind.BOARD to "Bacheca",
     AssistantSourceKind.POLL to "Sondaggi",
     AssistantSourceKind.SEAT_MAP to "Mappa posti",
-    AssistantSourceKind.CLASS to "La tua classe"
+    AssistantSourceKind.CLASS to "La tua classe",
+    AssistantSourceKind.GITA to "Gita"
 )
 
 /** Esempi di domande nel campo di testo, finche' la chat e' vuota. */
