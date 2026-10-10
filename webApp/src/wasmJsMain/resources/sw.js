@@ -24,7 +24,7 @@
 
 // Da aumentare solo se cambia il modo di usare la cache: la vecchia viene cancellata
 // all'attivazione. Per un aggiornamento normale dell'app NON serve (vedi staleWhileRevalidate).
-const SHELL_CACHE = 'aila-shell-v1';
+const SHELL_CACHE = 'aila-shell-v2';
 const DB_NAME = 'aila-sw';
 const DB_VERSION = 1;
 const SYNC_TAG = 'aila-sync';

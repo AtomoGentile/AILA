@@ -12,6 +12,14 @@ html, body {
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
 }
+/* I campi di testo (anche quello nascosto che Compose usa per la tastiera) devono poter essere
+   selezionati: su iOS un campo con user-select: none ereditato dal body non prende il fuoco e la
+   tastiera non si apre. */
+input, textarea, [contenteditable], [contenteditable] * {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
 #aila-splash {
   position: fixed;
   inset: 0;
