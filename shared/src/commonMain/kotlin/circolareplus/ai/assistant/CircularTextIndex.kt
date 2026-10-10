@@ -27,6 +27,9 @@ internal class CircularTextIndex {
 
     fun contains(number: Int): Boolean = number in texts
 
+    /** Numeri delle circolari nell'indice. */
+    fun numbers(): Set<Int> = texts.keys.toSet()
+
     /** Aggiunge o sostituisce il testo di una circolare. */
     fun put(number: Int, text: String) {
         remove(number)

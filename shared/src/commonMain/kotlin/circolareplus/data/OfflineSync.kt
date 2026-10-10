@@ -1,5 +1,6 @@
 package circolareplus.data
 
+import circolareplus.ai.assistant.CircularTextStore
 import circolareplus.data.remote.ConnectivityState
 import circolareplus.platform.currentTimeMillis
 import kotlinx.coroutines.CancellationException
@@ -23,9 +24,6 @@ object OfflineSync {
     private const val AUTO_INTERVAL_MILLIS = 2L * 60L * 60L * 1000L
     /** Ad app chiusa basta un giro ogni sei ore (il sistema sveglia l'app ogni 15+ minuti). */
     private const val BACKGROUND_INTERVAL_MILLIS = 6L * 60L * 60L * 1000L
-    private const val PDF_COUNT = 30
-    /** PDF tenuti sul telefono: quelli scaricati in automatico piu' un margine per quelli aperti a mano. */
-    private const val PDF_KEEP = 60
     private const val POLL_DETAILS = 30
     private const val PROPOSAL_COMMENTS = 30
 
@@ -85,15 +83,11 @@ object OfflineSync {
             proposals.take(PROPOSAL_COMMENTS).forEach { proposal ->
                 steps += { c.proposalsRepository.listComments(proposal.id) }
             }
-            circulars.sortedByDescending { it.number }.take(PDF_COUNT).forEach { circular ->
-                val keys = listOf(circular.r2PdfKey) + circular.attachments.mapNotNull { it.pdfKey }
-                keys.filter { it.isNotBlank() }.forEach { key ->
-                    steps += {
-                        if (!c.circularsRepository.isPdfAvailableOffline(key)) {
-                            c.circularsRepository.downloadPdfBytes(key)
-                        }
-                    }
-                }
+            // Per ogni circolare nel limite: PDF (e allegati) sul telefono, e il loro testo per la
+            // ricerca offline. Il testo serve all'assistente per cercare anche dove il riassunto
+            // non arriva, quindi conta quanto il PDF.
+            circulars.sortedByDescending { it.number }.take(circularLimit()).forEach { circular ->
+                steps += { keepCircularText(circular) }
             }
 
             steps.forEachIndexed { index, step ->
@@ -102,7 +96,7 @@ object OfflineSync {
                 attempt { step() }
                 onProgress((index + 1).toFloat() / steps.size)
             }
-            if (circulars.isNotEmpty()) prunePdfs(circulars)
+            if (circulars.isNotEmpty()) prune(circulars)
             AppContainer.settings.lastFullOfflineSyncMillis = currentTimeMillis()
             return true
         } finally {
@@ -110,24 +104,55 @@ object OfflineSync {
         }
     }
 
+    /** Quante circolari tenere offline, dalla piu' recente. Il valore 0 nelle Impostazioni = tutte. */
+    private fun circularLimit(): Int =
+        AppContainer.settings.offlineCircularLimit.let { if (it <= 0) Int.MAX_VALUE else it }
+
     /**
-     * Tiene sul telefono solo i PDF delle [PDF_KEEP] circolari piu' recenti (e dei loro allegati):
-     * prima ogni PDF mai aperto restava per sempre, e in un anno di circolari erano centinaia di MB.
+     * Scarica il PDF di una circolare e dei suoi allegati (la cache offline di ApiClient li tiene),
+     * ne estrae il testo e lo salva per la ricerca. Una scansione senza testo lascia un testo
+     * vuoto: cosi' non viene riscaricata a ogni giro.
      */
-    private fun prunePdfs(circulars: List<circolareplus.domain.model.Circular>) {
+    private suspend fun keepCircularText(circular: circolareplus.domain.model.Circular) {
+        if (CircularTextStore.has(circular.number)) return
+        val c = AppContainer
+        val pieces = mutableListOf<String>()
+        val mainText = c.pdfTextExtractor.extractText(c.circularsRepository.downloadPdfBytes(circular.r2PdfKey))
+        if (mainText.isNotBlank()) pieces += mainText
+        for (attachment in circular.attachments) {
+            val key = attachment.pdfKey?.takeIf { it.isNotBlank() } ?: continue
+            try {
+                val text = c.pdfTextExtractor.extractText(c.circularsRepository.downloadPdfBytes(key))
+                if (text.isNotBlank()) pieces += "--- Allegato: ${attachment.label} ---\n$text"
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Un allegato che non si scarica non fa saltare la circolare.
+            }
+        }
+        CircularTextStore.save(circular.number, pieces.joinToString("\n\n"))
+    }
+
+    /**
+     * Tiene sul telefono solo le circolari nel limite (PDF e testo). Prima ogni PDF mai aperto
+     * restava per sempre, e in un anno di circolari erano centinaia di MB.
+     */
+    private suspend fun prune(circulars: List<circolareplus.domain.model.Circular>) {
+        val kept = circulars.sortedByDescending { it.number }.take(circularLimit())
         val api = AppContainer.api
-        val keep = circulars.sortedByDescending { it.number }.take(PDF_KEEP).flatMap { circular ->
+        val keepPdfs = kept.flatMap { circular ->
             (listOf(circular.r2PdfKey) + circular.attachments.mapNotNull { it.pdfKey })
                 .filter { it.isNotBlank() }
                 .map { api.offlineName("/api/circulars/pdf/$it", "b") }
         }.toSet()
         try {
             circolareplus.platform.OfflineStore.list()
-                .filter { it.startsWith("b_") && it !in keep }
+                .filter { it.startsWith("b_") && it !in keepPdfs }
                 .forEach { circolareplus.platform.OfflineStore.delete(it) }
         } catch (e: Exception) {
             // Pulizia facoltativa: meglio un file in piu' che un errore.
         }
+        CircularTextStore.keepOnly(kept.map { it.number }.toSet())
     }
 
     private fun isRepresentative(): Boolean = try {
