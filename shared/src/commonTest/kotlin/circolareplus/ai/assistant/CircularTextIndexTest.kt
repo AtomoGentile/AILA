@@ -39,7 +39,7 @@ class CircularTextIndexTest {
     fun laCircolareConPiuOccorrenzeEPrimaANeleParitaDiParole() {
         val hits = index.search(listOf("scienze"))
         assertEquals(216, hits.first().number)
-        assertTrue("scienz" in hits.first().matchedTerms)
+        assertTrue(AssistantContext.stemOf("scienze") in hits.first().matchedTerms)
     }
 
     @Test
