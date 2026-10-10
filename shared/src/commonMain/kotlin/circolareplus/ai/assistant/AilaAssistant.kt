@@ -63,6 +63,9 @@ class AilaAssistant(
         /** Circolari lette per intero prima di chiedere al modello: le due piu' attinenti. */
         private const val PREFETCHED_CIRCULARS = 2
 
+        /** Circolari portate al secondo giro da una ricerca dell'assistente nel testo integrale. */
+        private const val MAX_SEARCHED_CIRCULARS = 2
+
         /**
          * Testo gia' estratto per circolare: la stessa domanda riformulata, o la domanda dopo,
          * non riscarica e non rilegge lo stesso PDF.
@@ -102,20 +105,23 @@ class AilaAssistant(
         val startedAt = currentTimeMillis()
         // "e dei genitori?": si cerca insieme alla domanda prima, vedi AssistantContext.searchQuery.
         val searchQuery = AssistantContext.searchQuery(question, history)
+        // Riscontri nel testo integrale delle circolari sul telefono: li calcola il codice, prima
+        // del modello, cosi' un "non compare" vale per tutte le circolari che ci sono.
+        val known = knowledge.copy(textHits = textHitsFor(question))
 
         // Le circolari che c'entrano davvero con la domanda si leggono per intero subito, senza
         // aspettare che sia il modello a chiederlo: i modelli sul telefono non lo chiedono quasi
         // mai e rispondevano col solo riassunto, dove dettagli come "scienze il martedi'" non
         // ci sono. Per saluti e domande generali la lista e' vuota e non si scarica niente.
         val prefetched = fetchCircularTexts(
-            AssistantContext.mostRelevantCirculars(knowledge, searchQuery, PREFETCHED_CIRCULARS),
-            knowledge.circulars,
+            AssistantContext.mostRelevantCirculars(known, searchQuery, PREFETCHED_CIRCULARS),
+            known.circulars,
             budgetMs = PREFETCH_BUDGET_MS
         )
 
         val firstRaw = when (
             val result = classifier.generateAnswer(
-                AssistantPrompt.builderFor(knowledge, history, question, prefetched, searchQuery)
+                AssistantPrompt.builderFor(known, history, question, prefetched, searchQuery)
             )
         ) {
             is AiTextResult.Failure -> return AssistantReply(
@@ -132,7 +138,10 @@ class AilaAssistant(
             modelLabel = firstRaw.modelLabel
         )
         val requested = firstAnswer.needsCircularText.filter { it !in prefetched }
-        if (requested.isEmpty()) return firstReply
+        // Le parole che il modello vuole cercare nel testo integrale: i passaggi entrano al
+        // secondo giro, come le circolari richieste per intero.
+        val searched = searchedTexts(firstAnswer.searches, prefetched.keys)
+        if (requested.isEmpty() && searched.isEmpty()) return firstReply
 
         // Con Gemini la risposta deve arrivare entro [TARGET_REPLY_MS]: il secondo giro si fa
         // solo se resta il tempo per un altro PDF e un'altra chiamata, e comunque non oltre.
@@ -142,11 +151,12 @@ class AilaAssistant(
         val remainingMs = TARGET_REPLY_MS - (currentTimeMillis() - startedAt)
         if (isCloud && remainingMs < MIN_SECOND_ROUND_MS) return firstReply
 
-        val deepTexts = prefetched + fetchCircularTexts(
+        val fetched = if (requested.isEmpty()) emptyMap() else fetchCircularTexts(
             requested,
-            knowledge.circulars,
+            known.circulars,
             budgetMs = if (isCloud) minOf(PREFETCH_BUDGET_MS, remainingMs - MIN_SECOND_ROUND_MS / 2) else Long.MAX_VALUE
         )
+        val deepTexts = prefetched + searched + fetched
         if (deepTexts.size == prefetched.size) {
             // Nessuno dei PDF richiesti si e' lasciato leggere (rete, scansione senza testo):
             // si tiene la prima risposta, che per contratto contiene gia' quello che il modello
@@ -154,7 +164,7 @@ class AilaAssistant(
             return firstReply
         }
 
-        val secondPrompt = AssistantPrompt.builderFor(knowledge, history, question, deepTexts, searchQuery)
+        val secondPrompt = AssistantPrompt.builderFor(known, history, question, deepTexts, searchQuery)
         val secondResult = if (isCloud) {
             val left = TARGET_REPLY_MS - (currentTimeMillis() - startedAt)
             if (left <= 0) return firstReply
@@ -174,8 +184,8 @@ class AilaAssistant(
             // Le circolari richieste e lette per intero entrano fra le fonti anche se il modello
             // si dimentica di citarle: sono quelle su cui la risposta si regge davvero.
             sources = mergeSources(
-                checkedSources(secondAnswer, searchQuery, deepTexts.keys, knowledge),
-                requested.filter { it in deepTexts }.toSet(),
+                checkedSources(secondAnswer, searchQuery, deepTexts.keys, known),
+                (requested + searched.keys).filter { it in deepTexts }.toSet(),
                 knowledge.circulars
             ),
             modelLabel = secondResult.modelLabel
@@ -215,6 +225,32 @@ class AilaAssistant(
     }
 
     private fun circularLabel(circular: Circular) = "Circolare n. ${circular.number} — ${circular.title}"
+
+    /**
+     * Per ogni parola della domanda, in quali circolari compare nel testo integrale sul telefono.
+     * Serve a [KeywordEvidence] per dire "non compare" solo quando il testo e' stato controllato.
+     */
+    private suspend fun textHitsFor(question: String): AssistantTextHits = AssistantTextHits(
+        circularsWithText = CircularTextStore.count(),
+        byTerm = KeywordEvidence.terms(question).associateWith { term ->
+            CircularTextStore.search(listOf(term)).map { it.number }.toSet()
+        }
+    )
+
+    /**
+     * Il testo integrale delle circolari trovate con le [terms] scelte dal modello, escluse quelle
+     * che il primo giro ha gia' letto. Al secondo giro [AssistantContext] ne ricava i passaggi
+     * che servono alla domanda.
+     */
+    private suspend fun searchedTexts(terms: List<String>, exclude: Set<Int>): Map<Int, String> {
+        if (terms.isEmpty()) return emptyMap()
+        return CircularTextStore.search(terms)
+            .map { it.number }
+            .filter { it !in exclude }
+            .take(MAX_SEARCHED_CIRCULARS)
+            .mapNotNull { number -> CircularTextStore.text(number)?.takeIf { it.isNotBlank() }?.let { number to it } }
+            .toMap()
+    }
 
     /**
      * Scarica ed estrae il testo delle circolari indicate, allegati PDF compresi.

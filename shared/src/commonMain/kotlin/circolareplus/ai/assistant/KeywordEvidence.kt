@@ -14,9 +14,10 @@ package circolareplus.ai.assistant
  *   integrale gia' letto in questa sessione;
  * - [NO_HIT] (-10): nessun riscontro nei dati in memoria.
  *
- * Il -10 vale solo per quello che l'app ha in memoria: titoli, riassunti, scadenze e i PDF gia'
- * letti. Il testo dei PDF non letti non viene controllato, e il messaggio lo dice esplicitamente,
- * altrimenti "non risulta" diventerebbe un'affermazione piu' forte di quello che si e' verificato.
+ * Il -10 vale per tutto quello che l'app ha: titoli, riassunti, scadenze e il testo delle
+ * circolari salvate sul telefono. Le circolari fuori dal limite offline non sono controllate, e il
+ * messaggio lo dice, altrimenti "non risulta" sarebbe un'affermazione piu' forte di quello che
+ * si e' verificato.
  */
 internal object KeywordEvidence {
 
@@ -39,14 +40,26 @@ internal object KeywordEvidence {
         "negli", "dove", "quando", "sempre", "anche", "ancora", "dimmi", "informazioni", "info"
     )
 
-    /** Esito per una parola: [score] e' il punteggio, [circulars] le circolari in cui compare. */
-    data class Evidence(val term: String, val score: Int, val circulars: List<Int>, val checked: Int)
+    /**
+     * Esito per una parola: [score] e' il punteggio, [circulars] le circolari in cui compare.
+     * [checked] quante circolari hanno titolo e riassunto controllati, [textChecked] quante hanno
+     * anche il testo integrale sul telefono.
+     */
+    data class Evidence(
+        val term: String,
+        val score: Int,
+        val circulars: List<Int>,
+        val checked: Int,
+        val textChecked: Int
+    )
+
+    /** Le parole della domanda da controllare, senza verbi di contorno, al massimo [MAX_TERMS]. */
+    fun terms(question: String): List<String> =
+        AssistantContext.tokenize(question).filter { it !in IGNORED }.take(MAX_TERMS)
 
     /** Un riscontro per ogni parola significativa della domanda, nell'ordine in cui compare. */
-    fun check(knowledge: AssistantKnowledge, question: String, deepTexts: Map<Int, String>): List<Evidence> {
-        val terms = AssistantContext.tokenize(question).filter { it !in IGNORED }.take(MAX_TERMS)
-        return terms.map { evaluate(it, knowledge, deepTexts) }
-    }
+    fun check(knowledge: AssistantKnowledge, question: String, deepTexts: Map<Int, String>): List<Evidence> =
+        terms(question).map { evaluate(it, knowledge, deepTexts) }
 
     private fun evaluate(term: String, knowledge: AssistantKnowledge, deepTexts: Map<Int, String>): Evidence {
         val stem = AssistantContext.stemOf(term)
@@ -59,16 +72,19 @@ internal object KeywordEvidence {
                 AssistantContext.normalize(analysis.personalSummary).contains(stem) ||
                     analysis.detectedDeadlines.any { AssistantContext.normalize(it.title).contains(stem) }
                 )
-            val inText = deepTexts[circular.number]?.let { AssistantContext.normalize(it).contains(stem) } == true
+            val inText = deepTexts[circular.number]?.let { AssistantContext.normalize(it).contains(stem) } == true ||
+                circular.number in knowledge.textHits.byTerm[term].orEmpty()
             when {
                 inTitle -> titleHits += circular.number
                 inSummary || inText -> otherHits += circular.number
             }
         }
+        val checked = knowledge.circulars.size
+        val textChecked = knowledge.textHits.circularsWithText
         return when {
-            titleHits.isNotEmpty() -> Evidence(term, TITLE_HIT, titleHits, knowledge.circulars.size)
-            otherHits.isNotEmpty() -> Evidence(term, SUMMARY_HIT, otherHits, knowledge.circulars.size)
-            else -> Evidence(term, NO_HIT, emptyList(), knowledge.circulars.size)
+            titleHits.isNotEmpty() -> Evidence(term, TITLE_HIT, titleHits, checked, textChecked)
+            otherHits.isNotEmpty() -> Evidence(term, SUMMARY_HIT, otherHits, checked, textChecked)
+            else -> Evidence(term, NO_HIT, emptyList(), checked, textChecked)
         }
     }
 
@@ -80,9 +96,14 @@ internal object KeywordEvidence {
                 e.circulars.joinToString(", ") { "n. $it" } + ". Usa quelle circolari."
             SUMMARY_HIT -> "- \"${e.term}\": $score, nel riassunto o nel testo della circolare " +
                 e.circulars.joinToString(", ") { "n. $it" } + "."
-            else -> "- \"${e.term}\": $score, nessun riscontro nei titoli, riassunti e scadenze " +
-                "delle ${e.checked} circolari in memoria (il testo dei PDF non letti non e' " +
-                "controllato). Non dire che compare nelle circolari."
+            else -> "- \"${e.term}\": $score, nessun riscontro in ${e.checked} circolari (titoli, " +
+                "riassunti, scadenze) e nel testo di ${e.textChecked} circolari sul telefono. " +
+                if (e.textChecked >= e.checked) {
+                    "Non dire che compare nelle circolari."
+                } else {
+                    "Le circolari senza testo sul telefono non sono controllate: non dire che " +
+                        "la parola non compare, ma che nelle circolari controllate non c'e'."
+                }
         }
     }
 }

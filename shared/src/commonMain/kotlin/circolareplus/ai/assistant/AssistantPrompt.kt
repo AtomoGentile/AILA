@@ -38,6 +38,8 @@ internal object AssistantPrompt {
     private const val HISTORY_BUDGET_DIVISOR = 8
 
     private const val MAX_QUESTION_CHARS = 1_500
+    /** Ricerche nel testo integrale per risposta: due parole bastano, di piu' diventano rumore. */
+    private const val MAX_SEARCHES = 2
     private const val MAX_HISTORY_MESSAGES = 8
     /** Risposte precedenti in cronologia: brevi sul telefono, piu' complete con Gemini. */
     private const val MAX_HISTORY_ANSWER_CHARS_COMPACT = 280
@@ -128,6 +130,11 @@ Rispondi SOLO con un oggetto JSON, senza testo prima o dopo, con questa struttur
   con numero e titolo presi dal CONTESTO. "kind" vale CIRCULAR, CALENDAR, BOARD, POLL,
   SEAT_MAP o CLASS. "circularNumber" solo quando kind e' CIRCULAR. Per saluti, chiacchiere e
   domande generali "sources" resta vuoto.
+- "searches": al massimo 2 parole chiave (una o due parole, senza articoli) da cercare nel TESTO
+  INTEGRALE di tutte le circolari sul telefono, quando la risposta puo' stare in una frase
+  dell'intero documento e non nel CONTESTO: per esempio un nome, una sigla o un argomento
+  preciso ("ICDL", "gita Firenze"). Il codice cerca e ti manda i passaggi trovati. Se il
+  CONTESTO basta, lascia [].
 - "needsCircularText": numeri di circolare di cui ti serve il TESTO INTEGRALE per rispondere
   bene, al massimo 2, fra quelle di cui il testo integrale non c'e' gia' nel CONTESTO. Usalo solo se il riassunto che hai non basta davvero, per esempio quando
   serve un orario, un importo o un nome che nel riassunto non c'e'. Se lo usi, in "answer"
@@ -152,10 +159,10 @@ Se nel testo di una circolare piu' righe rispondono (piu' giorni, orari, aule), 
 Se la domanda chiede regole, divieti o obblighi su un argomento, riporta subito TUTTI i punti del testo su quell'argomento in elenco puntato, senza aspettare "altro"; se e' un seguito, aggiungi solo cio' che non hai gia' scritto.
 Momenti scritti a parole ("l'ultima ora", "la terza ora") riportali cosi' come sono, senza trasformarli in orari. Non copiare date o orari da risposte precedenti o da altre circolari.
 Rispondi SOLO con questo oggetto JSON, senza altro testo:
-{"answer":"...","sources":[7,4],"needsCircularText":[]}
+{"answer":"...","sources":[7,4],"needsCircularText":[],"searches":[]}
 "answer" e' SEMPRE una stringa di testo (mai un array o un oggetto): gli elenchi vanno dentro la stringa, una riga per voce, separate da \n.
 A un saluto ("ciao", "buongiorno") rispondi con un saluto breve e chiedi come puoi aiutare: non elencare eventi, scadenze o circolari se non sono stati chiesti.
-"sources" contiene SOLO i numeri (interi, senza virgolette) delle circolari del CONTESTO che hai usato; per saluti e domande generali resta []. "needsCircularText": al massimo 2 numeri di circolari di cui ti serve il testo integrale, altrimenti [].
+"sources" contiene SOLO i numeri (interi, senza virgolette) delle circolari del CONTESTO che hai usato; per saluti e domande generali resta []. "needsCircularText": al massimo 2 numeri di circolari di cui ti serve il testo integrale, altrimenti []. "searches": al massimo 2 parole chiave da cercare nel testo integrale di tutte le circolari se il CONTESTO non basta (es. "ICDL"), altrimenti [].
 """
 
     /**
@@ -307,7 +314,9 @@ A un saluto ("ciao", "buongiorno") rispondi con un saluto breve e chiedi come pu
     data class ParsedAnswer(
         val answer: String,
         val sources: List<AssistantSource>,
-        val needsCircularText: List<Int>
+        val needsCircularText: List<Int>,
+        /** Parole da cercare nel testo integrale delle circolari sul telefono (al massimo 2). */
+        val searches: List<String> = emptyList()
     )
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -349,7 +358,12 @@ A un saluto ("ciao", "buongiorno") rispondi con un saluto breve e chiedi come pu
             emptyList()
         }
 
-        return ParsedAnswer(tidyAnswer(answer), sources, needs)
+        val searches = (root["searches"] as? JsonArray).orEmpty()
+            .mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { term -> term.length >= 3 } }
+            .distinct()
+            .take(MAX_SEARCHES)
+
+        return ParsedAnswer(tidyAnswer(answer), sources, needs, searches)
     }
 
     /**

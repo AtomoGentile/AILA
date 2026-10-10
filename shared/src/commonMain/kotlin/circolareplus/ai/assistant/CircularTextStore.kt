@@ -58,6 +58,12 @@ internal object CircularTextStore {
         ensureLoaded().search(terms)
     }
 
+    /** Quante circolari hanno il testo sul telefono. */
+    suspend fun count(): Int = mutex.withLock { ensureLoaded().size }
+
+    /** Il testo integrale di una circolare, se e' sul telefono. */
+    suspend fun text(number: Int): String? = mutex.withLock { ensureLoaded().text(number) }
+
     /** I passaggi di una circolare che contengono le [terms], entro [maxChars]. */
     suspend fun passages(number: Int, terms: List<String>, maxChars: Int): String = mutex.withLock {
         ensureLoaded().passages(number, terms, maxChars)

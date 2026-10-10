@@ -30,6 +30,9 @@ internal class CircularTextIndex {
     /** Numeri delle circolari nell'indice. */
     fun numbers(): Set<Int> = texts.keys.toSet()
 
+    /** Il testo integrale di una circolare, se e' nell'indice. */
+    fun text(number: Int): String? = texts[number]
+
     /** Aggiunge o sostituisce il testo di una circolare. */
     fun put(number: Int, text: String) {
         remove(number)

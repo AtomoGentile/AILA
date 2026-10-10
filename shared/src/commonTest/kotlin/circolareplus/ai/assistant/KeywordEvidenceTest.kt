@@ -46,11 +46,33 @@ class KeywordEvidenceTest {
 
     @Test
     fun parolaAssenteDaTuttiIDatiPrendeMenoDieci() {
-        val evidence = KeywordEvidence.check(knowledge, "Ci sono verifiche di matematica?", emptyMap())
+        val withText = knowledge.copy(textHits = AssistantTextHits(circularsWithText = 3))
+        val evidence = KeywordEvidence.check(withText, "Ci sono verifiche di matematica?", emptyMap())
         assertEquals(KeywordEvidence.NO_HIT, scoreOf(evidence, "matematica"))
         val line = KeywordEvidence.render(evidence).first { it.contains("matematica") }
         assertTrue("-10" in line)
         assertTrue("Non dire che compare" in line)
+    }
+
+    @Test
+    fun conCircolariSenzaTestoIlMessaggioNonDichiaraAssenza() {
+        // Due circolari su tre hanno il testo sul telefono: il "non compare" non e' verificato per tutte.
+        val partial = knowledge.copy(textHits = AssistantTextHits(circularsWithText = 2))
+        val evidence = KeywordEvidence.check(partial, "Ci sono verifiche di matematica?", emptyMap())
+        val line = KeywordEvidence.render(evidence).first { it.contains("matematica") }
+        assertTrue("non sono controllate" in line)
+        assertTrue("Non dire che compare" !in line)
+    }
+
+    @Test
+    fun ilTestoNellIndiceContaComeRiscontroNelCorpo() {
+        // "pagamento" non sta in titoli e riassunti: lo trova solo l'indice del testo.
+        val withIndex = knowledge.copy(
+            textHits = AssistantTextHits(circularsWithText = 3, byTerm = mapOf("pagamento" to setOf(215)))
+        )
+        val evidence = KeywordEvidence.check(withIndex, "Quando scade il pagamento?", emptyMap())
+        assertEquals(KeywordEvidence.SUMMARY_HIT, scoreOf(evidence, "pagamento"))
+        assertEquals(listOf(215), evidence.first { it.term == "pagamento" }.circulars)
     }
 
     @Test
