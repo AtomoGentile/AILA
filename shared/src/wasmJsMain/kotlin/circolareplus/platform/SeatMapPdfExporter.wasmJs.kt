@@ -27,7 +27,6 @@ import kotlinx.coroutines.await
 import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
 import kotlin.io.encoding.Base64
-import kotlin.js.Promise
 
 // Stesso foglio A4 in punti a 72 dpi dell'esportazione Android (PdfDocument).
 private const val PAGE_WIDTH = 595
@@ -49,7 +48,7 @@ actual suspend fun exportSeatMapPdf(
         ?: return
     val pdf = wrapJpegInPdf(jpeg, bitmap.width, bitmap.height)
     val name = "mappa_posti_${currentTimeMillis()}.pdf"
-    shareOrDownload(Base64.encode(pdf), name).await<JsAny?>()
+    shareOrDownload(Base64.encode(pdf), name, "Mappa Posti").await<JsAny?>()
 }
 
 private fun renderSeatMapPage(assignments: List<DeskAssignment>, studentsMap: Map<String, User>): ImageBitmap {
@@ -272,19 +271,3 @@ private class ByteArrayBuilder {
 
     fun toByteArray(): ByteArray = buffer.copyOf(size)
 }
-
-// Su telefoni e tablet si apre il foglio di condivisione con il file, come fa l'app nativa; sui
-// computer si scarica. Il foglio di condivisione non si usa sui computer anche se il browser lo
-// offre: su Windows apre una finestra di sistema che a molti sembra "non succede niente", e in un
-// browser senza interfaccia la promessa non si risolve mai e l'esportazione resta appesa. Se il
-// foglio viene negato (Safari, se e' passato troppo tempo dal tocco) si ripiega sul download.
-private fun shareOrDownload(base64: String, fileName: String): Promise<JsAny?> = js(
-    "(async function () { " +
-        "var bin = atob(base64); var bytes = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i); " +
-        "var file = new File([bytes], fileName, { type: 'application/pdf' }); " +
-        "var mobile = /Android|iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)); " +
-        "try { if (mobile && navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'Mappa Posti' }); return null; } } " +
-        "catch (e) { if (e && e.name === 'AbortError') return null; } " +
-        "var url = URL.createObjectURL(file); var a = document.createElement('a'); a.href = url; a.download = fileName; " +
-        "document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 60000); return null; })()"
-)
