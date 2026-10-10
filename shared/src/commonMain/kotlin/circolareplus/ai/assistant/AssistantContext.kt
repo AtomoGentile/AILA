@@ -115,7 +115,8 @@ internal object AssistantContext {
         deepTexts: Map<Int, String> = emptyMap(),
         maxChars: Int = 28_000,
         /** Le parole con cui cercare nei dati: vedi [searchQuery]. Il periodo resta quello di [question]. */
-        searchQuery: String = question
+        searchQuery: String = question,
+        mode: AssistantMode = AssistantMode.GENERAL
     ): String {
         val budget = Budget(maxChars, deepTextsPresent = deepTexts.isNotEmpty())
         val terms = tokenize(searchQuery)
@@ -163,11 +164,25 @@ internal object AssistantContext {
             }
         }
 
+        // Riscontri calcolati dal codice per le parole della domanda: il modello non cerca, legge
+        // il risultato. Breve, quindi sta sempre prima che il budget tagli le circolari.
+        val evidence = KeywordEvidence.check(knowledge, question, deepTexts)
+        if (evidence.isNotEmpty()) {
+            builder.appendSection("RISCONTRI PER LE PAROLE DELLA DOMANDA (calcolati dall'app)") {
+                appendLine(
+                    "Punteggio da -10 a +10. Con +10 o +5 usa le circolari indicate; con -10 " +
+                        "non affermare che la parola compare nelle circolari."
+                )
+                KeywordEvidence.render(evidence).forEach { appendLine(it) }
+            }
+        }
+
         // Una domanda sulla bacheca la mette in testa: con la finestra stretta del modello sul
         // telefono stava dopo circolari e calendario e finiva tagliata, e la risposta era
         // "non risulta".
         val aboutBoard = terms.any { it.startsWith("propost") || it.startsWith("bacheca") }
         if (aboutBoard) renderBoard(builder, knowledge, terms, budget)
+        renderGita(builder, knowledge, question, budget, mode)
         renderCirculars(builder, knowledge, searchQuery, terms, explicitNumbers, deepTexts, budget, scope)
         renderCalendar(builder, knowledge, terms, budget, scope)
         if (!aboutBoard && !budget.focused) renderBoard(builder, knowledge, terms, budget)
@@ -314,6 +329,49 @@ internal object AssistantContext {
             }
         }
     }
+
+    /**
+     * Il materiale della gita: testo estratto da ogni documento, versione corrente, con titolo,
+     * categoria e data di caricamento. In modalita' [AssistantMode.GITA_ONLY] occupa la parte
+     * piu' grande del contesto, perche' e' l'unica fonte consentita.
+     */
+    private fun renderGita(
+        builder: StringBuilder,
+        knowledge: AssistantKnowledge,
+        question: String,
+        budget: Budget,
+        mode: AssistantMode
+    ) {
+        if (knowledge.gita.isEmpty()) return
+        val intro = if (mode == AssistantMode.GITA_ONLY) {
+            "Domanda sulla gita: questo materiale e' l'UNICA fonte consentita, insieme alle circolari."
+        } else {
+            "Materiale della gita caricato dai rappresentanti. Cita titolo e data di caricamento."
+        }
+        val room = (budget.maxChars - builder.length - intro.length - 300).coerceAtLeast(0)
+        val fraction = if (mode == AssistantMode.GITA_ONLY) 0.7 else 0.4
+        val share = ((room * fraction) / knowledge.gita.size).toInt().coerceAtLeast(MIN_GITA_CHARS)
+        builder.appendSection("GITA — MATERIALE CARICATO DAI RAPPRESENTANTI") {
+            appendLine(intro)
+            knowledge.gita.forEach { doc ->
+                appendLine("")
+                val uploaded = readableDate(doc.uploadedAt.take(10), knowledge.todayIso)
+                appendLine("--- ${doc.title} (${doc.category.label}, caricato $uploaded) ---")
+                doc.url?.let { appendLine("Link: $it") }
+                if (doc.text.isBlank()) {
+                    appendLine(if (doc.url != null) "Solo link, nessun testo." else "Testo non disponibile per questo documento.")
+                } else {
+                    appendLine(PassageSelector.select(doc.text, question, share))
+                }
+            }
+        }
+    }
+
+    /** Etichetta di una fonte Gita: la costruisce il codice dai dati veri, non il modello. */
+    fun gitaSourceLabel(doc: circolareplus.domain.model.GitaSourceDoc, todayIso: String): String =
+        "Gita - ${doc.title} (caricato ${readableDate(doc.uploadedAt.take(10), todayIso)})"
+
+    private const val MIN_GITA_CHARS = 1_200
 
     private fun renderDeepTexts(
         builder: StringBuilder,

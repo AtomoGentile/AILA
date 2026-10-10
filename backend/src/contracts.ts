@@ -236,3 +236,72 @@ export interface WebPushPayload {
   kind: NotificationKind | '';
   data: Record<string, string>;
 }
+
+// ---------------------------------------------------------------------------
+// Gita (/api/gita/*)
+// ---------------------------------------------------------------------------
+
+export type GitaCategory = 'PROGRAMMA' | 'PREVENTIVO' | 'SCADENZA' | 'REGOLAMENTO' | 'PAGAMENTO' | 'ALTRO';
+
+export interface GitaVersionDto {
+  id: string;
+  versionNo: number;
+  uploadedBy: string;
+  uploadedAt: string;
+  hasFile: boolean;
+  fileMime: string | null;
+  fileSize: number | null;
+  textChars: number;
+  url: string | null;
+  note: string | null;
+}
+
+export interface GitaItemDto {
+  id: string;
+  kind: 'DOCUMENT' | 'LINK';
+  category: GitaCategory;
+  title: string;
+  createdBy: string;
+  createdAt: string;
+  withdrawn: boolean;
+  current: GitaVersionDto | null;
+}
+
+export interface GitaReportDto {
+  id: string;
+  itemId: string;
+  itemTitle: string;
+  versionId: string | null;
+  reportedBy: string;
+  reason: string;
+  status: 'OPEN' | 'RESOLVED';
+  createdAt: string;
+  resolvedAt: string | null;
+}
+
+export interface GitaFeedResponse {
+  items: GitaItemDto[];
+  reports: GitaReportDto[];
+  canEdit: boolean;
+}
+
+export interface GitaVersionsResponse {
+  item: GitaItemDto;
+  versions: GitaVersionDto[];
+}
+
+/** Materiale per l'assistente: versione corrente di ogni voce, con il testo estratto. */
+export interface GitaCorpusDoc {
+  itemId: string;
+  kind: 'DOCUMENT' | 'LINK';
+  category: GitaCategory;
+  title: string;
+  uploadedAt: string;
+  versionNo: number | null;
+  url: string | null;
+  text: string;
+}
+
+export interface GitaCorpusResponse {
+  documents: GitaCorpusDoc[];
+}

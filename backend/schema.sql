@@ -450,3 +450,60 @@ CREATE TABLE IF NOT EXISTS representative_invites (
 );
 
 CREATE INDEX IF NOT EXISTS idx_representative_invites_class ON representative_invites(class_id);
+
+-- 15. GITA (migrazione 018): documenti e link della gita con storico versioni e segnalazioni.
+-- Il file e il testo stanno su R2 (chiavi in gita_versions), vedi la migrazione.
+CREATE TABLE IF NOT EXISTS gita_items (
+    id TEXT PRIMARY KEY,
+    class_id TEXT NOT NULL REFERENCES classes(id),
+    kind TEXT NOT NULL CHECK(kind IN ('DOCUMENT', 'LINK')),
+    category TEXT NOT NULL DEFAULT 'ALTRO',
+    title TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    withdrawn INTEGER NOT NULL DEFAULT 0,
+    withdrawn_at DATETIME
+);
+
+CREATE INDEX IF NOT EXISTS idx_gita_items_class ON gita_items(class_id);
+
+CREATE TABLE IF NOT EXISTS gita_versions (
+    id TEXT PRIMARY KEY,
+    item_id TEXT NOT NULL REFERENCES gita_items(id) ON DELETE CASCADE,
+    version_no INTEGER NOT NULL,
+    uploaded_by TEXT NOT NULL,
+    uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    file_r2_key TEXT,
+    file_mime TEXT,
+    file_size INTEGER,
+    text_r2_key TEXT,
+    text_chars INTEGER NOT NULL DEFAULT 0,
+    url TEXT,
+    note TEXT,
+    UNIQUE(item_id, version_no)
+);
+
+CREATE TABLE IF NOT EXISTS gita_reports (
+    id TEXT PRIMARY KEY,
+    class_id TEXT NOT NULL REFERENCES classes(id),
+    item_id TEXT NOT NULL REFERENCES gita_items(id) ON DELETE CASCADE,
+    version_id TEXT,
+    reported_by TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'OPEN' CHECK(status IN ('OPEN', 'RESOLVED')),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    resolved_at DATETIME,
+    resolved_by TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_gita_reports_class ON gita_reports(class_id);
+CREATE INDEX IF NOT EXISTS idx_gita_reports_reporter ON gita_reports(reported_by);
+
+-- 16. CIRCOLARI DELLA GITA PER CLASSE (migrazione 019): quelle che il Rappresentante aggiunge.
+CREATE TABLE IF NOT EXISTS gita_circulars (
+    class_id TEXT NOT NULL REFERENCES classes(id),
+    circular_number INTEGER NOT NULL REFERENCES circulars(number) ON DELETE CASCADE,
+    added_by TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (class_id, circular_number)
+);

@@ -281,6 +281,24 @@ fun SettingsScreen(
                                 enabled = syncProgress == null
                             )
                             Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            // Quante circolari (PDF e testo per la ricerca) tenere sul telefono. Si
+                            // applica al prossimo aggiornamento: li' l'app scarica o libera i file.
+                            var offlineLimit by remember {
+                                mutableStateOf(circolareplus.data.AppContainer.settings.offlineCircularLimit)
+                            }
+                            AilaSecondaryButton(
+                                text = "Circolari offline: " +
+                                    (if (offlineLimit <= 0) "tutte" else offlineLimit.toString()) + " (tocca per cambiare)",
+                                onClick = {
+                                    val options = listOf(30, 60, 100, 0)
+                                    val current = options.indexOf(offlineLimit).coerceAtLeast(0)
+                                    offlineLimit = options[(current + 1) % options.size]
+                                    circolareplus.data.AppContainer.settings.offlineCircularLimit = offlineLimit
+                                },
+                                compact = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(AppTheme.Space8))
                             var confirmClearOffline by remember { mutableStateOf(false) }
                             AilaSecondaryButton(
                                 text = "Svuota dati offline",

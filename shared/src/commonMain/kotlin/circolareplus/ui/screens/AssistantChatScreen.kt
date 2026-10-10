@@ -757,7 +757,8 @@ private val WelcomeSources = listOf(
     AssistantSourceKind.BOARD to "Bacheca",
     AssistantSourceKind.POLL to "Sondaggi",
     AssistantSourceKind.SEAT_MAP to "Mappa posti",
-    AssistantSourceKind.CLASS to "La tua classe"
+    AssistantSourceKind.CLASS to "La tua classe",
+    AssistantSourceKind.GITA to "Gita"
 )
 
 /** Esempi di domande nel campo di testo, finche' la chat e' vuota. */
@@ -1136,6 +1137,7 @@ private fun AssistantSourceKind.tint(): Color = when (this) {
     AssistantSourceKind.POLL -> AppTheme.TintGreen
     AssistantSourceKind.SEAT_MAP -> AppTheme.TintSlate
     AssistantSourceKind.CLASS -> AppTheme.TintSlate
+    AssistantSourceKind.GITA -> AppTheme.TintAmber
 }
 
 private fun AssistantSourceKind.ink(): Color = when (this) {
@@ -1145,6 +1147,7 @@ private fun AssistantSourceKind.ink(): Color = when (this) {
     AssistantSourceKind.POLL -> AppTheme.TintGreenInk
     AssistantSourceKind.SEAT_MAP -> AppTheme.TintSlateInk
     AssistantSourceKind.CLASS -> AppTheme.TintSlateInk
+    AssistantSourceKind.GITA -> AppTheme.TintAmberInk
 }
 
 @Composable
@@ -1157,6 +1160,7 @@ private fun AssistantSourceKind.Icon(color: Color, iconSize: androidx.compose.ui
         AssistantSourceKind.POLL -> AppIcons.Check(modifier = size, color = color)
         AssistantSourceKind.SEAT_MAP -> AppIcons.Chair(modifier = size, color = color)
         AssistantSourceKind.CLASS -> AppIcons.Profile(modifier = size, color = color)
+        AssistantSourceKind.GITA -> AppIcons.Document(modifier = size, color = color)
     }
 }
 

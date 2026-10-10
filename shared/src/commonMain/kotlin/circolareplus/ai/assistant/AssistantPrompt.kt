@@ -38,6 +38,8 @@ internal object AssistantPrompt {
     private const val HISTORY_BUDGET_DIVISOR = 8
 
     private const val MAX_QUESTION_CHARS = 1_500
+    /** Ricerche nel testo integrale per risposta: due parole bastano, di piu' diventano rumore. */
+    private const val MAX_SEARCHES = 2
     private const val MAX_HISTORY_MESSAGES = 8
     /** Risposte precedenti in cronologia: brevi sul telefono, piu' complete con Gemini. */
     private const val MAX_HISTORY_ANSWER_CHARS_COMPACT = 280
@@ -126,8 +128,13 @@ Rispondi SOLO con un oggetto JSON, senza testo prima o dopo, con questa struttur
 - "sources": le fonti che hai davvero usato, al massimo 6, ognuna nella forma
   {"kind": "CIRCULAR", "label": "Circolare n. <numero> - <titolo>", "circularNumber": <numero>}
   con numero e titolo presi dal CONTESTO. "kind" vale CIRCULAR, CALENDAR, BOARD, POLL,
-  SEAT_MAP o CLASS. "circularNumber" solo quando kind e' CIRCULAR. Per saluti, chiacchiere e
+  SEAT_MAP, CLASS o GITA. "circularNumber" solo quando kind e' CIRCULAR. Per saluti, chiacchiere e
   domande generali "sources" resta vuoto.
+- "searches": al massimo 2 parole chiave (una o due parole, senza articoli) da cercare nel TESTO
+  INTEGRALE di tutte le circolari sul telefono, quando la risposta puo' stare in una frase
+  dell'intero documento e non nel CONTESTO: per esempio un nome, una sigla o un argomento
+  preciso ("ICDL", "gita Firenze"). Il codice cerca e ti manda i passaggi trovati. Se il
+  CONTESTO basta, lascia [].
 - "needsCircularText": numeri di circolare di cui ti serve il TESTO INTEGRALE per rispondere
   bene, al massimo 2, fra quelle di cui il testo integrale non c'e' gia' nel CONTESTO. Usalo solo se il riassunto che hai non basta davvero, per esempio quando
   serve un orario, un importo o un nome che nel riassunto non c'e'. Se lo usi, in "answer"
@@ -152,10 +159,10 @@ Se nel testo di una circolare piu' righe rispondono (piu' giorni, orari, aule), 
 Se la domanda chiede regole, divieti o obblighi su un argomento, riporta subito TUTTI i punti del testo su quell'argomento in elenco puntato, senza aspettare "altro"; se e' un seguito, aggiungi solo cio' che non hai gia' scritto.
 Momenti scritti a parole ("l'ultima ora", "la terza ora") riportali cosi' come sono, senza trasformarli in orari. Non copiare date o orari da risposte precedenti o da altre circolari.
 Rispondi SOLO con questo oggetto JSON, senza altro testo:
-{"answer":"...","sources":[7,4],"needsCircularText":[]}
+{"answer":"...","sources":[7,4],"needsCircularText":[],"searches":[]}
 "answer" e' SEMPRE una stringa di testo (mai un array o un oggetto): gli elenchi vanno dentro la stringa, una riga per voce, separate da \n.
 A un saluto ("ciao", "buongiorno") rispondi con un saluto breve e chiedi come puoi aiutare: non elencare eventi, scadenze o circolari se non sono stati chiesti.
-"sources" contiene SOLO i numeri (interi, senza virgolette) delle circolari del CONTESTO che hai usato; per saluti e domande generali resta []. "needsCircularText": al massimo 2 numeri di circolari di cui ti serve il testo integrale, altrimenti [].
+"sources" contiene SOLO i numeri (interi, senza virgolette) delle circolari del CONTESTO che hai usato; per saluti e domande generali resta []. "needsCircularText": al massimo 2 numeri di circolari di cui ti serve il testo integrale, altrimenti []. "searches": al massimo 2 parole chiave da cercare nel testo integrale di tutte le circolari se il CONTESTO non basta (es. "ICDL"), altrimenti [].
 """
 
     /**
@@ -170,10 +177,28 @@ A un saluto ("ciao", "buongiorno") rispondi con un saluto breve e chiedi come pu
         history: List<AssistantMessage>,
         question: String,
         deepTexts: Map<Int, String>,
-        searchQuery: String = question
+        searchQuery: String = question,
+        mode: AssistantMode = AssistantMode.GENERAL
     ): AiPromptBuilder = AiPromptBuilder { maxChars ->
-        build(maxChars, knowledge, history, question, deepTexts, searchQuery)
+        build(maxChars, knowledge, history, question, deepTexts, searchQuery, mode)
     }
+
+    /** La versione corta delle regole sulla gita, per i modelli con la finestra stretta. */
+    private const val COMPACT_GITA_RULE: String =
+        "\nGITA: sulla gita usa SOLO il materiale del CONTESTO; se manca scrivi \"Non lo trovo nel materiale disponibile\" e cita la fonte con kind GITA.\n"
+
+    /** Regole sulla gita, aggiunte al prompt solo se il materiale della gita c'e'. */
+    private const val GITA_RULES: String = """
+GITA (sezione GITA del CONTESTO: documenti caricati dai rappresentanti, con data di caricamento):
+- Sulla gita rispondi SOLO con quel materiale e con le circolari del CONTESTO.
+- Ogni risposta sulla gita cita la fonte in "sources" con kind GITA, usando il titolo e la data di caricamento scritti nel CONTESTO.
+- Se l'informazione non c'e', scrivi esattamente: "Non lo trovo nel materiale disponibile", e suggerisci di chiedere ai rappresentanti. Non inventare cifre, date o scadenze.
+- Se due fonti dicono cose diverse, dillo esplicitamente, citale entrambe, e privilegia quella caricata piu' di recente.
+"""
+
+    private const val GITA_ONLY_RULES: String = """
+MODALITA' SOLO MATERIALE: questa chat e' aperta dalla sezione Gita. Non usare conoscenze generali, nemmeno per domande di contorno. Se la domanda non riguarda il materiale della gita o le circolari, dillo e chiedi di riformulare.
+"""
 
     /**
      * Ripartisce [maxChars] fra istruzioni, cronologia, domanda e contesto.
@@ -190,9 +215,16 @@ A un saluto ("ciao", "buongiorno") rispondi con un saluto breve e chiedi come pu
         history: List<AssistantMessage>,
         question: String,
         deepTexts: Map<Int, String>,
-        searchQuery: String = question
+        searchQuery: String = question,
+        mode: AssistantMode = AssistantMode.GENERAL
     ): AiPrompt {
-        val systemPrompt = if (maxChars < COMPACT_THRESHOLD) COMPACT_SYSTEM_PROMPT else SYSTEM_PROMPT
+        val basePrompt = if (maxChars < COMPACT_THRESHOLD) COMPACT_SYSTEM_PROMPT else SYSTEM_PROMPT
+        val systemPrompt = when {
+            maxChars < COMPACT_THRESHOLD -> if (knowledge.gita.isEmpty()) basePrompt else basePrompt + COMPACT_GITA_RULE
+            knowledge.gita.isEmpty() && mode == AssistantMode.GENERAL -> basePrompt
+            mode == AssistantMode.GITA_ONLY -> basePrompt + GITA_RULES + GITA_ONLY_RULES
+            else -> basePrompt + GITA_RULES
+        }
         val trimmedQuestion = question.take(MAX_QUESTION_CHARS)
         val historyText = renderHistory(
             history,
@@ -205,7 +237,7 @@ A un saluto ("ciao", "buongiorno") rispondi con un saluto breve e chiedi come pu
                 historyText.length - FRAME_OVERHEAD_CHARS
             ).coerceAtLeast(MIN_CONTEXT_CHARS)
 
-        val context = AssistantContext.render(knowledge, question, deepTexts, contextBudget, searchQuery)
+        val context = AssistantContext.render(knowledge, question, deepTexts, contextBudget, searchQuery, mode)
         val userPrompt = assemble(context, historyText, trimmedQuestion, deepTexts.isNotEmpty())
 
         // Correzione finale: se i conti non tornano (istruzioni piu' lunghe dello spazio, budget
@@ -307,7 +339,9 @@ A un saluto ("ciao", "buongiorno") rispondi con un saluto breve e chiedi come pu
     data class ParsedAnswer(
         val answer: String,
         val sources: List<AssistantSource>,
-        val needsCircularText: List<Int>
+        val needsCircularText: List<Int>,
+        /** Parole da cercare nel testo integrale delle circolari sul telefono (al massimo 2). */
+        val searches: List<String> = emptyList()
     )
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -349,7 +383,12 @@ A un saluto ("ciao", "buongiorno") rispondi con un saluto breve e chiedi come pu
             emptyList()
         }
 
-        return ParsedAnswer(tidyAnswer(answer), sources, needs)
+        val searches = (root["searches"] as? JsonArray).orEmpty()
+            .mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { term -> term.length >= 3 } }
+            .distinct()
+            .take(MAX_SEARCHES)
+
+        return ParsedAnswer(tidyAnswer(answer), sources, needs, searches)
     }
 
     /**

@@ -12,6 +12,7 @@ import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
@@ -246,6 +247,28 @@ class ApiClient(
                 if (auth) authHeader()
                 contentType(ContentType.Application.Json)
                 setBody(body)
+            }
+        }
+        return apiJson.decodeFromString(text)
+    }
+
+    suspend inline fun <reified B, reified T> patch(path: String, body: B, auth: Boolean = true): T {
+        val text = sendText {
+            client.patch(baseUrl + path) {
+                if (auth) authHeader()
+                contentType(ContentType.Application.Json)
+                setBody(body)
+            }
+        }
+        return apiJson.decodeFromString(text)
+    }
+
+    /** Invio multipart (file + campi di testo), per i documenti della Gita. */
+    suspend inline fun <reified T> postMultipart(path: String, parts: List<io.ktor.http.content.PartData>): T {
+        val text = sendText {
+            client.post(baseUrl + path) {
+                authHeader()
+                setBody(io.ktor.client.request.forms.MultiPartFormDataContent(parts))
             }
         }
         return apiJson.decodeFromString(text)

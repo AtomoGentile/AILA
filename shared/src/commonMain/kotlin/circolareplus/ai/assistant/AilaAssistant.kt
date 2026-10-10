@@ -5,7 +5,6 @@ import circolareplus.ai.AiTextResult
 import circolareplus.ai.PdfTextExtractor
 import circolareplus.data.repository.CircularsRepository
 import circolareplus.domain.model.Circular
-import circolareplus.platform.currentTimeMillis
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.joinAll
@@ -51,17 +50,14 @@ class AilaAssistant(
          */
         private const val MAX_PDF_CHARS_PER_CIRCULAR = 150_000
 
-        /** Attesa massima di una risposta di Gemini, dalla domanda alla risposta in chat. */
-        private const val TARGET_REPLY_MS = 19_000L
-
         /** Tempo concesso ai PDF letti prima della domanda: il resto va al modello. */
         private const val PREFETCH_BUDGET_MS = 4_000L
 
-        /** Sotto questo margine il secondo giro (PDF richiesti + nuova chiamata) non si tenta. */
-        private const val MIN_SECOND_ROUND_MS = 7_000L
-
         /** Circolari lette per intero prima di chiedere al modello: le due piu' attinenti. */
         private const val PREFETCHED_CIRCULARS = 2
+
+        /** Circolari portate al secondo giro da una ricerca dell'assistente nel testo integrale. */
+        private const val MAX_SEARCHED_CIRCULARS = 2
 
         /**
          * Testo gia' estratto per circolare: la stessa domanda riformulata, o la domanda dopo,
@@ -82,40 +78,47 @@ class AilaAssistant(
     suspend fun ask(
         question: String,
         history: List<AssistantMessage>,
-        knowledge: AssistantKnowledge
+        knowledge: AssistantKnowledge,
+        mode: AssistantMode = AssistantMode.GENERAL
     ): AssistantReply {
         // "Ciao", "grazie": niente dati e niente modello, vedi [AssistantGreeting].
         AssistantGreeting.answer(question)?.let { return it }
-        // Scadenze, pagamenti, "cosa ho questa settimana": l'elenco lo fa il codice, esatto e
-        // subito. Il modello sul telefono lo ricopiava storpiato (vedi [AssistantAgenda]).
-        AssistantAgenda.answer(knowledge, question)?.let { return it }
-        // Stessa cosa per "quali proposte sono aperte?": vedi [AssistantBoard].
-        AssistantBoard.answer(knowledge, question)?.let { return it }
-        // "Puoi creare un sondaggio?": dove si fa nell'app, vedi [AssistantCapabilities].
-        AssistantCapabilities.answer(knowledge, question)?.let { return it }
-        // "Che cos'e' AILA?", "cosa sai fare?": la risposta la sa il codice, non il modello.
-        AssistantAbout.answer(question, history)?.let { return it }
-        // "Riassumimi le ultime circolari": i riassunti ci sono gia', vedi [AssistantDigest].
-        AssistantDigest.answer(knowledge, question)?.let { return it }
+        // Le risposte pronte del codice rispondono sull'app intera: nella chat della Gita no,
+        // li' l'unica fonte e' il materiale della gita e il modello la legge tutta.
+        if (mode == AssistantMode.GENERAL) {
+            // Scadenze, pagamenti, "cosa ho questa settimana": l'elenco lo fa il codice, esatto e
+            // subito. Il modello sul telefono lo ricopiava storpiato (vedi [AssistantAgenda]).
+            AssistantAgenda.answer(knowledge, question)?.let { return it }
+            // Stessa cosa per "quali proposte sono aperte?": vedi [AssistantBoard].
+            AssistantBoard.answer(knowledge, question)?.let { return it }
+            // "Puoi creare un sondaggio?": dove si fa nell'app, vedi [AssistantCapabilities].
+            AssistantCapabilities.answer(knowledge, question)?.let { return it }
+            // "Che cos'e' AILA?", "cosa sai fare?": la risposta la sa il codice, non il modello.
+            AssistantAbout.answer(question, history)?.let { return it }
+            // "Riassumimi le ultime circolari": i riassunti ci sono gia', vedi [AssistantDigest].
+            AssistantDigest.answer(knowledge, question)?.let { return it }
+        }
 
         val classifier = classifierFactory()
-        val startedAt = currentTimeMillis()
         // "e dei genitori?": si cerca insieme alla domanda prima, vedi AssistantContext.searchQuery.
         val searchQuery = AssistantContext.searchQuery(question, history)
+        // Riscontri nel testo integrale delle circolari sul telefono: li calcola il codice, prima
+        // del modello, cosi' un "non compare" vale per tutte le circolari che ci sono.
+        val known = knowledge.copy(textHits = textHitsFor(question))
 
         // Le circolari che c'entrano davvero con la domanda si leggono per intero subito, senza
         // aspettare che sia il modello a chiederlo: i modelli sul telefono non lo chiedono quasi
         // mai e rispondevano col solo riassunto, dove dettagli come "scienze il martedi'" non
         // ci sono. Per saluti e domande generali la lista e' vuota e non si scarica niente.
         val prefetched = fetchCircularTexts(
-            AssistantContext.mostRelevantCirculars(knowledge, searchQuery, PREFETCHED_CIRCULARS),
-            knowledge.circulars,
+            AssistantContext.mostRelevantCirculars(known, searchQuery, PREFETCHED_CIRCULARS),
+            known.circulars,
             budgetMs = PREFETCH_BUDGET_MS
         )
 
         val firstRaw = when (
             val result = classifier.generateAnswer(
-                AssistantPrompt.builderFor(knowledge, history, question, prefetched, searchQuery)
+                AssistantPrompt.builderFor(known, history, question, prefetched, searchQuery, mode)
             )
         ) {
             is AiTextResult.Failure -> return AssistantReply(
@@ -132,21 +135,19 @@ class AilaAssistant(
             modelLabel = firstRaw.modelLabel
         )
         val requested = firstAnswer.needsCircularText.filter { it !in prefetched }
-        if (requested.isEmpty()) return firstReply
+        // Le parole che il modello vuole cercare nel testo integrale: i passaggi entrano al
+        // secondo giro, come le circolari richieste per intero.
+        val searched = searchedTexts(firstAnswer.searches, prefetched.keys)
+        if (requested.isEmpty() && searched.isEmpty()) return firstReply
 
-        // Con Gemini la risposta deve arrivare entro [TARGET_REPLY_MS]: il secondo giro si fa
-        // solo se resta il tempo per un altro PDF e un'altra chiamata, e comunque non oltre.
-        // Il modello sul telefono non ha questo tetto: e' lento per natura, e un secondo giro
-        // saltato li' vorrebbe dire rispondere quasi sempre col solo riassunto.
-        val isCloud = firstRaw.modelLabel.startsWith("Google")
-        val remainingMs = TARGET_REPLY_MS - (currentTimeMillis() - startedAt)
-        if (isCloud && remainingMs < MIN_SECOND_ROUND_MS) return firstReply
-
-        val deepTexts = prefetched + fetchCircularTexts(
+        // Il secondo giro ha il suo tempo: ogni chiamata al modello e' limitata dal classificatore
+        // (vedi ChainedAiClassifier), quindi qui basta leggere le circolari richieste.
+        val fetched = if (requested.isEmpty()) emptyMap() else fetchCircularTexts(
             requested,
-            knowledge.circulars,
-            budgetMs = if (isCloud) minOf(PREFETCH_BUDGET_MS, remainingMs - MIN_SECOND_ROUND_MS / 2) else Long.MAX_VALUE
+            known.circulars,
+            budgetMs = PREFETCH_BUDGET_MS
         )
+        val deepTexts = prefetched + searched + fetched
         if (deepTexts.size == prefetched.size) {
             // Nessuno dei PDF richiesti si e' lasciato leggere (rete, scansione senza testo):
             // si tiene la prima risposta, che per contratto contiene gia' quello che il modello
@@ -154,14 +155,8 @@ class AilaAssistant(
             return firstReply
         }
 
-        val secondPrompt = AssistantPrompt.builderFor(knowledge, history, question, deepTexts, searchQuery)
-        val secondResult = if (isCloud) {
-            val left = TARGET_REPLY_MS - (currentTimeMillis() - startedAt)
-            if (left <= 0) return firstReply
-            withTimeoutOrNull(left) { classifier.generateAnswer(secondPrompt) } ?: return firstReply
-        } else {
-            classifier.generateAnswer(secondPrompt)
-        }
+        val secondPrompt = AssistantPrompt.builderFor(known, history, question, deepTexts, searchQuery, mode)
+        val secondResult = classifier.generateAnswer(secondPrompt)
         if (secondResult !is AiTextResult.Success) {
             // Il secondo giro e' un miglioramento, non un requisito: se cade (tipicamente per
             // quota esaurita dopo la prima chiamata) resta la risposta del primo giro.
@@ -174,8 +169,8 @@ class AilaAssistant(
             // Le circolari richieste e lette per intero entrano fra le fonti anche se il modello
             // si dimentica di citarle: sono quelle su cui la risposta si regge davvero.
             sources = mergeSources(
-                checkedSources(secondAnswer, searchQuery, deepTexts.keys, knowledge),
-                requested.filter { it in deepTexts }.toSet(),
+                checkedSources(secondAnswer, searchQuery, deepTexts.keys, known),
+                (requested + searched.keys).filter { it in deepTexts }.toSet(),
                 knowledge.circulars
             ),
             modelLabel = secondResult.modelLabel
@@ -202,6 +197,16 @@ class AilaAssistant(
             AssistantContext.circularNumbersIn(question) +
             AssistantContext.mostRelevantCirculars(knowledge, question, limit = 6)
         return parsed.sources.mapNotNull { source ->
+            if (source.kind == AssistantSourceKind.GITA) {
+                // Una fonte Gita vale solo se il titolo esiste davvero nel materiale: la sua
+                // etichetta si ricostruisce dai dati, come per le circolari.
+                val doc = knowledge.gita.firstOrNull { source.label.contains(it.title, ignoreCase = true) }
+                    ?: return@mapNotNull null
+                return@mapNotNull AssistantSource(
+                    AssistantSourceKind.GITA,
+                    AssistantContext.gitaSourceLabel(doc, knowledge.todayIso)
+                )
+            }
             if (source.kind != AssistantSourceKind.CIRCULAR) return@mapNotNull source
             val number = source.circularNumber ?: return@mapNotNull null
             val circular = byNumber[number] ?: return@mapNotNull null
@@ -215,6 +220,32 @@ class AilaAssistant(
     }
 
     private fun circularLabel(circular: Circular) = "Circolare n. ${circular.number} — ${circular.title}"
+
+    /**
+     * Per ogni parola della domanda, in quali circolari compare nel testo integrale sul telefono.
+     * Serve a [KeywordEvidence] per dire "non compare" solo quando il testo e' stato controllato.
+     */
+    private suspend fun textHitsFor(question: String): AssistantTextHits = AssistantTextHits(
+        circularsWithText = CircularTextStore.count(),
+        byTerm = KeywordEvidence.terms(question).associateWith { term ->
+            CircularTextStore.search(listOf(term)).map { it.number }.toSet()
+        }
+    )
+
+    /**
+     * Il testo integrale delle circolari trovate con le [terms] scelte dal modello, escluse quelle
+     * che il primo giro ha gia' letto. Al secondo giro [AssistantContext] ne ricava i passaggi
+     * che servono alla domanda.
+     */
+    private suspend fun searchedTexts(terms: List<String>, exclude: Set<Int>): Map<Int, String> {
+        if (terms.isEmpty()) return emptyMap()
+        return CircularTextStore.search(terms)
+            .map { it.number }
+            .filter { it !in exclude }
+            .take(MAX_SEARCHED_CIRCULARS)
+            .mapNotNull { number -> CircularTextStore.text(number)?.takeIf { it.isNotBlank() }?.let { number to it } }
+            .toMap()
+    }
 
     /**
      * Scarica ed estrae il testo delle circolari indicate, allegati PDF compresi.

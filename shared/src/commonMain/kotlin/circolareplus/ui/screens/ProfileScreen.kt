@@ -43,6 +43,9 @@ fun ProfileScreen(
     userAiApiKey: String = "",
     onOpenSettings: () -> Unit = {},
     onManageClassRoster: () -> Unit = {},
+    /** Le notifiche stanno qui: prima avevano la campanella in Home. */
+    onOpenNotifications: () -> Unit = {},
+    hasUnreadNotifications: Boolean = false,
     onLogoutClick: () -> Unit = {},
     /**
      * Elimina l'account dopo la conferma con password. Restituisce il messaggio d'errore da
@@ -209,6 +212,19 @@ fun ProfileScreen(
             AilaSectionTitle(text = "Impostazioni")
             Spacer(modifier = Modifier.height(AppTheme.Space12))
             AilaCard {
+                AilaListRow(
+                    title = "Notifiche",
+                    subtitle = if (hasUnreadNotifications) "Ci sono novità da leggere" else "Circolari, bacheca e calendario",
+                    tint = AppTheme.TintBlue,
+                    onClick = onOpenNotifications,
+                    icon = {
+                        AppIcons.Bell(
+                            modifier = Modifier.size(21.dp),
+                            color = AppTheme.TintBlueInk,
+                            hasBadge = hasUnreadNotifications
+                        )
+                    }
+                )
                 AilaListRow(
                     title = "Impostazioni",
                     subtitle = if (userAiApiKey.isBlank()) {

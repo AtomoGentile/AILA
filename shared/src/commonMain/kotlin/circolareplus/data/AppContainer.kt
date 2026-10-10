@@ -24,6 +24,7 @@ import circolareplus.data.repository.AuthRepository
 import circolareplus.data.repository.CalendarRepository
 import circolareplus.data.repository.CircularsRepository
 import circolareplus.data.repository.FcmRepository
+import circolareplus.data.repository.GitaRepository
 import circolareplus.data.repository.PollsRepository
 import circolareplus.data.repository.PreferencesRepository
 import circolareplus.data.repository.ProposalsRepository
@@ -43,6 +44,9 @@ import kotlinx.coroutines.SupervisorJob
  * progetto ed è facilmente sostituibile in seguito senza toccare le screen, che ricevono
  * sempre dati e callback dall'esterno.
  */
+/** Tempo massimo per ciascun tentativo di risposta dell'assistente: il primo modello, poi la riserva. */
+private const val ASSISTANT_ATTEMPT_MS = 30_000L
+
 object AppContainer {
     val settings: LocalSettingsManager by lazy { LocalSettingsManager() }
     val api: ApiClient by lazy { ApiClient(settings) }
@@ -62,6 +66,7 @@ object AppContainer {
     val ratingsRepository: RatingsRepository by lazy { RatingsRepository(api) }
     val seatMapRepository: SeatMapRepository by lazy { SeatMapRepository(api) }
     val pollsRepository: PollsRepository by lazy { PollsRepository(api) }
+    val gitaRepository: GitaRepository by lazy { GitaRepository(api, pdfTextExtractor) }
     val rankingPollsRepository: RankingPollsRepository by lazy { RankingPollsRepository(api) }
     val fcmRepository: FcmRepository by lazy { FcmRepository(api, settings, pushTokenProvider) }
 
@@ -100,7 +105,9 @@ object AppContainer {
      * cambiarli durante una conversazione ha effetto dal messaggio successivo.
      */
     fun newAssistant(): AilaAssistant = AilaAssistant(
-        classifierFactory = { newAiClassifier(localThinking = settings.assistantThinkingEnabled) },
+        classifierFactory = {
+            newAiClassifier(localThinking = settings.assistantThinkingEnabled, answerAttemptTimeoutMs = ASSISTANT_ATTEMPT_MS)
+        },
         circularsRepository = circularsRepository,
         pdfTextExtractor = pdfTextExtractor
     )
@@ -187,7 +194,9 @@ object AppContainer {
         allowLocalFallback: Boolean = true,
         pdfTextLength: Int? = null,
         /** Ragionamento del modello locale: lo passa solo l'assistente, vedi [LocalAiClassifier]. */
-        localThinking: Boolean = false
+        localThinking: Boolean = false,
+        /** Tetto per ciascun tentativo di risposta (primario e riserva), vedi [ChainedAiClassifier]. */
+        answerAttemptTimeoutMs: Long? = null
     ): AiClassifier {
         val cloud = ClientSideAiClassifier(userApiKey = settings.userAiApiKey)
 
@@ -207,11 +216,12 @@ object AppContainer {
 
         return when {
             provider == AiProvider.ON_DEVICE && !plan.cloudFirst ->
-                ChainedAiClassifier(primary = local, secondary = cloud)
+                ChainedAiClassifier(primary = local, secondary = cloud, answerAttemptTimeoutMs = answerAttemptTimeoutMs)
             else -> ChainedAiClassifier(
                 primary = cloud,
                 secondary = local,
-                escalateToSecondary = allowLocalFallback
+                escalateToSecondary = allowLocalFallback,
+                answerAttemptTimeoutMs = answerAttemptTimeoutMs
             )
         }
     }
