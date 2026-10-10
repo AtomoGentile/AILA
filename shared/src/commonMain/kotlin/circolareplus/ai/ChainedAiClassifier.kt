@@ -1,5 +1,6 @@
 package circolareplus.ai
 
+import kotlinx.coroutines.withTimeoutOrNull
 import circolareplus.domain.model.CircularAiClassification
 
 /**
@@ -32,7 +33,12 @@ class ChainedAiClassifier(
      * si e' vista qualche volta di fila, e lasciarla per l'apertura manuale di una singola
      * circolare (dove l'attesa e' accettata perche' e' l'utente a chiederla).
      */
-    private val escalateToSecondary: Boolean = true
+    private val escalateToSecondary: Boolean = true,
+    /**
+     * Tetto per ciascun tentativo di [generateAnswer]: il primario e poi la riserva hanno ognuno
+     * il loro tempo. Null = nessun tetto (classificazione in sottofondo).
+     */
+    private val answerAttemptTimeoutMs: Long? = null
 ) : AiClassifier {
 
     private companion object {
@@ -101,14 +107,21 @@ class ChainedAiClassifier(
      * (quota finita da una parte, modello non scaricato dall'altra) e sapere quale dei due
      * sistemare e' l'unica informazione utile.
      */
+    /** Un tentativo di risposta, con il suo tetto di tempo se c'e'. Allo scadere e' un fallimento. */
+    private suspend fun attempt(block: suspend () -> AiTextResult): AiTextResult {
+        val timeout = answerAttemptTimeoutMs ?: return block()
+        return withTimeoutOrNull(timeout) { block() }
+            ?: AiTextResult.Failure("Nessuna risposta entro ${timeout / 1000} secondi.")
+    }
+
     override suspend fun generateAnswer(prompt: AiPromptBuilder): AiTextResult {
-        val first = primary.generateAnswer(prompt)
+        val first = attempt { primary.generateAnswer(prompt) }
         if (first is AiTextResult.Success) return first
 
         // Lo stesso builder, non lo stesso prompt: ognuno dei due se lo fa costruire della
         // misura che regge. E' quello che rende la riserva una riserva vera anche quando il
         // primario e' il cloud con il suo contesto largo.
-        val second = secondary.generateAnswer(prompt)
+        val second = attempt { secondary.generateAnswer(prompt) }
         val firstReason = (first as AiTextResult.Failure).reason
         if (second is AiTextResult.Success) {
             // Sotto la risposta della riserva si vede perche' il primo non ha risposto: senza,

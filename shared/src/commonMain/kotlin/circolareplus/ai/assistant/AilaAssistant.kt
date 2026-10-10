@@ -5,7 +5,6 @@ import circolareplus.ai.AiTextResult
 import circolareplus.ai.PdfTextExtractor
 import circolareplus.data.repository.CircularsRepository
 import circolareplus.domain.model.Circular
-import circolareplus.platform.currentTimeMillis
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.joinAll
@@ -51,14 +50,8 @@ class AilaAssistant(
          */
         private const val MAX_PDF_CHARS_PER_CIRCULAR = 150_000
 
-        /** Attesa massima di una risposta di Gemini, dalla domanda alla risposta in chat. */
-        private const val TARGET_REPLY_MS = 30_000L
-
         /** Tempo concesso ai PDF letti prima della domanda: il resto va al modello. */
         private const val PREFETCH_BUDGET_MS = 4_000L
-
-        /** Sotto questo margine il secondo giro (PDF richiesti + nuova chiamata) non si tenta. */
-        private const val MIN_SECOND_ROUND_MS = 7_000L
 
         /** Circolari lette per intero prima di chiedere al modello: le due piu' attinenti. */
         private const val PREFETCHED_CIRCULARS = 2
@@ -102,7 +95,6 @@ class AilaAssistant(
         AssistantDigest.answer(knowledge, question)?.let { return it }
 
         val classifier = classifierFactory()
-        val startedAt = currentTimeMillis()
         // "e dei genitori?": si cerca insieme alla domanda prima, vedi AssistantContext.searchQuery.
         val searchQuery = AssistantContext.searchQuery(question, history)
         // Riscontri nel testo integrale delle circolari sul telefono: li calcola il codice, prima
@@ -143,18 +135,12 @@ class AilaAssistant(
         val searched = searchedTexts(firstAnswer.searches, prefetched.keys)
         if (requested.isEmpty() && searched.isEmpty()) return firstReply
 
-        // Con Gemini la risposta deve arrivare entro [TARGET_REPLY_MS]: il secondo giro si fa
-        // solo se resta il tempo per un altro PDF e un'altra chiamata, e comunque non oltre.
-        // Il modello sul telefono non ha questo tetto: e' lento per natura, e un secondo giro
-        // saltato li' vorrebbe dire rispondere quasi sempre col solo riassunto.
-        val isCloud = firstRaw.modelLabel.startsWith("Google")
-        val remainingMs = TARGET_REPLY_MS - (currentTimeMillis() - startedAt)
-        if (isCloud && remainingMs < MIN_SECOND_ROUND_MS) return firstReply
-
+        // Il secondo giro ha il suo tempo: ogni chiamata al modello e' limitata dal classificatore
+        // (vedi ChainedAiClassifier), quindi qui basta leggere le circolari richieste.
         val fetched = if (requested.isEmpty()) emptyMap() else fetchCircularTexts(
             requested,
             known.circulars,
-            budgetMs = if (isCloud) minOf(PREFETCH_BUDGET_MS, remainingMs - MIN_SECOND_ROUND_MS / 2) else Long.MAX_VALUE
+            budgetMs = PREFETCH_BUDGET_MS
         )
         val deepTexts = prefetched + searched + fetched
         if (deepTexts.size == prefetched.size) {
@@ -165,13 +151,7 @@ class AilaAssistant(
         }
 
         val secondPrompt = AssistantPrompt.builderFor(known, history, question, deepTexts, searchQuery)
-        val secondResult = if (isCloud) {
-            val left = TARGET_REPLY_MS - (currentTimeMillis() - startedAt)
-            if (left <= 0) return firstReply
-            withTimeoutOrNull(left) { classifier.generateAnswer(secondPrompt) } ?: return firstReply
-        } else {
-            classifier.generateAnswer(secondPrompt)
-        }
+        val secondResult = classifier.generateAnswer(secondPrompt)
         if (secondResult !is AiTextResult.Success) {
             // Il secondo giro e' un miglioramento, non un requisito: se cade (tipicamente per
             // quota esaurita dopo la prima chiamata) resta la risposta del primo giro.
