@@ -9,6 +9,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,7 +22,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,6 +37,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalUriHandler
@@ -54,9 +60,10 @@ import circolareplus.design.AilaListRow
 import circolareplus.design.AilaPillTextField
 import circolareplus.design.AilaPrimaryButton
 import circolareplus.design.AilaSectionTitle
+import circolareplus.design.AilaSlidingChipRow
+import circolareplus.design.AnimatedFilterChip
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
-import circolareplus.design.ailaAppear
 import circolareplus.domain.model.GitaCategory
 import circolareplus.domain.model.GitaCircular
 import circolareplus.domain.model.GitaFeed
@@ -118,6 +125,7 @@ fun GitaScreen(
     var notice by remember { mutableStateOf<String?>(null) }
     // Voce da sostituire mentre si sceglie il file: il picker torna con il file, non con la voce.
     var replaceTarget by remember { mutableStateOf<GitaItem?>(null) }
+    var refreshing by remember { mutableStateOf(false) }
 
     fun messageOf(e: Throwable): String = when (e) {
         is ApiException -> e.message ?: "Operazione non riuscita."
@@ -153,13 +161,17 @@ fun GitaScreen(
     }
 
     LaunchedEffect(reloadKey) {
+        refreshing = true
         try {
             feed = repository.feed()
             error = null
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            error = messageOf(e)
+            // Con dati già a schermo un errore di rete non li cancella: resta la barra e il messaggio.
+            if (feed == null) error = messageOf(e) else notice = messageOf(e)
+        } finally {
+            refreshing = false
         }
     }
 
@@ -172,16 +184,12 @@ fun GitaScreen(
                 title = "Gita",
                 onBackClick = onBackClick,
                 action = if (canEdit) {
-                    {
-                        AilaPrimaryButton(
-                            text = "Nuovo",
-                            compact = true,
-                            enabled = !busy,
-                            onClick = { sheet = GitaSheet.Choose }
-                        )
-                    }
+                    { GitaPlusButton(enabled = !busy, onClick = { sheet = GitaSheet.Choose }) }
                 } else null
             )
+            if (refreshing && current != null) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = AppTheme.PrimaryBlue)
+            }
             when {
                 current == null && error == null -> Box(Modifier.fillMaxSize()) {
                     AilaEmptyState(title = "Carico la gita…")
@@ -191,7 +199,6 @@ fun GitaScreen(
                     feed = current,
                     notice = notice,
                     onOpen = { sheet = GitaSheet.Detail(it) },
-                    onReport = { sheet = GitaSheet.Report(it) },
                     onPinCircular = { circular, pinned ->
                         write(if (pinned) "Circolare aggiunta alla gita." else "Circolare tolta dalla gita.") {
                             repository.setCircularPinned(circular.number, pinned)
@@ -340,103 +347,164 @@ fun GitaScreen(
     }
 }
 
+private enum class GitaFilter(val label: String) {
+    ALL("Tutti"), CIRCULARS("Circolari"), DOCUMENTS("Documenti"), LINKS("Link"), REPORTS("Segnalazioni")
+}
+
 @Composable
 private fun GitaList(
     feed: GitaFeed,
     notice: String?,
     onOpen: (GitaItem) -> Unit,
-    onReport: (GitaItem) -> Unit,
     onPinCircular: (GitaCircular, Boolean) -> Unit,
     onResolveReport: (GitaReport) -> Unit,
     canEdit: Boolean,
     busy: Boolean,
 ) {
-    val documents = feed.items.filter { !it.isLink }
-    val links = feed.items.filter { it.isLink }
-    val openReports = feed.reports.count { !it.isResolved }
-    val lastUpdate = feed.items.mapNotNull { it.current?.uploadedAt }.maxOrNull()
+    var filter by remember { mutableStateOf(GitaFilter.ALL) }
+    var query by remember { mutableStateOf("") }
+    val needle = query.trim().lowercase()
+
+    val circulars = feed.circulars.filter { needle.isEmpty() || it.title.lowercase().contains(needle) || "${it.number}".contains(needle) }
+    val documents = feed.items.filter { !it.isLink && (needle.isEmpty() || it.title.lowercase().contains(needle)) }
+    val links = feed.items.filter { it.isLink && (needle.isEmpty() || it.title.lowercase().contains(needle)) }
+    val reports = feed.reports
+    val show = { f: GitaFilter -> filter == GitaFilter.ALL || filter == f }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = AppTheme.Space16, end = AppTheme.Space16, top = AppTheme.Space8, bottom = 120.dp),
-        verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+        contentPadding = PaddingValues(start = AppTheme.Space16, end = AppTheme.Space16, top = AppTheme.Space12, bottom = 120.dp),
+        verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)
     ) {
-        item(key = "summary") {
-            AilaCard(modifier = Modifier.fillMaxWidth().ailaAppear(0)) {
-                Text("${documents.size} documenti · ${links.size} link · ${feed.circulars.size} circolari", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(AppTheme.Space4))
-                Text(
-                    lastUpdate?.let { "Ultimo aggiornamento il ${formatDay(it)}" } ?: "Nessun materiale ancora caricato",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AppTheme.TextMuted
+        item(key = "search") {
+            Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
+                AilaPillTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = "Cerca nella gita…",
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    leadingIcon = { AppIcons.Search(modifier = Modifier.size(18.dp), color = AppTheme.TextFaint) },
                 )
-                if (openReports > 0) {
-                    Spacer(Modifier.height(AppTheme.Space4))
-                    Text(
-                        if (canEdit) "$openReports segnalazioni da leggere" else "$openReports segnalazioni in attesa",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppTheme.TintAmberInk
-                    )
+                AilaSlidingChipRow(
+                    selectedIndex = GitaFilter.entries.indexOf(filter),
+                    itemCount = GitaFilter.entries.size,
+                    modifier = Modifier.fillMaxWidth()
+                ) { chipModifier ->
+                    GitaFilter.entries.forEachIndexed { index, f ->
+                        AnimatedFilterChip(
+                            label = f.label,
+                            isSelected = filter == f,
+                            onClick = { filter = f },
+                            drawSelectionBackground = false,
+                            modifier = chipModifier(index)
+                        )
+                    }
                 }
             }
         }
         notice?.let { text ->
-            item(key = "notice") {
-                Text(text, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TintGreenInk, modifier = Modifier.padding(horizontal = AppTheme.Space4))
+            item(key = "notice") { SubtleLine(text, tint = AppTheme.TintGreenInk) }
+        }
+
+        if (show(GitaFilter.CIRCULARS)) {
+            item(key = "circulars") {
+                GitaSection(title = "Circolari della gita", count = circulars.size) {
+                    if (circulars.isEmpty()) {
+                        SubtleLine(if (needle.isEmpty()) "Nessuna circolare sulla gita per questa classe." else "Nessuna circolare trovata.")
+                    }
+                    circulars.forEach { circular ->
+                        AilaListRow(
+                            title = "Circolare n. ${circular.number}",
+                            subtitle = "${circular.title} · ${formatDay(circular.publishDate)}",
+                            tint = AppTheme.TintBlue,
+                            icon = { AppIcons.Document(modifier = Modifier.size(20.dp), color = AppTheme.TintBlueInk) },
+                            trailing = if (canEdit) {
+                                {
+                                    AilaRowText(
+                                        text = if (circular.pinned) "Togli" else "Aggiungi",
+                                        enabled = !busy,
+                                        onClick = { onPinCircular(circular, !circular.pinned) }
+                                    )
+                                }
+                            } else null,
+                        )
+                    }
+                }
             }
         }
 
-        item(key = "circulars-title") { AilaSectionTitle(text = "Circolari della gita") }
-        if (feed.circulars.isEmpty()) {
-            item(key = "circulars-empty") { SubtleLine("Nessuna circolare sulla gita per questa classe.") }
+        if (show(GitaFilter.DOCUMENTS)) {
+            item(key = "documents") {
+                GitaSection(title = "Documenti", count = documents.size) {
+                    if (documents.isEmpty()) SubtleLine(if (needle.isEmpty()) "Nessun documento caricato." else "Nessun documento trovato.")
+                    documents.forEach { item -> ItemRow(item = item, onClick = { onOpen(item) }) }
+                }
+            }
         }
-        itemsIndexed(feed.circulars, key = { _, c -> "circular-${c.number}" }) { index, circular ->
-            AilaListRow(
-                title = "Circolare n. ${circular.number}",
-                subtitle = "${circular.title} · ${formatDay(circular.publishDate)}",
-                tint = AppTheme.TintBlue,
-                icon = { AppIcons.Document(modifier = Modifier.size(20.dp), color = AppTheme.TintBlueInk) },
-                trailing = if (canEdit) {
-                    {
-                        AilaRowText(
-                            text = if (circular.pinned) "Togli" else "Aggiungi",
-                            enabled = !busy,
-                            onClick = { onPinCircular(circular, !circular.pinned) }
+
+        if (show(GitaFilter.LINKS)) {
+            item(key = "links") {
+                GitaSection(title = "Link utili", count = links.size) {
+                    if (links.isEmpty()) SubtleLine(if (needle.isEmpty()) "Nessun link." else "Nessun link trovato.")
+                    links.forEach { item -> ItemRow(item = item, onClick = { onOpen(item) }) }
+                }
+            }
+        }
+
+        if (show(GitaFilter.REPORTS) && reports.isNotEmpty()) {
+            item(key = "reports") {
+                GitaSection(title = if (canEdit) "Segnalazioni" else "Le tue segnalazioni", count = reports.count { !it.isResolved }, countLabel = "da leggere") {
+                    reports.forEach { report ->
+                        ReportRow(
+                            report = report,
+                            showResolve = canEdit && !report.isResolved,
+                            busy = busy,
+                            onResolve = { onResolveReport(report) },
                         )
                     }
-                } else null,
-                modifier = Modifier.fillMaxWidth().ailaAppear(index + 1)
-            )
-        }
-
-        item(key = "docs-title") { AilaSectionTitle(text = "Documenti") }
-        if (documents.isEmpty()) item(key = "docs-empty") { SubtleLine("Nessun documento caricato.") }
-        itemsIndexed(documents, key = { _, i -> "doc-${i.id}" }) { index, item ->
-            ItemRow(item = item, onClick = { onOpen(item) }, modifier = Modifier.ailaAppear(index + 1))
-        }
-
-        item(key = "links-title") { AilaSectionTitle(text = "Link utili") }
-        if (links.isEmpty()) item(key = "links-empty") { SubtleLine("Nessun link.") }
-        itemsIndexed(links, key = { _, i -> "link-${i.id}" }) { index, item ->
-            ItemRow(item = item, onClick = { onOpen(item) }, modifier = Modifier.ailaAppear(index + 1))
-        }
-
-        if (feed.reports.isNotEmpty()) {
-            item(key = "reports-title") { AilaSectionTitle(text = if (canEdit) "Segnalazioni" else "Le tue segnalazioni") }
-            items(feed.reports, key = { "report-${it.id}" }) { report ->
-                ReportRow(
-                    report = report,
-                    showResolve = canEdit && !report.isResolved,
-                    busy = busy,
-                    onResolve = { onResolveReport(report) },
-                )
+                }
             }
         }
     }
 }
 
+/** Sezione della Gita: un titolo con il conteggio e le righe raccolte in una sola card. */
 @Composable
-private fun ItemRow(item: GitaItem, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun GitaSection(title: String, count: Int, countLabel: String? = null, content: @Composable ColumnScope.() -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = AppTheme.Space4)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.weight(1f))
+            Text(
+                if (countLabel != null) "$count $countLabel" else "$count",
+                style = MaterialTheme.typography.labelLarge,
+                color = AppTheme.TextMuted
+            )
+        }
+        AilaCard(modifier = Modifier.fillMaxWidth(), content = content)
+    }
+}
+
+/** "+" in intestazione: cerchio tenue con il segno, area di tocco di 44dp. */
+@Composable
+private fun GitaPlusButton(enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .padding(end = AppTheme.Space8)
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(AppTheme.TintBlue)
+            .clickable(enabled = enabled, onClick = onClick)
+            .semantics { contentDescription = "Aggiungi alla gita"; role = Role.Button },
+        contentAlignment = Alignment.Center
+    ) {
+        AppIcons.Plus(modifier = Modifier.size(20.dp), color = AppTheme.TintBlueInk)
+    }
+}
+
+@Composable
+private fun ItemRow(item: GitaItem, onClick: () -> Unit) {
     val look = if (item.isLink) CategoryTint(AppTheme.TintSlate, AppTheme.TintSlateInk, "Link") else item.category.look()
     val version = item.current
     val subtitle = if (item.isLink) {
@@ -453,7 +521,6 @@ private fun ItemRow(item: GitaItem, onClick: () -> Unit, modifier: Modifier = Mo
             if (item.isLink) AppIcons.ExternalLink(modifier = Modifier.size(20.dp), color = look.ink)
             else AppIcons.Document(modifier = Modifier.size(20.dp), color = look.ink)
         },
-        modifier = modifier.fillMaxWidth()
     )
 }
 
@@ -664,7 +731,7 @@ private fun VersionsSheet(
                 list == null -> SubtleLine("Caricamento…")
                 list.isEmpty() -> SubtleLine("Nessuna versione.")
                 else -> AilaCard(modifier = Modifier.fillMaxWidth()) {
-                    list.forEachIndexed { index, v ->
+                    list.forEach { v ->
                         AilaListRow(
                             title = "Versione ${v.versionNo}${if (v.id == item.current?.id) " · attuale" else ""}",
                             subtitle = listOfNotNull("Caricata il ${formatDay(v.uploadedAt)}", v.note).joinToString(" · "),
@@ -675,7 +742,7 @@ private fun VersionsSheet(
                                     else scope.launch { openPdfVersion(repository, v.id, item.title, v.versionNo, onError = onNotice) }
                                 }
                             } else null,
-                            modifier = Modifier.ailaAppear(index),
+                            modifier = Modifier,
                         )
                     }
                 }
@@ -758,8 +825,8 @@ private fun AilaRowText(text: String, enabled: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SubtleLine(text: String) {
-    Text(text, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted, modifier = Modifier.padding(horizontal = AppTheme.Space4))
+private fun SubtleLine(text: String, tint: Color = AppTheme.TextMuted) {
+    Text(text, style = MaterialTheme.typography.bodyMedium, color = tint, modifier = Modifier.padding(horizontal = AppTheme.Space4))
 }
 
 /** Scarica il PDF di una versione con il login e apre il foglio di condivisione del sistema. */
