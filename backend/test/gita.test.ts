@@ -247,3 +247,39 @@ describe('gita: date', () => {
     expect(created.json.version.uploadedAt).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
   });
 });
+
+describe('gita: circolari per classe', () => {
+  async function circular(number: number, title: string) {
+    await env.DB.prepare('INSERT INTO circulars (number, title, publish_date, r2_pdf_key) VALUES (?, ?, ?, ?)')
+      .bind(number, title, '2026-10-01', `circulars/${number}.pdf`).run();
+  }
+
+  it('mostra le circolari con gita o uscita nel titolo, e quelle aggiunte dalla classe', async () => {
+    await circular(101, 'Uscita didattica al museo');
+    await circular(102, 'Sciopero del personale');
+    await circular(103, 'Viaggio d\'istruzione a Roma');
+    const { rep, student } = await cast();
+    const list = await call('GET', '/api/gita', undefined, student);
+    const numbers = list.json.circulars.map((c: any) => c.number).sort();
+    expect(numbers).toEqual([101, 103]);
+    expect(list.json.circulars.every((c: any) => c.pinned === false)).toBe(true);
+
+    expect((await call('POST', '/api/gita/circulars', { number: 102 }, student)).status).toBe(403);
+    expect((await call('POST', '/api/gita/circulars', { number: 102 }, rep)).status).toBe(201);
+    const after = await call('GET', '/api/gita', undefined, rep);
+    expect(after.json.circulars.find((c: any) => c.number === 102).pinned).toBe(true);
+  });
+
+  it('le circolari aggiunte da una classe non compaiono nelle altre', async () => {
+    await circular(104, 'Circolare generica');
+    const { rep, other } = await cast();
+    await call('POST', '/api/gita/circulars', { number: 104 }, rep);
+    expect((await call('GET', '/api/gita', undefined, rep)).json.circulars.map((c: any) => c.number)).toContain(104);
+    expect((await call('GET', '/api/gita', undefined, other)).json.circulars.map((c: any) => c.number)).not.toContain(104);
+  });
+
+  it('una circolare inesistente non si può aggiungere', async () => {
+    const { rep } = await cast();
+    expect((await call('POST', '/api/gita/circulars', { number: 9999 }, rep)).status).toBe(404);
+  });
+});

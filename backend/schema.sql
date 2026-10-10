@@ -498,3 +498,12 @@ CREATE TABLE IF NOT EXISTS gita_reports (
 
 CREATE INDEX IF NOT EXISTS idx_gita_reports_class ON gita_reports(class_id);
 CREATE INDEX IF NOT EXISTS idx_gita_reports_reporter ON gita_reports(reported_by);
+
+-- 16. CIRCOLARI DELLA GITA PER CLASSE (migrazione 019): quelle che il Rappresentante aggiunge.
+CREATE TABLE IF NOT EXISTS gita_circulars (
+    class_id TEXT NOT NULL REFERENCES classes(id),
+    circular_number INTEGER NOT NULL REFERENCES circulars(number) ON DELETE CASCADE,
+    added_by TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (class_id, circular_number)
+);

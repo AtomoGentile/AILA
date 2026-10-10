@@ -17,6 +17,8 @@ export const GITA_MAX_BYTES = 100 * 1024 * 1024;
 const MAX_TITLE = 200;
 const MAX_NOTE = 1000;
 const MAX_REASON = 500;
+/** Titoli di circolare che parlano di gita: minuscole, senza accenti (il confronto è LIKE). */
+export const GITA_KEYWORDS = ['gita', 'uscita', 'viaggio', 'pullman', 'escursione'];
 export const GITA_CATEGORIES = ['PROGRAMMA', 'PREVENTIVO', 'SCADENZA', 'REGOLAMENTO', 'PAGAMENTO', 'ALTRO'] as const;
 type GitaCategory = (typeof GITA_CATEGORIES)[number];
 
@@ -259,6 +261,15 @@ gita.get('/', async (c) => {
     out.push(itemJson(item, await currentVersion(c.env, item.id)));
   }
 
+  // Circolari della gita: quelle che il Rappresentante ha aggiunto per la classe, più quelle il cui
+  // titolo parla di gita o uscita (la parola chiave è in GITA_KEYWORDS).
+  const circulars = await c.env.DB.prepare(
+    `SELECT c.number, c.title, c.publish_date, g.circular_number IS NOT NULL AS pinned
+     FROM circulars c LEFT JOIN gita_circulars g ON g.circular_number = c.number AND g.class_id = ?
+     WHERE g.circular_number IS NOT NULL OR ${GITA_KEYWORDS.map(() => 'LOWER(c.title) LIKE ?').join(' OR ')}
+     ORDER BY c.publish_date DESC, c.number DESC LIMIT 100`
+  ).bind(classId, ...GITA_KEYWORDS.map((k) => `%${k}%`)).all<{ number: number; title: string; publish_date: string; pinned: number }>();
+
   // Il Rappresentante vede tutte le segnalazioni della classe; gli altri solo le proprie.
   const isRep = payload.role === 'REPRESENTATIVE';
   const reports = await c.env.DB.prepare(
@@ -268,6 +279,12 @@ gita.get('/', async (c) => {
 
   return c.json({
     items: out,
+    circulars: circulars.results.map((r) => ({
+      number: r.number,
+      title: r.title,
+      publishDate: r.publish_date,
+      pinned: r.pinned === 1,
+    })),
     reports: reports.results.map((r) => reportJson(r, r.item_title)),
     canEdit: isRep,
   });
@@ -332,6 +349,33 @@ gita.get('/corpus', async (c) => {
     });
   }
   return c.json({ documents: out });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/gita/circulars — Aggiunge una circolare alla gita della classe. Solo Rappresentante
+// ---------------------------------------------------------------------------
+gita.post('/circulars', requireRole('REPRESENTATIVE'), async (c) => {
+  const classId = await resolveClassId(c);
+  const body = await c.req.json<Record<string, unknown>>().catch(() => null);
+  const number = typeof body?.number === 'number' ? body.number : Number(body?.number);
+  if (!Number.isInteger(number) || number <= 0) return c.json({ error: 'Numero di circolare non valido' }, 400);
+  const exists = await c.env.DB.prepare('SELECT number FROM circulars WHERE number = ?').bind(number).first();
+  if (!exists) return c.json({ error: 'Circolare non trovata' }, 404);
+  await c.env.DB.prepare('INSERT OR IGNORE INTO gita_circulars (class_id, circular_number, added_by) VALUES (?, ?, ?)')
+    .bind(classId, number, c.get('jwtPayload').sub).run();
+  return c.json({ ok: true }, 201);
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/gita/circulars/:number — La toglie dalla gita della classe. Solo Rappresentante
+// ---------------------------------------------------------------------------
+gita.delete('/circulars/:number', requireRole('REPRESENTATIVE'), async (c) => {
+  const classId = await resolveClassId(c);
+  const number = Number(c.req.param('number'));
+  if (!Number.isInteger(number)) return c.json({ error: 'Numero di circolare non valido' }, 400);
+  await c.env.DB.prepare('DELETE FROM gita_circulars WHERE class_id = ? AND circular_number = ?')
+    .bind(classId, number).run();
+  return c.json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------
