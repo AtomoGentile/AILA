@@ -236,8 +236,16 @@ fun AilaSegmentedTabs(
     // Capsula in entrambi gli stili. Glass: binario grigio traslucido e selezione bianca in
     // rilievo con testo scuro (segmented control di iOS). Expressive: binario tonale e selezione
     // "secondary container", con la molla piu' vivace di Material.
+    // Su tablet la striscia non si allunga a tutta la riga: ogni segmento resta largo come sul
+    // telefono (vedi isTabletWidth).
+    val tabletMaxWidth = if (circolareplus.design.isTabletWidth()) {
+        // wrapContentWidth prima di widthIn: chi chiama spesso passa weight(1f) o fillMaxWidth, cioe' una
+        // larghezza gia' fissata, e un semplice widthIn non la restringerebbe.
+        Modifier.wrapContentWidth(Alignment.Start).widthIn(max = circolareplus.design.TabletSegmentMaxWidth * labels.size)
+    } else Modifier
     BoxWithConstraints(
         modifier = modifier
+            .then(tabletMaxWidth)
             .clip(RoundedCornerShape(percent = 50))
             .background(AppTheme.TrackFill)
             .then(if (AppTheme.isGlass) Modifier.border(1.dp, AppTheme.GlassEdge, RoundedCornerShape(percent = 50)) else Modifier)
@@ -346,8 +354,11 @@ fun AilaSlidingChipRow(
         label = "chipRowIndicatorWidth"
     )
 
+    // Su tablet la barra dei filtri prende la larghezza delle sue chip invece di riempire la riga
+    // (vedi isTabletWidth): dentro un Box il figlio si misura con vincoli lasci e quindi si stringe.
+    val inner: @Composable (Modifier) -> Unit = { m ->
     Box(
-        modifier = modifier
+        modifier = m
             // Un'unica barra, come le tab segmentate — non più tante chip separate: prima ogni
             // chip da inattiva restava una sua piccola card bianca bordata, fluttuante nello
             // spazio invece che dentro un contenitore comune.
@@ -393,6 +404,8 @@ fun AilaSlidingChipRow(
             }
         }
     }
+    }
+    if (circolareplus.design.isTabletWidth()) Box(modifier = modifier) { inner(Modifier) } else inner(modifier)
 }
 
 /** La superficie base di tutte le liste; l'aspetto dipende dallo stile (Glass/Expressive). */

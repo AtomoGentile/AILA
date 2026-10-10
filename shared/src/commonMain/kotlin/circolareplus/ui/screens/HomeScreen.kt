@@ -425,20 +425,24 @@ private fun HomeHeroPanel(
 
         Spacer(modifier = Modifier.height(AppTheme.Space24))
 
+        // Su tablet le scorciatoie restano grandi come sul telefono e stanno a sinistra: quattro
+        // tasti larghi un quarto di schermo sarebbero strisce con un'icona minuscola in mezzo.
+        val tablet = circolareplus.design.isTabletWidth()
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12)
+            horizontalArrangement = Arrangement.spacedBy(if (tablet) AppTheme.Space16 else AppTheme.Space12)
         ) {
-            HomeQuickIcon(label = "Circolari", modifier = Modifier.weight(1f), onClick = onNavigateToCirculars) {
+            val tileModifier = if (tablet) Modifier.width(96.dp) else Modifier.weight(1f)
+            HomeQuickIcon(label = "Circolari", modifier = tileModifier, onClick = onNavigateToCirculars) {
                 AppIcons.Document(modifier = Modifier.size(22.dp), color = AppTheme.OnHeroPrimary)
             }
-            HomeQuickIcon(label = "Calendario", modifier = Modifier.weight(1f), onClick = onNavigateToCalendar) {
+            HomeQuickIcon(label = "Calendario", modifier = tileModifier, onClick = onNavigateToCalendar) {
                 AppIcons.Calendar(modifier = Modifier.size(22.dp), color = AppTheme.OnHeroPrimary)
             }
-            HomeQuickIcon(label = "Bacheca", modifier = Modifier.weight(1f), onClick = onNavigateToBoard) {
+            HomeQuickIcon(label = "Bacheca", modifier = tileModifier, onClick = onNavigateToBoard) {
                 AppIcons.ChatBubble(modifier = Modifier.size(22.dp), color = AppTheme.OnHeroPrimary)
             }
-            HomeQuickIcon(label = "Mappa posti", modifier = Modifier.weight(1f), onClick = onNavigateToSeatMap) {
+            HomeQuickIcon(label = "Mappa posti", modifier = tileModifier, onClick = onNavigateToSeatMap) {
                 AppIcons.Chair(modifier = Modifier.size(22.dp), color = AppTheme.OnHeroPrimary)
             }
         }

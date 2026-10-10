@@ -891,6 +891,8 @@ fun MainAppShell(
     // Dopo un cambio negli interruttori delle notifiche: il server li applica ai messaggi iOS
     // (con l'app in background il banner lo mostra il sistema, non onPushReceived).
     fun syncPushPreferences() {
+        // PWA: iscrizione Web Push e permesso del browser, nello stesso tocco (null su Android e iOS).
+        circolareplus.push.PushPreferencesHook.onChangedByUser?.invoke()
         coroutineScope.launch {
             try {
                 AppContainer.fcmRepository.syncPreferences(
@@ -3833,6 +3835,11 @@ fun MainAppShell(
                 if (twoPane && route != ShellRoute.ASSISTANT) Modifier.appContentWidth(circolareplus.design.MaxWideContentWidth)
                 else Modifier.appContentWidth()
             )) {
+            // Le schermate a pieno schermo (Profilo, Impostazioni, Notifiche, Ricerca, Scheda classe)
+            // hanno un ramo a due colonne per i tablet, ma lo leggono da LocalWideLayout, che qui
+            // non era impostato (lo e' solo dentro le tab): su un iPad restavano una colonna sola
+            // stirata a tutta larghezza.
+            androidx.compose.runtime.CompositionLocalProvider(circolareplus.design.LocalWideLayout provides twoPane) {
             when (route) {
                 ShellRoute.BACKGROUND_DEBUG -> {
                     circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { isInBackgroundDebugScreen = false }
@@ -4366,6 +4373,7 @@ fun MainAppShell(
                 }
                 // Le tab stanno sotto, nello Scaffold: qui niente (livello trasparente).
                 ShellRoute.TABS -> {}
+            }
             }
             }
             }

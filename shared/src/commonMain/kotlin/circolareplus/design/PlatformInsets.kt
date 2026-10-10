@@ -59,6 +59,22 @@ val TwoPaneMinWidth = 840.dp
 /** Larghezza massima del contenuto a due colonne (bacheca su schermi larghi). */
 val MaxWideContentWidth = 1160.dp
 
+/**
+ * true quando la finestra e' larga da tablet (da [RailMinWidth]). Serve ai controlli nati per il
+ * telefono (tab segmentate, filtri, scorciatoie): lì riempiono la riga e vanno bene, su un tablet
+ * diventerebbero strisce lunghe mezzo schermo con le etichette perse in mezzo. Si decide sulla
+ * larghezza della finestra e non su [LocalWideLayout], che scatta solo da [TwoPaneMinWidth].
+ */
+@androidx.compose.runtime.Composable
+fun isTabletWidth(): Boolean {
+    val widthPx = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize.width
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    return with(density) { widthPx.toDp() } >= RailMinWidth
+}
+
+/** Larghezza massima di un segmento delle tab segmentate su tablet (vedi [isTabletWidth]). */
+val TabletSegmentMaxWidth = 200.dp
+
 /** true quando la finestra e' larga abbastanza per due pannelli (vedi [TwoPaneMinWidth]). */
 val LocalWideLayout = androidx.compose.runtime.compositionLocalOf { false }
 

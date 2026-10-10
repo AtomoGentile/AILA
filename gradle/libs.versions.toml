@@ -4,7 +4,8 @@ compose-multiplatform = "1.11.1"
 agp = "8.13.2"
 coroutines = "1.11.0"
 serialization = "1.11.0"
-ktor = "2.3.13"
+# 3.x: la 2.x non ha il target wasmJs (PWA). Le API del client usate in :shared sono le stesse.
+ktor = "3.5.2"
 multiplatformSettings = "1.3.0"
 # Sfocatura dello sfondo (barra delle tab in Liquid Glass). 1.7.2 e' l'ultima che chiede Compose
 # 1.10 (la 1.7.3 e la 2.x vogliono Compose 1.12, cioe' un aggiornamento di tutta l'app).
@@ -41,6 +42,7 @@ ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
+ktor-client-js = { module = "io.ktor:ktor-client-js", version.ref = "ktor" }
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
 ktor-client-logging = { module = "io.ktor:ktor-client-logging", version.ref = "ktor" }
 haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }

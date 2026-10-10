@@ -4,6 +4,8 @@ import circolareplus.data.local.LocalSettingsManager
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpRequestRetry
+import io.ktor.client.plugins.HttpSend
+import io.ktor.client.plugins.plugin
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.HttpRequestBuilder
@@ -84,6 +86,23 @@ object SessionEvents {
     var expired by mutableStateOf(false)
 }
 
+/**
+ * Errore di rete come eccezione "vera". Il motore Ktor per il browser (ktor-client-js), quando
+ * fetch() fallisce (niente rete, server irraggiungibile), solleva un `kotlin.Error("Fail to
+ * fetch")`, che NON e' un'`Exception`: tutti i `catch (e: Exception)` che qui sotto trasformano
+ * l'assenza di rete in "usa la copia offline" lo lasciavano passare, e sul web l'app restava
+ * ferma su "Caricamento..." offline. OkHttp e Darwin sollevano invece eccezioni normali.
+ */
+class NetworkFailureException(message: String?, cause: Throwable) : Exception(message, cause)
+
+/**
+ * Converte in [NetworkFailureException] solo l'`Error` generico del motore web, riconosciuto dalla
+ * classe esatta: gli errori veri (memoria esaurita, asserzioni) sono sottoclassi e restano
+ * quelli che sono.
+ */
+internal fun Error.asNetworkFailure(): Throwable =
+    if (this::class == Error::class) NetworkFailureException(message, this) else this
+
 val apiJson: Json = Json {
     ignoreUnknownKeys = true
     isLenient = true
@@ -112,7 +131,7 @@ class ApiClient(
             }
             exponentialDelay()
         }
-    }
+    }.also { it.plugin(HttpSend).intercept { request -> try { execute(request) } catch (e: Error) { throw e.asNetworkFailure() } } }
 ) {
     @PublishedApi internal val client = engine
 

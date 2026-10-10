@@ -1,67 +1,106 @@
 name: PWA deploy
 
-# Build, test e deploy della PWA (web/) su Cloudflare Pages, progetto "aila-scuola".
-# Parte da solo sui push a main che toccano la PWA o il contratto condiviso col Worker, oppure a
-# mano (Actions → PWA deploy → Run workflow). Non tocca gli altri workflow né il Worker.
+# Compila la PWA (modulo :webApp: lo stesso codice Compose di :shared per il browser, WebAssembly)
+# e la pubblica su Cloudflare Pages, progetto "aila-scuola".
+# Parte da sola sui push a main che toccano il codice condiviso o la PWA, oppure a mano
+# (Actions → PWA deploy → Run workflow). Su pull request compila soltanto, senza pubblicare.
 # Secret richiesti: CLOUDFLARE_API_TOKEN (permesso "Cloudflare Pages: Edit") e
 # CLOUDFLARE_ACCOUNT_ID, gli stessi del deploy del Worker se il token ha anche quel permesso.
-# Variabile facoltativa: AILA_API_BASE (URL del Worker; vuota = quello di produzione).
 on:
   push:
     branches: [main]
     paths:
-      - 'web/**'
-      - 'backend/src/contracts.ts'
+      - 'shared/**'
+      - 'webApp/**'
+      - 'gradle/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - '.github/workflows/web-deploy.yml'
+  pull_request:
+    paths:
+      - 'shared/**'
+      - 'webApp/**'
+      - 'gradle/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
       - '.github/workflows/web-deploy.yml'
   workflow_dispatch:
 
 concurrency:
-  group: web-deploy
+  group: web-deploy-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   PAGES_PROJECT: aila-scuola
+  DIST: webApp/build/dist/wasmJs/productionExecutable
 
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: web
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
         with:
-          node-version: '22'
+          java-version: '21'
+          distribution: 'temurin'
 
-      # Come per il Worker: i package-lock.json sono esclusi dal repo (.gitignore), quindi le
-      # dipendenze si risolvono a ogni deploy. npm 11 come nel Worker: npm 10 (quello di Node 22)
-      # va in errore ("reading 'edgesOut'") su alcuni alberi di dipendenze (es. vitest 4).
-      - name: Install dependencies
-        run: npx -y npm@11 install --no-audit --no-fund
+      - name: Cache Gradle wrapper and dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ~/.gradle/nodejs
+            ~/.gradle/yarn
+          key: ${{ runner.os }}-gradle-web-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties', '**/*.gradle.kts', 'gradle/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-web-
 
-      - name: Test
-        run: npm test
+      # Come negli altri workflow: google-services.json non e' nel repository e il plugin del
+      # modulo Android lo vuole gia' in fase di configurazione, anche se la PWA non lo usa.
+      - name: google-services.json
+        run: |
+          if [ ! -f androidApp/google-services.json ]; then
+            cat > androidApp/google-services.json <<'EOF'
+          {
+            "project_info": { "project_number": "0", "project_id": "ci-placeholder", "storage_bucket": "ci-placeholder.appspot.com" },
+            "client": [{
+              "client_info": { "mobilesdk_app_id": "1:0:android:0000000000000000", "android_client_info": { "package_name": "com.circolareplus" } },
+              "api_key": [{ "current_key": "ci-placeholder" }]
+            }],
+            "configuration_version": "1"
+          }
+          EOF
+          fi
 
-      # Typecheck (app + service worker) e build di produzione.
-      - name: Build
-        env:
-          VITE_API_BASE: ${{ vars.AILA_API_BASE }}
-        run: npm run build
+      - name: Build PWA
+        run: ./gradlew --no-daemon :webApp:wasmJsBrowserDistribution
+
+      # Cloudflare Pages accetta file fino a 25 MiB: meglio accorgersene qui che al deploy.
+      - name: Check file sizes
+        run: |
+          find "$DIST" -type f -printf '%s %p\n' | sort -rn | head -8
+          big=$(find "$DIST" -type f -size +25M | head -1)
+          if [ -n "$big" ]; then
+            echo "::error::$big supera i 25 MiB ammessi da Cloudflare Pages"
+            exit 1
+          fi
 
       - name: Upload build
         uses: actions/upload-artifact@v4
         with:
           name: aila-pwa
-          path: web/dist
+          path: ${{ env.DIST }}
           retention-days: 7
 
+      # Da qui in poi solo sui push a main e sulle esecuzioni manuali da main.
       # Toglie spazi e "a capo" copiati per sbaglio insieme ai secret (come nel deploy del Worker).
       - name: Check secrets
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         env:
           RAW_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           RAW_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -79,10 +118,12 @@ jobs:
 
       # Al primo deploy il progetto Pages non esiste ancora: lo si crea.
       - name: Ensure Pages project
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         run: |
           if ! npx --yes wrangler@4 pages project list | grep -qw "$PAGES_PROJECT"; then
             npx --yes wrangler@4 pages project create "$PAGES_PROJECT" --production-branch=main
           fi
 
       - name: Deploy to Cloudflare Pages
-        run: npx --yes wrangler@4 pages deploy dist --project-name="$PAGES_PROJECT" --branch=main --commit-dirty=true
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: npx --yes wrangler@4 pages deploy "$DIST" --project-name="$PAGES_PROJECT" --branch=main --commit-dirty=true

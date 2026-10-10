@@ -38,6 +38,13 @@ kotlin {
         }
     }
 
+    // PWA: lo stesso codice Compose dell'app, compilato per il browser (WebAssembly). Vive in
+    // wasmJsMain; il modulo :webApp lo impacchetta con index.html, manifest e service worker.
+    @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+    wasmJs {
+        browser()
+    }
+
     applyDefaultHierarchyTemplate()
 
     sourceSets {
@@ -104,6 +111,11 @@ kotlin {
         val iosMain by getting {
             dependencies {
                 implementation(libs.ktor.client.darwin)
+            }
+        }
+        val wasmJsMain by getting {
+            dependencies {
+                implementation(libs.ktor.client.js)
             }
         }
         commonTest.dependencies {

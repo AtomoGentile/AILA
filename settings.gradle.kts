@@ -13,7 +13,11 @@ pluginManagement {
 }
 
 dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    // PREFER_PROJECT e non FAIL_ON_PROJECT_REPOS: il plugin Kotlin per wasmJs (modulo :webApp)
+    // aggiunge da solo il repository delle distribuzioni di Node.js/Yarn, e con FAIL_ON_PROJECT_REPOS
+    // la configurazione falliva. I repository dei moduli app non cambiano: quelli di settings
+    // restano gli unici che dichiariamo.
+    repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
     repositories {
         google()
         mavenCentral()
@@ -23,3 +27,4 @@ dependencyResolutionManagement {
 rootProject.name = "CircolarePlus"
 include(":shared")
 include(":androidApp")
+include(":webApp")
