@@ -44,7 +44,9 @@ data class AssistantKnowledge(
     val proposals: List<Proposal> = emptyList(),
     val dynamic: AssistantDynamicKnowledge = AssistantDynamicKnowledge(),
     /** Documenti della Gita con il testo estratto, versione corrente (vedi GitaRepository). */
-    val gita: List<circolareplus.domain.model.GitaSourceDoc> = emptyList()
+    val gita: List<circolareplus.domain.model.GitaSourceDoc> = emptyList(),
+    /** Riscontri nel testo integrale delle circolari sul telefono: vedi [CircularTextStore]. */
+    val textHits: AssistantTextHits = AssistantTextHits()
 ) {
     val role: UserRole get() = user?.role ?: UserRole.STUDENT
 
@@ -206,3 +208,13 @@ class AssistantKnowledgeLoader(
             null
         }
 }
+
+/**
+ * Esito della ricerca nel testo integrale delle circolari sul telefono, calcolato dal codice
+ * prima di chiamare il modello. [byTerm] dice, per ogni parola della domanda, in quali circolari
+ * compare; [circularsWithText] quante circolari hanno il testo sul telefono.
+ */
+data class AssistantTextHits(
+    val circularsWithText: Int = 0,
+    val byTerm: Map<String, Set<Int>> = emptyMap()
+)

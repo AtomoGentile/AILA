@@ -43,6 +43,8 @@ class LocalSettingsManager(
         private const val KEY_ACCENT = "accent_color"
         private const val KEY_LAST_ONLINE_SYNC = "last_online_sync_millis"
         private const val KEY_LAST_FULL_OFFLINE_SYNC = "last_full_offline_sync_millis"
+        private const val KEY_OFFLINE_CIRCULAR_LIMIT = "offline_circular_limit"
+        const val DEFAULT_OFFLINE_CIRCULAR_LIMIT = 100
         private const val KEY_MUTED_NOTIFICATIONS = "muted_notification_kinds"
         private const val KEY_LAST_SEEN_CIRCULAR = "last_seen_circular_number"
         private const val KEY_LAST_SEEN_PROPOSAL = "last_seen_proposal_id"
@@ -206,6 +208,14 @@ class LocalSettingsManager(
     var lastFullOfflineSyncMillis: Long
         get() = settings.getLong(KEY_LAST_FULL_OFFLINE_SYNC, 0L)
         set(value) = settings.putLong(KEY_LAST_FULL_OFFLINE_SYNC, value)
+
+    /**
+     * Quante circolari, dalla piu' recente, tenere sul telefono con PDF e testo per la ricerca
+     * offline. 0 = tutte. Vedi OfflineSync.
+     */
+    var offlineCircularLimit: Int
+        get() = settings.getInt(KEY_OFFLINE_CIRCULAR_LIMIT, DEFAULT_OFFLINE_CIRCULAR_LIMIT)
+        set(value) = settings.putInt(KEY_OFFLINE_CIRCULAR_LIMIT, value)
 
     /** Colore principale scelto dall'utente ("blue" = predefinito AILA). */
     var accentKey: String
