@@ -23,6 +23,17 @@ export async function openPdf(url: string): Promise<PDFDocumentProxy> {
   return m.getDocument({ data }).promise;
 }
 
+/** Testo di un PDF già in memoria (file scelto dal Rappresentante). Vuoto se non c'è testo. */
+export async function extractTextFromBytes(data: Uint8Array): Promise<string> {
+  const m = await pdfjs();
+  const task = m.getDocument({ data });
+  try {
+    return await extractText(await task.promise);
+  } finally {
+    await task.destroy();
+  }
+}
+
 /** Testo di tutte le pagine, una pagina per paragrafo. */
 export async function extractText(doc: PDFDocumentProxy): Promise<string> {
   const pages: string[] = [];

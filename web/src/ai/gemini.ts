@@ -196,3 +196,43 @@ export async function testKey(apiKey: string): Promise<string> {
   }
   return `Nessun modello utilizzabile con questa chiave. Ultimo errore: ${lastFailure ?? 'sconosciuto'}`;
 }
+
+/**
+ * Una risposta testuale per la chat della Gita: stessa scaletta di modelli e stessi tentativi
+ * della classificazione. Lancia `Error` con un messaggio leggibile se non riesce.
+ */
+export async function generateGitaText(apiKey: string, prompt: string): Promise<string> {
+  if (!cleanGeminiApiKey(apiKey)) throw new Error('Manca la chiave Google AI Studio: inseriscila in Impostazioni.');
+  let lastFailure: string | null = null;
+  for (const model of candidates()) {
+    let res: Response;
+    try {
+      res = await postGenerate(apiKey, model, prompt);
+    } catch {
+      throw new Error('Sei offline o Google non risponde. Riprova quando hai la connessione.');
+    }
+    const body = await res.text();
+    if (res.ok) {
+      resolvedModel = model;
+      const text = geminiTextOf(body);
+      if (text) return text;
+      throw new Error('Risposta vuota dal modello. Riprova con una domanda più precisa.');
+    }
+    lastFailure = `HTTP ${res.status}`;
+    if (res.status === 400 || res.status === 403) {
+      throw new Error('La chiave Google AI Studio è stata rifiutata. Controllala in Impostazioni.');
+    }
+    if (!isModelUnavailable(res.status, body)) break;
+  }
+  throw new Error(`Nessun modello disponibile in questo momento (${lastFailure ?? 'errore sconosciuto'}).`);
+}
+
+/** Il testo del primo candidato di una risposta generateContent, o stringa vuota. */
+function geminiTextOf(raw: string): string {
+  try {
+    const parsed = JSON.parse(raw) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+    return parsed.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('').trim() ?? '';
+  } catch {
+    return '';
+  }
+}

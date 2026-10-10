@@ -3,6 +3,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { isIosSafari, isStandalone } from '../lib/platform';
 import { useSession } from '../lib/session';
 import { Board } from './Board';
+import { Gita } from './Gita';
 import { Calendar } from './Calendar';
 import { CircularDetail } from './CircularDetail';
 import { Circulars } from './Circulars';
@@ -85,6 +86,9 @@ export function App({ updateReady, onUpdate }: { updateReady: boolean; onUpdate:
       break;
     case 'calendario':
       page = <Calendar />;
+      break;
+    case 'gita':
+      page = <Gita />;
       break;
     case 'mappa':
       page = <SeatMap />;

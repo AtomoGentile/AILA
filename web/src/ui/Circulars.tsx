@@ -43,6 +43,11 @@ export function Circulars() {
   return (
     <section>
       <PageHeader title="Circolari" />
+      {/* La Gita ha una sezione sua: la Home dell'app la mette in alto, qui è il punto d'ingresso. */}
+      <a class="card card-link gita-entry" href="#/gita">
+        <strong>Gita</strong>
+        <span class="muted"> · documenti, programma, preventivi e link</span>
+      </a>
       <input
         class="search"
         type="search"
