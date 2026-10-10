@@ -163,6 +163,19 @@ internal object AssistantContext {
             }
         }
 
+        // Riscontri calcolati dal codice per le parole della domanda: il modello non cerca, legge
+        // il risultato. Breve, quindi sta sempre prima che il budget tagli le circolari.
+        val evidence = KeywordEvidence.check(knowledge, question, deepTexts)
+        if (evidence.isNotEmpty()) {
+            builder.appendSection("RISCONTRI PER LE PAROLE DELLA DOMANDA (calcolati dall'app)") {
+                appendLine(
+                    "Punteggio da -10 a +10. Con +10 o +5 usa le circolari indicate; con -10 " +
+                        "non affermare che la parola compare nelle circolari."
+                )
+                KeywordEvidence.render(evidence).forEach { appendLine(it) }
+            }
+        }
+
         // Una domanda sulla bacheca la mette in testa: con la finestra stretta del modello sul
         // telefono stava dopo circolari e calendario e finiva tagliata, e la risposta era
         // "non risulta".
