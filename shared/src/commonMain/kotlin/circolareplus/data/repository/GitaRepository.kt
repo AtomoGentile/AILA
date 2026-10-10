@@ -13,6 +13,7 @@ import circolareplus.data.remote.dto.GitaVersionCreatedDto
 import circolareplus.data.remote.dto.GitaVersionDto
 import circolareplus.data.remote.dto.GitaVersionsDto
 import circolareplus.domain.model.GitaCategory
+import circolareplus.domain.model.GitaCircular
 import circolareplus.domain.model.GitaFeed
 import circolareplus.domain.model.GitaItem
 import circolareplus.domain.model.GitaReport
