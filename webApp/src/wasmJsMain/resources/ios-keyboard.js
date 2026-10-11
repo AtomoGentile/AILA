@@ -49,7 +49,7 @@
     var t = new Date();
     logLines.push(('0' + t.getMinutes()).slice(-2) + ':' + ('0' + t.getSeconds()).slice(-2) + '.' +
       ('00' + t.getMilliseconds()).slice(-3) + ' ' + msg);
-    if (logLines.length > 18) logLines.shift();
+    if (logLines.length > 24) logLines.shift();
     logEl.textContent = logLines.join('\n');
   }
   function who(el) {
@@ -72,6 +72,14 @@
     if (window.visualViewport) {
       window.visualViewport.addEventListener('resize', function () { log('viewport resize vv=' + vv()); });
     }
+    // Eventi del tocco, per vedere in che ordine arrivano su iOS (solo in diagnosi).
+    ['touchstart', 'touchend', 'touchcancel', 'pointercancel', 'mousedown', 'mouseup', 'click', 'contextmenu',
+     'dragstart', 'selectstart', 'visibilitychange', 'pagehide'].forEach(function (name) {
+      var target = (name === 'visibilitychange') ? document : (name === 'pagehide' ? window : document);
+      target.addEventListener(name, function (e) {
+        log('ev ' + name + (e.defaultPrevented ? '(prevented)' : '') + (e.target && e.target.tagName ? ' ' + e.target.tagName : ''));
+      }, true);
+    });
     document.addEventListener('focusin', function (e) { log('focusin ' + who(e.target)); }, true);
     document.addEventListener('focusout', function (e) { log('focusout ' + who(e.target)); }, true);
   }
