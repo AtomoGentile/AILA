@@ -7,7 +7,7 @@ import shared
 /// Stesso pattern di SeatMapPdfShareBridge.swift. Il file passa per percorso su disco.
 class GitaFileBridgeImpl: NSObject, GitaFileBridge, UIDocumentPickerDelegate {
 
-    private var pickCallback: ((String?) -> KotlinUnit)?
+    private var pickCallback: ((String?) -> Void)?
 
     func shareFile(path: String) -> String? {
         guard let presenter = topViewController() else {
@@ -22,7 +22,7 @@ class GitaFileBridgeImpl: NSObject, GitaFileBridge, UIDocumentPickerDelegate {
         return nil
     }
 
-    func pickPdf(onResult: @escaping (String?) -> KotlinUnit) {
+    func pickPdf(onResult: @escaping (String?) -> Void) {
         guard let presenter = topViewController() else {
             _ = onResult(nil)
             return
