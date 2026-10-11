@@ -45,6 +45,7 @@
       ls.color = '#0f0'; ls.background = 'rgba(0,0,0,0.78)'; ls.whiteSpace = 'pre-wrap';
       document.body.appendChild(logEl);
     }
+    if (!logEl.isConnected) document.body.appendChild(logEl);
     var t = new Date();
     logLines.push(('0' + t.getMinutes()).slice(-2) + ':' + ('0' + t.getSeconds()).slice(-2) + '.' +
       ('00' + t.getMilliseconds()).slice(-3) + ' ' + msg);
@@ -138,6 +139,7 @@
 
   function arm(box) {
     var el = getDecoy();
+    if (!el.isConnected) document.body.appendChild(el);
     // Vicino al campo vero, cosi' iOS scorre la pagina come farebbe per quello.
     el.style.left = Math.max(0, box.left) + 'px';
     el.style.top = Math.max(0, box.top) + 'px';
@@ -204,7 +206,17 @@
 
     // Gia' in modifica proprio su questo campo (spostare il cursore): non si ruba il fuoco.
     var active = r.activeElement;
-    if (isEditable(active) && contains(active.getBoundingClientRect(), e.clientX, e.clientY, 2)) return;
+    if (isEditable(active)) {
+      var ar = active.getBoundingClientRect();
+      var cx = ar.left + ar.width / 2;
+      var cy = ar.top + ar.height / 2;
+      // Il campo nascosto di Compose sta dentro il campo vero: se il suo centro e' nel riquadro
+      // toccato, e' lo stesso campo (spostare il cursore) e non si ruba il fuoco.
+      if (contains(box, cx, cy, 2) || contains(ar, e.clientX, e.clientY, 2)) {
+        log('tap sullo stesso campo gia in modifica: nessun appoggio');
+        return;
+      }
+    }
 
     pending = { box: box, t: Date.now() };
     arm(box);
