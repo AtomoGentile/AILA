@@ -23,7 +23,7 @@ actual class PdfTextExtractor actual constructor() {
         try {
             val nsData = pdfBytes.toNSData()
             val document = PDFDocument(data = nsData) ?: return@withContext ""
-            val pageCount = document.pageCount.toInt()
+            val pageCount = minOf(document.pageCount.toInt(), 300)
             buildString {
                 for (i in 0 until pageCount) {
                     val page = document.pageAtIndex(i.convert()) ?: continue

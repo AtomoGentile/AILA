@@ -4,6 +4,7 @@ import android.content.Context
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -25,6 +26,8 @@ object PdfBoxInit {
     }
 }
 
+private const val MAX_TEXT_PAGES = 300
+
 actual class PdfTextExtractor actual constructor() {
     actual suspend fun extractText(pdfBytes: ByteArray): String = withContext(Dispatchers.Default) {
         try {
@@ -34,9 +37,18 @@ actual class PdfTextExtractor actual constructor() {
                 // e aula dall'altra. Nella circolare 8 degli sportelli "SCIENZE" non stava sulla
                 // stessa riga di "LUNEDI' 13,30 - 15,00 0-020-B", e nessun modello (Gemini
                 // compreso) riusciva a dire quando c'era lo sportello di scienze.
-                PDFTextStripper().apply { sortByPosition = true }.getText(document)
+                PDFTextStripper().apply {
+                    sortByPosition = true
+                    // Oltre queste pagine il testo non serve all'assistente e il telefono resta
+                    // senza memoria: il documento si carica comunque, con il testo delle prime.
+                    endPage = MAX_TEXT_PAGES
+                }.getText(document)
             }
-        } catch (e: Exception) {
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            // Anche gli Error (OutOfMemoryError su PDF molto grandi, classi di PdfBox mancanti):
+            // catturare solo Exception lasciava chiudere l'app caricando un documento nella Gita.
             // PDF scansionato senza testo, non ancora inizializzato PdfBoxInit, file corrotto, ecc.
             // Il chiamante ricade sulla classificazione euristica basata sul solo titolo.
             ""

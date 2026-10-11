@@ -6,6 +6,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -24,16 +25,36 @@ actual suspend fun sharePdfFile(bytes: ByteArray, fileName: String) {
 }
 
 @Composable
-actual fun rememberPdfFilePicker(onPicked: (fileName: String, bytes: ByteArray) -> Unit): () -> Unit {
+actual fun rememberPdfFilePicker(
+    onError: (message: String) -> Unit,
+    onPicked: (fileName: String, bytes: ByteArray) -> Unit
+): () -> Unit {
     val scope = rememberCoroutineScope()
     val currentOnPicked by rememberUpdatedState(onPicked)
+    val currentOnError by rememberUpdatedState(onError)
     return remember {
         {
-            GitaFileBridgeHolder.bridge?.pickPdf { path ->
-                if (path != null) {
-                    scope.launch {
-                        val bytes = withContext(Dispatchers.Default) { readFile(path) }
-                        if (bytes != null) currentOnPicked(path.substringAfterLast('/'), bytes)
+            val bridge = GitaFileBridgeHolder.bridge
+            if (bridge == null) {
+                currentOnError(GITA_PDF_UNREADABLE_MESSAGE)
+            } else {
+                bridge.pickPdf { path ->
+                    if (path != null) {
+                        scope.launch {
+                            // Un errore qui, fuori da ogni try, chiuderebbe l'app.
+                            val bytes = try {
+                                withContext(Dispatchers.Default) { readFile(path) }
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Throwable) {
+                                null
+                            }
+                            when {
+                                bytes == null || bytes.isEmpty() -> currentOnError(GITA_PDF_UNREADABLE_MESSAGE)
+                                bytes.size > GITA_MAX_PDF_BYTES -> currentOnError(GITA_PDF_TOO_BIG_MESSAGE)
+                                else -> currentOnPicked(path.substringAfterLast('/'), bytes)
+                            }
+                        }
                     }
                 }
             }
