@@ -157,9 +157,22 @@
     }, 600);
   }
 
-  // Dopo pointerup il browser sposta il fuoco sull'elemento toccato (il canvas di Compose) con
-  // gli eventi mouse "di compatibilita'" e butterebbe via l'appoggio: il click arriva per ultimo,
-  // sempre dentro lo stesso gesto, e lo rimette a fuoco.
+  // Dopo pointerup il browser manda gli eventi mouse "di compatibilita'" (mousedown, click): il
+  // mousedown sposta il fuoco sull'elemento toccato, cioe' sul canvas di Compose (tabindex=0), e
+  // butta via sia l'appoggio sia il campo nascosto di Compose, chiudendo la tastiera. E' il
+  // difetto che Compose corregge dalla 1.12 (CMP-10079) annullando il touchend: qui lo si fa solo
+  // per i tocchi che cadono su un campo di testo. Il touchend e' anche un evento di gesto sicuro
+  // dove rimettere a fuoco l'appoggio.
+  document.addEventListener('touchend', function (e) {
+    var p = pending;
+    pending = null;
+    if (!p || Date.now() - p.t > 800) return;
+    if (e.cancelable) e.preventDefault();
+    log('touchend annullato (cancelable=' + e.cancelable + ')');
+    arm(p.box);
+  }, { capture: true, passive: false });
+
+  // Ripiego se il touchend non c'e' stato (altri dispositivi di puntamento).
   document.addEventListener('click', function () {
     var p = pending;
     pending = null;
