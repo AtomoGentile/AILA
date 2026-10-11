@@ -146,7 +146,9 @@ fun GitaScreen(
                 reloadKey++
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                // Anche gli Error (memoria finita con un PDF molto grande): un messaggio, non la
+                // chiusura dell'app.
                 notice = messageOf(e)
             } finally {
                 busy = false
@@ -154,12 +156,18 @@ fun GitaScreen(
         }
     }
 
-    val pickPdf = rememberPdfFilePicker { fileName, bytes ->
-        val target = replaceTarget
-        sheet = if (target != null) GitaSheet.ReplaceDocument(target, fileName, bytes)
-        else GitaSheet.NewDocument(fileName, bytes)
-        replaceTarget = null
-    }
+    val pickPdf = rememberPdfFilePicker(
+        onError = { message ->
+            replaceTarget = null
+            notice = message
+        },
+        onPicked = { fileName, bytes ->
+            val target = replaceTarget
+            sheet = if (target != null) GitaSheet.ReplaceDocument(target, fileName, bytes)
+            else GitaSheet.NewDocument(fileName, bytes)
+            replaceTarget = null
+        }
+    )
 
     LaunchedEffect(reloadKey) {
         refreshing = true

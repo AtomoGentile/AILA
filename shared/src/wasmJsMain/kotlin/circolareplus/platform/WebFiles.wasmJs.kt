@@ -16,31 +16,39 @@ actual suspend fun sharePdfFile(bytes: ByteArray, fileName: String) {
 }
 
 @Composable
-actual fun rememberPdfFilePicker(onPicked: (fileName: String, bytes: ByteArray) -> Unit): () -> Unit {
+actual fun rememberPdfFilePicker(
+    onError: (message: String) -> Unit,
+    onPicked: (fileName: String, bytes: ByteArray) -> Unit
+): () -> Unit {
     val currentOnPicked = rememberUpdatedState(onPicked)
+    val currentOnError = rememberUpdatedState(onError)
     return remember {
         {
             // Il selettore si puo' aprire solo dentro il tocco dell'utente: questa lambda viene
             // chiamata dal tocco, e l'input nasce e si apre li', senza attese in mezzo.
-            openPdfPicker { name, base64 ->
+            openPdfPicker(GITA_MAX_PDF_BYTES.toDouble(), { name, base64 ->
                 val bytes = try {
                     Base64.decode(base64)
                 } catch (e: IllegalArgumentException) {
                     null
                 }
                 if (bytes != null) currentOnPicked.value(name, bytes)
-            }
+                else currentOnError.value(GITA_PDF_UNREADABLE_MESSAGE)
+            }, { reason ->
+                currentOnError.value(if (reason == "big") GITA_PDF_TOO_BIG_MESSAGE else GITA_PDF_UNREADABLE_MESSAGE)
+            })
         }
     }
 }
 
-private fun openPdfPicker(onPicked: (String, String) -> Unit) {
+private fun openPdfPicker(maxBytes: Double, onPicked: (String, String) -> Unit, onFailed: (String) -> Unit) {
     js(
         "(function () { var input = document.createElement('input'); input.type = 'file'; input.accept = 'application/pdf,.pdf'; " +
             "input.style.display = 'none'; " +
             "input.onchange = function () { var f = input.files && input.files[0]; if (!f) { input.remove(); return; } " +
+            "if (f.size > maxBytes) { onFailed('big'); input.remove(); return; } " +
             "var r = new FileReader(); r.onload = function () { var s = String(r.result); onPicked(f.name, s.substring(s.indexOf(',') + 1)); input.remove(); }; " +
-            "r.onerror = function () { input.remove(); }; r.readAsDataURL(f); }; " +
+            "r.onerror = function () { onFailed('read'); input.remove(); }; r.readAsDataURL(f); }; " +
             "input.oncancel = function () { input.remove(); }; " +
             "document.body.appendChild(input); input.click(); })()"
     )

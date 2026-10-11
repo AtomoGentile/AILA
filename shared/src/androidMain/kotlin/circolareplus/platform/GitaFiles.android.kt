@@ -1,5 +1,6 @@
 package circolareplus.platform
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -12,10 +13,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.InputStream
 
 actual suspend fun sharePdfFile(bytes: ByteArray, fileName: String) {
     val context = AndroidAppContext.require()
@@ -35,22 +39,77 @@ actual suspend fun sharePdfFile(bytes: ByteArray, fileName: String) {
 }
 
 @Composable
-actual fun rememberPdfFilePicker(onPicked: (fileName: String, bytes: ByteArray) -> Unit): () -> Unit {
+actual fun rememberPdfFilePicker(
+    onError: (message: String) -> Unit,
+    onPicked: (fileName: String, bytes: ByteArray) -> Unit
+): () -> Unit {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val currentOnPicked by rememberUpdatedState(onPicked)
+    val currentOnError by rememberUpdatedState(onError)
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
-            // Un PDF può arrivare a 100 MB: la lettura non blocca la schermata.
-            val picked = withContext(Dispatchers.IO) {
-                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                val name = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-                    ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
-                bytes?.let { (name ?: "documento.pdf") to it }
+            // Un PDF può arrivare a 100 MB: la lettura non blocca la schermata. Ogni errore (file
+            // non più raggiungibile, permesso negato, memoria finita) diventa un messaggio: lasciato
+            // uscire dalla coroutine chiuderebbe l'app.
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    readPickedPdf(context, uri)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    PickResult.Failed(
+                        if (e is OutOfMemoryError) GITA_PDF_TOO_BIG_MESSAGE else GITA_PDF_UNREADABLE_MESSAGE
+                    )
+                }
             }
-            picked?.let { (name, bytes) -> currentOnPicked(name, bytes) }
+            when (result) {
+                is PickResult.Picked -> currentOnPicked(result.name, result.bytes)
+                is PickResult.Failed -> currentOnError(result.message)
+            }
         }
     }
     return remember(launcher) { { launcher.launch(arrayOf("application/pdf")) } }
+}
+
+private sealed interface PickResult {
+    class Picked(val name: String, val bytes: ByteArray) : PickResult
+    class Failed(val message: String) : PickResult
+}
+
+private fun readPickedPdf(context: Context, uri: Uri): PickResult {
+    val resolver = context.contentResolver
+    var name: String? = null
+    var size: Long? = null
+    resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+        if (cursor.moveToFirst()) {
+            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+            if (nameIndex >= 0 && !cursor.isNull(nameIndex)) name = cursor.getString(nameIndex)
+            if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) size = cursor.getLong(sizeIndex)
+        }
+    }
+    // Il controllo sulla dimensione dichiarata evita di caricare in memoria un file che il server
+    // rifiuterebbe comunque.
+    if ((size ?: 0L) > GITA_MAX_PDF_BYTES) return PickResult.Failed(GITA_PDF_TOO_BIG_MESSAGE)
+    val input = resolver.openInputStream(uri) ?: return PickResult.Failed(GITA_PDF_UNREADABLE_MESSAGE)
+    val bytes = input.use { it.readBounded(GITA_MAX_PDF_BYTES) } ?: return PickResult.Failed(GITA_PDF_TOO_BIG_MESSAGE)
+    if (bytes.isEmpty()) return PickResult.Failed(GITA_PDF_UNREADABLE_MESSAGE)
+    return PickResult.Picked(name ?: "documento.pdf", bytes)
+}
+
+/** Legge tutto il flusso; se supera [limit] byte si ferma e restituisce null, senza riempire la memoria. */
+private fun InputStream.readBounded(limit: Long): ByteArray? {
+    val out = ByteArrayOutputStream()
+    val buffer = ByteArray(64 * 1024)
+    var total = 0L
+    while (true) {
+        val read = read(buffer)
+        if (read < 0) break
+        total += read
+        if (total > limit) return null
+        out.write(buffer, 0, read)
+    }
+    return out.toByteArray()
 }

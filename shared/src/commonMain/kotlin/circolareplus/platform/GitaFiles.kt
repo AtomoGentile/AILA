@@ -9,9 +9,22 @@ import androidx.compose.runtime.Composable
  */
 expect suspend fun sharePdfFile(bytes: ByteArray, fileName: String)
 
+/** Dimensione massima di un PDF della Gita: la stessa che accetta il server. */
+const val GITA_MAX_PDF_BYTES: Long = 100L * 1024 * 1024
+
+/** Messaggio mostrato quando il file scelto supera [GITA_MAX_PDF_BYTES]. */
+const val GITA_PDF_TOO_BIG_MESSAGE = "Il file è troppo grande (massimo 100 MB)."
+
+/** Messaggio mostrato quando il file scelto non si riesce a leggere. */
+const val GITA_PDF_UNREADABLE_MESSAGE = "Non riesco a leggere il file. Riprova o scegline un altro."
+
 /**
  * Restituisce la funzione che apre il selettore dei PDF del telefono. [onPicked] riceve il nome del
- * file e il suo contenuto quando la scelta va a buon fine.
+ * file e il suo contenuto quando la scelta va a buon fine; [onError] il messaggio da mostrare se il
+ * file è troppo grande o non si legge (mai un'eccezione che chiuda l'app).
  */
 @Composable
-expect fun rememberPdfFilePicker(onPicked: (fileName: String, bytes: ByteArray) -> Unit): () -> Unit
+expect fun rememberPdfFilePicker(
+    onError: (message: String) -> Unit = {},
+    onPicked: (fileName: String, bytes: ByteArray) -> Unit
+): () -> Unit
