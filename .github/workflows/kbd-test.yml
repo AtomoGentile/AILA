@@ -1,0 +1,63 @@
+name: PWA keyboard test
+
+# Prova diagnostica: compila la PWA, la apre in Chromium (emulazione iPhone, eventi touch), tocca un
+# campo di testo e stampa nel log la sequenza di fuoco di Compose. Non pubblica nulla.
+# Con "compose" si puo' provare un'altra versione di Compose Multiplatform senza toccare il ramo.
+
+on:
+  workflow_dispatch:
+    inputs:
+      compose:
+        description: 'Versione di Compose Multiplatform da provare (vuoto = quella del progetto)'
+        required: false
+        default: ''
+      tap_script:
+        description: 'Con false si disattiva ios-keyboard.js'
+        required: false
+        default: 'true'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ~/.gradle/nodejs
+            ~/.gradle/yarn
+          key: ${{ runner.os }}-gradle-kbd-${{ hashFiles('gradle/libs.versions.toml') }}-${{ inputs.compose }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-web-
+      - name: Versione di Compose
+        if: inputs.compose != ''
+        run: sed -i "s/^compose-multiplatform = .*/compose-multiplatform = \"${{ inputs.compose }}\"/" gradle/libs.versions.toml
+      - name: Senza ios-keyboard.js
+        if: inputs.tap_script == 'false'
+        run: sed -i '/ios-keyboard.js/d' webApp/src/wasmJsMain/resources/index.html
+      - name: google-services.json
+        run: |
+          cat > androidApp/google-services.json <<'JSON'
+          { "project_info": { "project_number": "0", "project_id": "ci", "storage_bucket": "ci.appspot.com" },
+            "client": [{ "client_info": { "mobilesdk_app_id": "1:0:android:0000000000000000", "android_client_info": { "package_name": "com.circolareplus" } },
+              "api_key": [{ "current_key": "ci" }] }], "configuration_version": "1" }
+          JSON
+      - name: Build PWA
+        run: ./gradlew --no-daemon :webApp:wasmJsBrowserDistribution
+      - name: Playwright
+        run: |
+          mkdir -p /tmp/pw && cd /tmp/pw && npm init -y >/dev/null && npm i playwright@1.49.0 http-server >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Serve and test
+        run: |
+          cd /tmp/pw
+          npx http-server "$GITHUB_WORKSPACE/webApp/build/dist/wasmJs/productionExecutable" -p 8080 -s -c-1 &
+          sleep 3
+          cp "$GITHUB_WORKSPACE/.github/ci/kbd-test.mjs" /tmp/pw/kbd-test.mjs
+          node kbd-test.mjs
