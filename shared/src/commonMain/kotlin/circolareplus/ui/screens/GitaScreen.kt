@@ -129,6 +129,10 @@ private enum class GitaBody { LOADING, ERROR, READY }
 @Composable
 fun GitaScreen(
     repository: GitaRepository,
+    /** Ultimo elenco gia' letto: mostrato subito, senza schermata di caricamento. */
+    cachedFeed: GitaFeed?,
+    /** Chiamato a ogni lettura riuscita, per tenere la copia di chi sta sopra. */
+    onFeedLoaded: (GitaFeed) -> Unit,
     onBackClick: () -> Unit,
     onOpenAssistant: () -> Unit,
     /** Chiamato dopo ogni modifica: l'assistente rilegge il materiale alla domanda successiva. */
@@ -136,7 +140,7 @@ fun GitaScreen(
 ) {
     val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
-    var feed by remember { mutableStateOf<GitaFeed?>(null) }
+    var feed by remember { mutableStateOf(cachedFeed) }
     var error by remember { mutableStateOf<String?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
     // Foglio "+" e foglio di una voce. Il "closeRequested" li fa scendere con la loro animazione
@@ -205,7 +209,9 @@ fun GitaScreen(
     LaunchedEffect(reloadKey) {
         refreshing = true
         try {
-            feed = repository.feed()
+            val loaded = repository.feed()
+            feed = loaded
+            onFeedLoaded(loaded)
             error = null
         } catch (e: CancellationException) {
             throw e

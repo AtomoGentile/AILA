@@ -1022,6 +1022,21 @@ fun MainAppShell(
     var assistantDynamic by remember { mutableStateOf<AssistantDynamicKnowledge?>(null) }
     // Materiale della Gita per l'assistente: letto una volta per sessione, poi riletto dopo ogni modifica.
     var assistantGita by remember { mutableStateOf<List<circolareplus.domain.model.GitaSourceDoc>?>(null) }
+    // Ultimo elenco della Gita: la schermata lo mostra subito all'apertura e al ritorno (dall'Assistant
+    // o da un'altra schermata) e si aggiorna in silenzio, senza passare dal caricamento. Letto in
+    // anticipo qui sotto; si azzera da solo al logout, come il resto dello stato della shell.
+    var gitaFeedCache by remember { mutableStateOf<circolareplus.domain.model.GitaFeed?>(null) }
+    LaunchedEffect(Unit) {
+        if (gitaFeedCache == null) {
+            try {
+                gitaFeedCache = AppContainer.gitaRepository.feed()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Nessun problema: la schermata lo leggera' da sola e mostrera' l'errore, se c'e'.
+            }
+        }
+    }
     // La chat aperta dalla Gita resta "solo materiale"; dalla Ricerca e' l'assistente generalista.
     var assistantMode by rememberSaveable { mutableStateOf(AssistantMode.GENERAL) }
     var assistantMessageCounter by remember { mutableStateOf(0) }
@@ -4291,6 +4306,8 @@ fun MainAppShell(
                     circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { isInGitaScreen = false }
                     circolareplus.ui.screens.GitaScreen(
                         repository = AppContainer.gitaRepository,
+                        cachedFeed = gitaFeedCache,
+                        onFeedLoaded = { gitaFeedCache = it },
                         onBackClick = { isInGitaScreen = false },
                         onOpenAssistant = {
                             // La chat aperta dalla Gita risponde solo con il materiale della gita.
