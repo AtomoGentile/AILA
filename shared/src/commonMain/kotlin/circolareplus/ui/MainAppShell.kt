@@ -1721,6 +1721,10 @@ fun MainAppShell(
                 ).join()
                 val usedLocal = classifications[next.number]?.modelLabel?.startsWith("AI locale") == true
                 consecutiveLocalFallbacks = if (usedLocal) consecutiveLocalFallbacks + 1 else 0
+                // Sul web download, base64 e JSON di ogni circolare girano sullo stesso thread che
+                // disegna: una dopo l'altra senza pausa tenevano la UI occupata per minuti dopo
+                // l'avvio. Una pausa fra l'una e l'altra lascia passare i fotogrammi e i tocchi.
+                if (AppTheme.liteEffects) delay(2500L)
             } else {
                 delay(3000L)
             }
@@ -2486,7 +2490,8 @@ fun MainAppShell(
             .fillMaxSize()
             .then(if (AppTheme.isGlass) Modifier else Modifier.background(AppTheme.BackgroundLight))
             .graphicsLayer {
-                val radius = if (AppTheme.isGlass && circolareplus.design.AilaSheetBackdrop.openSheets > 0) 20.dp.toPx() else 0f
+                // Sul web la sfocatura a tutto schermo e' troppo pesante: resta il velo del foglio.
+                val radius = if (AppTheme.isGlass && !AppTheme.liteEffects && circolareplus.design.AilaSheetBackdrop.openSheets > 0) 20.dp.toPx() else 0f
                 renderEffect = if (radius > 0.5f) {
                     androidx.compose.ui.graphics.BlurEffect(radius, radius, androidx.compose.ui.graphics.TileMode.Clamp)
                 } else null
@@ -2655,7 +2660,10 @@ fun MainAppShell(
                 // Android: su iOS non compilava.)
                 val imeVisible = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
                 // Sorgente della sfocatura della barra (Liquid Glass): il contenuto delle tab.
-                val hazeState = dev.chrisbanes.haze.rememberHazeState()
+                // Sul web niente Haze: registra il contenuto delle tab in un livello a parte e lo
+                // sfoca a ogni fotogramma in cui qualcosa si muove (scorrimento compreso), su un
+                // solo thread. La barra ripiega sul velo traslucido (vedi tabBarSurface).
+                val hazeState = if (AppTheme.liteEffects) null else dev.chrisbanes.haze.rememberHazeState()
                 Box(modifier = Modifier.weight(1f)) {
                 val profileEntry = remember(user.firstName, user.lastName) {
                     circolareplus.design.AilaProfileEntry(
@@ -2778,7 +2786,7 @@ fun MainAppShell(
                             // scorrono sopra. Qui se ne ridisegna una copia identica, spostata al
                             // contrario delle tab che escono (cosi' resta ferma), solo perche' la
                             // barra in basso lo sfochi insieme al contenuto.
-                            if (AppTheme.isGlass) Modifier.hazeSource(hazeState).ailaGlassBackdrop {
+                            if (AppTheme.isGlass && hazeState != null) Modifier.hazeSource(hazeState).ailaGlassBackdrop {
                                 circolareplus.design.ailaUnderlayShift * maxOf(shellProgress.value, detailProgress.value)
                             } else Modifier
                         )
@@ -6687,7 +6695,12 @@ private fun Modifier.tabBarSurface(
                         noiseFactor = 0f
                     )
                 ) else Modifier.background(
-                    if (AppTheme.isDarkMode) Color(0xA6202430) else Color(0xB8FFFFFF)
+                    // Senza sfocatura (PWA) il contenuto sotto si leggerebbe nitido: velo piu' fitto.
+                    if (AppTheme.liteEffects) {
+                        if (AppTheme.isDarkMode) Color(0xD9202430) else Color(0xE6FFFFFF)
+                    } else {
+                        if (AppTheme.isDarkMode) Color(0xA6202430) else Color(0xB8FFFFFF)
+                    }
                 )
             )
             // Bordo speculare come gli altri vetri (luce dall'alto a sinistra).

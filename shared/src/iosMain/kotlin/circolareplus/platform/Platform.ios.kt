@@ -6,6 +6,8 @@ actual fun isIos(): Boolean = true
 
 actual fun isAndroid(): Boolean = false
 
+actual fun isWeb(): Boolean = false
+
 // iOS non espone il raggio in un'API pubblica: "_displayCornerRadius" di UIScreen e' la chiave
 // usata comunemente (esiste da iOS 13, vale 0 sugli schermi squadrati). In punti, cioe' in dp.
 @androidx.compose.runtime.Composable

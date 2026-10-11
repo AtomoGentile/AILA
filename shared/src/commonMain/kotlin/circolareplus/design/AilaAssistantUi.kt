@@ -67,15 +67,17 @@ fun AilaAssistantHalo(
     active: Boolean = false,
     intro: Boolean = false
 ) {
-    val reduce = AppTheme.reduceMotion
-    val transition = rememberInfiniteTransition(label = "assistantHalo")
-    val spin = transition.animateFloat(
+    // Sul web l'alone resta fermo, come con "Riduci movimento": rotazione e respiro sono due
+    // animazioni infinite, cioe' un disegno a 60 fotogrammi al secondo finche' la pagina e' aperta.
+    val reduce = AppTheme.reduceMotion || AppTheme.liteEffects
+    val transition = if (reduce) null else rememberInfiniteTransition(label = "assistantHalo")
+    val spin = transition?.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(tween(40_000, easing = LinearEasing)),
         label = "haloSpin"
     )
-    val breathe = transition.animateFloat(
+    val breathe = transition?.animateFloat(
         initialValue = 0.9f,
         targetValue = 1.06f,
         animationSpec = infiniteRepeatable(tween(3200, easing = FastOutSlowInEasing), RepeatMode.Reverse),
@@ -89,8 +91,9 @@ fun AilaAssistantHalo(
                 .size(outer)
                 .graphicsLayer {
                     if (!reduce) {
-                        scaleX = breathe.value
-                        scaleY = breathe.value
+                        val b = breathe?.value ?: 1f
+                        scaleX = b
+                        scaleY = b
                     }
                 }
                 .clip(CircleShape)
@@ -125,7 +128,7 @@ fun AilaAssistantHalo(
             Box(
                 modifier = Modifier
                     .size(size)
-                    .graphicsLayer { if (!reduce) rotationZ = spin.value * 3f }
+                    .graphicsLayer { if (!reduce) rotationZ = (spin?.value ?: 0f) * 3f }
                     .border(
                         2.dp,
                         Brush.sweepGradient(
@@ -145,7 +148,7 @@ fun AilaAssistantHalo(
             Box(
                 modifier = Modifier
                     .size(size)
-                    .graphicsLayer { if (!reduce) rotationZ = spin.value }
+                    .graphicsLayer { if (!reduce) rotationZ = spin?.value ?: 0f }
                     .clip(ailaCookieShape(lobes = 9, depth = 0.09f))
                     .background(
                         Brush.linearGradient(
@@ -172,10 +175,10 @@ fun AilaAssistantHalo(
  */
 @Composable
 fun Modifier.ailaAssistantAurora(shape: Shape = RoundedCornerShape(AppTheme.CardCornerRadius)): Modifier {
-    val reduce = AppTheme.reduceMotion
+    val reduce = AppTheme.reduceMotion || AppTheme.liteEffects
     val glass = AppTheme.isGlass
-    val transition = rememberInfiniteTransition(label = "assistantAurora")
-    val phase = transition.animateFloat(
+    val transition = if (reduce) null else rememberInfiniteTransition(label = "assistantAurora")
+    val phase = transition?.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(11_000, easing = LinearEasing)),
@@ -190,7 +193,7 @@ fun Modifier.ailaAssistantAurora(shape: Shape = RoundedCornerShape(AppTheme.Card
     return this
         .background(AppTheme.PrimaryGradient)
         .drawBehind {
-            val angle = (if (reduce) 0.15f else phase.value) * 2f * PI.toFloat()
+            val angle = (if (reduce) 0.15f else phase?.value ?: 0f) * 2f * PI.toFloat()
             val radius = size.maxDimension * 0.55f
             val a = Offset(size.width * (0.5f + 0.38f * sin(angle)), size.height * 0.15f)
             val b = Offset(size.width * (0.5f - 0.38f * sin(angle + 0.8f)), size.height * 0.95f)
@@ -321,7 +324,7 @@ fun AilaPillTextField(
  */
 @Composable
 fun Modifier.ailaPulse(): Modifier {
-    if (AppTheme.reduceMotion) return this
+    if (AppTheme.reduceMotion || AppTheme.liteEffects) return this
     val transition = rememberInfiniteTransition(label = "pulse")
     val alpha = transition.animateFloat(
         initialValue = 0.55f,

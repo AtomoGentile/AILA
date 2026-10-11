@@ -21,6 +21,8 @@ actual fun isIos(): Boolean {
 
 actual fun isAndroid(): Boolean = userAgent().contains("Android")
 
+actual fun isWeb(): Boolean = true
+
 private fun isStandalone(): Boolean =
     js("(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true")
 

@@ -13,6 +13,13 @@ expect fun isIos(): Boolean
 expect fun isAndroid(): Boolean
 
 /**
+ * Vero nella PWA (il browser). Sul web tutto gira su un solo thread e si disegna con Skia dentro un
+ * canvas: gli effetti che sul telefono sono quasi gratis (sfocature in tempo reale, animazioni che
+ * non finiscono mai) li' si pagano a ogni fotogramma. Lo legge AppTheme.liteEffects.
+ */
+expect fun isWeb(): Boolean
+
+/**
  * Raggio degli angoli arrotondati dello schermo del telefono (0 se lo schermo e' squadrato o non
  * si riesce a saperlo). Serve alle superfici che arrivano fino al bordo in alto (il pannello della
  * Home in Liquid Glass): con gli angoli squadrati il loro bordo di luce finiva sotto la curva

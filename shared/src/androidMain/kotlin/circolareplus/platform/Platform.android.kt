@@ -4,6 +4,8 @@ actual fun isIos(): Boolean = false
 
 actual fun isAndroid(): Boolean = true
 
+actual fun isWeb(): Boolean = false
+
 // Da Android 12 lo schermo dichiara i suoi angoli arrotondati (RoundedCorner); prima no: 0.
 // Alla primissima composizione la finestra puo' non avere ancora gli inset: si rilegge dopo il
 // primo fotogramma.

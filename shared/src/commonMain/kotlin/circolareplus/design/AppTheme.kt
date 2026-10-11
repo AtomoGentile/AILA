@@ -89,6 +89,15 @@ object AppTheme {
      */
     var reduceMotion by mutableStateOf(false)
 
+    /**
+     * Effetti pesanti spenti: vero nella PWA. Sul web il disegno e la logica stanno su un solo
+     * thread, quindi la sfocatura in tempo reale della barra (Haze), quella dello sfondo dietro ai
+     * fogli e le animazioni che girano senza fine (pulsazioni, aurora, aloni) costano a ogni
+     * fotogramma e fanno scattare anche lo scorrimento. L'aspetto resta lo stesso, senza il
+     * movimento decorativo.
+     */
+    val liteEffects: Boolean get() = circolareplus.platform.isWeb()
+
     /** Stile grafico scelto (Impostazioni); persiste in LocalSettingsManager. */
     var uiStyle by mutableStateOf(UiStyle.AUTO)
 

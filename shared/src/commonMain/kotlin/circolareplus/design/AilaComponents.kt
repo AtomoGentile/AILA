@@ -1135,15 +1135,20 @@ fun AilaAssistantBadge(
     tint: Color = AppTheme.TintViolet,
     ink: Color = AppTheme.TintVioletInk
 ) {
+    // Il respiro non finisce mai: ogni badge visibile (ce n'e' uno per card) teneva il disegno a
+    // 60 fotogrammi al secondo per sempre. Sul web, o con "Riduci movimento", resta fermo.
+    val still = AppTheme.liteEffects || AppTheme.reduceMotion
     var pulse by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            pulse = !pulse
-            delay(1400)
+    if (!still) {
+        LaunchedEffect(Unit) {
+            while (true) {
+                pulse = !pulse
+                delay(1400)
+            }
         }
     }
-    val alpha by animateFloatAsState(
-        targetValue = if (pulse) 1f else 0.55f,
+    val alpha = animateFloatAsState(
+        targetValue = if (still || pulse) 1f else 0.55f,
         animationSpec = tween(1400),
         label = "aiBadgePulse"
     )
@@ -1159,7 +1164,8 @@ fun AilaAssistantBadge(
     ) {
         AilaAssistantMark(
             size = 13.dp,
-            modifier = Modifier.alpha(alpha),
+            // Letta nel livello grafico: cambiare l'opacita' non ricompone piu' il badge.
+            modifier = Modifier.graphicsLayer { this.alpha = alpha.value },
             brush = SolidColor(ink)
         )
         Spacer(modifier = Modifier.width(4.dp))

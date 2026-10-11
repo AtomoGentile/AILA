@@ -492,7 +492,10 @@ private object AilaWarmUpMemory {
  */
 @Composable
 fun AilaWarmUp(pages: List<@Composable () -> Unit>) {
-    if (AilaWarmUpMemory.done) return
+    // Sul web non serve: non ci sono classi da caricare al primo uso (il modulo WebAssembly e'
+    // gia' tutto in memoria), e comporre quattro pagine nascoste a inizio sessione, mentre
+    // l'utente comincia a toccare, su un solo thread blocca proprio i primi gesti.
+    if (AilaWarmUpMemory.done || AppTheme.liteEffects) return
     var index by remember { mutableStateOf(-1) }
     LaunchedEffect(Unit) {
         // Prima: 2,5 s di attesa e 1,2 s per pagina, quindi i primi tocchi (che arrivano subito)
