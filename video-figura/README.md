@@ -1,8 +1,8 @@
 # AILA — "Fig. 1"
 
 Video di un minuto (1920×1080, 30 fps) che racconta AILA come una tavola tecnica animata: l'aula disegnata in 3D
-con solidi scuri e contorni chiari, etichette monospaziate, didascalie numerate collegate a un punto della scena e,
-sotto, tre righe di tasti (fasi, sistemi, luci) che si accendono mentre il video va avanti.
+con solidi scuri e contorni chiari, etichette monospaziate, un numero grande in alto a sinistra e didascalie numerate
+collegate a un punto della scena. La figura occupa tutto lo schermo; la fase in corso è scritta in basso a sinistra.
 
 Come gli altri due video è una pagina HTML esportata fotogramma per fotogramma, con l'audio sintetizzato in codice.
 Qui però la scena non è fatta di elementi HTML: è un canvas disegnato da un piccolo proiettore prospettico scritto
@@ -11,7 +11,7 @@ a mano dentro `figura.js`, senza librerie.
 | File | Cosa contiene |
 |---|---|
 | `timeline.js` | I tempi di tutto il video, in secondi. Li leggono sia la pagina sia l'audio |
-| `index.html` + `figura.js` | La scena, le scritte e i tasti. Aprendo `index.html` nel browser parte l'anteprima (barra in basso per scorrere; `#t=22` nell'URL per partire da un secondo preciso) |
+| `index.html` + `figura.js` | La scena e le scritte. Aprendo `index.html` nel browser parte l'anteprima (barra in basso per scorrere; `#t=22` nell'URL per partire da un secondo preciso) |
 | `audio.js` | Colonna sonora: un tappeto calmo che cambia accordo a ogni fase, più i suoni degli eventi |
 | `render.js` | Esporta il video con Chromium headless (`node render.js snap 10.5 24.6` salva singoli fotogrammi in `snaps/`) |
 | `mux.js` | Unisce video e audio in `AILA_figura.mp4` |
@@ -23,7 +23,7 @@ Per rigenerarlo: `npm install`, poi `npm run build` (circa un quarto d'ora con 2
 
 ## Scaletta
 
-| Tempo | Tasto | Cosa succede |
+| Tempo | Fase | Cosa succede |
 |---|---|---|
 | 0:00 | — | Si traccia la cornice, poi l'aula si disegna pezzo per pezzo e si accendono le finestre |
 | 0:05 | 1 Circolari | Arrivano cinque circolari, la scintilla le legge e a ognuna assegna la categoria; parte l'onda delle notifiche e si accendono i telefoni sui banchi |
@@ -47,7 +47,7 @@ del trailer. Come lì, la versione web non viene citata.
   didascalie. Le pareti si disegnano solo se la camera è dal lato interno: da fuori resta lo spaccato.
 - **Camera.** `CAM` elenca le inquadrature: ognuna parte a un certo secondo, ci arriva in `d` secondi dalla
   precedente e poi scivola piano. `cut: 1` fa uno stacco netto (serve per il controcampo della fase 4).
-- **Scritte.** Il numero grande, le didascalie e i tasti sono elementi HTML sopra il canvas; i numeri sul
+- **Scritte.** Il numero grande, le didascalie e le righe di stato sono elementi HTML sopra il canvas; i numeri sul
   calendario e sulle proposte sono invece disegnati nel canvas, appoggiati alle pareti (`text3D`).
 
-Per cambiare un testo o la posizione di una didascalia si tocca `INFO` in `figura.js`; per i tasti, `KEYS`.
+Per cambiare un testo o la posizione di una didascalia si tocca `INFO` in `figura.js`.

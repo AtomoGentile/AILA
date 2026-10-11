@@ -1,5 +1,5 @@
 // Colonna sonora di "Fig. 1", sintetizzata da zero (nessun campione): un tappeto calmo che cambia accordo a ogni
-// fase, più i piccoli suoni dell'interfaccia sugli eventi della scena (tasti, circolari, notifiche, segnaposto…).
+// fase, più i piccoli suoni dell'interfaccia sugli eventi della scena (cambi di fase, circolari, notifiche, segnaposto…).
 // I tempi vengono da timeline.js, gli stessi della pagina.
 //   node audio.js  -> build/audio.wav
 const fs = require('fs');
@@ -57,7 +57,7 @@ function pluck(t0, m, amp = 1, pan = 0) {
     put(i0 + k, (Math.sin(TAU * f * t) + .28 * Math.sin(TAU * 2 * f * t) * Math.exp(-t * 20)) * a * Math.exp(-t * 11) * .1 * amp, pan, .5);
   }
 }
-/* il "tic" di un tasto: un soffio brevissimo più una nota acuta che si spegne subito */
+/* un "tic" d'interfaccia: un soffio brevissimo più una nota acuta che si spegne subito */
 function tick(t0, amp = 1, pan = 0, f = 1900) {
   const i0 = Math.round(t0 * SR), len = Math.round(.045 * SR); let prev = 0;
   for (let k = 0; k < len; k++) {
@@ -109,7 +109,7 @@ tick(TL.WINDOWS, 1, -.5); shimmer(TL.WINDOWS, 1.8, [76, 81, 84], .8);       // f
 // ---------------- le sei fasi ----------------
 const CALL = [76, 79, 81, 76, 79, 84];
 for (let k = 0; k < 6; k++) {
-  tick(T[k], 1.3, -.55 + k * .12);                                          // tasto della fase
+  tick(T[k], 1.3, -.55 + k * .12);                                          // cambio di fase
   if (k === 3) { tick(T[k] + .02, .9, 0, 300); } else whoosh(T[k], 1.9, .85);  // movimento di camera (alla quarta c'è lo stacco)
   bell(T[k] + TL.CO_IN + .1, CALL[k], .6, .4);                              // didascalia
 }

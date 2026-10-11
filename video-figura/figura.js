@@ -1,11 +1,12 @@
 'use strict';
 /*
  * AILA — "Fig. 1". L'aula disegnata come una tavola tecnica: solidi scuri con il contorno chiaro, etichette
- * monospaziate, didascalie numerate collegate a un punto della scena e, sotto, le tre righe di tasti.
+ * monospaziate, un numero grande in alto a sinistra e didascalie numerate collegate a un punto della scena.
  * La scena 3D è disegnata su un canvas da un piccolo proiettore prospettico (niente librerie); le scritte sono DOM.
  * Tutto dipende solo dal tempo: seek(t) ridisegna il fotogramma al secondo t, ed è quello che usa render.js.
  */
-const FR = { x: 40, y: 30, w: 1840, h: 820 };                // il riquadro della figura, in pixel sullo stage
+const FR = { x: 40, y: 40, w: 1840, h: 1000 };               // il riquadro della figura, in pixel sullo stage
+const ZOOM = 1.1;                                            // ingrandimento della scena dentro il riquadro
 const CX = FR.x + FR.w / 2, CY = FR.y + FR.h / 2;
 const { DURATION, PH0, PHD, T } = TL;                        // i tempi stanno in timeline.js, condivisi con l'audio
 window.DURATION = DURATION;
@@ -67,7 +68,7 @@ function setCam(t) {
     p = { pos: lerp3(q.pos, p.pos, e), tgt: lerp3(q.tgt, p.tgt, e), fov: lerp(q.fov, p.fov, e) };
   }
   const f = norm(sub(p.tgt, p.pos)), r = norm(cross(f, [0, 1, 0])), u = cross(r, f);
-  cam = { pos: p.pos, f, r, u, F: (FR.h / 2) / Math.tan(p.fov * Math.PI / 360) };
+  cam = { pos: p.pos, f, r, u, F: ZOOM * 410 / Math.tan(p.fov * Math.PI / 360) };
 }
 /* nei controcampi la scena si spegne un attimo prima dello stacco e si riaccende subito dopo */
 const cutFade = t => CAM.reduce((a, k) => k.cut ? a * (t < k.t ? 1 - P(t, k.t - .2, .2, E.in) : P(t, k.t, .4)) : a, 1);
@@ -527,32 +528,32 @@ const INFO = {
   '-1': { name: 'Aula', st: 'Aula · 12 banchi · 24 posti', lab: 'L’APP PER LA VITA DI CLASSE', val: () => 'AILA', unit: '' },
   0: { name: 'Circolari', st: 'Circolari · riassunto · categoria per la classe · notifica',
     lab: 'CIRCOLARI · OGGI', val: t => SH.filter((_, k) => t > shArr(k) + .35).length, unit: 'nuove',
-    num: '01', ttl: 'Circolari', at: [1236, 80], anchor: () => add(shHome(4), [SH_W / 2, SH_H / 2, 0]),
+    num: '01', ttl: 'Circolari', at: [1236, 96], anchor: () => add(shHome(4), [SH_W / 2, SH_H / 2, 0]),
     desc: 'Ogni circolare nuova arriva con un riassunto, una categoria per la tua classe e le scadenze già estratte.',
     data: `<span>${dotH(GREEN)}TI RIGUARDA 2</span><span>${dotH(YELLOW)}POTENZIALE 2</span><span>${dotH(GREY)}NO 1</span>` },
   1: { name: 'Assistant', st: 'Assistant · domande in italiano · solo dati di AILA',
     lab: 'ASSISTANT · FONTI', val: t => TL.SRC.filter(x => t > x + .5).length, unit: 'citate',
-    num: '02', ttl: 'AILA Assistant', at: [1250, 548], anchor: t => add(sparkPos(t), [.36, -.36, 0]),
+    num: '02', ttl: 'AILA Assistant', at: [1250, 638], anchor: t => add(sparkPos(t), [.36, -.36, 0]),
     desc: 'Fai una domanda in italiano: risponde solo con i dati di AILA e ti mostra le fonti da aprire.',
     data: 'FONTI · CIRCOLARE N. 112 · CALENDARIO' },
   2: { name: 'Calendario', st: 'Calendario · scuola e classe · ore dalla 1ª alla 6ª',
     lab: 'OTTOBRE 2026 · EVENTI', val: t => EVT.filter(e => t > T[2] + e[3] + .2).length + (t > LAND + .1 ? 1 : 0), unit: 'in arrivo',
-    num: '03', ttl: 'Calendario', at: [1246, 500], anchor: () => cellAt(23, 1, .5),
+    num: '03', ttl: 'Calendario', at: [1246, 590], anchor: () => cellAt(23, 1, .5),
     desc: 'Eventi della scuola e della classe, anche creati dalle scadenze delle circolari.',
     data: '23 OTT · AUTORIZZAZIONE · DA CIRCOLARE N. 112' },
   3: { name: 'Interrogazioni', st: 'Interrogazioni · voti equi · storico visibile alla classe',
     lab: 'INTERROGAZIONI · POSTI ASSEGNATI', val: t => GROUPS.reduce((n, gr, gi) => n + gr.filter((_, j) => t > pinT(gi, j) + .2).length, 0), unit: 'di 9',
-    num: '04', ttl: 'Sondaggi interrogazioni', at: [96, 566], side: 'L', anchor: () => { const [x, z] = seatXZ(2); return [x, .9, z + .2]; },
+    num: '04', ttl: 'Sondaggi interrogazioni', at: [96, 656], side: 'L', anchor: () => { const [x, z] = seatXZ(2); return [x, .9, z + .2]; },
     desc: 'Prenoti le date con un sistema di voti equo, pensato per non poter essere aggirato.',
     data: 'LUN 2 · MER 4 · VEN 6 NOV · 3 POSTI PER DATA' },
   4: { name: 'Mappa posti', st: 'Mappa posti · 3 disposizioni · sceglie il Rappresentante',
     lab: 'MAPPA POSTI · PROPOSTA', val: t => 'ABC'[propAt(t)], unit: 'di 3',
-    num: '05', ttl: 'Mappa posti', at: [1250, 330], anchor: t => add(tokenState(SEAT_OF[propAt(t)].indexOf(5), t).p, [.2, 0, 0]),
+    num: '05', ttl: 'Mappa posti', at: [1250, 420], anchor: t => add(tokenState(SEAT_OF[propAt(t)].indexOf(5), t).p, [.2, 0, 0]),
     desc: 'Tre disposizioni dei banchi che tengono conto di affinità, aiuto tra compagni, rumore e altezza.',
     data: 'AFFINITÀ · AIUTO · RUMORE · ALTEZZA' },
   5: { name: 'Bacheca', st: 'Bacheca · proponi, vota e commenta',
     lab: 'BACHECA · VOTI A FAVORE', val: t => votesAt(t), unit: 'voti',
-    num: '06', ttl: 'Bacheca proposte', at: [1150, 92], anchor: () => [BRD.x0 + BRD.w / 2, BRD.y1, BRD.z],
+    num: '06', ttl: 'Bacheca proposte', at: [1150, 84], anchor: () => [BRD.x0 + BRD.w / 2, BRD.y1, BRD.z],
     desc: 'Proponi, vota e commenta, anche in forma anonima.',
     data: 'DISTRIBUTORE D’ACQUA AL 2º PIANO · ANONIMA' },
   6: { name: 'Dall’alto', st: 'AILA · Android · iPhone · iPad', lab: 'AULA · VISTA DALL’ALTO', val: () => 24, unit: 'posti' },
@@ -560,7 +561,6 @@ const INFO = {
 const phaseOf = t => t < T[0] ? -1 : t >= T[6] ? 6 : Math.floor((t - T[0]) / PHD);
 const phaseT0 = k => k < 0 ? 0 : T[k];
 const CO_IN = TL.CO_IN, CO_OUT = PHD - .65;
-const coVisible = t => { const k = phaseOf(t); return k >= 0 && k < 6 && t - T[k] > CO_IN && t - T[k] < CO_OUT + .3; };
 
 const tags = {};
 function tag(id, html, p, o, cls = '') {
@@ -642,57 +642,6 @@ function drawHUD(t) {
 }
 
 // =====================================================================================
-// I tasti sotto la figura. st: 0 spento, 1 attivo (bordo bianco), 2 in evidenza (colore d'accento)
-// =====================================================================================
-const inPh = (t, k, a = 0, b = PHD) => t >= T[k] + a && t < T[k] + b;
-const ROWN = ['FASI', 'SISTEMI', 'LUCI'];
-const KEYS = [
-  ...['Circolari', 'Assistant', 'Calendario', 'Interrogazioni', 'Mappa posti', 'Bacheca'].map((l, k) => ({ row: 0, cap: k + 1, label: l, st: t => inPh(t, k) ? 1 : 0 })),
-  { row: 0, cap: 7, label: 'Dall’alto', st: t => t >= T[6] ? 1 : 0 },
-  { row: 1, cap: 'A', label: 'AI', st: t => inPh(t, 0, 2.4) ? 2 : (inPh(t, 1) || inPh(t, 2, 2.5)) ? 1 : 0 },
-  { row: 1, cap: 'N', label: 'Notifiche', st: t => inPh(t, 0, 3.9) ? 1 : 0 },
-  { row: 1, cap: 'F', label: 'Fonti', st: t => inPh(t, 1, 3.0) ? 2 : 0 },
-  { row: 1, cap: 'S', label: 'Scadenze', st: t => inPh(t, 2, 2.6) ? 2 : 0 },
-  { row: 1, cap: 'V', label: 'Voti', st: t => inPh(t, 3, 1.5) ? 2 : inPh(t, 5, 2.3) ? 1 : 0 },
-  { row: 1, cap: 'P', label: 'Proposte', sub: t => inPh(t, 4, .6) ? 'ABC'[propAt(t)] + ' · di 3' : '3 disposizioni', st: t => inPh(t, 4, .6) ? 2 : 0 },
-  { row: 1, cap: 'X', label: 'Anonimato', st: t => inPh(t, 5, 1.0) ? 2 : 0 },
-  { row: 1, cap: 'I', label: 'Ispeziona', st: t => coVisible(t) ? 1 : 0 },
-  { row: 2, label: 'Finestre', sub: () => 'Auto · giorno', st: t => t >= TL.WINDOWS ? 1 : 0 },
-  { row: 2, label: 'Lavagna', st: t => inPh(t, 2, .3) ? 1 : 0 },
-  { row: 2, label: 'Telefoni', st: t => t >= PULSE0 && t < T[2] ? 1 : 0 },
-  { row: 2, label: 'Scintilla', st: t => t >= T[0] + .2 ? 1 : 0 },
-  { row: 2, label: 'Rete', sub: t => t >= NET0 ? 'Auto · accesa' : 'Spenta', st: t => t >= NET0 ? 1 : 0 },
-];
-(function buildBar() {
-  const bar = $('bar');
-  ROWN.forEach((n, r) => {
-    const row = document.createElement('div'); row.className = 'row'; row.style.top = (870 + r * 57) + 'px';
-    row.innerHTML = `<div class="rl">${n}</div>`;
-    KEYS.filter(k => k.row === r).forEach(k => {
-      const el = document.createElement('div');
-      el.innerHTML = `<i class="fl"></i>${k.cap != null ? `<span class="cap">${k.cap}</span>` : ''}<span>${k.label}</span>${k.sub ? '<span class="sub"></span>' : ''}`;
-      k.el = el; k.fl = el.firstChild; k.subEl = el.querySelector('.sub'); row.appendChild(el);
-    });
-    bar.appendChild(row);
-  });
-  // l'ordine in cui compaiono all'inizio
-  KEYS.forEach((k, i) => { k.t0 = 1.7 + k.row * .3 + KEYS.filter((q, j) => q.row === k.row && j < i).length * .05; });
-})();
-function drawBar(t) {
-  for (const k of KEYS) {
-    const st = k.st(t), cls = 'key' + (k.cap == null ? ' nc' : '') + (st === 1 ? ' on' : st === 2 ? ' hot' : '');
-    if (k.el.className !== cls) k.el.className = cls;
-    if (k.subEl) setHTML(k.subEl, k.sub(t));
-    // lampo breve quando il tasto cambia stato: cerca l'istante del cambio negli ultimi 0,35 s
-    let fl = 0;
-    if (t > .4 && k.st(t - .35) !== st) { let lo = t - .35, hi = t; for (let i = 0; i < 9; i++) { const m = (lo + hi) / 2; k.st(m) === st ? hi = m : lo = m; } fl = (1 - (t - hi) / .35) * (st ? .42 : .14); }
-    k.fl.style.opacity = fl.toFixed(3);
-    k.el.style.opacity = P(t, k.t0, .45).toFixed(3);
-  }
-  document.querySelectorAll('.rl').forEach((el, r) => { el.style.opacity = P(t, 1.5 + r * .3, .5).toFixed(3); });
-}
-
-// =====================================================================================
 // Chiusura: il logo vero, che è la stessa aula vista dall'alto
 // =====================================================================================
 const LOGO_T = TL.LOGO;
@@ -757,7 +706,6 @@ function seek(t) {
   // la cornice della figura si traccia nei primi istanti
   const fp = P(t, .15, 1.1, E.inOut), per = 2 * (FR.w + FR.h);
   g.beginPath(); g.rect(FR.x + .5, FR.y + .5, FR.w - 1, FR.h - 1); g.setLineDash([per * fp, per]); g.lineWidth = 1; g.strokeStyle = 'rgba(255,255,255,.15)'; g.stroke(); g.setLineDash([]);
-  drawBar(t);
   drawEnd(t);
 }
 window.seek = seek;
