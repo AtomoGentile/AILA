@@ -1,0 +1,15 @@
+{
+  "name": "aila-video-figura",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AILA \"Fig. 1\": l'aula come tavola tecnica animata (HTML esportato in MP4)",
+  "scripts": {
+    "video": "node render.js frames",
+    "audio": "node audio.js",
+    "mux": "node mux.js",
+    "build": "node render.js frames && node audio.js && node mux.js"
+  },
+  "dependencies": {
+    "playwright-core": "^1.56.1"
+  }
+}
