@@ -36,6 +36,12 @@ const a11y = () => page.evaluate(() => {
     return { role: n.getAttribute('role') || '', t: (n.innerText || '').slice(0, 40).replace(/\n/g, ' / '), x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height), click: !!n.onclick };
   }).filter((n) => n.w > 0 && n.h > 0);
 });
+// L'app parte da una schermata "Caricamento...": si aspetta che compaiano pulsanti o campi.
+for (let i = 0; i < 40; i++) {
+  const n = await a11y();
+  if (n.some((x) => x.role === 'button' || x.role === 'textbox')) break;
+  await page.waitForTimeout(1000);
+}
 let first = await info();
 for (let step = 0; step < 6 && !first.boxes.length; step++) {
   const nodes = await a11y();
