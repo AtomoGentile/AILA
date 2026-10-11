@@ -1,9 +1,13 @@
+@file:OptIn(ExperimentalForeignApi::class)
+
 package circolareplus.platform
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.CancellationException
@@ -14,6 +18,7 @@ import platform.Foundation.NSData
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.create
 import platform.Foundation.dataWithContentsOfFile
+import platform.Foundation.writeToFile
 import platform.posix.memcpy
 
 actual suspend fun sharePdfFile(bytes: ByteArray, fileName: String) {
