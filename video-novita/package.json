@@ -1,0 +1,17 @@
+{
+  "name": "aila-video-novita",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Video delle novità di AILA: PWA e sezione Gita (HTML animato esportato in MP4)",
+  "scripts": {
+    "icons": "node build-icons.js",
+    "video": "node render.js frames",
+    "music": "node render.js sfx && node music.js",
+    "mux": "node mux.js",
+    "build": "node render.js frames && node music.js && node mux.js"
+  },
+  "dependencies": {
+    "lucide-static": "^0.577.0",
+    "playwright-core": "^1.56.1"
+  }
+}
