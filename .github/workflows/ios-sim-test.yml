@@ -37,6 +37,11 @@ jobs:
             exit 1
           fi
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          PV=$(xcrun simctl list devices available | awk -v u="$UDID" '/^-- iOS/ {v=$3} index($0,u) {print v; exit}')
+          DN=$(xcrun simctl list devices available | grep -m1 "$UDID" | sed 's/ (.*//' | sed 's/^ *//')
+          echo "platform_version=$PV" >> "$GITHUB_OUTPUT"
+          echo "device_name=$DN" >> "$GITHUB_OUTPUT"
+          echo "Versione iOS: $PV, dispositivo: $DN"
           xcrun simctl list devices | grep "$UDID"
 
       - name: Boot simulator
@@ -60,12 +65,17 @@ jobs:
       - name: Run test
         env:
           UDID: ${{ steps.sim.outputs.udid }}
+          PLATFORM_VERSION: ${{ steps.sim.outputs.platform_version }}
+          DEVICE_NAME: ${{ steps.sim.outputs.device_name }}
           BASE_URL: ${{ inputs.base_url || 'https://aila-scuola.pages.dev/' }}
         run: |
           cp .github/ci/ios-sim-test.mjs "$RUNNER_TEMP/t/ios-sim-test.mjs"
           cd "$RUNNER_TEMP/t"
           node ios-sim-test.mjs
 
-      - name: Appium log (tail)
+      - name: Appium log (errori e coda)
         if: always()
-        run: tail -n 60 "$RUNNER_TEMP/appium.log" || true
+        run: |
+          grep -n "error:" "$RUNNER_TEMP/appium.log" | tail -n 40 || true
+          echo ------
+          tail -n 60 "$RUNNER_TEMP/appium.log" || true
