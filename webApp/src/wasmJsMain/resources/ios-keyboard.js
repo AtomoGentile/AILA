@@ -16,6 +16,7 @@
   var isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   if (!isIOS) return;
 
+  var VERSION = 'v4';
   var TAP_SLOP_PX = 12;
   var TAP_MAX_MS = 600;
   var decoy = null;
@@ -34,6 +35,8 @@
 
   var logEl = null;
   var logLines = [];
+  var styleState = 'no';
+  function headerText() { return '[' + VERSION + ' stile=' + styleState + ']'; }
   function log(msg) {
     if (!debug) return;
     if (!logEl) {
@@ -50,7 +53,7 @@
     logLines.push(('0' + t.getMinutes()).slice(-2) + ':' + ('0' + t.getSeconds()).slice(-2) + '.' +
       ('00' + t.getMilliseconds()).slice(-3) + ' ' + msg);
     if (logLines.length > 24) logLines.shift();
-    logEl.textContent = logLines.join('\n');
+    logEl.textContent = headerText() + '\n' + logLines.join('\n');
   }
   function who(el) {
     if (!el) return 'null';
@@ -60,13 +63,22 @@
     var v = window.visualViewport;
     return v ? Math.round(v.height) + 'x' + Math.round(v.width) : '?';
   }
+  function backingInfo(r) {
+    var b = r && r.querySelector('input, textarea');
+    if (!b) return 'nocampo';
+    var cs = getComputedStyle(b);
+    var rc = b.getBoundingClientRect();
+    return 'us=' + cs.userSelect + '/' + (cs.webkitUserSelect || '-') + ' ro=' + b.readOnly + ' dis=' + b.disabled +
+      ' im=' + b.inputMode + ' ' + Math.round(rc.width) + 'x' + Math.round(rc.height) + '@' + Math.round(rc.left) + ',' + Math.round(rc.top);
+  }
   function snapshot(label) {
     var r = getRoot();
-    log(label + ' doc=' + who(document.activeElement) + ' sr=' + (r ? who(r.activeElement) : 'noroot') + ' vv=' + vv());
+    log(label + ' doc=' + who(document.activeElement) + ' sr=' + (r ? who(r.activeElement) : 'noroot') + ' vv=' + vv() +
+      ' | ' + backingInfo(r));
   }
   if (debug) {
     window.addEventListener('DOMContentLoaded', function () {
-      log('debug ok; ua=' + (/CriOS/.test(ua) ? 'Chrome' : /FxiOS/.test(ua) ? 'Firefox' : 'Safari/PWA') +
+      log('debug ok ' + VERSION + '; ua=' + (/CriOS/.test(ua) ? 'Chrome' : /FxiOS/.test(ua) ? 'Firefox' : 'Safari/PWA') +
         ' standalone=' + (navigator.standalone === true) + ' vv=' + vv());
     });
     if (window.visualViewport) {
@@ -123,6 +135,7 @@
       '-webkit-touch-callout: default !important; }';
     r.appendChild(st);
     r.__ailaKbdStyle = true;
+    styleState = 'si';
     log('stile di modifica iniettato nella radice shadow');
   }
 
@@ -205,6 +218,8 @@
     if (!p || Date.now() - p.t > 800) return;
     if (e.cancelable) e.preventDefault();
     log('touchend annullato (cancelable=' + e.cancelable + ')');
+    var rr = getRoot();
+    if (rr && isEditable(rr.activeElement)) { log('Compose ha gia il fuoco: nessun nuovo appoggio'); return; }
     arm(p.box);
   }, { capture: true, passive: false });
 
