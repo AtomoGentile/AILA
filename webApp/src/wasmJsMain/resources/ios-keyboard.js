@@ -9,6 +9,11 @@
 // il campo nascosto di Compose (o, se non esiste ancora, un <input> di appoggio). La tastiera si apre; quando Compose mette a fuoco il suo campo
 // la trova gia' aperta e la tiene. Il campo di Compose si riconosce dall'albero di accessibilita'
 // (ruolo "textbox"): sugli altri tocchi non succede nulla, quindi nessuna tastiera a ogni pulsante.
+// CAUSA TROVATA (iOS/Safari 27, WebKit 64ee64b): ogni nuova richiesta focus() SOSTITUISCE la precedente
+// e conta come "senza interazione dell'utente" se non parte da un gesto. Compose chiama focus() sul
+// campo nascosto anche dopo (requestAnimationFrame, a ogni updateState): quella chiamata annulla il
+// fuoco dato nel gesto e la tastiera non compare. Compose 1.12 lo corregge (PR #3446); qui, restando
+// alla 1.11, si ignorano le focus() su un campo che ha gia' il fuoco.
 (function () {
   'use strict';
 
@@ -16,9 +21,22 @@
   var isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   if (!isIOS) return;
 
-  var VERSION = 'v7';
+  var VERSION = 'v8';
   // ?kbdoff=1: lo script non fa nulla (serve ai test automatici per confrontare con e senza).
   if (/[?&]kbdoff=1/.test(location.search)) return;
+
+  var origFocus = HTMLElement.prototype.focus;
+  var skippedFocus = 0;
+  HTMLElement.prototype.focus = function () {
+    try {
+      var tag = this.tagName;
+      if ((tag === 'INPUT' || tag === 'TEXTAREA') && this.getRootNode().activeElement === this) {
+        skippedFocus++;
+        return;
+      }
+    } catch (err) { /* si prosegue con la focus() vera */ }
+    return origFocus.apply(this, arguments);
+  };
 
   var TAP_SLOP_PX = 12;
   var TAP_MAX_MS = 600;
@@ -39,7 +57,7 @@
   var logEl = null;
   var logLines = [];
   var styleState = 'no';
-  function headerText() { return '[' + VERSION + ' stile=' + styleState + ']'; }
+  function headerText() { return '[' + VERSION + ' stile=' + styleState + ' focusIgnorati=' + skippedFocus + ']'; }
   function log(msg) {
     if (!debug) return;
     if (!logEl) {
@@ -229,22 +247,10 @@
     var r = getRoot();
     var bk = r && r.querySelector('input, textarea');
     if (bk) {
-      // Il campo nascosto di Compose esiste gia' (lo crea durante il pointerup) ma al momento del
-      // fuoco e' alto 0 px: su iOS un campo senza area non fa comparire la tastiera. Prima gli si da'
-      // un'altezza, poi si passa dall'appoggio (che la tastiera la apre di sicuro) e subito dopo si
-      // sposta il fuoco sul campo di Compose, tutto dentro il gesto: la tastiera resta aperta.
-      var br = bk.getBoundingClientRect();
-      if (br.height < 10) bk.style.height = Math.max(24, p.box.height) + 'px';
-      if (br.width < 10) bk.style.width = '24px';
+      // Il campo nascosto di Compose esiste gia' (lo crea durante il pointerup): il fuoco lo si da'
+      // qui, dentro il gesto. Le focus() successive di Compose vengono ignorate (vedi in cima).
       if (r.activeElement === bk) bk.blur();
-      var el = getDecoy();
-      if (!el.isConnected) document.body.appendChild(el);
-      el.style.left = Math.max(0, p.box.left) + 'px';
-      el.style.top = Math.max(0, p.box.top) + 'px';
-      el.style.height = Math.max(24, p.box.height) + 'px';
-      try { el.focus({ preventScroll: true }); } catch (err) { el.focus(); }
-      snapshot('appoggio a fuoco ->');
-      try { bk.focus({ preventScroll: true }); } catch (err) { bk.focus(); }
+      try { origFocus.call(bk, { preventScroll: true }); } catch (err) { origFocus.call(bk); }
       snapshot('campo di Compose a fuoco nel gesto ->');
       if (debug) {
         [100, 300, 700, 1500].forEach(function (ms) { setTimeout(function () { snapshot('+' + ms + 'ms'); }, ms); });
