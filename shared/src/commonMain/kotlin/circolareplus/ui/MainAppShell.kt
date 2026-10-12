@@ -1680,6 +1680,10 @@ fun MainAppShell(
     LaunchedEffect(user.id) {
         AnalysisActivity.stopRequests.collect { number -> stopClassification(number) }
     }
+    // Ore di lezione della classe (5 o 6): il calendario offre solo quelle.
+    LaunchedEffect(user.id) {
+        circolareplus.data.ClassSchedule.refresh()
+    }
 
     // Mentre si è dentro l'app, continua a classificare in background le circolari rimaste
     // indietro (quelle che l'anticipo durante il caricamento non ha fatto in tempo a coprire):
@@ -4886,6 +4890,8 @@ private fun AddCalendarEventDialog(
     var showDatePicker by remember { mutableStateOf(false) }
     var fromHour by remember { mutableStateOf<Int?>(null) }
     var toHour by remember { mutableStateOf<Int?>(null) }
+    // Ore di lezione della classe: 5 (8-13) o 6 (8-14).
+    val maxHours = circolareplus.data.ClassSchedule.lessonHours
     // Le ore di lezione scelte, scritte come le vede la classe: "3ª ora" o "Dalla 2ª alla 4ª ora".
     val time = remember(fromHour, toHour) { lessonHoursLabel(fromHour, toHour) }
     var category by remember { mutableStateOf(CalendarEventCategory.VERIFICA) }
@@ -5229,12 +5235,15 @@ private fun AddCalendarEventDialog(
                                     // Le ore di lezione dette dall'utente ("3ª ora", "dalla 2 alla 4")
                                     // si leggono con regole fisse, che battono il modello: uno piccolo
                                     // le ignorava o le scambiava per un orario dell'orologio.
-                                    val spoken = circolareplus.ai.LessonHours.parse(aiPrompt)
+                                    val spoken = circolareplus.ai.LessonHours.parse(aiPrompt, maxHours)
                                     // Un orario dell'orologio ("alle 9") diventa l'ora di lezione in
                                     // corso a quell'ora (vedi LessonHours.fromClock).
-                                    val fromClock = circolareplus.ai.LessonHours.fromClock(draft.time)
-                                    fromHour = spoken?.from ?: draft.fromHour ?: fromClock
-                                    toHour = spoken?.to ?: draft.toHour ?: fromClock
+                                    val fromClock = circolareplus.ai.LessonHours.fromClock(draft.time, maxHours)
+                                    // Un'ora oltre quelle della classe (la 6ª in una classe da 5) non vale.
+                                    val modelFrom = draft.fromHour?.takeIf { it <= maxHours }
+                                    val modelTo = draft.toHour?.takeIf { it <= maxHours }
+                                    fromHour = spoken?.from ?: modelFrom ?: fromClock
+                                    toHour = spoken?.to ?: modelTo ?: fromClock
                                     // Fuori dalle ore di lezione (es. "alle 15") il foglio non ha dove
                                     // metterlo: resta nelle note invece di perdersi.
                                     val clock = if (fromHour == null) draft.time?.let { "Orario indicato: $it" } else null
@@ -5351,6 +5360,7 @@ private fun AddCalendarEventDialog(
                         HourDropdown(
                             label = "Da",
                             value = fromHour,
+                            maxHour = maxHours,
                             onSelect = {
                                 fromHour = it
                                 if (toHour != null && toHour!! < it) toHour = it
@@ -5361,6 +5371,7 @@ private fun AddCalendarEventDialog(
                             label = "A",
                             value = toHour,
                             minHour = fromHour ?: 1,
+                            maxHour = maxHours,
                             onSelect = { toHour = it },
                             modifier = Modifier.weight(1f)
                         )
@@ -5523,14 +5534,15 @@ private fun lessonHoursLabel(from: Int?, to: Int?): String = when {
     else -> "Dalla ${from}ª alla ${to}ª ora"
 }
 
-/** Menu a discesa "Da / A" per scegliere un'ora di lezione da 1 a 6. */
+/** Menu a discesa "Da / A" per scegliere un'ora di lezione, da 1 fino a [maxHour] (5 o 6, come la classe). */
 @Composable
 private fun HourDropdown(
     label: String,
     value: Int?,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    minHour: Int = 1
+    minHour: Int = 1,
+    maxHour: Int = 6
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier = modifier) {
@@ -5557,7 +5569,7 @@ private fun HourDropdown(
             )
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            (minHour..6).forEach { hour ->
+            (minHour..maxHour).forEach { hour ->
                 DropdownMenuItem(
                     text = { Text("${hour}ª ora") },
                     onClick = {

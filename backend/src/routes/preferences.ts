@@ -6,7 +6,7 @@
 
 import { Hono } from 'hono';
 import type { Env, JWTPayload } from '../types';
-import { authMiddleware, requireRole, resolveClassId, ensureClassRow } from '../auth';
+import { authMiddleware, requireRole, resolveClassId, ensureClassRow, isLessonHours } from '../auth';
 import { notifyClass, notifyUser } from '../services/fcm';
 import { inBackground } from '../services/background';
 
@@ -74,13 +74,15 @@ preferences.get('/config', async (c) => {
   // corrispondente): vedi il commento su ensureClassRow per perché serve e cosa causava.
   await ensureClassRow(c.env, classId);
   const config = await c.env.DB.prepare(
-    'SELECT preferences_open, label, created_at FROM classes WHERE id = ?'
-  ).bind(classId).first<{ preferences_open: number; label: string; created_at: string }>();
+    'SELECT preferences_open, label, lesson_hours, created_at FROM classes WHERE id = ?'
+  ).bind(classId).first<{ preferences_open: number; label: string; lesson_hours: number; created_at: string }>();
 
   return c.json({
     preferencesOpen: Boolean(config?.preferences_open ?? 0),
     classId,
     classLabel: config?.label ?? null,
+    // Ore di lezione al giorno (5 o 6): il calendario offre solo queste.
+    lessonHours: config?.lesson_hours ?? 6,
     updatedAt: config?.created_at ?? null,
   });
 });
@@ -117,6 +119,20 @@ preferences.post('/config', requireRole('REPRESENTATIVE'), async (c) => {
   }
 
   return c.json({ success: true, preferencesOpen: open });
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/preferences/lesson-hours — Ore di lezione della classe, 5 o 6 (solo REPRESENTATIVE)
+// ---------------------------------------------------------------------------
+preferences.put('/lesson-hours', requireRole('REPRESENTATIVE'), async (c) => {
+  const body = await c.req.json<{ lessonHours?: unknown }>().catch(() => ({} as { lessonHours?: unknown }));
+  if (!isLessonHours(body.lessonHours)) {
+    return c.json({ error: 'Le ore di lezione possono essere 5 (8-13) o 6 (8-14)' }, 400);
+  }
+  const classId = await resolveClassId(c);
+  await ensureClassRow(c.env, classId);
+  await c.env.DB.prepare('UPDATE classes SET lesson_hours = ? WHERE id = ?').bind(body.lessonHours, classId).run();
+  return c.json({ success: true, lessonHours: body.lessonHours });
 });
 
 // ---------------------------------------------------------------------------

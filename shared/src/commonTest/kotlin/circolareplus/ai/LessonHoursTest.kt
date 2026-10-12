@@ -95,4 +95,21 @@ class LessonHoursTest {
         assertNull(LessonHours.fromClock("abc"))
         assertNull(LessonHours.fromClock(null))
     }
+
+    @Test
+    fun unaClasseDaCinqueOreNonHaLaSesta() {
+        assertEquals(5 to 5, LessonHours.parse("uscita all'ultima ora", maxHours = 5)?.let { it.from to it.to })
+        assertEquals(6 to 6, LessonHours.parse("uscita all'ultima ora", maxHours = 6)?.let { it.from to it.to })
+        assertNull(LessonHours.parse("verifica alla sesta ora", maxHours = 5))
+        assertNull(LessonHours.parse("verifica dalla 4 alla 6 ora", maxHours = 5))
+        assertEquals(4 to 5, LessonHours.parse("verifica dalla 4 alla 5 ora", maxHours = 5)?.let { it.from to it.to })
+    }
+
+    @Test
+    fun conCinqueOreLOrologioFinisceAlleTredici() {
+        assertEquals(5, LessonHours.fromClock("12:59", maxHours = 5))
+        assertNull(LessonHours.fromClock("13:00", maxHours = 5))
+        assertEquals(6, LessonHours.fromClock("13:30", maxHours = 6))
+        assertNull(LessonHours.fromClock("14:00", maxHours = 6))
+    }
 }

@@ -80,6 +80,8 @@ fun ClassRosterScreen(
             )
             Spacer(modifier = Modifier.height(AppTheme.Space8))
             ClassCodeRow()
+            Spacer(modifier = Modifier.height(AppTheme.Space8))
+            LessonHoursRow()
         }
 
         if (entries.isEmpty()) {
@@ -212,6 +214,58 @@ private fun ClassCodeRow() {
                 }
             },
             confirmLabel = "Rigenera"
+        )
+    }
+}
+
+/**
+ * Quante ore di lezione fa la classe al giorno, 5 (8-13) o 6 (8-14). Il calendario offre solo
+ * queste ore e l'AI traduce "alle 9" nell'ora giusta. Lo sceglie il Rappresentante alla
+ * registrazione; qui lo cambia (le classi nate prima partono da 6).
+ */
+@Composable
+private fun LessonHoursRow() {
+    val current = circolareplus.data.ClassSchedule.lessonHours
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+            .background(AppTheme.TintBlue)
+            .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8)
+    ) {
+        Text(text = "Ore di lezione", style = MaterialTheme.typography.bodySmall, color = AppTheme.TintBlueInk)
+        Spacer(modifier = Modifier.height(AppTheme.Space4))
+        circolareplus.design.LessonHoursPicker(
+            selected = current,
+            enabled = !busy,
+            onSelect = { hours ->
+                if (hours != current) {
+                    busy = true
+                    error = null
+                    scope.launch {
+                        try {
+                            circolareplus.data.ClassSchedule.change(hours)
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            error = (e as? circolareplus.data.remote.ApiException)?.message
+                                ?: "Non sono riuscito a salvare: controlla la connessione."
+                        } finally {
+                            busy = false
+                        }
+                    }
+                }
+            }
+        )
+        Text(
+            text = error ?: "Nel calendario compaiono solo le ore che la classe ha.",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Normal,
+            color = if (error != null) AppTheme.TintRedInk else AppTheme.TintBlueInk.copy(alpha = 0.8f)
         )
     }
 }

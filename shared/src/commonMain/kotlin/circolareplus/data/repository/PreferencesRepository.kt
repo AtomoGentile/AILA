@@ -42,6 +42,14 @@ class PreferencesRepository(private val api: ApiClient) {
         return getConfig()
     }
 
+    /** Solo Rappresentante: ore di lezione al giorno della classe, 5 (8-13) o 6 (8-14). */
+    suspend fun setLessonHours(lessonHours: Int) {
+        api.put<SetLessonHoursRequestDto, SuccessDto>(
+            "/api/preferences/lesson-hours",
+            SetLessonHoursRequestDto(lessonHours)
+        )
+    }
+
     /** score: -2, -1, 0, 1, 2. Il server applica i vincoli anti-gaming (max 2 voti +2 e max 2 -2). */
     suspend fun vote(toStudentId: String, score: SocialPreferenceScore) {
         api.post<VoteSocialPreferenceRequestDto, SuccessDto>(

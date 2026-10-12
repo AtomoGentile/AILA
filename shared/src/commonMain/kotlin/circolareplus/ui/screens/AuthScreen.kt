@@ -76,6 +76,9 @@ fun AuthScreen(
     var lastName by remember { mutableStateOf("") }
     var selectedHeightCm by remember { mutableStateOf(175) }
     var representativeCode by remember { mutableStateOf("") }
+    // Ore di lezione della classe (5 o 6): le sceglie il Rappresentante che la crea. Nessun valore
+    // preselezionato, cosi' non si salta per distrazione.
+    var lessonHours by remember { mutableStateOf<Int?>(null) }
 
     // Classe. Prima non si sceglieva: il server ne conosceva una sola e tutti finivano lì
     // dentro. L'elenco arriva dal server (le classi che esistono già) e si può comunque
@@ -104,6 +107,14 @@ fun AuthScreen(
         }
     }
 
+    val joiningExistingClass = remember(classInput, knownClasses) {
+        val wanted = classKey(classInput)
+        wanted.isNotEmpty() && knownClasses.any { it.studentCount > 0 && classKey(it.label) == wanted }
+    }
+    // Le ore le decide chi crea la classe, cioe' il Rappresentante di una classe che non esiste
+    // ancora; chi entra in una classe che c'e' gia' trova quelle scelte.
+    val asksLessonHours = representativeCode.isNotBlank() && !joiningExistingClass
+
     fun submit() {
         errorMessage = null
         if (isRegisterMode) {
@@ -117,6 +128,10 @@ fun AuthScreen(
             }
             if (password.length < 8) {
                 errorMessage = "La password deve essere di almeno 8 caratteri."
+                return
+            }
+            if (asksLessonHours && lessonHours == null) {
+                errorMessage = "Indica quante ore di lezione fa la tua classe: 5 (8-13) o 6 (8-14)."
                 return
             }
         } else if (username.isBlank() || password.isBlank()) {
@@ -136,7 +151,8 @@ fun AuthScreen(
                         heightCm = selectedHeightCm,
                         classLabel = classInput.trim(),
                         representativeCode = representativeCode.trim(),
-                        classCode = classCode
+                        classCode = classCode,
+                        lessonHours = if (asksLessonHours) lessonHours else null
                     )
                 } else {
                     AppContainer.authRepository.login(
@@ -165,10 +181,6 @@ fun AuthScreen(
         }
     }
 
-    val joiningExistingClass = remember(classInput, knownClasses) {
-        val wanted = classKey(classInput)
-        wanted.isNotEmpty() && knownClasses.any { it.studentCount > 0 && classKey(it.label) == wanted }
-    }
 
     if (showResetDialog) {
         ResetPasswordDialog(
@@ -435,6 +447,35 @@ fun AuthScreen(
                             Spacer(modifier = Modifier.height(AppTheme.Space4))
                             Text(
                                 text = "Solo per i Rappresentanti eletti: il codice vale per la classe scelta sopra e una volta sola. Lascialo vuoto se ti registri come studente.",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Normal,
+                                color = AppTheme.TextFaint
+                            )
+                        }
+                    }
+
+                    // Solo al Rappresentante che crea la classe: quante ore di lezione fa al giorno.
+                    AnimatedVisibility(
+                        visible = isRegisterMode && asksLessonHours,
+                        enter = circolareplus.design.ailaExpandEnter(),
+                        exit = circolareplus.design.ailaCollapseExit()
+                    ) {
+                        Column {
+                            Spacer(modifier = Modifier.height(AppTheme.Space16))
+                            Text(
+                                text = "Ore di lezione della classe",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                color = AppTheme.TextDark
+                            )
+                            Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            circolareplus.design.LessonHoursPicker(
+                                selected = lessonHours,
+                                onSelect = { lessonHours = it }
+                            )
+                            Spacer(modifier = Modifier.height(AppTheme.Space4))
+                            Text(
+                                text = "Il calendario offre solo le ore che la classe ha. Potrai cambiarle dalla Scheda Classe.",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Normal,
                                 color = AppTheme.TextFaint

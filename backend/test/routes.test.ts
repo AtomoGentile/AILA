@@ -107,6 +107,45 @@ describe('registrazione e codice classe', () => {
   });
 });
 
+describe('ore di lezione della classe', () => {
+  const hoursOf = async (token: string) => (await call('GET', '/api/preferences/config', undefined, token)).json.lessonHours;
+
+  it('la sceglie chi crea la classe; senza scelta sono 6', async () => {
+    const five = await register('rep5', { classLabel: '2 A', lessonHours: 5, representativeCode: await repCode('2 A') });
+    expect(five.status).toBe(201);
+    expect(await hoursOf(five.json.token)).toBe(5);
+
+    const dflt = await register('rep6', { classLabel: '2 B', representativeCode: await repCode('2 B') });
+    expect(await hoursOf(dflt.json.token)).toBe(6);
+  });
+
+  it('chi si iscrive a una classe esistente non cambia le ore', async () => {
+    const rep = await register('rep', { classLabel: '2 A', lessonHours: 5, representativeCode: await repCode('2 A') });
+    const code = await classCodeOf(rep.json.token);
+    const student = await register('studente', { classLabel: '2 A', lessonHours: 6, classCode: code });
+    expect(student.status).toBe(201);
+    expect(await hoursOf(student.json.token)).toBe(5);
+  });
+
+  it('rifiuta valori diversi da 5 e 6', async () => {
+    expect((await register('ore_sette', { classLabel: '2 C', lessonHours: 7 })).status).toBe(400);
+    expect((await register('ore_testo', { classLabel: '2 C', lessonHours: '5' })).status).toBe(400);
+    expect((await register('ore_null', { classLabel: '2 C', lessonHours: null })).status).toBe(201);
+  });
+
+  it('il Rappresentante le cambia, lo studente no', async () => {
+    const rep = await register('rep', { classLabel: '2 A', representativeCode: await repCode('2 A') });
+    const code = await classCodeOf(rep.json.token);
+    const student = await register('studente', { classLabel: '2 A', classCode: code });
+
+    expect((await call('PUT', '/api/preferences/lesson-hours', { lessonHours: 5 }, rep.json.token)).status).toBe(200);
+    expect(await hoursOf(student.json.token)).toBe(5);
+    expect((await call('PUT', '/api/preferences/lesson-hours', { lessonHours: 4 }, rep.json.token)).status).toBe(400);
+    expect((await call('PUT', '/api/preferences/lesson-hours', { lessonHours: 6 }, student.json.token)).status).toBe(403);
+    expect(await hoursOf(rep.json.token)).toBe(5);
+  });
+});
+
 describe('codici Rappresentante per classe e monouso', () => {
   it('un codice di un\'altra classe viene rifiutato', async () => {
     const other = await repCode('5 A');

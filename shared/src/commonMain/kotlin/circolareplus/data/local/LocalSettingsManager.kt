@@ -58,6 +58,7 @@ class LocalSettingsManager(
         private const val KEY_ASSISTANT_HISTORY = "assistant_history_json"
         private const val KEY_CIRCULAR_ANALYSES = "circular_analyses_json"
         private const val KEY_BG_LAST_CIRCULAR = "bg_last_circular_number"
+        private const val KEY_CLASS_LESSON_HOURS = "class_lesson_hours"
         private const val KEY_UPDATE_LAST_CHECK = "update_last_check_millis"
         private const val KEY_UPDATE_DISMISSED_TAG = "update_dismissed_tag"
         private const val KEY_DEBUG_MENU = "debug_menu_enabled"
@@ -189,6 +190,11 @@ class LocalSettingsManager(
         val updated = if (submitted) (current + pollId).distinct() else current.filter { it != pollId }
         settings.putString(KEY_SUBMITTED_POLLS, updated.joinToString("\n"))
     }
+
+    /** Ore di lezione al giorno della classe (5 o 6), l'ultima nota: serve anche senza rete. */
+    var classLessonHours: Int
+        get() = settings.getInt(KEY_CLASS_LESSON_HOURS, 6).takeIf { it == 5 || it == 6 } ?: 6
+        set(value) = settings.putInt(KEY_CLASS_LESSON_HOURS, value)
 
     // --- Aggiornamenti dell'app (vedi circolareplus.update.AppUpdateManager) -------------------
 

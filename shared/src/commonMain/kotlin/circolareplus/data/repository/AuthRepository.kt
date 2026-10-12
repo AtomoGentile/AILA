@@ -91,7 +91,8 @@ class AuthRepository(
         heightCm: Int,
         classLabel: String,
         representativeCode: String? = null,
-        classCode: String? = null
+        classCode: String? = null,
+        lessonHours: Int? = null
     ): Pair<User, StudentProfile> {
         val response: AuthResponseDto = api.post(
             "/api/auth/register",
@@ -103,7 +104,8 @@ class AuthRepository(
                 heightCm = heightCm,
                 representativeCode = representativeCode?.ifBlank { null },
                 classLabel = classLabel,
-                classCode = classCode?.trim()?.ifBlank { null }
+                classCode = classCode?.trim()?.ifBlank { null },
+                lessonHours = lessonHours
             ),
             auth = false
         )

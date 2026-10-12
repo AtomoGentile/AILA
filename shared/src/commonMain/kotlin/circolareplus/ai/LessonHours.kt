@@ -33,7 +33,14 @@ internal object LessonHours {
     private fun number(token: String): Int? =
         token.toIntOrNull() ?: WORDS.entries.firstOrNull { token.startsWith(it.key) }?.value
 
-    fun parse(text: String): LessonHourRange? {
+    /**
+     * Le ore dette nel testo. `null` se non ce ne sono o se qualcuna supera [maxHours]: una classe
+     * da 5 ore non ha la 6ª. "Ultima ora" e' l'ultima della classe, cioe' [maxHours].
+     */
+    fun parse(text: String, maxHours: Int = MAX): LessonHourRange? =
+        parseAny(text, maxHours)?.takeIf { it.to <= maxHours }
+
+    private fun parseAny(text: String, maxHours: Int): LessonHourRange? {
         val lower = text.lowercase()
         (range.find(lower) ?: dashed.find(lower))?.let { m ->
             val a = number(m.groupValues[1]) ?: return@let
@@ -48,7 +55,7 @@ internal object LessonHours {
             val n = number(m.groupValues[1]) ?: return@let
             return LessonHourRange(n, n)
         }
-        if (last.containsMatchIn(lower)) return LessonHourRange(MAX, MAX)
+        if (last.containsMatchIn(lower)) return LessonHourRange(maxHours, maxHours)
         return null
     }
 
@@ -60,14 +67,15 @@ internal object LessonHours {
 
     /**
      * L'ora di lezione in corso all'orario "HH:MM" dell'orologio ("09:00" -> 2, "10:30" -> 3), o
-     * `null` se cade fuori dalle ore di lezione (prima delle 8:00, dalle 14:00 in poi) o non e' leggibile.
+     * `null` se cade fuori dalle ore di lezione della classe (prima delle 8:00, dopo la fine della
+     * [maxHours]-esima ora: 13:00 con 5 ore, 14:00 con 6) o non e' leggibile.
      */
-    fun fromClock(timeHm: String?): Int? {
+    fun fromClock(timeHm: String?, maxHours: Int = MAX): Int? {
         val parts = timeHm?.split(':') ?: return null
         if (parts.size != 2) return null
         val minutes = (parts[0].toIntOrNull() ?: return null) * 60 + (parts[1].toIntOrNull() ?: return null)
         if (minutes < FIRST_HOUR_START_MINUTES) return null
-        return ((minutes - FIRST_HOUR_START_MINUTES) / LESSON_MINUTES + 1).takeIf { it <= MAX }
+        return ((minutes - FIRST_HOUR_START_MINUTES) / LESSON_MINUTES + 1).takeIf { it <= maxHours }
     }
 
     /** Un numero letto dal JSON del modello, se e' un'ora di lezione valida. */

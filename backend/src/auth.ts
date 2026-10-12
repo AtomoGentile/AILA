@@ -295,6 +295,12 @@ export function normalizeClassLabel(raw: string): string | null {
   return `${match[1]} ${match[2]}`;
 }
 
+/** Ore di lezione al giorno di una classe: 5 (8:00-13:00) o 6 (8:00-14:00). */
+export const DEFAULT_LESSON_HOURS = 6;
+export function isLessonHours(value: unknown): value is 5 | 6 {
+  return value === 5 || value === 6;
+}
+
 /** Id stabile e leggibile ricavato dall'etichetta: "4 CSA" -> "CLASS_4_CSA". */
 export function classIdFromLabel(label: string): string {
   return `CLASS_${label.replace(/\s+/g, '_')}`;

@@ -46,7 +46,9 @@ data class RegisterWithClassRequestDto(
     val representativeCode: String? = null,
     val classLabel: String,
     /** Codice della classe (lo vede il Rappresentante): serve per entrare in una classe che ha gia' iscritti. */
-    val classCode: String? = null
+    val classCode: String? = null,
+    /** Ore di lezione al giorno (5 o 6) della classe: conta solo per chi la crea, il primo Rappresentante. */
+    val lessonHours: Int? = null
 )
 
 // --- Password e codice classe ------------------------------------------------------------------
@@ -72,8 +74,13 @@ data class ClassCodeResponseDto(val code: String = "")
 data class ClassConfigDto(
     val preferencesOpen: Boolean = false,
     val classId: String? = null,
-    val classLabel: String? = null
+    val classLabel: String? = null,
+    /** Ore di lezione al giorno: 5 (8-13) o 6 (8-14). */
+    val lessonHours: Int = 6
 )
+
+@Serializable
+data class SetLessonHoursRequestDto(val lessonHours: Int)
 
 // --- Sondaggi: invio e scadenza ---------------------------------------------------------------
 

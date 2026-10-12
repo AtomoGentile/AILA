@@ -5,7 +5,9 @@
 import { Hono } from 'hono';
 import type { Env, UserRole } from '../types';
 import {
+  DEFAULT_LESSON_HOURS,
   classIdFromLabel,
+  isLessonHours,
   issueToken,
   newUUID,
   normalizeClassLabel,
@@ -80,6 +82,9 @@ auth.post('/register', async (c) => {
     // Codice della classe (lo vede il Rappresentante nella Scheda Classe): serve per entrare in
     // una classe che ha gia' degli iscritti.
     classCode?: string;
+    // Ore di lezione al giorno (5 o 6) della classe. Conta solo quando la registrazione la crea,
+    // cioe' per il primo Rappresentante: dopo, la cambia lui dalla Scheda Classe.
+    lessonHours?: number | null;
   }>();
 
   const { username, password, heightCm, representativeCode, classLabel, classCode } = body;
@@ -126,6 +131,10 @@ auth.post('/register', async (c) => {
     );
   }
   const classId = classIdFromLabel(normalizedLabel);
+  if (body.lessonHours !== undefined && body.lessonHours !== null && !isLessonHours(body.lessonHours)) {
+    return c.json({ error: 'Le ore di lezione possono essere 5 (8-13) o 6 (8-14)' }, 400);
+  }
+  const lessonHours = isLessonHours(body.lessonHours) ? body.lessonHours : DEFAULT_LESSON_HOURS;
 
   // Ruolo: STUDENT di default. Diventa REPRESENTATIVE con un codice Rappresentante emesso per
   // questa classe (POST /api/admin/representative-invites, vedi README): vale una volta sola e
@@ -213,8 +222,8 @@ auth.post('/register', async (c) => {
       // OR IGNORE: se due studenti della stessa classe si registrano nello stesso momento, la
       // seconda INSERT non deve far fallire la registrazione.
       c.env.DB.prepare(
-        'INSERT OR IGNORE INTO classes (id, label) VALUES (?, ?)'
-      ).bind(classId, normalizedLabel),
+        'INSERT OR IGNORE INTO classes (id, label, lesson_hours) VALUES (?, ?, ?)'
+      ).bind(classId, normalizedLabel, lessonHours),
 
       c.env.DB.prepare(
         'INSERT INTO users (id, first_name, last_name, username, password_hash, role, class_id) VALUES (?, ?, ?, ?, ?, ?, ?)'

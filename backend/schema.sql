@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS classes (
     -- (come su D1) un riferimento in avanti fa fallire perfino l'INSERT della classe iniziale.
     -- Alla cancellazione di un utente la pulisce users.ts.
     security_guard_id TEXT,
+    -- Ore di lezione al giorno: 5 (8:00-13:00) o 6 (8:00-14:00). Lo sceglie il Rappresentante
+    -- (alla registrazione o dalla Scheda Classe); il calendario offre solo le ore che la classe ha.
+    lesson_hours INTEGER NOT NULL DEFAULT 6 CHECK (lesson_hours IN (5, 6)),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
