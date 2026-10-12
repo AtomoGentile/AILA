@@ -4726,12 +4726,15 @@ private data class AiEventDraft(
     val category: CalendarEventCategory,
     val dateMillis: Long?,
     val time: String?,
-    val notes: String?
+    val notes: String?,
+    /** Ore di lezione (1-6) per i selettori "Da / A". */
+    val fromHour: Int? = null,
+    val toHour: Int? = null
 )
 
 private val AI_PROMPT_EXAMPLES = listOf(
     "Compito di inglese domani",
-    "Interrogazione di storia lunedì alle 9",
+    "Interrogazione di storia lunedì alla 3ª ora",
     "Verifica di matematica venerdì alle 10",
     "Uscita didattica al museo giovedì"
 )
@@ -4779,7 +4782,9 @@ private fun aiEventDraftFromAi(draft: EventDraft): AiEventDraft {
         category = category,
         dateMillis = dateMillis,
         time = draft.timeHm,
-        notes = draft.notes
+        notes = draft.notes,
+        fromHour = draft.fromHour,
+        toHour = draft.toHour
     )
 }
 
@@ -5221,7 +5226,17 @@ private fun AddCalendarEventDialog(
                                     subject = draft.subject
                                     category = draft.category
                                     selectedDateMillis = draft.dateMillis
-                                                    draft.notes?.let { notes = it }
+                                    // Le ore di lezione dette dall'utente ("3ª ora", "dalla 2 alla 4")
+                                    // si leggono con regole fisse, che battono il modello: uno piccolo
+                                    // le ignorava o le scambiava per un orario dell'orologio.
+                                    val spoken = circolareplus.ai.LessonHours.parse(aiPrompt)
+                                    fromHour = spoken?.from ?: draft.fromHour
+                                    toHour = spoken?.to ?: draft.toHour
+                                    // "alle 9" non e' un'ora di lezione e il foglio non ha un campo per
+                                    // l'orologio: lo si tiene nelle note invece di perderlo.
+                                    val clock = if (fromHour == null) draft.time?.let { "Orario indicato: $it" } else null
+                                    listOfNotNull(draft.notes, clock).joinToString("\n")
+                                        .takeIf { it.isNotBlank() }?.let { notes = it }
                                     aiFilled = fromAi != null
                                     aiFallbackNotice = fromAi == null
                                     step = EventCreationStep.MANUAL

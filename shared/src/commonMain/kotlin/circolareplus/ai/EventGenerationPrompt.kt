@@ -30,7 +30,10 @@ data class EventDraft(
     val category: String,
     val dateIso: String?,
     val timeHm: String?,
-    val notes: String?
+    val notes: String?,
+    /** Ora di lezione (1-6) d'inizio e di fine, come nel selettore "Da / A" del foglio evento. */
+    val fromHour: Int? = null,
+    val toHour: Int? = null
 )
 
 /**
@@ -63,7 +66,7 @@ internal object EventGenerationPrompt {
             "$userPrompt"
 
             Rispondi con questo JSON:
-            {"title":"","subject":"","category":"ALTRO","dateIso":"YYYY-MM-DD","timeHm":"HH:MM","notes":""}
+            {"title":"","subject":"","category":"ALTRO","dateIso":"YYYY-MM-DD","fromHour":null,"toHour":null,"timeHm":"HH:MM","notes":""}
 
             Regole:
             - "title": titolo breve dell'evento (es. "Verifica di matematica"). Obbligatorio.
@@ -79,8 +82,14 @@ internal object EventGenerationPrompt {
               ("venerdì") usa la prossima volta che cade a partire da oggi; con giorno e mese ("12
               ottobre") usa l'anno di oggi (${civilToday.year}), oppure il successivo se quella data è già
               passata.
-            - "timeHm": l'ora in formato HH:MM 24 ore se presente nel testo (es. "alle 9" -> "09:00",
-              "alle 14:30" -> "14:30"). Altrimenti null. Non inventare un orario se il testo non lo dice.
+            - "fromHour" e "toHour": le ORE DI LEZIONE della scuola, numeri interi da 1 a 6, se il testo
+              dice in quale ora si svolge l'evento: "3ª ora", "terza ora" -> fromHour 3 e toHour 3;
+              "dalla 2 alla 4 ora" -> fromHour 2 e toHour 4; "prime due ore" -> 1 e 2; "ultima ora" -> 6.
+              Sono ore di lezione, NON orari dell'orologio: "alle 9" NON e' un'ora di lezione. Se il
+              testo non le dice, entrambi null.
+            - "timeHm": l'orario dell'orologio in formato HH:MM 24 ore, solo se il testo lo dice
+              esplicitamente (es. "alle 9" -> "09:00", "alle 14:30" -> "14:30"). Per "3ª ora" resta null.
+              Non inventare un orario se il testo non lo dice.
             - "notes": eventuali dettagli aggiuntivi del testo che non rientrano in titolo/materia/data/ora
               (es. luogo, cosa portare, argomenti specifici, chi è coinvolto). Stringa vuota se non c'è
               nient'altro da riportare.
@@ -100,7 +109,7 @@ internal object EventGenerationPrompt {
         return """
             Oggi e' $todayWeekday ${civilToday.toIso()}.
             Scrivi un oggetto JSON per l'evento "$userPrompt" con questi campi:
-            "title" (titolo breve), "subject" (materia o vuoto), "category" (una sola parola tra VERIFICA, INTERROGAZIONE, PAGAMENTO, USCITA_DIDATTICA, AVVISO, ALTRO), "dateIso" (AAAA-MM-GG, oggi o futura, mai passata, oppure null), "timeHm" (HH:MM oppure null), "notes" (dettagli o vuoto).
+            "title" (titolo breve), "subject" (materia o vuoto), "category" (una sola parola tra VERIFICA, INTERROGAZIONE, PAGAMENTO, USCITA_DIDATTICA, AVVISO, ALTRO), "dateIso" (AAAA-MM-GG, oggi o futura, mai passata, oppure null), "fromHour" e "toHour" (ore di lezione da 1 a 6, es. "3ª ora" -> 3 e 3, "dalla 2 alla 4 ora" -> 2 e 4, altrimenti null), "timeHm" (orario dell'orologio HH:MM solo se detto, altrimenti null), "notes" (dettagli o vuoto).
             Rispondi solo con il JSON.
         """.trimIndent()
     }
@@ -150,6 +159,8 @@ internal object EventGenerationPrompt {
         val timeHm = obj["timeHm"]?.jsonPrimitive?.contentOrNull
             ?.takeIf { isClockTime(it) }
         val notes = obj["notes"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }
+        val fromHour = LessonHours.valid(obj["fromHour"]?.jsonPrimitive?.contentOrNull?.toIntOrNull())
+        val toHour = LessonHours.valid(obj["toHour"]?.jsonPrimitive?.contentOrNull?.toIntOrNull())
 
         return EventDraft(
             title = title.take(120),
@@ -157,7 +168,10 @@ internal object EventGenerationPrompt {
             category = category,
             dateIso = dateIso,
             timeHm = timeHm,
-            notes = notes?.take(500)
+            notes = notes?.take(500),
+            // Una sola delle due: l'altra e' la stessa ora. Se sono invertite, si rimettono in ordine.
+            fromHour = if (fromHour != null && toHour != null) minOf(fromHour, toHour) else fromHour ?: toHour,
+            toHour = if (fromHour != null && toHour != null) maxOf(fromHour, toHour) else toHour ?: fromHour
         )
     }
 }
