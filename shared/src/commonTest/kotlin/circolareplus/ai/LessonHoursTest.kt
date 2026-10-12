@@ -78,4 +78,21 @@ class LessonHoursTest {
         assertNull(draft.fromHour)
         assertNull(draft.toHour)
     }
+
+    @Test
+    fun unOrarioDellOrologioDiventaLOraDiLezione() {
+        assertEquals(1, LessonHours.fromClock("08:00"))
+        assertEquals(2, LessonHours.fromClock("09:00"))
+        assertEquals(3, LessonHours.fromClock("10:30"))
+        assertEquals(6, LessonHours.fromClock("13:59"))
+    }
+
+    @Test
+    fun fuoriDalleOreDiLezioneNonSiTraduce() {
+        assertNull(LessonHours.fromClock("07:59"))
+        assertNull(LessonHours.fromClock("14:00"))
+        assertNull(LessonHours.fromClock("15:30"))
+        assertNull(LessonHours.fromClock("abc"))
+        assertNull(LessonHours.fromClock(null))
+    }
 }

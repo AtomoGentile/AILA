@@ -52,6 +52,24 @@ internal object LessonHours {
         return null
     }
 
+    // Griglia oraria usata per tradurre un orario dell'orologio in ora di lezione: la 1ª ora
+    // comincia alle 8:00 e ogni ora dura un'ora, quindi la 6ª finisce alle 14:00. E' l'unico posto
+    // da cambiare se la scuola ha altri orari del suono.
+    private const val FIRST_HOUR_START_MINUTES = 8 * 60
+    private const val LESSON_MINUTES = 60
+
+    /**
+     * L'ora di lezione in corso all'orario "HH:MM" dell'orologio ("09:00" -> 2, "10:30" -> 3), o
+     * `null` se cade fuori dalle ore di lezione (prima delle 8:00, dalle 14:00 in poi) o non e' leggibile.
+     */
+    fun fromClock(timeHm: String?): Int? {
+        val parts = timeHm?.split(':') ?: return null
+        if (parts.size != 2) return null
+        val minutes = (parts[0].toIntOrNull() ?: return null) * 60 + (parts[1].toIntOrNull() ?: return null)
+        if (minutes < FIRST_HOUR_START_MINUTES) return null
+        return ((minutes - FIRST_HOUR_START_MINUTES) / LESSON_MINUTES + 1).takeIf { it <= MAX }
+    }
+
     /** Un numero letto dal JSON del modello, se e' un'ora di lezione valida. */
     fun valid(hour: Int?): Int? = hour?.takeIf { it in MIN..MAX }
 }

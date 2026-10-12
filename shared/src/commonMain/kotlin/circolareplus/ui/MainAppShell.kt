@@ -5230,10 +5230,13 @@ private fun AddCalendarEventDialog(
                                     // si leggono con regole fisse, che battono il modello: uno piccolo
                                     // le ignorava o le scambiava per un orario dell'orologio.
                                     val spoken = circolareplus.ai.LessonHours.parse(aiPrompt)
-                                    fromHour = spoken?.from ?: draft.fromHour
-                                    toHour = spoken?.to ?: draft.toHour
-                                    // "alle 9" non e' un'ora di lezione e il foglio non ha un campo per
-                                    // l'orologio: lo si tiene nelle note invece di perderlo.
+                                    // Un orario dell'orologio ("alle 9") diventa l'ora di lezione in
+                                    // corso a quell'ora (vedi LessonHours.fromClock).
+                                    val fromClock = circolareplus.ai.LessonHours.fromClock(draft.time)
+                                    fromHour = spoken?.from ?: draft.fromHour ?: fromClock
+                                    toHour = spoken?.to ?: draft.toHour ?: fromClock
+                                    // Fuori dalle ore di lezione (es. "alle 15") il foglio non ha dove
+                                    // metterlo: resta nelle note invece di perdersi.
                                     val clock = if (fromHour == null) draft.time?.let { "Orario indicato: $it" } else null
                                     listOfNotNull(draft.notes, clock).joinToString("\n")
                                         .takeIf { it.isNotBlank() }?.let { notes = it }
