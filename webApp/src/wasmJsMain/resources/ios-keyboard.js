@@ -16,7 +16,7 @@
   var isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   if (!isIOS) return;
 
-  var VERSION = 'v6';
+  var VERSION = 'v7';
   // ?kbdoff=1: lo script non fa nulla (serve ai test automatici per confrontare con e senza).
   if (/[?&]kbdoff=1/.test(location.search)) return;
 
@@ -229,9 +229,21 @@
     var r = getRoot();
     var bk = r && r.querySelector('input, textarea');
     if (bk) {
-      // Il campo nascosto di Compose esiste gia' (lo crea durante il pointerup): il fuoco lo si da'
-      // qui, dentro il gesto. Se lo ha gia' e la tastiera non si vede, si toglie e si rimette.
-      if (r.activeElement === bk && !keyboardVisible()) bk.blur();
+      // Il campo nascosto di Compose esiste gia' (lo crea durante il pointerup) ma al momento del
+      // fuoco e' alto 0 px: su iOS un campo senza area non fa comparire la tastiera. Prima gli si da'
+      // un'altezza, poi si passa dall'appoggio (che la tastiera la apre di sicuro) e subito dopo si
+      // sposta il fuoco sul campo di Compose, tutto dentro il gesto: la tastiera resta aperta.
+      var br = bk.getBoundingClientRect();
+      if (br.height < 10) bk.style.height = Math.max(24, p.box.height) + 'px';
+      if (br.width < 10) bk.style.width = '24px';
+      if (r.activeElement === bk) bk.blur();
+      var el = getDecoy();
+      if (!el.isConnected) document.body.appendChild(el);
+      el.style.left = Math.max(0, p.box.left) + 'px';
+      el.style.top = Math.max(0, p.box.top) + 'px';
+      el.style.height = Math.max(24, p.box.height) + 'px';
+      try { el.focus({ preventScroll: true }); } catch (err) { el.focus(); }
+      snapshot('appoggio a fuoco ->');
       try { bk.focus({ preventScroll: true }); } catch (err) { bk.focus(); }
       snapshot('campo di Compose a fuoco nel gesto ->');
       if (debug) {
