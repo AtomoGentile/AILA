@@ -47,7 +47,7 @@ jobs:
 
       - name: Install Appium
         run: |
-          npm install -g appium@2
+          npm install -g appium@latest
           appium driver install xcuitest
           mkdir -p "$RUNNER_TEMP/t" && cd "$RUNNER_TEMP/t" && npm init -y >/dev/null && npm install webdriverio@9 >/dev/null
 
