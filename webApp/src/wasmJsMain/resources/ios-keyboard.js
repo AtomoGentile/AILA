@@ -111,6 +111,21 @@
     return decoy;
   }
 
+  // Il campo di testo nascosto di Compose ha user-select: none (inline) e sta dentro una radice
+  // shadow con :host { -webkit-user-select: none }. Su iOS un campo cosi' prende il fuoco ma non e'
+  // modificabile: compare il fumetto "Incolla" e la tastiera non si apre, o si chiude dopo mezzo
+  // secondo. Il CSS della pagina non entra nella radice shadow: la regola va messa li' dentro, con
+  // !important perche' lo stile inline di Compose non e' important.
+  function patchRoot(r) {
+    if (!r || r.__ailaKbdStyle) return;
+    var st = document.createElement('style');
+    st.textContent = 'input, textarea { -webkit-user-select: text !important; user-select: text !important; ' +
+      '-webkit-touch-callout: default !important; }';
+    r.appendChild(st);
+    r.__ailaKbdStyle = true;
+    log('stile di modifica iniettato nella radice shadow');
+  }
+
   // Radice shadow di Compose (contiene canvas, albero di accessibilita' e campo nascosto).
   function getRoot() {
     if (root && root.host.isConnected) return root;
@@ -119,8 +134,19 @@
     for (var i = 0; i < divs.length; i++) {
       if (divs[i].shadowRoot) { root = divs[i].shadowRoot; break; }
     }
+    patchRoot(root);
     return root;
   }
+
+  // Compose crea la radice shadow dopo l'avvio (asincrono): la si cerca finche' non c'e', cosi' la
+  // regola e' gia' attiva quando nasce il campo nascosto al primo tocco.
+  (function waitForRoot() {
+    var tries = 0;
+    var timer = setInterval(function () {
+      tries++;
+      if (getRoot() || tries > 120) clearInterval(timer);
+    }, 500);
+  })();
 
   function contains(rect, x, y, slop) {
     return x >= rect.left - slop && x <= rect.right + slop && y >= rect.top - slop && y <= rect.bottom + slop;
