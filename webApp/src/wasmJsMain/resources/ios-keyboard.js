@@ -16,7 +16,7 @@
   var isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   if (!isIOS) return;
 
-  var VERSION = 'v4';
+  var VERSION = 'v5';
   var TAP_SLOP_PX = 12;
   var TAP_MAX_MS = 600;
   var decoy = null;
@@ -178,6 +178,11 @@
     return best;
   }
 
+  function keyboardVisible() {
+    var v = window.visualViewport;
+    return !!v && (window.innerHeight - v.height) > 120;
+  }
+
   function isEditable(el) {
     return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA');
   }
@@ -218,8 +223,6 @@
     if (!p || Date.now() - p.t > 800) return;
     if (e.cancelable) e.preventDefault();
     log('touchend annullato (cancelable=' + e.cancelable + ')');
-    var rr = getRoot();
-    if (rr && isEditable(rr.activeElement)) { log('Compose ha gia il fuoco: nessun nuovo appoggio'); return; }
     arm(p.box);
   }, { capture: true, passive: false });
 
@@ -262,8 +265,11 @@
       // Il campo nascosto di Compose sta dentro il campo vero: se il suo centro e' nel riquadro
       // toccato, e' lo stesso campo (spostare il cursore) e non si ruba il fuoco.
       if (contains(box, cx, cy, 2) || contains(ar, e.clientX, e.clientY, 2)) {
-        log('tap sullo stesso campo gia in modifica: nessun appoggio');
-        return;
+        if (keyboardVisible()) {
+          log('tap sullo stesso campo, tastiera visibile: nessun appoggio');
+          return;
+        }
+        log('tap sullo stesso campo ma tastiera NON visibile: riprovo ad aprirla');
       }
     }
 
