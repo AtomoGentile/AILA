@@ -89,7 +89,7 @@ class AppUpdateTest {
     }
 
     @Test
-    fiNoteSenzaLaSezioneInstallazione() {
+    fun leNoteSenzaLaSezioneInstallazione() {
         val body = "Prima versione stabile.\n\n## Installazione\n\n- **Android**: scarica AILA.apk\n\n## Novità\n\n- Più veloce\n- **Nuovo** tema"
         assertEquals("Prima versione stabile.\n\nNovità\n\n• Più veloce\n• Nuovo tema", AppUpdateParser.cleanNotes(body))
         assertEquals("", AppUpdateParser.cleanNotes("## Installazione\n\n- solo istruzioni"))
