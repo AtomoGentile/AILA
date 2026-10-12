@@ -17,6 +17,9 @@
   if (!isIOS) return;
 
   var VERSION = 'v6';
+  // ?kbdoff=1: lo script non fa nulla (serve ai test automatici per confrontare con e senza).
+  if (/[?&]kbdoff=1/.test(location.search)) return;
+
   var TAP_SLOP_PX = 12;
   var TAP_MAX_MS = 600;
   var decoy = null;
