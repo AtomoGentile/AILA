@@ -109,7 +109,14 @@ android {
         val ciRun = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
         val ciSha = System.getenv("GITHUB_SHA")?.take(7)
         versionCode = ciRun ?: 1
-        versionName = if (ciRun != null) "1.0.0 (build $ciRun, $ciSha)" else "1.0.0"
+        // Sui tag vX.Y.Z (le release) la versione e' quella del tag: l'aggiornamento dall'app
+        // (circolareplus.update.AppUpdateManager) confronta il tag dell'ultima release con questa,
+        // e se restasse "1.0.0" proporrebbe di aggiornarsi all'infinito.
+        val tagVersion = if (System.getenv("GITHUB_REF_TYPE") == "tag") {
+            Regex("^[vV](\\d+(\\.\\d+)*)$").find(System.getenv("GITHUB_REF_NAME").orEmpty())?.groupValues?.get(1)
+        } else null
+        val baseVersion = tagVersion ?: "1.0.0"
+        versionName = if (ciRun != null) "$baseVersion (build $ciRun, $ciSha)" else baseVersion
 
         ndk {
             // Le librerie native del motore di AI locale esistono per quattro ABI e da sole

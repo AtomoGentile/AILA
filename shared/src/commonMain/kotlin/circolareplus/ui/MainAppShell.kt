@@ -2227,6 +2227,9 @@ fun MainAppShell(
     }
     if (AppTheme.isGlass) creationDialogs()
 
+    // Controllo delle release su GitHub e finestra "Aggiornamento disponibile" (solo Android).
+    circolareplus.update.AppUpdateHost()
+
     if (seatMapActionError != null) {
         AlertDialog(
             onDismissRequest = { seatMapActionError = null },

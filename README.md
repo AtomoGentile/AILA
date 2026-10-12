@@ -37,6 +37,18 @@ Scarica l'ultima versione dalla pagina **Releases** del repository.
 
 Per registrarti serve il codice della tua classe; i Rappresentanti ricevono un codice personale.
 
+### Aggiornamenti
+
+- **Android**: l'app controlla da sola le release di GitHub (all'apertura, al massimo ogni 6 ore; a mano da
+  *Impostazioni → Aggiornamenti*). Se ce n'è una più recente propone di scaricarla e installarla senza uscire
+  dall'app. La prima volta Android chiede di consentire ad AILA di installare app.
+- **iPhone / iPad**: gli aggiornamenti arrivano da SideStore (vedi sopra).
+
+**Per pubblicare un aggiornamento**: crea su GitHub una release con un tag di versione più alto di quello
+installato, nel formato `vX.Y.Z` (es. `v1.0.1`), non come bozza né pre-release. La CI compila l'APK con quella
+versione e lo allega alla release come `AILA.apk` dopo qualche minuto: da quel momento l'app lo propone.
+Le note della release compaiono nella finestra di aggiornamento (la sezione «Installazione» viene omessa).
+
 ---
 
 ## Servizi usati

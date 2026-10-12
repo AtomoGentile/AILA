@@ -58,6 +58,8 @@ class LocalSettingsManager(
         private const val KEY_ASSISTANT_HISTORY = "assistant_history_json"
         private const val KEY_CIRCULAR_ANALYSES = "circular_analyses_json"
         private const val KEY_BG_LAST_CIRCULAR = "bg_last_circular_number"
+        private const val KEY_UPDATE_LAST_CHECK = "update_last_check_millis"
+        private const val KEY_UPDATE_DISMISSED_TAG = "update_dismissed_tag"
         private const val KEY_DEBUG_MENU = "debug_menu_enabled"
         /** Nelle impostazioni normali: i segreti nel Portachiavi sono di questa installazione. */
         private const val KEY_SECRETS_OWNED = "secrets_in_secure_storage"
@@ -187,6 +189,18 @@ class LocalSettingsManager(
         val updated = if (submitted) (current + pollId).distinct() else current.filter { it != pollId }
         settings.putString(KEY_SUBMITTED_POLLS, updated.joinToString("\n"))
     }
+
+    // --- Aggiornamenti dell'app (vedi circolareplus.update.AppUpdateManager) -------------------
+
+    /** Ultimo controllo automatico delle release su GitHub: tra uno e l'altro passano ore. */
+    var updateLastCheckMillis: Long
+        get() = settings.getLong(KEY_UPDATE_LAST_CHECK, 0L)
+        set(value) = settings.putLong(KEY_UPDATE_LAST_CHECK, value)
+
+    /** Tag per cui l'utente ha toccato "Piu' tardi": l'avviso automatico non si ripete per quello. */
+    var updateDismissedTag: String
+        get() = settings.getString(KEY_UPDATE_DISMISSED_TAG, "")
+        set(value) = settings.putString(KEY_UPDATE_DISMISSED_TAG, value)
 
     // --- Aspetto -----------------------------------------------------------------------------
 

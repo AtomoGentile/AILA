@@ -768,6 +768,25 @@ fun SettingsScreen(
                             },
                             icon = { AppIcons.Sparkle(modifier = Modifier.size(19.dp), color = AppTheme.TintSlateInk) }
                         )
+                        // Solo Android: su iPhone/iPad gli aggiornamenti li porta SideStore.
+                        if (circolareplus.platform.isInAppUpdateSupported()) {
+                            val updateState = circolareplus.update.AppUpdateManager.state
+                            val updateReady = updateState is circolareplus.update.UpdateState.Available ||
+                                updateState is circolareplus.update.UpdateState.ReadyToInstall
+                            AilaListRow(
+                                title = "Aggiornamenti",
+                                subtitle = circolareplus.update.AppUpdateManager.statusLabel(),
+                                tint = if (updateReady) AppTheme.TintGreen else AppTheme.TintSlate,
+                                showChevron = false,
+                                onClick = { circolareplus.update.AppUpdateManager.onSettingsRowClick() },
+                                icon = {
+                                    AppIcons.Download(
+                                        modifier = Modifier.size(19.dp),
+                                        color = if (updateReady) AppTheme.TintGreenInk else AppTheme.TintSlateInk
+                                    )
+                                }
+                            )
+                        }
                         AilaListRow(
                             title = "Privacy",
                             subtitle = if (showPrivacy) "Tocca per chiudere" else "Come vengono trattati i tuoi dati",

@@ -9,6 +9,10 @@
     <uses-sdk tools:overrideLibrary="com.google.mlkit.genai.prompt,com.google.mlkit.genai.common" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Aggiornamento dall'app: scarica l'APK dell'ultima release di GitHub e apre l'installazione
+         di sistema (vedi circolareplus.update.AppUpdateManager). Android chiede comunque all'utente
+         di consentire ad AILA di installare app, una volta sola. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Il download del modello di AI locale e la sincronizzazione delle circolari girano ora in
          WorkManager con notifica in primo piano, cosi' sopravvivono a schermo spento o app in
          background invece di fermarsi appena si esce dalla schermata che li ha avviati (vedi
@@ -78,7 +82,8 @@
 
         <!-- Condivisione di file generati in-app (es. il PDF della Mappa Posti) tramite share
              sheet, senza esporre l'intero filesystem dell'app: vedi res/xml/file_paths.xml e
-             circolareplus.platform.SeatMapPdfExporter.android.kt. -->
+             circolareplus.platform.SeatMapPdfExporter.android.kt. Serve anche all'installatore di
+             sistema per leggere l'APK scaricato (AppInstaller.android.kt). -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

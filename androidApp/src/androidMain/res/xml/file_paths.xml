@@ -2,10 +2,12 @@
 <!--
      Percorsi esposti dal FileProvider per la condivisione di file generati in-app (es. il PDF
      della Mappa Posti, vedi circolareplus.platform.SeatMapPdfExporter.android.kt, e i PDF della
-     Gita, vedi GitaFiles.android.kt): solo le sottocartelle "exports" e "gita" della cache, non
+     Gita, vedi GitaFiles.android.kt): solo le sottocartelle "exports", "gita" e "updates" (l'APK di aggiornamento scaricato,
+     vedi AppInstaller.android.kt) della cache, non
      l'intera cache dell'app.
 -->
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <cache-path name="exports" path="exports/" />
     <cache-path name="gita" path="gita/" />
+    <cache-path name="updates" path="updates/" />
 </paths>
