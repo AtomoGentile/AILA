@@ -21,7 +21,7 @@
   var isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   if (!isIOS) return;
 
-  var VERSION = 'v8';
+  var VERSION = 'v9';
   // ?kbdoff=1: lo script non fa nulla (serve ai test automatici per confrontare con e senza).
   if (/[?&]kbdoff=1/.test(location.search)) return;
 
@@ -45,14 +45,11 @@
   var down = null;
 
 
-  // Diagnosi: aprire l'app con ?kbddebug=1 (una volta sola: poi resta attiva finche' non si apre
-  // con ?kbddebug=0). Scrive in alto cosa succede a ogni tocco su un campo di testo.
-  var debug = false;
-  try {
-    var q = /[?&]kbddebug=([01])/.exec(location.search);
-    if (q) localStorage.setItem('aila-kbddebug', q[1]);
-    debug = localStorage.getItem('aila-kbddebug') === '1';
-  } catch (err) { debug = !!/[?&]kbddebug=1/.test(location.search); }
+  // Diagnosi: aprire l'app con ?kbddebug=1. Scrive in alto cosa succede a ogni tocco su un campo di testo.
+  // La modalita' resta attiva solo se l'indirizzo contiene ?kbddebug=1; il valore salvato in passato
+  // (che teneva accesa la striscia verde) viene cancellato.
+  var debug = /[?&]kbddebug=1/.test(location.search);
+  try { localStorage.removeItem('aila-kbddebug'); } catch (err) { /* niente da fare */ }
 
   var logEl = null;
   var logLines = [];
