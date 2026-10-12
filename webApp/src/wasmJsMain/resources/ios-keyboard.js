@@ -5,8 +5,8 @@
 // (Chrome iOS, app installata) aprono la tastiera solo se focus() parte durante il tocco, e
 // altrimenti il campo prende il fuoco ma la tastiera resta chiusa.
 //
-// Rimedio: su un tocco rapido sopra un campo di testo si mette a fuoco, subito e dentro il
-// gesto, un <input> di appoggio. La tastiera si apre; quando Compose mette a fuoco il suo campo
+// Rimedio: su un tocco rapido sopra un campo di testo, al touchend (dentro il gesto) si mette a fuoco
+// il campo nascosto di Compose (o, se non esiste ancora, un <input> di appoggio). La tastiera si apre; quando Compose mette a fuoco il suo campo
 // la trova gia' aperta e la tiene. Il campo di Compose si riconosce dall'albero di accessibilita'
 // (ruolo "textbox"): sugli altri tocchi non succede nulla, quindi nessuna tastiera a ogni pulsante.
 (function () {
@@ -16,7 +16,7 @@
   var isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   if (!isIOS) return;
 
-  var VERSION = 'v5';
+  var VERSION = 'v6';
   var TAP_SLOP_PX = 12;
   var TAP_MAX_MS = 600;
   var decoy = null;
@@ -223,6 +223,20 @@
     if (!p || Date.now() - p.t > 800) return;
     if (e.cancelable) e.preventDefault();
     log('touchend annullato (cancelable=' + e.cancelable + ')');
+    var r = getRoot();
+    var bk = r && r.querySelector('input, textarea');
+    if (bk) {
+      // Il campo nascosto di Compose esiste gia' (lo crea durante il pointerup): il fuoco lo si da'
+      // qui, dentro il gesto. Se lo ha gia' e la tastiera non si vede, si toglie e si rimette.
+      if (r.activeElement === bk && !keyboardVisible()) bk.blur();
+      try { bk.focus({ preventScroll: true }); } catch (err) { bk.focus(); }
+      snapshot('campo di Compose a fuoco nel gesto ->');
+      if (debug) {
+        [100, 300, 700, 1500].forEach(function (ms) { setTimeout(function () { snapshot('+' + ms + 'ms'); }, ms); });
+      }
+      return;
+    }
+    // Compose non ha ancora creato il campo: l'appoggio apre la tastiera, poi subentrera' Compose.
     arm(p.box);
   }, { capture: true, passive: false });
 
@@ -274,6 +288,5 @@
     }
 
     pending = { box: box, t: Date.now() };
-    arm(box);
   }, { capture: true, passive: true });
 })();
