@@ -6,6 +6,7 @@ import circolareplus.data.remote.dto.MyPreferencesResponseDto
 import circolareplus.data.remote.dto.PreferenceMatrixResponseDto
 import circolareplus.data.remote.dto.PreferencesConfigDto
 import circolareplus.data.remote.dto.PreferencesProgressDto
+import circolareplus.data.remote.dto.SetLessonHoursRequestDto
 import circolareplus.data.remote.dto.SetPreferencesConfigRequestDto
 import circolareplus.data.remote.dto.SuccessDto
 import circolareplus.data.remote.dto.VoteSocialPreferenceRequestDto
