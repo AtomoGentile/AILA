@@ -235,10 +235,12 @@ private fun LessonHoursRow() {
             .fillMaxWidth()
             .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
             .background(AppTheme.TintBlue)
-            .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8)
+            // Piu' aria che nella riga del codice classe: qui dentro ci sono due pulsanti da toccare,
+            // e a ridosso dei bordi del riquadro sembravano schiacciati.
+            .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space16)
     ) {
         Text(text = "Ore di lezione", style = MaterialTheme.typography.bodySmall, color = AppTheme.TintBlueInk)
-        Spacer(modifier = Modifier.height(AppTheme.Space4))
+        Spacer(modifier = Modifier.height(AppTheme.Space12))
         circolareplus.design.LessonHoursPicker(
             selected = current,
             enabled = !busy,
@@ -261,6 +263,7 @@ private fun LessonHoursRow() {
                 }
             }
         )
+        Spacer(modifier = Modifier.height(AppTheme.Space12))
         Text(
             text = error ?: "Nel calendario compaiono solo le ore che la classe ha.",
             style = MaterialTheme.typography.labelSmall,
