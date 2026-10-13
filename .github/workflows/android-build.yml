@@ -175,8 +175,20 @@ jobs:
           path: AILA.apk
           if-no-files-found: error
 
+      # Note della release: se nel repository c'e' release-notes/<tag>.md (es. release-notes/v1.0.3.md)
+      # diventano la descrizione della release; altrimenti GitHub genera le note dai commit. Il
+      # file va nel commit su cui si crea il tag, perche' la build sul tag usa quella versione.
+      - name: Release notes
+        id: notes
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          f="release-notes/${GITHUB_REF_NAME}.md"
+          if [ -f "$f" ]; then echo "path=$f" >> "$GITHUB_OUTPUT"; fi
+
       - name: Attach APK to release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: AILA.apk
+          body_path: ${{ steps.notes.outputs.path }}
+          generate_release_notes: ${{ steps.notes.outputs.path == '' }}
