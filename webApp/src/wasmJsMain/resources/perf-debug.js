@@ -1,22 +1,37 @@
-// Diagnosi della fluidita' (solo su richiesta, niente cambia per gli altri utenti).
+// Fluidita' della PWA: limite alla risoluzione del disegno, accessibilita' DOM spenta e, su
+// richiesta, la diagnosi (fps e blocchi del thread).
 //
 // ?perf=1  mostra in alto a destra i fotogrammi al secondo, il fotogramma piu' lungo dell'ultimo
 //          secondo e quanto tempo il thread principale e' rimasto bloccato (attivita' > 50 ms).
 //          Resta attiva finche' non si apre con ?perf=0.
 // ?dpr=2   limita la risoluzione del disegno a 2 pixel per punto (sugli iPhone sono 3): meno pixel
 //          da riempire a ogni fotogramma, testo appena meno nitido. ?dpr=0 toglie il limite.
+//          Senza scelta esplicita il limite e' 2 (vedi DEFAULT_DPR_CAP): e' il rimedio piu' efficace
+//          contro gli scatti sugli iPhone, che hanno 3 pixel per punto = 2,25 volte i pixel.
 //          Va letta prima di aila.js: per questo lo script e' caricato senza "defer".
+// ?a11y=1  riaccende la copia DOM dell'albero di accessibilita' (spenta di default perche' costa
+//          a ogni fotogramma, vedi main.kt). ?a11y=0 la rispegne. Resta salvata sul dispositivo.
 (function () {
   'use strict';
+  var DEFAULT_DPR_CAP = 2;
   var perf = false;
-  var dprCap = 0;
+  var dprCap = DEFAULT_DPR_CAP;
+  window.__ailaA11y = false;
+  try {
+    var a = /[?&]a11y=([01])/.exec(location.search);
+    if (a) localStorage.setItem('aila-a11y', a[1]);
+    window.__ailaA11y = localStorage.getItem('aila-a11y') === '1';
+  } catch (err) {
+    window.__ailaA11y = /[?&]a11y=1/.test(location.search);
+  }
   try {
     var q = /[?&]perf=([01])/.exec(location.search);
     if (q) localStorage.setItem('aila-perf', q[1]);
     perf = localStorage.getItem('aila-perf') === '1';
     var d = /[?&]dpr=([0-9.]+)/.exec(location.search);
     if (d) localStorage.setItem('aila-dpr', d[1]);
-    dprCap = parseFloat(localStorage.getItem('aila-dpr') || '0') || 0;
+    var stored = localStorage.getItem('aila-dpr');
+    if (stored !== null) dprCap = parseFloat(stored) || 0;
   } catch (err) {
     perf = /[?&]perf=1/.test(location.search);
   }

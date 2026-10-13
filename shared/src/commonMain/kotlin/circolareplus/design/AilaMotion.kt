@@ -322,6 +322,17 @@ fun AnimatedContentTransitionScope<*>.ailaPushTransition(forward: Boolean): Cont
         } else {
             EnterTransition.None togetherWith fadeOut(tween(durationMillis = REDUCED_FADE_MS))
         }
+    } else if (AppTheme.isGlass && AppTheme.liteEffects) {
+        // Web: solo scorrimenti. Una schermata con opacita' < 1 va disegnata prima in un livello a
+        // parte (a tutto schermo e a piena risoluzione) e poi ricomposta, a ogni fotogramma: la
+        // dissolvenza della pagina che resta sotto costava piu' dello scorrimento stesso.
+        if (forward) {
+            slideInHorizontally(ailaNavigationSpring()) { it } togetherWith
+                slideOutHorizontally(ailaNavigationSpring()) { -it / 3 }
+        } else {
+            slideInHorizontally(ailaNavigationSpring()) { -it / 3 } togetherWith
+                slideOutHorizontally(ailaNavigationSpring()) { it }
+        }
     } else if (AppTheme.isGlass) {
         if (forward) {
             slideInHorizontally(ailaNavigationSpring()) { it } togetherWith

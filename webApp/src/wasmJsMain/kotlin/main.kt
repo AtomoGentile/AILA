@@ -30,7 +30,12 @@ fun main() {
     // in memoria prima che parta la UI. Nel frattempo si vede la schermata di avvio di index.html.
     MainScope().launch {
         OfflineStore.init()
-        ComposeViewport {
+        // isA11YEnabled = false: Compose affianca al canvas una copia DOM dell'albero di
+        // accessibilita' (un elemento per ogni nodo) e la risincronizza a ogni cambio di layout,
+        // cioe' a ogni fotogramma di un'animazione o di uno scorrimento, sullo stesso thread che
+        // disegna. Su schermate lunghe e' il costo piu' alto dopo il disegno. Si riaccende con
+        // ?a11y=1 (per chi usa VoiceOver/TalkBack sulla PWA), vedi perf-debug.js.
+        ComposeViewport(configure = { isA11YEnabled = a11yRequested() }) {
             // Il primo fotogramma di Compose e' pronto: via la schermata di avvio HTML.
             LaunchedEffect(Unit) { hideSplash() }
             AilaTheme {
@@ -39,6 +44,8 @@ fun main() {
         }
     }
 }
+
+private fun a11yRequested(): Boolean = js("window.__ailaA11y === true")
 
 private fun hideSplash() {
     js("var s = document.getElementById('aila-splash'); if (s) { s.classList.add('done'); setTimeout(function () { s.remove(); }, 400); }")

@@ -1863,6 +1863,10 @@ fun MainAppShell(
         }
     }
 
+    // Sul web ogni lettura (rete, JSON, ricomposizione della lista) gira sul thread che disegna e
+    // ogni 3 s si sentiva come un singhiozzo; push e rientro in primo piano aggiornano comunque
+    // subito (DataRefreshEvents), quindi qui basta un giro piu' lento.
+    val livePollIntervalMs = if (AppTheme.liteEffects) 8_000L else 3_000L
     // Tempo quasi reale per sondaggi e bacheca: finche' si e' nella tab (e l'app e' in primo piano)
     // le liste si rileggono ogni pochi secondi, e subito quando arriva un push o l'app torna
     // davanti. Prima si caricavano solo entrando nella tab: un voto, un invio o una proposta dei
@@ -1871,7 +1875,7 @@ fun MainAppShell(
     LaunchedEffect(isInPollsScreen, user.id) {
         if (!isInPollsScreen) return@LaunchedEffect
         while (isActive) {
-            delay(3_000L)
+            delay(livePollIntervalMs)
             circolareplus.platform.awaitForeground()
             try {
                 val polls = AppContainer.pollsRepository.listPolls()
@@ -1908,7 +1912,7 @@ fun MainAppShell(
     LaunchedEffect(selectedTab, user.id) {
         if (selectedTab != MainTab.CLASS) return@LaunchedEffect
         while (isActive) {
-            delay(3_000L)
+            delay(livePollIntervalMs)
             circolareplus.platform.awaitForeground()
             proposalsRefreshTrigger++
         }
