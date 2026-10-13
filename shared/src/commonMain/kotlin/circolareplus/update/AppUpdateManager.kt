@@ -44,13 +44,16 @@ sealed interface UpdateState {
  * circolareplus.platform.isInAppUpdateSupported).
  *
  * Quando si pubblica una release (tag `vX.Y.Z`) la CI allega `AILA.apk`; l'app, all'avvio e al
- * ritorno in primo piano (al massimo ogni [AUTO_CHECK_INTERVAL_MS]) legge `releases/latest`, e se la
+ * ritorno in primo piano (al massimo ogni ora) legge `releases/latest`, e se la
  * versione e' piu' alta di quella installata propone di scaricarla e installarla. Lo stato e' di
  * Compose, global come AppTheme: lo scaricamento continua anche se si chiude la finestra.
  */
 object AppUpdateManager {
     private const val LATEST_RELEASE_URL = "https://api.github.com/repos/AtomoGentile/AILA/releases/latest"
-    private const val AUTO_CHECK_INTERVAL_MS = 6L * 60 * 60 * 1000
+    // Al ritorno in primo piano non si ricontrolla piu' spesso di cosi': l'API di GitHub senza
+    // token ha un limite per indirizzo, e una classe a scuola condivide quello del Wi-Fi. L'apertura
+    // dell'app invece controlla sempre (checkOnLaunch).
+    private const val FOREGROUND_CHECK_INTERVAL_MS = 60L * 60 * 1000
 
     var state: UpdateState by mutableStateOf(UpdateState.Idle)
         private set
@@ -76,11 +79,17 @@ object AppUpdateManager {
     private val busy: Boolean
         get() = state is UpdateState.Checking || state is UpdateState.Downloading
 
-    /** Controllo automatico (avvio e ritorno in primo piano): rispetta l'intervallo e non disturba. */
-    fun checkAutomatically() {
+    /** All'apertura dell'app: controlla sempre, senza aspettare intervalli. */
+    fun checkOnLaunch() {
+        if (!isInAppUpdateSupported() || busy) return
+        check(manual = false)
+    }
+
+    /** Ritorno in primo piano: come sopra ma al massimo una volta l'ora. */
+    private fun checkOnForeground() {
         if (!isInAppUpdateSupported() || busy) return
         val last = AppContainer.settings.updateLastCheckMillis
-        if (currentTimeMillis() - last < AUTO_CHECK_INTERVAL_MS) return
+        if (currentTimeMillis() - last < FOREGROUND_CHECK_INTERVAL_MS) return
         check(manual = false)
     }
 
@@ -186,12 +195,26 @@ object AppUpdateManager {
             state = UpdateState.NeedsPermission(update)
             return
         }
-        if (installDownloadedApk()) {
+        val error = installDownloadedApk()
+        if (error == null) {
+            // Da qui la conferma e l'esito li gestisce Android; un rifiuto torna da onInstallFailed.
             state = UpdateState.ReadyToInstall(update)
             dialogVisible = false
         } else {
-            state = UpdateState.Failed("Impossibile avviare l'installazione.", update)
+            state = UpdateState.Failed(error, update)
         }
+    }
+
+    /** Android ha rifiutato l'installazione (chiamato da AppInstallReceiver): si mostra il motivo. */
+    fun onInstallFailed(message: String) {
+        val update = when (val s = state) {
+            is UpdateState.ReadyToInstall -> s.update
+            is UpdateState.Failed -> s.update
+            is UpdateState.NeedsPermission -> s.update
+            else -> null
+        } ?: return
+        state = UpdateState.Failed(message, update)
+        dialogVisible = true
     }
 
     /**
@@ -204,7 +227,7 @@ object AppUpdateManager {
             if (canInstallPackages()) install(s.update)
             return
         }
-        checkAutomatically()
+        checkOnForeground()
     }
 
     /** Tocco sulla riga "Aggiornamenti" delle Impostazioni. */

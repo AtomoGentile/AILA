@@ -39,7 +39,7 @@ Per registrarti serve il codice della tua classe; i Rappresentanti ricevono un c
 
 ### Aggiornamenti
 
-- **Android**: l'app controlla da sola le release di GitHub (all'apertura, al massimo ogni 6 ore; a mano da
+- **Android**: l'app controlla da sola le release di GitHub (a ogni apertura, e al ritorno in primo piano al massimo una volta l'ora; a mano da
   *Impostazioni → Aggiornamenti*). Se ce n'è una più recente propone di scaricarla e installarla senza uscire
   dall'app. La prima volta Android chiede di consentire ad AILA di installare app.
 - **iPhone / iPad**: gli aggiornamenti arrivano da SideStore (vedi sopra).

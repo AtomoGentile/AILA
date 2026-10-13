@@ -1,10 +1,11 @@
 package circolareplus.platform
 
+import android.app.PendingIntent
 import android.content.Intent
+import android.content.pm.PackageInstaller
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -14,11 +15,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 
-// Cartella privata nella cache dell'app, esposta al FileProvider da res/xml/file_paths.xml
-// ("updates"): l'installatore di sistema deve poter leggere l'APK, ma nient'altro.
+// Cartella privata nella cache dell'app: l'APK scaricato resta li' finche' non si installa.
 private const val UPDATES_DIR = "updates"
 private const val APK_FILE = "AILA-update.apk"
-private const val APK_MIME = "application/vnd.android.package-archive"
 
 private fun updatesDir(): File = File(AndroidAppContext.require().cacheDir, UPDATES_DIR).apply { mkdirs() }
 
@@ -108,19 +107,35 @@ actual fun isUpdateApkDownloaded(expectedSize: Long): Boolean {
     return file.isFile && file.length() > 0 && (expectedSize <= 0 || file.length() == expectedSize)
 }
 
-actual fun installDownloadedApk(): Boolean {
+actual fun installDownloadedApk(): String? {
     val context = AndroidAppContext.require()
     val file = apkFile()
-    if (!file.isFile) return false
+    if (!file.isFile) return "Il file scaricato non c'è più: riprova il download."
     return try {
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-        val intent = Intent(Intent.ACTION_VIEW)
-            .setDataAndType(uri, APK_MIME)
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(intent)
-        true
+        // PackageInstaller al posto di ACTION_VIEW: con ACTION_VIEW il sistema mostrava solo un
+        // generico "impossibile installare" e l'app non sapeva il perche'. Qui l'esito torna ad
+        // AppInstallReceiver, con il motivo.
+        val installer = context.packageManager.packageInstaller
+        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+        params.setAppPackageName(context.packageName)
+        val sessionId = installer.createSession(params)
+        installer.openSession(sessionId).use { session ->
+            file.inputStream().use { input ->
+                session.openWrite("AILA.apk", 0, file.length()).use { output ->
+                    input.copyTo(output)
+                    session.fsync(output)
+                }
+            }
+            val statusIntent = Intent(context, AppInstallReceiver::class.java).setPackage(context.packageName)
+            // Mutabile: e' il sistema ad aggiungere all'intent l'esito e la schermata di conferma.
+            val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
+            val pending = PendingIntent.getBroadcast(context, sessionId, statusIntent, flags)
+            session.commit(pending.intentSender)
+        }
+        null
     } catch (e: Exception) {
-        false
+        e.message?.takeIf { it.isNotBlank() } ?: "Impossibile avviare l'installazione."
     }
 }
 

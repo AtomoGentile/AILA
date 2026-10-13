@@ -34,6 +34,9 @@ import circolareplus.platform.openInstallPermissionSettings
  */
 @Composable
 fun AppUpdateHost() {
+    // Apertura dell'app: controlla subito, senza intervalli.
+    LaunchedEffect(Unit) { AppUpdateManager.checkOnLaunch() }
+    // Ritorno in primo piano (anche dalle impostazioni di sistema, dove si consente l'installazione).
     val foreground = AppForeground.isForeground
     LaunchedEffect(foreground) {
         if (foreground) AppUpdateManager.onForeground()

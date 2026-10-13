@@ -31,8 +31,12 @@ expect suspend fun downloadUpdateApk(
 /** Vero se un APK gia' scaricato e completo e' pronto da installare. */
 expect fun isUpdateApkDownloaded(expectedSize: Long): Boolean
 
-/** Apre l'installazione di sistema sull'APK scaricato. Falso se non e' stato possibile avviarla. */
-expect fun installDownloadedApk(): Boolean
+/**
+ * Avvia l'installazione di sistema sull'APK scaricato. `null` se e' partita (la conferma e l'esito
+ * li gestisce Android: un rifiuto arriva dopo, vedi AppUpdateManager.onInstallFailed); altrimenti il
+ * motivo per cui non si e' potuta nemmeno avviare.
+ */
+expect fun installDownloadedApk(): String?
 
 /** Elimina l'APK scaricato (dopo l'installazione, o quando non serve piu'). */
 expect fun clearDownloadedUpdate()

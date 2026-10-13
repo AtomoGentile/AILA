@@ -19,6 +19,6 @@ actual suspend fun downloadUpdateApk(
 
 actual fun isUpdateApkDownloaded(expectedSize: Long): Boolean = false
 
-actual fun installDownloadedApk(): Boolean = false
+actual fun installDownloadedApk(): String? = "Aggiornamento dall'app non disponibile su questa piattaforma"
 
 actual fun clearDownloadedUpdate() {}
