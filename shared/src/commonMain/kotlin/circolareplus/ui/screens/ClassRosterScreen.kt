@@ -31,6 +31,7 @@ import circolareplus.design.AilaSwitch
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 /**
  * Scheda Classe del Rappresentante: unica schermata dove chi ha il ruolo REPRESENTATIVE può
@@ -93,14 +94,19 @@ fun ClassRosterScreen(
                 )
             }
         } else {
+            // Sort entries case-insensitively so names in lowercase don't jump out of order.
+            val displayEntries = remember(entries) {
+                entries.sortedWith(compareBy({ it.firstName.lowercase(Locale.ROOT) }, { it.lastName.lowercase(Locale.ROOT) }))
+            }
+
             circolareplus.design.AilaAdaptiveCardList(
-                items = entries,
+                items = displayEntries,
                 key = { it.studentId },
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = AppTheme.Space16, vertical = AppTheme.Space8),
                 header = {
                     DisciplinePairsCard(
-                        entries = entries,
+                        entries = displayEntries,
                         pairs = disciplinePairs,
                         onAdd = onAddDisciplinePair,
                         onRemove = onRemoveDisciplinePair
@@ -144,11 +150,6 @@ private fun ClassCodeRow() {
         }
     }
 
-    // Il codice e' nascosto finche' non si tocca l'occhio: arrivava un secondo dopo l'apertura della
-    // pagina (e' una richiesta al server) e il riquadro cambiava aspetto proprio mentre ci si
-    // guardava. Ora il riquadro ha sempre la stessa forma (pallini finche' e' nascosto, o in
-    // arrivo) e il codice si rivela carattere per carattere solo su richiesta. E' anche il codice
-    // d'accesso alla classe: non deve restare a vista di chiunque guardi lo schermo.
     var revealed by remember { mutableStateOf(false) }
 
     Row(
@@ -485,8 +486,6 @@ private fun RatingStepper(label: String, value: Int, onValueChange: (Int) -> Uni
     ) {
         Text(text = label, style = MaterialTheme.typography.bodyLarge, color = AppTheme.TextMuted)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // 44dp come gli altri pulsanti-icona (erano 28: troppo piccoli per il pollice), spenti ai
-            // limiti della scala e con un nome per lo screen reader al posto di "meno"/"più".
             IconButton(
                 onClick = { onValueChange(value - 1) },
                 enabled = value > 1,
@@ -519,15 +518,8 @@ private fun RatingStepper(label: String, value: Int, onValueChange: (Int) -> Uni
     }
 }
 
-/** Durate proposte per una coppia da separare, con il valore che capisce il server. */
 private val PAIR_DURATIONS = listOf("1 mese" to "MONTH", "3 mesi" to "QUARTER", "Fine anno" to "SCHOOL_YEAR")
 
-/**
- * Coppie da separare per disciplina: chi insieme fa caos ma con altri e' tranquillo. Il voto di
- * comportamento e' per persona e non sa dirlo. L'ottimizzatore penalizza solo quel banco, senza
- * vietarlo, cosi' la rotazione mensile continua a variare. Visibile solo ai Rappresentanti; ogni
- * segnalazione scade da sola.
- */
 @Composable
 private fun DisciplinePairsCard(
     entries: List<RatingEntryDto>,
@@ -612,7 +604,6 @@ private fun AddDisciplinePairDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        // Stessa superficie e forma dei dialoghi del design system (AilaConfirmDialog).
         containerColor = AppTheme.SurfaceWhite,
         shape = RoundedCornerShape(AppTheme.CardCornerRadius),
         title = { Text("Coppia da separare") },
@@ -643,8 +634,6 @@ private fun AddDisciplinePairDialog(
                                         selected += entry.studentId
                                     }
                                 }
-                                // 12 e non 10: sulla griglia, e con il testo a 14sp la riga
-                                // arriva ai 44dp di area di tocco.
                                 .padding(horizontal = AppTheme.Space8, vertical = AppTheme.Space12),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -686,7 +675,6 @@ private fun AddDisciplinePairDialog(
     )
 }
 
-/** "2026-10-22" -> "22/10/2026"; se il formato non e' quello atteso, la stringa com'e'. */
 private fun italianDate(iso: String): String {
     val parts = iso.take(10).split("-")
     return if (parts.size == 3) "${parts[2]}/${parts[1]}/${parts[0]}" else iso
