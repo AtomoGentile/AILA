@@ -107,7 +107,8 @@ export async function releaseRepresentativeInvite(env: Env, inviteId: string, us
  */
 export function matchesGlobalCode(env: Env, code: string, now: Date = new Date()): boolean {
   const until = env.REPRESENTATIVE_GLOBAL_CODE_UNTIL?.trim();
-  if (!env.REPRESENTATIVE_SIGNUP_CODE || !until || !/^\d{4}-\d{2}-\d{2}$/.test(until)) return false;
+  const expected = env.REPRESENTATIVE_SIGNUP_CODE?.trim();
+  if (!expected || !until || !/^\d{4}-\d{2}-\d{2}$/.test(until)) return false;
   if (italianToday(now) > until) return false;
-  return timingSafeEqual(code, env.REPRESENTATIVE_SIGNUP_CODE);
+  return timingSafeEqual(normalizeInviteCode(code), normalizeInviteCode(expected));
 }
