@@ -124,3 +124,557 @@ fun ClassRosterScreen(
         }
     }
 }
+
+/**
+ * Codice per entrare nella classe: senza, chiunque poteva registrarsi in "4 CSA" e vedere nomi,
+ * bacheca e calendario. Si gira ai compagni (es. nel gruppo della classe); se finisce dove non
+ * deve si rigenera e quello vecchio smette di valere. Diventa obbligatorio per registrarsi dal
+ * momento in cui esiste, cioe' dalla prima volta che si apre questa schermata.
+ */
+@Composable
+private fun ClassCodeRow() {
+    var code by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var confirmRegenerate by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        try {
+            code = circolareplus.data.AppContainer.usersRepository.classCode()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            error = (e as? circolareplus.data.remote.ApiException)?.message ?: "Codice classe non disponibile offline."
+        }
+    }
+
+    var revealed by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+            .background(AppTheme.TintBlue)
+            .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = "Codice classe", style = MaterialTheme.typography.bodySmall, color = AppTheme.TintBlueInk)
+            if (error != null && code == null) {
+                Text(text = error ?: "", style = MaterialTheme.typography.labelMedium, color = AppTheme.TintBlueInk)
+            } else {
+                ClassCodeDigits(code = code, revealed = revealed)
+            }
+            Text(
+                text = "Serve ai compagni per registrarsi in questa classe.",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Normal,
+                color = AppTheme.TintBlueInk.copy(alpha = 0.8f)
+            )
+        }
+        circolareplus.design.AilaIconButton(
+            contentDescription = if (revealed) "Nascondi il codice" else "Mostra il codice",
+            onClick = { revealed = !revealed },
+            enabled = code != null,
+            size = 40.dp
+        ) { tint ->
+            androidx.compose.animation.Crossfade(
+                targetState = revealed,
+                animationSpec = circolareplus.design.ailaFadeSpec(circolareplus.design.AilaDuration.Quick),
+                label = "codeEye"
+            ) { shown ->
+                if (shown) circolareplus.design.AppIcons.EyeOff(modifier = Modifier.size(19.dp), color = tint)
+                else circolareplus.design.AppIcons.Eye(modifier = Modifier.size(19.dp), color = tint)
+            }
+        }
+        TextButton(enabled = code != null && !busy, onClick = { confirmRegenerate = true }) {
+            Text(if (busy) "…" else "Rigenera", color = AppTheme.TintBlueInk)
+        }
+    }
+
+    if (confirmRegenerate) {
+        circolareplus.design.AilaConfirmDialog(
+            title = "Nuovo codice classe?",
+            message = "Il codice attuale smette di valere: chi non si è ancora registrato dovrà usare quello nuovo.",
+            onDismiss = { confirmRegenerate = false },
+            onConfirm = {
+                confirmRegenerate = false
+                busy = true
+                scope.launch {
+                    try {
+                        code = circolareplus.data.AppContainer.usersRepository.regenerateClassCode()
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        error = (e as? circolareplus.data.remote.ApiException)?.message
+                    } finally {
+                        busy = false
+                    }
+                }
+            },
+            confirmLabel = "Rigenera"
+        )
+    }
+}
+
+/**
+ * Quante ore di lezione fa la classe al giorno, 5 (8-13) o 6 (8-14). Il calendario offre solo
+ * queste ore e l'AI traduce "alle 9" nell'ora giusta. Lo sceglie il Rappresentante alla
+ * registrazione; qui lo cambia (le classi nate prima partono da 6).
+ */
+@Composable
+private fun LessonHoursRow() {
+    val current = circolareplus.data.ClassSchedule.lessonHours
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+            .background(AppTheme.TintBlue)
+            // Piu' aria che nella riga del codice classe: qui dentro ci sono due pulsanti da toccare,
+            // e a ridosso dei bordi del riquadro sembravano schiacciati.
+            .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space16)
+    ) {
+        Text(text = "Ore di lezione", style = MaterialTheme.typography.bodySmall, color = AppTheme.TintBlueInk)
+        Spacer(modifier = Modifier.height(AppTheme.Space12))
+        circolareplus.design.LessonHoursPicker(
+            selected = current,
+            enabled = !busy,
+            onSelect = { hours ->
+                if (hours != current) {
+                    busy = true
+                    error = null
+                    scope.launch {
+                        try {
+                            circolareplus.data.ClassSchedule.change(hours)
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            error = (e as? circolareplus.data.remote.ApiException)?.message
+                                ?: "Non sono riuscito a salvare: controlla la connessione."
+                        } finally {
+                            busy = false
+                        }
+                    }
+                }
+            }
+        )
+        Spacer(modifier = Modifier.height(AppTheme.Space12))
+        Text(
+            text = error ?: "Nel calendario compaiono solo le ore che la classe ha.",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Normal,
+            color = if (error != null) AppTheme.TintRedInk else AppTheme.TintBlueInk.copy(alpha = 0.8f)
+        )
+    }
+}
+
+/**
+ * Le cifre del codice classe: pallini finche' [revealed] e' falso (o il codice non e' ancora
+ * arrivato), poi ogni carattere si rivela a turno, con una piccola crescita, da sinistra a destra.
+ * Carattere a larghezza fissa: pallino e lettera occupano lo stesso spazio, quindi rivelando non si
+ * sposta niente.
+ */
+@Composable
+private fun ClassCodeDigits(code: String?, revealed: Boolean) {
+    val count = maxOf(code?.length ?: 0, 6)
+    val shown = revealed && code != null
+    Row {
+        for (index in 0 until count) {
+            val char = code?.getOrNull(index)?.toString() ?: "•"
+            androidx.compose.animation.AnimatedContent(
+                targetState = shown,
+                transitionSpec = {
+                    val delay = index * 35
+                    (androidx.compose.animation.fadeIn(
+                        circolareplus.design.ailaFadeSpec(circolareplus.design.AilaDuration.Standard, delayMillis = delay)
+                    ) + androidx.compose.animation.scaleIn(
+                        circolareplus.design.ailaMoveSpec(circolareplus.design.AilaDuration.Standard, delayMillis = delay),
+                        initialScale = 0.5f
+                    )) togetherWith androidx.compose.animation.fadeOut(
+                        circolareplus.design.ailaFadeSpec(circolareplus.design.AilaDuration.Quick)
+                    )
+                },
+                label = "classCodeChar"
+            ) { visible ->
+                Text(
+                    text = if (visible) char else "•",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    color = AppTheme.TintBlueInk,
+                    modifier = Modifier.padding(end = 3.dp)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Password dimenticata di un compagno: nell'app non ci sono email, quindi il Rappresentante genera
+ * un codice monouso (24 ore) e glielo dice; lui lo usa in "Password dimenticata?" al login.
+ */
+@Composable
+private fun ResetCodeButton(entry: RatingEntryDto) {
+    var result by remember { mutableStateOf<circolareplus.data.remote.dto.ResetCodeResponseDto?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var confirm by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    TextButton(enabled = !busy, onClick = { confirm = true }) {
+        Text(if (busy) "Genero il codice…" else "Password dimenticata? Genera un codice", style = MaterialTheme.typography.bodyMedium)
+    }
+    error?.let { Text(text = it, style = MaterialTheme.typography.bodySmall, color = AppTheme.TintRedInk) }
+
+    if (confirm) {
+        circolareplus.design.AilaConfirmDialog(
+            title = "Codice di reset",
+            message = "Generi un codice con cui ${entry.firstName} può scegliere una password nuova: " +
+                "daglielo solo di persona o in privato. Riceverà anche una notifica.",
+            onDismiss = { confirm = false },
+            onConfirm = {
+                confirm = false
+                busy = true
+                error = null
+                scope.launch {
+                    try {
+                        result = circolareplus.data.AppContainer.usersRepository.createResetCode(entry.studentId)
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        error = (e as? circolareplus.data.remote.ApiException)?.message ?: "Impossibile generare il codice."
+                    } finally {
+                        busy = false
+                    }
+                }
+            },
+            confirmLabel = "Genera",
+            isDestructive = false
+        )
+    }
+
+    result?.let { reset ->
+        AlertDialog(
+            onDismissRequest = { result = null },
+            // Stessa superficie e forma dei dialoghi del design system (AilaConfirmDialog).
+            containerColor = AppTheme.SurfaceWhite,
+            shape = RoundedCornerShape(AppTheme.CardCornerRadius),
+            title = { Text("Codice per ${entry.firstName}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                    Text(text = reset.code, style = MaterialTheme.typography.headlineMedium, letterSpacing = 4.sp, color = AppTheme.TextDark)
+                    Text(
+                        text = "Username: ${reset.username ?: "—"}. Al login tocca \"Password dimenticata?\" e inserisce " +
+                            "username, questo codice e la password nuova. Vale 24 ore e una volta sola.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AppTheme.TextMuted
+                    )
+                }
+            },
+            confirmButton = { TextButton(onClick = { result = null }) { Text("Fatto") } }
+        )
+    }
+}
+
+@Composable
+private fun ClassRosterRow(
+    entry: RatingEntryDto,
+    isSelf: Boolean = false,
+    onDidacticChange: (Int) -> Unit,
+    onBehaviorChange: (Int) -> Unit,
+    onPriorityPassChange: (Boolean) -> Unit,
+    onSecurityGuardChange: (Boolean) -> Unit
+) {
+    AilaCard {
+        Column(modifier = Modifier.padding(AppTheme.Space16)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(AppTheme.TintBlue),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "${entry.firstName.take(1)}${entry.lastName.take(1)}",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = AppTheme.TintBlueInk
+                    )
+                }
+                Spacer(modifier = Modifier.width(AppTheme.Space12))
+                Text(
+                    text = "${entry.firstName} ${entry.lastName}" + if (isSelf) " (Tu)" else "",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = AppTheme.TextDark
+                )
+            }
+
+            Spacer(modifier = Modifier.height(AppTheme.Space12))
+
+            RatingStepper(
+                label = "Didattica",
+                value = entry.didactic ?: 3,
+                onValueChange = onDidacticChange
+            )
+
+            Spacer(modifier = Modifier.height(AppTheme.Space8))
+
+            RatingStepper(
+                label = "Comportamento",
+                value = entry.behavior ?: 3,
+                onValueChange = onBehaviorChange
+            )
+
+            Spacer(modifier = Modifier.height(AppTheme.Space8))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = "Priority Pass (prime 3 file)", style = MaterialTheme.typography.bodyLarge, color = AppTheme.TextMuted)
+                AilaSwitch(
+                    checked = entry.priorityPass,
+                    onCheckedChange = onPriorityPassChange
+                )
+            }
+
+            // I Rappresentanti non possono essere anche la Guardia: le tre firme sono di tre
+            // persone diverse.
+            if (entry.role != "REPRESENTATIVE") {
+                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Guardia di Sicurezza (3ª firma)",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = AppTheme.TextMuted,
+                        modifier = Modifier.weight(1f)
+                    )
+                    AilaSwitch(
+                        checked = entry.isSecurityGuard,
+                        onCheckedChange = onSecurityGuardChange
+                    )
+                }
+            }
+
+            // Non sull'altro Rappresentante: il server lo rifiuta (con il suo account una persona
+            // sola avrebbe due firme del quorum per svelare gli anonimi).
+            if (!isSelf && entry.role != "REPRESENTATIVE") {
+                Spacer(modifier = Modifier.height(AppTheme.Space4))
+                ResetCodeButton(entry)
+            }
+        }
+    }
+}
+
+/** Selettore 1-5 con frecce +/- , senza dipendenze da picker più complessi. */
+@Composable
+private fun RatingStepper(label: String, value: Int, onValueChange: (Int) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = label, style = MaterialTheme.typography.bodyLarge, color = AppTheme.TextMuted)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(
+                onClick = { onValueChange(value - 1) },
+                enabled = value > 1,
+                modifier = Modifier.size(44.dp).semantics { contentDescription = "$label: diminuisci" }
+            ) {
+                Text(
+                    text = "−",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = if (value > 1) AppTheme.PrimaryBlue else AppTheme.TextFaint
+                )
+            }
+            Text(
+                text = "$value",
+                style = MaterialTheme.typography.titleSmall,
+                color = AppTheme.TextDark,
+                modifier = Modifier.padding(horizontal = AppTheme.Space8)
+            )
+            IconButton(
+                onClick = { onValueChange(value + 1) },
+                enabled = value < 5,
+                modifier = Modifier.size(44.dp).semantics { contentDescription = "$label: aumenta" }
+            ) {
+                Text(
+                    text = "+",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = if (value < 5) AppTheme.PrimaryBlue else AppTheme.TextFaint
+                )
+            }
+        }
+    }
+}
+
+private val PAIR_DURATIONS = listOf("1 mese" to "MONTH", "3 mesi" to "QUARTER", "Fine anno" to "SCHOOL_YEAR")
+
+@Composable
+private fun DisciplinePairsCard(
+    entries: List<RatingEntryDto>,
+    pairs: List<DisciplinePairDto>,
+    onAdd: (String, String, String) -> Unit,
+    onRemove: (String) -> Unit
+) {
+    var showDialog by remember { mutableStateOf(false) }
+    val names = remember(entries) { entries.associate { it.studentId to "${it.firstName} ${it.lastName}" } }
+
+    AilaCard {
+        Column(modifier = Modifier.padding(AppTheme.Space16)) {
+            Text(
+                text = "Coppie da separare",
+                style = MaterialTheme.typography.titleSmall,
+                color = AppTheme.TextDark
+            )
+            Spacer(modifier = Modifier.height(AppTheme.Space4))
+            Text(
+                text = "Per chi insieme fa caos ma con altri e' tranquillo. La Mappa Posti evita di " +
+                    "metterli nello stesso banco, senza bloccare la rotazione. Lo vedono solo i " +
+                    "Rappresentanti e scade da solo.",
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTheme.TextMuted
+            )
+            pairs.forEach { pair ->
+                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "${names[pair.studentA] ?: "?"} + ${names[pair.studentB] ?: "?"}",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AppTheme.TextDark
+                        )
+                        Text(
+                            text = "Fino al ${italianDate(pair.expiresAt)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AppTheme.TextMuted
+                        )
+                    }
+                    AilaIconButton(
+                        contentDescription = "Rimuovi la coppia",
+                        onClick = { onRemove(pair.id) }
+                    ) { tint -> AppIcons.Trash(modifier = Modifier.size(18.dp), color = tint) }
+                }
+            }
+            if (entries.size >= 2) {
+                Spacer(modifier = Modifier.height(AppTheme.Space12))
+                AilaSecondaryButton(
+                    text = "Aggiungi coppia",
+                    onClick = { showDialog = true },
+                    compact = true
+                )
+            }
+        }
+    }
+
+    if (showDialog) {
+        AddDisciplinePairDialog(
+            entries = entries,
+            onDismiss = { showDialog = false },
+            onConfirm = { a, b, duration ->
+                showDialog = false
+                onAdd(a, b, duration)
+            }
+        )
+    }
+}
+
+@Composable
+private fun AddDisciplinePairDialog(
+    entries: List<RatingEntryDto>,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String, String) -> Unit
+) {
+    val selected = remember { mutableStateListOf<String>() }
+    var durationIndex by remember { mutableStateOf(0) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = AppTheme.SurfaceWhite,
+        shape = RoundedCornerShape(AppTheme.CardCornerRadius),
+        title = { Text("Coppia da separare") },
+        text = {
+            Column {
+                Text(
+                    text = "Scegli due compagni.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AppTheme.TextMuted
+                )
+                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 280.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    entries.forEach { entry ->
+                        val isSelected = entry.studentId in selected
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSelected) AppTheme.TintBlue else Color.Transparent)
+                                .clickable {
+                                    if (isSelected) {
+                                        selected -= entry.studentId
+                                    } else if (selected.size < 2) {
+                                        selected += entry.studentId
+                                    }
+                                }
+                                .padding(horizontal = AppTheme.Space8, vertical = AppTheme.Space12),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "${entry.firstName} ${entry.lastName}",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isSelected) AppTheme.TintBlueInk else AppTheme.TextDark,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (isSelected) {
+                                AppIcons.Check(modifier = Modifier.size(16.dp), color = AppTheme.TintBlueInk)
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(AppTheme.Space12))
+                Text(text = "Per quanto tempo", fontSize = 13.sp, color = AppTheme.TextMuted)
+                Spacer(modifier = Modifier.height(4.dp))
+                AilaSegmentedTabs(
+                    labels = PAIR_DURATIONS.map { it.first },
+                    selectedIndex = durationIndex,
+                    onSelect = { durationIndex = it },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = selected.size == 2,
+                onClick = { onConfirm(selected[0], selected[1], PAIR_DURATIONS[durationIndex].second) }
+            ) {
+                Text("Salva")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Annulla") }
+        }
+    )
+}
+
+private fun italianDate(iso: String): String {
+    val parts = iso.take(10).split("-")
+    return if (parts.size == 3) "${parts[2]}/${parts[1]}/${parts[0]}" else iso
+}
