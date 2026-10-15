@@ -220,13 +220,30 @@
       [100, 300, 700, 1500].forEach(function (ms) { setTimeout(function () { snapshot('+' + ms + 'ms'); }, ms); });
     }
 
-    // Se Compose non ha preso il fuoco (tocco che non apre la tastiera), l'appoggio si toglie.
+    // Manteniamo l'appoggio vivo abbastanza a lungo per non far chiudere la tastiera prima che
+    // Compose abbia creato e preso il fuoco sul campo nascosto. Se Compose non interviene entro
+    // qualche secondo, l'appoggio si rimuove come fallback ma senza il timeout da 0,5s che
+    // causava la chiusura immediata su login/registrazione.
+    var composeTookFocus = false;
+    var rr = getRoot();
+    function onComposeFocus() {
+      var r = getRoot();
+      if (r && isEditable(r.activeElement)) {
+        composeTookFocus = true;
+        if (document.activeElement === el) el.blur();
+        try { if (r && r.removeEventListener) r.removeEventListener('focusin', onComposeFocus, true); } catch (err) {}
+      }
+    }
+    try { if (rr && rr.addEventListener) rr.addEventListener('focusin', onComposeFocus, true); } catch (err) {}
+
     setTimeout(function () {
+      if (composeTookFocus) return;
       if (document.activeElement !== el) return;
-      var rr = getRoot();
-      if (rr && isEditable(rr.activeElement)) return;
+      var rr2 = getRoot();
+      if (rr2 && isEditable(rr2.activeElement)) return;
+      try { if (rr2 && rr2.removeEventListener) rr2.removeEventListener('focusin', onComposeFocus, true); } catch (err) {}
       el.blur();
-    }, 600);
+    }, 5000);
   }
 
   // Dopo pointerup il browser manda gli eventi mouse "di compatibilita'" (mousedown, click): il
