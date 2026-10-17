@@ -9,20 +9,31 @@
 //          Senza scelta esplicita il limite e' 2 (vedi DEFAULT_DPR_CAP): e' il rimedio piu' efficace
 //          contro gli scatti sugli iPhone, che hanno 3 pixel per punto = 2,25 volte i pixel.
 //          Va letta prima di aila.js: per questo lo script e' caricato senza "defer".
-// ?a11y=1  riaccende la copia DOM dell'albero di accessibilita' (spenta di default perche' costa
-//          a ogni fotogramma, vedi main.kt). ?a11y=0 la rispegne. Resta salvata sul dispositivo.
+// ?a11y=1  riaccende la copia DOM dell'albero di accessibilita' se e' spenta. Su iOS e' ACCESA di
+//          default: ios-keyboard.js la usa per riconoscere il campo di testo toccato e aprirgli la
+//          tastiera dentro il gesto; senza, la tastiera si apre e si richiude subito (accesso e
+//          registrazione impossibili). Su Android e computer resta spenta perche' costa a ogni
+//          fotogramma, come spiegato in main.kt. ?a11y=0 la spegne anche su iOS. La scelta resta
+//          salvata sul dispositivo.
 (function () {
   'use strict';
   var DEFAULT_DPR_CAP = 2;
   var perf = false;
   var dprCap = DEFAULT_DPR_CAP;
-  window.__ailaA11y = false;
+  // Il browser non dice "sono un iPhone" in modo diretto: si legge lo user agent. Gli iPad recenti
+  // si presentano come Mac, ma un Mac vero non ha lo schermo tattile (stesso criterio di
+  // Platform.wasmJs.kt e ios-keyboard.js).
+  var ua = navigator.userAgent || '';
+  var isIOS = /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && (navigator.maxTouchPoints || 0) > 1);
+  window.__ailaA11y = isIOS;
   try {
     var a = /[?&]a11y=([01])/.exec(location.search);
     if (a) localStorage.setItem('aila-a11y', a[1]);
-    window.__ailaA11y = localStorage.getItem('aila-a11y') === '1';
+    var storedA11y = localStorage.getItem('aila-a11y');
+    if (storedA11y !== null) window.__ailaA11y = storedA11y === '1';
   } catch (err) {
-    window.__ailaA11y = /[?&]a11y=1/.test(location.search);
+    if (/[?&]a11y=1/.test(location.search)) window.__ailaA11y = true;
+    else if (/[?&]a11y=0/.test(location.search)) window.__ailaA11y = false;
   }
   try {
     var q = /[?&]perf=([01])/.exec(location.search);

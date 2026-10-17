@@ -30,11 +30,14 @@ fun main() {
     // in memoria prima che parta la UI. Nel frattempo si vede la schermata di avvio di index.html.
     MainScope().launch {
         OfflineStore.init()
-        // isA11YEnabled = false: Compose affianca al canvas una copia DOM dell'albero di
-        // accessibilita' (un elemento per ogni nodo) e la risincronizza a ogni cambio di layout,
-        // cioe' a ogni fotogramma di un'animazione o di uno scorrimento, sullo stesso thread che
-        // disegna. Su schermate lunghe e' il costo piu' alto dopo il disegno. Si riaccende con
-        // ?a11y=1 (per chi usa VoiceOver/TalkBack sulla PWA), vedi perf-debug.js.
+        // isA11YEnabled: Compose affianca al canvas una copia DOM dell'albero di accessibilita'
+        // (un elemento per ogni nodo) e la risincronizza a ogni cambio di layout, cioe' a ogni
+        // fotogramma di un'animazione o di uno scorrimento, sullo stesso thread che disegna. Su
+        // schermate lunghe e' il costo piu' alto dopo il disegno, quindi su Android e computer e'
+        // spenta. Su iOS invece deve restare accesa: ios-keyboard.js riconosce da li' il campo di
+        // testo toccato e gli apre la tastiera dentro il gesto (senza, si apre e si richiude
+        // subito). ?a11y=1 la riaccende dove e' spenta, ?a11y=0 la spegne anche su iOS: vedi
+        // perf-debug.js.
         ComposeViewport(configure = { isA11YEnabled = a11yRequested() }) {
             // Il primo fotogramma di Compose e' pronto: via la schermata di avvio HTML.
             LaunchedEffect(Unit) { hideSplash() }
