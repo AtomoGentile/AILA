@@ -94,8 +94,10 @@ fun ClassRosterScreen(
             }
         } else {
             // Sort entries case-insensitively without Java-only Locale so the Wasm build remains portable.
+            // Prima il cognome, poi il nome: e' il modo in cui si elencano gli studenti a scuola
+            // (come la classifica scolastica, il selettore destinatari dei sondaggi e il backend).
             val displayEntries = remember(entries) {
-                entries.sortedWith(compareBy({ it.firstName.lowercase() }, { it.lastName.lowercase() }))
+                entries.sortedWith(compareBy({ it.lastName.lowercase() }, { it.firstName.lowercase() }))
             }
 
             circolareplus.design.AilaAdaptiveCardList(
