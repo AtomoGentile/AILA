@@ -6,6 +6,7 @@ import android.content.pm.ActivityInfo
 import android.os.Build
 import android.os.Bundle
 import android.graphics.Color
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -13,6 +14,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.LaunchedEffect
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import circolareplus.ai.PdfBoxInit
 import circolareplus.data.AppContainer
 import circolareplus.platform.AndroidAppContext
@@ -114,6 +118,14 @@ class MainActivity : ComponentActivity() {
         super.onStop()
     }
 
+    // Il sistema puo' far riapparire la barra di navigazione tornando da un'altra app, da un
+    // dialogo di sistema o dopo un cambio di configurazione: la si rimette via al ritorno del
+    // focus. Solo sui telefoni a tre tasti (vedi hideNavigationBarForButtonPhones).
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideNavigationBarForButtonPhones()
+    }
+
     /**
      * Finestra edge-to-edge (obbligatoria da targetSdk 35: il contenuto passa sotto le barre di
      * sistema e i margini li mette il codice condiviso, vedi design/PlatformInsets.kt) con barre
@@ -126,6 +138,36 @@ class MainActivity : ComponentActivity() {
             SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
         }
         enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+        // enableEdgeToEdge resetta il controller delle barre di sistema: la barra nascosta va
+        // richiesta di nuovo qui, altrimenti tornerebbe visibile a ogni cambio di tema.
+        hideNavigationBarForButtonPhones()
+    }
+
+    /**
+     * Sui telefoni con la navigazione a tre tasti (o due) la barra di sistema in fondo resta
+     * visibile e spinge in alto la barra flottante delle tab, che perde il contatto col bordo
+     * inferiore. La si nasconde in "sticky immersive": scompare finche' non la si richiama con
+     * uno swipe dal bordo in basso, e poi si rinasconde da sola. Con la navigazione a gesti non
+     * si tocca nulla: il manico e' un puntino discreto e non serve nasconderlo.
+     */
+    private fun hideNavigationBarForButtonPhones() {
+        if (!usesButtonNavigation()) return
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            hide(WindowInsetsCompat.Type.navigationBars())
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+    }
+
+    /**
+     * true sui telefoni a tre (o due) tasti. `navigation_mode` e' la stessa impostazione che il
+     * sistema tiene in Settings.Secure: 0 = tre tasti, 1 = due tasti, 2 = gesti. Se il telefono non
+     * la espone (alcuni produttori) si assume la navigazione a tasti, perche' e' l'unico caso in cui
+     * nascondere la barra serve davvero.
+     */
+    private fun usesButtonNavigation(): Boolean = try {
+        Settings.Secure.getInt(contentResolver, "navigation_mode", 0) != 2
+    } catch (e: Exception) {
+        true
     }
 
     private fun applyPendingDeepLinkFrom(intent: Intent) {

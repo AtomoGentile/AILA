@@ -98,14 +98,20 @@ fun Modifier.appContentWidth(max: Dp = MaxContentWidth): Modifier =
 val LocalBottomBarPadding = androidx.compose.runtime.compositionLocalOf { 0.dp }
 
 /**
- * Margine sotto la barra flottante dovuto alla barra di sistema. Su iOS l'inset del home indicator
- * (34dp sugli iPhone con Face ID) e' molto piu' alto dello spazio che serve davvero: la barra di
- * sistema di iOS sta molto piu' vicina al bordo, e con l'inset intero la pillola risultava
- * sollevata e sembrava troppo alta. Android resta com'era (barra gesti o a tre tasti).
+ * Margine sotto la barra flottante dovuto alla barra di sistema.
+ *
+ * iOS: l'inset del home indicator (34dp sugli iPhone con Face ID) e' molto piu' alto dello spazio
+ * che serve davvero — la barra di sistema di iOS sta molto piu' vicina al bordo. Se ne tiene solo
+ * un filo (4dp), cosi' la pillola scende quasi a fondo senza disegnare sopra la linea del home
+ * indicator, che vive negli ultimi ~13dp dello schermo.
+ *
+ * Android: l'inset vero. Sui telefoni a tre tasti MainActivity nasconde la barra di sistema
+ * (vedi `applySystemBarStyle`): nascosta, `navigationBars` vale 0 e la barra arriva in fondo; la
+ * si richiama con uno swipe dal bordo. Con la navigazione a gesti resta il piccolo inset del manico.
  */
 @androidx.compose.runtime.Composable
 fun tabBarSystemInset(): Dp {
     val inset = WindowInsets.navigationBars
         .asPaddingValues().calculateBottomPadding()
-    return if (circolareplus.platform.isIos()) (inset - 18.dp).coerceAtLeast(0.dp) else inset
+    return if (circolareplus.platform.isIos()) (inset - 30.dp).coerceAtLeast(0.dp) else inset
 }
