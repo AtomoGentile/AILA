@@ -21,17 +21,14 @@
   var isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   if (!isIOS) return;
 
-  var VERSION = 'v9';
   // ?kbdoff=1: lo script non fa nulla (serve ai test automatici per confrontare con e senza).
   if (/[?&]kbdoff=1/.test(location.search)) return;
 
   var origFocus = HTMLElement.prototype.focus;
-  var skippedFocus = 0;
   HTMLElement.prototype.focus = function () {
     try {
       var tag = this.tagName;
       if ((tag === 'INPUT' || tag === 'TEXTAREA') && this.getRootNode().activeElement === this) {
-        skippedFocus++;
         return;
       }
     } catch (err) { /* si prosegue con la focus() vera */ }
@@ -43,76 +40,6 @@
   var decoy = null;
   var root = null;
   var down = null;
-
-
-  // Diagnosi: aprire l'app con ?kbddebug=1. Scrive in alto cosa succede a ogni tocco su un campo di testo.
-  // La modalita' resta attiva solo se l'indirizzo contiene ?kbddebug=1; il valore salvato in passato
-  // (che teneva accesa la striscia verde) viene cancellato.
-  var debug = /[?&]kbddebug=1/.test(location.search);
-  try { localStorage.removeItem('aila-kbddebug'); } catch (err) { /* niente da fare */ }
-
-  var logEl = null;
-  var logLines = [];
-  var styleState = 'no';
-  function headerText() { return '[' + VERSION + ' stile=' + styleState + ' focusIgnorati=' + skippedFocus + ']'; }
-  function log(msg) {
-    if (!debug) return;
-    if (!logEl) {
-      logEl = document.createElement('pre');
-      var ls = logEl.style;
-      ls.position = 'fixed'; ls.left = '0'; ls.top = '0'; ls.right = '0'; ls.margin = '0';
-      ls.padding = 'env(safe-area-inset-top) 6px 4px'; ls.zIndex = '2147483647';
-      ls.pointerEvents = 'none'; ls.font = '10px/1.25 ui-monospace, Menlo, monospace';
-      ls.color = '#0f0'; ls.background = 'rgba(0,0,0,0.78)'; ls.whiteSpace = 'pre-wrap';
-      document.body.appendChild(logEl);
-    }
-    if (!logEl.isConnected) document.body.appendChild(logEl);
-    var t = new Date();
-    logLines.push(('0' + t.getMinutes()).slice(-2) + ':' + ('0' + t.getSeconds()).slice(-2) + '.' +
-      ('00' + t.getMilliseconds()).slice(-3) + ' ' + msg);
-    if (logLines.length > 24) logLines.shift();
-    logEl.textContent = headerText() + '\n' + logLines.join('\n');
-  }
-  function who(el) {
-    if (!el) return 'null';
-    return el.tagName + (el.getAttribute && el.getAttribute('role') ? '[' + el.getAttribute('role') + ']' : '');
-  }
-  function vv() {
-    var v = window.visualViewport;
-    return v ? Math.round(v.height) + 'x' + Math.round(v.width) : '?';
-  }
-  function backingInfo(r) {
-    var b = r && r.querySelector('input, textarea');
-    if (!b) return 'nocampo';
-    var cs = getComputedStyle(b);
-    var rc = b.getBoundingClientRect();
-    return 'us=' + cs.userSelect + '/' + (cs.webkitUserSelect || '-') + ' ro=' + b.readOnly + ' dis=' + b.disabled +
-      ' im=' + b.inputMode + ' ' + Math.round(rc.width) + 'x' + Math.round(rc.height) + '@' + Math.round(rc.left) + ',' + Math.round(rc.top);
-  }
-  function snapshot(label) {
-    var r = getRoot();
-    log(label + ' doc=' + who(document.activeElement) + ' sr=' + (r ? who(r.activeElement) : 'noroot') + ' vv=' + vv() +
-      ' | ' + backingInfo(r));
-  }
-  if (debug) {
-    window.addEventListener('DOMContentLoaded', function () {
-      log('debug ok ' + VERSION + '; ua=' + (/CriOS/.test(ua) ? 'Chrome' : /FxiOS/.test(ua) ? 'Firefox' : 'Safari/PWA') +
-        ' standalone=' + (navigator.standalone === true) + ' vv=' + vv());
-    });
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', function () { log('viewport resize vv=' + vv()); });
-    }
-    // Eventi del tocco, per vedere in che ordine arrivano su iOS (solo in diagnosi).
-    ['touchstart', 'touchend', 'touchcancel', 'pointercancel', 'mousedown', 'mouseup', 'click', 'contextmenu',
-     'dragstart', 'selectstart', 'visibilitychange', 'pagehide'].forEach(function (name) {
-      var target = (name === 'visibilitychange') ? document : (name === 'pagehide' ? window : document);
-      target.addEventListener(name, function (e) {
-        log('ev ' + name + (e.defaultPrevented ? '(prevented)' : '') + (e.target && e.target.tagName ? ' ' + e.target.tagName : ''));
-      }, true);
-    });
-    document.addEventListener('focusin', function (e) { log('focusin ' + who(e.target)); }, true);
-    document.addEventListener('focusout', function (e) { log('focusout ' + who(e.target)); }, true);
-  }
 
   function getDecoy() {
     if (decoy) return decoy;
@@ -153,8 +80,6 @@
       '-webkit-touch-callout: default !important; }';
     r.appendChild(st);
     r.__ailaKbdStyle = true;
-    styleState = 'si';
-    log('stile di modifica iniettato nella radice shadow');
   }
 
   // Radice shadow di Compose (contiene canvas, albero di accessibilita' e campo nascosto).
@@ -215,10 +140,6 @@
     el.style.top = Math.max(0, box.top) + 'px';
     el.style.height = Math.max(1, box.height) + 'px';
     try { el.focus({ preventScroll: true }); } catch (err) { el.focus(); }
-    snapshot('appoggio a fuoco ->');
-    if (debug) {
-      [100, 300, 700, 1500].forEach(function (ms) { setTimeout(function () { snapshot('+' + ms + 'ms'); }, ms); });
-    }
 
     // Manteniamo l'appoggio vivo abbastanza a lungo per non far chiudere la tastiera prima che
     // Compose abbia creato e preso il fuoco sul campo nascosto. Se Compose non interviene entro
@@ -257,7 +178,6 @@
     pending = null;
     if (!p || Date.now() - p.t > 800) return;
     if (e.cancelable) e.preventDefault();
-    log('touchend annullato (cancelable=' + e.cancelable + ')');
     var r = getRoot();
     var bk = r && r.querySelector('input, textarea');
     if (bk) {
@@ -265,10 +185,6 @@
       // qui, dentro il gesto. Le focus() successive di Compose vengono ignorate (vedi in cima).
       if (r.activeElement === bk) bk.blur();
       try { origFocus.call(bk, { preventScroll: true }); } catch (err) { origFocus.call(bk); }
-      snapshot('campo di Compose a fuoco nel gesto ->');
-      if (debug) {
-        [100, 300, 700, 1500].forEach(function (ms) { setTimeout(function () { snapshot('+' + ms + 'ms'); }, ms); });
-      }
       return;
     }
     // Compose non ha ancora creato il campo: l'appoggio apre la tastiera, poi subentrera' Compose.
@@ -297,12 +213,8 @@
     if (Math.abs(e.clientX - d.x) > TAP_SLOP_PX || Math.abs(e.clientY - d.y) > TAP_SLOP_PX) return;
 
     var r = getRoot();
-    if (!r) { log('tap: nessuna radice shadow di Compose'); return; }
+    if (!r) return;
     var box = textboxAt(r, e.clientX, e.clientY);
-    if (debug) {
-      log('tap ' + Math.round(e.clientX) + ',' + Math.round(e.clientY) + ' textbox nel DOM=' +
-        r.querySelectorAll('[role="textbox"]').length + ' sotto il dito=' + !!box);
-    }
     if (!box) return;
 
     // Gia' in modifica proprio su questo campo (spostare il cursore): non si ruba il fuoco.
@@ -314,11 +226,8 @@
       // Il campo nascosto di Compose sta dentro il campo vero: se il suo centro e' nel riquadro
       // toccato, e' lo stesso campo (spostare il cursore) e non si ruba il fuoco.
       if (contains(box, cx, cy, 2) || contains(ar, e.clientX, e.clientY, 2)) {
-        if (keyboardVisible()) {
-          log('tap sullo stesso campo, tastiera visibile: nessun appoggio');
-          return;
-        }
-        log('tap sullo stesso campo ma tastiera NON visibile: riprovo ad aprirla');
+        if (keyboardVisible()) return;
+        // Tastiera non visibile: si riprova ad aprirla (pending qui sotto).
       }
     }
 
