@@ -526,3 +526,21 @@ CREATE TABLE IF NOT EXISTS gita_circulars (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (class_id, circular_number)
 );
+
+-- 17. CAMBIO NOME (migrazione 020): lo studente chiede, il Rappresentante (o la Guardia)
+-- approva o rifiuta. I nomi vecchi restano scritti nella richiesta, cosi' chi decide vede
+-- immediatamente la transizione senza dover cercare la persona nell'elenco.
+CREATE TABLE IF NOT EXISTS name_change_requests (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    old_first_name TEXT NOT NULL,
+    old_last_name TEXT NOT NULL,
+    new_first_name TEXT NOT NULL,
+    new_last_name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING', 'APPROVED', 'REJECTED')),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    decided_by TEXT,
+    decided_at DATETIME
+);
+
+CREATE INDEX IF NOT EXISTS idx_name_change_requests_user ON name_change_requests(user_id);

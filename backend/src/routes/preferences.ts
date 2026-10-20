@@ -9,6 +9,7 @@ import type { Env, JWTPayload } from '../types';
 import { authMiddleware, requireRole, resolveClassId, ensureClassRow, isLessonHours } from '../auth';
 import { notifyClass, notifyUser } from '../services/fcm';
 import { inBackground } from '../services/background';
+import { fullName, nameCase } from '../names';
 
 const preferences = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();
 
@@ -31,12 +32,12 @@ async function preferencesProgress(env: Env, classId: string): Promise<{
             EXISTS (SELECT 1 FROM social_preferences sp WHERE sp.from_student_id = u.id) AS has_voted
      FROM users u
      WHERE u.class_id = ? AND u.role IN ('STUDENT', 'REPRESENTATIVE')
-     ORDER BY u.last_name, u.first_name`
+     ORDER BY lower(u.last_name), lower(u.first_name)`
   ).bind(classId).all<{ id: string; first_name: string; last_name: string; has_voted: number }>();
 
   const pending = rows.results
     .filter((r) => !r.has_voted)
-    .map((r) => ({ id: r.id, firstName: r.first_name, lastName: r.last_name }));
+    .map((r) => ({ id: r.id, firstName: nameCase(r.first_name), lastName: nameCase(r.last_name) }));
 
   return {
     totalStudents: rows.results.length,
@@ -265,7 +266,7 @@ preferences.get('/my', async (c) => {
   return c.json({
     votes: rows.results.map((r) => ({
       toStudentId: r.to_student_id,
-      toName: `${r.first_name} ${r.last_name}`,
+      toName: fullName(r.first_name, r.last_name),
       score: r.score,
       updatedAt: r.updated_at,
     })),

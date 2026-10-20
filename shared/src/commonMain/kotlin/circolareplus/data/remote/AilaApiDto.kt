@@ -119,3 +119,43 @@ data class UpdateProposalRequestDto(
     val description: String? = null,
     val category: String? = null
 )
+
+// --- Cambio nome (richiesta da approvare al Rappresentante) -------------------------------------
+
+@Serializable
+data class NameChangeRequestDto(val firstName: String, val lastName: String)
+
+@Serializable
+data class NameChangeRequestSubmittedDto(val success: Boolean = false, val status: String = "")
+
+/** La propria richiesta in attesa: `request` vale null quando non ce n'e' nessuna. */
+@Serializable
+data class OwnNameChangeRequestDto(
+    val id: String,
+    val firstName: String = "",
+    val lastName: String = "",
+    val createdAt: String? = null
+)
+
+@Serializable
+data class OwnNameChangeStatusDto(val request: OwnNameChangeRequestDto? = null)
+
+/** Esecuzione a richiesta in attesa per la classe: chi decide la legge nel Profilo. */
+@Serializable
+data class PendingNameChangeDto(
+    val id: String,
+    val userId: String = "",
+    /** "Vecchio nome completo": e' cosi' che il richiedente si vede adesso. */
+    val oldName: String = "",
+    val newFirstName: String = "",
+    val newLastName: String = "",
+    val createdAt: String? = null,
+    /** false sulla propria richiesta: decide un altro Rappresentante o la Guardia. */
+    val canDecide: Boolean = false
+)
+
+@Serializable
+data class PendingNameChangesDto(val requests: List<PendingNameChangeDto> = emptyList())
+
+@Serializable
+data class NameChangeDecisionDto(val success: Boolean = false, val status: String = "")

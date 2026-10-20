@@ -57,8 +57,44 @@ fun ProfileScreen(
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showPasswordDialog by remember { mutableStateOf(false) }
+    var showNameDialog by remember { mutableStateOf(false) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
     val isRepresentative = user.role == UserRole.REPRESENTATIVE
+    // Cambio nome: chi decide (Rappresentante o Guardia di Sicurezza) legge l'elenco delle
+    // richieste in attesa direttamente dal Profilo, con approva e rifiuta a un tocco ciascuna.
+    val canDecideNames = user.role == UserRole.REPRESENTATIVE || user.role == UserRole.SECURITY_GUARD
+    var pendingNameChanges by remember {
+        mutableStateOf<List<circolareplus.data.remote.dto.PendingNameChangeDto>>(emptyList())
+    }
+    var nameDecisionError by remember { mutableStateOf<String?>(null) }
+    var nameRequestsBusy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    fun loadPendingNameChanges() {
+        if (!canDecideNames || nameRequestsBusy) return
+        scope.launch {
+            nameRequestsBusy = true
+            try {
+                pendingNameChanges = circolareplus.data.AppContainer.usersRepository.pendingNameChanges().requests
+            } catch (_: Exception) {
+                // Offline o senza la migrazione: la sezione resta nascosta finché la lista non arriva.
+                pendingNameChanges = emptyList()
+            } finally {
+                nameRequestsBusy = false
+            }
+        }
+    }
+
+    LaunchedEffect(canDecideNames) {
+        if (canDecideNames) {
+            // Primo caricamento libero: evita che la lista stia un intero "busy".
+            try {
+                pendingNameChanges = circolareplus.data.AppContainer.usersRepository.pendingNameChanges().requests
+            } catch (_: Exception) {
+                pendingNameChanges = emptyList()
+            }
+        }
+    }
     // Classe e anno: prima erano il sottotitolo dell'intestazione, ora stanno nella card identita'.
     val classLine = buildString {
         if (profile.className.isNotBlank()) {
@@ -205,6 +241,63 @@ fun ProfileScreen(
             }
 
 
+            // --- Richieste di cambio nome (solo chi decide) ----------------------------------
+            // Una card a sé: nome attuale → nome richiesto, con approva e rifiuta sulla stessa
+            // riga. Sulla propria richiesta non compaiono i tasti.
+            if (canDecideNames && pendingNameChanges.isNotEmpty()) {
+                AilaSectionTitle(text = "Richieste di cambio nome")
+                Spacer(modifier = Modifier.height(AppTheme.Space12))
+                nameDecisionError?.let { error ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                            .background(AppTheme.TintRed)
+                            .padding(AppTheme.Space12),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = error, style = MaterialTheme.typography.bodySmall, color = AppTheme.TintRedInk)
+                    }
+                    Spacer(modifier = Modifier.height(AppTheme.Space8))
+                }
+                AilaCard {
+                    pendingNameChanges.forEachIndexed { index, request ->
+                        if (index > 0) {
+                            HorizontalDivider(color = AppTheme.Hairline)
+                        }
+                        PendingNameChangeRow(
+                            request = request,
+                            busy = nameRequestsBusy,
+                            onDecide = { approve ->
+                                if (nameRequestsBusy) return@PendingNameChangeRow
+                                scope.launch {
+                                    nameRequestsBusy = true
+                                    nameDecisionError = null
+                                    try {
+                                        val decision = if (approve) {
+                                            circolareplus.data.AppContainer.usersRepository.approveNameChange(request.id)
+                                        } else {
+                                            circolareplus.data.AppContainer.usersRepository.rejectNameChange(request.id)
+                                        }
+                                        if (!decision.success) {
+                                            nameDecisionError = "La decisione non è andata a buon fine."
+                                        }
+                                    } catch (e: circolareplus.data.remote.ApiException) {
+                                        nameDecisionError = e.message
+                                    } catch (_: Exception) {
+                                        nameDecisionError = "Impossibile contattare il server. Riprova."
+                                    } finally {
+                                        nameRequestsBusy = false
+                                        loadPendingNameChanges()
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(AppTheme.Space24))
+            }
+
             // --- Sezione: Impostazioni ------------------------------------------------------
             // La chiave AI stava qui, in mezzo al profilo, con la casella di testo sempre aperta.
             // Ora vive in Impostazioni insieme a tema, stile e filtri delle notifiche: il profilo
@@ -244,6 +337,16 @@ fun ProfileScreen(
 
             // --- Uscita ---------------------------------------------------------------------
             AilaCard {
+                AilaListRow(
+                    title = "Modifica nome",
+                    subtitle = "Il tuo nome resta finché il Rappresentante non approva",
+                    tint = AppTheme.TintSlate,
+                    onClick = { showNameDialog = true },
+                    icon = {
+                        AppIcons.Profile(modifier = Modifier.size(20.dp), color = AppTheme.TintSlateInk)
+                    }
+                )
+                HorizontalDivider(color = AppTheme.Hairline, modifier = Modifier.padding(start = 72.dp))
                 AilaListRow(
                     title = "Cambia password",
                     subtitle = "Gli altri dispositivi dovranno accedere di nuovo",
@@ -330,6 +433,13 @@ fun ProfileScreen(
 
     if (showPasswordDialog) {
         ChangePasswordDialog(onDismiss = { showPasswordDialog = false })
+    }
+    if (showNameDialog) {
+        NameChangeDialog(
+            currentFirstName = user.firstName,
+            currentLastName = user.lastName,
+            onDismiss = { showNameDialog = false }
+        )
     }
 }
 
@@ -437,6 +547,188 @@ private fun ChangePasswordDialog(onDismiss: () -> Unit) {
             }
         }
     )
+}
+
+/**
+ * Cambio nome: nome e cognome nuovi, la richiesta va in attesa. Come per la password vale la
+ * regola "chi scrive può solo farlo": una richiesta nuova sostituisce quella in attesa, ma la
+ * firma la mette il Rappresentante (o la Guardia) dal suo Profilo.
+ */
+@Composable
+private fun NameChangeDialog(
+    currentFirstName: String,
+    currentLastName: String,
+    onDismiss: () -> Unit
+) {
+    var first by remember { mutableStateOf(currentFirstName) }
+    var last by remember { mutableStateOf(currentLastName) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var done by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    // Se c'e' gia' una richiesta in attesa lo si dice subito, prima di chiedere l'ennesima.
+    var pendingRequest by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        try {
+            val own = circolareplus.data.AppContainer.usersRepository.ownNameChangeRequest()
+            if (own != null) {
+                pendingRequest = "${own.firstName} ${own.lastName}"
+            }
+        } catch (_: Exception) {
+            // Non arriva la conferma: la finestra resta comunque utilizzabile.
+        }
+    }
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        containerColor = AppTheme.SurfaceWhite,
+        shape = RoundedCornerShape(AppTheme.CardCornerRadius),
+        title = {
+            Text(text = "Modifica nome", style = MaterialTheme.typography.titleLarge, color = AppTheme.TextDark)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                if (done) {
+                    Text(
+                        text = "Richiesta inviata: il tuo nome cambierà quando il Rappresentante la approva." +
+                            " Riceverai una notifica.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AppTheme.TextMuted
+                    )
+                } else {
+                    pendingRequest?.let {
+                        Text(
+                            text = "Hai già una richiesta in attesa ($it): inviandone una nuova la sostituisci.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AppTheme.TextMuted
+                        )
+                    }
+                    @Composable
+                    fun field(value: String, placeholder: String, onChange: (String) -> Unit) {
+                        androidx.compose.material3.OutlinedTextField(
+                            value = value,
+                            onValueChange = {
+                                onChange(it)
+                                error = null
+                            },
+                            placeholder = { Text(placeholder, style = MaterialTheme.typography.bodyMedium) },
+                            singleLine = true,
+                            enabled = !busy && !done,
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Words,
+                                autoCorrectEnabled = false,
+                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Text
+                            ),
+                            shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
+                            colors = circolareplus.design.ailaFieldColors(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    field(first, "Nome") { first = it }
+                    field(last, "Cognome") { last = it }
+                    error?.let { Text(text = it, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TintRedInk) }
+                }
+            }
+        },
+        confirmButton = {
+            circolareplus.design.AilaPrimaryButton(
+                text = when {
+                    done -> "Fatto"
+                    busy -> "Invio…"
+                    else -> "Chiedi il cambio"
+                },
+                compact = true,
+                onClick = {
+                    if (done) {
+                        onDismiss()
+                        return@AilaPrimaryButton
+                    }
+                    if (busy) return@AilaPrimaryButton
+                    val newFirst = first.trim()
+                    val newLast = last.trim()
+                    error = when {
+                        newFirst.isBlank() || newLast.isBlank() -> "Scrivi nome e cognome."
+                        // La grafia la decide il server ("Prima Maiuscola"): qui basta non
+                        // mandare la stessa identica cosa riscritta con altre maiuscole.
+                        newFirst.equals(currentFirstName, ignoreCase = true) &&
+                            newLast.equals(currentLastName, ignoreCase = true) -> "Il nome è già quello."
+                        else -> null
+                    }
+                    if (error != null) return@AilaPrimaryButton
+                    busy = true
+                    scope.launch {
+                        try {
+                            circolareplus.data.AppContainer.usersRepository.requestNameChange(newFirst, newLast)
+                            done = true
+                        } catch (e: circolareplus.data.remote.ApiException) {
+                            error = e.message
+                        } catch (e: Exception) {
+                            error = "Impossibile contattare il server. Riprova."
+                        } finally {
+                            busy = false
+                        }
+                    }
+                }
+            )
+        },
+        dismissButton = {
+            if (!done) {
+                circolareplus.design.AilaSecondaryButton(
+                    text = "Annulla",
+                    compact = true,
+                    onClick = { if (!busy) onDismiss() }
+                )
+            }
+        }
+    )
+}
+
+/** La persona che ha cambiato il nome: attuale → chiesto, con i due tasti per decidere. */
+@Composable
+private fun PendingNameChangeRow(
+    request: circolareplus.data.remote.dto.PendingNameChangeDto,
+    busy: Boolean,
+    onDecide: (approve: Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(AppTheme.Space12),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "${request.oldName} → ${request.newFirstName} ${request.newLastName}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (request.canDecide) AppTheme.TextDark else AppTheme.TextMuted,
+                maxLines = 2
+            )
+            Text(
+                text = if (request.canDecide) {
+                    "Vuole essere chiamato così: tocca ad approvare o rifiutare."
+                } else {
+                    "La tua richiesta: può deciderne solo un altro Rappresentante o la Guardia."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTheme.TextMuted
+            )
+        }
+        if (request.canDecide) {
+            Spacer(modifier = Modifier.width(AppTheme.Space8))
+            circolareplus.design.AilaSecondaryButton(
+                text = "Rifiuta",
+                compact = true,
+                onClick = { onDecide(false) }
+            )
+            Spacer(modifier = Modifier.width(AppTheme.Space8))
+            circolareplus.design.AilaPrimaryButton(
+                text = "Approva",
+                compact = true,
+                onClick = { onDecide(true) }
+            )
+        }
+    }
 }
 
 /**

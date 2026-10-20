@@ -4,6 +4,7 @@
 
 import { Hono } from 'hono';
 import type { Env, UserRole } from '../types';
+import { nameCase } from '../names';
 import {
   DEFAULT_LESSON_HOURS,
   classIdFromLabel,
@@ -88,8 +89,9 @@ auth.post('/register', async (c) => {
   }>();
 
   const { username, password, heightCm, representativeCode, classLabel, classCode } = body;
-  const firstName = typeof body.firstName === 'string' ? body.firstName.trim() : '';
-  const lastName = typeof body.lastName === 'string' ? body.lastName.trim() : '';
+  // Grafia unica "Prima Maiuscola" (vedi names.ts): qui e' la fonte, tutto il resto la legge.
+  const firstName = typeof body.firstName === 'string' ? nameCase(body.firstName) : '';
+  const lastName = typeof body.lastName === 'string' ? nameCase(body.lastName) : '';
 
   const ip = clientIp(c.req);
   if (ip) {
@@ -343,8 +345,8 @@ auth.post('/login', async (c) => {
     token,
     user: {
       id: user.id,
-      firstName: user.first_name,
-      lastName: user.last_name,
+      firstName: nameCase(user.first_name),
+      lastName: nameCase(user.last_name),
       username: user.username,
       role: user.role,
       classId,
@@ -449,8 +451,8 @@ auth.post('/reset-password', async (c) => {
     token,
     user: {
       id: row.id,
-      firstName: row.first_name,
-      lastName: row.last_name,
+      firstName: nameCase(row.first_name),
+      lastName: nameCase(row.last_name),
       username: row.username,
       role: row.role,
       classId,

@@ -6,6 +6,7 @@
 import { Hono } from 'hono';
 import type { Env, JWTPayload } from '../types';
 import { authMiddleware, requireRole, resolveClassId } from '../auth';
+import { nameCase } from '../names';
 
 const ratings = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();
 
@@ -31,7 +32,7 @@ ratings.get('/', requireRole('REPRESENTATIVE'), async (c) => {
      LEFT JOIN representative_ratings rr ON rr.student_id = u.id
      LEFT JOIN student_profiles sp ON sp.user_id = u.id
      WHERE u.role IN ('STUDENT', 'REPRESENTATIVE') AND u.class_id = ?
-     ORDER BY u.last_name, u.first_name`
+     ORDER BY lower(u.last_name), lower(u.first_name)`
   ).bind(await resolveClassId(c)).all<{
     id: string;
     first_name: string;
@@ -48,8 +49,8 @@ ratings.get('/', requireRole('REPRESENTATIVE'), async (c) => {
   return c.json({
     ratings: rows.results.map((r) => ({
       studentId: r.id,
-      firstName: r.first_name,
-      lastName: r.last_name,
+      firstName: nameCase(r.first_name),
+      lastName: nameCase(r.last_name),
       role: r.role,
       // Guardia di Sicurezza della classe (terza firma per lo svelamento): la nomina il
       // Rappresentante da questa stessa schermata.

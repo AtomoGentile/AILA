@@ -9,6 +9,7 @@ import { authMiddleware, requireRole, newUUID, resolveClassId } from '../auth';
 import { notifyClass, notifyUser, notifyUsers } from '../services/fcm';
 import { classMemberIds, effectiveAudience, isInAudience, normalizeAudience, parseAudience } from '../services/audience';
 import { inBackground } from '../services/background';
+import { fullName } from '../names';
 
 const polls = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();
 
@@ -686,7 +687,7 @@ polls.get('/:id/assignments', async (c) => {
      JOIN users u ON u.id = a.student_id
      JOIN interrogation_slots s ON s.id = a.slot_id
      WHERE s.grid_id = ?
-     ORDER BY s.slot_date ASC, u.last_name ASC`
+     ORDER BY s.slot_date ASC, lower(u.last_name) ASC`
   ).bind(gridId).all<{
     id: string;
     slot_id: string;
@@ -704,7 +705,7 @@ polls.get('/:id/assignments', async (c) => {
       slotId: a.slot_id,
       slotDate: a.slot_date,
       studentId: a.student_id,
-      studentName: `${a.first_name} ${a.last_name}`,
+      studentName: fullName(a.first_name, a.last_name),
       assignedAt: a.assigned_at,
     })),
   });

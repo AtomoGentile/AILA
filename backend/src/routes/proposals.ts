@@ -9,6 +9,7 @@ import type { Env, JWTPayload, ProposalStatus } from '../types';
 import { authMiddleware, requireRole, newUUID, resolveClassId } from '../auth';
 import { notifyClass, notifyUser } from '../services/fcm';
 import { inBackground } from '../services/background';
+import { fullName } from '../names';
 
 // Quorum per svelare l'autore di una proposta o di un commento anonimi (specifica v3.0, sez. 3.3).
 const QUORUM_REPRESENTATIVES = 2;
@@ -142,7 +143,7 @@ proposals.get('/', async (c) => {
         outcome: p.outcome,
         isAnonymous: Boolean(p.is_anonymous),
         authorId: canSeeAuthor ? p.author_id : null,
-        authorName: canSeeAuthor ? `${p.author_first_name} ${p.author_last_name}` : null,
+        authorName: canSeeAuthor ? fullName(p.author_first_name, p.author_last_name) : null,
         // Vero quando l'autore è visibile solo perché lo svelamento è stato approvato.
         identityRevealed: Boolean(p.is_anonymous) && !isMine && Boolean(p.revealed_to_me),
         // Stato dell'ultima richiesta di svelamento (solo per chi può gestirle).
@@ -452,7 +453,7 @@ proposals.get('/:id/comments', async (c) => {
         // userId e nome restano nascosti per un commento anonimo: nome e id viaggiavano sempre
         // nella risposta, quindi l'anonimato sarebbe stato solo grafico.
         userId: canSeeAuthor ? cmt.user_id : '',
-        authorName: canSeeAuthor ? `${cmt.first_name} ${cmt.last_name}` : 'Anonimo',
+        authorName: canSeeAuthor ? fullName(cmt.first_name, cmt.last_name) : 'Anonimo',
         content: cmt.content,
         createdAt: cmt.created_at,
         isAnonymous: anonymous,
@@ -557,14 +558,14 @@ proposals.get('/unlock-requests', async (c) => {
         commentId: r.comment_id,
         commentExcerpt: r.comment_content ? r.comment_content.slice(0, 140) : null,
         reason: r.reason,
-        requestedByName: `${r.requester_first_name} ${r.requester_last_name}`,
+        requestedByName: fullName(r.requester_first_name, r.requester_last_name),
         createdAt: r.created_at,
         representativeApprovals: signed.filter((a) => a.role === 'REPRESENTATIVE').length,
         guardApprovals: signed.filter((a) => a.role === 'SECURITY_GUARD').length,
         representativesNeeded: QUORUM_REPRESENTATIVES,
         guardsNeeded: QUORUM_GUARDS,
         approvedByMe: signed.some((a) => a.user_id === payload.sub),
-        approverNames: signed.map((a) => `${a.first_name} ${a.last_name}`),
+        approverNames: signed.map((a) => fullName(a.first_name, a.last_name)),
       };
     }),
   });

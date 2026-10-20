@@ -156,6 +156,13 @@ const val NOTIFICATION_CATEGORY_SEATMAP_PREFERENCES = "seatmap_preferences"
  */
 const val NOTIFICATION_CATEGORY_RANKING_POLLS = "ranking_polls"
 
+/**
+ * Tocchi dedicati al Profilo: la richiesta di cambio nome porta chi decide alla schermata con
+ * l'elenco da approvare, l'esito torna a chi l'aveva chiesta. Non e' in NotificationKind: resta
+ * sempre attiva (le interruttori delle impostazioni non toccano il Profilo).
+ */
+const val NOTIFICATION_CATEGORY_PROFILE = "profile"
+
 @OptIn(ExperimentalLayoutApi::class, androidx.compose.animation.ExperimentalAnimationApi::class)
 @Composable
 fun MainAppShell(
@@ -1357,6 +1364,9 @@ fun MainAppShell(
             }
             NotificationKind.CALENDAR.key -> {
                 selectedTab = MainTab.CALENDAR
+            }
+            NOTIFICATION_CATEGORY_PROFILE -> {
+                isInProfileScreen = true
             }
             // Categoria sconosciuta/vuota (es. push generica senza tipo): nessuna destinazione
             // certa, si resta dove si è.

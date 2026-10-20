@@ -3,7 +3,7 @@
 **AILA** (ex "Circolare+") è l'app per la vita di classe: circolari spiegate dall'AI, calendario condiviso, bacheca
 delle proposte, sondaggi, mappa dei posti in aula e notifiche in tempo reale. Per Android e iPhone/iPad.
 
-> **Versione 1.0.0**
+> **Versione 1.1.5**
 
 ---
 

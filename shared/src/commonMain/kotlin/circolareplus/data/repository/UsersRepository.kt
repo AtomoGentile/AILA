@@ -3,6 +3,12 @@ package circolareplus.data.repository
 import circolareplus.data.remote.ApiClient
 import circolareplus.data.remote.dto.ClassCodeResponseDto
 import circolareplus.data.remote.dto.EmptyBodyDto
+import circolareplus.data.remote.dto.NameChangeDecisionDto
+import circolareplus.data.remote.dto.NameChangeRequestDto
+import circolareplus.data.remote.dto.NameChangeRequestSubmittedDto
+import circolareplus.data.remote.dto.OwnNameChangeRequestDto
+import circolareplus.data.remote.dto.OwnNameChangeStatusDto
+import circolareplus.data.remote.dto.PendingNameChangesDto
 import circolareplus.data.remote.dto.ResetCodeResponseDto
 import circolareplus.data.remote.dto.SetHeightRequestDto
 import circolareplus.data.remote.dto.SuccessDto
@@ -37,4 +43,29 @@ class UsersRepository(private val api: ApiClient) {
     suspend fun setStudentHeight(userId: String, heightCm: Int) {
         api.put<SetHeightRequestDto, SuccessDto>("/api/users/$userId/height", SetHeightRequestDto(heightCm))
     }
+
+    // Cambio nome: lo chiede chi ha il nome sbagliato, lo approva (o lo rifiuta) il Rappresentante
+    // o la Guardia. Le letture non finiscono nella copia offline (offlineCopy = false): sono dati
+    // di sessione, come il resto dei dialoghi del profilo.
+
+    /** Chiede il cambio del proprio nome; la richiesta resta in attesa fino alla decisione. */
+    suspend fun requestNameChange(firstName: String, lastName: String): NameChangeRequestSubmittedDto =
+        api.post<NameChangeRequestDto, NameChangeRequestSubmittedDto>(
+            "/api/users/me/name-request",
+            NameChangeRequestDto(firstName = firstName, lastName = lastName)
+        )
+
+    /** La propria richiesta in attesa, oppure null. */
+    suspend fun ownNameChangeRequest(): OwnNameChangeRequestDto? =
+        api.get<OwnNameChangeStatusDto>("/api/users/me/name-request", offlineCopy = false).request
+
+    /** Richieste in attesa nella classe; solo Rappresentanti e Guardie possono leggerlo. */
+    suspend fun pendingNameChanges(): PendingNameChangesDto =
+        api.get<PendingNameChangesDto>("/api/users/name-requests/pending", offlineCopy = false)
+
+    suspend fun approveNameChange(id: String): NameChangeDecisionDto =
+        api.post<EmptyBodyDto, NameChangeDecisionDto>("/api/users/name-requests/$id/approve", EmptyBodyDto())
+
+    suspend fun rejectNameChange(id: String): NameChangeDecisionDto =
+        api.post<EmptyBodyDto, NameChangeDecisionDto>("/api/users/name-requests/$id/reject", EmptyBodyDto())
 }

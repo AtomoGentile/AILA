@@ -12,6 +12,9 @@ import type { Env } from '../src/types';
 const notified = vi.hoisted(() => [] as { userIds: string[]; title: string; data?: Record<string, string> }[]);
 vi.mock('../src/services/fcm', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/services/fcm')>()),
+  notifyUser: async (_env: unknown, userId: string, title: string, _body: string, data?: Record<string, string>) => {
+    notified.push({ userIds: [userId], title, data });
+  },
   notifyUsers: async (_env: unknown, userIds: string[], title: string, _body: string, data?: Record<string, string>) => {
     notified.push({ userIds, title, data });
   },
@@ -374,6 +377,110 @@ describe('password e token', () => {
     const { json } = await register('anna');
     expect((await call('DELETE', '/api/users/me', { password: 'password123' }, json.token)).status).toBe(200);
     expect((await call('GET', '/api/calendar', undefined, json.token)).status).toBe(401);
+  });
+});
+
+describe('cambio nome', () => {
+  async function setup() {
+    const rep = await register('capo', { representativeCode: await repCode() });
+    const student = await register('studente', { classCode: await classCodeOf(rep.json.token) });
+    return { repToken: rep.json.token, repId: rep.json.user.id, studentToken: student.json.token, studentId: student.json.user.id };
+  }
+
+  it('lo studente chiede, il Rappresentante approva: il nome cambia per tutti', async () => {
+    const { repToken, repId, studentToken, studentId } = await setup();
+
+    // Nome uguale, maiuscole diverse: non serve nessuna firma.
+    const same = await call('POST', '/api/users/me/name-request', { firstName: 'NOME', lastName: 'STUDENTE' }, studentToken);
+    expect(same.status).toBe(400);
+
+    const asked = await call('POST', '/api/users/me/name-request', { firstName: 'GIULIO', lastName: 'rossi.rossi' }, studentToken);
+    expect(asked.status).toBe(201);
+
+    // La richiesta ha avvisato chi puo' decidere (il Rappresentante), non il richiedente.
+    const requestNotice = notified.find((n) => n.data?.action === 'name_change_request');
+    expect(requestNotice?.userIds).toContain(repId);
+
+    // Uno studente non vede l'elenco di chi decide e non puo' decidere nulla.
+    expect((await call('GET', '/api/users/name-requests/pending', undefined, studentToken)).status).toBe(403);
+
+    const pending = await call('GET', '/api/users/name-requests/pending', undefined, repToken);
+    expect(pending.status).toBe(200);
+    expect(pending.json.requests).toHaveLength(1);
+    expect(pending.json.requests[0]).toMatchObject({
+      oldName: 'Nome Studente',
+      newFirstName: 'Giulio',
+      newLastName: 'Rossi.rossi',
+      canDecide: true,
+    });
+    const requestId = pending.json.requests[0].id as string;
+
+    const approved = await call('POST', `/api/users/name-requests/${requestId}/approve`, {}, repToken);
+    expect(approved.status).toBe(200);
+
+    // Identita' allineata dappertutto: profilo e nomi dei compagni.
+    expect((await call('GET', '/api/users/me', undefined, studentToken)).json).toMatchObject({ firstName: 'Giulio', lastName: 'Rossi.rossi' });
+    const classmates = await call('GET', '/api/users', undefined, repToken);
+    expect(classmates.json.users.find((u: { id: string }) => u.id === studentId).firstName).toBe('Giulio');
+
+    // La decisione ha avvisato il richiedente.
+    expect(notified.find((n) => n.data?.action === 'name_change_approved')?.userIds).toContain(studentId);
+
+    // Già deliberata: una seconda firma non sostituisce la prima.
+    expect((await call('POST', `/api/users/name-requests/${requestId}/approve`, {}, repToken)).status).toBe(409);
+  });
+
+  it('un rifiuto non cambia il nome e avvisa il richiedente', async () => {
+    const { repToken, repId, studentToken, studentId } = await setup();
+    expect((await call('POST', '/api/users/me/name-request', { firstName: 'Giulio', lastName: 'Bianco' }, studentToken)).status).toBe(201);
+    const pending = await call('GET', '/api/users/name-requests/pending', undefined, repToken);
+    expect(pending.json.requests[0].oldName).toBe('Nome Studente');
+
+    const rejected = await call('POST', `/api/users/name-requests/${pending.json.requests[0].id}/reject`, {}, repToken);
+    expect(rejected.status).toBe(200);
+    expect((await call('GET', '/api/users/me', undefined, studentToken)).json.firstName).toBe('Nome');
+    expect((await call('GET', '/api/users/me/name-request', undefined, studentToken)).json.request).toBeNull();
+    expect(notified.find((n) => n.data?.action === 'name_change_rejected')?.userIds).toContain(studentId);
+    // La richiesta rifiutata non risponde piu' alla funga di approvazione.
+    expect((await call('POST', `/api/users/name-requests/${pending.json.requests[0].id}/approve`, {}, repToken)).status).toBe(409);
+  });
+
+  it('nessuno decide sulla propria richiesta', async () => {
+    const { repToken } = await setup();
+    expect((await call('POST', '/api/users/me/name-request', { firstName: 'Capo', lastName: 'Supremo' }, repToken)).status).toBe(201);
+    const pending = await call('GET', '/api/users/name-requests/pending', undefined, repToken);
+    expect(pending.json.requests).toHaveLength(1);
+    expect(pending.json.requests[0].canDecide).toBe(false);
+    expect((await call('POST', `/api/users/name-requests/${pending.json.requests[0].id}/approve`, {}, repToken)).status).toBe(403);
+  });
+
+  it('una richiesta nuova sostituisce quella in attesa', async () => {
+    const { repToken, studentToken } = await setup();
+    expect((await call('POST', '/api/users/me/name-request', { firstName: 'Giulio', lastName: 'Bianco' }, studentToken)).status).toBe(201);
+    expect((await call('POST', '/api/users/me/name-request', { firstName: 'Gino', lastName: 'Bianco' }, studentToken)).status).toBe(201);
+    const pending = await call('GET', '/api/users/name-requests/pending', undefined, repToken);
+    expect(pending.json.requests).toHaveLength(1);
+    expect(pending.json.requests[0].newFirstName).toBe('Gino');
+  });
+
+  it('i nomi si mostrano sempre "Prima Maiuscola" e gli elenchi si ordinano a prescindere dalle maiuscole salvate', async () => {
+    const { repToken, studentToken, studentId } = await setup();
+    const code = await classCodeOf(repToken);
+    await register('antonelli', { classCode: code });
+    await register('bianchi', { classCode: code });
+    // Un nome salvato com'e' venuto fuori prima della grafia unica ("ALFIERI"): nell'elenco non
+    // deve sconvolgere l'ordine alfabetico (in SQLite le maiuscole vengono prima delle minuscole)
+    // né la sua grafia: lower() nell'ORDER BY e nameCase() in lettura lo ripulisce.
+    await env.DB.prepare('UPDATE users SET last_name = ? WHERE username = ?').bind('ALFIERI', 'antonelli').run();
+
+    await env.DB.prepare('UPDATE users SET first_name = ?, last_name = ? WHERE id = ?').bind('ZULA', 'zun.*', studentId).run();
+
+    const list = await call('GET', '/api/users', undefined, studentToken);
+    const names = list.json.users.map((u: { lastName: string }) => u.lastName);
+    // Quattro compagni: l'ALFIERI scritto tutto in maiuscole, Bianchi, il Rappresentante ("Capo")
+    // e lo studente, il cognome del quale qui sotto e' stato rinominato in "zun.*". Il lower()
+    // nell'ORDER BY tiene Alfieri al primo posto nonostante le sue maiuscole salvate.
+    expect(names).toEqual(['Alfieri', 'Bianchi', 'Capo', 'Zun.*']);
   });
 });
 

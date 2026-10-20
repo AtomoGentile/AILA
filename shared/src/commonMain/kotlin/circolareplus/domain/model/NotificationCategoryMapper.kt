@@ -19,6 +19,7 @@ object NotificationCategoryMapper {
             "poll_published", "poll_complete", "swap_request", "swap_accepted" -> "polls"
             "new_circular" -> "circulars"
             "new_proposal" -> "board"
+            "name_change_request", "name_change_approved", "name_change_rejected" -> "profile"
             else -> null
         }
         if (fromAction != null) return fromAction
