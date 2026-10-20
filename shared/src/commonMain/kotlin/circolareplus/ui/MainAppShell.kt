@@ -4213,6 +4213,22 @@ fun MainAppShell(
                                             classRosterActionError = "Priority Pass non salvato: ${e.message}"
                                         }
                                     }
+                                },
+                                onHeightChange = { studentId, heightCm ->
+                                    val previous = classRosterEntries
+                                    classRosterEntries = classRosterEntries.map {
+                                        if (it.studentId == studentId) it.copy(heightCm = heightCm) else it
+                                    }
+                                    coroutineScope.launch {
+                                        try {
+                                            AppContainer.usersRepository.setStudentHeight(studentId, heightCm)
+                                        } catch (e: CancellationException) {
+                                            throw e
+                                        } catch (e: Exception) {
+                                            classRosterEntries = previous
+                                            classRosterActionError = "Altezza non salvata: ${e.message}"
+                                        }
+                                    }
                                 }
                             )
                         }

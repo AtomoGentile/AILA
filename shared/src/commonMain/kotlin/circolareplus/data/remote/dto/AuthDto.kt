@@ -50,5 +50,9 @@ data class ToggleBoardNotificationsResponseDto(val success: Boolean, val notific
 @Serializable
 data class DeleteAccountRequestDto(val password: String)
 
+/** Correzione dell'altezza di un compagno da parte del Rappresentante. */
+@Serializable
+data class SetHeightRequestDto(val heightCm: Int)
+
 @Serializable
 data class UsersListResponseDto(val users: List<UserDto>)

@@ -15,6 +15,9 @@ vi.mock('../src/services/fcm', async (importOriginal) => ({
   notifyUsers: async (_env: unknown, userIds: string[], title: string, _body: string, data?: Record<string, string>) => {
     notified.push({ userIds, title, data });
   },
+  notifyUser: async (_env: unknown, userId: string, title: string, _body: string, data?: Record<string, string>) => {
+    notified.push({ userIds: [userId], title, data });
+  },
 }));
 
 const ctx = { waitUntil() {}, passThroughOnException() {} } as never;
@@ -276,6 +279,17 @@ describe('codici Rappresentante per classe e monouso', () => {
     env = { ...env, REPRESENTATIVE_GLOBAL_CODE_UNTIL: undefined } as Env;
     expect((await register('rep3', { representativeCode: 'VECCHIO', classLabel: '5 A' })).status).toBe(400);
   });
+
+  it('il codice globale di transizione accetta maiuscole/minuscole e trattini in modo case-insensitive', async () => {
+    env = { ...env, REPRESENTATIVE_SIGNUP_CODE: 'VECCHIO', REPRESENTATIVE_GLOBAL_CODE_UNTIL: '2999-12-31' } as Env;
+    const first = await register('rep1', { representativeCode: 'vecchio' });
+    expect(first.status).toBe(201);
+    expect(first.json.user.role).toBe('REPRESENTATIVE');
+
+    const second = await register('rep2', { representativeCode: 've-cc-hi-o' });
+    expect(second.status).toBe(400);
+    expect(second.json.error).toMatch(/già|non valido|transizione/i);
+  });
 });
 
 describe('token', () => {
@@ -498,6 +512,49 @@ describe('elenco classi', () => {
     const labels = (r.json.classes as { label: string }[]).map((c) => c.label);
     expect(labels).toContain('3 B');
     expect(labels).not.toContain('DEFAULT_CLASS');
+  });
+});
+
+describe('altezza corretta dal Rappresentante', () => {
+  it("il Rappresentante la vede nella Scheda Classe e la corregge, il compagno riceve la notifica", async () => {
+    const rep = await register('rappresentante', { representativeCode: await repCode() });
+    expect(rep.status).toBe(201);
+    const classCode = await classCodeOf(rep.json.token);
+    const student = await register('alunno', { classCode, heightCm: 170 });
+    expect(student.status).toBe(201);
+
+    // Nella Scheda Classe arriva l'altezza dichiarata alla registrazione.
+    const roster = await call('GET', '/api/ratings', undefined, rep.json.token);
+    expect(roster.json.ratings.find((r: any) => r.studentId === student.json.user.id).heightCm).toBe(170);
+
+    const changed = await call('PUT', `/api/users/${student.json.user.id}/height`, { heightCm: 160 }, rep.json.token);
+    expect(changed.status).toBe(200);
+    expect(changed.json).toMatchObject({ success: true, heightCm: 160, previousHeightCm: 170 });
+
+    // Nessuna modifica silenziosa: il compagno riceve vecchio e nuovo valore.
+    await new Promise((r) => setTimeout(r, 0));
+    const sent = notified.find((n) => n.data?.action === 'height_updated');
+    expect(sent?.userIds).toEqual([student.json.user.id]);
+    expect(sent?.title).toBe('Altezza aggiornata');
+  });
+
+  it('la può cambiare solo il Rappresentante della classe, e solo a scaglioni validi', async () => {
+    const rep = await register('rappresentante', { representativeCode: await repCode() });
+    const classCode = await classCodeOf(rep.json.token);
+    const student = await register('alunno', { classCode });
+    const other = await register('estraneo', { classLabel: '5 A' });
+    const otherRep = await register('altrorep', { classLabel: '5 A', representativeCode: await repCode('5 A') });
+    const id = student.json.user.id;
+
+    // Né un compagno né il Rappresentante di un'altra classe.
+    expect((await call('PUT', `/api/users/${id}/height`, { heightCm: 165 }, student.json.token)).status).toBe(403);
+    expect((await call('PUT', `/api/users/${id}/height`, { heightCm: 165 }, other.json.token)).status).toBe(403);
+    expect((await call('PUT', `/api/users/${id}/height`, { heightCm: 165 }, otherRep.json.token)).status).toBe(404);
+
+    expect((await call('PUT', `/api/users/${id}/height`, { heightCm: 165 }, rep.json.token)).status).toBe(200);
+    for (const bad of [139, 143, 215, 165.5, '165', null]) {
+      expect((await call('PUT', `/api/users/${id}/height`, { heightCm: bad }, rep.json.token)).status).toBe(400);
+    }
   });
 });
 

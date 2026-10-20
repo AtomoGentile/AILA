@@ -46,6 +46,8 @@ fun ClassRosterScreen(
     onDidacticChange: (studentId: String, value: Int) -> Unit,
     onBehaviorChange: (studentId: String, value: Int) -> Unit,
     onPriorityPassChange: (studentId: String, enabled: Boolean) -> Unit,
+    /** Il Rappresentante corregge l'altezza usata dalla Mappa Posti; il compagno riceve una notifica. */
+    onHeightChange: (studentId: String, heightCm: Int) -> Unit = { _, _ -> },
     onSecurityGuardChange: (studentId: String, enabled: Boolean) -> Unit = { _, _ -> },
     /** Coppie che insieme fanno caos: la Mappa Posti le penalizza (non le vieta). */
     disciplinePairs: List<DisciplinePairDto> = emptyList(),
@@ -120,6 +122,7 @@ fun ClassRosterScreen(
                     onDidacticChange = { onDidacticChange(entry.studentId, it) },
                     onBehaviorChange = { onBehaviorChange(entry.studentId, it) },
                     onPriorityPassChange = { onPriorityPassChange(entry.studentId, it) },
+                    onHeightChange = { onHeightChange(entry.studentId, it) },
                     onSecurityGuardChange = { onSecurityGuardChange(entry.studentId, it) }
                 )
             }
@@ -389,6 +392,7 @@ private fun ClassRosterRow(
     onDidacticChange: (Int) -> Unit,
     onBehaviorChange: (Int) -> Unit,
     onPriorityPassChange: (Boolean) -> Unit,
+    onHeightChange: (Int) -> Unit,
     onSecurityGuardChange: (Boolean) -> Unit
 ) {
     AilaCard {
@@ -416,6 +420,10 @@ private fun ClassRosterRow(
             }
 
             Spacer(modifier = Modifier.height(AppTheme.Space12))
+
+            HeightEditorRow(entry = entry, onHeightChange = onHeightChange)
+
+            Spacer(modifier = Modifier.height(AppTheme.Space8))
 
             RatingStepper(
                 label = "Didattica",
@@ -475,6 +483,146 @@ private fun ClassRosterRow(
             }
         }
     }
+}
+
+/**
+ * Altezza dichiarata dal compagno, con il pulsante per correggerla. Il Rappresentante la usa
+ * quando genera la Mappa Posti: un valore più basso del vero sposta il banco e toglie il posto
+ * giusto a chi sta dietro. La correzione è sempre notificata all'interessato.
+ */
+@Composable
+private fun HeightEditorRow(entry: RatingEntryDto, onHeightChange: (Int) -> Unit) {
+    var showDialog by remember(entry.studentId) { mutableStateOf(false) }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = "Altezza", style = MaterialTheme.typography.bodyLarge, color = AppTheme.TextMuted)
+            Text(
+                text = "Serve alla Mappa Posti: chi è più alto va più indietro.",
+                style = MaterialTheme.typography.labelSmall,
+                color = AppTheme.TextFaint
+            )
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = entry.heightCm?.let { "$it cm" } ?: "Non indicata",
+                style = MaterialTheme.typography.titleSmall,
+                color = AppTheme.TextDark
+            )
+            Spacer(modifier = Modifier.width(AppTheme.Space4))
+            AilaIconButton(
+                contentDescription = "Correggi l'altezza di ${entry.firstName}",
+                onClick = { showDialog = true }
+            ) { tint ->
+                AppIcons.Pencil(modifier = Modifier.size(18.dp), color = tint)
+            }
+        }
+    }
+
+    if (showDialog) {
+        HeightCorrectionDialog(
+            entry = entry,
+            onDismiss = { showDialog = false },
+            onConfirm = { height ->
+                showDialog = false
+                onHeightChange(height)
+            }
+        )
+    }
+}
+
+/**
+ * Correzione a scaglioni di 5 cm, gli stessi ammessi alla registrazione (140-210). Il dialogo
+ * dice esplicitamente che il compagno riceverà una notifica: nessuna modifica silenziosa.
+ */
+@Composable
+private fun HeightCorrectionDialog(
+    entry: RatingEntryDto,
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit
+) {
+    // Se il valore manca si parte da 170, la media; altrimenti dal valore attuale, arrotondato
+    // allo scaglione più vicino (i dati vecchi potrebbero non essere già a multipli di 5).
+    var height by remember(entry.studentId) {
+        mutableStateOf(((entry.heightCm ?: 170) / 5 * 5).coerceIn(140, 210))
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        // Stessa superficie e forma dei dialoghi del design system (AilaConfirmDialog).
+        containerColor = AppTheme.SurfaceWhite,
+        shape = RoundedCornerShape(AppTheme.CardCornerRadius),
+        title = { Text("Altezza di ${entry.firstName}") },
+        text = {
+            Column {
+                Text(
+                    text = "Correggila solo se il valore dichiarato non è quello vero: la Mappa Posti " +
+                        "mette i più alti dietro, e un'altezza sbagliata sposta il banco di qualcun altro.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AppTheme.TextMuted
+                )
+                Spacer(modifier = Modifier.height(AppTheme.Space16))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = { height = (height - 5).coerceAtLeast(140) },
+                        enabled = height > 140,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .semantics { contentDescription = "Altezza: diminuisci di 5 cm" }
+                    ) {
+                        Text(
+                            text = "−",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = if (height > 140) AppTheme.PrimaryBlue else AppTheme.TextFaint
+                        )
+                    }
+                    Text(
+                        text = "$height cm",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = AppTheme.TextDark
+                    )
+                    IconButton(
+                        onClick = { height = (height + 5).coerceAtMost(210) },
+                        enabled = height < 210,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .semantics { contentDescription = "Altezza: aumenta di 5 cm" }
+                    ) {
+                        Text(
+                            text = "+",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = if (height < 210) AppTheme.PrimaryBlue else AppTheme.TextFaint
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(AppTheme.Space12))
+                Text(
+                    text = "${entry.firstName} riceverà una notifica con il nuovo valore.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AppTheme.TextFaint
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = height != entry.heightCm,
+                onClick = { onConfirm(height) }
+            ) {
+                Text("Salva")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Annulla") }
+        }
+    )
 }
 
 /** Selettore 1-5 con frecce +/- , senza dipendenze da picker più complessi. */
