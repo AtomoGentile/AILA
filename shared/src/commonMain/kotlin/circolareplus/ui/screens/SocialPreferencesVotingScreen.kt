@@ -50,7 +50,15 @@ fun SocialPreferencesVotingScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(AppTheme.BackgroundLight)
-            .padding(AppTheme.Space16)
+            .padding(
+                start = AppTheme.Space16,
+                end = AppTheme.Space16,
+                top = AppTheme.Space16,
+                // La barra delle tab galleggia sopra il contenuto (vedi FloatingTabBar in
+                // MainAppShell): senza questo margine copriva il pulsante "Salva preferenze"
+                // appoggiato al bordo in basso, come in tutte le altre schermate della tab.
+                bottom = AppTheme.Space12 + circolareplus.design.LocalBottomBarPadding.current
+            )
     ) {
         Text(
             text = "Esprimi le tue Preferenze",

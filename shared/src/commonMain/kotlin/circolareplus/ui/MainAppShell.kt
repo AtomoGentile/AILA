@@ -2677,12 +2677,16 @@ fun MainAppShell(
                 // Altezza occupata dalla barra flottante (pillola + margini + barra di sistema):
                 // le schermate delle tab la lasciano libera in fondo alle liste.
                 // Con la barra laterale in fondo resta solo la barra di sistema.
-                // 64 di pillola piu' il margine Space12 sopra e sotto (vedi FloatingTabBar): se
-                // cambia uno dei due va cambiato anche qui.
-                val bottomBarPadding = if (useRail) {
-                    WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-                } else {
-                    64.dp + AppTheme.Space12 * 2 + circolareplus.design.tabBarSystemInset()
+                // Durante la votazione delle preferenze la barra flottante sparisce (vedi sotto):
+                // resta da liberare solo il piccolo inset della barra di sistema, cosi' il pulsante
+                // "Salva preferenze" arriva dove finisce lo schermo.
+                val isVotingSocial = selectedTab == MainTab.SEATMAP && seatMapMode == "VOTE_PREFERENCES"
+                val bottomBarPadding = when {
+                    isVotingSocial -> circolareplus.design.tabBarSystemInset()
+                    useRail -> WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                    // 64 di pillola piu' il margine Space12 sopra e sotto (vedi FloatingTabBar): se
+                    // cambia uno dei due va cambiato anche qui.
+                    else -> 64.dp + AppTheme.Space12 * 2 + circolareplus.design.tabBarSystemInset()
                 }
                 // Tastiera aperta = il suo inset in basso e' > 0. (`isImeVisible` esiste solo su
                 // Android: su iOS non compilava.)
@@ -3695,7 +3699,11 @@ fun MainAppShell(
                     )
                 }
                 if (!useRail) androidx.compose.animation.AnimatedVisibility(
-                    visible = !imeVisible,
+                    // Nascosta anche mentre si votano le preferenze sociali (vedi bottomBarPadding):
+                    // la schermata di voto deve usare tutto lo spazio in fondo, senza la pillola che
+                    // copre il pulsante "Salva preferenze".
+                    // Con "Riduci movimento" la barra compare e sparisce in dissolvenza, senza salire.
+                    visible = !imeVisible && !isVotingSocial,
                     modifier = Modifier.align(Alignment.BottomCenter),
                     // Con "Riduci movimento" la barra compare e sparisce in dissolvenza, senza salire.
                     enter = if (AppTheme.reduceMotion) androidx.compose.animation.fadeIn(circolareplus.design.ailaFadeSpec())
