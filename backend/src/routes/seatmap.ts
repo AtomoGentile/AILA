@@ -87,6 +87,84 @@ seatmap.post('/publish', requireRole('REPRESENTATIVE'), async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// Fantocci della Mappa Posti
+//
+// Studenti inventati dal Rappresentante che occupano un posto come tutti, con
+// nome e cognome in mappa, ma non sono utenti: nessuna credenziale, nessun
+// accesso, e di conseguenza non votano le preferenze sociali e non possono
+// essere votati (la rotta di voto li respinge esplicitamente, vedi preferences.ts).
+// Servono ad esempio per riempire le file quando i compagni reali sono pochi.
+// ---------------------------------------------------------------------------
+
+// Un solo fantoccio per classe fino a questo numero: sono nomi fittizi, non un
+// registro anagrafico, e la capienza reale di un'aula resta dell'ordine delle
+// decine.
+export const MAX_DUMMIES = 30;
+
+function normalizeName(value: unknown): string {
+  return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
+}
+
+seatmap.get('/dummies', async (c) => {
+  const rows = await c.env.DB.prepare(
+    'SELECT id, first_name, last_name FROM class_dummies WHERE class_id = ? ORDER BY last_name, first_name'
+  ).bind(await resolveClassId(c)).all<{ id: string; first_name: string; last_name: string }>();
+
+  return c.json({
+    dummies: rows.results.map((r) => ({
+      id: r.id,
+      firstName: r.first_name,
+      lastName: r.last_name,
+    })),
+  });
+});
+
+seatmap.post('/dummies', requireRole('REPRESENTATIVE'), async (c) => {
+  const body = await c.req.json<{ firstName?: unknown; lastName?: unknown }>().catch(() => ({}) as { firstName?: unknown; lastName?: unknown });
+  const firstName = normalizeName(body.firstName);
+  const lastName = normalizeName(body.lastName);
+
+  if (!firstName || !lastName) {
+    return c.json({ error: 'Nome e cognome sono richiesti' }, 400);
+  }
+  // Le colonne sono TEXT NOT NULL senza limite: il tetto serve a non ritrovarsi
+  // un "nome" di dieci migliaia di caratteri in mappa e nel PDF esportato.
+  if (firstName.length > 30 || lastName.length > 30) {
+    return c.json({ error: 'Nome e cognome possono avere al massimo 30 caratteri' }, 400);
+  }
+
+  const classId = await resolveClassId(c);
+  const count = await c.env.DB.prepare(
+    'SELECT COUNT(*) as cnt FROM class_dummies WHERE class_id = ?'
+  ).bind(classId).first<{ cnt: number }>();
+  if ((count?.cnt ?? 0) >= MAX_DUMMIES) {
+    return c.json({ error: `Puoi creare al massimo ${MAX_DUMMIES} fantocci per classe` }, 409);
+  }
+
+  const id = newUUID();
+  await c.env.DB.prepare(
+    'INSERT INTO class_dummies (id, class_id, first_name, last_name, created_by) VALUES (?, ?, ?, ?, ?)'
+  ).bind(id, classId, firstName, lastName, c.get('jwtPayload').sub).run();
+
+  return c.json({
+    success: true,
+    dummy: { id, firstName, lastName },
+  }, 201);
+});
+
+seatmap.delete('/dummies/:id', requireRole('REPRESENTATIVE'), async (c) => {
+  const id = c.req.param('id');
+  // Solo i fantocci della propria classe: la richiesta di un'altra classe per
+  // id esatto resterebbe comunque senza effetto, ma l'errore distinto e' piu'
+  // onesto del 200 fatto a vuoto.
+  const classId = await resolveClassId(c);
+  const result = await c.env.DB.prepare('DELETE FROM class_dummies WHERE id = ? AND class_id = ?')
+    .bind(id, classId).run();
+  if (!result.meta.changes) return c.json({ error: 'Fantoccio non trovato' }, 404);
+  return c.json({ success: true });
+});
+
+// ---------------------------------------------------------------------------
 // POST /api/seat-map/reset-history — Reset storico mappe (solo REPRESENTATIVE)
 // ---------------------------------------------------------------------------
 seatmap.post('/reset-history', requireRole('REPRESENTATIVE'), async (c) => {

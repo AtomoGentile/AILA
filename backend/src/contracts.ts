@@ -217,6 +217,22 @@ export interface CurrentSeatMapResponse {
   seatMap: { id: string; layout: DeskAssignmentDto[]; publishedAt: string } | null;
 }
 
+// Fantoccio della Mappa Posti: studente inventato dal Rappresentante, non e' un utente vero.
+export interface ClassDummyDto {
+  id: string;
+  firstName: string;
+  lastName: string;
+}
+
+export interface ClassDummiesResponse {
+  dummies: ClassDummyDto[];
+}
+
+export interface CreateClassDummyRequest {
+  firstName: string;
+  lastName: string;
+}
+
 // --- Web push (PWA) ---------------------------------------------------------
 
 export interface WebPushSubscriptionRequest {
