@@ -185,6 +185,75 @@ users.post('/:id/reset-code', requireRole('REPRESENTATIVE'), async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// PUT /api/users/:id/height — Il Rappresentante corregge l'altezza di un compagno
+//
+// L'altezza decide chi sta davanti nella Mappa Posti: dichiararla più bassa del vero sposta
+// il banco, e il posto non è più giusto per gli altri. Il Rappresentante può correggerla, ma
+// non in silenzio: chi la subisce riceve subito una notifica con il vecchio e il nuovo valore,
+// così se la correzione è sbagliata può parlarne. Nessuna modifica senza avviso, quindi.
+// ---------------------------------------------------------------------------
+users.put('/:id/height', requireRole('REPRESENTATIVE'), async (c) => {
+  const payload = c.get('jwtPayload');
+  const targetId = c.req.param('id');
+
+  let heightCm: unknown;
+  try {
+    heightCm = (await c.req.json<{ heightCm?: unknown }>()).heightCm;
+  } catch {
+    return c.json({ error: 'Corpo della richiesta non valido' }, 400);
+  }
+  if (
+    typeof heightCm !== 'number' || !Number.isInteger(heightCm) ||
+    heightCm < 140 || heightCm > 210 || heightCm % 5 !== 0
+  ) {
+    return c.json({ error: "L'altezza deve essere tra 140 e 210 cm a scaglioni di 5 cm" }, 400);
+  }
+
+  // Stessa classe, e solo studenti o Rappresentanti: un Rappresentante non tocca le altre classi.
+  const target = await c.env.DB.prepare(
+    `SELECT u.id, u.first_name, sp.height_cm
+     FROM users u
+     LEFT JOIN student_profiles sp ON sp.user_id = u.id
+     WHERE u.id = ? AND u.class_id = ? AND u.role IN ('STUDENT', 'REPRESENTATIVE')`
+  ).bind(targetId, await resolveClassId(c)).first<{
+    id: string;
+    first_name: string;
+    height_cm: number | null;
+  }>();
+  if (!target) return c.json({ error: 'Compagno non trovato nella tua classe' }, 404);
+
+  const previous = target.height_cm;
+  if (previous === heightCm) return c.json({ success: true, heightCm, unchanged: true });
+
+  await c.env.DB.prepare(
+    `INSERT INTO student_profiles (user_id, height_cm) VALUES (?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET height_cm = excluded.height_cm`
+  ).bind(targetId, heightCm).run();
+
+  // Se il Rappresentante corregge la propria altezza non c'è nessuno da avvisare.
+  if (target.id !== payload.sub) {
+    // Il nome di chi ha corretto: la notifica dice da chi andare a chiedere conto, non un anonimo
+    // "il Rappresentante" che in classe sono in due.
+    const author = await c.env.DB.prepare('SELECT first_name, last_name FROM users WHERE id = ?')
+      .bind(payload.sub)
+      .first<{ first_name: string; last_name: string }>();
+    const authorName = author ? `${author.first_name} ${author.last_name}` : 'Il Rappresentante';
+    inBackground(c, notifyUser(
+      c.env,
+      target.id,
+      'Altezza aggiornata',
+      previous == null
+        ? `${authorName} ha impostato la tua altezza a ${heightCm} cm. Se non è giusto, parlane con chi l'ha corretta.`
+        : `${authorName} ha corretto la tua altezza da ${previous} a ${heightCm} cm. ` +
+          `Se non è giusto, parlane con chi l'ha corretta.`,
+      { action: 'height_updated' }
+    ));
+  }
+
+  return c.json({ success: true, heightCm, previousHeightCm: previous });
+});
+
+// ---------------------------------------------------------------------------
 // DELETE /api/users/me — Elimina il proprio account
 //
 // Richiede la password nel corpo: un token rubato o un telefono lasciato sbloccato non devono
