@@ -14,11 +14,21 @@
       "localizedDescription": "AILA – La tua scuola, sincronizzata.\n\nL'app che tiene tutta la scuola in un posto solo: circolari e comunicazioni sempre aggiornate sul telefono, con notifiche anche quando l'app è chiusa.",
       "iconURL": "https://raw.githubusercontent.com/AtomoGentile/AILA/main/iosApp/iosApp/Assets.xcassets/AppIcon.appiconset/Icon-1024.png",
       "tintColor": "#0A1330",
-      "version": "1.1.4",
-      "versionDate": "2026-10-20T19:41:15Z",
-      "downloadURL": "https://github.com/AtomoGentile/AILA/releases/download/v1.1.4/AILA.ipa",
-      "size": 19385663,
+      "version": "1.1.5",
+      "versionDate": "2026-10-20T22:07:23Z",
+      "downloadURL": "https://github.com/AtomoGentile/AILA/releases/download/v1.1.5/AILA.ipa",
+      "size": 19446406,
       "versions": [
+        {
+          "version": "1.1.5",
+          "buildVersion": "5",
+          "date": "2026-10-20T22:07:23Z",
+          "localizedDescription": "v1.1.5",
+          "downloadURL": "https://github.com/AtomoGentile/AILA/releases/download/v1.1.5/AILA.ipa",
+          "size": 19446406,
+          "sha256": "9419c86c5e6c8b4e9772ba3e66a33a206e3fef0fb5d9adbbdac5c963e1a5c960",
+          "minOSVersion": "17.0"
+        },
         {
           "version": "1.1.4",
           "buildVersion": "4",
