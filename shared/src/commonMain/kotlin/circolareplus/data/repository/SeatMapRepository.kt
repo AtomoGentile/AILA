@@ -102,7 +102,8 @@ class SeatMapRepository(private val api: ApiClient? = null) {
         // si rilegge l'elenco e si prende quello appena aggiunto, se c'è.
         return listDummies()
             .lastOrNull { it.firstName.equals(name, ignoreCase = true) && it.lastName.equals(surname, ignoreCase = true) }
-            ?: SeatMapDummy(id = "dummy_${System.nanoTime()}", firstName = name, lastName = surname)
+            // Id provvisorio, valido finché il device non rilegge l'elenco dal server.
+            ?: SeatMapDummy(id = "dummy_${kotlin.random.Random.nextLong().toString(16)}", firstName = name, lastName = surname)
     }
 
     /** Solo Rappresentante: elimina il fantoccio (chi resta sui banchi appare come posto occupato ma non risolto). */
