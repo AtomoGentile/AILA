@@ -369,6 +369,22 @@ CREATE TABLE IF NOT EXISTS seat_map_history (
 
 CREATE INDEX IF NOT EXISTS idx_seatmap_class ON seat_map_history(class_id);
 
+-- 10a. FANTOCCI DELLA MAPPA POSTI (migrazione 021)
+-- Studenti inventati dal Rappresentante per riempire la mappa quando in classe le file sono piu'
+-- dei compagni reali (immagini, copioni per le prove...). Non sono utenti: nessuna credenziale,
+-- nessun accesso. Non votano le preferenze e non possono essere votati (/preferences/vote li
+-- respinge per costruzione, e non entrano nella tabella `users` quindi neanche nel conteggio).
+CREATE TABLE IF NOT EXISTS class_dummies (
+    id TEXT PRIMARY KEY,
+    class_id TEXT NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_dummies_class ON class_dummies(class_id);
+
 -- 11. TOKEN FCM DISPOSITIVI (Notifiche Push)
 -- Un token per utente per piattaforma
 CREATE TABLE IF NOT EXISTS fcm_tokens (

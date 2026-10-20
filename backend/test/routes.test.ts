@@ -576,3 +576,79 @@ describe('evento AI con rimando alla circolare', () => {
     expect(byTitle).toEqual({ Uno: 42, Due: null, Tre: null });
   });
 });
+
+describe('fantocci della Mappa Posti', () => {
+  async function setup() {
+    const rep = await register('rappresentante', { representativeCode: await repCode() });
+    const classCode = await classCodeOf(rep.json.token);
+    const student = await register('alunno', { classCode });
+    return { rep: rep.json.token, repId: rep.json.user.id, student: student.json.token, studentId: student.json.user.id };
+  }
+
+  it('li crea solo il Rappresentante; chiunque li legge per i nomi in mappa', async () => {
+    const { rep, student } = await setup();
+
+    const created = await call('POST', '/api/seat-map/dummies', { firstName: ' Pinco ', lastName: ' Pallo ' }, rep);
+    expect(created.status).toBe(201);
+    expect(created.json.dummy).toMatchObject({ firstName: 'Pinco', lastName: 'Pallo' });
+    expect(created.json.dummy.id).toBeTruthy();
+
+    const invalid = [
+      { firstName: 'Solo nome' },
+      { lastName: 'Solo cognome' },
+      { firstName: '   ', lastName: 'Vuoto' },
+      { firstName: 'x'.repeat(31), lastName: 'Troppo lungo' },
+    ];
+    for (const body of invalid) {
+      expect((await call('POST', '/api/seat-map/dummies', body, rep)).status).toBe(400);
+    }
+
+    // Gli altri non creano n� eliminano.
+    expect((await call('POST', '/api/seat-map/dummies', { firstName: 'A', lastName: 'B' }, student)).status).toBe(403);
+    expect((await call('DELETE', `/api/seat-map/dummies/${created.json.dummy.id}`, undefined, student)).status).toBe(403);
+
+    const list = await call('GET', '/api/seat-map/dummies', undefined, student);
+    expect(list.status).toBe(200);
+    expect(list.json.dummies).toEqual([{ id: created.json.dummy.id, firstName: 'Pinco', lastName: 'Pallo' }]);
+  });
+
+  it('non sono utenti: non compaiono nell\'elenco compagni n� nel conteggio della votazione', async () => {
+    const { rep, repId, student, studentId } = await setup();
+    await call('POST', '/api/seat-map/dummies', { firstName: 'Pinco', lastName: 'Pallo' }, rep);
+
+    expect((await call('GET', '/api/users', undefined, student)).json.users.some((u: any) => u.firstName === 'Pinco')).toBe(false);
+
+    expect((await call('POST', '/api/preferences/config', { open: true }, rep)).status).toBe(200);
+    // Solo gli alunni veri votano: il fantoccio non entra nella finestra.
+    expect((await call('POST', '/api/preferences/vote', { toStudentId: studentId, score: 0 }, rep)).status).toBe(200);
+    expect((await call('POST', '/api/preferences/vote', { toStudentId: repId, score: 0 }, student)).status).toBe(200);
+    const progress = await call('GET', '/api/preferences/progress', undefined, rep);
+    expect(progress.json.totalStudents).toBe(2);
+    expect(progress.json.allVoted).toBe(true);
+  });
+
+  it('non si pu� votare un fantoccio', async () => {
+    const { rep, repId, student } = await setup();
+    const dummy = (await call('POST', '/api/seat-map/dummies', { firstName: 'Pinco', lastName: 'Pallo' }, rep)).json.dummy;
+    await call('POST', '/api/preferences/config', { open: true }, rep);
+
+    // Voto verso un compagno vero: ok. Voto verso il fantoccio: respinto per costruzione.
+    expect((await call('POST', '/api/preferences/vote', { toStudentId: repId, score: 1 }, student)).status).toBe(200);
+    const refused = await call('POST', '/api/preferences/vote', { toStudentId: dummy.id, score: 1 }, student);
+    expect(refused.status).toBe(400);
+    expect(refused.json.error).toMatch(/fantoccio/);
+  });
+
+  it('il Rappresentante lo elimina; un id di un\'altra classe non ne tocca nessuno', async () => {
+    const { rep } = await setup();
+    const here = (await call('POST', '/api/seat-map/dummies', { firstName: 'Pinco', lastName: 'Pallo' }, rep)).json.dummy;
+    const otherRep = await register('altrorep', { classLabel: '5 A', representativeCode: await repCode('5 A') });
+
+    expect((await call('DELETE', `/api/seat-map/dummies/${here.id}`, undefined, otherRep.json.token)).status).toBe(404);
+    expect((await call('DELETE', `/api/seat-map/dummies/${here.id}`, undefined, rep)).status).toBe(200);
+    expect((await call('DELETE', `/api/seat-map/dummies/${here.id}`, undefined, rep)).status).toBe(404);
+
+    const list = await call('GET', '/api/seat-map/dummies', undefined, rep);
+    expect(list.json.dummies).toEqual([]);
+  });
+});

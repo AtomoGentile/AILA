@@ -100,6 +100,8 @@ import circolareplus.ai.CircularClassificationPrompt
 import circolareplus.ai.cleanPdfTextForAi
 import circolareplus.domain.model.Proposal
 import circolareplus.domain.model.SocialPreferenceScore
+import circolareplus.domain.model.SeatMapDummy
+import circolareplus.domain.model.asUser
 import circolareplus.domain.model.StudentProfile
 import circolareplus.domain.model.UnlockRequest
 import circolareplus.domain.model.User
@@ -1051,6 +1053,10 @@ fun MainAppShell(
     // --- Stato Mappa Posti & Preferenze Sociali --------------------------------------------
     var classmates by remember { mutableStateOf<List<User>>(emptyList()) }
     var isClassmatesLoading by remember { mutableStateOf(false) }
+    // Fantocci della Mappa Posti: studenti inventati dal Rappresentante, con nome e cognome,
+    // che occupano un posto come tutti. Non sono utenti: non votano e non possono essere votati.
+    var seatMapDummies by remember { mutableStateOf<List<circolareplus.domain.model.SeatMapDummy>>(emptyList()) }
+    var isSavingSeatMapDummy by remember { mutableStateOf(false) }
     var seatMapAssignments by remember { mutableStateOf<List<DeskAssignment>>(emptyList()) }
     var isSeatMapLoading by remember { mutableStateOf(false) }
     // La mappa e' stata letta almeno una volta in questa sessione (anche se vuota).
@@ -1088,6 +1094,12 @@ fun MainAppShell(
     var seatMapOptimizerHistory by remember { mutableStateOf<List<SeatMapHistoryRecord>>(emptyList()) }
     var seatMapOptimizerWeights by remember { mutableStateOf(OptimizerWeights()) }
     var seatMapOptimizerIsSmallClass by remember { mutableStateOf(false) }
+    // Compagni veri + fantocci, per l'ottimizzatore e per la generazione: un fantoccio occupa un
+    // posto come tutti. La votazione delle preferenze invece riceve solo `classmates`: un
+    // fantoccio non vota e non può essere votato.
+    val seatMapGenerationStudents = remember(classmates, seatMapDummies) {
+        classmates + seatMapDummies.map { it.asUser() }
+    }
 
     // --- Stato Sondaggi Interrogazioni ------------------------------------------------------
     var currentPoll by remember { mutableStateOf<PollDetailDto?>(null) }
@@ -1495,6 +1507,10 @@ fun MainAppShell(
         }
         val mapDeferred = async { runCatching { AppContainer.seatMapRepository.getCurrentSeatMap() ?: emptyList() } }
         val configDeferred = async { runCatching { AppContainer.preferencesRepository.getConfig() } }
+        // I fantocci servono a tutti (si leggono i loro nomi nella mappa pubblicata), non solo
+        // al Rappresentante: l'informazione mancante non blocca la mappa, quindi gli errori
+        // restano silenziosi.
+        val dummiesDeferred = async { runCatching { AppContainer.seatMapRepository.listDummies() } }
 
         classmatesDeferred?.await()?.let { result ->
             result.onSuccess { classmates = it }
@@ -1505,6 +1521,7 @@ fun MainAppShell(
         }
         val map = mapDeferred.await()
         val config = configDeferred.await()
+        dummiesDeferred.await().getOrNull()?.let { seatMapDummies = it }
         map.exceptionOrNull()?.let { if (it is CancellationException) throw it }
         config.exceptionOrNull()?.let { if (it is CancellationException) throw it }
         val freshMap = map.getOrNull()
@@ -2961,8 +2978,9 @@ fun MainAppShell(
                                             if (isPreferencesOpen) {
                                                 PreferencesOpenBanner(onClick = { seatMapMode = "VOTE_PREFERENCES" })
                                             }
-                                            val memoizedStudentsMap = remember(classmates, user) {
-                                                classmates.associateBy { it.id } + (user.id to user)
+                                            val memoizedStudentsMap = remember(classmates, user, seatMapDummies) {
+                                                classmates.associateBy { it.id } + (user.id to user) +
+                                                    seatMapDummies.associateBy { it.id }.mapValues { it.value.asUser() }
                                             }
                                             SeatMapScreen(
                                                 currentUserId = user.id,
@@ -2971,6 +2989,37 @@ fun MainAppShell(
                                                 studentsMap = memoizedStudentsMap,
                                                 isPreferencesOpen = isPreferencesOpen,
                                                 preferencesProgress = preferencesProgress,
+                                                dummies = seatMapDummies,
+                                                isSavingDummy = isSavingSeatMapDummy,
+                                                onAddDummy = { firstName, lastName ->
+                                                    coroutineScope.launch {
+                                                        isSavingSeatMapDummy = true
+                                                        try {
+                                                            val created = AppContainer.seatMapRepository.createDummy(firstName, lastName)
+                                                            seatMapDummies = (seatMapDummies + created).sortedWith(
+                                                                compareBy({ it.lastName }, { it.firstName })
+                                                            )
+                                                        } catch (e: CancellationException) {
+                                                            throw e
+                                                        } catch (e: Exception) {
+                                                            seatMapActionError = "Impossibile creare il fantoccio: ${e.message}"
+                                                        } finally {
+                                                            isSavingSeatMapDummy = false
+                                                        }
+                                                    }
+                                                },
+                                                onDeleteDummy = { dummyId ->
+                                                    coroutineScope.launch {
+                                                        try {
+                                                            AppContainer.seatMapRepository.deleteDummy(dummyId)
+                                                            seatMapDummies = seatMapDummies.filterNot { it.id == dummyId }
+                                                        } catch (e: CancellationException) {
+                                                            throw e
+                                                        } catch (e: Exception) {
+                                                            seatMapActionError = "Impossibile eliminare il fantoccio: ${e.message}"
+                                                        }
+                                                    }
+                                                },
                                                 isExportingPdf = isExportingSeatMapPdf,
                                                 isGeneratingProposals = isGeneratingProposals,
                                                 onExportPdf = {
@@ -3055,10 +3104,10 @@ fun MainAppShell(
                                                             seatMapOptimizerSocialMap = socialMap
                                                             seatMapOptimizerHistory = history
                                                             seatMapOptimizerWeights = weights
-                                                            seatMapOptimizerIsSmallClass = classmates.size < 22
+                                                            seatMapOptimizerIsSmallClass = seatMapGenerationStudents.size < 22
                                                             val computed = withContext(Dispatchers.Default) {
                                                                 AppContainer.seatMapRepository.generateThreeProposals(
-                                                                    students = classmates,
+                                                                    students = seatMapGenerationStudents,
                                                                     profiles = profiles,
                                                                     ratings = ratingsMap,
                                                                     socialPreferences = socialMap,
@@ -4366,8 +4415,9 @@ fun MainAppShell(
                     // Le tre proposte restano tutte disponibili finche' non se ne sceglie una:
                     // l'anteprima con l'occhio non ne scarta nessuna. Il back le abbandona.
                     circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { proposalOptions = emptyList() }
-                    val proposalsStudentsMap = remember(classmates, user) {
-                        classmates.associateBy { it.id } + (user.id to user)
+                    val proposalsStudentsMap = remember(classmates, user, seatMapDummies) {
+                        classmates.associateBy { it.id } + (user.id to user) +
+                            seatMapDummies.associateBy { it.id }.mapValues { it.value.asUser() }
                     }
                     Column(modifier = Modifier.fillMaxSize()) {
                         ScreenBackBar(
@@ -4424,8 +4474,9 @@ fun MainAppShell(
                     val editorSatisfaction = remember(currentAssignments, seatMapOptimizerSocialMap) {
                         SeatMapOptimizer.voteSatisfaction(currentAssignments, seatMapOptimizerSocialMap)
                     }
-                    val editorStudentsMap = remember(classmates, user) {
-                        classmates.associateBy { it.id } + (user.id to user)
+                    val editorStudentsMap = remember(classmates, user, seatMapDummies) {
+                        classmates.associateBy { it.id } + (user.id to user) +
+                            seatMapDummies.associateBy { it.id }.mapValues { it.value.asUser() }
                     }
 
                     Column(modifier = Modifier.fillMaxSize()) {

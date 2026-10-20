@@ -169,6 +169,16 @@ preferences.post('/vote', async (c) => {
 
   // Il compagno votato dev'essere della stessa classe: le preferenze alimentano la disposizione
   // dei banchi di quell'aula, un voto verso un'altra classe non significherebbe nulla.
+  // I fantocci della Mappa Posti non sono righe di `users`: senza questo controllo arriverebbero
+  // al "non trovato", ma il divieto e' esplicito e resta valido a prescindere da cosa decideranno
+  // i client. Un fantoccio non vota (nessun account, nessun token) e non puo' essere votato.
+  const dummy = await c.env.DB.prepare(
+    'SELECT id FROM class_dummies WHERE id = ? AND class_id = ?'
+  ).bind(toStudentId, classId).first<{ id: string }>();
+  if (dummy) {
+    return c.json({ error: 'Un fantoccio non può essere votato: esprimi una preferenza su un compagno vero' }, 400);
+  }
+
   const target = await c.env.DB.prepare('SELECT id FROM users WHERE id = ? AND class_id = ?')
     .bind(toStudentId, classId).first<{ id: string }>();
   if (!target) return c.json({ error: 'Studente non trovato in questa classe' }, 404);

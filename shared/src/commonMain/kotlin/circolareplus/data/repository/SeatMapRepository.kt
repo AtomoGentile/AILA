@@ -6,7 +6,12 @@ import circolareplus.data.remote.apiJson
 import circolareplus.data.remote.dto.CurrentSeatMapResponseDto
 import circolareplus.data.remote.dto.PublishSeatMapRequestDto
 import circolareplus.data.remote.dto.SeatMapHistoryResponseDto
+import circolareplus.data.remote.dto.SeatMapDummiesResponseDto
+import circolareplus.data.remote.dto.SeatMapDummyDto
 import circolareplus.data.remote.dto.SuccessDto
+import circolareplus.data.remote.dto.CreateSeatMapDummyRequestDto
+import circolareplus.data.remote.dto.CreatedSeatMapDummyResponseDto
+import circolareplus.data.remote.dto.toDomain
 import circolareplus.domain.model.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -72,6 +77,37 @@ class SeatMapRepository(private val api: ApiClient? = null) {
 
     /** Solo Rappresentante: azzera lo storico (inizio quadrimestre / cambio aula). */
     suspend fun resetHistory(): SuccessDto = requireApi().post("/api/seat-map/reset-history", Unit)
+
+    // -------------------------------------------------------------------------
+    // Fantocci: studenti inventati dal Rappresentante, con nome e cognome, che
+    // occupano un posto come tutti. Non sono utenti: non votano le preferenze e
+    // non possono essere votati. L'elenco serve anche agli altri compagni, che
+    // devono leggere i nomi dei fantocci nella mappa pubblicata.
+    // -------------------------------------------------------------------------
+
+    /** Elenco dei fantocci della classe, in ordine di cognome. */
+    suspend fun listDummies(): List<SeatMapDummy> =
+        requireApi().get<SeatMapDummiesResponseDto>("/api/seat-map/dummies").dummies.map { it.toDomain() }
+
+    /** Solo Rappresentante: crea un fantoccio e lo restituisce, con l'id del server. */
+    suspend fun createDummy(firstName: String, lastName: String): SeatMapDummy {
+        val name = firstName.trim()
+        val surname = lastName.trim()
+        val response = requireApi().post<CreateSeatMapDummyRequestDto, CreatedSeatMapDummyResponseDto>(
+            "/api/seat-map/dummies",
+            CreateSeatMapDummyRequestDto(firstName = name, lastName = surname)
+        )
+        response.dummy?.let { return it.toDomain() }
+        // Il server non ha restituito il fantoccio creato (aggiornamento a metà):
+        // si rilegge l'elenco e si prende quello appena aggiunto, se c'è.
+        return listDummies()
+            .lastOrNull { it.firstName.equals(name, ignoreCase = true) && it.lastName.equals(surname, ignoreCase = true) }
+            ?: SeatMapDummy(id = "dummy_${System.nanoTime()}", firstName = name, lastName = surname)
+    }
+
+    /** Solo Rappresentante: elimina il fantoccio (chi resta sui banchi appare come posto occupato ma non risolto). */
+    suspend fun deleteDummy(id: String): SuccessDto =
+        requireApi().delete("/api/seat-map/dummies/$id")
 
     /**
      * Genera le 3 proposte d'aula eseguendo l'ottimizzatore a ricerca locale (hill-climbing con

@@ -65,6 +65,12 @@ fun SeatMapScreen(
     isPreferencesOpen: Boolean,
     /** Quanti hanno votato le preferenze; null finche' non e' stato caricato. */
     preferencesProgress: circolareplus.data.remote.dto.PreferencesProgressDto? = null,
+    /** Fantocci della classe: studenti inventati che occupano un posto in mappa come tutti. */
+    dummies: List<circolareplus.domain.model.SeatMapDummy> = emptyList(),
+    /** True mentre il server crea o elimina un fantoccio: la gestione resta aperta ma non si ripreme. */
+    isSavingDummy: Boolean = false,
+    onAddDummy: (firstName: String, lastName: String) -> Unit = { _, _ -> },
+    onDeleteDummy: (String) -> Unit = {},
     onTogglePreferencesWindow: (Boolean) -> Unit = {},
     onGenerateProposals: (OptimizerWeights, seatsPerDesk: Int, rowSeats: List<Int>) -> Unit = { _, _, _ -> },
     isExportingPdf: Boolean = false,
@@ -335,6 +341,18 @@ fun SeatMapScreen(
                         Spacer(modifier = Modifier.height(AppTheme.Space8))
                         PreferencesProgressBlock(progress = preferencesProgress)
                     }
+
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+
+                    // Fantocci: studenti inventati con nome e cognome. Occupano un posto come
+                    // tutti, ma non sono utenti: non votano le preferenze e non possono essere
+                    // votati. Per riempire le file quando i compagni reali sono pochi.
+                    DummiesBlock(
+                        dummies = dummies,
+                        isSaving = isSavingDummy,
+                        onAdd = onAddDummy,
+                        onDelete = onDeleteDummy
+                    )
 
                     Spacer(modifier = Modifier.height(AppTheme.Space12))
 
@@ -647,6 +665,128 @@ private fun PreferencesProgressBlock(progress: circolareplus.data.remote.dto.Pre
                     progress.pending.joinToString(", ") { "${it.firstName} ${it.lastName.take(1)}." },
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Normal,
+                color = AppTheme.TextMuted
+            )
+        }
+    }
+}
+
+/**
+ * Gestione dei fantocci nel pannello del Rappresentante: nome e cognome, tasto per aggiungere e
+ * lista con l'eliminazione. Un fantoccio esiste solo per la Mappa Posti: non è un utente, quindi
+ * non vota le preferenze sociali e non può essere votato.
+ */
+@Composable
+private fun DummiesBlock(
+    dummies: List<circolareplus.domain.model.SeatMapDummy>,
+    isSaving: Boolean,
+    onAdd: (String, String) -> Unit,
+    onDelete: (String) -> Unit
+) {
+    var firstName by remember { mutableStateOf("") }
+    var lastName by remember { mutableStateOf("") }
+    val canAdd = firstName.isNotBlank() && lastName.isNotBlank() && !isSaving
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AppIcons.Chair(modifier = Modifier.size(16.dp), color = AppTheme.TextDark)
+            Spacer(modifier = Modifier.width(AppTheme.Space8))
+            Column {
+                Text(
+                    text = "Fantocci (${dummies.size})",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = AppTheme.TextDark
+                )
+                Text(
+                    text = "Studenti inventati: occupano un posto in mappa, ma non votano e non possono essere votati.",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Normal,
+                    color = AppTheme.TextMuted
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(AppTheme.Space8))
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = firstName,
+                onValueChange = { firstName = it },
+                placeholder = { Text("Nome", style = MaterialTheme.typography.bodyMedium, maxLines = 1) },
+                singleLine = true,
+                shape = RoundedCornerShape(AppTheme.CardCornerRadius),
+                colors = ailaFieldColors(),
+                modifier = Modifier.weight(1f)
+            )
+            OutlinedTextField(
+                value = lastName,
+                onValueChange = { lastName = it },
+                placeholder = { Text("Cognome", style = MaterialTheme.typography.bodyMedium, maxLines = 1) },
+                singleLine = true,
+                shape = RoundedCornerShape(AppTheme.CardCornerRadius),
+                colors = ailaFieldColors(),
+                modifier = Modifier.weight(1f)
+            )
+            AilaPrimaryButton(
+                text = "Aggiungi",
+                onClick = {
+                    onAdd(firstName.trim(), lastName.trim())
+                    firstName = ""
+                    lastName = ""
+                },
+                enabled = canAdd,
+                compact = true
+            )
+        }
+
+        if (dummies.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(AppTheme.Space4))
+            Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space4)) {
+                dummies.chunked(2).forEach { rowDummies ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space4), modifier = Modifier.fillMaxWidth()) {
+                        rowDummies.forEach { dummy ->
+                            Row(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                                    .background(AppTheme.TintBlue)
+                                    .padding(horizontal = AppTheme.Space8, vertical = AppTheme.Space4),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = dummy.fullName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = AppTheme.TintBlueInk,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(26.dp)
+                                        .clip(CircleShape)
+                                        .clickable(enabled = !isSaving) { onDelete(dummy.id) }
+                                        .semantics { contentDescription = "Elimina il fantoccio ${dummy.fullName}" },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    AppIcons.Trash(modifier = Modifier.size(13.dp), color = AppTheme.PollDarkRed)
+                                }
+                            }
+                        }
+                        if (rowDummies.size == 1) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        } else {
+            Spacer(modifier = Modifier.height(AppTheme.Space4))
+            Text(
+                text = "Nessun fantoccio: scrivi un nome e un cognome e aggiungilo come compagno di banco fittizio.",
+                style = MaterialTheme.typography.labelSmall,
                 color = AppTheme.TextMuted
             )
         }
