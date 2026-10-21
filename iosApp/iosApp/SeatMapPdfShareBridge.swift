@@ -198,6 +198,11 @@ class SeatMapPdfShareBridgeImpl: SeatMapPdfShareBridge {
         ]
 
         for desk in desks {
+            // v1.1.6: banco vuoto della disposizione completa (nessun occupante, `names` vuoto:
+            // lato Kotlin listOfNotNull di tre nil). NON si disegna né box né etichetta — ma le
+            // colonne/righe/dimensioni sopra restano calcolate su TUTTI i desks, quindi i banchi
+            // occupati non si spostano e il vuoto lascia solo un buco bianco nella griglia.
+            if desk.names.isEmpty { continue }
             let row = max(Int(desk.row), 0)
             let col = max(Int(desk.column), 0)
             let left = margin + CGFloat(col) * (deskWidth + gutter)

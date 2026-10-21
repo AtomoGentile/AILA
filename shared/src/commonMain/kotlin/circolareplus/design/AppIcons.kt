@@ -837,6 +837,23 @@ object AppIcons {
         }
     }
 
+    /** Presa di trascinamento: sei punti in griglia 3x2, l'handle "puoi trascinare da qui". */
+    @Composable
+    fun Grip(modifier: Modifier = Modifier.size(24.dp), color: Color = Color(0xFF1E293B)) {
+        Canvas(modifier = modifier) {
+            val w = size.width; val h = size.height
+            for (rowIndex in 0..1) {
+                for (colIndex in 0..2) {
+                    drawCircle(
+                        color,
+                        radius = w * 0.09f,
+                        center = Offset(w * (0.3f + 0.2f * colIndex), h * (0.3f + 0.4f * rowIndex))
+                    )
+                }
+            }
+        }
+    }
+
     /** "Apri fuori dall'app": riquadro con la freccia che esce in alto a destra. */
     @Composable
     fun ExternalLink(modifier: Modifier = Modifier.size(24.dp), color: Color = Color(0xFF1E293B)) {

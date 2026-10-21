@@ -9,7 +9,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import circolareplus.algorithms.DeskAssignment
@@ -97,5 +99,34 @@ fun VacantDeskSlot(
                 color = AppTheme.TextMuted
             )
         }
+    }
+}
+
+/**
+ * Slot invisibile di un banco vuoto nelle superfici FUORI dall'editor (mappa pubblicata,
+ * anteprima "occhio" delle proposte e, indirettamente, i PDF): dal v1.1.6 la disposizione
+ * completa passa per withVacantDesks e contiene banchi senza occupanti, che pero' non devono
+ * vedersi a valle. Qui lo spazio libero si nasconde disegnando la stessa card dei banchi
+ * pieni con alpha 0 ("buco bianco"): occupa esattamente lo stesso spazio in griglia, quindi
+ * colonne e file restano dove sono e le coppie NON slittano — un semplice Spacer a fissa
+ * altezza non garantirebbe la misura della card della fila (che conta anche i trii).
+ * clearAndSetSemantics: per lo screen reader il banco nascosto non esiste, esattamente come
+ * non si vede allegate a vista.
+ */
+@Composable
+fun VacantDeskBlankSlot(
+    desk: DeskAssignment,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .alpha(0f)
+            .clearAndSetSemantics {}
+    ) {
+        SeatMapDeskCard(
+            desk = desk,
+            studentsMap = emptyMap(),
+            showThirdSeat = desk.hasThirdSeat
+        )
     }
 }
