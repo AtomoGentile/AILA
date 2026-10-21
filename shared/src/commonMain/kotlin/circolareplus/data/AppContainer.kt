@@ -214,15 +214,38 @@ object AppContainer {
             noModelReason = if (plan.aiCoreSkipped && model == null) aiCoreCooldown.skipReason() else null
         )
 
-        return when {
-            provider == AiProvider.ON_DEVICE && !plan.cloudFirst ->
-                ChainedAiClassifier(primary = local, secondary = cloud, answerAttemptTimeoutMs = answerAttemptTimeoutMs)
-            else -> ChainedAiClassifier(
-                primary = cloud,
-                secondary = local,
-                escalateToSecondary = allowLocalFallback,
-                answerAttemptTimeoutMs = answerAttemptTimeoutMs
+        // La catena "classica" chiave Google / modello locale: e' com'era prima della v1.5.0 e
+        // resta in piedi sotto il servizio incluso come riserva, e da sola per le circolari —
+        // la lettura delle circolari non passa dal servizio incluso (vedi AilaCloudClassifier).
+        val personal = ChainedAiClassifier(
+            primary = cloud,
+            secondary = local,
+            escalateToSecondary = allowLocalFallback,
+            answerAttemptTimeoutMs = answerAttemptTimeoutMs
+        )
+
+        return when (provider) {
+            // Provider predefinito dalla v1.5.0: chat ed eventi su Gemma via Worker di AILA
+            // ("vale per tutti"), circolari sulla catena classica, la quota di Cloudflare come
+            // unica contatrice (nessuna stima fatta in casa).
+            AiProvider.AILA_CLOUD -> AilaCloudClassifier(
+                apiBaseUrl = { api.baseUrl },
+                authToken = { settings.authToken },
+                personal = personal,
+                enableThinking = localThinking,
+                attemptTimeoutMs = answerAttemptTimeoutMs
             )
+            AiProvider.ON_DEVICE ->
+                if (!plan.cloudFirst) {
+                    ChainedAiClassifier(
+                        primary = local,
+                        secondary = cloud,
+                        answerAttemptTimeoutMs = answerAttemptTimeoutMs
+                    )
+                } else personal
+            // Comportamento di prima per chi sceglie la chiave Google: il primario e' il
+            // cloud con il locale come riserva. Qui la catena e' gia' quella giusta.
+            else -> personal
         }
     }
 }

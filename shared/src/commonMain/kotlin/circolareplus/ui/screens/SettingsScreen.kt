@@ -69,7 +69,7 @@ fun SettingsScreen(
     onToggleBoardNotifications: (Boolean) -> Unit = {},
     systemNotificationsEnabled: Boolean = true,
     onToggleSystemNotifications: (Boolean) -> Unit = {},
-    aiProvider: String = "GOOGLE_AI_STUDIO",
+    aiProvider: String = "AILA_CLOUD",
     onAiProviderChange: (String) -> Unit = {},
     /** Frase da mostrare se l'AI locale non è utilizzabile qui (iPhone, emulatore non ARM). */
     localAiUnavailableReason: String? = null,
@@ -385,14 +385,17 @@ fun SettingsScreen(
             // --- AI ------------------------------------------------------------------------
             add {
                 Column {
-                    AilaSectionTitle(text = "Chiave AI di AILA Assistant", modifier = Modifier.ailaAppear(4))
+                    AilaSectionTitle(text = "Chiave AI (Google AI Studio)", modifier = Modifier.ailaAppear(4))
                     Spacer(modifier = Modifier.height(AppTheme.Space12))
                     AilaCard(modifier = Modifier.ailaAppear(5)) {
                         Column(modifier = Modifier.padding(AppTheme.Space16)) {
                             Text(
-                                text = "La chiave resta su questo dispositivo e serve ad analizzare le " +
-                                    "circolari in riservatezza. Se ne ottiene una gratuita, senza carta " +
-                                    "di credito, da Google AI Studio: aistudio.google.com/apikey",
+                                text = "Facoltativa: la chat dell'assistente funziona senza " +
+                                    "nessuna chiave, col servizio incluso dell'app. Questa chiave " +
+                                    "serve ad analizzare le circolari in riservatezza e fa da " +
+                                    "riserva quando la quota del servizio e' finita. Se ne " +
+                                    "ottiene una gratuita, senza carta di credito, da Google " +
+                                    "AI Studio: aistudio.google.com/apikey",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = AppTheme.TextMuted
                             )
@@ -500,15 +503,37 @@ fun SettingsScreen(
                                 )
                                 Spacer(modifier = Modifier.height(AppTheme.Space8))
                                 AilaSegmentedTabs(
-                                    labels = listOf("Google AI", "AI locale (Beta)"),
-                                    selectedIndex = if (selectedAiProvider == "ON_DEVICE") 1 else 0,
+                                    labels = listOf("AILA (incluso)", "Google AI", "AI locale (Beta)"),
+                                    selectedIndex = when (selectedAiProvider) {
+                                        "AILA_CLOUD" -> 0
+                                        "ON_DEVICE" -> 2
+                                        else -> 1
+                                    },
                                     onSelect = { index ->
-                                        selectedAiProvider = if (index == 1) "ON_DEVICE" else "GOOGLE_AI_STUDIO"
+                                        selectedAiProvider = when (index) {
+                                            0 -> "AILA_CLOUD"
+                                            1 -> "GOOGLE_AI_STUDIO"
+                                            else -> "ON_DEVICE"
+                                        }
                                         onAiProviderChange(selectedAiProvider)
                                     },
                                     modifier = Modifier.fillMaxWidth()
                                 )
                                 Spacer(modifier = Modifier.height(AppTheme.Space8))
+                                if (selectedAiProvider == "AILA_CLOUD") {
+                                    Text(
+                                        text = "La chat di AILA Assistant gira sul servizio incluso " +
+                                            "dell'app (Gemma 4 26B A4B via il Worker di AILA): nessuna " +
+                                            "chiave da configurare. La quota giornaliera la conta " +
+                                            "Cloudflare e si rinnova a mezzanotte UTC; finita la " +
+                                            "quota, la chat prova in automatico con la chiave qui " +
+                                            "sotto o con l'AI locale.",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Normal,
+                                        color = AppTheme.TextMuted
+                                    )
+                                    Spacer(modifier = Modifier.height(AppTheme.Space4))
+                                }
                                 if (selectedAiProvider == "ON_DEVICE") {
                                     Text(
                                         text = "L'AI sul telefono e' in beta: su molti telefoni e' " +

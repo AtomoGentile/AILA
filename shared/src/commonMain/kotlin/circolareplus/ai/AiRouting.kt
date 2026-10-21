@@ -144,6 +144,11 @@ fun planAiRoute(
         selectedModel
     }
     val cloudFirst = when (provider) {
+        // Provider "AILA (incluso)" (v1.5.0): qui decide solo l'ordine per la classificazione
+        // delle circolari — la chat non passa da planAiRoute (vedi AilaCloudClassifier). Per
+        // le circolari si comporta come Google: cloud per primo solo con la chiave personale,
+        // con il modello locale come riserva.
+        AiProvider.AILA_CLOUD -> hasCloudKey
         AiProvider.GOOGLE_AI_STUDIO -> true
         AiProvider.ON_DEVICE ->
             // Solo quando e' stata la pausa a togliere il locale: senza nessun modello installato

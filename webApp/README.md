@@ -21,7 +21,7 @@ Le parti di piattaforma stanno in `shared/src/wasmJsMain/` (gli `actual` delle `
 | PDF (lettura e testo per l'AI) | pdf.js (`pdf/`, `ai/PdfTextExtractor.wasmJs.kt`) |
 | PDF della mappa posti | disegnato come in Android, incollato in un PDF e scaricato o condiviso |
 | Tasto indietro | voce sentinella nella cronologia del browser (`PlatformBackHandler.wasmJs.kt`) |
-| AI locale (modelli sul telefono, Apple Intelligence) | non c'è: resta l'analisi del server e Gemini con la chiave personale |
+| AI locale (modelli sul telefono, Apple Intelligence) | non c'è: la chat gira sul servizio incluso di AILA (senza chiavi), l'analisi del server resta e Gemini usa la chiave personale |
 | Notifiche e sincronizzazione in background | service worker e Web Push |
 
 ## Sviluppo

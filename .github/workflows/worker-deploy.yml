@@ -5,6 +5,13 @@ name: Worker deploy
 # CLOUDFLARE_ACCOUNT_ID e WRANGLER_TOML (contenuto intero di backend/wrangler.toml, che non e'
 # nel repository: e' in .gitignore e il workflow lo ricrea a ogni lancio). I secret del Worker (JWT_SECRET, GEMINI_API_KEY, FCM...) restano su
 # Cloudflare: il deploy non li tocca.
+#
+# Dalla v1.5.0 il wrangler.toml nel secret deve contenere anche il binding Workers AI:
+#   [ai]
+#   binding = "AI"
+# (routes/ai.ts, chat di AILA Assistant incluso per tutti). Non e' un secret e non costa:
+# sul piano Free e' Cloudflare stessa a contare i neuron (10.000/giorno) e bloccare a fine
+# quota: la rotta traduce quell'errore in 429.
 on:
   workflow_dispatch:
     inputs:

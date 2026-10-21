@@ -113,14 +113,13 @@ class LocalSettingsManager(
     /**
      * Provider AI scelto: uno degli `id` di [circolareplus.ai.AiProvider].
      *
-     * Le installazioni aggiornate da una versione precedente possono avere ancora
-     * `"GITHUB_MODELS"` salvato qui. Non serve una migrazione: `AiProvider.fromId` non riconosce
-     * quel valore e ricade su Google AI Studio, che è esattamente il provider che quelle
-     * installazioni stavano già usando davvero (GitHub Models non era mai stato collegato alla
-     * classificazione).
+     * Dalla v1.5.0 il default e' `AILA_CLOUD` — il servizio incluso per tutti, che non ha
+     * bisogno di chiavi — anche per chi non ha mai scelto niente. Le installazioni che hanno
+     * salvato un provider a mano lo tengono; chi aveva ancora `"GITHUB_MODELS"` (mai collegato
+     * alle chiamate vere) passa al servizio incluso, come chi parte da zero.
      */
     var aiProvider: String
-        get() = settings.getString(KEY_AI_PROVIDER, "GOOGLE_AI_STUDIO")
+        get() = settings.getString(KEY_AI_PROVIDER, "AILA_CLOUD")
         set(value) = settings.putString(KEY_AI_PROVIDER, value)
 
     /**
