@@ -33,6 +33,17 @@ import kotlinx.serialization.json.jsonPrimitive
 // esisteva prima della v1.5.0, chiave Google o AI locale.
 // ---------------------------------------------------------------------------
 
+/**
+ * Tetto di completamento per la chat; gli eventi ne chiedono di meno. Gemma potrebbe
+ * scrivere pagina su pagina, ma l'assistente risponde in poche schermate e i neuron
+ * gratis sono pochi: un tetto basso e' il modo piu' semplice di non sprecarli.
+ *
+ * Costante a livello di file: il valore predefinito di [AilaChatRequest] pende da lei, e
+ * un private nel companion di `AilaCloudClassifier` non e' visibile da una classe di primo
+ * livello (compilazione Android in CI fallita su v1.5.0).
+ */
+private const val DEFAULT_CHAT_MAX_TOKENS = 1500
+
 @Serializable
 internal data class AilaChatMessage(val role: String, val content: String)
 
@@ -103,12 +114,6 @@ class AilaCloudClassifier(
          */
         private const val MAX_CHAT_PROMPT_CHARS = 60_000
 
-        /**
-         * Tetto di completamento per la chat; gli eventi ne chiedono di meno. Gemma potrebbe
-         * scrivere pagina su pagina, ma l'assistente risponde in poche schermate e i neuron
-         * gratis sono pochi: un tetto basso e' il modo piu' semplice di non sprecarli.
-         */
-        private const val DEFAULT_CHAT_MAX_TOKENS = 1500
         private const val MAX_EVENT_TOKENS = 500
 
         private val json = Json { ignoreUnknownKeys = true }

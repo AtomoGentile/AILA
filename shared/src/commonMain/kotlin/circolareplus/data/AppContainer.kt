@@ -2,6 +2,7 @@ package circolareplus.data
 
 import circolareplus.ai.AiClassifier
 import circolareplus.ai.AiCoreCooldown
+import circolareplus.ai.AilaCloudClassifier
 import circolareplus.ai.assistant.AilaAssistant
 import circolareplus.ai.assistant.AssistantKnowledgeLoader
 import circolareplus.ai.AiProvider
