@@ -1078,12 +1078,24 @@ fun MainAppShell(
     var seatMapMode by rememberSaveable { mutableStateOf("MAP") } // "MAP" | "VOTE_PREFERENCES"
     val socialVotes = remember { mutableStateMapOf<String, SocialPreferenceScore>() }
     var proposalOptions by remember { mutableStateOf<List<SeatMapProposal>>(emptyList()) }
+    // Bozza delle proposte salvata sul telefono (v1.1.6): le tre mappe calcolate ma NON ancora
+    // pubblicate non si perdono uscendo dall'app. In avvio si legge e basta (nessun cambio di
+    // schermata a sorpresa): le proposte ripresentate quando il Rappresentante torna lì, usando
+    // il solito tasto di generazione, che invece di ricalcolare ripristina (vedi onGenerateProposals).
+    var savedSeatMapDraft by remember { mutableStateOf(AppContainer.settings.readSeatMapDraft()) }
     // Modalità richiesta per l'ultima generazione: serve alla schermata delle proposte per
     // etichettare correttamente "banchi da due/tre" anche quando nessun banco della disposizione
     // calcolata finisce per avere un terzo occupante (classe piccola, coppie vietate che spezzano
     // i trii), caso in cui dedurlo dai soli dati (studentCId != null) darebbe "banchi da due" pur
     // avendo l'utente scelto i trii.
     var lastRequestedSeatsPerDesk by remember { mutableStateOf(SeatMapOptimizer.SEATS_PER_DESK_PAIR) }
+    // Slot banchi della griglia COMPLETA scelta per l'ultima generazione (v1.1.6, layout personal-
+    // izzato: file x coppie, PRIMA che i banchi in surplus vengano tolti dal fondo dall'algoritmo).
+    // L'editor passa la disposizione per SeatMapOptimizer.withVacantDesks con questi slot: se i
+    // posti superano gli studenti (es. 22 studenti su 4 file da 3 coppie = 12 banchi) la proposta
+    // e' corta di un banco e l'editor materializza il banco vuoto mancante, spostabile col
+    // drag&drop secondo la scelta del Rappresentante. Vuoto = layout automatico (nessun surplus).
+    var lastRequestedDeskSlots by remember { mutableStateOf<List<SeatMapOptimizer.DeskSlot>>(emptyList()) }
     var isGeneratingProposals by remember { mutableStateOf(false) }
     var seatMapActionError by remember { mutableStateOf<String?>(null) }
     var isExportingSeatMapPdf by remember { mutableStateOf(false) }
@@ -1092,6 +1104,10 @@ fun MainAppShell(
     var editingSeatMapProposal by remember { mutableStateOf<List<DeskAssignment>?>(null) }
     val lastEditorAssignments = remember { arrayOf<List<DeskAssignment>>(emptyList()) }
     var originalSeatMapProposal by remember { mutableStateOf<List<DeskAssignment>?>(null) }
+    // Proposta scelta nell'editor (per id): serve a risincronizzare la bozza salvata quando il
+    // Rappresentante modifica la sua disposizione (scambi di posti/banchi: la bozza segue, vedi
+    // syncEditedDraft nel wiring dell'editor).
+    var editingChosenProposalId by remember { mutableStateOf<String?>(null) }
     // Input dell'ultimo calcolo dell'ottimizzatore, tenuti in stato per poter ricalcolare live il
     // punteggio nell'editor manuale senza rifare le chiamate di rete (ratings/matrice/storico).
     var seatMapOptimizerProfiles by remember { mutableStateOf<Map<String, StudentProfile>>(emptyMap()) }
@@ -1106,6 +1122,83 @@ fun MainAppShell(
     // fantoccio non vota e non può essere votato.
     val seatMapGenerationStudents = remember(classmates, seatMapDummies) {
         classmates + seatMapDummies.map { it.asUser() }
+    }
+    // Richiesta "Elimina storico mappe" in volo (rotta /api/seat-map/reset-history).
+    var isDeletingSeatMapHistory by remember { mutableStateOf(false) }
+    // Avviso NON d'errore della gestione della mappa (es. storico eliminato): stessa forma del
+    // dialogo errori qui sotto.
+    var seatMapInfoMessage by remember { mutableStateOf<String?>(null) }
+
+    // Un solo punto per scrivere o togliere la bozza dal telefono (storage + stato).
+    fun updateSeatMapDraft(draft: circolareplus.data.local.SeatMapProposalsDraft?) {
+        savedSeatMapDraft = draft
+        if (draft == null) AppContainer.settings.clearSeatMapDraft()
+        else runCatching { AppContainer.settings.saveSeatMapDraft(draft) }
+    }
+
+    // Ripristina una bozza negli stati in memoria. Con [showProposals] anche le proposte tornano
+    // in RAM e la schermata si riapre; al bootstrap no: la shellRoute deriva da proposalOptions
+    // e un ripristino in avvio aprirebbe le proposte sopra qualunque tab a ogni accensione —
+    // lì si torna con il solito tasto di generazione, che le ripristina (vedi onGenerateProposals).
+    fun restoreSeatMapDraft(
+        draft: circolareplus.data.local.SeatMapProposalsDraft,
+        showProposals: Boolean
+    ) {
+        lastRequestedSeatsPerDesk = draft.seatsPerDesk
+        seatMapOptimizerProfiles = draft.profiles
+        seatMapOptimizerRatings = draft.ratings
+        seatMapOptimizerDisciplinePairs = draft.disciplinePairs
+        seatMapOptimizerSocialMap = draft.socialPreferences
+        seatMapOptimizerHistory = draft.history
+        seatMapOptimizerWeights = draft.weights
+        seatMapOptimizerIsSmallClass = draft.isSmallClass
+        if (showProposals) {
+            circolareplus.design.AilaContainerTransform.touchFresh()
+            proposalOptions = draft.proposals
+        }
+    }
+
+    // Fine del flusso editor: pubblicare svuota proposte ed editing INSIEME, mentre il back
+    // dall'editor le mantiene (torna alle proposte). Quando svaniscono insieme la bozza salvata
+    // non vale piu': la mappa e' stata pubblicata e al prossimo rientro non va ripresentata
+    // come "proposta non pubblicata".
+    var proposalsWereInEditor by remember { mutableStateOf(false) }
+    LaunchedEffect(editingSeatMapProposal, proposalOptions) {
+        when {
+            editingSeatMapProposal != null && proposalOptions.isNotEmpty() ->
+                proposalsWereInEditor = true
+            proposalsWereInEditor && editingSeatMapProposal == null && proposalOptions.isEmpty() -> {
+                proposalsWereInEditor = false
+                // Pubblicata: via la bozza.
+                updateSeatMapDraft(null)
+            }
+        }
+    }
+
+    // Ogni modifica nell'editor (swap di posti) aggiorna la bozza salvata: uscendo a meta'
+    // editing (senza pubblicare) la bozza riflette la disposizione attuale, non quella di
+    // partenza dell'algoritmo. Le proposte non scelte restano quelle generate. Anche il
+    // ritorno alla proposta originale ("Ripristina") riscrive la bozza, sempre: idempotente.
+    LaunchedEffect(editingSeatMapProposal) {
+        val editing = editingSeatMapProposal
+        val draft = savedSeatMapDraft ?: return@LaunchedEffect
+        val original = originalSeatMapProposal ?: return@LaunchedEffect
+        if (editing != null) {
+            val updated = draft.copy(
+                proposals = draft.proposals.map { proposal ->
+                    if (proposal.assignments == original) proposal.copy(assignments = editing) else proposal
+                }
+            )
+            if (updated != draft) updateSeatMapDraft(updated)
+        }
+    }
+
+    // Bootstrap: se c'e' una bozza, gli input dell'ottimizzatore e la modalita' richiesta tornano
+    // gia' ora, cosi' l'editor ricalcola come prima appena si entra. La lettura della bozza avviene
+    // in `savedSeatMapDraft` (stessa composizione); le proposte si ripresentano solo quando il
+    // Rappresentante torna lì, con il solito tasto di generazione.
+    LaunchedEffect(Unit) {
+        savedSeatMapDraft?.let { draft -> restoreSeatMapDraft(draft, showProposals = false) }
     }
 
     // --- Stato Sondaggi Interrogazioni ------------------------------------------------------
@@ -2278,6 +2371,20 @@ fun MainAppShell(
             }
         )
     }
+    if (seatMapInfoMessage != null) {
+        // Avviso buono della gestione della mappa (es. "storico eliminato"): stessa forma
+        // del dialogo errori, senza il titolo d'allarme.
+        AlertDialog(
+            onDismissRequest = { seatMapInfoMessage = null },
+            containerColor = AppTheme.SurfaceWhite,
+            shape = RoundedCornerShape(AppTheme.CardCornerRadius),
+            title = { Text("Fatto") },
+            text = { Text(seatMapInfoMessage ?: "") },
+            confirmButton = {
+                TextButton(onClick = { seatMapInfoMessage = null }) { Text("Ho capito") }
+            }
+        )
+    }
 
     // Push/pop "alla iOS" delle schermate a tutto schermo (Impostazioni, Sondaggi, Assistente,
     // ...): vivono in un livello SOPRA lo Scaffold, cosi' scorrono sopra anche la barra in basso
@@ -3069,10 +3176,52 @@ fun MainAppShell(
                                                         }
                                                     }
                                                 },
+                                                isDeletingHistory = isDeletingSeatMapHistory,
+                                                onDeleteSeatMapHistory = {
+                                                    coroutineScope.launch {
+                                                        isDeletingSeatMapHistory = true
+                                                        try {
+                                                            AppContainer.seatMapRepository.resetHistory()
+                                                            // Lo storico pesa solo nell'ottimizzatore (penalita'
+                                                            // memoria): qui lo si azzera, dalla prossima
+                                                            // generazione le disposizioni passate non contano piu'.
+                                                            seatMapOptimizerHistory = emptyList()
+                                                            // La bozza salvata (se c'e') riparte anch'essa senza il
+                                                            // vecchio storico: il restore non deve resuscitare
+                                                            // disposizioni che non contano piu'. Una generazione
+                                                            // nuova ricarica comunque lo storico dal repository.
+                                                            savedSeatMapDraft?.let { draft ->
+                                                                updateSeatMapDraft(draft.copy(history = emptyList()))
+                                                            }
+                                                            seatMapInfoMessage =
+                                                                "Storico delle mappe eliminato: l'algoritmo non terrà più conto delle disposizioni passate."
+                                                        } catch (e: CancellationException) {
+                                                            throw e
+                                                        } catch (e: Exception) {
+                                                            seatMapActionError = "Impossibile eliminare lo storico: ${e.message}"
+                                                        } finally {
+                                                            isDeletingSeatMapHistory = false
+                                                        }
+                                                    }
+                                                },
                                                 onGenerateProposals = { weights, seatsPerDesk, rowSeats ->
                                                     coroutineScope.launch {
+                                                        // Porta nel generatore con una bozza in sospeso (generate e
+                                                        // non pubblicate, v1.1.6): invece di ricalcolare si ripristina
+                                                        // la bozza, le proposte e gli input dell'ottimizzatore tornano
+                                                        // com'erano. Per generare mappe nuove prima si usa "Riavvolgi".
+                                                        val draft = savedSeatMapDraft
+                                                        if (draft != null && draft.proposals.isNotEmpty()) {
+                                                            restoreSeatMapDraft(draft, showProposals = true)
+                                                            return@launch
+                                                        }
                                                         isGeneratingProposals = true
                                                         lastRequestedSeatsPerDesk = seatsPerDesk
+                                                        // Griglia COMPLETA scelta (v1.1.6, layout personalizzato):
+                                                        // serve all'editor per materializzare i banchi vuoti in
+                                                        // surplus con withVacantDesks. Layout automatico: vuoto.
+                                                        lastRequestedDeskSlots = if (rowSeats.isEmpty()) emptyList()
+                                                        else SeatMapOptimizer.fullDeskSlots(rowSeats, seatsPerDesk)
                                                         try {
                                                             val disciplinePairsDeferred = async {
                                                                 // Un server senza la rotta nuova non deve impedire le proposte.
@@ -3136,6 +3285,23 @@ fun MainAppShell(
                                                             // il tocco e' di qualche secondo fa, lo si rinnova.
                                                             circolareplus.design.AilaContainerTransform.touchFresh()
                                                             proposalOptions = computed
+                                                            // Bozza salvata sul telefono (v1.1.6): se l'app viene chiusa
+                                                            // senza pubblicare, rientrando il "Calcola" ripresenta le
+                                                            // stesse tre mappe invece di ricalcolare. Il salvataggio
+                                                            // non deve impedire il flusso: se proprio non si puo' scrivere,
+                                                            // le proposte restano quelle di sempre (in memoria, volatile).
+                                                            val draftData = circolareplus.data.local.SeatMapProposalsDraft(
+                                                                proposals = computed,
+                                                                seatsPerDesk = seatsPerDesk,
+                                                                profiles = profiles,
+                                                                ratings = ratingsMap,
+                                                                disciplinePairs = disciplinePairs,
+                                                                socialPreferences = socialMap,
+                                                                history = history,
+                                                                weights = weights,
+                                                                isSmallClass = seatMapOptimizerIsSmallClass
+                                                            )
+                                                            updateSeatMapDraft(draftData)
                                                         } catch (e: Exception) {
                                                             seatMapActionError = "Impossibile calcolare le proposte: ${e.message}"
                                                         } finally {
@@ -4447,6 +4613,22 @@ fun MainAppShell(
                             studentsMap = proposalsStudentsMap,
                             seatsPerDesk = lastRequestedSeatsPerDesk,
                             isBusy = isGeneratingProposals,
+                            // Riavvolgibile solo se c'e' una bozza salvata: le proposte vive di questa
+                            // sessione non ancora salvata cambiano di nuovo al prossimo "Calcola".
+                            canRewind = savedSeatMapDraft != null,
+                            // Riavvolgi: le bozze spariscono sul telefono e in memoria, come se non
+                            // fossero mai state create. Il prossimo "Calcola" riparte da zero.
+                            onRewind = {
+                                updateSeatMapDraft(null)
+                                proposalOptions = emptyList()
+                                seatMapOptimizerProfiles = emptyMap()
+                                seatMapOptimizerRatings = emptyMap()
+                                seatMapOptimizerDisciplinePairs = emptySet()
+                                seatMapOptimizerSocialMap = emptyMap()
+                                seatMapOptimizerHistory = emptyList()
+                                seatMapOptimizerWeights = OptimizerWeights()
+                                seatMapOptimizerIsSmallClass = false
+                            },
                             // Scegliere una proposta non la pubblica direttamente: apre l'editor
                             // manuale (swap-by-tap con ricalcolo live) da cui il Rappresentante
                             // pubblica quando e' pronto. Le proposte NON vengono scartate qui:
@@ -4454,6 +4636,7 @@ fun MainAppShell(
                             onSelect = { chosen ->
                                 originalSeatMapProposal = chosen.assignments
                                 editingSeatMapProposal = chosen.assignments
+                                editingChosenProposalId = chosen.id
                             }
                         )
                     }
@@ -4462,7 +4645,34 @@ fun MainAppShell(
                     // Durante l'animazione di uscita dall'editor editingSeatMapProposal e' gia'
                     // null: si continua a mostrare l'ultima disposizione invece di andare in crash.
                     editingSeatMapProposal?.let { lastEditorAssignments[0] = it }
-                    val currentAssignments = editingSeatMapProposal ?: lastEditorAssignments[0]
+                    // Griglia COMPLETA (v1.1.6): la disposizione passa per withVacantDesks con gli
+                    // slot scelti alla generazione, cosi' gia' al primo render l'editor vede anche
+                    // i banchi vuoti negli spazi in surplus e TUTTI i banchi sono trascinabili
+                    // (long-press): lo spazio libero va dove vuole il Rappresentante. Idempotente:
+                    // le coordinate gia' coperte restano com'erano, si aggiunge solo cio' che manca;
+                    // i banchi fuori dagli slot (coordinate non previste) si riappendono. Una bozza
+                    // ripaterna da riavvolgimento non porta gli slot (non c'entrano col salvataggio):
+                    // slot vuoti -> disposizioni identiche (nessun banco fantasma).
+                    val currentAssignments = SeatMapOptimizer.withVacantDesks(
+                        editingSeatMapProposal ?: lastEditorAssignments[0],
+                        lastRequestedDeskSlots
+                    )
+                    // La bozza in sospeso segue l'editing (v1.1.6): ogni scambio o ripristino aggiorna
+                    // la proposta scelta DENTRO la bozza salvata, cosi' rientrando in app la si
+                    // ritrova com'era. Si riusano gli helper della bozza (altro agente): copy+
+                    // settings.saveSeatMapDraft; in scrittura fallita si resta con la bozza in memoria.
+                    val syncEditedDraft: () -> Unit = saveEditedDraft@{
+                        val proposalId = editingChosenProposalId ?: return@saveEditedDraft
+                        val draft = savedSeatMapDraft ?: return@saveEditedDraft
+                        val edited = editingSeatMapProposal ?: return@saveEditedDraft
+                        val updated = draft.copy(
+                            proposals = draft.proposals.map {
+                                if (it.id == proposalId) it.copy(assignments = edited) else it
+                            }
+                        )
+                        savedSeatMapDraft = updated
+                        runCatching { AppContainer.settings.saveSeatMapDraft(updated) }
+                    }
                     // Il back torna alla schermata precedente (le proposte), non alla mappa.
                     circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) {
                         editingSeatMapProposal = null
@@ -4519,8 +4729,23 @@ fun MainAppShell(
                                     SeatMapOptimizer.SeatRef(deskIndex1, seatIndex1),
                                     SeatMapOptimizer.SeatRef(deskIndex2, seatIndex2)
                                 )
+                                syncEditedDraft()
                             },
-                            onRestore = { editingSeatMapProposal = originalSeatMapProposal },
+                            // Drag & drop del banco INTERO (v1.1.6): la coppia (o il trio) trascinata
+                            // col long-press si porta nel banco di arrivo (anche vuoto) e lo spazio
+                            // libero va dove era. La bozza segue anche qui (vedi syncEditedDraft).
+                            onSwapDesks = { deskIndexFrom, deskIndexTo ->
+                                editingSeatMapProposal = SeatMapOptimizer.swapDesks(
+                                    currentAssignments,
+                                    deskIndexFrom,
+                                    deskIndexTo
+                                )
+                                syncEditedDraft()
+                            },
+                            onRestore = {
+                                editingSeatMapProposal = originalSeatMapProposal
+                                syncEditedDraft()
+                            },
                             onPublish = {
                                 coroutineScope.launch {
                                     isGeneratingProposals = true
@@ -4529,6 +4754,13 @@ fun MainAppShell(
                                         seatMapAssignments = currentAssignments
                                         editingSeatMapProposal = null
                                         originalSeatMapProposal = null
+                                        editingChosenProposalId = null
+                                        // Pubblicata: la bozza in sospeso e' consumata (le bozze sono
+                                        // "generate e NON pubblicate", vedi onGenerateProposals):
+                                        // rientrando il "Calcola" ricomincia dal vivo. runCatching:
+                                        // se lo storage non scrive, la pubblicazione resta conclusa.
+                                        runCatching { AppContainer.settings.clearSeatMapDraft() }
+                                        savedSeatMapDraft = null
                                         // Pubblicata: le proposte non servono più, si torna alla mappa.
                                         proposalOptions = emptyList()
                                     } catch (e: Exception) {

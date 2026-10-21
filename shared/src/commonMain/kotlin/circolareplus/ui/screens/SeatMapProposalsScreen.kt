@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import circolareplus.algorithms.SeatMapOptimizer
 import circolareplus.algorithms.SeatMapProposal
 import circolareplus.design.AilaCard
+import circolareplus.design.AilaConfirmDialog
 import circolareplus.design.AilaPrimaryButton
 import circolareplus.design.AilaSegmentedTabs
 import circolareplus.design.AppIcons
@@ -51,10 +52,19 @@ fun SeatMapProposalsScreen(
     // che darebbe "banchi da due" anche in modalità trio quando nessun banco arriva ad avere un
     // terzo occupante (classe piccola, coppie vietate che spezzano i trii).
     seatsPerDesk: Int = SeatMapOptimizer.SEATS_PER_DESK_PAIR,
-    isBusy: Boolean = false
+    isBusy: Boolean = false,
+    /**
+     * "Riavvolgi": butta via le proposte calcolate (e la bozza salvata sul telefono) come se non
+     * fossero mai state create. Pesa solo su chi ha una bozza in sospeso: senza, sarebbe un
+     * tasto che non fa nulla da nascondere.
+     */
+    canRewind: Boolean = false,
+    onRewind: () -> Unit = {}
 ) {
     // Indice della proposta di cui si sta guardando la mappa; null = nessuna anteprima aperta.
     var previewIndex by remember { mutableStateOf<Int?>(null) }
+    // Conferma del tasto "Riavvolgi": le bozze spariscono davvero, meglio un passo in piu'.
+    var showRewindConfirm by remember { mutableStateOf(false) }
     val safePreview = previewIndex?.takeIf { it in proposals.indices }
 
     val previewCells = remember(safePreview, proposals) {
@@ -73,19 +83,43 @@ fun SeatMapProposalsScreen(
         modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight)
     ) {
         fullRow {
-            Column {
-                Text(
-                    text = "Scegli la disposizione",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = AppTheme.TextDark
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Tocca l'occhio per guardare la mappa di una proposta senza sceglierla: " +
-                        "le altre restano disponibili. Dopo la scelta potrai ancora modificare i posti.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AppTheme.TextMuted
-                )
+            Row(verticalAlignment = Alignment.Top) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Scegli la disposizione",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = AppTheme.TextDark
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Tocca l'occhio per guardare la mappa di una proposta senza sceglierla: " +
+                            "le altre restano disponibili. Dopo la scelta potrai ancora modificare i posti.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTheme.TextMuted
+                    )
+                }
+                // Riavvolgi: fuori dalle proposte salvate senza pubblicarle, come se non fossero
+                // mai esistite. Stesso stile dell'occhio delle schede (piastrella 44dp).
+                if (canRewind && proposals.isNotEmpty()) {
+                    Spacer(modifier = Modifier.width(AppTheme.Space8))
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                            .background(AppTheme.TintSlate)
+                            .ailaPressable(pressedScale = 0.92f) { showRewindConfirm = true }
+                            .semantics {
+                                contentDescription = "Riavvolgi: elimina le proposte salvate"
+                                role = Role.Button
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AppIcons.Refresh(
+                            modifier = Modifier.size(20.dp),
+                            color = AppTheme.TextMuted
+                        )
+                    }
+                }
             }
         }
 
@@ -176,6 +210,22 @@ fun SeatMapProposalsScreen(
                 )
             }
         }
+    }
+
+    // Conferma del riavvolgimento: le mappe generate spariscono davvero, con tutto il resto
+    // della bozza, e non e' una cosa da fare per sbaglio.
+    if (showRewindConfirm) {
+        AilaConfirmDialog(
+            title = "Riavvolgere le proposte?",
+            message = "Eliminare le bozze attuali? Le mappe generate verranno perse come se non " +
+                "fossero mai state create.",
+            onDismiss = { showRewindConfirm = false },
+            onConfirm = {
+                showRewindConfirm = false
+                onRewind()
+            },
+            confirmLabel = "Riavvolgi"
+        )
     }
 }
 

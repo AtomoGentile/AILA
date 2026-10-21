@@ -100,6 +100,14 @@ preferences.post('/config', requireRole('REPRESENTATIVE'), async (c) => {
   // clicchi — nessun errore visibile, perché un UPDATE senza righe corrispondenti "riesce" comunque.
   await ensureClassRow(c.env, classId);
 
+  // Serve lo stato PRIMA dell'update per distinguere l'apertura di una NUOVA finestra (era chiusa,
+  // si apre) dalla chiusura (era aperta, si chiude): l'apertura azzera la raccolta, la chiusura no,
+  // altrimenti riaprire per cambiare un voto non avrebbe senso.
+  const current = await c.env.DB.prepare(
+    'SELECT preferences_open FROM classes WHERE id = ?'
+  ).bind(classId).first<{ preferences_open: number }>();
+  const wasOpen = Boolean(current?.preferences_open ?? 0);
+
   await c.env.DB.prepare(
     'UPDATE classes SET preferences_open = ? WHERE id = ?'
   ).bind(open ? 1 : 0, classId).run();
@@ -108,6 +116,19 @@ preferences.post('/config', requireRole('REPRESENTATIVE'), async (c) => {
   await c.env.DB.prepare(
     'UPDATE app_config SET preferences_open = ?, updated_at = CURRENT_TIMESTAMP WHERE class_id = ?'
   ).bind(open ? 1 : 0, classId).run();
+
+  // Apertura di una NUOVA finestra: la vecchia si resetta. I voti precedenti non valgono più
+  // (l'utente ha confermato che la nuova votazione sostituisce la vecchia), quindi ogni studente
+  // riparte "non ancora votato" e GET /progress riparte da 0 e sale man mano che arrivano i voti.
+  // social_preferences non ha una colonna classe: i voti della classe si individuano da chi li ha
+  // espressi, come già fanno /progress e /summary.
+  if (open && !wasOpen) {
+    await c.env.DB.prepare(
+      `DELETE FROM social_preferences
+       WHERE from_student_id IN (SELECT id FROM users WHERE class_id = ?)
+          OR to_student_id IN (SELECT id FROM users WHERE class_id = ?)`
+    ).bind(classId, classId).run();
+  }
 
   if (open) {
     inBackground(c, notifyClass(
@@ -119,7 +140,7 @@ preferences.post('/config', requireRole('REPRESENTATIVE'), async (c) => {
     ));
   }
 
-  return c.json({ success: true, preferencesOpen: open });
+  return c.json({ success: true, preferencesOpen: open, votesReset: open && !wasOpen });
 });
 
 // ---------------------------------------------------------------------------

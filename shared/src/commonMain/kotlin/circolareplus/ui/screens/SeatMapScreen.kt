@@ -43,7 +43,9 @@ import circolareplus.algorithms.OptimizerWeights
 import circolareplus.algorithms.SeatMapOptimizer
 import circolareplus.design.AilaIconButton
 import circolareplus.design.AilaCard
+import circolareplus.design.AilaConfirmDialog
 import circolareplus.design.AilaPrimaryButton
+import circolareplus.design.AilaDestructiveButton
 import circolareplus.design.AilaEmptyState
 import circolareplus.design.AilaDot
 import circolareplus.design.ailaAppear
@@ -73,6 +75,11 @@ fun SeatMapScreen(
     onDeleteDummy: (String) -> Unit = {},
     onTogglePreferencesWindow: (Boolean) -> Unit = {},
     onGenerateProposals: (OptimizerWeights, seatsPerDesk: Int, rowSeats: List<Int>) -> Unit = { _, _, _ -> },
+    /** Solo Rappresentante: azzera lo storico delle mappe pubblicate (rotta /api/seat-map/reset-history):
+     *  le ultime 4 disposizioni smettono di pesare nella penalita' memoria dell'ottimizzatore. */
+    onDeleteSeatMapHistory: () -> Unit = {},
+    /** True mentre la richiesta di reset e' in volo: il tasto non si ripreme. */
+    isDeletingHistory: Boolean = false,
     isExportingPdf: Boolean = false,
     onExportPdf: () -> Unit = {},
     /** Proposte in calcolo: il pulsante mostra l'attesa e non si puo' ripremere. */
@@ -131,6 +138,9 @@ fun SeatMapScreen(
     var customLayout by remember { mutableStateOf(false) }
     var rowSeats by remember { mutableStateOf(defaultRowSeats(studentCount)) }
     var rowsEdited by remember { mutableStateOf(false) }
+    // Conferma "Elimina storico mappe": e' un'azione che cambia il comportamento
+    // dell'algoritmo per tutti, non se ne perde per un tocco di troppo.
+    var showResetHistoryConfirm by remember { mutableStateOf(false) }
 
     // Una disposizione pubblicata usa banchi da trio se un banco ha capienza 3 (campo `seats`,
     // salvato nel JSON) o, per le mappe vecchie senza il campo, un terzo occupante.
@@ -467,6 +477,17 @@ fun SeatMapScreen(
                         },
                         fillMaxWidth = true
                     )
+
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+
+                    // Storico delle mappe pubblicate: le ultime 4 contano nella penalita' memoria
+                    // dell'algoritmo. Azione rara (inizio quadrimestre, cambio aula) ma che il
+                    // Rappresentante deve poter fare dal telefono, come le altre gestioni.
+                    AilaDestructiveButton(
+                        text = "Elimina storico mappe",
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { if (!isDeletingHistory) showResetHistoryConfirm = true }
+                    )
                 }
             }
         }
@@ -562,6 +583,21 @@ fun SeatMapScreen(
             }
         }
         }
+    }
+
+    // Conferma del reset dello storico: le disposizioni passate smettono di contare per tutti.
+    if (showResetHistoryConfirm) {
+        AilaConfirmDialog(
+            title = "Eliminare lo storico?",
+            message = "Eliminare lo STORICO delle mappe pubblicate? L'algoritmo non terrà più " +
+                "conto delle disposizioni passate.",
+            onDismiss = { showResetHistoryConfirm = false },
+            onConfirm = {
+                showResetHistoryConfirm = false
+                onDeleteSeatMapHistory()
+            },
+            confirmLabel = "Elimina"
+        )
     }
 }
 

@@ -30,6 +30,13 @@ data class DeskAssignment(
     val seats: Int = 2
 )
 
+/**
+ * @Serializable (v1.1.6): le proposte NON ancora pubblicate vengono salvate come bozze nello
+ * storage locale del Rappresentante (vedi LocalSettingsManager.saveSeatMapDraft), cosi'
+ * uscendo dall'app senza pubblicare non si perdono. Solo i dati del risultato: tutto il resto
+ * (pesi, storico, voti) resta fuori dalla bozza.
+ */
+@Serializable
 data class SeatMapProposal(
     val id: String,
     val assignments: List<DeskAssignment>,
@@ -48,12 +55,15 @@ data class SeatMapProposal(
     val columnNoisePenalty: Double = 0.0
 )
 
+/** @Serializable:una mappa dello storico puo' comparire dentro una bozza (input dell'ottimizzatore). */
+@Serializable
 data class SeatMapHistoryRecord(
     val mapIndex: Int, // 1 for N-1, 2 for N-2, 3 for N-3, 4 for N-4
     val pairs: Set<Pair<String, String>>,
     val deskAssignments: Map<String, Pair<Int, Int>> // studentId -> (row, col)
 )
 
+@Serializable
 data class OptimizerWeights(
     val wSocial: Double = 1.0,      // Range 0.5 - 1.5
     val wDiscipline: Double = 1.0,  // Range 0.5 - 1.5
@@ -169,14 +179,19 @@ object SeatMapOptimizer {
 
     /**
      * Penalità Altezza a Scalare (Paltezza)
-     * Paltezza = max(0, floor((Hdavanti - Hdietro) / 5)) * 30 pt
+     * Paltezza = max(0, floor((Hdavanti - Hdietro) / 5)) * 15 pt
+     * Penalità altezza dimezzata in v1.1.6 (da 30 a 15 pt per scaglione di 5 cm): 30 pt
+     * rendeva l'altezza troppo dominante rispetto a sociale/didattica/chiasso.
      */
     fun calculateHeightPenalty(heightFrontCm: Int, heightBackCm: Int): Int {
         val diff = heightFrontCm - heightBackCm
         if (diff <= 0) return 0
         val steps = diff / 5
-        return steps * 30
+        return steps * HEIGHT_PENALTY_PER_STEP
     }
+
+    /** Punti per scaglione di 5 cm di altezza in più davanti (dimezzati in v1.1.6: era 30). */
+    const val HEIGHT_PENALTY_PER_STEP = 15
 
     /**
      * Prevenzione Tutor Burnout (Pburnout) per studenti Livello 5
@@ -405,6 +420,7 @@ object SeatMapOptimizer {
         return if (values.isEmpty()) null else values.sum() / values.size
     }
 
+    @Serializable
     data class ScoreBreakdown(
         val social: Double,
         val discipline: Double,
@@ -528,6 +544,7 @@ object SeatMapOptimizer {
      * @property uncomfortableStudents fra questi, quanti siedono con almeno una persona che hanno
      * votato in negativo (-1 o -2).
      */
+    @Serializable
     data class VoteSatisfaction(val percentage: Double, val evaluatedStudents: Int, val uncomfortableStudents: Int)
 
     /**
@@ -890,4 +907,87 @@ object SeatMapOptimizer {
 
         return best
     }
+
+    // -----------------------------------------------------------------------------------------
+    // Editor manuale del Rappresentante: banchi interi e spazi vuoti (v1.1.6).
+    // Funzioni pure in fondo al file, come swapSeats: nessuna funzione esistente cambia.
+    // -----------------------------------------------------------------------------------------
+
+    /**
+     * Tutti i banchi della griglia scelta dal Rappresentante (una riga = [rowSeats] posti,
+     * [preferred] il tipo di banco), SENZA l'ultima passata di [buildDeskSlots] che togglie i
+     * banchi in surplus dal fondo: se i posti superano gli studenti (es. 22 studenti su 4 file da
+     * 3 coppie = 12 banchi, 2 posti avanzano) la proposta generata e' corta di qualche banco, e
+     * e' proprio il banco tolto che l'editor vuole vedere come slot vuoto trascinabile.
+     */
+    fun fullDeskSlots(rowSeats: List<Int>, preferred: Int): List<DeskSlot> =
+        rowSeats.flatMapIndexed { row, seats ->
+            partitionRow(seats, preferred).mapIndexed { column, size -> DeskSlot(row, column, size) }
+        }
+
+    /**
+     * Scambia due banchi INTERI (fra essi anche banchi vuoti: trascinare un banco pieno sul posto
+     * libero sposta lo spazio vuoto dove era il banco). Coordinate comprese? No: le coordinate
+     * (row/column) RESTANO ancorate al posto della griglia, mentre occupanti e capienza viaggiano
+     * col banco trascinato: cosi' lo scambio e' visivamente immediato (la coppia va dove e' stata
+     * lasciata, il vuoto va dove era) e ogni banco resta in una posizione della griglia unica.
+     * E' lo stesso schema di swapSeats (copy della lista, si modifica solo lo slot), qui a banco
+     * intero; gli indici sono quelli della lista assignments, come i deskIndex dell'editor.
+     * Indici fuori range o uguali: lista invariata (nessun crash su banchi rimossi dal vivo).
+     */
+    fun swapDesks(assignments: List<DeskAssignment>, deskIndex1: Int, deskIndex2: Int): List<DeskAssignment> {
+        if (deskIndex1 == deskIndex2) return assignments
+        if (deskIndex1 !in assignments.indices || deskIndex2 !in assignments.indices) return assignments
+
+        val desk1 = assignments[deskIndex1]
+        val desk2 = assignments[deskIndex2]
+        return assignments.toMutableList().also {
+            it[deskIndex1] = desk2.copy(row = desk1.row, column = desk1.column)
+            it[deskIndex2] = desk1.copy(row = desk2.row, column = desk2.column)
+        }
+    }
+
+    /** Come [swapDesks] ma su una proposta intera, immutabile: sostituisce solo `assignments`. */
+    fun swapDesks(proposal: SeatMapProposal, deskIndex1: Int, deskIndex2: Int): SeatMapProposal =
+        proposal.copy(assignments = swapDesks(proposal.assignments, deskIndex1, deskIndex2))
+
+    /**
+     * Completa la disposizione con banchi VUOTI (nessun occupante) finche' copre l'intera griglia
+     * che il Rappresentante ha selezionato ([deskSlots], in genere [fullDeskSlots]): con piu'
+     * posti che studenti esiste cosi' un banco libero reale da trascinare, invece del banco
+     * "sparito" dal fondo alla generazione. Idempotente: i banchi gia' presenti alle coordinate
+     * degli slot restano come sono (anche occupati), solo le coordinate mancanti si riempiono di
+     * un banco vacante; i banchi fuori dagli slot non si perdono ma si riportano in fondo.
+     *
+     * Definizione di "vuoto": STUDANTI A/B/C a null, senza un campo `vacant` dedicato. Piu'
+     * invasivo sarebbe aggiungere un campo a DeskAssignment (@Serializable: tocca l'immagine
+     * serializzata pubblicata su server/bozze e le mappe gia' salvate), mentre "nessuno ci sta
+     * seduto" e' gia' codificato dalla lista occupanti vuota (deskOccupantIds) che le funzioni di
+     * punteggio e lo storico somma col metodo listOfNotNull. Capienza del banco vacante: ricavata
+     * dallo slot (coppia 2, trio 3).
+     */
+    fun withVacantDesks(assignments: List<DeskAssignment>, deskSlots: List<DeskSlot>): List<DeskAssignment> {
+        if (deskSlots.isEmpty()) return assignments
+
+        val byPosition = assignments.associateBy { it.row to it.column }
+        val covered = deskSlots.map { it.row to it.column }.toSet()
+        val fullGrid = deskSlots.map { slot ->
+            byPosition[slot.row to slot.column]
+                ?: DeskAssignment(
+                    row = slot.row,
+                    column = slot.column,
+                    studentAId = null,
+                    studentBId = null,
+                    seats = slot.seats
+                )
+        }
+        // Banchi in coordinate non selezionate (es. mappa modificata a mano su misura): non si
+        // scrivono via, si riappendono — restano visibili e trascinabili anche loro.
+        val extras = assignments.filter { (it.row to it.column) !in covered }
+        return fullGrid + extras
+    }
+
+    /** Come [withVacantDesks] ma su una proposta intera, immutabile: sostituisce solo `assignments`. */
+    fun withVacantDesks(proposal: SeatMapProposal, deskSlots: List<DeskSlot>): SeatMapProposal =
+        proposal.copy(assignments = withVacantDesks(proposal.assignments, deskSlots))
 }

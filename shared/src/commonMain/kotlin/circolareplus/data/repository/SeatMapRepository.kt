@@ -175,6 +175,18 @@ class SeatMapRepository(private val api: ApiClient? = null) {
             )
         }
 
-        return proposals.sortedByDescending { it.totalScore }
+        // Ordine allineato a quello che la UI mostra: la proposta in testa (index 0) prende il
+        // badge "MIGLIORE", e la % che l'utente vede e confronta è la soddisfazione media
+        // (satisfaction.percentage), non il totalScore dell'ottimizzatore (che include anche
+        // penalità invisibili in UI: memoria, altezza, burnout, chiasso di colonna). Ordinare
+        // solo per totalScore poteva quindi mettere "MIGLIORE" su una proposta con soddisfazione
+        // più bassa (es. 69% in testa davanti a 71%). Regola: prima soddisfazione più alta, a
+        // parità di soddisfazione vince il totalScore. Nessun voto espresso (satisfaction null)
+        // va in fondo: senza misura non può dichiararsi "MIGLIORE". Non cambia la matematica
+        // dell'ottimizzatore né l'uso del totalScore altrove (es. rendiconto/scorciatoie).
+        return proposals.sortedWith(
+            compareByDescending<SeatMapProposal> { it.satisfaction?.percentage ?: Double.NEGATIVE_INFINITY }
+                .thenByDescending { it.totalScore }
+        )
     }
 }

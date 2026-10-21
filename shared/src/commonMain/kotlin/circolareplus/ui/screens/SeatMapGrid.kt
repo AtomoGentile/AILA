@@ -1,6 +1,20 @@
 package circolareplus.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import circolareplus.algorithms.DeskAssignment
+import circolareplus.design.AppTheme
+import circolareplus.design.ailaDeskLabel
 
 /**
  * Cella della griglia dei banchi: il banco con il suo indice nella disposizione, oppure null per
@@ -28,3 +42,60 @@ fun deskGridCells(assignments: List<DeskAssignment>): Pair<Int, List<DeskCell>> 
 
 /** Il banco ha un terzo posto (trio), anche se in questo momento e' vuoto. */
 val DeskAssignment.hasThirdSeat: Boolean get() = seats >= 3 || studentCId != null
+
+/**
+ * Il banco non ha nessun occupante: e' uno slot "vuoto". Dal v1.1.6 nell'editor manuale esiste
+ * davvero (lo aggiunge SeatMapOptimizer.withVacantDesks finche' la griglia scelta ha piu' posti
+ * che studenti) per lasciare al Rappresentante la decisione di DOVE stare lo spazio libero: si
+ * trascina come un banco pieno e spostandolo lo spazio vuoto cambia posto. Nessun campo nuovo in
+ * DeskAssignment: i tre occupanti a null ("non ci e' seduto nessuno") fanno gia' da banco vacante
+ * e la capienza 2/3 si legge dal campo `seats`.
+ */
+val DeskAssignment.isVacantDesk: Boolean
+    get() = studentAId == null && studentBId == null && studentCId == null
+
+/**
+ * Slot visivo di un banco senza occupanti nell'editor: box "ghost" col bordo sottile, distinto
+ * da un banco pieno (card con i nomi) e da un banco con un solo occupante (card con "Vuoto" in
+ * uno dei due posti). Il bordo si accende quando e' il bersaglio del trascinamento in corso.
+ */
+@Composable
+fun VacantDeskSlot(
+    desk: DeskAssignment,
+    modifier: Modifier = Modifier,
+    isDragged: Boolean = false,
+    isHoverTarget: Boolean = false,
+    showGlass: Boolean = AppTheme.isGlass
+) {
+    val shape = RoundedCornerShape(if (showGlass) AppTheme.SmallElementRadius + 2.dp else 16.dp)
+    val hoverHighlight = isHoverTarget && !isDragged
+    Box(
+        modifier = modifier
+            .background(
+                if (showGlass) Color.Transparent else AppTheme.DeskFloor.copy(alpha = 0.4f),
+                shape
+            )
+            .border(
+                if (hoverHighlight) 2.dp else 1.dp,
+                if (hoverHighlight) AppTheme.PrimaryBlue else AppTheme.TextMuted.copy(alpha = 0.4f),
+                shape
+            )
+            .padding(AppTheme.Space8),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "Banco F${desk.row + 1}C${desk.column + 1}",
+                style = MaterialTheme.typography.ailaDeskLabel,
+                color = AppTheme.TextMuted
+            )
+            Spacer(modifier = Modifier.height(AppTheme.Space4))
+            Text(
+                text = "Libero (trascinabile)",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Normal,
+                color = AppTheme.TextMuted
+            )
+        }
+    }
+}

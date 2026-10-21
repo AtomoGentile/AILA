@@ -6,6 +6,7 @@ import circolareplus.domain.model.StudentProfile
 import circolareplus.domain.model.User
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SeatMapOptimizerTest {
@@ -40,14 +41,15 @@ class SeatMapOptimizerTest {
         assertEquals(0, SeatMapOptimizer.calculateHeightPenalty(170, 175))
         assertEquals(0, SeatMapOptimizer.calculateHeightPenalty(170, 170))
 
-        // Scarto di 5 cm davanti -> -30 pt
-        assertEquals(30, SeatMapOptimizer.calculateHeightPenalty(175, 170))
+        // Penalità altezza dimezzata in v1.1.6: da 30 a 15 pt per scaglione di 5 cm.
+        // Scarto di 5 cm davanti -> -15 pt
+        assertEquals(15, SeatMapOptimizer.calculateHeightPenalty(175, 170))
 
-        // Scarto di 10 cm davanti -> -60 pt
-        assertEquals(60, SeatMapOptimizer.calculateHeightPenalty(180, 170))
+        // Scarto di 10 cm davanti -> -30 pt
+        assertEquals(30, SeatMapOptimizer.calculateHeightPenalty(180, 170))
 
-        // Scarto di 15 cm davanti -> -90 pt
-        assertEquals(90, SeatMapOptimizer.calculateHeightPenalty(185, 170))
+        // Scarto di 15 cm davanti -> -45 pt
+        assertEquals(45, SeatMapOptimizer.calculateHeightPenalty(185, 170))
     }
 
     @Test
@@ -320,8 +322,9 @@ class SeatMapOptimizerTest {
 
         // Banco davanti e dietro entrambi a chiasso 5 nella stessa colonna -> -120 pt (magnitudine 120).
         assertEquals(120.0, breakdown.columnNoisePenalty)
-        // Differenza altezza 10cm tra fila davanti e dietro -> 2 scaglioni da 30 pt = 60 pt.
-        assertEquals(60.0, breakdown.heightPenalty)
+        // Differenza altezza 10cm tra fila davanti e dietro -> 2 scaglioni da 15 pt = 30 pt
+        // (penalità altezza dimezzata in v1.1.6: prima erano 2 scaglioni da 30 pt = 60 pt).
+        assertEquals(30.0, breakdown.heightPenalty)
     }
 
     @Test
@@ -430,5 +433,70 @@ class SeatMapOptimizerTest {
         val s2 = SeatMapOptimizer.buildDeskSlots(listOf(8, 8, 7), SeatMapOptimizer.SEATS_PER_DESK_TRIO, 22)
         assertEquals(22, s2.sumOf { it.seats })
         assertTrue(s2.count { it.seats == 3 } >= 4)
+    }
+
+    @Test
+    fun swapDesksSpostaCoppiaNelVuotoConservandoLeCoordinate() {
+        val layout = listOf(
+            DeskAssignment(row = 0, column = 0, studentAId = "marco", studentBId = "luca"),
+            DeskAssignment(row = 0, column = 1, studentAId = "anna", studentBId = "sara")
+        )
+        val emptyBench = DeskAssignment(row = 1, column = 0, studentAId = null, studentBId = null, seats = 3)
+        val all = layout + emptyBench
+
+        val swapped = SeatMapOptimizer.swapDesks(all, deskIndex1 = 0, deskIndex2 = 2)
+        // La coppia viaggia col banco e ora sta alla posizione del vuoto; le coordinate restano
+        // ancorate al posto della griglia, quindi si vede esattamente lo scambio voluto.
+        val toVacantSpot = swapped.first { it.row to it.column == 1 to 0 }
+        assertEquals("marco", toVacantSpot.studentAId)
+        assertEquals("luca", toVacantSpot.studentBId)
+        // Il banco trasportato e' quello di partenza: la capienza viaggia con gli occupanti.
+        assertEquals(2, toVacantSpot.seats)
+        // Dove stava la coppia restano solo posti vuoti: lo slot libero si e' spostato.
+        val atOldPairSpot = swapped.first { it.row to it.column == 0 to 0 }
+        assertNull(atOldPairSpot.studentAId)
+        assertNull(atOldPairSpot.studentBId)
+        // Gli altri banchi restano identici.
+        val untouched = swapped.first { it.row to it.column == 0 to 1 }
+        assertEquals("anna", untouched.studentAId)
+        assertEquals("sara", untouched.studentBId)
+        // Immutabile: la lista di partenza non cambia, e lo scambio si puo' annullare ruotando a ritroso.
+        assertEquals("marco", all[0].studentAId)
+        assertEquals(all, SeatMapOptimizer.swapDesks(swapped, deskIndex1 = 0, deskIndex2 = 2))
+        // Indici uguali / fuori range: lista invariata, nessun crash.
+        assertEquals(all, SeatMapOptimizer.swapDesks(all, 1, 1))
+        assertEquals(all, SeatMapOptimizer.swapDesks(all, 0, 99))
+    }
+
+    @Test
+    fun withVacantDesksMaterializzaIlBancoMancanteEPesaZero() {
+        // 22 iscritti su 4 file da 3 coppie: 12 banchi nella griglia scelta, 2 posti avanzano, e
+        // buildDeskSlots toglie l'ultimo banco dal fondo (11 banchi, vuoto in fondo).
+        val slots = SeatMapOptimizer.fullDeskSlots(listOf(6, 6, 6, 6), SeatMapOptimizer.SEATS_PER_DESK_PAIR)
+        assertEquals(12, slots.size)
+        val generated = SeatMapOptimizer.buildDeskSlots(listOf(6, 6, 6, 6), SeatMapOptimizer.SEATS_PER_DESK_PAIR, 22)
+        assertEquals(11, generated.size)
+
+        val layout = generated.mapIndexed { index, slot ->
+            DeskAssignment(
+                row = slot.row, column = slot.column,
+                studentAId = "s$index", studentBId = "t$index", seats = slot.seats
+            )
+        }
+        val fullGrid = SeatMapOptimizer.withVacantDesks(layout, slots)
+        val vacant = fullGrid.filter { it.studentAId == null && it.studentBId == null && it.studentCId == null }
+        assertEquals(1, vacant.size)
+        // Il banco mancante sta dove buildDeskSlots l'ha tolto: ultima coppia dell'ultima fila.
+        assertEquals(3 to 2, vacant.first().row to vacant.first().column)
+        // Idempotente: riapplicarla non aggiunge niente e non tocca i banchi gia' presenti.
+        assertEquals(fullGrid, SeatMapOptimizer.withVacantDesks(fullGrid, slots))
+        // Un banco gia' presente alle coordinate di uno slot resta com'e' (anche occupato).
+        assertEquals("s0" to "t0", fullGrid.first { it.row to it.column == 0 to 0 }.let { it.studentAId to it.studentBId })
+        // Le funzioni di punteggio ignorano i banchi vuoti: nessuna penalita' fantasma, nessun crash.
+        fun total(assignments: List<DeskAssignment>) = SeatMapOptimizer.scoreLayout(
+            assignments, emptyMap(), emptyMap(), emptyMap(), emptyList(),
+            OptimizerWeights(), isSmallClass = false
+        ).total
+        assertEquals(total(layout), total(fullGrid))
     }
 }

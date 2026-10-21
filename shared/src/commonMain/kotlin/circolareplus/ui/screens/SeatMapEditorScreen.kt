@@ -3,15 +3,22 @@ package circolareplus.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -31,10 +38,23 @@ import circolareplus.domain.model.User
  * 1=B, 2=C — quest'ultimo solo per i banchi da trio). */
 private data class EditableSeatRef(val deskIndex: Int, val seatIndex: Int)
 
+/** Bordo di un banco nella griglia, in coordinate schermo: serve a individuare il banco sotto
+ * il dito durante un trascinamento (long-press) fra banchi. */
+private data class DeskBounds(val position: Offset, val size: androidx.compose.ui.unit.IntSize) {
+    val center: Offset
+        get() = Offset(position.x + size.width / 2f, position.y + size.height / 2f)
+}
+
 /**
  * Editor manuale della disposizione scelta dal Rappresentante: tap-to-swap (si seleziona un posto,
  * poi un secondo per scambiarli) con ricalcolo live del punteggio passato da fuori, pulsante di
  * ripristino alla proposta originale dell'algoritmo e pulsante di pubblicazione finale.
+ *
+ * Dal v1.1.6 in piu' c'e' il drag & drop di banchi interi con LONG-PRESS (stile progetto, come in
+ * RankingPollsScreen): il tap-to-swap dei singoli posti resta invariato (tap breve), mentre un
+ * banco tenuto premuto per la durata del long-press si puo' trascinare su un altro banco — anche
+ * su un banco VUOTO, cosi' lo spazio libero della griglia va dove vuole il Rappresentante. Alla
+ * fine del trascinamento si chiama [onSwapDesks].
  */
 @Composable
 fun SeatMapEditorScreen(
@@ -45,6 +65,10 @@ fun SeatMapEditorScreen(
     satisfaction: SeatMapOptimizer.VoteSatisfaction?,
     isPublishing: Boolean,
     onSwapSeats: (deskIndex1: Int, seatIndex1: Int, deskIndex2: Int, seatIndex2: Int) -> Unit,
+    // Drag & drop di banchi interi (long-press): indice di partenza e banco su cui e' stato
+    // lasciato. Pari-passo con onSwapSeats ma a grana diversa (posto / banco): il MainAppShell fa
+    // editingSeatMapProposal = SeatMapOptimizer.swapDesks(...).
+    onSwapDesks: (deskIndexFrom: Int, deskIndexTo: Int) -> Unit = { _, _ -> },
     onRestore: () -> Unit,
     onPublish: () -> Unit,
     // Modalità scelta per QUESTA generazione (coppia o trio), come in SeatMapProposalsScreen:
@@ -54,14 +78,37 @@ fun SeatMapEditorScreen(
 ) {
     var selectedSeat by remember { mutableStateOf<EditableSeatRef?>(null) }
     val (deskColumns, deskCells) = remember(assignments) { deskGridCells(assignments) }
+    val gridState = rememberLazyGridState()
+
+    // --- Stato del drag&drop dei banchi (long-press) --------------------------------------
+    // Banco in trascinamento e banco evidenziato come bersaglio: gli indici sono deskIndex
+    // (posizione nella lista assignments), la stessa unita' di onSwapSeats/onSwapDesks.
+    var draggingDeskIndex by remember { mutableStateOf<Int?>(null) }
+    var hoveredDeskIndex by remember { mutableStateOf<Int?>(null) }
+    // Bordo di ogni banco visibile, aggiornato a ogni layout (scroll compreso): durante il drag
+    // il banco sotto il dito e' quello col centro piu' vicino al puntatore, fra i banchi attual-
+    // mente visibili (un banco fuori schermo non e' un bersaglio sensato e il suo bordo sarebbe
+    // stante: si filtrano sui banchi visibili, vedi deskIndexUnderPointer).
+    val deskBounds = remember { androidx.compose.runtime.mutableStateMapOf<Int, DeskBounds>() }
+
+    fun endDeskDrag() {
+        val from = draggingDeskIndex
+        val target = hoveredDeskIndex
+        draggingDeskIndex = null
+        hoveredDeskIndex = null
+        if (from != null && target != null && target != from) onSwapDesks(from, target)
+    }
 
     // Uno scambio può cambiare la composizione dei banchi: se la selezione punta a un indice
-    // ormai fuori range, la si azzera invece di lasciarla puntare a un posto inesistente.
-    LaunchedEffect(assignments.size) {
+    // ormai fuori range, la si azzera invece di lasciarla puntare a un posto inesistente. Stessa
+    // ragione per il drag in corso: se la lista cambia a trascinamento avviato, si resetta.
+    LaunchedEffect(assignments) {
         val seat = selectedSeat
         if (seat != null && seat.deskIndex >= assignments.size) {
             selectedSeat = null
         }
+        draggingDeskIndex = null
+        hoveredDeskIndex = null
     }
 
     Column(modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
@@ -90,6 +137,16 @@ fun SeatMapEditorScreen(
                     fontWeight = FontWeight.Normal,
                     color = AppTheme.TextMuted,
                     modifier = Modifier.padding(top = AppTheme.Space8)
+                )
+                Text(
+                    // Drag & drop dei banchi interi (v1.1.6): il long-press prevale sul tap, che
+                    // in Compose parte solo se il dito si solleva prima della soglia del long-press.
+                    text = "Più banchi: tieni premuto un banco e trascinalo su un altro (anche quello " +
+                        "«Libero») per spostare l'intera coppia: lo spazio vuoto va dove vuoi tu.",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Normal,
+                    color = AppTheme.TextMuted,
+                    modifier = Modifier.padding(top = 2.dp)
                 )
                 Spacer(modifier = Modifier.height(AppTheme.Space12))
                 AilaSecondaryButton(
@@ -130,6 +187,11 @@ fun SeatMapEditorScreen(
                 }
                 val deskIndex = cell.index
                 val desk = cell.value
+                // Banco senza occupanti (v1.1.6): slot "ghost" — visivamente distinto e trascinabile
+                // come un banco pieno, cosi' lo spazio vuoto della griglia si puo' spostare a mano.
+                val isVacant = desk.isVacantDesk
+                val isDragged = draggingDeskIndex == deskIndex
+                val isHovered = hoveredDeskIndex == deskIndex && draggingDeskIndex != null
                 val sA = desk.studentAId?.let { studentsMap[it] }
                 val sB = desk.studentBId?.let { studentsMap[it] }
                 val sC = desk.studentCId?.let { studentsMap[it] }
@@ -144,6 +206,56 @@ fun SeatMapEditorScreen(
 
                 val deskShape = RoundedCornerShape(if (AppTheme.isGlass) AppTheme.SmallElementRadius + 2.dp else 16.dp)
                 val glass = AppTheme.isGlass
+                // --- Drag & drop del banco intero (long-press, stile RankingPollsScreen) --------
+                // Il long-press prevale sul tap perche' il tap-to-swap parte solo se il dito si
+                // solleva PRIMA della soglia del long-press; in piu' il click sui posti viene
+                // ignorato finche' un trascinamento e' in corso (il dito potrebbe risalire in
+                // ritardo proprio sul banco appena rilasciato).
+                val dragModifier = Modifier.pointerInput(deskIndex) {
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = {
+                            draggingDeskIndex = deskIndex
+                            hoveredDeskIndex = null
+                        },
+                        onDrag = { change, _ ->
+                            change.consume()
+                            // Puntatore in coordinate schermo: origine del banco + posizione
+                            // locale dell'evento. Il bersaglio e' il banco visibile col centro
+                            // piu' vicino al puntatore (vedi deskIndexUnderPointer).
+                            val origin = deskBounds[deskIndex]?.position ?: Offset.Zero
+                            hoveredDeskIndex = deskIndexUnderPointer(
+                                pointerInRoot = origin + change.position,
+                                deskBounds = deskBounds,
+                                visibleCellIndexes = gridState.layoutInfo.visibleItemsInfo.map { it.index },
+                                cells = deskCells
+                            )
+                        },
+                        onDragEnd = { endDeskDrag() },
+                        onDragCancel = { endDeskDrag() }
+                    )
+                }
+                // Layout observer: aggiorna il bordo del banco (serve sopra, per bersaglio/dito).
+                val boundsModifier = Modifier.onGloballyPositioned { coords ->
+                    deskBounds[deskIndex] = DeskBounds(coords.positionInRoot(), coords.size)
+                }
+                val dragVisualModifier = when {
+                    isDragged -> Modifier.graphicsLayer { alpha = 0.55f; scaleX = 1.03f; scaleY = 1.03f }
+                    isHovered -> Modifier.border(2.dp, AppTheme.PrimaryBlue, deskShape)
+                    else -> Modifier
+                }
+
+                if (isVacant) {
+                    // Banco vuoto: slot ghost (bordo sottile, niente nomi), trascinabile come un
+                    // banco pieno; l'evidenziazione del bersaglio e' interna (bordo acceso).
+                    VacantDeskSlot(
+                        desk = desk,
+                        isDragged = isDragged,
+                        isHoverTarget = isHovered,
+                        modifier = boundsModifier.then(dragModifier).then(dragVisualModifier)
+                    )
+                    return@items
+                }
+
                 // Liquid Glass: banco di vetro; se la coppia e' vietata, vetro rosso col bordo pieno.
                 Card(
                     shape = deskShape,
@@ -156,10 +268,13 @@ fun SeatMapEditorScreen(
                         }
                     ),
                     elevation = CardDefaults.cardElevation(defaultElevation = AppTheme.CardElevation),
-                    modifier = if (glass) Modifier
+                    modifier = (if (glass) Modifier
                         .ailaGlassSurface(deskShape, tint = if (isForbidden) AppTheme.TintRed.copy(alpha = 0.6f) else null)
                         .then(if (isForbidden) Modifier.border(2.dp, AppTheme.PollDarkRed, deskShape) else Modifier)
-                    else Modifier
+                    else Modifier)
+                        .then(boundsModifier)
+                        .then(dragModifier)
+                        .then(dragVisualModifier)
                 ) {
                     Column(
                         modifier = Modifier.padding(AppTheme.Space8),
@@ -182,11 +297,13 @@ fun SeatMapEditorScreen(
                             name = sA?.firstName,
                             isSelected = selectedSeat == EditableSeatRef(deskIndex, 0),
                             onClick = {
-                                selectedSeat = handleSeatTap(
-                                    tapped = EditableSeatRef(deskIndex, 0),
-                                    current = selectedSeat,
-                                    onSwap = onSwapSeats
-                                )
+                                if (draggingDeskIndex == null) {
+                                    selectedSeat = handleSeatTap(
+                                        tapped = EditableSeatRef(deskIndex, 0),
+                                        current = selectedSeat,
+                                        onSwap = onSwapSeats
+                                    )
+                                }
                             }
                         )
                         HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), color = AppTheme.Hairline)
@@ -194,11 +311,13 @@ fun SeatMapEditorScreen(
                             name = sB?.firstName,
                             isSelected = selectedSeat == EditableSeatRef(deskIndex, 1),
                             onClick = {
-                                selectedSeat = handleSeatTap(
-                                    tapped = EditableSeatRef(deskIndex, 1),
-                                    current = selectedSeat,
-                                    onSwap = onSwapSeats
-                                )
+                                if (draggingDeskIndex == null) {
+                                    selectedSeat = handleSeatTap(
+                                        tapped = EditableSeatRef(deskIndex, 1),
+                                        current = selectedSeat,
+                                        onSwap = onSwapSeats
+                                    )
+                                }
                             }
                         )
                         if (desk.hasThirdSeat) {
@@ -207,11 +326,13 @@ fun SeatMapEditorScreen(
                                 name = sC?.firstName,
                                 isSelected = selectedSeat == EditableSeatRef(deskIndex, 2),
                                 onClick = {
-                                    selectedSeat = handleSeatTap(
-                                        tapped = EditableSeatRef(deskIndex, 2),
-                                        current = selectedSeat,
-                                        onSwap = onSwapSeats
-                                    )
+                                    if (draggingDeskIndex == null) {
+                                        selectedSeat = handleSeatTap(
+                                            tapped = EditableSeatRef(deskIndex, 2),
+                                            current = selectedSeat,
+                                            onSwap = onSwapSeats
+                                        )
+                                    }
                                 }
                             )
                         }
@@ -240,6 +361,30 @@ private fun handleSeatTap(
             null
         }
     }
+}
+
+/**
+ * Banco bersaglio di un trascinamento in corso: fra i banchi ATTUALMENTE VISIBILI (i loro indici
+ * di cella arrivano da gridState.layoutInfo.visibleItemsInfo), quello il cui centro registrato in
+ * coordinate schermo e' piu' vicino al puntatore — pattern "cella piu' vicina al pointer": non
+ * serve calcolare a mano i bounds di LazyVerticalGrid (col padding il calcolo e' fragile) e la
+ * dito che sfiora il bordo fra due banchi ottiene comunque un bersaglio stabile.
+ * Banchi fuori schermo (bordi stanti o ignoti) non sono bersagli.
+ */
+private fun deskIndexUnderPointer(
+    pointerInRoot: Offset,
+    deskBounds: Map<Int, DeskBounds>,
+    visibleCellIndexes: List<Int>,
+    cells: List<DeskCell>
+): Int? {
+    var best: Pair<Float, Int>? = null
+    for (cellIndex in visibleCellIndexes) {
+        val deskIndex = cells.getOrNull(cellIndex)?.index ?: continue
+        val bounds = deskBounds[deskIndex] ?: continue
+        val distance = (bounds.center - pointerInRoot).getDistanceSquared()
+        if (best == null || distance < best.first) best = distance to deskIndex
+    }
+    return best?.second
 }
 
 @Composable

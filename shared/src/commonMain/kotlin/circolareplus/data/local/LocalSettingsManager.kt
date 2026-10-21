@@ -3,11 +3,19 @@ package circolareplus.data.local
 import circolareplus.ai.assistant.AssistantConversation
 import circolareplus.ai.cleanGeminiApiKey
 import circolareplus.ai.tier
+import circolareplus.algorithms.OptimizerWeights
+import circolareplus.algorithms.SeatMapHistoryRecord
+import circolareplus.algorithms.SeatMapOptimizer
+import circolareplus.algorithms.SeatMapProposal
 import circolareplus.domain.model.CircularAiClassification
 import circolareplus.domain.model.NotificationLogEntry
+import circolareplus.domain.model.RepresentativeRating
+import circolareplus.domain.model.SocialPreferenceScore
+import circolareplus.domain.model.StudentProfile
 import circolareplus.platform.createSecureSettings
 import circolareplus.platform.currentTimeMillis
 import com.russhwolf.settings.Settings
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -59,6 +67,8 @@ class LocalSettingsManager(
         private const val KEY_CIRCULAR_ANALYSES = "circular_analyses_json"
         private const val KEY_BG_LAST_CIRCULAR = "bg_last_circular_number"
         private const val KEY_CLASS_LESSON_HOURS = "class_lesson_hours"
+        /** Bozze delle proposte della mappa posti (generate e non ancora pubblicate), in JSON. */
+        private const val KEY_SEATMAP_DRAFTS = "seatmap_proposals_draft_json"
         private const val KEY_UPDATE_LAST_CHECK = "update_last_check_millis"
         private const val KEY_UPDATE_DISMISSED_TAG = "update_dismissed_tag"
         private const val KEY_DEBUG_MENU = "debug_menu_enabled"
@@ -195,6 +205,32 @@ class LocalSettingsManager(
     var classLessonHours: Int
         get() = settings.getInt(KEY_CLASS_LESSON_HOURS, 6).takeIf { it == 5 || it == 6 } ?: 6
         set(value) = settings.putInt(KEY_CLASS_LESSON_HOURS, value)
+
+    // --- Bozze delle proposte della Mappa Posti -------------------------------------------------
+    // Le tre proposte calcolate ma NON ancora pubblicate restano sul dispositivo del
+    // Rappresentante (nessun server): uscendo e rientrando non si perdono. Con loro si salvano gli
+    // input dell'ottimizzatore dell'ultima generazione, perche' l'editor manuale ricalcola
+    // l'andamento live riusando quelli (vedi MainAppShell, stati seatMapOptimizer*).
+    // Muoiono alla pubblicazione (sostituite da una nuova generazione) o al tasto "Riavvolgi".
+
+    fun readSeatMapDraft(): SeatMapProposalsDraft? {
+        val raw = settings.getStringOrNull(KEY_SEATMAP_DRAFTS) ?: return null
+        // Stesso criterio delle analisi e della cronologia: JSON vecchio o corrotto = bozza inesistente.
+        return try {
+            json.decodeFromString<SeatMapProposalsDraft>(raw)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun saveSeatMapDraft(draft: SeatMapProposalsDraft) {
+        if (draft.proposals.isEmpty()) return
+        settings.putString(KEY_SEATMAP_DRAFTS, json.encodeToString(draft))
+    }
+
+    fun clearSeatMapDraft() {
+        settings.remove(KEY_SEATMAP_DRAFTS)
+    }
 
     // --- Aggiornamenti dell'app (vedi circolareplus.update.AppUpdateManager) -------------------
 
@@ -543,7 +579,8 @@ class LocalSettingsManager(
             KEY_LAST_SEEN_CIRCULAR, KEY_LAST_SEEN_PROPOSAL, KEY_LAST_SEEN_SEATMAP,
             KEY_LAST_SEEN_PREFERENCES_OPEN, KEY_LAST_SEEN_POLL_ID, KEY_LAST_SEEN_POLL_CREATED_AT,
             KEY_BG_LAST_CIRCULAR, KEY_BG_ANALYSES_CURSOR,
-            KEY_LAST_ONLINE_SYNC, KEY_LAST_FULL_OFFLINE_SYNC, KEY_DATA_OWNER
+            KEY_LAST_ONLINE_SYNC, KEY_LAST_FULL_OFFLINE_SYNC, KEY_DATA_OWNER,
+            KEY_SEATMAP_DRAFTS
         ).forEach { settings.remove(it) }
         clearSecrets()
     }
@@ -606,3 +643,28 @@ class LocalSettingsManager(
         listOf(KEY_AUTH_TOKEN, KEY_USER_AI_API_KEY).forEach { key -> runCatching { secure.remove(key) } }
     }
 }
+
+/**
+ * Una bozza di proposte della mappa posti: le tre disposizioni calcolate e non ancora
+ * pubblicate piu' gli input dell'ottimizzatore con cui sono nate (pesi, storico, voti e
+ * preferenze). Serve a ripresentare le proposte uguali dopo il rientro nell'app (v1.1.6) e a
+ * far ricalcolare live l'editor manuale con gli stessi parametri di prima, senza rifare le
+ * chiamate di rete. I tipi sono tutti @Serializable: DeskAssignment/SeatMapProposal/...
+ * nell'algoritmo, StudentProfile/RepresentativeRating/SocialPreferenceScore nel dominio;
+ * le coppie (String,String) e (Int,Int) usano i serializer predefiniti di kotlinx.serialization.
+ */
+@Serializable
+data class SeatMapProposalsDraft(
+    /** Le tre proposte, nello stesso ordine mostrato dalla schermata (prima la "MIGLIORE"). */
+    val proposals: List<SeatMapProposal> = emptyList(),
+    /** Modalita' richiesta per l'ultima generazione: etichetta "banchi da due/tre" in UI. */
+    val seatsPerDesk: Int = SeatMapOptimizer.SEATS_PER_DESK_PAIR,
+    // Input dell'ottimizzatore dell'ultima generazione, per il ricalcolo live nell'editor.
+    val profiles: Map<String, StudentProfile> = emptyMap(),
+    val ratings: Map<String, RepresentativeRating> = emptyMap(),
+    val disciplinePairs: Set<Pair<String, String>> = emptySet(),
+    val socialPreferences: Map<Pair<String, String>, SocialPreferenceScore> = emptyMap(),
+    val history: List<SeatMapHistoryRecord> = emptyList(),
+    val weights: OptimizerWeights = OptimizerWeights(),
+    val isSmallClass: Boolean = false
+)
