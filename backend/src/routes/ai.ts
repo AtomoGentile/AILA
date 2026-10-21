@@ -44,6 +44,12 @@ interface ChatMessage {
   content: string;
 }
 
+/** Workers AI restituisce i modelli chat come Chat Completion; `response` copre il formato legacy. */
+interface WorkersAiChatResult {
+  choices?: Array<{ message?: { content?: string | null } }>;
+  response?: string;
+}
+
 /**
  * `true` quando l'errore e' il limite giornaliero dei neuron. Rilevato dall'errore reale:
  * con il binding arriva come `AiError: 4006: you have used up your daily free allocation
@@ -161,9 +167,9 @@ ai.post('/chat', async (c) => {
     input.response_format = { type: 'json_object' };
   }
 
-  let result: { response?: string } | undefined;
+  let result: WorkersAiChatResult | undefined;
   try {
-    result = await c.env.AI.run(MODEL, input);
+    result = await c.env.AI.run(MODEL, input) as WorkersAiChatResult;
   } catch (err) {
     if (isDailyQuotaError(err)) {
       return c.json({
@@ -182,7 +188,12 @@ ai.post('/chat', async (c) => {
     }, 502);
   }
 
-  const text = typeof result?.response === 'string' ? result.response.trim() : '';
+  const completionText = result?.choices?.[0]?.message?.content;
+  const text = typeof completionText === 'string'
+    ? completionText.trim()
+    : typeof result?.response === 'string'
+      ? result.response.trim()
+      : '';
   if (!text) {
     return c.json({ error: 'Il modello ha risposto vuoto' , reason: 'AI_ERROR' }, 502);
   }
