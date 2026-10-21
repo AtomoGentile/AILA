@@ -195,7 +195,14 @@ fun SeatMapProposalsScreen(
                 key = { index, _ -> "$safePreview-$index" }
             ) { _, cell ->
                 if (cell != null) {
-                    SeatMapDeskCard(desk = cell.value, studentsMap = studentsMap, showThirdSeat = cell.value.hasThirdSeat)
+                    if (cell.value.isVacantDesk) {
+                        // v1.1.6: stesso trattamento della mappa pubblicata — il banco vuoto
+                        // dell'anteprima non si vede (buco bianco) ma resta al suo posto in
+                        // griglia per non spostare le coppie delle proposte.
+                        VacantDeskBlankSlot(desk = cell.value)
+                    } else {
+                        SeatMapDeskCard(desk = cell.value, studentsMap = studentsMap, showThirdSeat = cell.value.hasThirdSeat)
+                    }
                 } else {
                     Spacer(modifier = Modifier)
                 }

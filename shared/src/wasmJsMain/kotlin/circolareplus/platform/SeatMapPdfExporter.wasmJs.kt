@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import circolareplus.algorithms.DeskAssignment
 import circolareplus.domain.model.User
+import circolareplus.ui.screens.isVacantDesk
 import kotlinx.coroutines.await
 import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
@@ -166,6 +167,11 @@ private fun DrawScope.drawDesks(
     for (row in 0 until rows) {
         for (col in 0 until columns) {
             val desk = byPosition[row to col] ?: continue
+            // v1.1.6: i banchi vuoti (disposizione completa, surplus di posti) NON si disegnano
+            // nel PDF. Il salto vale solo per il disegno: righe/colonne/dimensioni di cella
+            // restano calcolate su TUTTI i banchi (inclusi i vuoti), quindi i banchi occupati
+            // restano alle coordinate in cui sono e il vuoto lascia solo un buco bianco.
+            if (desk.isVacantDesk) continue
             val left = MARGIN + col * (deskWidth + gutter)
             val deskTop = top + row * (deskHeight + gutter)
             val corner = CornerRadius(6f)

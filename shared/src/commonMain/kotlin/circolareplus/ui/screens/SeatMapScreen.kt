@@ -570,13 +570,23 @@ fun SeatMapScreen(
             // e basta, facile da non notare.
             itemsIndexed(deskCells) { cellIndex, cell ->
                 if (cell != null) {
-                    SeatMapDeskCard(
-                        modifier = Modifier.ailaAppear(3 + cellIndex),
-                        desk = cell.value,
-                        studentsMap = studentsMap,
-                        showThirdSeat = cell.value.hasThirdSeat,
-                        focusedStudentId = highlightedId
-                    )
+                    if (cell.value.isVacantDesk) {
+                        // v1.1.6: banco senza occupanti della disposizione completa — fuori
+                        // dall'editor non si vede: resta solo un "buco bianco" nella griglia,
+                        // che però mantiene le sue celle e non sposta le coppie vicine.
+                        VacantDeskBlankSlot(
+                            modifier = Modifier.ailaAppear(3 + cellIndex),
+                            desk = cell.value
+                        )
+                    } else {
+                        SeatMapDeskCard(
+                            modifier = Modifier.ailaAppear(3 + cellIndex),
+                            desk = cell.value,
+                            studentsMap = studentsMap,
+                            showThirdSeat = cell.value.hasThirdSeat,
+                            focusedStudentId = highlightedId
+                        )
+                    }
                 } else {
                     Spacer(modifier = Modifier)
                 }

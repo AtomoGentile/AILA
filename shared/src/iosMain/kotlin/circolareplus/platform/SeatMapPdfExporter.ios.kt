@@ -13,6 +13,12 @@ import kotlinx.coroutines.withContext
  * La data di generazione viene lasciata a Swift ("" qui): kotlinx.datetime non è garantita
  * disponibile su questo target, e Date() lato Swift è semplicissimo da formattare.
  *
+ * L'anteprima dell'occupazione: l'elenco desks arriva completo (v1.1.6 include i banchi vuoti
+ * della disposizione completa): qui i vuoti nascono con `names = []` (listOfNotNull di tre
+ * occupanti null) e il bridge Swift li usa SOLO per il conteggio di righe/colonne, saltandone
+ * il disegno — cosi' il PDF non mostra "Vuoto" ma i banchi occupati restano alle coordinate di
+ * sempre, con un buco bianco al posto di quello libero.
+ *
  * presentSeatMapPdf deve girare sul thread principale (UIActivityViewController lo richiede),
  * da qui il withContext(Dispatchers.Main). Ritorna un messaggio d'errore (o null se ok): vedi sotto.
  */

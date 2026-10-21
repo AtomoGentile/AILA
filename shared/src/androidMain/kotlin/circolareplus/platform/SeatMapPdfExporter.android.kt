@@ -16,6 +16,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.util.Calendar
+import circolareplus.ui.screens.isVacantDesk
 
 // Formato A4 in punti a 72dpi: stessa unità usata da PdfDocument/Canvas.
 private const val PAGE_WIDTH = 595
@@ -201,6 +202,12 @@ private fun drawDesks(
     for (row in 0 until rows) {
         for (col in 0 until columns) {
             val desk = byPosition[row to col] ?: continue
+            // v1.1.6: i banchi vuoti (disposizione completa, surplus di posti) NON si disegnano
+            // nel PDF — nemmeno "Vuoto" e senza rettangolo. Il salto vale solo per il disegno:
+            // righe/colonne/dimensioni di cella restano calcolate su TUTTI i banchi (inclusi i
+            // vuoti), quindi i banchi occupati restano alle coordinate in cui sono e il vuoto
+            // lascia solo un buco bianco nella griglia.
+            if (desk.isVacantDesk) continue
             val left = MARGIN + col * (deskWidth + gutter)
             val top2 = top + row * (deskHeight + gutter)
             val rect = RectF(left, top2, left + deskWidth, top2 + deskHeight)
