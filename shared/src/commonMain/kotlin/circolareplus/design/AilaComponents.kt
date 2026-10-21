@@ -308,7 +308,9 @@ fun AilaSegmentedTabs(
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                         color = if (isSelected) AppTheme.OnSelection else AppTheme.TextMuted,
-                        maxLines = 1
+                        maxLines = 1,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }

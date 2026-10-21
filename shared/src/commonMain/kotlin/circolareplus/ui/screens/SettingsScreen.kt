@@ -404,9 +404,9 @@ fun SettingsScreen(
                         Column(modifier = Modifier.padding(AppTheme.Space16)) {
                             val localCanBeSelected = showLocalAiSection && localAiUnavailableReason == null
                             val providerLabels = if (localCanBeSelected) {
-                                listOf("AILA", "Google", "API compatibile", "AI locale")
+                                listOf("AILA", "Google", "API", "AI locale")
                             } else {
-                                listOf("AILA", "Google", "API compatibile")
+                                listOf("AILA", "Google", "API")
                             }
                             AilaSegmentedTabs(
                                 labels = providerLabels,
@@ -431,7 +431,7 @@ fun SettingsScreen(
                             Text(
                                 text = when (selectedAiProvider) {
                                     "AILA_CLOUD" -> "AILA è incluso: la chat usa il servizio dell'app, senza chiave personale."
-                                    "COMPATIBLE_API" -> "Configura formato, endpoint, modello e chiave qui sotto."
+                                    "COMPATIBLE_API" -> "Configura formato, endpoint, modello e chiave nella sezione Chiavi AI."
                                     "ON_DEVICE" -> "L'AI locale gira su questo dispositivo."
                                     else -> "Google AI usa la chiave personale qui sotto."
                                 },
@@ -444,13 +444,15 @@ fun SettingsScreen(
                 }
             }
 
-            // --- AI ------------------------------------------------------------------------
+            // Google e API personalizzate condividono un'area dedicata alle credenziali.
             add {
                 Column {
-                    AilaSectionTitle(text = "Chiave AI (Google AI Studio)", modifier = Modifier.ailaAppear(4))
+                    AilaSectionTitle(text = "Chiavi AI", modifier = Modifier.ailaAppear(4))
                     Spacer(modifier = Modifier.height(AppTheme.Space12))
                     AilaCard(modifier = Modifier.ailaAppear(5)) {
                         Column(modifier = Modifier.padding(AppTheme.Space16)) {
+                            Text("Google AI Studio", style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
+                            Spacer(modifier = Modifier.height(AppTheme.Space8))
                             Text(
                                 text = "Facoltativa: la chat dell'assistente funziona senza " +
                                     "nessuna chiave, col servizio incluso dell'app. Questa chiave " +
@@ -530,17 +532,13 @@ fun SettingsScreen(
                                     }
                                 )
                             }
-                        }
-                    }
-            
-                }
-            }
-            if (selectedAiProvider == "COMPATIBLE_API") add {
-                Column {
-                    AilaSectionTitle(text = "API compatibile", modifier = Modifier.ailaAppear(8))
-                    Spacer(modifier = Modifier.height(AppTheme.Space12))
-                    AilaCard(modifier = Modifier.ailaAppear(9)) {
-                        Column(modifier = Modifier.padding(AppTheme.Space16)) {
+
+                            Spacer(modifier = Modifier.height(AppTheme.Space16))
+                            HorizontalDivider(color = AppTheme.Hairline)
+                            Spacer(modifier = Modifier.height(AppTheme.Space16))
+
+                            Text("API", style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
+                            Spacer(modifier = Modifier.height(AppTheme.Space8))
                             Text(
                                 text = "Scegli il formato supportato dal tuo servizio. La chiave e le richieste restano su questo dispositivo.",
                                 style = MaterialTheme.typography.bodySmall,
