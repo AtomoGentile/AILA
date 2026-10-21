@@ -9,6 +9,8 @@ import circolareplus.ai.AiProvider
 import circolareplus.ai.AiRoutePlan
 import circolareplus.ai.ChainedAiClassifier
 import circolareplus.ai.ClientSideAiClassifier
+import circolareplus.ai.CompatibleAiFormat
+import circolareplus.ai.CompatibleApiAiClassifier
 import circolareplus.ai.LocalAiCatalog
 import circolareplus.ai.LocalAiClassifier
 import circolareplus.ai.LocalAiModel
