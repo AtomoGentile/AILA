@@ -44,10 +44,21 @@ rispondono alla domanda, come già accade per le circolari. Il budget è condivi
 - Il PDF e il testo estratto stanno su R2 (`gita/{classe}/{voce}/{versione}.pdf` e `.txt`), non in
   D1: un testo può arrivare a 100 MB, troppo per una riga di database.
 - Il testo viene estratto sul telefono del Rappresentante (`PdfTextExtractor`) prima dell'invio.
-  Il server non chiama nessun modello AI: la chiave resta sul telefono di chi usa l'assistente.
+  Per la chat, dalla v1.5.0 il modello gira sul Worker di AILA (`routes/ai.ts` → Workers AI);
+  per le circolari vale quanto scritto nelle «Chiavi» qui sotto.
 
 ## Chiavi
 
-Le chiamate al modello restano client-side, con la chiave personale dell'utente
-(Google AI Studio). Il provider «AI locale» usa lo stesso prompt, ma con la versione compatta
-delle regole sulla gita, perché il modello sul telefono ha una finestra più stretta.
+Dalla v1.5.0 la chat dell'assistente passa per il servizio incluso dell'app, senza chiavi
+personali: il client costruisce il prompt come prima e lo manda a `/api/ai/chat` del Worker,
+che lo gira su Gemma 4 26B A4B (Cloudflare Workers AI, provider `AILA_CLOUD`). La quota
+giornaliera la conta Cloudflare (10.000 neuron al giorno sul piano Free) e la ferma da sola;
+quando finisce, l'app prosegue con la riserva — la chiave personale Google AI Studio o l'AI
+locale — oppure mostra un messaggio chiaro («quota finita, si rinnova domani»).
+
+Le circolari restano fuori dal servizio incluso: l'analisi client-side usa la chiave
+personale dell'utente (Google AI Studio), la stessa decisione di prima della v1.5.0, e i
+riassunti in anticipo arrivano dalla cron del server con la sua chiave dedicata
+(`GEMINI_API_KEY`, segreto del Worker). Il provider «AI locale» usa lo stesso prompt, ma con
+la versione compatta delle regole sulla gita, perché il modello sul telefono ha una finestra
+più stretta.

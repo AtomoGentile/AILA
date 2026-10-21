@@ -20,6 +20,11 @@ export interface Env {
   // Segreto per le rotte /api/admin (emissione dei codici Rappresentante). Solo come secret,
   // almeno 16 caratteri; se manca le rotte rispondono 503.
   ADMIN_SECRET?: string;
+  // Binding di Workers AI per il chatbot di AILA Assistant (routes/ai.ts). Va in wrangler.toml
+  // con `[ai] binding = "AI"` — non e' un secret e non costa: sul piano Free il conteggio dei
+  // neuron (10.000/giorno, esatto, di Cloudflare) vale come hard limit e la rotta traduce
+  // l'errore 4006 di fine quota in un 429. Se il binding manca, la rotta risponde 503.
+  AI?: AiBinding;
   // Chiave Google AI Studio per il riassunto delle circolari fatto dal server (services/summarizer.ts).
   // Solo come secret (`wrangler secret put GEMINI_API_KEY`), mai in [vars]. Se assente, i riassunti
   // restano ai telefoni come prima.
@@ -31,6 +36,20 @@ export interface Env {
   VAPID_SUBJECT?: string;
   // Origini ammesse dal CORS, separate da virgola (in [vars] di wrangler.toml).
   WEB_ORIGINS?: string;
+}
+
+/**
+ * Binding di Workers AI (Env.AI). Digitato con la sola interfaccia che routes/ai.ts usa:
+ * il tipo `Ai` di @cloudflare/workers-types non e' disponibile in tutte le versioni e una
+ * dichiarazione minima qui non importa alcun pacchetto in piu'.
+ */
+export interface AiBinding {
+  run(model: string, input: Record<string, unknown>): Promise<AiRunResult>;
+}
+
+/** Risposta "messages" di un modello di testo di Workers AI: il testo e' in `response`. */
+export interface AiRunResult {
+  response?: string;
 }
 
 export interface JWTPayload {

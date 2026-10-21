@@ -27,6 +27,7 @@ import rankingPollsRoutes from './routes/rankingPolls';
 import fcmRoutes from './routes/fcm';
 import webPushRoutes from './routes/webpush';
 import adminRoutes from './routes/admin';
+import aiRoutes from './routes/ai';
 import { adminPage } from './routes/adminPage';
 
 // ---------------------------------------------------------------------------
@@ -76,6 +77,8 @@ app.route('/api/ranking-polls', rankingPollsRoutes);
 app.route('/api/fcm', fcmRoutes);
 app.route('/api/webpush', webPushRoutes);
 app.route('/api/admin', adminRoutes);
+// Chat di AILA Assistant inclusa per tutti (v1.5.0): proxy verso Workers AI con Gemma.
+app.route('/api/ai', aiRoutes);
 // Pagina per emettere i codici Rappresentante dal browser (routes/adminPage.ts).
 app.get('/admin', adminPage);
 

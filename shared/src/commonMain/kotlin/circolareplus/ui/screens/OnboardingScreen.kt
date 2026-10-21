@@ -171,7 +171,8 @@ private val onboardingPages = listOf(
         iconKind = OnboardingIcon.SPARKLE,
         title = "Chiedi ad\nAILA Assistant.",
         body = "Una domanda in italiano e una risposta costruita sui dati della tua classe, " +
-            "con le fonti da aprire. Nel prossimo passo scegli l'AI che la alimenta.",
+            "con le fonti da aprire. Funziona subito, senza chiavi da configurare: nel " +
+            "passo dopo, se vuoi, aggiungi un'AI in più.",
         accent = AppTheme.OnboardingAssistantAccent,
         gradient = AppTheme.OnboardingAssistantGradient
     )
@@ -489,13 +490,15 @@ private fun OnboardingCopyText(page: OnboardingPage, modifier: Modifier) {
 }
 
 /**
- * Il passo "Scegli l'AI". Due strade in schede selezionabili, ciascuna con i propri passaggi
- * spiegati in fila (niente gergo: "chiave" è spiegata come "una password gratuita che ti dà
- * Google"), e la possibilità di rimandare senza perdere nulla.
+ * Il passo "Un'AI in più, se la vuoi". Da v1.5.0 la chat dell'assistente non richiede
+ * nessuna configurazione (il servizio incluso vale per tutti), quindi il passo è solo
+ * una struttura facoltativa: due strade in schede selezionabili, ciascuna con i propri
+ * passaggi spiegati in fila (niente gergo: "chiave" è spiegata come "una password
+ * gratuita che ti dà Google"), e la possibilità di saltare senza perdere nulla.
  *
- * Non parte alcun download da solo e nessuna scheda è preselezionata: il modello locale pesa da
- * qualche centinaio di MB a un paio di GB, e scaricarlo sulla rete mobile di nascosto sarebbe un
- * brutto primo incontro con l'app.
+ * Non parte alcun download da solo e nessuna scheda è preselezionata: il modello locale
+ * pesa da qualche centinaio di MB a un paio di GB, e scaricarlo sulla rete mobile di
+ * nascosto sarebbe un brutto primo incontro con l'app.
  */
 @Composable
 private fun AiSetupStep(
@@ -545,14 +548,16 @@ private fun AiSetupStep(
     }
     Spacer(modifier = Modifier.height(AppTheme.Space16))
     Text(
-        text = "Scegli come AILA\nlegge le circolari",
+        text = "Un'AI in più,\nse la vuoi.",
         style = MaterialTheme.typography.headlineMedium,
         color = AppTheme.TextDark
     )
     Spacer(modifier = Modifier.height(AppTheme.Space8))
     Text(
-        text = "Per riassumere le circolari e rispondere alle tue domande AILA usa un'AI. " +
-            "Scegli una strada: potrai cambiarla quando vuoi da Impostazioni.",
+        text = "La chat di AILA Assistant funziona già, sul servizio incluso dell'app, " +
+            "senza chiavi. Le strade qui sotto sono facoltative: servono all'analisi " +
+            "personale delle circolari e fanno da riserva quando la quota del servizio " +
+            "è finita. Puoi anche saltarle. Potrai cambiarle da Impostazioni.",
         style = MaterialTheme.typography.bodyLarge,
         color = AppTheme.TextMuted
     )
@@ -562,7 +567,7 @@ private fun AiSetupStep(
     AiChoiceCard(
         title = "Chiave Google gratuita",
         subtitle = "La più semplice da avviare. Serve la connessione a ogni circolare.",
-        badge = "Consigliata per iniziare",
+        badge = "Facoltativa",
         selected = choice == AiChoice.GOOGLE,
         enabled = !busy,
         onClick = { choice = AiChoice.GOOGLE }
