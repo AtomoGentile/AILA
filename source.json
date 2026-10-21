@@ -15,18 +15,18 @@
       "iconURL": "https://raw.githubusercontent.com/AtomoGentile/AILA/main/iosApp/iosApp/Assets.xcassets/AppIcon.appiconset/Icon-1024.png",
       "tintColor": "#0A1330",
       "version": "1.1.6",
-      "versionDate": "2026-10-21T14:18:36Z",
+      "versionDate": "2026-10-21T16:18:51Z",
       "downloadURL": "https://github.com/AtomoGentile/AILA/releases/download/v1.1.6/AILA.ipa",
-      "size": 19513746,
+      "size": 19523575,
       "versions": [
         {
           "version": "1.1.6",
           "buildVersion": "6",
-          "date": "2026-10-21T14:18:36Z",
+          "date": "2026-10-21T16:18:51Z",
           "localizedDescription": "AILA 1.1.6",
           "downloadURL": "https://github.com/AtomoGentile/AILA/releases/download/v1.1.6/AILA.ipa",
-          "size": 19513746,
-          "sha256": "5f6db81e521a8cf98123c45c98b6957d5cfbeea199f1bda4ac2e91033bfaced8",
+          "size": 19523575,
+          "sha256": "3de9ad8f4a6a729972f62c9fea379bfd885bd0f9991df388dad6c379bcdecb1c",
           "minOSVersion": "17.0"
         },
         {
