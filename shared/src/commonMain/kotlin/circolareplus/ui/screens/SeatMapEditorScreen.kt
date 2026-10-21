@@ -88,6 +88,10 @@ fun SeatMapEditorScreen(
     // (posizione nella lista assignments), la stessa unita' di onSwapSeats/onSwapDesks.
     var draggingDeskIndex by remember { mutableStateOf<Int?>(null) }
     var hoveredDeskIndex by remember { mutableStateOf<Int?>(null) }
+    // La presa ha un recognizer proprio per iniziare il drag al primo movimento. Quando parte
+    // sul touch, il recognizer long-press della card vede il movimento consumato e riceve cancel:
+    // non deve azzerare il drag della presa, che è ancora in corso.
+    var gripDraggingDeskIndex by remember { mutableStateOf<Int?>(null) }
     // Bordo di ogni banco visibile, aggiornato a ogni layout (scroll compreso): durante il drag
     // il banco sotto il dito e' quello col centro piu' vicino al puntatore, fra i banchi attual-
     // mente visibili (un banco fuori schermo non e' un bersaglio sensato e il suo bordo sarebbe
@@ -113,6 +117,7 @@ fun SeatMapEditorScreen(
     // consuma subito il dito dopo la touch slop, cosi' lo scroll della griglia non parte e
     // non annulla il gesto (il guaio del long-press, che resta come fallback sul corpo card).
     fun startGripDrag(from: Int) {
+        gripDraggingDeskIndex = from
         if (draggingDeskIndex == null) {
             draggingDeskIndex = from
             hoveredDeskIndex = null
@@ -133,6 +138,7 @@ fun SeatMapEditorScreen(
     }
 
     fun endGripDrag(deskIndex: Int) {
+        if (gripDraggingDeskIndex == deskIndex) gripDraggingDeskIndex = null
         if (draggingDeskIndex == deskIndex) endDeskDrag()
     }
 
@@ -253,24 +259,28 @@ fun SeatMapEditorScreen(
                 val dragModifier = Modifier.pointerInput(deskIndex) {
                     detectDragGesturesAfterLongPress(
                         onDragStart = {
-                            draggingDeskIndex = deskIndex
-                            hoveredDeskIndex = null
+                            if (gripDraggingDeskIndex != deskIndex) {
+                                draggingDeskIndex = deskIndex
+                                hoveredDeskIndex = null
+                            }
                         },
                         onDrag = { change, _ ->
-                            change.consume()
-                            // Puntatore in coordinate schermo: origine del banco + posizione
-                            // locale dell'evento. Il bersaglio e' il banco visibile col centro
-                            // piu' vicino al puntatore (vedi deskIndexUnderPointer).
-                            val origin = deskBounds[deskIndex]?.position ?: Offset.Zero
-                            hoveredDeskIndex = deskIndexUnderPointer(
-                                pointerInRoot = origin + change.position,
-                                deskBounds = deskBounds,
-                                visibleCellIndexes = gridState.layoutInfo.visibleItemsInfo.map { it.index },
-                                cells = deskCells
-                            )
+                            if (gripDraggingDeskIndex != deskIndex) {
+                                change.consume()
+                                // Puntatore in coordinate schermo: origine del banco + posizione
+                                // locale dell'evento. Il bersaglio e' il banco visibile col centro
+                                // piu' vicino al puntatore (vedi deskIndexUnderPointer).
+                                val origin = deskBounds[deskIndex]?.position ?: Offset.Zero
+                                hoveredDeskIndex = deskIndexUnderPointer(
+                                    pointerInRoot = origin + change.position,
+                                    deskBounds = deskBounds,
+                                    visibleCellIndexes = gridState.layoutInfo.visibleItemsInfo.map { it.index },
+                                    cells = deskCells
+                                )
+                            }
                         },
-                        onDragEnd = { endDeskDrag() },
-                        onDragCancel = { endDeskDrag() }
+                        onDragEnd = { if (gripDraggingDeskIndex != deskIndex) endDeskDrag() },
+                        onDragCancel = { if (gripDraggingDeskIndex != deskIndex) endDeskDrag() }
                     )
                 }
                 // Layout observer: aggiorna il bordo del banco (serve sopra, per bersaglio/dito).
@@ -499,7 +509,7 @@ private fun DeskGripHandle(
     var originInRoot by remember { mutableStateOf(Offset.Zero) }
     Box(
         modifier = modifier
-            .size(28.dp)
+            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
             .onGloballyPositioned { originInRoot = it.positionInRoot() }
             .pointerInput(Unit) {
                 detectDragGestures(
