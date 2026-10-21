@@ -15,6 +15,12 @@ function isValidEventTime(value: string): boolean {
   return range !== null && Number(range[1]) <= Number(range[2]);
 }
 
+function isValidIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
 
 const calendar = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();
 
@@ -123,6 +129,8 @@ calendar.post('/', async (c) => {
   const body = await c.req.json<{
     title: string;
     eventDate: string;
+    endDate?: string;
+    repeat?: 'NONE' | 'DAILY' | 'WEEKLY';
     startTime?: string;
     category: EventCategory;
     isForAll?: boolean;
@@ -135,6 +143,8 @@ calendar.post('/', async (c) => {
   }>();
 
   const { eventDate, startTime, category, isAiGenerated = false, notes, force = false } = body;
+  const endDate = body.endDate ?? eventDate;
+  const repeat = body.repeat ?? 'NONE';
   const title = typeof body.title === 'string' ? body.title.trim() : '';
   const visibleToUserIds = Array.isArray(body.visibleToUserIds)
     ? [...new Set(body.visibleToUserIds.filter((id): id is string => typeof id === 'string'))]
@@ -150,8 +160,23 @@ calendar.post('/', async (c) => {
   if (!VALID_CATEGORIES.includes(category)) {
     return c.json({ error: `Categoria non valida. Valori ammessi: ${VALID_CATEGORIES.join(', ')}` }, 400);
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
+  if (!isValidIsoDate(eventDate)) {
     return c.json({ error: 'eventDate deve essere nel formato yyyy-mm-dd' }, 400);
+  }
+  if (!isValidIsoDate(endDate) || endDate < eventDate) {
+    return c.json({ error: 'endDate deve essere uguale o successiva a eventDate' }, 400);
+  }
+  if (!['NONE', 'DAILY', 'WEEKLY'].includes(repeat)) {
+    return c.json({ error: 'Ripetizione non valida' }, 400);
+  }
+  const startUtc = Date.parse(`${eventDate}T00:00:00Z`);
+  const endUtc = Date.parse(`${endDate}T00:00:00Z`);
+  if ((endUtc - startUtc) / 86_400_000 > 365) return c.json({ error: 'La durata massima è un anno' }, 400);
+  const eventDates: string[] = [];
+  for (let day = 0; startUtc + day * 86_400_000 <= endUtc; day++) {
+    if (repeat === 'NONE' || repeat === 'DAILY' || (repeat === 'WEEKLY' && day % 7 === 0)) {
+      eventDates.push(new Date(startUtc + day * 86_400_000).toISOString().slice(0, 10));
+    }
   }
   if (startTime != null && !isValidEventTime(startTime)) {
     return c.json({ error: 'startTime deve essere HH:MM oppure ora di lezione (es. 3ª ora)' }, 400);
@@ -177,8 +202,9 @@ calendar.post('/', async (c) => {
   // sono spesso piu' d'una. L'avviso si puo' superare con `force`.
   if (!force) {
     const sameDay = await c.env.DB.prepare(
-      'SELECT id, title FROM calendar_events WHERE class_id = ? AND category = ? AND event_date = ?'
-    ).bind(classId, category, eventDate).all<{ id: string; title: string }>();
+      `SELECT id, title FROM calendar_events WHERE class_id = ? AND category = ?
+       AND event_date IN (${eventDates.map(() => '?').join(',')})`
+    ).bind(classId, category, ...eventDates).all<{ id: string; title: string }>();
     const wanted = normalizeTitle(title);
     const dup = sameDay.results.find((e) => normalizeTitle(e.title) === wanted);
     if (dup) {
@@ -195,35 +221,25 @@ calendar.post('/', async (c) => {
     circularNumber = found?.number ?? null;
   }
 
-  const id = newUUID();
-  const values = [
-    id, title, eventDate, startTime ?? null, category, isForAll ? 1 : 0, isAiGenerated ? 1 : 0,
-    payload.sub, classId,
-    notes ?? null,
-    visibleToUserIds && visibleToUserIds.length > 0 ? JSON.stringify(visibleToUserIds) : null,
-  ];
-  const insertPlain = () => c.env.DB.prepare(
-    `INSERT INTO calendar_events
-       (id, title, event_date, start_time, category, is_for_all, is_ai_generated, created_by, class_id, notes, visible_to_user_ids_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(...values).run();
-  if (circularNumber === null) {
-    await insertPlain();
-  } else {
-    try {
-      await c.env.DB.prepare(
-        `INSERT INTO calendar_events
-           (id, title, event_date, start_time, category, is_for_all, is_ai_generated, created_by, class_id, notes, visible_to_user_ids_json, circular_number)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      ).bind(...values, circularNumber).run();
-    } catch (e) {
-      // Migrazione 015 non ancora applicata: l'evento si crea comunque, senza il rimando.
-      console.error('[Calendar] circular_number non salvato (manca la migrazione 015?)', e);
-      await insertPlain();
-    }
+  const ids = eventDates.map(() => newUUID());
+  const visibleJson = visibleToUserIds && visibleToUserIds.length > 0 ? JSON.stringify(visibleToUserIds) : null;
+  const statements = eventDates.map((date, index) => {
+    const values = [ids[index], title, date, startTime ?? null, category, isForAll ? 1 : 0,
+      isAiGenerated ? 1 : 0, payload.sub, classId, notes ?? null, visibleJson];
+    return circularNumber === null
+      ? c.env.DB.prepare(`INSERT INTO calendar_events (id,title,event_date,start_time,category,is_for_all,is_ai_generated,created_by,class_id,notes,visible_to_user_ids_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(...values)
+      : c.env.DB.prepare(`INSERT INTO calendar_events (id,title,event_date,start_time,category,is_for_all,is_ai_generated,created_by,class_id,notes,visible_to_user_ids_json,circular_number) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).bind(...values, circularNumber);
+  });
+  try {
+    await c.env.DB.batch(statements);
+  } catch (e) {
+    if (circularNumber === null) throw e;
+    console.error('[Calendar] circular_number non salvato (manca la migrazione 015?)', e);
+    await c.env.DB.batch(eventDates.map((date, index) => c.env.DB.prepare(
+      `INSERT INTO calendar_events (id,title,event_date,start_time,category,is_for_all,is_ai_generated,created_by,class_id,notes,visible_to_user_ids_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+    ).bind(ids[index], title, date, startTime ?? null, category, isForAll ? 1 : 0, isAiGenerated ? 1 : 0, payload.sub, classId, notes ?? null, visibleJson)));
   }
-
-  return c.json({ success: true, id }, 201);
+  return c.json({ success: true, id: ids[0], count: ids.length }, 201);
 });
 
 // ---------------------------------------------------------------------------

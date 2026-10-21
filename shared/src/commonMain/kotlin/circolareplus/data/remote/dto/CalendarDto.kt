@@ -34,7 +34,9 @@ data class CreateCalendarEventRequestDto(
     val notes: String? = null,
     val circularNumber: Int? = null,
     /** Inserisci anche se il server ha trovato lo stesso evento nello stesso giorno. */
-    val force: Boolean = false
+    val force: Boolean = false,
+    val endDate: String? = null,
+    val repeat: String = "NONE"
 )
 
 @Serializable

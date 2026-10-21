@@ -2144,7 +2144,7 @@ fun MainAppShell(
             closeRequested = addEventCloseRequested,
             initialStep = addEventInitialStep,
             initialDateIso = addEventInitialDateIso,
-            onConfirm = { title, date, time, category, visibleToUserIds, notes ->
+            onConfirm = { title, date, endDate, repeat, time, category, visibleToUserIds, notes ->
                 fun create(force: Boolean) {
                     coroutineScope.launch {
                         try {
@@ -2155,7 +2155,9 @@ fun MainAppShell(
                                 category = category,
                                 visibleToUserIds = visibleToUserIds,
                                 notes = notes,
-                                force = force
+                                force = force,
+                                endDate = endDate,
+                                repeat = repeat
                             )
                             if (response.warning != null) {
                                 // Lo stesso evento c'e' gia' quel giorno: si chiede se aggiungerlo
@@ -5181,7 +5183,7 @@ private fun parseAiEventPrompt(raw: String): AiEventDraft {
 @Composable
 private fun AddCalendarEventDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String, String, String?, CalendarEventCategory, List<String>?, String?) -> Unit,
+    onConfirm: (String, String, String, String, String?, CalendarEventCategory, List<String>?, String?) -> Unit,
     initialStep: EventCreationStep = EventCreationStep.MENU,
     initialDateIso: String? = null,
     /** true quando il chiamante vuole chiudere il foglio (evento creato): scende e poi chiama [onDismiss]. */
@@ -5206,9 +5208,12 @@ private fun AddCalendarEventDialog(
                 ?.takeIf { it >= todayMillis }
         )
     }
+    var selectedEndDateMillis by remember { mutableStateOf<Long?>(null) }
     // Anche una data arrivata dall'assistente (es. "la verifica di ieri") puo' essere passata.
     val isPastDate = selectedDateMillis?.let { it < todayMillis } == true
     var showDatePicker by remember { mutableStateOf(false) }
+    var showEndDatePicker by remember { mutableStateOf(false) }
+    var repeatFrequency by remember { mutableStateOf("NONE") }
     var fromHour by remember { mutableStateOf<Int?>(null) }
     var toHour by remember { mutableStateOf<Int?>(null) }
     // Ore di lezione della classe: 5 (8-13) o 6 (8-14).
@@ -5320,6 +5325,8 @@ private fun AddCalendarEventDialog(
             onConfirm(
                 finalTitle,
                 date,
+                selectedEndDateMillis?.let { epochMillisToIsoDate(it) } ?: date,
+                repeatFrequency,
                 time.trim().ifBlank { null },
                 category,
                 visibleToUserIds,
@@ -5327,13 +5334,17 @@ private fun AddCalendarEventDialog(
             )
         }
     }
-    val canSubmitManualEvent = title.isNotBlank() && selectedDateMillis != null && !isPastDate
+    val canSubmitManualEvent = title.isNotBlank() && selectedDateMillis != null && !isPastDate &&
+        (selectedEndDateMillis == null || selectedEndDateMillis!! >= (selectedDateMillis ?: 0L)) &&
+        (repeatFrequency == "NONE" || selectedEndDateMillis != null)
 
     // Il DatePickerDialog Material a griglia resta solo per il ramo Android: in stile iOS
     // "Data" apre invece il wheel picker inline dentro il foglio (vedi più sotto).
-    if (showDatePicker) {
+    if (showDatePicker || showEndDatePicker) {
+        val pickingEndDate = showEndDatePicker
+        val pickerInitialDate = if (pickingEndDate) selectedEndDateMillis ?: selectedDateMillis else selectedDateMillis
         val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = selectedDateMillis,
+            initialSelectedDateMillis = pickerInitialDate,
             // Nel selettore i giorni passati sono grigi e non si toccano.
             selectableDates = object : androidx.compose.material3.SelectableDates {
                 override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis >= todayMillis
@@ -5342,11 +5353,16 @@ private fun AddCalendarEventDialog(
         )
         circolareplus.design.AilaDatePickerDialog(
             state = datePickerState,
-            onDismiss = { showDatePicker = false },
+            onDismiss = { showDatePicker = false; showEndDatePicker = false },
             confirmLabel = "Scegli"
         ) {
-            selectedDateMillis = datePickerState.selectedDateMillis
+            if (pickingEndDate) selectedEndDateMillis = datePickerState.selectedDateMillis
+            else {
+                selectedDateMillis = datePickerState.selectedDateMillis
+                if (selectedEndDateMillis != null && selectedEndDateMillis!! < (selectedDateMillis ?: 0L)) selectedEndDateMillis = null
+            }
             showDatePicker = false
+            showEndDatePicker = false
         }
     }
 
@@ -5671,6 +5687,24 @@ private fun AddCalendarEventDialog(
                                 maxLines = 1
                             )
                         }
+                    }
+                    val endDateLabel = selectedEndDateMillis?.let { millis ->
+                        val civil = circolareplus.util.parseIsoDate(epochMillisToIsoDate(millis))
+                        if (civil != null) "Fino al ${civil.day} ${circolareplus.util.ITALIAN_MONTHS.getOrNull(civil.month)?.lowercase().orEmpty()}" else "Fino al"
+                    } ?: "Più giorni"
+                    FlowRow(modifier = Modifier.fillMaxWidth().ailaSheetReveal(3), horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8), verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                        Text("Ripeti", style = MaterialTheme.typography.labelMedium, color = AppTheme.TextMuted)
+                        listOf("NONE" to "Mai", "DAILY" to "Ogni giorno", "WEEKLY" to "Ogni settimana").forEach { (value, label) ->
+                            circolareplus.design.AnimatedFilterChip(label = label, isSelected = repeatFrequency == value, onClick = { repeatFrequency = value })
+                        }
+                    }
+                    Row(modifier = Modifier.fillMaxWidth().clickable { showEndDatePicker = true }.padding(vertical = AppTheme.Space8), verticalAlignment = Alignment.CenterVertically) {
+                        AppIcons.Calendar(modifier = Modifier.size(16.dp), color = AppTheme.PrimaryBlue)
+                        Spacer(modifier = Modifier.width(AppTheme.Space8))
+                        Text(endDateLabel, style = MaterialTheme.typography.labelLarge, color = if (selectedEndDateMillis != null) AppTheme.TextDark else AppTheme.TextMuted)
+                    }
+                    if (repeatFrequency != "NONE" && selectedEndDateMillis == null) {
+                        Text("Scegli la data di fine per impostare la ripetizione.", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
                     }
                     Spacer(modifier = Modifier.height(AppTheme.Space8))
                     // Orario a ore di lezione (1-6) invece di un'ora libera tipo "8:00".

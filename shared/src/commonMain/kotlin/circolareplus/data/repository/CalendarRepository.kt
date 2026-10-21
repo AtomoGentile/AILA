@@ -33,12 +33,15 @@ class CalendarRepository(private val api: ApiClient) {
         visibleToUserIds: List<String>? = null,
         notes: String? = null,
         force: Boolean = false,
-        circularNumber: Int? = null
+        circularNumber: Int? = null,
+        endDate: String? = null,
+        repeat: String = "NONE"
     ): CreateCalendarEventResponseDto = api.post(
         "/api/calendar",
         CreateCalendarEventRequestDto(
             title, eventDate, startTime, category.name, isForAll, isAiGenerated,
-            visibleToUserIds = visibleToUserIds, notes = notes, circularNumber = circularNumber, force = force
+            visibleToUserIds = visibleToUserIds, notes = notes, circularNumber = circularNumber, force = force,
+            endDate = endDate, repeat = repeat
         )
     )
 

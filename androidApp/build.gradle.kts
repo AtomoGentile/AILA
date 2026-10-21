@@ -122,7 +122,7 @@ android {
                     Regex("^[vV](\\d+(\\.\\d+)*)$").find(System.getenv("GITHUB_REF_NAME").orEmpty())?.groupValues?.get(1)
                 } else null
         }
-        val baseVersion = tagVersion ?: "1.5.0"
+        val baseVersion = tagVersion ?: "1.5.1"
         versionName = if (ciRun != null) "$baseVersion (build $ciRun, $ciSha)" else baseVersion
 
         ndk {
