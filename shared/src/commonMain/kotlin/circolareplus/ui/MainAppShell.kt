@@ -5418,6 +5418,7 @@ private fun AddCalendarEventDialog(
                 .appImePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = AppTheme.Space20)
+                .padding(top = AppTheme.Space8)
                 .padding(bottom = AppTheme.Space32)
         ) {
             // Intestazione Material: freccia indietro (fuori dal menu iniziale) + titolo + chiudi.
@@ -5711,6 +5712,7 @@ private fun AddCalendarEventDialog(
                         Row(
                             modifier = Modifier
                                 .weight(1.4f)
+                                .heightIn(min = 56.dp)
                                 .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
                                 .border(1.dp, AppTheme.FieldOutline, RoundedCornerShape(AppTheme.SmallElementRadius))
                                 .clickable { showDatePicker = true }
@@ -5732,13 +5734,27 @@ private fun AddCalendarEventDialog(
                         val civil = circolareplus.util.parseIsoDate(epochMillisToIsoDate(millis))
                         if (civil != null) "Fino al ${civil.day} ${circolareplus.util.ITALIAN_MONTHS.getOrNull(civil.month)?.lowercase().orEmpty()} ${civil.year}" else "Fino al"
                     } ?: if (selectedDateMillis == null) "Scegli prima una data di inizio" else "Scegli la data finale"
-                    FlowRow(modifier = Modifier.fillMaxWidth().ailaSheetReveal(3), horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8), verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
-                        Text("Ripeti", style = MaterialTheme.typography.labelMedium, color = AppTheme.TextMuted)
+                    Spacer(modifier = Modifier.height(AppTheme.Space16))
+                    Text(
+                        text = "Ripeti",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = AppTheme.TextMuted,
+                        modifier = Modifier.ailaSheetReveal(3).padding(bottom = AppTheme.Space8)
+                    )
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth().ailaSheetReveal(3),
+                        horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
+                        verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+                    ) {
                         listOf("NONE" to "Mai", "DAILY" to "Ogni giorno", "WEEKLY" to "Ogni settimana").forEach { (value, label) ->
-                            circolareplus.design.AnimatedFilterChip(label = label, isSelected = repeatFrequency == value, onClick = { repeatFrequency = value })
+                            circolareplus.design.AnimatedFilterChip(
+                                label = label,
+                                isSelected = repeatFrequency == value,
+                                onClick = { repeatFrequency = value }
+                            )
                         }
                     }
-                    Spacer(modifier = Modifier.height(AppTheme.Space8))
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -5788,9 +5804,9 @@ private fun AddCalendarEventDialog(
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = AppTheme.TextMuted,
-                        modifier = Modifier.padding(start = AppTheme.Space8, top = AppTheme.Space4)
+                        modifier = Modifier.padding(start = AppTheme.Space12, top = AppTheme.Space8)
                     )
-                    Spacer(modifier = Modifier.height(AppTheme.Space8))
+                    Spacer(modifier = Modifier.height(AppTheme.Space16))
                     // Orario a ore di lezione (1-6) invece di un'ora libera tipo "8:00".
                     Row(
                         modifier = Modifier.fillMaxWidth().ailaSheetReveal(3),

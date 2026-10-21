@@ -732,74 +732,125 @@ private fun DummiesBlock(
     var firstName by remember { mutableStateOf("") }
     var lastName by remember { mutableStateOf("") }
     val canAdd = firstName.isNotBlank() && lastName.isNotBlank() && !isSaving
+    val blockShape = RoundedCornerShape(AppTheme.SmallElementRadius)
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(blockShape)
+            .background(AppTheme.DeskFloor.copy(alpha = 0.55f))
+            .border(1.dp, AppTheme.Hairline, blockShape)
+            .padding(AppTheme.Space12)
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            AppIcons.Chair(modifier = Modifier.size(16.dp), color = AppTheme.TextDark)
-            Spacer(modifier = Modifier.width(AppTheme.Space8))
-            Column {
+            Box(
+                modifier = Modifier.size(36.dp).clip(CircleShape).background(AppTheme.TintBlue),
+                contentAlignment = Alignment.Center
+            ) {
+                AppIcons.Chair(modifier = Modifier.size(18.dp), color = AppTheme.TintBlueInk)
+            }
+            Spacer(modifier = Modifier.width(AppTheme.Space12))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Fantocci", style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
+                    Spacer(modifier = Modifier.width(AppTheme.Space8))
+                    Text(
+                        text = dummies.size.toString(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AppTheme.TintBlueInk,
+                        modifier = Modifier.clip(CircleShape).background(AppTheme.TintBlue)
+                            .padding(horizontal = AppTheme.Space8, vertical = AppTheme.Space4)
+                    )
+                }
                 Text(
-                    text = "Fantocci (${dummies.size})",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = AppTheme.TextDark
-                )
-                Text(
-                    text = "Studenti inventati: occupano un posto in mappa, ma non votano e non possono essere votati.",
-                    style = MaterialTheme.typography.labelSmall,
+                    text = "Posti extra in mappa, esclusi dalle votazioni.",
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Normal,
                     color = AppTheme.TextMuted
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(AppTheme.Space8))
-
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedTextField(
-                value = firstName,
-                onValueChange = { firstName = it },
-                placeholder = { Text("Nome", style = MaterialTheme.typography.bodyMedium, maxLines = 1) },
-                singleLine = true,
-                shape = RoundedCornerShape(AppTheme.CardCornerRadius),
-                colors = ailaFieldColors(),
-                modifier = Modifier.weight(1f)
-            )
-            OutlinedTextField(
-                value = lastName,
-                onValueChange = { lastName = it },
-                placeholder = { Text("Cognome", style = MaterialTheme.typography.bodyMedium, maxLines = 1) },
-                singleLine = true,
-                shape = RoundedCornerShape(AppTheme.CardCornerRadius),
-                colors = ailaFieldColors(),
-                modifier = Modifier.weight(1f)
-            )
-            AilaPrimaryButton(
-                text = "Aggiungi",
-                onClick = {
+        Spacer(modifier = Modifier.height(AppTheme.Space12))
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val stackFields = maxWidth < 500.dp
+            val fields: @Composable ColumnScope.() -> Unit = {
+                OutlinedTextField(
+                    value = firstName,
+                    onValueChange = { firstName = it },
+                    placeholder = { Text("Nome", style = MaterialTheme.typography.bodyMedium, maxLines = 1) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(AppTheme.SmallElementRadius),
+                    colors = ailaFieldColors(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = lastName,
+                    onValueChange = { lastName = it },
+                    placeholder = { Text("Cognome", style = MaterialTheme.typography.bodyMedium, maxLines = 1) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(AppTheme.SmallElementRadius),
+                    colors = ailaFieldColors(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            val addDummy: () -> Unit = {
+                if (canAdd) {
                     onAdd(firstName.trim(), lastName.trim())
                     firstName = ""
                     lastName = ""
-                },
-                enabled = canAdd,
-                compact = true
-            )
+                }
+            }
+            if (stackFields) {
+                Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                    fields()
+                    AilaPrimaryButton(
+                        text = if (isSaving) "Aggiungo…" else "Aggiungi fantoccio",
+                        onClick = addDummy,
+                        enabled = canAdd,
+                        fillMaxWidth = true
+                    )
+                }
+            } else {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+                    ) { fields() }
+                    AilaPrimaryButton(
+                        text = if (isSaving) "Aggiungo…" else "Aggiungi",
+                        onClick = addDummy,
+                        enabled = canAdd,
+                        compact = true
+                    )
+                }
+            }
         }
 
         if (dummies.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(AppTheme.Space4))
-            Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space4)) {
+            Spacer(modifier = Modifier.height(AppTheme.Space12))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Presenti in mappa", style = MaterialTheme.typography.labelMedium, color = AppTheme.TextMuted)
+                Text(dummies.size.toString(), style = MaterialTheme.typography.labelMedium, color = AppTheme.TextMuted)
+            }
+            Spacer(modifier = Modifier.height(AppTheme.Space8))
+            Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
                 dummies.chunked(2).forEach { rowDummies ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space4), modifier = Modifier.fillMaxWidth()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8), modifier = Modifier.fillMaxWidth()) {
                         rowDummies.forEach { dummy ->
                             Row(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
                                     .background(AppTheme.TintBlue)
-                                    .padding(horizontal = AppTheme.Space8, vertical = AppTheme.Space4),
+                                    .padding(start = AppTheme.Space12, end = AppTheme.Space4),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
@@ -808,11 +859,11 @@ private fun DummiesBlock(
                                     color = AppTheme.TintBlueInk,
                                     maxLines = 1,
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f).padding(vertical = AppTheme.Space8)
                                 )
                                 Box(
                                     modifier = Modifier
-                                        .size(26.dp)
+                                        .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
                                         .clip(CircleShape)
                                         .clickable(enabled = !isSaving) { onDelete(dummy.id) }
                                         .semantics { contentDescription = "Elimina il fantoccio ${dummy.fullName}" },
@@ -829,10 +880,11 @@ private fun DummiesBlock(
                 }
             }
         } else {
-            Spacer(modifier = Modifier.height(AppTheme.Space4))
+            Spacer(modifier = Modifier.height(AppTheme.Space8))
             Text(
-                text = "Nessun fantoccio: scrivi un nome e un cognome e aggiungilo come compagno di banco fittizio.",
-                style = MaterialTheme.typography.labelSmall,
+                text = "Aggiungi nomi fittizi per completare la disposizione dei posti.",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Normal,
                 color = AppTheme.TextMuted
             )
         }
