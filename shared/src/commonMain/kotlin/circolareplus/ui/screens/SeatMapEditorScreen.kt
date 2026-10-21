@@ -3,8 +3,6 @@ package circolareplus.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -18,6 +16,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.awaitEachGesture
+import androidx.compose.ui.input.pointer.awaitFirstDown
+import androidx.compose.ui.input.pointer.awaitPointerEvent
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.font.FontWeight
@@ -36,6 +38,7 @@ import circolareplus.design.ailaDeskLabel
 import circolareplus.design.ailaDeskBadge
 import circolareplus.domain.model.SocialPreferenceScore
 import circolareplus.domain.model.User
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Riferimento a un posto selezionato nell'editor: indice del banco + indice del posto (0=A,
  * 1=B, 2=C — quest'ultimo solo per i banchi da trio). */
@@ -53,11 +56,10 @@ private data class DeskBounds(val position: Offset, val size: androidx.compose.u
  * poi un secondo per scambiarli) con ricalcolo live del punteggio passato da fuori, pulsante di
  * ripristino alla proposta originale dell'algoritmo e pulsante di pubblicazione finale.
  *
- * Dal v1.1.6 in piu' c'e' il drag & drop di banchi interi: la presa (grip) in alto a destra di
- * ogni card avvia il trascinamento al PRIMO movimento del dito, mentre il long-press sul corpo
- * della card resta come fallback. Un banco si trascina su un altro banco — anche su uno VUOTO,
- * cosi' lo spazio libero della griglia va dove vuole il Rappresentante — e alla fine del
- * trascinamento si chiama [onSwapDesks].
+ * Oltre al tap-to-swap dei posti, la presa di ogni banco supporta il drag: touch con pressione
+ * prolungata, mouse appena inizia il movimento. Sul touch si può anche toccare la presa di origine
+ * e poi quella di destinazione. Un banco si sposta su un altro banco — anche uno vuoto — e al
+ * rilascio si chiama [onSwapDesks].
  */
 @Composable
 fun SeatMapEditorScreen(
@@ -80,18 +82,15 @@ fun SeatMapEditorScreen(
     seatsPerDesk: Int = SeatMapOptimizer.SEATS_PER_DESK_PAIR
 ) {
     var selectedSeat by remember { mutableStateOf<EditableSeatRef?>(null) }
+    var selectedDeskForMove by remember { mutableStateOf<Int?>(null) }
     val (deskColumns, deskCells) = remember(assignments) { deskGridCells(assignments) }
     val gridState = rememberLazyGridState()
 
-    // --- Stato del drag&drop dei banchi (long-press) --------------------------------------
+    // --- Stato del drag&drop dei banchi --------------------------------------------------
     // Banco in trascinamento e banco evidenziato come bersaglio: gli indici sono deskIndex
     // (posizione nella lista assignments), la stessa unita' di onSwapSeats/onSwapDesks.
     var draggingDeskIndex by remember { mutableStateOf<Int?>(null) }
     var hoveredDeskIndex by remember { mutableStateOf<Int?>(null) }
-    // La presa ha un recognizer proprio per iniziare il drag al primo movimento. Quando parte
-    // sul touch, il recognizer long-press della card vede il movimento consumato e riceve cancel:
-    // non deve azzerare il drag della presa, che è ancora in corso.
-    var gripDraggingDeskIndex by remember { mutableStateOf<Int?>(null) }
     // Bordo di ogni banco visibile, aggiornato a ogni layout (scroll compreso): durante il drag
     // il banco sotto il dito e' quello col centro piu' vicino al puntatore, fra i banchi attual-
     // mente visibili (un banco fuori schermo non e' un bersaglio sensato e il suo bordo sarebbe
@@ -103,21 +102,19 @@ fun SeatMapEditorScreen(
         val target = hoveredDeskIndex
         draggingDeskIndex = null
         hoveredDeskIndex = null
+        selectedDeskForMove = null
         if (from != null && target != null && target != from) {
             onSwapDesks(from, target)
             // Lo scambio ha spostato banchi INTERI: la selezione precedente potrebbe puntare a un
-            // banco ormai spostato, la si azzera (vale sia per il drag dalla presa sia per il
-            // long-press sul corpo della card).
+            // banco ormai spostato, la si azzera.
             selectedSeat = null
         }
     }
 
-    // --- Presa di trascinamento dei banchi (v1.1.6) ----------------------------------------
-    // Il grip avvia il drag al PRIMO movimento (detectDragGestures, non after-long-press):
-    // consuma subito il dito dopo la touch slop, cosi' lo scroll della griglia non parte e
-    // non annulla il gesto (il guaio del long-press, che resta come fallback sul corpo card).
+    // --- Presa di trascinamento dei banchi ------------------------------------------------
     fun startGripDrag(from: Int) {
-        gripDraggingDeskIndex = from
+        selectedDeskForMove = null
+        selectedSeat = null
         if (draggingDeskIndex == null) {
             draggingDeskIndex = from
             hoveredDeskIndex = null
@@ -138,8 +135,21 @@ fun SeatMapEditorScreen(
     }
 
     fun endGripDrag(deskIndex: Int) {
-        if (gripDraggingDeskIndex == deskIndex) gripDraggingDeskIndex = null
         if (draggingDeskIndex == deskIndex) endDeskDrag()
+    }
+
+    fun tapDeskGrip(deskIndex: Int) {
+        val source = selectedDeskForMove
+        if (source == null) {
+            selectedDeskForMove = deskIndex
+            selectedSeat = null
+        } else {
+            selectedDeskForMove = null
+            if (source != deskIndex) {
+                onSwapDesks(source, deskIndex)
+                selectedSeat = null
+            }
+        }
     }
 
     // Uno scambio può cambiare la composizione dei banchi: se la selezione punta a un indice
@@ -152,6 +162,7 @@ fun SeatMapEditorScreen(
         }
         draggingDeskIndex = null
         hoveredDeskIndex = null
+        selectedDeskForMove = null
     }
 
     Column(modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
@@ -172,22 +183,22 @@ fun SeatMapEditorScreen(
                     StatChip("Disciplina", breakdown.discipline.toInt(), Modifier.weight(1f))
                 }
                 Text(
-                    text = if (selectedSeat == null)
-                        "Tocca un nome per selezionarlo, poi un secondo per scambiarli."
-                    else
-                        "Ora tocca un secondo nome per completare lo scambio.",
+                    text = when {
+                        selectedDeskForMove != null -> "Banco selezionato: tocca la presa del banco di destinazione."
+                        selectedSeat == null -> "Tocca un nome per selezionarlo, poi un secondo per scambiarli."
+                        else -> "Ora tocca un secondo nome per completare lo scambio."
+                    },
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Normal,
                     color = AppTheme.TextMuted,
                     modifier = Modifier.padding(top = AppTheme.Space8)
                 )
                 Text(
-                    // Drag & drop dei banchi interi (v1.1.6): la presa (grip) avvia il trascina-
-                    // mento al primo movimento del dito, il long-press resta come fallback sul
-                    // corpo della card.
-                    text = "Trascina un banco dalla presa ⠿ in alto a destra (o tienilo premuto) " +
-                        "e lascialo su un altro banco — anche uno «Libero» — per spostare " +
-                        "l'intera coppia. Lo spazio vuoto va dove vuoi tu.",
+                    // Drag & drop dei banchi interi: pressione prolungata sulla presa su touch;
+                    // un tocco breve sulla presa seleziona il banco per il movimento a due tocchi.
+                    text = "Tieni premuta la presa ⠿ e trascina il banco; su computer puoi " +
+                        "trascinarlo subito. Sul telefono puoi anche toccare la presa del banco " +
+                        "e poi quella di destinazione.",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Normal,
                     color = AppTheme.TextMuted,
@@ -251,38 +262,6 @@ fun SeatMapEditorScreen(
 
                 val deskShape = RoundedCornerShape(if (AppTheme.isGlass) AppTheme.SmallElementRadius + 2.dp else 16.dp)
                 val glass = AppTheme.isGlass
-                // --- Drag & drop del banco intero (long-press, stile RankingPollsScreen) --------
-                // Il long-press prevale sul tap perche' il tap-to-swap parte solo se il dito si
-                // solleva PRIMA della soglia del long-press; in piu' il click sui posti viene
-                // ignorato finche' un trascinamento e' in corso (il dito potrebbe risalire in
-                // ritardo proprio sul banco appena rilasciato).
-                val dragModifier = Modifier.pointerInput(deskIndex) {
-                    detectDragGesturesAfterLongPress(
-                        onDragStart = {
-                            if (gripDraggingDeskIndex != deskIndex) {
-                                draggingDeskIndex = deskIndex
-                                hoveredDeskIndex = null
-                            }
-                        },
-                        onDrag = { change, _ ->
-                            if (gripDraggingDeskIndex != deskIndex) {
-                                change.consume()
-                                // Puntatore in coordinate schermo: origine del banco + posizione
-                                // locale dell'evento. Il bersaglio e' il banco visibile col centro
-                                // piu' vicino al puntatore (vedi deskIndexUnderPointer).
-                                val origin = deskBounds[deskIndex]?.position ?: Offset.Zero
-                                hoveredDeskIndex = deskIndexUnderPointer(
-                                    pointerInRoot = origin + change.position,
-                                    deskBounds = deskBounds,
-                                    visibleCellIndexes = gridState.layoutInfo.visibleItemsInfo.map { it.index },
-                                    cells = deskCells
-                                )
-                            }
-                        },
-                        onDragEnd = { if (gripDraggingDeskIndex != deskIndex) endDeskDrag() },
-                        onDragCancel = { if (gripDraggingDeskIndex != deskIndex) endDeskDrag() }
-                    )
-                }
                 // Layout observer: aggiorna il bordo del banco (serve sopra, per bersaglio/dito).
                 val boundsModifier = Modifier.onGloballyPositioned { coords ->
                     deskBounds[deskIndex] = DeskBounds(coords.positionInRoot(), coords.size)
@@ -306,7 +285,7 @@ fun SeatMapEditorScreen(
                     // banco pieno; l'evidenziazione del bersaglio e' interna (bordo acceso). La
                     // presa sta SOPRA lo slot (VacantDeskSlot resta com'e', sta in SeatMapGrid):
                     // un Box esterno porta bounds/drag/feedback senza cambiarne il layout.
-                    Box(modifier = boundsModifier.then(dragModifier).then(dragVisualModifier)) {
+                    Box(modifier = boundsModifier.then(dragVisualModifier)) {
                         VacantDeskSlot(
                             desk = desk,
                             isDragged = isDragged,
@@ -317,7 +296,9 @@ fun SeatMapEditorScreen(
                             dimmed = draggingDeskIndex != null,
                             onStart = { startGripDrag(deskIndex) },
                             onDrag = { pointerInRoot -> dragGripFrom(deskIndex, pointerInRoot) },
-                            onEnd = { endGripDrag(deskIndex) }
+                            onEnd = { endGripDrag(deskIndex) },
+                            onTap = { tapDeskGrip(deskIndex) },
+                            selected = selectedDeskForMove == deskIndex
                         )
                     }
                     return@items
@@ -340,7 +321,6 @@ fun SeatMapEditorScreen(
                         .then(if (isForbidden) Modifier.border(2.dp, AppTheme.PollDarkRed, deskShape) else Modifier)
                     else Modifier)
                         .then(boundsModifier)
-                        .then(dragModifier)
                         .then(dragVisualModifier)
                 ) {
                     Column(
@@ -362,7 +342,9 @@ fun SeatMapEditorScreen(
                                 dimmed = draggingDeskIndex != null,
                                 onStart = { startGripDrag(deskIndex) },
                                 onDrag = { pointerInRoot -> dragGripFrom(deskIndex, pointerInRoot) },
-                                onEnd = { endGripDrag(deskIndex) }
+                                onEnd = { endGripDrag(deskIndex) },
+                                onTap = { tapDeskGrip(deskIndex) },
+                                selected = selectedDeskForMove == deskIndex
                             )
                         }
                         if (isForbidden) {
@@ -488,10 +470,10 @@ private fun SeatSlotLabel(name: String?, isSelected: Boolean, onClick: () -> Uni
 }
 
 /**
- * Presa di trascinamento di un banco (v1.1.6): la griglietta di punti in alto a destra della
- * card. Il drag parte al primo movimento del dito (detectDragGestures, NON after-long-press):
- * al superamento della touch slop la presa consuma l'evento nella pass Main (che abbasa prima
- * i figli), prima dello scroll della griglia, quindi il gesto non viene annullato. Il bersaglio
+ * Presa di trascinamento di un banco: la griglietta di punti in alto a destra della card.
+ * Su touch si attiva con una pressione prolungata, evitando che la griglia interpreti il gesto
+ * come scroll; con mouse parte subito dopo la touch slop. Un tocco breve seleziona il banco,
+ * così si può spostare anche con la sequenza di due tocchi sul telefono. Il bersaglio
  * si calcola nello stesso spazio dei bounds dei banchi: la posizione del dito e' quella della
  * presa in coordinate root + offset locale dell'evento, con lo stesso helper del long-press
  * (deskIndexUnderPointer, "centro piu' vicino": il bersaglio resta comunque il BANCO).
@@ -503,7 +485,9 @@ private fun DeskGripHandle(
     dimmed: Boolean,
     onStart: () -> Unit,
     onDrag: (pointerInRoot: Offset) -> Unit,
-    onEnd: () -> Unit
+    onEnd: () -> Unit,
+    onTap: () -> Unit,
+    selected: Boolean
 ) {
     // Posizione della presa in coordinate root: registra il "dove" per calcolare il bersaglio.
     var originInRoot by remember { mutableStateOf(Offset.Zero) }
@@ -511,22 +495,81 @@ private fun DeskGripHandle(
         modifier = modifier
             .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
             .onGloballyPositioned { originInRoot = it.positionInRoot() }
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (selected) AppTheme.PrimaryBlue.copy(alpha = 0.14f) else androidx.compose.ui.graphics.Color.Transparent)
             .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragStart = { _ -> onStart() },
-                    onDrag = { change, _ ->
-                        change.consume()
-                        onDrag(originInRoot + change.position)
-                    },
-                    onDragEnd = { onEnd() },
-                    onDragCancel = { onEnd() }
-                )
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    var started = false
+                    if (down.type == PointerType.Mouse) {
+                        while (!started) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id }
+                                ?: return@awaitEachGesture
+                            if (!change.pressed) {
+                                onTap()
+                                return@awaitEachGesture
+                            }
+                            if ((change.position - down.position).getDistance() >= viewConfiguration.touchSlop) {
+                                change.consume()
+                                onStart()
+                                onDrag(originInRoot + change.position)
+                                started = true
+                            }
+                        }
+                    } else {
+                        var releasedBeforeLongPress = false
+                        var movedBeforeLongPress = false
+                        val longPressRecognized = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == down.id }
+                                if (change == null || !change.pressed) {
+                                    releasedBeforeLongPress = true
+                                    return@withTimeoutOrNull false
+                                }
+                                if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) {
+                                    movedBeforeLongPress = true
+                                    return@withTimeoutOrNull false
+                                }
+                            }
+                            @Suppress("UNREACHABLE_CODE")
+                            false
+                        } == null
+                        if (!longPressRecognized) {
+                            if (releasedBeforeLongPress && !movedBeforeLongPress) onTap()
+                            return@awaitEachGesture
+                        }
+                        onStart()
+                        started = true
+                    }
+
+                    while (started) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id }
+                        if (change == null || !change.pressed) {
+                            if (change != null) {
+                                change.consume()
+                                onDrag(originInRoot + change.position)
+                            }
+                            started = false
+                        } else {
+                            change.consume()
+                            onDrag(originInRoot + change.position)
+                        }
+                    }
+                    onEnd()
+                }
             },
         contentAlignment = Alignment.Center
     ) {
         AppIcons.Grip(
             modifier = Modifier.size(16.dp),
-            color = AppTheme.TextMuted.copy(alpha = if (dimmed) 0.3f else 1f)
+            color = when {
+                selected -> AppTheme.PrimaryBlue
+                dimmed -> AppTheme.TextMuted.copy(alpha = 0.3f)
+                else -> AppTheme.TextMuted
+            }
         )
     }
 }

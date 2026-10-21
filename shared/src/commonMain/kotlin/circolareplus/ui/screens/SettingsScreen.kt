@@ -394,6 +394,56 @@ fun SettingsScreen(
             
                 }
             }
+            // Il provider va scelto sempre qui, anche su dispositivi senza AI locale: prima
+            // la scelta compariva solo nel riquadro AI locale (o in fondo alla schermata PWA).
+            add {
+                Column {
+                    AilaSectionTitle(text = "Provider AI", modifier = Modifier.ailaAppear(4))
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    AilaCard(modifier = Modifier.ailaAppear(5)) {
+                        Column(modifier = Modifier.padding(AppTheme.Space16)) {
+                            val localCanBeSelected = showLocalAiSection && localAiUnavailableReason == null
+                            val providerLabels = if (localCanBeSelected) {
+                                listOf("AILA", "Google", "API compatibile", "AI locale")
+                            } else {
+                                listOf("AILA", "Google", "API compatibile")
+                            }
+                            AilaSegmentedTabs(
+                                labels = providerLabels,
+                                selectedIndex = when (selectedAiProvider) {
+                                    "GOOGLE_AI_STUDIO" -> 1
+                                    "COMPATIBLE_API" -> 2
+                                    "ON_DEVICE" -> if (localCanBeSelected) 3 else 0
+                                    else -> 0
+                                },
+                                onSelect = { index ->
+                                    selectedAiProvider = when (index) {
+                                        1 -> "GOOGLE_AI_STUDIO"
+                                        2 -> "COMPATIBLE_API"
+                                        3 -> "ON_DEVICE"
+                                        else -> "AILA_CLOUD"
+                                    }
+                                    onAiProviderChange(selectedAiProvider)
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            Text(
+                                text = when (selectedAiProvider) {
+                                    "AILA_CLOUD" -> "AILA è incluso: la chat usa il servizio dell'app, senza chiave personale."
+                                    "COMPATIBLE_API" -> "Configura formato, endpoint, modello e chiave qui sotto."
+                                    "ON_DEVICE" -> "L'AI locale gira su questo dispositivo."
+                                    else -> "Google AI usa la chiave personale qui sotto."
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Normal,
+                                color = AppTheme.TextMuted
+                            )
+                        }
+                    }
+                }
+            }
+
             // --- AI ------------------------------------------------------------------------
             add {
                 Column {
@@ -483,46 +533,6 @@ fun SettingsScreen(
                         }
                     }
             
-                }
-            }
-            // Nel browser e su iOS senza AI on-device non viene mostrata la sezione locale,
-            // ma il provider cloud deve restare selezionabile.
-            if (!showLocalAiSection) add {
-                Column {
-                    AilaSectionTitle(text = "Provider AI", modifier = Modifier.ailaAppear(6))
-                    Spacer(modifier = Modifier.height(AppTheme.Space12))
-                    AilaCard(modifier = Modifier.ailaAppear(7)) {
-                        Column(modifier = Modifier.padding(AppTheme.Space16)) {
-                            AilaSegmentedTabs(
-                                labels = listOf("AILA (incluso)", "Google AI", "API compatibile"),
-                                selectedIndex = when (selectedAiProvider) {
-                                    "GOOGLE_AI_STUDIO" -> 1
-                                    "COMPATIBLE_API" -> 2
-                                    else -> 0
-                                },
-                                onSelect = { index ->
-                                    selectedAiProvider = when (index) {
-                                        1 -> "GOOGLE_AI_STUDIO"
-                                        2 -> "COMPATIBLE_API"
-                                        else -> "AILA_CLOUD"
-                                    }
-                                    onAiProviderChange(selectedAiProvider)
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Spacer(modifier = Modifier.height(AppTheme.Space8))
-                            Text(
-                                text = when (selectedAiProvider) {
-                                    "AILA_CLOUD" -> "AILA è incluso: la chat usa il servizio dell'app, senza chiave personale."
-                                    "COMPATIBLE_API" -> "Configura il formato API, l'endpoint, il modello e la chiave nella sezione dedicata qui sotto."
-                                    else -> "Google AI usa la chiave personale salvata qui sotto."
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Normal,
-                                color = AppTheme.TextMuted
-                            )
-                        }
-                    }
                 }
             }
             if (selectedAiProvider == "COMPATIBLE_API") add {
@@ -640,32 +650,6 @@ fun SettingsScreen(
                                     color = AppTheme.TextMuted
                                 )
                             } else {
-                                Text(
-                                    text = "Provider",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = AppTheme.TextDark
-                                )
-                                Spacer(modifier = Modifier.height(AppTheme.Space8))
-                                AilaSegmentedTabs(
-                                    labels = listOf("AILA (incluso)", "Google AI", "API compatibile", "AI locale (Beta)"),
-                                    selectedIndex = when (selectedAiProvider) {
-                                        "AILA_CLOUD" -> 0
-                                        "GOOGLE_AI_STUDIO" -> 1
-                                        "COMPATIBLE_API" -> 2
-                                        else -> 3
-                                    },
-                                    onSelect = { index ->
-                                        selectedAiProvider = when (index) {
-                                            0 -> "AILA_CLOUD"
-                                            1 -> "GOOGLE_AI_STUDIO"
-                                            2 -> "COMPATIBLE_API"
-                                            else -> "ON_DEVICE"
-                                        }
-                                        onAiProviderChange(selectedAiProvider)
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                                Spacer(modifier = Modifier.height(AppTheme.Space8))
                                 if (selectedAiProvider == "AILA_CLOUD") {
                                     Text(
                                         text = "La chat di AILA Assistant gira sul servizio incluso " +
