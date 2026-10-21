@@ -34,6 +34,10 @@ class LocalSettingsManager(
     companion object {
         private const val KEY_USER_AI_API_KEY = "user_ai_api_key"
         private const val KEY_AI_PROVIDER = "ai_provider"
+        private const val KEY_COMPATIBLE_AI_FORMAT = "compatible_ai_format"
+        private const val KEY_COMPATIBLE_AI_BASE_URL = "compatible_ai_base_url"
+        private const val KEY_COMPATIBLE_AI_MODEL = "compatible_ai_model"
+        private const val KEY_COMPATIBLE_AI_API_KEY = "compatible_ai_api_key"
         private const val KEY_LOCAL_AI_MODEL = "local_ai_model_id"
         private const val KEY_ASSISTANT_THINKING = "assistant_thinking_enabled"
         private const val KEY_BOARD_NOTIFICATIONS_ENABLED = "board_notifications_enabled"
@@ -121,6 +125,22 @@ class LocalSettingsManager(
     var aiProvider: String
         get() = settings.getString(KEY_AI_PROVIDER, "AILA_CLOUD")
         set(value) = settings.putString(KEY_AI_PROVIDER, value)
+
+    var compatibleAiFormat: String
+        get() = settings.getString(KEY_COMPATIBLE_AI_FORMAT, "OPENAI")
+        set(value) = settings.putString(KEY_COMPATIBLE_AI_FORMAT, value)
+
+    var compatibleAiBaseUrl: String
+        get() = settings.getString(KEY_COMPATIBLE_AI_BASE_URL, "")
+        set(value) = settings.putString(KEY_COMPATIBLE_AI_BASE_URL, value.trim())
+
+    var compatibleAiModel: String
+        get() = settings.getString(KEY_COMPATIBLE_AI_MODEL, "")
+        set(value) = settings.putString(KEY_COMPATIBLE_AI_MODEL, value.trim())
+
+    var compatibleAiApiKey: String
+        get() = readSecret(KEY_COMPATIBLE_AI_API_KEY)
+        set(value) = writeSecret(KEY_COMPATIBLE_AI_API_KEY, value.trim())
 
     /**
      * `id` del modello di AI locale scelto (vedi `LocalAiCatalog`). Vuoto = nessuna scelta
@@ -572,7 +592,8 @@ class LocalSettingsManager(
      */
     fun clearUserData() {
         listOf(
-            KEY_AUTH_TOKEN, KEY_USER_ID, KEY_CACHED_USER, KEY_USER_AI_API_KEY,
+            KEY_AUTH_TOKEN, KEY_USER_ID, KEY_CACHED_USER, KEY_USER_AI_API_KEY, KEY_COMPATIBLE_AI_API_KEY,
+            KEY_COMPATIBLE_AI_FORMAT, KEY_COMPATIBLE_AI_BASE_URL, KEY_COMPATIBLE_AI_MODEL,
             KEY_NOTIFICATION_LOG, KEY_ASSISTANT_HISTORY, KEY_CIRCULAR_ANALYSES,
             KEY_RECENT_SEARCHES, KEY_SUBMITTED_POLLS,
             KEY_LAST_SEEN_CIRCULAR, KEY_LAST_SEEN_PROPOSAL, KEY_LAST_SEEN_SEATMAP,
@@ -639,7 +660,7 @@ class LocalSettingsManager(
 
     private fun clearSecrets() {
         if (!separateSecureStorage) return
-        listOf(KEY_AUTH_TOKEN, KEY_USER_AI_API_KEY).forEach { key -> runCatching { secure.remove(key) } }
+        listOf(KEY_AUTH_TOKEN, KEY_USER_AI_API_KEY, KEY_COMPATIBLE_AI_API_KEY).forEach { key -> runCatching { secure.remove(key) } }
     }
 }
 

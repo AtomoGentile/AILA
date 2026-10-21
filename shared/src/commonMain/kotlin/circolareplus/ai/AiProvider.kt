@@ -25,6 +25,11 @@ enum class AiProvider(val id: String, val label: String, val description: String
         label = "Google AI Studio",
         description = "Gemini via API key personale — gratuito, ma serve rete a ogni circolare"
     ),
+    COMPATIBLE_API(
+        id = "COMPATIBLE_API",
+        label = "API compatibile",
+        description = "Endpoint compatibili con le API OpenAI o Anthropic"
+    ),
     ON_DEVICE(
         id = "ON_DEVICE",
         label = "AI locale",

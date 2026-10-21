@@ -8,6 +8,7 @@
  */
 const DURATION = TIMELINE.DURATION; // tempo del video; le scene usano il tempo interno (timeline.js)
 const stage = document.getElementById('stage');
+const NEURAL = /neural/.test(location.search); // logo: i sei posti pieni, poi si collegano e nasce il logo
 const SFX = []; // {t, type} — letti da render.js per sincronizzare gli effetti sonori
 
 // ---------- matematica ----------
@@ -114,11 +115,31 @@ function logoSVG(id) {
 </svg>`;
 }
 /* costruzione del logo a partire da t0 */
-function renderLogo(root, t, t0) {
+function renderLogoNeural(root, t, t0, uc = 1.2) {
+  const { dk, ln, halo, spk } = root._parts;
+  const tc = t0 + uc, u = Math.max(0, t - tc); // istante del collegamento
+  dk.forEach((d, i) => {
+    const p = P(t, t0 + i * .04, .4, E.back), pulse = 1 + (t >= tc ? .12 * Math.exp(-u * 9) : 0);
+    d.style.opacity = clamp(p * 2) * (i >= 3 ? .78 : 1);
+    d.style.transform = `scale(${lerp(.3, 1, p) * pulse * (1 + .015 * Math.sin(t * 6 + i))})`;
+  });
+  ln.forEach(l => {
+    const p = P(t, tc, .22, E.out);
+    l.style.strokeDashoffset = (1 - p) * l._L;
+    l.style.strokeOpacity = t >= tc ? .45 + .55 * Math.exp(-u * 4) : 0;
+  });
+  const pe = P(t, tc + .12, .8, E.out);
+  halo.style.opacity = pe; halo.style.transform = `scale(${lerp(.2, 1.15, pe) * (1 + .05 * Math.sin(t * 2.2))})`;
+  const ps = P(t, tc + .12, .65, E.back);
+  spk.style.opacity = clamp(ps * 2);
+  spk.style.transform = `scale(${ps * (1 + .045 * Math.sin(t * 3.1))}) rotate(${(1 - ps) * -120}deg)`;
+}
+function renderLogo(root, t, t0, neural, uc) {
   if (!root._parts) {
     root._parts = { dk: [...root.querySelectorAll('.dk')], ln: [...root.querySelectorAll('.ln')], halo: root.querySelector('.halo'), spk: root.querySelector('.spk') };
     root._parts.ln.forEach(l => { const L = Math.hypot(l.x2.baseVal.value - l.x1.baseVal.value, l.y2.baseVal.value - l.y1.baseVal.value); l._L = L; l.style.strokeDasharray = L; });
   }
+  if (neural && NEURAL) return renderLogoNeural(root, t, t0, uc);
   const { dk, ln, halo, spk } = root._parts;
   dk.forEach((d, i) => {
     const p = P(t, t0 + i * .06, .55, E.back);
@@ -221,16 +242,18 @@ function renderBg(t) {
   const wm = S.q('#wm'); wm.innerHTML = 'AILA'.split('').map(c => `<span class="w">${c}</span>`).join('');
   wm._w = [...wm.querySelectorAll('.w')];
   sfx(16, 'impact');
+  const UC = 1.28, TF = NEURAL ? 16 + UC : 16, // il collegamento cade su una battuta della musica
+     TW = NEURAL ? .8 : 0; // flash/anello al collegamento; scritte dopo
   S.render = t => {
     rw(S.q('#q'), t, 12.25, 15.15, { step: .13, od: .55, os: 1.06, b: 16 });
-    S.q('#flash').style.opacity = t < 16 ? 0 : .55 * (1 - P(t, 16, .7, E.out));
-    const pr = P(t, 16, 1.3, E.out5);
-    pose(S.q('#ring'), { o: t < 16 ? 0 : (1 - pr) * .9, s: lerp(.2, 4.5, pr) });
-    renderLogo(S.q('#logo'), t, 16.0);
+    S.q('#flash').style.opacity = t < TF ? 0 : .55 * (1 - P(t, TF, .7, E.out));
+    const pr = P(t, TF, 1.3, E.out5);
+    pose(S.q('#ring'), { o: t < TF ? 0 : (1 - pr) * .9, s: lerp(.2, 4.5, pr) });
+    renderLogo(S.q('#logo'), t, 16.0, true, UC);
     pose(S.q('#logo'), { y: Math.sin(t * 1.3) * 6 });
-    wm._w.forEach((w, i) => io(w, t, 16.9 + i * .09, null, { dy: 80, b: 18, d: .8, e: E.out5 }));
-    io(S.q('#tag'), t, 17.6, null, { dy: 30 });
-    io(S.q('#mods'), t, 18.2, null, { dy: 20, b: 6 });
+    wm._w.forEach((w, i) => io(w, t, 16.9 + TW + i * .09, null, { dy: 80, b: 18, d: .8, e: E.out5 }));
+    io(S.q('#tag'), t, 17.6 + TW, null, { dy: 30 });
+    io(S.q('#mods'), t, 18.2 + TW * .6, null, { dy: 20, b: 6 });
     const pg = P(t, 19.35, .7, E.in);
     pose(S.q('#grp'), { o: 1 - pg, s: lerp(1, .9, pg), b: pg * 14 });
   };
@@ -776,13 +799,14 @@ function renderBars(root, t, active) {
     <div class="a center" id="cred" style="left:0;width:1920px;top:960px;font-size:24px;color:var(--faint)">Un progetto di Simone Bianchin</div>`);
   const wm = S.q('#wm2'); wm._w = [...wm.querySelectorAll('.w')];
   sfx(113, 'impact');
+  const UC2 = 1.73, TF2 = NEURAL ? 113 + UC2 : 113, TW2 = NEURAL ? .8 : 0;
   S.render = t => {
-    S.q('#flash2').style.opacity = t < 113 ? 0 : .5 * (1 - P(t, 113, .8));
-    renderLogo(S.q('#logo2'), t, 113.0);
+    S.q('#flash2').style.opacity = t < TF2 ? 0 : .5 * (1 - P(t, TF2, .8));
+    renderLogo(S.q('#logo2'), t, 113.0, true, UC2);
     pose(S.q('#logo2'), { y: Math.sin(t * 1.3) * 6 });
-    wm._w.forEach((w, i) => io(w, t, 113.7 + i * .09, null, { dy: 80, b: 18, d: .8, e: E.out5 }));
-    io(S.q('#tag2'), t, 114.5, null, { dy: 30 });
-    io(S.q('#cta'), t, 116.0, null, { dy: 30, s0: .9, e: E.back });
+    wm._w.forEach((w, i) => io(w, t, 113.7 + TW2 + i * .09, null, { dy: 80, b: 18, d: .8, e: E.out5 }));
+    io(S.q('#tag2'), t, 114.5 + TW2, null, { dy: 30 });
+    io(S.q('#cta'), t, 116.0 + TW2 * .5, null, { dy: 30, s0: .9, e: E.back });
     io(S.q('#plat'), t, 116.6, null, { dy: 20 });
     io(S.q('#cred'), t, 117.8, null, { dy: 16 });
   };

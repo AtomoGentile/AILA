@@ -4,11 +4,12 @@
 //   node music.js  -> build/music.wav
 const fs = require('fs');
 const TL = require('./timeline');
+const HYPE = !!process.env.HYPE, OUTDIR = process.env.OUT || 'build';
 const SR = 44100, DUR = TL.DURATION, N = Math.ceil(SR * DUR);
 // momenti chiave nel tempo del video (vedi timeline.js)
 const W = TL.unwarp;
 const DROP = W(16), CIRC = W(20), ASSIST = W(38), CAL = W(50), SEATS = W(76), BUILD = W(106), FINALE = W(113);
-const SFX = JSON.parse(fs.readFileSync('sfx.json', 'utf8'));
+const SFX = JSON.parse(fs.readFileSync(HYPE ? 'sfx_hype.json' : 'sfx.json', 'utf8'));
 
 const L = new Float32Array(N), R = new Float32Array(N);       // mix asciutto
 const VL = new Float32Array(N), VR = new Float32Array(N);     // mandata al riverbero
@@ -62,13 +63,14 @@ const closeAt = t => CLOSE[CLOSE_SEQ[Math.min(4, Math.floor((t - FINALE) / 2))]]
 const chordFor = t => t >= FINALE ? closeAt(t) : chordAt(t);
 
 // ---------------- arrangiamento ----------------
-const GROOVE = t => has(t, CIRC, ASSIST) || has(t, CAL, FINALE - .25);
+// beat conclusivo: dal finale in poi cassa, clap e basso pulsante fino a 2 s dalla fine
+const GROOVE = t => HYPE ? (has(t, DROP, FINALE - .25) || has(t, FINALE, DUR - 2)) : (has(t, CIRC, ASSIST) || has(t, CAL, FINALE - .25) || has(t, FINALE, DUR - 2));
 const kickOn = t => GROOVE(t);
 const pulseOn = t => has(t, 4, 10.4);                 // battito sordo nel caos iniziale
 const clapOn = t => GROOVE(t) || has(t, ASSIST + 4, CAL);
 const hatOn = t => has(t, 2, 10.4) || GROOVE(t) || has(t, ASSIST + 2, CAL);
 const arpOn = t => has(t, DROP, FINALE - .25);
-const arpHi = t => has(t, SEATS, FINALE - .25);
+const arpHi = t => has(t, HYPE ? CIRC : SEATS, FINALE - .25);
 const bassMode = t => GROOVE(t) ? 'pump' : (has(t, DROP, CIRC) || has(t, ASSIST, CAL) || has(t, FINALE, DUR - 2) ? 'long' : null);
 function padCut(t) {
   if (t < 12) return 450 + 250 * t / 12;
@@ -195,6 +197,11 @@ for (let b = 0; b * beat < DUR; b++) {
 for (let k = 0; k < 4; k++) clap(CAL - 1 + k * .25, .5 + k * .12);
 for (let t = FINALE - 2.5, step = .25; t < FINALE - .3; t += step, step = Math.max(.0625, step * .9)) clap(t, .35 + .6 * (t - FINALE + 2.5) / 2.2);
 
+// hype: rullo di clap, cassa e piatto a ogni cambio scena
+if (HYPE) [CIRC, ASSIST, CAL, SEATS, W(96), W(106), FINALE].forEach(b => {
+  for (let t = b - 1.5, step = .25; t < b - .1; t += step, step = Math.max(.0625, step * .85)) clap(t, .4 + .55 * (t - b + 1.5) / 1.4);
+  kick(b, 1.2); hat(b, 1.6, true);
+});
 // arpeggio a sedicesimi
 const ARP_PATTERN = [0, 1, 2, 3, 2, 1, 3, 1];
 for (let s = 0; s * .125 < DUR; s++) {
@@ -329,6 +336,6 @@ buf.write('RIFF', 0); buf.writeUInt32LE(36 + N * 4, 4); buf.write('WAVE', 8); bu
 buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20); buf.writeUInt16LE(2, 22); buf.writeUInt32LE(SR, 24);
 buf.writeUInt32LE(SR * 4, 28); buf.writeUInt16LE(4, 32); buf.writeUInt16LE(16, 34); buf.write('data', 36); buf.writeUInt32LE(N * 4, 40);
 for (let i = 0; i < N * 2; i++) buf.writeInt16LE(Math.round(clamp(tmp[i] * norm, -1, 1) * 32767), 44 + i * 2);
-fs.mkdirSync('build', { recursive: true });
-fs.writeFileSync('build/music.wav', buf);
-console.log('build/music.wav scritto, picco pre-saturazione', peak.toFixed(2));
+fs.mkdirSync(OUTDIR, { recursive: true });
+fs.writeFileSync(OUTDIR + '/music.wav', buf);
+console.log(OUTDIR + '/music.wav scritto, picco pre-saturazione', peak.toFixed(2));

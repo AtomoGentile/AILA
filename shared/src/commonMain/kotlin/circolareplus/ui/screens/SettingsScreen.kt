@@ -71,6 +71,12 @@ fun SettingsScreen(
     onToggleSystemNotifications: (Boolean) -> Unit = {},
     aiProvider: String = "AILA_CLOUD",
     onAiProviderChange: (String) -> Unit = {},
+    compatibleAiFormat: String = "OPENAI",
+    compatibleAiBaseUrl: String = "",
+    compatibleAiModel: String = "",
+    compatibleAiApiKey: String = "",
+    onSaveCompatibleAiSettings: (format: String, baseUrl: String, model: String, apiKey: String) -> Unit = { _, _, _, _ -> },
+    onTestCompatibleAi: suspend (format: String, baseUrl: String, model: String, apiKey: String) -> String = { _, _, _, _ -> "Non disponibile" },
     /** Frase da mostrare se l'AI locale non è utilizzabile qui (iPhone, emulatore non ARM). */
     localAiUnavailableReason: String? = null,
     /** false = sezione "AI locale" nascosta del tutto (vedi isOnDeviceAiOfferedHere). */
@@ -110,10 +116,16 @@ fun SettingsScreen(
     onOpenBackgroundDebug: () -> Unit = {},
     onBackClick: () -> Unit
 ) {
-    var apiKeyInput by remember { mutableStateOf(apiKey) }
+    var apiKeyInput by remember(apiKey) { mutableStateOf(apiKey) }
     var apiKeyStatus by remember { mutableStateOf<String?>(null) }
     var isTesting by remember { mutableStateOf(false) }
-    var selectedAiProvider by remember { mutableStateOf(aiProvider) }
+    var selectedAiProvider by remember(aiProvider) { mutableStateOf(aiProvider) }
+    var compatibleFormat by remember(compatibleAiFormat) { mutableStateOf(compatibleAiFormat) }
+    var compatibleBaseUrl by remember(compatibleAiBaseUrl) { mutableStateOf(compatibleAiBaseUrl) }
+    var compatibleModel by remember(compatibleAiModel) { mutableStateOf(compatibleAiModel) }
+    var compatibleApiKey by remember(compatibleAiApiKey) { mutableStateOf(compatibleAiApiKey) }
+    var compatibleStatus by remember { mutableStateOf<String?>(null) }
+    var isTestingCompatible by remember { mutableStateOf(false) }
     var showAllModels by remember { mutableStateOf(false) }
     var isDownloading by remember { mutableStateOf(false) }
     var downloadedBytes by remember { mutableStateOf(0L) }
@@ -408,7 +420,7 @@ fun SettingsScreen(
                                     apiKeyInput = it
                                     apiKeyStatus = null
                                 },
-                                placeholder = { Text("AIzaSy…", style = MaterialTheme.typography.bodyMedium) },
+                                placeholder = { Text("AQ.…", style = MaterialTheme.typography.bodyMedium) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(
                                     capitalization = KeyboardCapitalization.None,
@@ -473,6 +485,138 @@ fun SettingsScreen(
             
                 }
             }
+            // Nel browser e su iOS senza AI on-device non viene mostrata la sezione locale,
+            // ma il provider cloud deve restare selezionabile.
+            if (!showLocalAiSection) add {
+                Column {
+                    AilaSectionTitle(text = "Provider AI", modifier = Modifier.ailaAppear(6))
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    AilaCard(modifier = Modifier.ailaAppear(7)) {
+                        Column(modifier = Modifier.padding(AppTheme.Space16)) {
+                            AilaSegmentedTabs(
+                                labels = listOf("AILA (incluso)", "Google AI", "API compatibile"),
+                                selectedIndex = when (selectedAiProvider) {
+                                    "GOOGLE_AI_STUDIO" -> 1
+                                    "COMPATIBLE_API" -> 2
+                                    else -> 0
+                                },
+                                onSelect = { index ->
+                                    selectedAiProvider = when (index) {
+                                        1 -> "GOOGLE_AI_STUDIO"
+                                        2 -> "COMPATIBLE_API"
+                                        else -> "AILA_CLOUD"
+                                    }
+                                    onAiProviderChange(selectedAiProvider)
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            Text(
+                                text = when (selectedAiProvider) {
+                                    "AILA_CLOUD" -> "AILA è incluso: la chat usa il servizio dell'app, senza chiave personale."
+                                    "COMPATIBLE_API" -> "Configura il formato API, l'endpoint, il modello e la chiave nella sezione dedicata qui sotto."
+                                    else -> "Google AI usa la chiave personale salvata qui sotto."
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Normal,
+                                color = AppTheme.TextMuted
+                            )
+                        }
+                    }
+                }
+            }
+            if (selectedAiProvider == "COMPATIBLE_API") add {
+                Column {
+                    AilaSectionTitle(text = "API compatibile", modifier = Modifier.ailaAppear(8))
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    AilaCard(modifier = Modifier.ailaAppear(9)) {
+                        Column(modifier = Modifier.padding(AppTheme.Space16)) {
+                            Text(
+                                text = "Scegli il formato supportato dal tuo servizio. La chiave e le richieste restano su questo dispositivo.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppTheme.TextMuted
+                            )
+                            Spacer(modifier = Modifier.height(AppTheme.Space12))
+                            Text("Formato API", style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
+                            Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            AilaSegmentedTabs(
+                                labels = listOf("OpenAI compatibile", "Anthropic compatibile"),
+                                selectedIndex = if (compatibleFormat == "ANTHROPIC") 1 else 0,
+                                onSelect = { compatibleFormat = if (it == 1) "ANTHROPIC" else "OPENAI" },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(AppTheme.Space12))
+                            OutlinedTextField(
+                                value = compatibleBaseUrl,
+                                onValueChange = { compatibleBaseUrl = it; compatibleStatus = null },
+                                label = { Text("Endpoint base") },
+                                placeholder = { Text(if (compatibleFormat == "ANTHROPIC") "https://api.anthropic.com/v1" else "https://api.openai.com/v1") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
+                                shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
+                                colors = ailaFieldColors(),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            OutlinedTextField(
+                                value = compatibleModel,
+                                onValueChange = { compatibleModel = it; compatibleStatus = null },
+                                label = { Text("Modello") },
+                                placeholder = { Text("es. claude-sonnet-4 o gpt-4.1-mini") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
+                                shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
+                                colors = ailaFieldColors(),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            OutlinedTextField(
+                                value = compatibleApiKey,
+                                onValueChange = { compatibleApiKey = it; compatibleStatus = null },
+                                label = { Text("Chiave API") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
+                                shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
+                                colors = ailaFieldColors(),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            compatibleStatus?.let {
+                                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                                Text(it, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+                            }
+                            Spacer(modifier = Modifier.height(AppTheme.Space12))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                AilaSecondaryButton(
+                                    text = if (isTestingCompatible) "Provo…" else "Prova",
+                                    onClick = {
+                                        if (!isTestingCompatible) {
+                                            isTestingCompatible = true
+                                            scope.launch {
+                                                compatibleStatus = onTestCompatibleAi(
+                                                    compatibleFormat, compatibleBaseUrl.trim(),
+                                                    compatibleModel.trim(), compatibleApiKey.trim()
+                                                )
+                                                isTestingCompatible = false
+                                            }
+                                        }
+                                    }
+                                )
+                                AilaPrimaryButton(
+                                    text = "Salva",
+                                    onClick = {
+                                        onSaveCompatibleAiSettings(compatibleFormat, compatibleBaseUrl.trim(), compatibleModel.trim(), compatibleApiKey.trim())
+                                        compatibleStatus = "Configurazione salvata su questo dispositivo."
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
             // --- AI locale sul telefono -------------------------------------------------
             // Nascosta dove non potrà mai funzionare (iPhone con iOS < 26 o non idoneo).
             if (showLocalAiSection) add {
@@ -503,16 +647,18 @@ fun SettingsScreen(
                                 )
                                 Spacer(modifier = Modifier.height(AppTheme.Space8))
                                 AilaSegmentedTabs(
-                                    labels = listOf("AILA (incluso)", "Google AI", "AI locale (Beta)"),
+                                    labels = listOf("AILA (incluso)", "Google AI", "API compatibile", "AI locale (Beta)"),
                                     selectedIndex = when (selectedAiProvider) {
                                         "AILA_CLOUD" -> 0
-                                        "ON_DEVICE" -> 2
-                                        else -> 1
+                                        "GOOGLE_AI_STUDIO" -> 1
+                                        "COMPATIBLE_API" -> 2
+                                        else -> 3
                                     },
                                     onSelect = { index ->
                                         selectedAiProvider = when (index) {
                                             0 -> "AILA_CLOUD"
                                             1 -> "GOOGLE_AI_STUDIO"
+                                            2 -> "COMPATIBLE_API"
                                             else -> "ON_DEVICE"
                                         }
                                         onAiProviderChange(selectedAiProvider)

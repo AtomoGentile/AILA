@@ -594,7 +594,7 @@ private fun AiSetupStep(
                 keyStatus = null
                 keyOk = false
             },
-            placeholder = { Text("AIzaSy…", style = MaterialTheme.typography.bodyMedium) },
+            placeholder = { Text("AQ.…", style = MaterialTheme.typography.bodyMedium) },
             singleLine = true,
             keyboardOptions = KeyboardOptions(
                 capitalization = KeyboardCapitalization.None,

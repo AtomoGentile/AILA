@@ -4,3 +4,6 @@ build/
 snaps/
 sfx.json
 *.mp4
+sfx_hype.json
+build_hype/
+build_neural/

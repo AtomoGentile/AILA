@@ -150,6 +150,7 @@ fun planAiRoute(
         // con il modello locale come riserva.
         AiProvider.AILA_CLOUD -> hasCloudKey
         AiProvider.GOOGLE_AI_STUDIO -> true
+        AiProvider.COMPATIBLE_API -> true
         AiProvider.ON_DEVICE ->
             // Solo quando e' stata la pausa a togliere il locale: senza nessun modello installato
             // l'ordine resta quello di prima (il locale ripiega subito e la catena passa al cloud).

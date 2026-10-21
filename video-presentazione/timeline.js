@@ -5,7 +5,10 @@
 // Usato sia dal browser (video.js) sia da Node (music.js).
 (function (g) {
   const TB = [0, 12, 16, 20, 31.8, 38, 50, 58, 76, 96, 106, 113, 122];  // interni
-  const NB = [0, 12, 16, 22, 36.4, 40, 56, 66, 88, 112, 126, 134, 144]; // nel video
+  // versione "hype" (?hype nel browser, HYPE=1 in Node): scene più serrate, durata 2:04
+  const hype = typeof process !== 'undefined' ? !!(process.env && process.env.HYPE) : /hype/.test(g.location.search);
+  const NB = hype ? [0, 12, 16, 22, 33.8, 38, 50, 58, 76, 96, 106, 114, 124]
+    : [0, 12, 16, 22, 36.4, 40, 56, 66, 88, 112, 126, 134, 144]; // nel video
   const map = (x, from, to) => {
     let i = 0;
     while (i < from.length - 2 && x > from[i + 1]) i++;

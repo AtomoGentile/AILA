@@ -4208,6 +4208,25 @@ fun MainAppShell(
                         onAiProviderChange = { provider ->
                             AppContainer.settings.aiProvider = provider
                         },
+                        compatibleAiFormat = AppContainer.settings.compatibleAiFormat,
+                        compatibleAiBaseUrl = AppContainer.settings.compatibleAiBaseUrl,
+                        compatibleAiModel = AppContainer.settings.compatibleAiModel,
+                        compatibleAiApiKey = AppContainer.settings.compatibleAiApiKey,
+                        onSaveCompatibleAiSettings = { format, baseUrl, model, key ->
+                            AppContainer.settings.compatibleAiFormat = format
+                            AppContainer.settings.compatibleAiBaseUrl = baseUrl
+                            AppContainer.settings.compatibleAiModel = model
+                            AppContainer.settings.compatibleAiApiKey = key
+                            apiKeyRevision++
+                        },
+                        onTestCompatibleAi = { format, baseUrl, model, key ->
+                            circolareplus.ai.CompatibleApiAiClassifier(
+                                format = circolareplus.ai.CompatibleAiFormat.fromId(format),
+                                baseUrl = baseUrl,
+                                apiKey = key,
+                                model = model
+                            ).testConfiguration()
+                        },
                         // Calcolati una volta sola: prima si rileggevano (memoria del telefono,
                         // AICore di sistema, catalogo) a ogni ridisegno delle Impostazioni, anche
                         // durante l'animazione d'ingresso e lo scorrimento: da qui lo stuttering.

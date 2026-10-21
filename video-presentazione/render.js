@@ -10,7 +10,7 @@ const { pathToFileURL } = require('url');
 const FPS = 30;
 const WORKERS = +(process.env.WORKERS || 6);
 const CHROME = process.env.CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-const URL = pathToFileURL(path.join(__dirname, 'index.html')).href + '?capture';
+const URL = pathToFileURL(path.join(__dirname, 'index.html')).href + '?capture' + (process.env.HYPE ? '&hype' : '') + (process.env.NEURAL ? '&neural' : '');
 
 async function openPage(browser) {
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
@@ -25,7 +25,7 @@ async function openPage(browser) {
   const browser = await chromium.launch({ executablePath: CHROME, args: ['--force-color-profile=srgb', '--hide-scrollbars'] });
   if (mode === 'sfx') {
     const page = await openPage(browser);
-    fs.writeFileSync('sfx.json', JSON.stringify(await page.evaluate(() => window.SFX)));
+    fs.writeFileSync(process.env.HYPE ? 'sfx_hype.json' : 'sfx.json', JSON.stringify(await page.evaluate(() => window.SFX)));
   } else if (mode === 'snap') {
     const page = await openPage(browser);
     fs.mkdirSync('snaps', { recursive: true });
@@ -42,7 +42,7 @@ async function openPage(browser) {
     fs.mkdirSync(dir, { recursive: true });
     const probe = await openPage(browser);
     const duration = await probe.evaluate(() => window.DURATION);
-    fs.writeFileSync('sfx.json', JSON.stringify(await probe.evaluate(() => window.SFX)));
+    fs.writeFileSync(process.env.HYPE ? 'sfx_hype.json' : 'sfx.json', JSON.stringify(await probe.evaluate(() => window.SFX)));
     await probe.close();
     const total = Math.round(duration * FPS);
     const per = Math.ceil(total / WORKERS);

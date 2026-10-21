@@ -199,9 +199,17 @@ object AppContainer {
         /** Tetto per ciascun tentativo di risposta (primario e riserva), vedi [ChainedAiClassifier]. */
         answerAttemptTimeoutMs: Long? = null
     ): AiClassifier {
-        val cloud = ClientSideAiClassifier(userApiKey = settings.userAiApiKey)
-
+        val google = ClientSideAiClassifier(userApiKey = settings.userAiApiKey)
         val provider = AiProvider.fromId(settings.aiProvider)
+        val cloud: AiClassifier = if (provider == AiProvider.COMPATIBLE_API) {
+            CompatibleApiAiClassifier(
+                format = CompatibleAiFormat.fromId(settings.compatibleAiFormat),
+                baseUrl = settings.compatibleAiBaseUrl,
+                apiKey = settings.compatibleAiApiKey,
+                model = settings.compatibleAiModel
+            )
+        } else google
+
         // AICore in pausa (vedi AiCoreCooldown) si salta: al suo posto un modello LiteRT-LM gia'
         // scaricato, o il cloud se non ce n'e'.
         val plan = currentRoute(provider, pdfTextLength)
