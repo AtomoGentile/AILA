@@ -482,6 +482,23 @@ describe('cambio nome', () => {
     // nell'ORDER BY tiene Alfieri al primo posto nonostante le sue maiuscole salvate.
     expect(names).toEqual(['Alfieri', 'Bianchi', 'Capo', 'Zun.*']);
   });
+
+  it('nei nomi composti la maiuscola tocca a ogni pezzo: spazio, apostrofo e trattino', async () => {
+    const { repToken, studentToken } = await setup();
+    const code = await classCodeOf(repToken);
+    // Scritte a casaccio in registrazione: "dE paoli" non puo' restare sul solo primo pezzo.
+    await register('paoloa', { classCode: code, firstName: 'giulio cesare', lastName: 'dE paoli' });
+    await register('paolob', { classCode: code, lastName: "d'AURIA" });
+    await register('paoloc', { classCode: code, lastName: 'rossi-VERDI' });
+
+    const list = await call('GET', '/api/users', undefined, repToken);
+    const byUsername = new Map(list.json.users.map((u: { username: string; firstName: string; lastName: string }) => [u.username, u]));
+    expect(byUsername.get('paoloa')).toMatchObject({ firstName: 'Giulio Cesare', lastName: 'De Paoli' });
+    expect(byUsername.get('paolob')?.lastName).toBe("D'Auria");
+    expect(byUsername.get('paoloc')?.lastName).toBe('Rossi-Verdi');
+    // Nessuno a modo suo: anche chi decide e' nella stessa grafia.
+    expect(byUsername.get('capo')?.lastName).toBe('Capo');
+  });
 });
 
 describe('calendario', () => {
