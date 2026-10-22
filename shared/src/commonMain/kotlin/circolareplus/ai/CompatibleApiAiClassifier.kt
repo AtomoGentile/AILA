@@ -21,7 +21,8 @@ import kotlinx.serialization.json.jsonPrimitive
 
 enum class CompatibleAiFormat(val id: String, val label: String) {
     OPENAI("OPENAI", "OpenAI compatibile"),
-    ANTHROPIC("ANTHROPIC", "Anthropic compatibile");
+    ANTHROPIC("ANTHROPIC", "Anthropic compatibile"),
+    GOOGLE("GOOGLE", "Google compatibile");
 
     companion object {
         fun fromId(id: String?): CompatibleAiFormat = entries.firstOrNull { it.id == id } ?: OPENAI
@@ -49,7 +50,30 @@ private data class AnthropicCompatibleRequest(
     val temperature: Double = 0.2
 )
 
-/** Calls user-configured OpenAI-compatible or Anthropic-compatible endpoints from the device. */
+@Serializable
+private data class GooglePart(val text: String)
+
+@Serializable
+private data class GoogleContent(val role: String? = null, val parts: List<GooglePart>)
+
+@Serializable
+private data class GoogleSystemInstruction(val parts: List<GooglePart>)
+
+@Serializable
+private data class GoogleGenerationConfig(
+    val temperature: Double = 0.2,
+    val maxOutputTokens: Int = 2048,
+    val responseMimeType: String? = null
+)
+
+@Serializable
+private data class GoogleRequest(
+    val systemInstruction: GoogleSystemInstruction? = null,
+    val contents: List<GoogleContent>,
+    val generationConfig: GoogleGenerationConfig? = null
+)
+
+/** Calls user-configured OpenAI-compatible, Anthropic-compatible, or Google Gemini endpoints from the device. */
 class CompatibleApiAiClassifier(
     private val format: CompatibleAiFormat,
     private val baseUrl: String,
@@ -127,15 +151,16 @@ class CompatibleApiAiClassifier(
 
     override suspend fun testConfiguration(): String = try {
         request("Rispondi solo con OK.", "Verifica di connessione.", 32)
-        "Connessione riuscita con ${format.label} ($model)."
+        "Connessione riuscita con ${format.label} (${model.ifBlank { "gemini-2.5-flash" }})."
     } catch (e: Exception) {
         "Connessione non riuscita: ${e.message ?: "errore sconosciuto"}"
     }
 
     private suspend fun request(system: String, user: String, maxTokens: Int): String {
+        val effectiveModel = model.trim().ifBlank { if (format == CompatibleAiFormat.GOOGLE) "gemini-2.5-flash" else "" }
         require(apiKey.isNotBlank()) { "Inserisci la chiave API." }
-        require(model.isNotBlank()) { "Inserisci il modello." }
-        val endpoint = endpointUrl()
+        require(effectiveModel.isNotBlank()) { "Inserisci il modello." }
+        val endpoint = endpointUrl(effectiveModel)
         val response = httpClient.post(endpoint) {
             contentType(ContentType.Application.Json)
             when (format) {
@@ -144,18 +169,32 @@ class CompatibleApiAiClassifier(
                     header("x-api-key", apiKey.trim())
                     header("anthropic-version", "2023-06-01")
                 }
+                CompatibleAiFormat.GOOGLE -> {
+                    header("x-goog-api-key", apiKey.trim())
+                }
             }
             setBody(
                 when (format) {
                     CompatibleAiFormat.OPENAI -> OpenAiCompatibleRequest(
-                        model = model.trim(),
+                        model = effectiveModel,
                         messages = listOf(CompatibleMessage("system", system), CompatibleMessage("user", user)),
                         max_tokens = maxTokens,
                         response_format = if (system.contains("JSON", ignoreCase = true)) mapOf("type" to "json_object") else null
                     )
                     CompatibleAiFormat.ANTHROPIC -> AnthropicCompatibleRequest(
-                        model = model.trim(), system = system,
+                        model = effectiveModel, system = system,
                         messages = listOf(CompatibleMessage("user", user)), max_tokens = maxTokens
+                    )
+                    CompatibleAiFormat.GOOGLE -> GoogleRequest(
+                        systemInstruction = if (system.isNotBlank()) {
+                            GoogleSystemInstruction(listOf(GooglePart(system)))
+                        } else null,
+                        contents = listOf(GoogleContent(role = "user", parts = listOf(GooglePart(user)))),
+                        generationConfig = GoogleGenerationConfig(
+                            temperature = 0.2,
+                            maxOutputTokens = maxTokens,
+                            responseMimeType = if (system.contains("JSON", ignoreCase = true)) "application/json" else null
+                        )
                     )
                 }
             )
@@ -174,22 +213,43 @@ class CompatibleApiAiClassifier(
             CompatibleAiFormat.ANTHROPIC -> root["content"]?.jsonArray?.mapNotNull {
                 (it as? JsonObject)?.get("text")?.jsonPrimitive?.contentOrNull
             }?.joinToString("")
+            CompatibleAiFormat.GOOGLE -> {
+                val parts = root["candidates"]?.jsonArray?.getOrNull(0)?.jsonObject
+                    ?.get("content")?.jsonObject?.get("parts")?.jsonArray
+                parts?.mapNotNull {
+                    (it as? JsonObject)?.get("text")?.jsonPrimitive?.contentOrNull
+                }?.joinToString("")
+            }
         }
         return text?.takeIf { it.isNotBlank() } ?: error("Il provider ha restituito una risposta vuota.")
     }
 
-    private fun endpointUrl(): String {
-        val base = baseUrl.trim().trimEnd('/')
+    private fun endpointUrl(effectiveModel: String): String {
+        val defaultBase = if (format == CompatibleAiFormat.GOOGLE) "https://generativelanguage.googleapis.com" else ""
+        val base = baseUrl.trim().ifBlank { defaultBase }.trimEnd('/')
         require(base.startsWith("https://") || base.startsWith("http://")) {
             "Inserisci un endpoint HTTP o HTTPS valido."
         }
-        val suffix = when (format) {
-            CompatibleAiFormat.OPENAI -> "/chat/completions"
-            CompatibleAiFormat.ANTHROPIC -> "/messages"
+        return when (format) {
+            CompatibleAiFormat.OPENAI -> {
+                val suffix = "/chat/completions"
+                if (base.endsWith(suffix)) base
+                else if (base.endsWith("/v1")) "$base$suffix"
+                else "$base/v1$suffix"
+            }
+            CompatibleAiFormat.ANTHROPIC -> {
+                val suffix = "/messages"
+                if (base.endsWith(suffix)) base
+                else if (base.endsWith("/v1")) "$base$suffix"
+                else "$base/v1$suffix"
+            }
+            CompatibleAiFormat.GOOGLE -> {
+                if (base.contains(":generateContent")) base
+                else {
+                    val prefix = if (base.contains("/v1") || base.contains("/v1beta")) base else "$base/v1beta"
+                    "$prefix/models/$effectiveModel:generateContent"
+                }
+            }
         }
-        if (base.endsWith(suffix)) return base
-        if (format == CompatibleAiFormat.OPENAI && base.endsWith("/v1")) return "$base$suffix"
-        if (format == CompatibleAiFormat.ANTHROPIC && base.endsWith("/v1")) return "$base$suffix"
-        return "$base/v1$suffix"
     }
 }

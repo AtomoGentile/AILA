@@ -452,11 +452,14 @@ private fun deskIndexUnderPointer(
     cells: List<DeskCell>
 ): Int? {
     var best: Pair<Float, Int>? = null
+    val maxDistanceSq = 250f * 250f
     for (cellIndex in visibleCellIndexes) {
         val deskIndex = cells.getOrNull(cellIndex)?.index ?: continue
         val bounds = deskBounds[deskIndex] ?: continue
         val distance = (bounds.center - pointerInRoot).getDistanceSquared()
-        if (best == null || distance < best.first) best = distance to deskIndex
+        if (distance <= maxDistanceSq) {
+            if (best == null || distance < best.first) best = distance to deskIndex
+        }
     }
     return best?.second
 }
@@ -491,19 +494,22 @@ private fun Modifier.seatMapDragInput(
 ): Modifier = pointerInput(deskIndex) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
-        var dragStarted = false
+        var dragActive = false
+        val originAtStart = deskBounds[deskIndex]?.position ?: Offset.Zero
+
         try {
             if (down.type == PointerType.Mouse) {
                 while (true) {
                     val event = awaitPointerEvent()
                     val change = event.changes.firstOrNull { it.id == down.id } ?: break
                     if (!change.pressed) break
-                    if ((change.position - down.position).getDistance() >= viewConfiguration.touchSlop) {
+                    val dist = (change.position - down.position).getDistance()
+                    if (dist >= viewConfiguration.touchSlop) {
                         change.consume()
                         onStart()
-                        dragStarted = true
-                        val origin = deskBounds[deskIndex]?.position ?: Offset.Zero
-                        onDrag(origin + change.position)
+                        dragActive = true
+                        val currentOrigin = deskBounds[deskIndex]?.position ?: originAtStart
+                        onDrag(currentOrigin + change.position)
                         break
                     }
                 }
@@ -519,32 +525,36 @@ private fun Modifier.seatMapDragInput(
                     @Suppress("UNREACHABLE_CODE")
                     false
                 } == null
-                if (!longPressRecognized) return@awaitEachGesture
-                onStart()
-                dragStarted = true
-                val origin = deskBounds[deskIndex]?.position ?: Offset.Zero
-                onDrag(origin + down.position)
+
+                if (longPressRecognized) {
+                    onStart()
+                    dragActive = true
+                    val currentOrigin = deskBounds[deskIndex]?.position ?: originAtStart
+                    onDrag(currentOrigin + down.position)
+                }
             }
 
-            while (dragStarted) {
+            while (dragActive) {
                 val event = awaitPointerEvent()
                 val change = event.changes.firstOrNull { it.id == down.id }
                 if (change == null || !change.pressed) {
                     if (change != null) {
                         change.consume()
-                        val origin = deskBounds[deskIndex]?.position ?: Offset.Zero
-                        onDrag(origin + change.position)
+                        val currentOrigin = deskBounds[deskIndex]?.position ?: originAtStart
+                        onDrag(currentOrigin + change.position)
                     }
-                    dragStarted = false
-                    onEnd()
+                    break
                 } else {
                     change.consume()
-                    val origin = deskBounds[deskIndex]?.position ?: Offset.Zero
-                    onDrag(origin + change.position)
+                    val currentOrigin = deskBounds[deskIndex]?.position ?: originAtStart
+                    onDrag(currentOrigin + change.position)
                 }
             }
         } finally {
-            if (dragStarted) onEnd()
+            if (dragActive) {
+                dragActive = false
+                onEnd()
+            }
         }
     }
 }

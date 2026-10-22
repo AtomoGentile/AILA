@@ -193,7 +193,11 @@ fun AssistantChatScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(AppTheme.Space16)
             ) {
-                AssistantWelcome(conversations = conversations, onOpenConversation = onOpenConversation)
+                AssistantWelcome(
+                    conversations = conversations,
+                    onOpenConversation = onOpenConversation,
+                    onOpenSource = onOpenSource
+                )
             }
         } else LazyColumn(
             state = listState,
@@ -640,7 +644,8 @@ private fun relativeTimeLabel(atMillis: Long): String {
 @Composable
 private fun AssistantWelcome(
     conversations: List<AssistantConversation>,
-    onOpenConversation: (AssistantConversation) -> Unit
+    onOpenConversation: (AssistantConversation) -> Unit,
+    onOpenSource: (AssistantSource) -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = AppTheme.Space12),
@@ -703,8 +708,6 @@ private fun AssistantWelcome(
 
         Spacer(modifier = Modifier.height(AppTheme.Space16))
         WelcomeLabel("DA DOVE PRENDO LE RISPOSTE")
-        // Inerti di proposito (niente freccia, niente pressione): dicono dove guarda l'Assistant,
-        // non portano da nessuna parte.
         WelcomeSources.chunked(2).forEach { pair ->
             Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = AppTheme.Space8),
@@ -715,6 +718,9 @@ private fun AssistantWelcome(
                         modifier = Modifier
                             .weight(1f)
                             .ailaTopicSurface(RoundedCornerShape(AppTheme.ButtonCornerRadius), kind.tint(), kind.ink())
+                            .ailaPressable(pressedScale = 0.98f) {
+                                onOpenSource(AssistantSource(kind = kind, label = label))
+                            }
                             .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -757,7 +763,6 @@ private val WelcomeSources = listOf(
     AssistantSourceKind.BOARD to "Bacheca",
     AssistantSourceKind.POLL to "Sondaggi",
     AssistantSourceKind.SEAT_MAP to "Mappa posti",
-    AssistantSourceKind.CLASS to "La tua classe",
     AssistantSourceKind.GITA to "Gita"
 )
 

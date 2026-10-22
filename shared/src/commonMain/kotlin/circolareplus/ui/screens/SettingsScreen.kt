@@ -123,7 +123,9 @@ fun SettingsScreen(
     var compatibleFormat by remember(compatibleAiFormat) { mutableStateOf(compatibleAiFormat) }
     var compatibleBaseUrl by remember(compatibleAiBaseUrl) { mutableStateOf(compatibleAiBaseUrl) }
     var compatibleModel by remember(compatibleAiModel) { mutableStateOf(compatibleAiModel) }
-    var compatibleApiKey by remember(compatibleAiApiKey) { mutableStateOf(compatibleAiApiKey) }
+    var compatibleApiKey by remember(compatibleAiApiKey, apiKey) {
+        mutableStateOf(if (compatibleAiApiKey.isNotBlank()) compatibleAiApiKey else apiKey)
+    }
     var compatibleStatus by remember { mutableStateOf<String?>(null) }
     var isTestingCompatible by remember { mutableStateOf(false) }
     var showAllModels by remember { mutableStateOf(false) }
@@ -444,121 +446,54 @@ fun SettingsScreen(
                 }
             }
 
-            // Google e API personalizzate condividono un'area dedicata alle credenziali.
+            // Una sola sezione "API" con selettore a tre opzioni (OpenAI, Anthropic, Google)
             add {
                 Column {
-                    AilaSectionTitle(text = "Chiavi AI", modifier = Modifier.ailaAppear(4))
+                    AilaSectionTitle(text = "API", modifier = Modifier.ailaAppear(4))
                     Spacer(modifier = Modifier.height(AppTheme.Space12))
                     AilaCard(modifier = Modifier.ailaAppear(5)) {
                         Column(modifier = Modifier.padding(AppTheme.Space16)) {
-                            Text("Google AI Studio", style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
-                            Spacer(modifier = Modifier.height(AppTheme.Space8))
                             Text(
-                                text = "Facoltativa: la chat dell'assistente funziona senza " +
-                                    "nessuna chiave, col servizio incluso dell'app. Questa chiave " +
-                                    "serve ad analizzare le circolari in riservatezza e fa da " +
-                                    "riserva quando la quota del servizio e' finita. Se ne " +
-                                    "ottiene una gratuita, senza carta di credito, da Google " +
-                                    "AI Studio: aistudio.google.com/apikey",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = AppTheme.TextMuted
-                            )
-
-                            Spacer(modifier = Modifier.height(AppTheme.Space12))
-
-                            OutlinedTextField(
-                                value = apiKeyInput,
-                                onValueChange = {
-                                    apiKeyInput = it
-                                    apiKeyStatus = null
-                                },
-                                placeholder = { Text("AQ.…", style = MaterialTheme.typography.bodyMedium) },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(
-                                    capitalization = KeyboardCapitalization.None,
-                                    autoCorrectEnabled = false
-                ),
-                                shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
-                                colors = ailaFieldColors(),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            if (apiKeyStatus != null) {
-                                Spacer(modifier = Modifier.height(AppTheme.Space8))
-                                Text(
-                                    text = apiKeyStatus!!,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = AppTheme.TextMuted
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(AppTheme.Space12))
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // "Prova la chiave" è la risposta al non poter capire perché l'AI non
-                                // rispondeva: fa una chiamata minima e riporta la risposta di Google
-                                // per esteso, invece di lasciare indovinare.
-                                AilaSecondaryButton(
-                                    text = if (isTesting) "Provo…" else "Prova la chiave",
-                                    onClick = {
-                                        if (!isTesting) {
-                                            isTesting = true
-                                            apiKeyStatus = null
-                                            scope.launch {
-                                                apiKeyStatus = onTestApiKey(apiKeyInput.trim())
-                                                isTesting = false
-                                            }
-                                        }
-                                    }
-                                )
-                                Spacer(modifier = Modifier.weight(1f))
-                                AilaPrimaryButton(
-                                    text = "Salva",
-                                    onClick = {
-                                        val trimmed = apiKeyInput.trim()
-                                        onSaveApiKey(trimmed)
-                                        apiKeyInput = trimmed
-                                        // Prima il tasto non dava alcun segno: la chiave veniva salvata
-                                        // ma sembrava che non fosse successo niente.
-                                        apiKeyStatus = if (trimmed.isEmpty()) {
-                                            "Chiave rimossa da questo dispositivo."
-                                        } else {
-                                            "Chiave salvata. Usa \"Prova la chiave\" per verificare che funzioni."
-                                        }
-                                    }
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(AppTheme.Space16))
-                            HorizontalDivider(color = AppTheme.Hairline)
-                            Spacer(modifier = Modifier.height(AppTheme.Space16))
-
-                            Text("API", style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
-                            Spacer(modifier = Modifier.height(AppTheme.Space8))
-                            Text(
-                                text = "Scegli il formato supportato dal tuo servizio. La chiave e le richieste restano su questo dispositivo.",
+                                text = "Scegli il formato del tuo servizio. La chiave e le richieste restano su questo dispositivo.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = AppTheme.TextMuted
                             )
                             Spacer(modifier = Modifier.height(AppTheme.Space12))
                             Text("Formato API", style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
                             Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            val apiFormats = listOf("OpenAI compatibile", "Anthropic compatibile", "Google compatibile")
+                            val selectedFormatIndex = when (compatibleFormat) {
+                                "ANTHROPIC" -> 1
+                                "GOOGLE" -> 2
+                                else -> 0
+                            }
                             AilaSegmentedTabs(
-                                labels = listOf("OpenAI compatibile", "Anthropic compatibile"),
-                                selectedIndex = if (compatibleFormat == "ANTHROPIC") 1 else 0,
-                                onSelect = { compatibleFormat = if (it == 1) "ANTHROPIC" else "OPENAI" },
+                                labels = apiFormats,
+                                selectedIndex = selectedFormatIndex,
+                                onSelect = { index ->
+                                    compatibleFormat = when (index) {
+                                        1 -> "ANTHROPIC"
+                                        2 -> "GOOGLE"
+                                        else -> "OPENAI"
+                                    }
+                                    compatibleStatus = null
+                                    if (compatibleFormat == "GOOGLE" && compatibleApiKey.isBlank() && apiKey.isNotBlank()) {
+                                        compatibleApiKey = apiKey
+                                    }
+                                },
                                 modifier = Modifier.fillMaxWidth()
                             )
                             Spacer(modifier = Modifier.height(AppTheme.Space12))
+                            val endpointPlaceholder = when (compatibleFormat) {
+                                "ANTHROPIC" -> "https://api.anthropic.com/v1"
+                                "GOOGLE" -> "https://generativelanguage.googleapis.com"
+                                else -> "https://api.openai.com/v1"
+                            }
                             OutlinedTextField(
                                 value = compatibleBaseUrl,
                                 onValueChange = { compatibleBaseUrl = it; compatibleStatus = null },
                                 label = { Text("Endpoint base") },
-                                placeholder = { Text(if (compatibleFormat == "ANTHROPIC") "https://api.anthropic.com/v1" else "https://api.openai.com/v1") },
+                                placeholder = { Text(endpointPlaceholder) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
                                 shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
@@ -566,11 +501,16 @@ fun SettingsScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
                             Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            val modelPlaceholder = when (compatibleFormat) {
+                                "ANTHROPIC" -> "claude-3-5-sonnet-20241022"
+                                "GOOGLE" -> "gemini-2.5-flash"
+                                else -> "gpt-4o-mini"
+                            }
                             OutlinedTextField(
                                 value = compatibleModel,
                                 onValueChange = { compatibleModel = it; compatibleStatus = null },
                                 label = { Text("Modello") },
-                                placeholder = { Text("es. claude-sonnet-4 o gpt-4.1-mini") },
+                                placeholder = { Text(modelPlaceholder) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
                                 shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
@@ -578,11 +518,23 @@ fun SettingsScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
                             Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            var isApiKeyVisible by remember { mutableStateOf(false) }
                             OutlinedTextField(
                                 value = compatibleApiKey,
                                 onValueChange = { compatibleApiKey = it; compatibleStatus = null },
                                 label = { Text("Chiave API") },
                                 singleLine = true,
+                                visualTransformation = if (isApiKeyVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                                trailingIcon = {
+                                    val iconLabel = if (isApiKeyVisible) "Nascondi chiave" else "Mostra chiave"
+                                    AilaIconButton(
+                                        contentDescription = iconLabel,
+                                        onClick = { isApiKeyVisible = !isApiKeyVisible }
+                                    ) { tint ->
+                                        if (isApiKeyVisible) AppIcons.EyeOff(modifier = Modifier.size(19.dp), color = tint)
+                                        else AppIcons.Eye(modifier = Modifier.size(19.dp), color = tint)
+                                    }
+                                },
                                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
                                 shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
                                 colors = ailaFieldColors(),
@@ -613,10 +565,19 @@ fun SettingsScreen(
                                         }
                                     }
                                 )
+                                Spacer(modifier = Modifier.weight(1f))
                                 AilaPrimaryButton(
                                     text = "Salva",
                                     onClick = {
-                                        onSaveCompatibleAiSettings(compatibleFormat, compatibleBaseUrl.trim(), compatibleModel.trim(), compatibleApiKey.trim())
+                                        onSaveCompatibleAiSettings(
+                                            compatibleFormat,
+                                            compatibleBaseUrl.trim(),
+                                            compatibleModel.trim(),
+                                            compatibleApiKey.trim()
+                                        )
+                                        if (compatibleFormat == "GOOGLE") {
+                                            onSaveApiKey(compatibleApiKey.trim())
+                                        }
                                         compatibleStatus = "Configurazione salvata su questo dispositivo."
                                     }
                                 )

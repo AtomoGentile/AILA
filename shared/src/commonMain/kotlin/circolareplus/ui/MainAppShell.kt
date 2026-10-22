@@ -4217,6 +4217,9 @@ fun MainAppShell(
                             AppContainer.settings.compatibleAiBaseUrl = baseUrl
                             AppContainer.settings.compatibleAiModel = model
                             AppContainer.settings.compatibleAiApiKey = key
+                            if (format == "GOOGLE") {
+                                AppContainer.settings.userAiApiKey = key
+                            }
                             apiKeyRevision++
                         },
                         onTestCompatibleAi = { format, baseUrl, model, key ->
@@ -6028,22 +6031,38 @@ private fun HourDropdown(
             AppIcons.ChevronRight(modifier = Modifier.size(14.dp).rotate(if (expanded) 270f else 90f), color = AppTheme.TextMuted)
         }
         if (expanded) {
-            FlowRow(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = AppTheme.Space8)
+                    .padding(top = AppTheme.Space4)
                     .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                    .background(AppTheme.TintSlate)
-                    .padding(AppTheme.Space8),
-                horizontalArrangement = Arrangement.spacedBy(AppTheme.Space4),
-                verticalArrangement = Arrangement.spacedBy(AppTheme.Space4)
+                    .background(if (AppTheme.isGlass) AppTheme.FieldSurface else AppTheme.SurfaceWhite)
+                    .border(1.dp, AppTheme.FieldOutline, RoundedCornerShape(AppTheme.SmallElementRadius))
+                    .heightIn(max = 220.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(vertical = AppTheme.Space4)
             ) {
                 (minHour..maxHour).forEach { hour ->
-                    circolareplus.design.AnimatedFilterChip(
-                        label = "${hour}ª",
-                        isSelected = value == hour,
-                        onClick = { onSelect(hour) }
-                    )
+                    val isSelected = value == hour
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(hour) }
+                            .background(if (isSelected) AppTheme.TintBlue else Color.Transparent)
+                            .padding(horizontal = AppTheme.Space16, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${hour}ª ora",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) AppTheme.PrimaryBlue else AppTheme.TextDark,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (isSelected) {
+                            AppIcons.Check(modifier = Modifier.size(16.dp), color = AppTheme.PrimaryBlue)
+                        }
+                    }
                 }
             }
         }
