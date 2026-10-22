@@ -219,6 +219,23 @@ fun SeatMapProposalsScreen(
         }
     }
 
+    // Anteprima immersiva: la mappa passa sopra l'elenco e usa tutto lo spazio disponibile.
+    if (safePreview != null) {
+        val proposal = proposals[safePreview]
+        FullscreenSeatMapPreview(
+            proposalNumber = safePreview + 1,
+            proposalCount = proposals.size,
+            proposal = proposal,
+            cells = previewCells.second,
+            columns = previewCells.first,
+            studentsMap = studentsMap,
+            isBusy = isBusy,
+            onBack = { previewIndex = null },
+            onSelectProposal = { onSelect(proposal) },
+            onChangeProposal = { previewIndex = it }
+        )
+    }
+
     // Conferma del riavvolgimento: le mappe generate spariscono davvero, con tutto il resto
     // della bozza, e non e' una cosa da fare per sbaglio.
     if (showRewindConfirm) {
@@ -233,6 +250,124 @@ fun SeatMapProposalsScreen(
             },
             confirmLabel = "Riavvolgi"
         )
+    }
+}
+
+/**
+ * Vista a schermo intero della mappa: controlli compatti in alto, aula e banchi nello spazio
+ * restante. Non cambia la disposizione calcolata né i dati della proposta.
+ */
+@Composable
+private fun FullscreenSeatMapPreview(
+    proposalNumber: Int,
+    proposalCount: Int,
+    proposal: SeatMapProposal,
+    cells: List<DeskCell?>,
+    columns: Int,
+    studentsMap: Map<String, User>,
+    isBusy: Boolean,
+    onBack: () -> Unit,
+    onSelectProposal: () -> Unit,
+    onChangeProposal: (Int) -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppTheme.BackgroundLight)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                        .background(AppTheme.TintSlate)
+                        .ailaPressable(pressedScale = 0.94f, onClick = onBack)
+                        .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8)
+                        .semantics {
+                            contentDescription = "Torna alle proposte"
+                            role = Role.Button
+                        }
+                ) {
+                    Text("← Proposte", style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
+                }
+                Text(
+                    text = "Mappa · Proposta $proposalNumber",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = AppTheme.TextDark,
+                    modifier = Modifier.weight(1f)
+                )
+                AilaPrimaryButton(
+                    text = "Scegli",
+                    onClick = onSelectProposal,
+                    compact = true,
+                    enabled = !isBusy
+                )
+            }
+            Spacer(modifier = Modifier.height(AppTheme.Space8))
+            if (proposalCount > 1) {
+                AilaSegmentedTabs(
+                    labels = (1..proposalCount).map { it.toString() },
+                    selectedIndex = proposalNumber - 1,
+                    onSelect = onChangeProposal,
+                    modifier = Modifier.fillMaxWidth(),
+                    key = proposalNumber
+                )
+                Spacer(modifier = Modifier.height(AppTheme.Space8))
+            }
+            Text(
+                text = proposal.satisfaction?.let { "Soddisfazione ${it.percentage.toInt()}%" }
+                    ?: "Soddisfazione non calcolabile: nessun voto",
+                style = MaterialTheme.typography.labelMedium,
+                color = AppTheme.TextMuted
+            )
+            Spacer(modifier = Modifier.height(AppTheme.Space8))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                    .background(AppTheme.HeroGradient)
+                    .padding(vertical = AppTheme.Space8),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "LAVAGNA & CATTEDRA",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = AppTheme.OnHeroPrimary
+                )
+            }
+            Spacer(modifier = Modifier.height(AppTheme.Space8))
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(columns.coerceAtLeast(1)),
+                horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
+                verticalArrangement = Arrangement.spacedBy(AppTheme.Space8),
+                contentPadding = PaddingValues(bottom = AppTheme.Space8),
+                modifier = Modifier.fillMaxWidth().weight(1f)
+            ) {
+                itemsIndexed(cells, key = { index, _ -> "fullscreen-$proposalNumber-$index" }) { _, cell ->
+                    if (cell != null) {
+                        if (cell.value.isVacantDesk) {
+                            VacantDeskBlankSlot(desk = cell.value)
+                        } else {
+                            SeatMapDeskCard(
+                                desk = cell.value,
+                                studentsMap = studentsMap,
+                                showThirdSeat = cell.value.hasThirdSeat
+                            )
+                        }
+                    } else {
+                        Spacer(modifier = Modifier)
+                    }
+                }
+            }
+        }
     }
 }
 
