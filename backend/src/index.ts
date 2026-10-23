@@ -10,6 +10,7 @@ import { logger } from 'hono/logger';
 import type { Env } from './types';
 import { syncSpaggiariCirculars } from './services/spaggiari';
 import { summarizePendingCirculars } from './services/summarizer';
+import { checkTelegramSignatureReminders } from './services/telegram';
 import { pruneAttempts } from './rateLimit';
 
 // Routes
@@ -26,6 +27,7 @@ import pollsRoutes from './routes/polls';
 import rankingPollsRoutes from './routes/rankingPolls';
 import fcmRoutes from './routes/fcm';
 import webPushRoutes from './routes/webpush';
+import telegramRoutes from './routes/telegram';
 import adminRoutes from './routes/admin';
 import aiRoutes from './routes/ai';
 import { adminPage } from './routes/adminPage';
@@ -76,6 +78,7 @@ app.route('/api/polls', pollsRoutes);
 app.route('/api/ranking-polls', rankingPollsRoutes);
 app.route('/api/fcm', fcmRoutes);
 app.route('/api/webpush', webPushRoutes);
+app.route('/api/telegram', telegramRoutes);
 app.route('/api/admin', adminRoutes);
 // Chat di AILA Assistant inclusa per tutti (v1.5.0): proxy verso Workers AI con Gemma.
 app.route('/api/ai', aiRoutes);
@@ -108,14 +111,15 @@ export default {
     return app.fetch(request, env, ctx);
   },
 
-  // Cron handler — Spaggiari sync ogni 15 minuti
+  // Cron handler — Spaggiari sync ogni 15 minuti + Promemoria Telegram
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     console.log(`[Cron] Avvio sync Spaggiari: ${new Date().toISOString()}`);
-    // I riassunti partono dopo la sync (e dopo la sua notifica): prima quelli delle circolari
-    // appena arrivate, poi quelli rimasti indietro, al massimo MAX_PER_RUN per giro.
+    // I riassunti e i promemoria Telegram partono dopo la sync. Un errore Telegram non blocca
+    // le altre attività del cron né la pulizia dei rate limit.
     ctx.waitUntil(
       syncSpaggiariCirculars(env)
         .then(() => summarizePendingCirculars(env))
+        .then(() => checkTelegramSignatureReminders(env).catch((err) => console.error('[Cron Telegram Error]', err)))
         .finally(() => pruneAttempts(env))
     );
   },

@@ -38,7 +38,7 @@ users.get('/me', async (c) => {
 
   const user = await c.env.DB.prepare(
     `SELECT u.id, u.first_name, u.last_name, u.username, u.role, u.created_at,
-            u.class_id, cl.label AS class_label,
+            u.class_id, u.signature_expires_at, cl.label AS class_label,
             sp.height_cm, sp.priority_pass, sp.notification_board_enabled
      FROM users u
      LEFT JOIN classes cl ON cl.id = u.class_id
@@ -52,6 +52,7 @@ users.get('/me', async (c) => {
     role: string;
     created_at: string;
     class_id: string | null;
+    signature_expires_at: string | null;
     class_label: string | null;
     height_cm: number | null;
     priority_pass: number | null;
@@ -72,6 +73,7 @@ users.get('/me', async (c) => {
     heightCm: user.height_cm,
     priorityPass: Boolean(user.priority_pass),
     notificationBoardEnabled: Boolean(user.notification_board_enabled ?? 1),
+    signatureExpiresAt: user.signature_expires_at,
   });
 });
 
@@ -87,6 +89,32 @@ users.put('/me/notifications', async (c) => {
   ).bind(boardEnabled ? 1 : 0, payload.sub).run();
 
   return c.json({ success: true, notificationBoardEnabled: boardEnabled });
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/users/me/signature-expiration — Aggiorna la data di scadenza della firma iOS
+// ---------------------------------------------------------------------------
+users.put('/me/signature-expiration', async (c) => {
+  const payload = c.get('jwtPayload');
+  let body: { expiresAt?: string; signatureExpiresAt?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Corpo della richiesta non valido' }, 400);
+  }
+
+  const rawExpires = body.expiresAt ?? body.signatureExpiresAt;
+  if (rawExpires !== undefined && rawExpires !== null && typeof rawExpires !== 'string') {
+    return c.json({ error: 'Data di scadenza non valida' }, 400);
+  }
+
+  const expiresAt = rawExpires && rawExpires.trim().length > 0 ? rawExpires.trim() : null;
+
+  await c.env.DB.prepare('UPDATE users SET signature_expires_at = ? WHERE id = ?')
+    .bind(expiresAt, payload.sub)
+    .run();
+
+  return c.json({ success: true, signatureExpiresAt: expiresAt });
 });
 
 // ---------------------------------------------------------------------------

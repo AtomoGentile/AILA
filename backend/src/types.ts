@@ -34,6 +34,9 @@ export interface Env {
   VAPID_PRIVATE_KEY?: string;
   // Contatto per i push service, es. "mailto:indirizzo@esempio.it".
   VAPID_SUBJECT?: string;
+  // Segreti Telegram per il bot di promemoria firma iOS
+  TELEGRAM_TOKEN?: string;
+  TELEGRAM_WEBHOOK_SECRET?: string;
   // Origini ammesse dal CORS, separate da virgola (in [vars] di wrangler.toml).
   WEB_ORIGINS?: string;
 }

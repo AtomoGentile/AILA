@@ -78,6 +78,7 @@ class LocalSettingsManager(
         private const val KEY_DEBUG_MENU = "debug_menu_enabled"
         /** Nelle impostazioni normali: i segreti nel Portachiavi sono di questa installazione. */
         private const val KEY_SECRETS_OWNED = "secrets_in_secure_storage"
+        private const val KEY_IOS_FIRST_LAUNCH = "ios_first_launch_millis"
         /** Scritto da Swift (AilaBackground.swift): righe separate da "\n", max 100. */
         const val KEY_BG_LOG = "bg_log"
 
@@ -108,6 +109,18 @@ class LocalSettingsManager(
     var apiBaseUrlOverride: String
         get() = settings.getString(KEY_API_BASE_URL, "")
         set(value) = settings.putString(KEY_API_BASE_URL, value)
+
+    /** Data del primo avvio dell'app su iOS per la stima della scadenza della firma. */
+    var iosFirstLaunchMillis: Long
+        get() {
+            var v = settings.getLong(KEY_IOS_FIRST_LAUNCH, 0L)
+            if (v == 0L) {
+                v = currentTimeMillis()
+                settings.putLong(KEY_IOS_FIRST_LAUNCH, v)
+            }
+            return v
+        }
+        set(value) = settings.putLong(KEY_IOS_FIRST_LAUNCH, value)
 
     /** Ripulita sia in scrittura sia in lettura, cosi' si sistema anche una chiave gia' salvata. */
     var userAiApiKey: String

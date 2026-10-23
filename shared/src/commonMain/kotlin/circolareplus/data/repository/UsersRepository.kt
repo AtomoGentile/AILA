@@ -11,13 +11,45 @@ import circolareplus.data.remote.dto.OwnNameChangeStatusDto
 import circolareplus.data.remote.dto.PendingNameChangesDto
 import circolareplus.data.remote.dto.ResetCodeResponseDto
 import circolareplus.data.remote.dto.SetHeightRequestDto
+import circolareplus.data.remote.dto.SignatureExpirationRequestDto
 import circolareplus.data.remote.dto.SuccessDto
+import circolareplus.data.remote.dto.TelegramLinkCodeDto
+import circolareplus.data.remote.dto.TelegramStatusDto
 import circolareplus.data.remote.dto.UsersListResponseDto
 import circolareplus.domain.model.User
+import circolareplus.platform.getIosSignatureExpirationInfo
+import circolareplus.platform.isIos
 
 class UsersRepository(private val api: ApiClient) {
 
     suspend fun me(): User = api.get<circolareplus.data.remote.dto.UserDto>("/api/users/me").toDomain().first
+
+    /** Invia al backend la data di scadenza della firma iOS (se su iOS). */
+    suspend fun syncIosSignatureExpiration() {
+        if (!isIos()) return
+        val info = getIosSignatureExpirationInfo(api.settings.iosFirstLaunchMillis) ?: return
+        try {
+            api.put<SignatureExpirationRequestDto, SuccessDto>(
+                "/api/users/me/signature-expiration",
+                SignatureExpirationRequestDto(expiresAt = info.expiresAtIso)
+            )
+        } catch (e: Exception) {
+            // Se offline o errore di rete, fallisce silenziosamente per il momento
+        }
+    }
+
+    /** Stato del collegamento Telegram per i promemoria di firma iOS. */
+    suspend fun telegramStatus(): TelegramStatusDto =
+        api.get<TelegramStatusDto>("/api/telegram/status", offlineCopy = false)
+
+    /** Genera un codice temporaneo monouso per collegare il bot Telegram. */
+    suspend fun createTelegramLinkCode(): TelegramLinkCodeDto =
+        api.post<EmptyBodyDto, TelegramLinkCodeDto>("/api/telegram/link-code", EmptyBodyDto())
+
+    /** Scollega/disabilita i promemoria Telegram. */
+    suspend fun unlinkTelegram() {
+        api.post<EmptyBodyDto, SuccessDto>("/api/telegram/unlink", EmptyBodyDto())
+    }
 
     /** Solo Rappresentante: elenco di tutti gli studenti della classe. */
     suspend fun listStudents(): List<User> =

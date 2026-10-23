@@ -864,6 +864,140 @@ fun SettingsScreen(
             
                 }
             }
+            // --- Telegram & Firma iOS --------------------------------------------------------
+            add {
+                var telegramStatus by remember { mutableStateOf<circolareplus.data.remote.dto.TelegramStatusDto?>(null) }
+                var showLinkDialog by remember { mutableStateOf(false) }
+                var generatedCodeInfo by remember { mutableStateOf<circolareplus.data.remote.dto.TelegramLinkCodeDto?>(null) }
+                var linkCodeError by remember { mutableStateOf<String?>(null) }
+                var isTelegramBusy by remember { mutableStateOf(false) }
+
+                val scope = rememberCoroutineScope()
+
+                LaunchedEffect(Unit) {
+                    try {
+                        circolareplus.data.AppContainer.usersRepository.syncIosSignatureExpiration()
+                        telegramStatus = circolareplus.data.AppContainer.usersRepository.telegramStatus()
+                    } catch (_: Exception) {}
+                }
+
+                Column {
+                    AilaSectionTitle(text = "Promemoria Telegram (Firma iOS)", modifier = Modifier.ailaAppear(8))
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    AilaCard(modifier = Modifier.ailaAppear(7)) {
+                        val isIosPlatform = circolareplus.platform.isIos()
+                        val sigInfo = if (isIosPlatform) {
+                            circolareplus.platform.getIosSignatureExpirationInfo(
+                                circolareplus.data.AppContainer.settings.iosFirstLaunchMillis
+                            )
+                        } else null
+
+                        if (sigInfo != null) {
+                            val formattedDate = sigInfo.expiresAtIso.take(10)
+                            val titleText = if (sigInfo.isEstimated) {
+                                "Scadenza firma iOS (stimata)"
+                            } else {
+                                "Scadenza firma iOS (verificata)"
+                            }
+                            val subtitleText = if (sigInfo.isEstimated) {
+                                "Scade il $formattedDate (stima di 7 giorni dall'installazione)"
+                            } else {
+                                "Scade il $formattedDate (da embedded.mobileprovision)"
+                            }
+                            AilaListRow(
+                                title = titleText,
+                                subtitle = subtitleText,
+                                tint = if (sigInfo.isEstimated) AppTheme.TintAmber else AppTheme.TintGreen,
+                                showChevron = false,
+                                icon = {
+                                    AppIcons.Calendar(
+                                        modifier = Modifier.size(19.dp),
+                                        color = if (sigInfo.isEstimated) AppTheme.TintAmberInk else AppTheme.TintGreenInk
+                                    )
+                                }
+                            )
+                            HorizontalDivider(color = AppTheme.Hairline, modifier = Modifier.padding(start = 72.dp))
+                        }
+
+                        val isLinked = telegramStatus?.linked == true && telegramStatus?.active == true
+                        val statusSubtitle = if (isLinked) {
+                            "Bot Telegram collegato: riceverai un avviso prima della scadenza"
+                        } else {
+                            "Ricevi una notifica su Telegram prima che scada la firma SideStore"
+                        }
+
+                        AilaListRow(
+                            title = if (isLinked) "Telegram collegato" else "Collega Telegram",
+                            subtitle = statusSubtitle,
+                            tint = if (isLinked) AppTheme.TintGreen else AppTheme.TintBlue,
+                            showChevron = false,
+                            onClick = {
+                                if (isTelegramBusy) return@AilaListRow
+                                if (isLinked) {
+                                    scope.launch {
+                                        isTelegramBusy = true
+                                        try {
+                                            circolareplus.data.AppContainer.usersRepository.unlinkTelegram()
+                                            telegramStatus = circolareplus.data.AppContainer.usersRepository.telegramStatus()
+                                        } catch (_: Exception) {}
+                                        finally { isTelegramBusy = false }
+                                    }
+                                } else {
+                                    scope.launch {
+                                        isTelegramBusy = true
+                                        linkCodeError = null
+                                        try {
+                                            generatedCodeInfo = circolareplus.data.AppContainer.usersRepository.createTelegramLinkCode()
+                                            showLinkDialog = true
+                                        } catch (e: Exception) {
+                                            linkCodeError = e.message ?: "Impossibile generare il codice"
+                                        } finally { isTelegramBusy = false }
+                                    }
+                                }
+                            },
+                            icon = {
+                                AppIcons.Bell(
+                                    modifier = Modifier.size(19.dp),
+                                    color = if (isLinked) AppTheme.TintGreenInk else AppTheme.TintBlueInk
+                                )
+                            }
+                        )
+
+                        if (linkCodeError != null) {
+                            Text(
+                                text = linkCodeError!!,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppTheme.TintRedInk,
+                                modifier = Modifier.padding(AppTheme.Space16)
+                            )
+                        }
+                    }
+
+                    if (showLinkDialog && generatedCodeInfo != null) {
+                        val code = generatedCodeInfo!!.code
+                        circolareplus.design.AilaConfirmDialog(
+                            title = "Codice Collegamento Telegram",
+                            message = "Il tuo codice monouso e':\n\n$code\n\n" +
+                                "1. Cerca il bot Telegram di AILA\n" +
+                                "2. Invia la chat con /start $code oppure scrivi solo $code\n" +
+                                "3. Il codice scade tra 15 minuti.",
+                            confirmLabel = "Chiudi",
+                            dismissLabel = "Aggiorna Stato",
+                            isDestructive = false,
+                            onConfirm = { showLinkDialog = false },
+                            onDismiss = {
+                                scope.launch {
+                                    try {
+                                        telegramStatus = circolareplus.data.AppContainer.usersRepository.telegramStatus()
+                                    } catch (_: Exception) {}
+                                }
+                                showLinkDialog = false
+                            }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(AppTheme.Space24))
+            }
             // --- Info ----------------------------------------------------------------------
             add {
                 Column {
