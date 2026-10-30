@@ -146,7 +146,7 @@ class LocalSettingsManager(
         get() = settings.getString(KEY_COMPATIBLE_AI_FORMAT, "OPENAI")
         set(value) {
             val previous = compatibleAiFormat
-            if (previous != value) {
+            if (previous != value && !settings.getBoolean(KEY_COMPATIBLE_AI_CONFIGS_MIGRATED, false)) {
                 val suffix = previous.lowercase()
                 val oldBase = "${KEY_COMPATIBLE_AI_BASE_URL}_$suffix"
                 val oldModel = "${KEY_COMPATIBLE_AI_MODEL}_$suffix"

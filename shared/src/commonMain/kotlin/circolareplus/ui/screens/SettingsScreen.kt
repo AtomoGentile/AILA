@@ -1,5 +1,6 @@
 package circolareplus.ui.screens
 
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -127,10 +128,10 @@ fun SettingsScreen(
     var isTesting by remember { mutableStateOf(false) }
     var selectedAiProvider by remember(aiProvider) { mutableStateOf(aiProvider) }
     var compatibleFormat by remember(compatibleAiFormat) { mutableStateOf(compatibleAiFormat) }
-    var compatibleBaseUrl by remember(compatibleAiBaseUrl) { mutableStateOf(compatibleAiBaseUrl) }
-    var compatibleModel by remember(compatibleAiModel) { mutableStateOf(compatibleAiModel) }
-    var compatibleApiKey by remember(compatibleAiApiKey, apiKey) {
-        mutableStateOf(if (compatibleAiApiKey.isNotBlank()) compatibleAiApiKey else apiKey)
+    var compatibleBaseUrl by remember(compatibleAiFormat, compatibleAiBaseUrl) { mutableStateOf(compatibleAiBaseUrl) }
+    var compatibleModel by remember(compatibleAiFormat, compatibleAiModel) { mutableStateOf(compatibleAiModel) }
+    var compatibleApiKey by remember(compatibleAiFormat, compatibleAiApiKey, apiKey) {
+        mutableStateOf(if (compatibleAiFormat == "GOOGLE") compatibleAiApiKey.ifBlank { apiKey } else compatibleAiApiKey)
     }
     var compatibleStatus by remember { mutableStateOf<String?>(null) }
     var isTestingCompatible by remember { mutableStateOf(false) }
@@ -433,33 +434,20 @@ fun SettingsScreen(
                             val localCanBeSelected = showLocalAiSection && localAiUnavailableReason == null
                             val providerLabels = buildList {
                                 add("AILA")
-                                add("Google")
-                                add(if (compatibleFormat == "ANTHROPIC") "Anthropic" else "OpenAI")
+                                add("API")
                                 if (localCanBeSelected) add("AI locale")
                             }
                             AilaSegmentedTabs(
                                 labels = providerLabels,
                                 selectedIndex = when (selectedAiProvider) {
-                                    "GOOGLE_AI_STUDIO" -> 1
-                                    "COMPATIBLE_API" -> 2
-                                    "ON_DEVICE" -> if (localCanBeSelected) 3 else 0
+                                    "GOOGLE_AI_STUDIO", "COMPATIBLE_API" -> 1
+                                    "ON_DEVICE" -> if (localCanBeSelected) 2 else 0
                                     else -> 0
                                 },
                                 onSelect = { index ->
                                     selectedAiProvider = when (index) {
-                                        1 -> {
-                                            compatibleFormat = "GOOGLE"
-                                            onCompatibleAiFormatChange("GOOGLE")
-                                            "GOOGLE_AI_STUDIO"
-                                        }
-                                        2 -> {
-                                            if (compatibleFormat == "GOOGLE") {
-                                                compatibleFormat = "OPENAI"
-                                                onCompatibleAiFormatChange("OPENAI")
-                                            }
-                                            "COMPATIBLE_API"
-                                        }
-                                        3 -> "ON_DEVICE"
+                                        1 -> if (compatibleFormat == "GOOGLE") "GOOGLE_AI_STUDIO" else "COMPATIBLE_API"
+                                        2 -> "ON_DEVICE"
                                         else -> "AILA_CLOUD"
                                     }
                                     onAiProviderChange(selectedAiProvider)
@@ -516,9 +504,6 @@ fun SettingsScreen(
                                     compatibleStatus = null
                                     onCompatibleAiFormatChange(compatibleFormat)
                                     onAiProviderChange(if (compatibleFormat == "GOOGLE") "GOOGLE_AI_STUDIO" else "COMPATIBLE_API")
-                                    if (compatibleFormat == "GOOGLE" && compatibleApiKey.isBlank() && apiKey.isNotBlank()) {
-                                        compatibleApiKey = apiKey
-                                    }
                                 },
                                 modifier = Modifier.fillMaxWidth()
                             )

@@ -4229,6 +4229,7 @@ fun MainAppShell(
                         aiProvider = AppContainer.settings.aiProvider,
                         onAiProviderChange = { provider ->
                             AppContainer.settings.aiProvider = provider
+                            apiKeyRevision++
                         },
                         compatibleAiFormat = AppContainer.settings.compatibleAiFormat,
                         compatibleAiBaseUrl = run { apiKeyRevision; AppContainer.settings.compatibleAiBaseUrl },
@@ -5409,7 +5410,7 @@ private fun AddCalendarEventDialog(
     val canSubmitManualEvent = title.isNotBlank() && startDateMillis != null && !isPastDate &&
         (endDateMillis == null || (endDateMillis >= startDateMillis && endDateMillis <= startDateMillis + EVENT_MAX_RANGE_DAYS * EVENT_DAY_MILLIS)) &&
         (repeatFrequency == "NONE" || selectedEndDateMillis != null) &&
-        (repeatFrequency != "CUSTOM" || (customWeekdays.isNotEmpty() && customWeekdays.all { customTimes[it] != null }))
+        (repeatFrequency != "CUSTOM" || (eventOccurrenceCount > 0 && customWeekdays.all { customTimes[it] != null }))
 
     // Lo stesso calendario a griglia viene usato su Android, iOS e web; per la data finale
     // limita la scelta all'intervallo valido, invece di lasciare che il server rifiuti il form.
@@ -5892,6 +5893,7 @@ private fun AddCalendarEventDialog(
                     )
                     Spacer(modifier = Modifier.height(AppTheme.Space16))
                     // Orario a ore di lezione (1-6) invece di un'ora libera tipo "8:00".
+                    if (repeatFrequency != "CUSTOM") {
                     Row(
                         modifier = Modifier.fillMaxWidth().ailaSheetReveal(3),
                         horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
@@ -5919,6 +5921,7 @@ private fun AddCalendarEventDialog(
                             onSelect = { toHour = it; expandedHourPicker = null },
                             modifier = Modifier.weight(1f)
                         )
+                    }
                     }
                     if (isPastDate) {
                         Text(
