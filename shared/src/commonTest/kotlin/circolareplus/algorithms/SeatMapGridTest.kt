@@ -19,6 +19,9 @@ class SeatMapGridTest {
         assertEquals(1, deskIndexUnderPointer(Offset(150f, 140f), bounds, listOf(1), cells, 0f))
         assertNull(deskIndexUnderPointer(Offset(30f, 140f), bounds, listOf(1), cells, 0f))
         assertNull(deskIndexUnderPointer(Offset(400f, 400f), bounds, listOf(0, 1), cells, 12f))
+        // Una cella parzialmente tagliata non è un bersaglio sopra il bordo del viewport.
+        assertNull(deskIndexUnderPointer(Offset(30f, 110f), bounds, listOf(0, 1), cells, 12f,
+            DeskBounds(Offset(0f, 140f), IntSize(200, 200))))
     }
 
     @Test

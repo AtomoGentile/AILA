@@ -57,6 +57,8 @@ private data class EditableSeatRef(val deskIndex: Int, val seatIndex: Int)
 internal data class DeskBounds(val position: Offset, val size: androidx.compose.ui.unit.IntSize) {
     val center: Offset
         get() = Offset(position.x + size.width / 2f, position.y + size.height / 2f)
+    fun contains(point: Offset): Boolean = point.x in position.x..(position.x + size.width) &&
+        point.y in position.y..(position.y + size.height)
 }
 
 /**
@@ -149,7 +151,8 @@ fun SeatMapEditorScreen(
                 deskBounds = deskBounds,
                 visibleCellIndexes = gridState.layoutInfo.visibleItemsInfo.map { it.index },
                 cells = deskCells,
-                tolerance = with(density) { 12.dp.toPx() }
+                tolerance = with(density) { 12.dp.toPx() },
+                viewport = gridBounds
             )
         }
     }
@@ -506,8 +509,10 @@ internal fun deskIndexUnderPointer(
     deskBounds: Map<Int, DeskBounds>,
     visibleCellIndexes: List<Int>,
     cells: List<DeskCell>,
-    tolerance: Float
+    tolerance: Float,
+    viewport: DeskBounds? = null
 ): Int? {
+    if (viewport != null && !viewport.contains(pointerInRoot)) return null
     var best: Pair<Float, Int>? = null
     for (cellIndex in visibleCellIndexes) {
         val deskIndex = cells.getOrNull(cellIndex)?.index ?: continue
