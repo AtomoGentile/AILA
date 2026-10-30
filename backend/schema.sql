@@ -360,10 +360,10 @@ CREATE TABLE IF NOT EXISTS ranking_poll_answers (
     PRIMARY KEY (poll_id, user_id, option_id)
 );
 
--- 10. STORICO DISPOSIZIONE MAPPA POSTI (Finestra regressiva su 4 mappe)
+-- 10. STORICO DELLE DISPOSIZIONI PUBBLICATE (migrazione 025)
 CREATE TABLE IF NOT EXISTS seat_map_history (
     id TEXT PRIMARY KEY,
-    map_index INTEGER NOT NULL CHECK(map_index BETWEEN 1 AND 4), -- 1 per N-1, 2 per N-2, 3 per N-3, 4 per N-4
+    map_index INTEGER NOT NULL CHECK(map_index >= 1), -- 1 = mappa attuale, 2 = precedente, ecc.
     layout_json TEXT NOT NULL,
     class_id TEXT NOT NULL DEFAULT 'DEFAULT_CLASS' REFERENCES classes(id),
     published_at DATETIME DEFAULT CURRENT_TIMESTAMP

@@ -85,13 +85,13 @@ fun VacantDeskSlot(
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = "Banco F${desk.row + 1}C${desk.column + 1}",
+                text = "F${desk.row + 1} · C${desk.column + 1}",
                 style = MaterialTheme.typography.ailaDeskLabel,
                 color = AppTheme.TextMuted
             )
             Spacer(modifier = Modifier.height(AppTheme.Space4))
             Text(
-                text = "Libero (trascinabile)",
+                text = "Libero",
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Normal,
                 color = AppTheme.TextMuted

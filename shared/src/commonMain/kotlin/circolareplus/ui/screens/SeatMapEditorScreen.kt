@@ -21,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -29,6 +30,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -344,30 +346,6 @@ fun SeatMapEditorScreen(
                     else -> Modifier
                 }
 
-                if (isVacant) {
-                    // Banco vuoto: slot ghost (bordo sottile, niente nomi), trascinabile come un
-                    // banco pieno; l'evidenziazione del bersaglio e' interna (bordo acceso). La
-                    // presa sta SOPRA lo slot (VacantDeskSlot resta com'e', sta in SeatMapGrid):
-                    // un Box esterno porta bounds/drag/feedback senza cambiarne il layout.
-                    Box(
-                        modifier = boundsModifier.fillMaxWidth().heightIn(min = 152.dp)
-                            .then(dragVisualModifier)
-                    ) {
-                        VacantDeskSlot(
-                            desk = desk,
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 152.dp),
-                            isDragged = isDragged,
-                            isHoverTarget = isHovered
-                        )
-                        DeskGripHandle(
-                            modifier = Modifier.matchParentSize(),
-                            onTap = { tapDeskGrip(deskIndex) },
-                            selected = selectedDeskForMove == deskIndex
-                        )
-                    }
-                    return@items
-                }
-
                 // Liquid Glass: banco di vetro; se la coppia e' vietata, vetro rosso col bordo pieno.
                 Card(
                     shape = deskShape,
@@ -379,6 +357,7 @@ fun SeatMapEditorScreen(
                             else -> AppTheme.DeskFloor
                         }
                     ),
+                    border = if (isVacant) androidx.compose.foundation.BorderStroke(1.dp, AppTheme.TextMuted.copy(alpha = 0.4f)) else null,
                     elevation = CardDefaults.cardElevation(defaultElevation = AppTheme.CardElevation),
                     modifier = (if (glass) Modifier
                         .ailaGlassSurface(deskShape, tint = if (isForbidden) AppTheme.TintRed.copy(alpha = 0.6f) else null)
@@ -416,47 +395,42 @@ fun SeatMapEditorScreen(
                             )
                         }
                         Spacer(modifier = Modifier.height(AppTheme.Space4))
-                        SeatSlotLabel(
-                            name = sA?.firstName,
-                            isSelected = selectedSeat == EditableSeatRef(deskIndex, 0),
-                            onClick = {
-                                if (draggingDeskIndex == null) {
-                                    selectedSeat = handleSeatTap(
-                                        tapped = EditableSeatRef(deskIndex, 0),
-                                        current = selectedSeat,
-                                        onSwap = onSwapSeats
+                        // Lo slot libero usa la stessa testata, gli stessi posti e le stesse
+                        // spaziature dei banchi occupati. Nessuna altezza fissa, anche con font grandi.
+                        val seatCount = if (isVacant) {
+                            if (assignments.any { it.row == desk.row && it.hasThirdSeat }) 3 else 2
+                        } else if (desk.hasThirdSeat) 3 else 2
+                        Box(contentAlignment = Alignment.Center) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = if (isVacant) Modifier.alpha(0f).clearAndSetSemantics {} else Modifier
+                            ) {
+                                val names = listOf(sA?.firstName, sB?.firstName, sC?.firstName)
+                                repeat(seatCount) { seatIndex ->
+                                    if (seatIndex > 0) HorizontalDivider(
+                                        modifier = Modifier.padding(vertical = 2.dp), color = AppTheme.Hairline
+                                    )
+                                    SeatSlotLabel(
+                                        name = names[seatIndex],
+                                        isSelected = selectedSeat == EditableSeatRef(deskIndex, seatIndex),
+                                        enabled = !isVacant,
+                                        onClick = {
+                                            if (draggingDeskIndex == null) {
+                                                selectedSeat = handleSeatTap(
+                                                    tapped = EditableSeatRef(deskIndex, seatIndex),
+                                                    current = selectedSeat,
+                                                    onSwap = onSwapSeats
+                                                )
+                                            }
+                                        }
                                     )
                                 }
                             }
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), color = AppTheme.Hairline)
-                        SeatSlotLabel(
-                            name = sB?.firstName,
-                            isSelected = selectedSeat == EditableSeatRef(deskIndex, 1),
-                            onClick = {
-                                if (draggingDeskIndex == null) {
-                                    selectedSeat = handleSeatTap(
-                                        tapped = EditableSeatRef(deskIndex, 1),
-                                        current = selectedSeat,
-                                        onSwap = onSwapSeats
-                                    )
-                                }
-                            }
-                        )
-                        if (desk.hasThirdSeat) {
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), color = AppTheme.Hairline)
-                            SeatSlotLabel(
-                                name = sC?.firstName,
-                                isSelected = selectedSeat == EditableSeatRef(deskIndex, 2),
-                                onClick = {
-                                    if (draggingDeskIndex == null) {
-                                        selectedSeat = handleSeatTap(
-                                            tapped = EditableSeatRef(deskIndex, 2),
-                                            current = selectedSeat,
-                                            onSwap = onSwapSeats
-                                        )
-                                    }
-                                }
+                            if (isVacant) Text(
+                                text = "Libero",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = AppTheme.TextMuted,
+                                maxLines = 1
                             )
                         }
                     }
@@ -529,14 +503,16 @@ internal fun deskIndexUnderPointer(
 }
 
 @Composable
-private fun SeatSlotLabel(name: String?, isSelected: Boolean, onClick: () -> Unit) {
+private fun SeatSlotLabel(name: String?, isSelected: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
     Text(
         text = name ?: "Vuoto",
+        maxLines = 1,
+        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         style = MaterialTheme.typography.labelMedium,
         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
         color = if (isSelected) AppTheme.PrimaryBlue else AppTheme.TextDark,
         modifier = Modifier
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             // L'altezza di prima (28dp), che veniva dall'interlinea di 24sp ereditata da Material:
             // nel banco non c'e' posto per 44, ma sotto i 28 il nome diventava difficile da toccare.
             .heightIn(min = 28.dp)

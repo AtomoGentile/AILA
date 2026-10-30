@@ -56,6 +56,7 @@ import circolareplus.design.AilaSegmentedTabs
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
 import circolareplus.domain.model.User
+import circolareplus.domain.model.PublishedSeatMap
 import kotlinx.coroutines.launch
 
 @Composable
@@ -76,17 +77,23 @@ fun SeatMapScreen(
     onDeleteDummy: (String) -> Unit = {},
     onTogglePreferencesWindow: (Boolean) -> Unit = {},
     onGenerateProposals: (OptimizerWeights, seatsPerDesk: Int, rowSeats: List<Int>, deskSlots: List<SeatMapOptimizer.DeskSlot>?) -> Unit = { _, _, _, _ -> },
-    /** Solo Rappresentante: azzera lo storico delle mappe pubblicate (rotta /api/seat-map/reset-history):
-     *  le ultime 4 disposizioni smettono di pesare nella penalita' memoria dell'ottimizzatore. */
+    /** Solo Rappresentante: elimina le pubblicazioni e azzera la memoria dell'ottimizzatore. */
     onDeleteSeatMapHistory: () -> Unit = {},
     /** True mentre la richiesta di reset e' in volo: il tasto non si ripreme. */
     isDeletingHistory: Boolean = false,
     isExportingPdf: Boolean = false,
     onExportPdf: () -> Unit = {},
+    loadPublishedHistory: suspend () -> List<PublishedSeatMap> = { emptyList() },
     /** Proposte in calcolo: il pulsante mostra l'attesa e non si puo' ripremere. */
     isGeneratingProposals: Boolean = false
 ) {
     var searchQuery by remember { mutableStateOf("") }
+    var showHistory by remember { mutableStateOf(false) }
+    if (showHistory) SeatMapHistoryDialog(
+        studentsMap = studentsMap,
+        loadHistory = loadPublishedHistory,
+        onDismiss = { showHistory = false }
+    )
     // Chi evidenziare nella mappa: "Il mio posto" o il compagno cercato. Prima il tasto era solo
     // un'icona di localizzazione (sembrava chiedere il GPS) e la ricerca non faceva nulla.
     var focusedStudentId by remember { mutableStateOf<String?>(null) }
@@ -163,6 +170,9 @@ fun SeatMapScreen(
             title = "Mappa Posti",
             action = {
                 Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                    AilaIconButton(contentDescription = "Storico mappe pubblicate", onClick = { showHistory = true }) { tint ->
+                        AppIcons.History(modifier = Modifier.size(19.dp), color = tint)
+                    }
                     // Esporta la disposizione pubblicata in PDF (disegno del layout, non solo
                     // testo): utile a chiunque veda la mappa, non solo al Rappresentante.
                     if (assignments.isNotEmpty()) {
@@ -600,8 +610,8 @@ fun SeatMapScreen(
     if (showResetHistoryConfirm) {
         AilaConfirmDialog(
             title = "Eliminare lo storico?",
-            message = "Eliminare lo STORICO delle mappe pubblicate? L'algoritmo non terrà più " +
-                "conto delle disposizioni passate.",
+            message = "Tutte le mappe dell'archivio, compresa quella attualmente pubblicata, saranno eliminate. " +
+                "L'algoritmo non terrà più conto delle disposizioni passate. L'azione non può essere annullata.",
             onDismiss = { showResetHistoryConfirm = false },
             onConfirm = {
                 showResetHistoryConfirm = false

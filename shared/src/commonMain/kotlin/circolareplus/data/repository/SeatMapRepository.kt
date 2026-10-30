@@ -46,15 +46,27 @@ class SeatMapRepository(private val api: ApiClient? = null) {
         return response.seatMap?.let { apiJson.decodeFromJsonElement<List<DeskAssignment>>(it.layout) }
     }
 
+    /** Archivio consultabile: solo pubblicazioni confermate dal server, mai bozze locali. */
+    suspend fun getPublishedHistory(): List<PublishedSeatMap> = readPublishedHistory(archive = true)
+
+    private suspend fun readPublishedHistory(archive: Boolean): List<PublishedSeatMap> {
+        val path = if (archive) "/api/seat-map/history?archive=true" else "/api/seat-map/history"
+        // Lo storico deve riflettere anche pubblicazioni/reset fatti da un altro rappresentante.
+        val response: SeatMapHistoryResponseDto = requireApi().get(path, offlineCopy = false)
+        return response.history.mapNotNull { entry ->
+            val index = entry.mapIndex?.takeIf { it >= 1 } ?: return@mapNotNull null
+            PublishedSeatMap(entry.id, index, entry.publishedAt,
+                apiJson.decodeFromJsonElement<List<DeskAssignment>>(entry.layout))
+        }.sortedBy { it.mapIndex }
+    }
+
     /** Storico regressivo (almeno 4 mappe e gli ultimi 12 mesi) usato da [SeatMapOptimizer.calculateMemoryPenalty]. Un
      * banco da trio genera tutte e tre le coppie possibili (A-B, A-C, B-C): sono tre fatti
      * storici distinti ("erano insieme"), coerenti con come SeatMapOptimizer li ricontrolla uno
      * per uno per i banchi futuri — vedi il commento su SeatMapOptimizer.pairRepeatPenalty. */
     suspend fun getHistoryForOptimizer(): List<SeatMapHistoryRecord> {
-        val response: SeatMapHistoryResponseDto = requireApi().get("/api/seat-map/history")
-        return response.history.mapNotNull { entry ->
-            val mapIndex = entry.mapIndex ?: return@mapNotNull null
-            val assignments = apiJson.decodeFromJsonElement<List<DeskAssignment>>(entry.layout)
+        return readPublishedHistory(archive = false).map { entry ->
+            val assignments = entry.assignments
             val pairs = assignments.flatMap { a ->
                 val occupants = listOfNotNull(a.studentAId, a.studentBId, a.studentCId)
                 occupants.indices.flatMap { i -> ((i + 1) until occupants.size).map { j -> occupants[i] to occupants[j] } }
@@ -64,11 +76,11 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                     listOfNotNull(a.studentAId, a.studentBId, a.studentCId).forEach { put(it, a.row to a.column) }
                 }
             }
-            SeatMapHistoryRecord(mapIndex = mapIndex, pairs = pairs, deskAssignments = deskPositions, publishedAt = entry.publishedAt)
+            SeatMapHistoryRecord(mapIndex = entry.mapIndex, pairs = pairs, deskAssignments = deskPositions, publishedAt = entry.publishedAt)
         }
     }
 
-    /** Solo Rappresentante: pubblica la disposizione scelta (ruota automaticamente lo storico N-1..N-4). */
+    /** Solo Rappresentante: pubblica la disposizione scelta e la aggiunge allo storico condiviso. */
     suspend fun publish(assignments: List<DeskAssignment>): SuccessDto {
         val layoutJson = apiJson.encodeToString(assignments)
         val layoutElement = apiJson.parseToJsonElement(layoutJson)

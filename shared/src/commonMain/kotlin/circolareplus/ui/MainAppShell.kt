@@ -3115,6 +3115,7 @@ fun MainAppShell(
                                                 assignments = seatMapAssignments,
                                                 studentsMap = memoizedStudentsMap,
                                                 isPreferencesOpen = isPreferencesOpen,
+                                                loadPublishedHistory = { AppContainer.seatMapRepository.getPublishedHistory() },
                                                 preferencesProgress = preferencesProgress,
                                                 dummies = seatMapDummies,
                                                 showDummiesMenu = run {
@@ -3192,6 +3193,7 @@ fun MainAppShell(
                                                         isDeletingSeatMapHistory = true
                                                         try {
                                                             AppContainer.seatMapRepository.resetHistory()
+                                                            seatMapAssignments = emptyList()
                                                             // Lo storico pesa solo nell'ottimizzatore (penalita'
                                                             // memoria): qui lo si azzera, dalla prossima
                                                             // generazione le disposizioni passate non contano piu'.
@@ -3222,7 +3224,21 @@ fun MainAppShell(
                                                         // com'erano. Per generare mappe nuove prima si usa "Riavvolgi".
                                                         val draft = savedSeatMapDraft
                                                         if (draft != null && draft.proposals.isNotEmpty()) {
-                                                            restoreSeatMapDraft(draft, showProposals = true)
+                                                            isGeneratingProposals = true
+                                                            try {
+                                                                // Una bozza conserva gli input di calcolo, mai un'autorità
+                                                                // sullo storico: un altro rappresentante può aver pubblicato.
+                                                                val publishedHistory = AppContainer.seatMapRepository.getHistoryForOptimizer()
+                                                                val refreshedDraft = draft.copy(history = publishedHistory)
+                                                                updateSeatMapDraft(refreshedDraft)
+                                                                restoreSeatMapDraft(refreshedDraft, showProposals = true)
+                                                            } catch (e: CancellationException) {
+                                                                throw e
+                                                            } catch (e: Exception) {
+                                                                seatMapActionError = "Impossibile verificare lo storico delle mappe pubblicate: ${e.message}"
+                                                            } finally {
+                                                                isGeneratingProposals = false
+                                                            }
                                                             return@launch
                                                         }
                                                         isGeneratingProposals = true
@@ -4829,6 +4845,17 @@ fun MainAppShell(
                                     }
                                     isGeneratingProposals = true
                                     try {
+                                        // Tra il calcolo e la pubblicazione un altro rappresentante
+                                        // può aver pubblicato: verifica sullo storico attuale del server.
+                                        val latestHistory = AppContainer.seatMapRepository.getHistoryForOptimizer()
+                                        seatMapOptimizerHistory = latestHistory
+                                        if (SeatMapOptimizer.rowRotationViolations(
+                                                currentAssignments, seatMapOptimizerProfiles, latestHistory
+                                            ).isNotEmpty()) {
+                                            savedSeatMapDraft?.let { updateSeatMapDraft(it.copy(history = latestHistory)) }
+                                            seatMapActionError = "Lo storico delle mappe pubblicate è cambiato: controlla la rotazione delle file prima di pubblicare."
+                                            return@launch
+                                        }
                                         AppContainer.seatMapRepository.publish(currentAssignments)
                                         seatMapAssignments = currentAssignments
                                         editingSeatMapProposal = null
@@ -5826,17 +5853,21 @@ private fun AddCalendarEventDialog(
                         color = AppTheme.TextMuted,
                         modifier = Modifier.ailaSheetReveal(3).padding(bottom = AppTheme.Space8)
                     )
-                    FlowRow(
+                    Column(
                         modifier = Modifier.fillMaxWidth().ailaSheetReveal(3),
-                        horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
                         verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
                     ) {
-                        listOf("NONE" to "Mai", "DAILY" to "Ogni giorno", "WEEKLY" to "Ogni settimana", "CUSTOM" to "Personalizzata").forEach { (value, label) ->
-                            circolareplus.design.AnimatedFilterChip(
-                                label = label,
-                                isSelected = repeatFrequency == value,
-                                onClick = { repeatFrequency = value }
-                            )
+                        listOf("NONE" to "Mai", "DAILY" to "Ogni giorno", "WEEKLY" to "Ogni settimana", "CUSTOM" to "Personalizzata").chunked(2).forEach { options ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                                options.forEach { (value, label) ->
+                                    circolareplus.design.AnimatedFilterChip(
+                                        label = label,
+                                        modifier = Modifier.weight(1f),
+                                        isSelected = repeatFrequency == value,
+                                        onClick = { repeatFrequency = value; expandedHourPicker = null }
+                                    )
+                                }
+                            }
                         }
                     }
                     if (repeatFrequency == "CUSTOM") {
@@ -6127,7 +6158,9 @@ private fun HourDropdown(
     minHour: Int = 1,
     maxHour: Int = 6
 ) {
-    Column(modifier = modifier) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    var anchorWidth by remember { mutableStateOf(0.dp) }
+    Box(modifier = modifier.onGloballyPositioned { anchorWidth = with(density) { it.size.width.toDp() } }) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -6148,40 +6181,26 @@ private fun HourDropdown(
             )
             AppIcons.ChevronRight(modifier = Modifier.size(14.dp).rotate(if (expanded) 270f else 90f), color = AppTheme.TextMuted)
         }
-        if (expanded) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = AppTheme.Space4)
-                    .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                    .background(if (AppTheme.isGlass) AppTheme.FieldSurface else AppTheme.SurfaceWhite)
-                    .border(1.dp, AppTheme.FieldOutline, RoundedCornerShape(AppTheme.SmallElementRadius))
-                    .heightIn(max = 220.dp)
-                    .verticalScroll(rememberScrollState())
-                    .padding(vertical = AppTheme.Space4)
-            ) {
-                (minHour..maxHour).forEach { hour ->
-                    val isSelected = value == hour
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelect(hour) }
-                            .background(if (isSelected) AppTheme.TintBlue else Color.Transparent)
-                            .padding(horizontal = AppTheme.Space16, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "${hour}ª ora",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelected) AppTheme.PrimaryBlue else AppTheme.TextDark,
-                            modifier = Modifier.weight(1f)
-                        )
-                        if (isSelected) {
-                            AppIcons.Check(modifier = Modifier.size(16.dp), color = AppTheme.PrimaryBlue)
-                        }
+        // DropdownMenu vive in un popup: apertura e chiusura non cambiano l'altezza del form.
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { if (expanded) onToggle() },
+            modifier = Modifier.width(anchorWidth.coerceAtLeast(120.dp)).heightIn(max = 260.dp)
+                .background(if (AppTheme.isGlass) AppTheme.FieldSurface else AppTheme.SurfaceWhite)
+        ) {
+            (minHour..maxHour).forEach { hour ->
+                val isSelected = value == hour
+                DropdownMenuItem(
+                    text = {
+                        Text("${hour}ª ora", fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) AppTheme.PrimaryBlue else AppTheme.TextDark)
+                    },
+                    onClick = { onSelect(hour) },
+                    modifier = Modifier.background(if (isSelected) AppTheme.TintBlue else Color.Transparent),
+                    trailingIcon = {
+                        if (isSelected) AppIcons.Check(modifier = Modifier.size(16.dp), color = AppTheme.PrimaryBlue)
                     }
-                }
+                )
             }
         }
     }

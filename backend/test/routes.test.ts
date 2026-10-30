@@ -701,6 +701,69 @@ describe('evento AI con rimando alla circolare', () => {
   });
 });
 
+describe('storico delle mappe pubblicate', () => {
+  async function setup() {
+    const rep = await register('rappresentante', { representativeCode: await repCode() });
+    const student = await register('alunno', { classCode: await classCodeOf(rep.json.token) });
+    return { rep: rep.json.token, student: student.json.token, id: student.json.user.id };
+  }
+
+  it('lettura, anteprime locali e proposte non pubblicate non cambiano lo storico', async () => {
+    const { rep, student, id } = await setup();
+    const proposal = [{ row: 0, column: 2, studentAId: id, studentBId: null }];
+    expect((await call('GET', '/api/seat-map/history', undefined, rep)).json.history).toEqual([]);
+    expect((await call('GET', '/api/seat-map/current', undefined, student)).json.seatMap).toBeNull();
+    // Anche una pubblicazione tentata da chi non ha il ruolo non crea una voce.
+    expect((await call('POST', '/api/seat-map/publish', { layout: proposal }, student)).status).toBe(403);
+    expect((await call('GET', '/api/seat-map/history?archive=true', undefined, rep)).json.history).toEqual([]);
+    const published = await call('POST', '/api/seat-map/publish', { layout: proposal }, rep);
+    expect(published.status).toBe(201);
+    for (let i = 0; i < 3; i++) await call('GET', '/api/seat-map/current', undefined, rep);
+    const history = (await call('GET', '/api/seat-map/history?archive=true', undefined, student)).json.history;
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({ id: published.json.id, mapIndex: 1, layout: proposal });
+    expect(history[0].publishedAt).toBeTruthy();
+  });
+
+  it('conserva più di quattro pubblicazioni e identifica la corrente anche con date uguali', async () => {
+    const { rep, student, id } = await setup();
+    const ids: string[] = [];
+    for (let row = 0; row < 7; row++) {
+      const res = await call('POST', '/api/seat-map/publish', { layout: [{ row, column: 0, studentAId: id }] }, rep);
+      expect(res.status).toBe(201);
+      ids.unshift(res.json.id);
+    }
+    await env.DB.prepare("UPDATE seat_map_history SET published_at = '2026-10-30 10:00:00'").run();
+    const history = (await call('GET', '/api/seat-map/history?archive=true', undefined, student)).json.history;
+    expect(history.map((m: any) => m.id)).toEqual(ids);
+    expect(history.map((m: any) => m.mapIndex)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect((await call('GET', '/api/seat-map/current', undefined, student)).json.seatMap.id).toBe(ids[0]);
+  });
+
+  it('mantiene l’archivio completo separato dalla finestra usata dall’algoritmo', async () => {
+    const { rep } = await setup();
+    for (let i = 0; i < 6; i++) expect((await call('POST', '/api/seat-map/publish', { layout: [] }, rep)).status).toBe(201);
+    await env.DB.prepare("UPDATE seat_map_history SET published_at = datetime('now', '-13 months') WHERE map_index > 4").run();
+    expect((await call('GET', '/api/seat-map/history', undefined, rep)).json.history).toHaveLength(4);
+    expect((await call('GET', '/api/seat-map/history?archive=true', undefined, rep)).json.history).toHaveLength(6);
+    // Una nuova pubblicazione non cancella nemmeno le mappe vecchie dell'archivio.
+    expect((await call('POST', '/api/seat-map/publish', { layout: [] }, rep)).status).toBe(201);
+    expect((await call('GET', '/api/seat-map/history?archive=true', undefined, rep)).json.history).toHaveLength(7);
+  });
+
+  it('isola le classi e consente il reset solo al rappresentante della classe', async () => {
+    const { rep, student } = await setup();
+    const other = await register('altro', { classLabel: '5 A', representativeCode: await repCode('5 A') });
+    await call('POST', '/api/seat-map/publish', { layout: [] }, rep);
+    await call('POST', '/api/seat-map/publish', { layout: [] }, other.json.token);
+    expect((await call('GET', '/api/seat-map/history?archive=true', undefined, student)).json.history).toHaveLength(1);
+    expect((await call('POST', '/api/seat-map/reset-history', {}, student)).status).toBe(403);
+    expect((await call('POST', '/api/seat-map/reset-history', {}, rep)).status).toBe(200);
+    expect((await call('GET', '/api/seat-map/history?archive=true', undefined, rep)).json.history).toEqual([]);
+    expect((await call('GET', '/api/seat-map/history?archive=true', undefined, other.json.token)).json.history).toHaveLength(1);
+  });
+});
+
 describe('fantocci della Mappa Posti', () => {
   async function setup() {
     const rep = await register('rappresentante', { representativeCode: await repCode() });

@@ -1,6 +1,6 @@
 // =============================================================================
 // CIRCOLARE+ — Seat Map Routes (/api/seat-map/*)
-// Pubblicazione e storico disposizione aula (finestra regressiva 4 mappe)
+// Pubblicazione e archivio delle disposizioni effettivamente pubblicate.
 // =============================================================================
 
 import { Hono } from 'hono';
@@ -18,7 +18,7 @@ seatmap.use('*', authMiddleware());
 // ---------------------------------------------------------------------------
 seatmap.get('/current', async (c) => {
   const row = await c.env.DB.prepare(
-    'SELECT id, layout_json, published_at FROM seat_map_history WHERE class_id = ? ORDER BY published_at DESC LIMIT 1'
+    'SELECT id, layout_json, published_at FROM seat_map_history WHERE class_id = ? ORDER BY map_index ASC LIMIT 1'
   ).bind(await resolveClassId(c)).first<{ id: string; layout_json: string; published_at: string }>();
 
   if (!row) return c.json({ seatMap: null });
@@ -36,8 +36,13 @@ seatmap.get('/current', async (c) => {
 // GET /api/seat-map/history — Ultime 4 mappe e tutte quelle necessarie alla rotazione annuale
 // ---------------------------------------------------------------------------
 seatmap.get('/history', async (c) => {
+  // L'archivio consultabile conserva tutte le pubblicazioni; l'ottimizzatore usa
+  // soltanto le quattro più recenti e quelle necessarie alla rotazione annuale.
+  const archive = c.req.query('archive') === 'true';
   const rows = await c.env.DB.prepare(
-    'SELECT id, map_index, layout_json, published_at FROM seat_map_history WHERE class_id = ? AND (map_index <= 4 OR published_at >= datetime(\'now\', \'-12 months\')) ORDER BY map_index ASC'
+    'SELECT id, map_index, layout_json, published_at FROM seat_map_history WHERE class_id = ?' +
+    (archive ? '' : " AND (map_index <= 4 OR published_at >= datetime('now', '-12 months'))") +
+    ' ORDER BY map_index ASC'
   ).bind(await resolveClassId(c)).all<{ id: string; map_index: number; layout_json: string; published_at: string }>();
 
   return c.json({
@@ -62,12 +67,10 @@ seatmap.post('/publish', requireRole('REPRESENTATIVE'), async (c) => {
     return c.json({ error: 'layout è richiesto e deve essere un oggetto JSON' }, 400);
   }
 
-  // Conserva almeno 4 mappe e tutte quelle degli ultimi 12 mesi, anche con pubblicazioni frequenti. La
-  // nuova diventa la 1. In un'unica transazione: prima erano tre query separate, e un errore a
-  // meta' lasciava lo storico spostato senza la mappa nuova.
+  // Questa è l'unica scrittura nello storico: generazione, scelta ed editing delle
+  // proposte restano locali. La nuova pubblicazione diventa la 1, in transazione.
   const id = newUUID();
   await c.env.DB.batch([
-    c.env.DB.prepare("DELETE FROM seat_map_history WHERE class_id = ? AND map_index >= 4 AND published_at < datetime('now', '-12 months')").bind(classId),
     c.env.DB.prepare('UPDATE seat_map_history SET map_index = map_index + 1 WHERE class_id = ?').bind(classId),
     c.env.DB.prepare(
       'INSERT INTO seat_map_history (id, map_index, layout_json, class_id) VALUES (?, ?, ?, ?)'
