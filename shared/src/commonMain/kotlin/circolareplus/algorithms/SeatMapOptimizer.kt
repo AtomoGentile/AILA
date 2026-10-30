@@ -850,7 +850,7 @@ object SeatMapOptimizer {
 
         var current = if (slots != null) buildInitialLayoutFromSlots(students, socialPreferences, random, slots)
         else buildInitialLayout(students, socialPreferences, random, seatsPerDesk)
-        current = movePriorityPassOutOfCooldownRows(current, profiles, history)
+        current = movePriorityPassOutOfCooldownRows(current, profiles, history, socialPreferences)
         var currentScore = score(current)
         var best = current
         var bestScore = currentScore
@@ -912,22 +912,30 @@ object SeatMapOptimizer {
     }
 
     private fun movePriorityPassOutOfCooldownRows(
-        layout: List<DeskAssignment>, profiles: Map<String, StudentProfile>, history: List<SeatMapHistoryRecord>
+        layout: List<DeskAssignment>, profiles: Map<String, StudentProfile>, history: List<SeatMapHistoryRecord>,
+        socialPreferences: Map<Pair<String, String>, SocialPreferenceScore>
     ): List<DeskAssignment> {
         fun restricted(id: String) = isPriorityPassCooldownActive(id, profiles, history)
         var result = layout
-        for (deskIndex in result.indices) {
-            val desk = result[deskIndex]
-            val occupants = listOfNotNull(desk.studentAId, desk.studentBId, desk.studentCId)
-            if (desk.row > MAX_PRIORITY_ROW || occupants.none(::restricted)) continue
-            val target = result.indices.firstOrNull { index ->
-                result[index].row > MAX_PRIORITY_ROW && listOfNotNull(result[index].studentAId, result[index].studentBId, result[index].studentCId).none(::restricted)
-            } ?: continue
-            result = swapDesks(result, deskIndex, target)
+        val seats = allSeats(layout, SEATS_PER_DESK_PAIR)
+        for (seat in seats) {
+            if (result[seat.deskIndex].row > MAX_PRIORITY_ROW) continue
+            val student = seat.studentId(result) ?: continue
+            if (!restricted(student)) continue
+            val repaired = seats.firstNotNullOfOrNull { target ->
+                if (result[target.deskIndex].row <= MAX_PRIORITY_ROW || target.studentId(result)?.let(::restricted) == true) {
+                    null
+                } else {
+                    val candidate = swapSeats(result, seat, target)
+                    candidate.takeIf {
+                        !hasForbiddenPairAtDesk(it[seat.deskIndex], socialPreferences) &&
+                            !hasForbiddenPairAtDesk(it[target.deskIndex], socialPreferences)
+                    }
+                }
+            }
+            require(repaired != null) { "Impossibile rispettare la rotazione Priority Pass e le preferenze con i posti disponibili" }
+            result = repaired
         }
-        require(result.all { desk ->
-            desk.row > MAX_PRIORITY_ROW || listOfNotNull(desk.studentAId, desk.studentBId, desk.studentCId).none(::restricted)
-        }) { "Impossibile rispettare il periodo di rotazione Priority Pass con i posti disponibili" }
         return result
     }
 

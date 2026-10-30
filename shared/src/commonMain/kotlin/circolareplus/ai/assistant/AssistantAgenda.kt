@@ -240,6 +240,7 @@ internal object AssistantAgenda {
         CalendarEventCategory.INTERROGAZIONE -> "interrogazione"
         CalendarEventCategory.PAGAMENTO -> "pagamento"
         CalendarEventCategory.USCITA_DIDATTICA -> "uscita didattica"
+        CalendarEventCategory.ENTRATA -> "entrata"
         CalendarEventCategory.AVVISO, CalendarEventCategory.ALTRO, null -> null
     }
 

@@ -232,7 +232,13 @@ export async function syncSpaggiariCirculars(env: Env): Promise<AddedCircular[]>
 }
 
 /** Invia la notifica solo per circolari con analisi server già salvata. */
-export async function notifySummarizedCirculars(env: Env, circulars: AddedCircular[]): Promise<void> {
+export async function notifySummarizedCirculars(env: Env): Promise<void> {
+  const pending = await env.DB.prepare(
+    `SELECT c.number, c.title FROM circulars c
+     JOIN circular_ai_analysis a ON a.circular_number = c.number
+     WHERE c.notification_pending = 1 AND a.tier >= 2 ORDER BY c.number DESC`
+  ).all<AddedCircular>();
+  const circulars = pending.results;
   if (circulars.length === 0) return;
   const newest = circulars[0];
   const title = circulars.length === 1 ? 'Nuova Circolare' : `${circulars.length} nuove circolari`;
@@ -241,6 +247,9 @@ export async function notifySummarizedCirculars(env: Env, circulars: AddedCircul
     : circulars.map((c) => `n. ${c.number}: ${c.title}`).join(' · ').slice(0, 500);
   try {
     await notifyClass(env, title, body, { action: 'new_circular', circular_number: String(newest.number) });
+    await env.DB.batch(circulars.map((circular) => env.DB.prepare(
+      'UPDATE circulars SET notification_pending = 0 WHERE number = ?'
+    ).bind(circular.number)));
   } catch (err) {
     console.error('[Spaggiari] Push delle circolari riassunte non inviata:', err);
   }
@@ -307,12 +316,12 @@ async function syncOneCircular(env: Env, circ: ScrapedCircular, isRecent: boolea
 
   // 4. Save metadata in D1
   await env.DB.prepare(
-    'INSERT INTO circulars (number, title, publish_date, r2_pdf_key, original_url, attachments_json) VALUES (?, ?, ?, ?, ?, ?)'
+    'INSERT INTO circulars (number, title, publish_date, r2_pdf_key, original_url, attachments_json, notification_pending) VALUES (?, ?, ?, ?, ?, ?, 1)'
   )
     .bind(circ.number, circ.title, circ.date, r2Key, circ.pdfUrl, JSON.stringify(attachments))
     .run();
 
-  // 5. Il riassunto lo fa summarizePendingCirculars subito dopo questo giro (index.ts), dopo la
+  // 5. Il riassunto lo fa summarizePendingCirculars subito dopo questo giro (index.ts), prima della
   //    notifica. Intanto si segna che il server ci sta pensando: chi apre la circolare nel
   //    frattempo non ne fa partire un secondo in parallelo.
   try {

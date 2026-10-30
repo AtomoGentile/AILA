@@ -128,6 +128,7 @@ CREATE TABLE IF NOT EXISTS circulars (
     -- cache su R2 come il PDF principale, url quando punta altrove (pagina non-PDF) e si apre
     -- esternamente. Default '[]' additivo: le righe scritte prima di questa colonna restano valide.
     attachments_json TEXT NOT NULL DEFAULT '[]',
+    notification_pending INTEGER NOT NULL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

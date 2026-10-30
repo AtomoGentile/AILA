@@ -8,7 +8,7 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 
 import type { Env } from './types';
-import { summarizeNewCirculars, summarizePendingCirculars } from './services/summarizer';
+import { summarizePendingCirculars } from './services/summarizer';
 import { notifySummarizedCirculars, syncSpaggiariCirculars } from './services/spaggiari';
 import { checkTelegramSignatureReminders } from './services/telegram';
 import { pruneAttempts } from './rateLimit';
@@ -118,11 +118,8 @@ export default {
     // le altre attività del cron né la pulizia dei rate limit.
     ctx.waitUntil(
       syncSpaggiariCirculars(env)
-        .then(async (added) => {
-          const readyNumbers = await summarizeNewCirculars(env, added.map((c) => c.number));
-          await notifySummarizedCirculars(env, added.filter((c) => readyNumbers.includes(c.number)));
-          await summarizePendingCirculars(env);
-        })
+        .then(() => summarizePendingCirculars(env))
+        .then(() => notifySummarizedCirculars(env))
         .then(() => checkTelegramSignatureReminders(env).catch((err) => console.error('[Cron Telegram Error]', err)))
         .finally(() => pruneAttempts(env))
     );

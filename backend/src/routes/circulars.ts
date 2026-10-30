@@ -52,7 +52,7 @@ circulars.get('/', authMiddleware(), async (c) => {
 
   const rows = await c.env.DB.prepare(
     `SELECT c.number, c.title, c.publish_date, c.r2_pdf_key, c.original_url, c.attachments_json, c.created_at,
-       EXISTS(SELECT 1 FROM circular_ai_analysis a WHERE a.circular_number = c.number) AS summary_ready
+       EXISTS(SELECT 1 FROM circular_ai_analysis a WHERE a.circular_number = c.number AND a.tier >= 2) AS summary_ready
      FROM circulars c ORDER BY c.number DESC LIMIT ? OFFSET ?`
   ).bind(limit, offset).all<{
     number: number;
@@ -143,7 +143,7 @@ circulars.get('/newer', authMiddleware(), async (c) => {
   if (isNaN(after) || after < 0) return c.json({ error: 'Parametro after non valido' }, 400);
 
   const rows = await c.env.DB.prepare(
-    'SELECT number, title, publish_date FROM circulars WHERE number > ? ORDER BY number ASC LIMIT 50'
+    `SELECT c.number, c.title, c.publish_date FROM circulars c WHERE c.number > ? AND EXISTS (SELECT 1 FROM circular_ai_analysis a WHERE a.circular_number = c.number AND a.tier >= 2) ORDER BY c.number ASC LIMIT 50`
   ).bind(after).all<{ number: number; title: string; publish_date: string }>();
 
   return c.json({

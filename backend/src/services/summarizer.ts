@@ -408,19 +408,6 @@ export async function summarizeCircular(
   }
 }
 
-/** Riassume subito le circolari appena inserite e restituisce solo quelle salvate correttamente. */
-export async function summarizeNewCirculars(env: Env, numbers: number[]): Promise<number[]> {
-  if (!env.GEMINI_API_KEY || numbers.length === 0) return [];
-  const ready: number[] = [];
-  for (const number of numbers) {
-    const row = await env.DB.prepare(
-      'SELECT number, title, r2_pdf_key, attachments_json FROM circulars WHERE number = ?'
-    ).bind(number).first<{ number: number; title: string; r2_pdf_key: string; attachments_json: string }>();
-    if (row && await summarizeCircular(env, row)) ready.push(number);
-  }
-  return ready;
-}
-
 /**
  * Le circolari più vecchie di BACKFILL_WINDOW il cron non le rifà: le rifà il server quando
  * qualcuno di una classe senza la sua parte ne apre una (GET /api/circulars/:number/analysis).
@@ -488,7 +475,7 @@ export async function summarizePendingCirculars(env: Env): Promise<void> {
   if (!env.GEMINI_API_KEY) return;
   const rows = await env.DB.prepare(
     `SELECT c.number, c.title, c.r2_pdf_key, c.attachments_json
-     FROM (SELECT * FROM circulars ORDER BY number DESC LIMIT ?) c
+     FROM (SELECT * FROM circulars WHERE notification_pending = 1 OR number IN (SELECT number FROM circulars ORDER BY number DESC LIMIT ?)) c
      LEFT JOIN circular_ai_analysis a ON a.circular_number = c.number
      LEFT JOIN circular_ai_server_attempts t ON t.circular_number = c.number
      WHERE (a.tier IS NULL OR a.tier < ?

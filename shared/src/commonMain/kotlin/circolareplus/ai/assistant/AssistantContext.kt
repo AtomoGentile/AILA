@@ -829,6 +829,7 @@ internal object AssistantContext {
         CalendarEventCategory.INTERROGAZIONE -> "interrogazione"
         CalendarEventCategory.PAGAMENTO -> "pagamento"
         CalendarEventCategory.USCITA_DIDATTICA -> "uscita didattica"
+        CalendarEventCategory.ENTRATA -> "entrata"
         CalendarEventCategory.AVVISO -> "avviso"
         CalendarEventCategory.ALTRO -> null
     }
