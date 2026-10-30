@@ -137,8 +137,14 @@ fun SeatMapScreen(
     // ogni fila scelti dal Rappresentante (es. 8, 7, 7).
     val studentCount = studentsMap.size
     var customLayout by remember { mutableStateOf(false) }
-    var customDeskSlots by remember(studentCount, seatsPerDesk) {
+    var customDeskSlots by remember(studentCount) {
         mutableStateOf(SeatMapOptimizer.rectangularDeskSlots(defaultRowSeats(studentCount), seatsPerDesk))
+    }
+    var deskPositionsEdited by remember(studentCount) { mutableStateOf(false) }
+    LaunchedEffect(studentCount, seatsPerDesk) {
+        if (!deskPositionsEdited) {
+            customDeskSlots = SeatMapOptimizer.rectangularDeskSlots(defaultRowSeats(studentCount), seatsPerDesk)
+        }
     }
     // Conferma "Elimina storico mappe": e' un'azione che cambia il comportamento
     // dell'algoritmo per tutti, non se ne perde per un tocco di troppo.
@@ -432,7 +438,7 @@ fun SeatMapScreen(
                         Spacer(modifier = Modifier.height(AppTheme.Space8))
                         DeskPositionsEditor(
                             slots = customDeskSlots,
-                            onChange = { customDeskSlots = it },
+                            onChange = { customDeskSlots = it; deskPositionsEdited = true },
                             studentCount = studentCount,
                             preferredDeskSeats = seatsPerDesk
                         )
