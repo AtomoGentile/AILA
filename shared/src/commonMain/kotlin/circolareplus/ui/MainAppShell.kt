@@ -541,7 +541,9 @@ fun MainAppShell(
         var wroteSomething = false
 
         if (freshCirculars != null && freshCirculars.isNotEmpty()) {
-            val newest = freshCirculars.maxOf { it.number }
+            val readyCirculars = freshCirculars.filter { it.summaryReady }
+            if (readyCirculars.isEmpty()) return
+            val newest = readyCirculars.maxOf { it.number }
             val lastSeen = settings.lastSeenCircularNumber
             if (lastSeen == 0) {
                 settings.lastSeenCircularNumber = newest
@@ -552,7 +554,7 @@ fun MainAppShell(
                     // rinfresco dinamico (che rilegge la lista appena arriva il push) quasi sempre.
                     val alreadyLogged = settings.listNotifications()
                         .filter { it.category == NotificationKind.CIRCULARS.key }
-                    freshCirculars
+                    readyCirculars
                         .filter { it.number > lastSeen }
                         .sortedBy { it.number }
                         .forEach { circular ->
@@ -942,6 +944,7 @@ fun MainAppShell(
     // Ricomposizione dopo il salvataggio della chiave: la schermata legge il valore da
     // LocalSettingsManager, che non è stato di Compose e da solo non farebbe ridisegnare nulla.
     var apiKeyRevision by remember { mutableStateOf(0) }
+    var seatMapSettingsRevision by remember { mutableStateOf(0) }
     var selectedCircularForDetail by remember { mutableStateOf<Circular?>(null) }
     // Su schermi larghi (iPad in orizzontale, tablet) la circolare si apre accanto alla lista,
     // nella tab Classe, invece che sopra a tutto: e' questa, non selectedCircularForDetail.
@@ -2144,7 +2147,7 @@ fun MainAppShell(
             closeRequested = addEventCloseRequested,
             initialStep = addEventInitialStep,
             initialDateIso = addEventInitialDateIso,
-            onConfirm = { title, date, endDate, repeat, time, category, visibleToUserIds, notes ->
+            onConfirm = { title, date, endDate, repeat, time, category, visibleToUserIds, notes, customSchedule ->
                 fun create(force: Boolean) {
                     coroutineScope.launch {
                         try {
@@ -2157,7 +2160,8 @@ fun MainAppShell(
                                 notes = notes,
                                 force = force,
                                 endDate = endDate,
-                                repeat = repeat
+                                repeat = repeat,
+                                customSchedule = customSchedule
                             )
                             if (response.warning != null) {
                                 // Lo stesso evento c'e' gia' quel giorno: si chiede se aggiungerlo
@@ -3113,6 +3117,10 @@ fun MainAppShell(
                                                 isPreferencesOpen = isPreferencesOpen,
                                                 preferencesProgress = preferencesProgress,
                                                 dummies = seatMapDummies,
+                                                showDummiesMenu = run {
+                                                    seatMapSettingsRevision
+                                                    AppContainer.settings.isSeatMapDummiesMenuEnabled
+                                                },
                                                 isSavingDummy = isSavingSeatMapDummy,
                                                 onAddDummy = { firstName, lastName ->
                                                     coroutineScope.launch {
@@ -4152,6 +4160,15 @@ fun MainAppShell(
                 ShellRoute.SETTINGS -> {
                     circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { isInSettingsScreen = false }
                     SettingsScreen(
+                        isRepresentative = isRepresentative,
+                        seatMapDummiesMenuEnabled = run {
+                            seatMapSettingsRevision
+                            AppContainer.settings.isSeatMapDummiesMenuEnabled
+                        },
+                        onSeatMapDummiesMenuChange = { enabled ->
+                            AppContainer.settings.isSeatMapDummiesMenuEnabled = enabled
+                            seatMapSettingsRevision++
+                        },
                         // Numero della build e commit: dice quale APK e' davvero installato.
                         appVersion = circolareplus.platform.appVersionName(),
                         apiKey = run {
@@ -4204,16 +4221,27 @@ fun MainAppShell(
                             AppContainer.settings.isSystemNotificationsEnabled = enabled
                             syncPushPreferences()
                         },
+                        localAiEnabled = AppContainer.settings.isLocalAiEnabled,
+                        onLocalAiEnabledChange = { enabled ->
+                            AppContainer.settings.isLocalAiEnabled = enabled
+                            apiKeyRevision++
+                        },
                         aiProvider = AppContainer.settings.aiProvider,
                         onAiProviderChange = { provider ->
                             AppContainer.settings.aiProvider = provider
                         },
                         compatibleAiFormat = AppContainer.settings.compatibleAiFormat,
-                        compatibleAiBaseUrl = AppContainer.settings.compatibleAiBaseUrl,
-                        compatibleAiModel = AppContainer.settings.compatibleAiModel,
-                        compatibleAiApiKey = AppContainer.settings.compatibleAiApiKey,
+                        compatibleAiBaseUrl = run { apiKeyRevision; AppContainer.settings.compatibleAiBaseUrl },
+                        compatibleAiModel = run { apiKeyRevision; AppContainer.settings.compatibleAiModel },
+                        compatibleAiApiKey = run { apiKeyRevision; AppContainer.settings.compatibleAiApiKey },
+                        onCompatibleAiFormatChange = { format ->
+                            AppContainer.settings.compatibleAiFormat = format
+                            AppContainer.settings.aiProvider = if (format == "GOOGLE") "GOOGLE_AI_STUDIO" else "COMPATIBLE_API"
+                            apiKeyRevision++
+                        },
                         onSaveCompatibleAiSettings = { format, baseUrl, model, key ->
                             AppContainer.settings.compatibleAiFormat = format
+                            AppContainer.settings.aiProvider = if (format == "GOOGLE") "GOOGLE_AI_STUDIO" else "COMPATIBLE_API"
                             AppContainer.settings.compatibleAiBaseUrl = baseUrl
                             AppContainer.settings.compatibleAiModel = model
                             AppContainer.settings.compatibleAiApiKey = key
@@ -4223,12 +4251,16 @@ fun MainAppShell(
                             apiKeyRevision++
                         },
                         onTestCompatibleAi = { format, baseUrl, model, key ->
-                            circolareplus.ai.CompatibleApiAiClassifier(
-                                format = circolareplus.ai.CompatibleAiFormat.fromId(format),
-                                baseUrl = baseUrl,
-                                apiKey = key,
-                                model = model
-                            ).testConfiguration()
+                            if (format == "GOOGLE") {
+                                circolareplus.ai.ClientSideAiClassifier(userApiKey = key).testKey()
+                            } else {
+                                circolareplus.ai.CompatibleApiAiClassifier(
+                                    format = circolareplus.ai.CompatibleAiFormat.fromId(format),
+                                    baseUrl = baseUrl,
+                                    apiKey = key,
+                                    model = model
+                                ).testConfiguration()
+                            }
                         },
                         // Calcolati una volta sola: prima si rileggevano (memoria del telefono,
                         // AICore di sistema, catalogo) a ogni ridisegno delle Impostazioni, anche
@@ -5001,6 +5033,7 @@ private val EVENT_CATEGORY_ORDER = listOf(
     CalendarEventCategory.INTERROGAZIONE,
     CalendarEventCategory.PAGAMENTO,
     CalendarEventCategory.USCITA_DIDATTICA,
+    CalendarEventCategory.ENTRATA,
     CalendarEventCategory.AVVISO,
     CalendarEventCategory.ALTRO
 )
@@ -5010,6 +5043,7 @@ private fun eventCategoryLabel(category: CalendarEventCategory): String = when (
     CalendarEventCategory.INTERROGAZIONE -> "Interrogazione"
     CalendarEventCategory.PAGAMENTO -> "Pagamento"
     CalendarEventCategory.USCITA_DIDATTICA -> "Uscita"
+    CalendarEventCategory.ENTRATA -> "Entrata"
     CalendarEventCategory.AVVISO -> "Avviso"
     CalendarEventCategory.ALTRO -> "Altro"
 }
@@ -5021,6 +5055,7 @@ private fun eventCategoryIcon(category: CalendarEventCategory, modifier: Modifie
         CalendarEventCategory.INTERROGAZIONE -> AppIcons.ChatBubble(modifier, color)
         CalendarEventCategory.PAGAMENTO -> AppIcons.Card(modifier, color)
         CalendarEventCategory.USCITA_DIDATTICA -> AppIcons.Bus(modifier, color)
+        CalendarEventCategory.ENTRATA -> AppIcons.ArrowUp(modifier, color)
         CalendarEventCategory.AVVISO -> AppIcons.Warning(modifier, color)
         CalendarEventCategory.ALTRO -> AppIcons.Sparkle(modifier, color)
     }
@@ -5209,7 +5244,7 @@ private fun parseAiEventPrompt(raw: String): AiEventDraft {
 @Composable
 private fun AddCalendarEventDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String, String, String, String, String?, CalendarEventCategory, List<String>?, String?) -> Unit,
+    onConfirm: (String, String, String, String, String?, CalendarEventCategory, List<String>?, String?, List<circolareplus.data.remote.dto.CustomEventDayDto>?) -> Unit,
     initialStep: EventCreationStep = EventCreationStep.MENU,
     initialDateIso: String? = null,
     /** true quando il chiamante vuole chiudere il foglio (evento creato): scende e poi chiama [onDismiss]. */
@@ -5240,6 +5275,8 @@ private fun AddCalendarEventDialog(
     var showDatePicker by remember { mutableStateOf(false) }
     var showEndDatePicker by remember { mutableStateOf(false) }
     var repeatFrequency by remember { mutableStateOf("NONE") }
+    var customWeekdays by remember { mutableStateOf(setOf<Int>()) }
+    var customTimes by remember { mutableStateOf(mapOf<Int, Int?>()) }
     var expandedHourPicker by remember { mutableStateOf<String?>(null) }
     var fromHour by remember { mutableStateOf<Int?>(null) }
     var toHour by remember { mutableStateOf<Int?>(null) }
@@ -5337,6 +5374,13 @@ private fun AddCalendarEventDialog(
     val eventOccurrenceCount = when (repeatFrequency) {
         "DAILY" -> eventRangeDays
         "WEEKLY" -> (eventRangeDays - 1) / 7 + 1
+        "CUSTOM" -> if (startDateMillis == null || endDateMillis == null) 0 else {
+            val firstDay = (startDateMillis / EVENT_DAY_MILLIS).toInt()
+            val lastDay = (endDateMillis / EVENT_DAY_MILLIS).toInt()
+            (firstDay..lastDay).count { day ->
+                circolareplus.util.weekdayOf(circolareplus.util.civilFromEpochMillis(day.toLong() * EVENT_DAY_MILLIS)) in customWeekdays
+            }
+        }
         else -> eventRangeDays
     }
 
@@ -5355,13 +5399,17 @@ private fun AddCalendarEventDialog(
                 time.trim().ifBlank { null },
                 category,
                 visibleToUserIds,
-                notes.trim().ifBlank { null }
+                notes.trim().ifBlank { null },
+                if (repeatFrequency == "CUSTOM") customWeekdays.sorted().map { day ->
+                    circolareplus.data.remote.dto.CustomEventDayDto(day, lessonHoursLabel(customTimes[day], customTimes[day]).ifBlank { null })
+                } else null
             )
         }
     }
     val canSubmitManualEvent = title.isNotBlank() && startDateMillis != null && !isPastDate &&
         (endDateMillis == null || (endDateMillis >= startDateMillis && endDateMillis <= startDateMillis + EVENT_MAX_RANGE_DAYS * EVENT_DAY_MILLIS)) &&
-        (repeatFrequency == "NONE" || selectedEndDateMillis != null)
+        (repeatFrequency == "NONE" || selectedEndDateMillis != null) &&
+        (repeatFrequency != "CUSTOM" || (customWeekdays.isNotEmpty() && customWeekdays.all { customTimes[it] != null }))
 
     // Lo stesso calendario a griglia viene usato su Android, iOS e web; per la data finale
     // limita la scelta all'intervallo valido, invece di lasciare che il server rifiuti il form.
@@ -5749,12 +5797,45 @@ private fun AddCalendarEventDialog(
                         horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
                         verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
                     ) {
-                        listOf("NONE" to "Mai", "DAILY" to "Ogni giorno", "WEEKLY" to "Ogni settimana").forEach { (value, label) ->
+                        listOf("NONE" to "Mai", "DAILY" to "Ogni giorno", "WEEKLY" to "Ogni settimana", "CUSTOM" to "Personalizzata").forEach { (value, label) ->
                             circolareplus.design.AnimatedFilterChip(
                                 label = label,
                                 isSelected = repeatFrequency == value,
                                 onClick = { repeatFrequency = value }
                             )
+                        }
+                    }
+                    if (repeatFrequency == "CUSTOM") {
+                        Spacer(modifier = Modifier.height(AppTheme.Space12))
+                        Text("Giorni e orari", style = MaterialTheme.typography.labelMedium, color = AppTheme.TextMuted)
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth().padding(top = AppTheme.Space8),
+                            horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
+                            verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+                        ) {
+                            circolareplus.util.ITALIAN_WEEKDAYS.forEachIndexed { index, day ->
+                                circolareplus.design.AnimatedFilterChip(
+                                    label = day.take(3).replaceFirstChar { it.uppercase() },
+                                    isSelected = index in customWeekdays,
+                                    onClick = {
+                                        customWeekdays = if (index in customWeekdays) customWeekdays - index else customWeekdays + index
+                                        if (index !in customWeekdays) customTimes = customTimes + (index to null)
+                                    }
+                                )
+                            }
+                        }
+                        customWeekdays.sorted().forEach { weekday ->
+                            Row(modifier = Modifier.fillMaxWidth().padding(top = AppTheme.Space8), verticalAlignment = Alignment.CenterVertically) {
+                                Text(circolareplus.util.ITALIAN_WEEKDAYS[weekday].replaceFirstChar { it.uppercase() }, modifier = Modifier.weight(1f), color = AppTheme.TextDark)
+                                HourDropdown(
+                                    label = "Ora",
+                                    value = customTimes[weekday],
+                                    maxHour = maxHours,
+                                    expanded = expandedHourPicker == "CUSTOM_$weekday",
+                                    onToggle = { expandedHourPicker = if (expandedHourPicker == "CUSTOM_$weekday") null else "CUSTOM_$weekday" },
+                                    onSelect = { customTimes = customTimes + (weekday to it); expandedHourPicker = null }
+                                )
+                            }
                         }
                     }
                     Spacer(modifier = Modifier.height(AppTheme.Space12))
@@ -6408,7 +6489,7 @@ private fun EventDetailRow(label: String, value: String, modifier: Modifier = Mo
 private fun eventCategoryTint(category: CalendarEventCategory): Color = when (category) {
     CalendarEventCategory.VERIFICA, CalendarEventCategory.INTERROGAZIONE -> AppTheme.TintBlue
     CalendarEventCategory.PAGAMENTO -> AppTheme.TintAmber
-    CalendarEventCategory.USCITA_DIDATTICA -> AppTheme.TintGreen
+    CalendarEventCategory.USCITA_DIDATTICA, CalendarEventCategory.ENTRATA -> AppTheme.TintGreen
     CalendarEventCategory.AVVISO -> AppTheme.TintRed
     else -> AppTheme.TintSlate
 }
@@ -6416,7 +6497,7 @@ private fun eventCategoryTint(category: CalendarEventCategory): Color = when (ca
 private fun eventCategoryInk(category: CalendarEventCategory): Color = when (category) {
     CalendarEventCategory.VERIFICA, CalendarEventCategory.INTERROGAZIONE -> AppTheme.TintBlueInk
     CalendarEventCategory.PAGAMENTO -> AppTheme.TintAmberInk
-    CalendarEventCategory.USCITA_DIDATTICA -> AppTheme.TintGreenInk
+    CalendarEventCategory.USCITA_DIDATTICA, CalendarEventCategory.ENTRATA -> AppTheme.TintGreenInk
     CalendarEventCategory.AVVISO -> AppTheme.TintRedInk
     else -> AppTheme.TintSlateInk
 }

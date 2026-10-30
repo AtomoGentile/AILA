@@ -27,7 +27,7 @@ const calendar = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload }
 calendar.use('*', authMiddleware());
 
 const VALID_CATEGORIES: EventCategory[] = [
-  'VERIFICA', 'INTERROGAZIONE', 'PAGAMENTO', 'USCITA_DIDATTICA', 'AVVISO', 'ALTRO',
+  'VERIFICA', 'INTERROGAZIONE', 'PAGAMENTO', 'USCITA_DIDATTICA', 'ENTRATA', 'AVVISO', 'ALTRO',
 ];
 
 const MAX_TITLE_LENGTH = 200;
@@ -130,7 +130,8 @@ calendar.post('/', async (c) => {
     title: string;
     eventDate: string;
     endDate?: string;
-    repeat?: 'NONE' | 'DAILY' | 'WEEKLY';
+    repeat?: 'NONE' | 'DAILY' | 'WEEKLY' | 'CUSTOM';
+    customSchedule?: Array<{ weekday: number; time?: string | null }>;
     startTime?: string;
     category: EventCategory;
     isForAll?: boolean;
@@ -166,18 +167,29 @@ calendar.post('/', async (c) => {
   if (!isValidIsoDate(endDate) || endDate < eventDate) {
     return c.json({ error: 'endDate deve essere uguale o successiva a eventDate' }, 400);
   }
-  if (!['NONE', 'DAILY', 'WEEKLY'].includes(repeat)) {
+  if (!['NONE', 'DAILY', 'WEEKLY', 'CUSTOM'].includes(repeat)) {
     return c.json({ error: 'Ripetizione non valida' }, 400);
   }
   const startUtc = Date.parse(`${eventDate}T00:00:00Z`);
   const endUtc = Date.parse(`${endDate}T00:00:00Z`);
   if ((endUtc - startUtc) / 86_400_000 > 365) return c.json({ error: 'La durata massima è un anno' }, 400);
-  const eventDates: string[] = [];
+  if (repeat === 'CUSTOM' && (!Array.isArray(body.customSchedule) || body.customSchedule.length === 0 ||
+      new Set(body.customSchedule.map((slot) => slot.weekday)).size !== body.customSchedule.length ||
+      body.customSchedule.some((slot) => !Number.isInteger(slot.weekday) || slot.weekday < 0 || slot.weekday > 6 || (slot.time != null && !isValidEventTime(slot.time))))) {
+    return c.json({ error: 'Seleziona almeno un giorno e un orario valido' }, 400);
+  }
+  const eventDates: Array<{ date: string; time: string | null }> = [];
   for (let day = 0; startUtc + day * 86_400_000 <= endUtc; day++) {
-    if (repeat === 'NONE' || repeat === 'DAILY' || (repeat === 'WEEKLY' && day % 7 === 0)) {
-      eventDates.push(new Date(startUtc + day * 86_400_000).toISOString().slice(0, 10));
+    const date = new Date(startUtc + day * 86_400_000).toISOString().slice(0, 10);
+    const weekday = (new Date(startUtc + day * 86_400_000).getUTCDay() + 6) % 7;
+    if (repeat === 'CUSTOM') {
+      const slot = body.customSchedule?.find((item) => item.weekday === weekday);
+      if (slot) eventDates.push({ date, time: slot.time ?? null });
+    } else if (repeat === 'NONE' || repeat === 'DAILY' || (repeat === 'WEEKLY' && day % 7 === 0)) {
+      eventDates.push({ date, time: startTime ?? null });
     }
   }
+  if (eventDates.length === 0) return c.json({ error: 'Nessuna occorrenza nell’intervallo selezionato' }, 400);
   if (startTime != null && !isValidEventTime(startTime)) {
     return c.json({ error: 'startTime deve essere HH:MM oppure ora di lezione (es. 3ª ora)' }, 400);
   }
@@ -204,7 +216,7 @@ calendar.post('/', async (c) => {
     const sameDay = await c.env.DB.prepare(
       `SELECT id, title FROM calendar_events WHERE class_id = ? AND category = ?
        AND event_date IN (${eventDates.map(() => '?').join(',')})`
-    ).bind(classId, category, ...eventDates).all<{ id: string; title: string }>();
+    ).bind(classId, category, ...eventDates.map((event) => event.date)).all<{ id: string; title: string }>();
     const wanted = normalizeTitle(title);
     const dup = sameDay.results.find((e) => normalizeTitle(e.title) === wanted);
     if (dup) {
@@ -223,8 +235,8 @@ calendar.post('/', async (c) => {
 
   const ids = eventDates.map(() => newUUID());
   const visibleJson = visibleToUserIds && visibleToUserIds.length > 0 ? JSON.stringify(visibleToUserIds) : null;
-  const statements = eventDates.map((date, index) => {
-    const values = [ids[index], title, date, startTime ?? null, category, isForAll ? 1 : 0,
+  const statements = eventDates.map((event, index) => {
+    const values = [ids[index], title, event.date, event.time, category, isForAll ? 1 : 0,
       isAiGenerated ? 1 : 0, payload.sub, classId, notes ?? null, visibleJson];
     return circularNumber === null
       ? c.env.DB.prepare(`INSERT INTO calendar_events (id,title,event_date,start_time,category,is_for_all,is_ai_generated,created_by,class_id,notes,visible_to_user_ids_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(...values)
@@ -235,9 +247,9 @@ calendar.post('/', async (c) => {
   } catch (e) {
     if (circularNumber === null) throw e;
     console.error('[Calendar] circular_number non salvato (manca la migrazione 015?)', e);
-    await c.env.DB.batch(eventDates.map((date, index) => c.env.DB.prepare(
+    await c.env.DB.batch(eventDates.map((event, index) => c.env.DB.prepare(
       `INSERT INTO calendar_events (id,title,event_date,start_time,category,is_for_all,is_ai_generated,created_by,class_id,notes,visible_to_user_ids_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)`
-    ).bind(ids[index], title, date, startTime ?? null, category, isForAll ? 1 : 0, isAiGenerated ? 1 : 0, payload.sub, classId, notes ?? null, visibleJson)));
+    ).bind(ids[index], title, event.date, event.time, category, isForAll ? 1 : 0, isAiGenerated ? 1 : 0, payload.sub, classId, notes ?? null, visibleJson)));
   }
   return c.json({ success: true, id: ids[0], count: ids.length }, 201);
 });

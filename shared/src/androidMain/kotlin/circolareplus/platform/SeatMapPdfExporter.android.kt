@@ -19,8 +19,9 @@ import java.util.Calendar
 import circolareplus.ui.screens.isVacantDesk
 
 // Formato A4 in punti a 72dpi: stessa unità usata da PdfDocument/Canvas.
-private const val PAGE_WIDTH = 595
-private const val PAGE_HEIGHT = 842
+// A4 landscape: la mappa e' una griglia larga e ha piu' leggibilita' con colonne orizzontali.
+private const val PAGE_WIDTH = 842
+private const val PAGE_HEIGHT = 595
 private const val MARGIN = 36f
 
 /**

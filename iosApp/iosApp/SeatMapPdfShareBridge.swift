@@ -21,8 +21,9 @@ import shared
 class SeatMapPdfShareBridgeImpl: SeatMapPdfShareBridge {
 
     // Formato A4 in punti a 72dpi: stessa unità usata dall'implementazione Android.
-    private let pageWidth: CGFloat = 595
-    private let pageHeight: CGFloat = 842
+    // A4 landscape, coerente con Android e con la griglia larga della mappa.
+    private let pageWidth: CGFloat = 842
+    private let pageHeight: CGFloat = 595
     private let margin: CGFloat = 36
 
     // Palette allineata al design system AILA (vedi AppTheme.kt: PrimaryBlue, HeroGradient*,

@@ -11,7 +11,8 @@ data class CircularDto(
     val hasLocalPdf: Boolean? = null,
     val originalUrl: String? = null,
     val attachments: List<CircularAttachmentDto> = emptyList(),
-    val createdAt: String? = null
+    val createdAt: String? = null,
+    val summaryReady: Boolean = false
 )
 
 /**

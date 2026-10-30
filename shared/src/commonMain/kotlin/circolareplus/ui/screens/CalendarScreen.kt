@@ -226,46 +226,34 @@ fun CalendarScreen(
             }
         }
         val filtersSection: @Composable () -> Unit = {
-            // Filtri categoria: senza emoji, con l'icona della categoria. Pill scorrevole condiviso
-            // (AilaSlidingChipRow) invece del cross-fade di colore su ogni singola chip; scorrevole
-            // perché con 4 chip il contenuto non ci sta su schermi stretti.
-            val categoryFilterOptions = remember { listOf<CalendarEventCategory?>(null, CalendarEventCategory.VERIFICA, CalendarEventCategory.PAGAMENTO, CalendarEventCategory.AVVISO) }
+            // Mostra tutti i tag effettivamente usati nel calendario, non solo tre categorie.
+            val categoryFilterOptions = remember {
+                listOf<CalendarEventCategory?>(null) + CalendarEventCategory.entries
+            }
             circolareplus.design.AilaSlidingChipRow(
                 selectedIndex = categoryFilterOptions.indexOf(selectedCategoryFilter),
                 itemCount = categoryFilterOptions.size,
                 modifier = Modifier.fillMaxWidth().ailaAppear(1)
             ) { chipModifier ->
-                AnimatedFilterChip(
-                    label = "Tutte",
-                    isSelected = selectedCategoryFilter == null,
-                    onClick = { selectedCategoryFilter = null },
-                    drawSelectionBackground = false,
-                    modifier = chipModifier(0)
-                )
-                AnimatedFilterChip(
-                    label = "Verifiche",
-                    isSelected = selectedCategoryFilter == CalendarEventCategory.VERIFICA,
-                    onClick = { selectedCategoryFilter = CalendarEventCategory.VERIFICA },
-                    icon = { tint -> AppIcons.Pencil(modifier = Modifier.size(14.dp), color = tint) },
-                    drawSelectionBackground = false,
-                    modifier = chipModifier(1)
-                )
-                AnimatedFilterChip(
-                    label = "Pagamenti",
-                    isSelected = selectedCategoryFilter == CalendarEventCategory.PAGAMENTO,
-                    onClick = { selectedCategoryFilter = CalendarEventCategory.PAGAMENTO },
-                    icon = { tint -> AppIcons.Card(modifier = Modifier.size(14.dp), color = tint) },
-                    drawSelectionBackground = false,
-                    modifier = chipModifier(2)
-                )
-                AnimatedFilterChip(
-                    label = "Avvisi",
-                    isSelected = selectedCategoryFilter == CalendarEventCategory.AVVISO,
-                    onClick = { selectedCategoryFilter = CalendarEventCategory.AVVISO },
-                    icon = { tint -> AppIcons.Bell(modifier = Modifier.size(14.dp), color = tint) },
-                    drawSelectionBackground = false,
-                    modifier = chipModifier(3)
-                )
+                categoryFilterOptions.forEachIndexed { index, category ->
+                    val label = when (category) {
+                        null -> "Tutte"
+                        CalendarEventCategory.VERIFICA -> "Verifiche"
+                        CalendarEventCategory.INTERROGAZIONE -> "Interrogazioni"
+                        CalendarEventCategory.PAGAMENTO -> "Pagamenti"
+                        CalendarEventCategory.USCITA_DIDATTICA -> "Uscite"
+                        CalendarEventCategory.ENTRATA -> "Entrate"
+                        CalendarEventCategory.AVVISO -> "Avvisi"
+                        CalendarEventCategory.ALTRO -> "Altro"
+                    }
+                    AnimatedFilterChip(
+                        label = label,
+                        isSelected = selectedCategoryFilter == category,
+                        onClick = { selectedCategoryFilter = category },
+                        drawSelectionBackground = false,
+                        modifier = chipModifier(index)
+                    )
+                }
             }
         }
         val daySection: @Composable () -> Unit = {

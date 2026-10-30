@@ -16,7 +16,8 @@ data class Circular(
     val publishDate: String,
     val r2PdfKey: String,
     val downloadUrl: String? = null,
-    val attachments: List<CircularAttachment> = emptyList()
+    val attachments: List<CircularAttachment> = emptyList(),
+    val summaryReady: Boolean = false
 )
 
 /**
@@ -77,6 +78,7 @@ enum class CalendarEventCategory {
     INTERROGAZIONE,
     PAGAMENTO,
     USCITA_DIDATTICA,
+    ENTRATA,
     AVVISO,
     ALTRO
 }

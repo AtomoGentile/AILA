@@ -69,6 +69,7 @@ fun SeatMapScreen(
     preferencesProgress: circolareplus.data.remote.dto.PreferencesProgressDto? = null,
     /** Fantocci della classe: studenti inventati che occupano un posto in mappa come tutti. */
     dummies: List<circolareplus.domain.model.SeatMapDummy> = emptyList(),
+    showDummiesMenu: Boolean = true,
     /** True mentre il server crea o elimina un fantoccio: la gestione resta aperta ma non si ripreme. */
     isSavingDummy: Boolean = false,
     onAddDummy: (firstName: String, lastName: String) -> Unit = { _, _ -> },
@@ -352,19 +353,16 @@ fun SeatMapScreen(
                         PreferencesProgressBlock(progress = preferencesProgress)
                     }
 
-                    Spacer(modifier = Modifier.height(AppTheme.Space12))
-
-                    // Fantocci: studenti inventati con nome e cognome. Occupano un posto come
-                    // tutti, ma non sono utenti: non votano le preferenze e non possono essere
-                    // votati. Per riempire le file quando i compagni reali sono pochi.
-                    DummiesBlock(
-                        dummies = dummies,
-                        isSaving = isSavingDummy,
-                        onAdd = onAddDummy,
-                        onDelete = onDeleteDummy
-                    )
-
-                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    if (showDummiesMenu) {
+                        Spacer(modifier = Modifier.height(AppTheme.Space12))
+                        DummiesBlock(
+                            dummies = dummies,
+                            isSaving = isSavingDummy,
+                            onAdd = onAddDummy,
+                            onDelete = onDeleteDummy
+                        )
+                        Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    }
 
                     // Pesi dell'algoritmo. **C'era un solo slider per tre pesi**: quello del peso
                     // sociale. Gli altri due comparivano nell'etichetta ma non erano regolabili in

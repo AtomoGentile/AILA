@@ -51,7 +51,9 @@ circulars.get('/', authMiddleware(), async (c) => {
   const offset = Math.max(parseInt(c.req.query('offset') ?? '0', 10) || 0, 0);
 
   const rows = await c.env.DB.prepare(
-    'SELECT number, title, publish_date, r2_pdf_key, original_url, attachments_json, created_at FROM circulars ORDER BY number DESC LIMIT ? OFFSET ?'
+    `SELECT c.number, c.title, c.publish_date, c.r2_pdf_key, c.original_url, c.attachments_json, c.created_at,
+       EXISTS(SELECT 1 FROM circular_ai_analysis a WHERE a.circular_number = c.number) AS summary_ready
+     FROM circulars c ORDER BY c.number DESC LIMIT ? OFFSET ?`
   ).bind(limit, offset).all<{
     number: number;
     title: string;
@@ -60,6 +62,7 @@ circulars.get('/', authMiddleware(), async (c) => {
     original_url: string | null;
     attachments_json: string;
     created_at: string;
+    summary_ready: number;
   }>();
 
   const total = await c.env.DB.prepare('SELECT COUNT(*) as count FROM circulars')
@@ -74,6 +77,7 @@ circulars.get('/', authMiddleware(), async (c) => {
       hasLocalPdf: true,
       attachments: parseAttachments(row.attachments_json),
       createdAt: row.created_at,
+      summaryReady: row.summary_ready === 1,
     })),
     total: total?.count ?? 0,
     limit,

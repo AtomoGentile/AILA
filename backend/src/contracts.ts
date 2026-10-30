@@ -13,6 +13,7 @@ export type EventCategory =
   | 'INTERROGAZIONE'
   | 'PAGAMENTO'
   | 'USCITA_DIDATTICA'
+  | 'ENTRATA'
   | 'AVVISO'
   | 'ALTRO';
 

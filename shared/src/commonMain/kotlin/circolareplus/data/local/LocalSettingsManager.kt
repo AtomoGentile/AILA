@@ -38,10 +38,13 @@ class LocalSettingsManager(
         private const val KEY_COMPATIBLE_AI_BASE_URL = "compatible_ai_base_url"
         private const val KEY_COMPATIBLE_AI_MODEL = "compatible_ai_model"
         private const val KEY_COMPATIBLE_AI_API_KEY = "compatible_ai_api_key"
+        private const val KEY_COMPATIBLE_AI_CONFIGS_MIGRATED = "compatible_ai_configs_migrated"
+        private const val KEY_LOCAL_AI_ENABLED = "local_ai_enabled"
         private const val KEY_LOCAL_AI_MODEL = "local_ai_model_id"
         private const val KEY_ASSISTANT_THINKING = "assistant_thinking_enabled"
         private const val KEY_BOARD_NOTIFICATIONS_ENABLED = "board_notifications_enabled"
         private const val KEY_SYSTEM_NOTIFICATIONS_ENABLED = "system_notifications_enabled"
+        private const val KEY_SEATMAP_DUMMIES_MENU_ENABLED = "seatmap_dummies_menu_enabled"
         private const val KEY_AUTH_TOKEN = "auth_token"
         private const val KEY_USER_ID = "user_id"
         private const val KEY_CACHED_USER = "cached_user_json"
@@ -141,19 +144,49 @@ class LocalSettingsManager(
 
     var compatibleAiFormat: String
         get() = settings.getString(KEY_COMPATIBLE_AI_FORMAT, "OPENAI")
-        set(value) = settings.putString(KEY_COMPATIBLE_AI_FORMAT, value)
+        set(value) {
+            val previous = compatibleAiFormat
+            if (previous != value) {
+                val suffix = previous.lowercase()
+                val oldBase = "${KEY_COMPATIBLE_AI_BASE_URL}_$suffix"
+                val oldModel = "${KEY_COMPATIBLE_AI_MODEL}_$suffix"
+                val oldKey = "${KEY_COMPATIBLE_AI_API_KEY}_$suffix"
+                if (settings.getStringOrNull(oldBase) == null) {
+                    settings.putString(oldBase, settings.getString(KEY_COMPATIBLE_AI_BASE_URL, ""))
+                }
+                if (settings.getStringOrNull(oldModel) == null) {
+                    settings.putString(oldModel, settings.getString(KEY_COMPATIBLE_AI_MODEL, ""))
+                }
+                if (secure.getStringOrNull(oldKey) == null) {
+                    val legacyKey = readSecret(KEY_COMPATIBLE_AI_API_KEY)
+                    if (legacyKey.isNotBlank()) writeSecret(oldKey, legacyKey)
+                }
+                settings.putBoolean(KEY_COMPATIBLE_AI_CONFIGS_MIGRATED, true)
+            }
+            settings.putString(KEY_COMPATIBLE_AI_FORMAT, value)
+        }
 
     var compatibleAiBaseUrl: String
-        get() = settings.getString(KEY_COMPATIBLE_AI_BASE_URL, "")
-        set(value) = settings.putString(KEY_COMPATIBLE_AI_BASE_URL, value.trim())
+        get() = settings.getString(compatibleKey(KEY_COMPATIBLE_AI_BASE_URL),
+            if (!settings.getBoolean(KEY_COMPATIBLE_AI_CONFIGS_MIGRATED, false) && compatibleAiFormat == settings.getString(KEY_COMPATIBLE_AI_FORMAT, "OPENAI")) settings.getString(KEY_COMPATIBLE_AI_BASE_URL, "") else "")
+        set(value) = settings.putString(compatibleKey(KEY_COMPATIBLE_AI_BASE_URL), value.trim())
 
     var compatibleAiModel: String
-        get() = settings.getString(KEY_COMPATIBLE_AI_MODEL, "")
-        set(value) = settings.putString(KEY_COMPATIBLE_AI_MODEL, value.trim())
+        get() = settings.getString(compatibleKey(KEY_COMPATIBLE_AI_MODEL),
+            if (!settings.getBoolean(KEY_COMPATIBLE_AI_CONFIGS_MIGRATED, false) && compatibleAiFormat == settings.getString(KEY_COMPATIBLE_AI_FORMAT, "OPENAI")) settings.getString(KEY_COMPATIBLE_AI_MODEL, "") else "")
+        set(value) = settings.putString(compatibleKey(KEY_COMPATIBLE_AI_MODEL), value.trim())
 
     var compatibleAiApiKey: String
-        get() = readSecret(KEY_COMPATIBLE_AI_API_KEY)
-        set(value) = writeSecret(KEY_COMPATIBLE_AI_API_KEY, value.trim())
+        get() = readSecret(compatibleKey(KEY_COMPATIBLE_AI_API_KEY)).ifBlank {
+            if (!settings.getBoolean(KEY_COMPATIBLE_AI_CONFIGS_MIGRATED, false) && compatibleAiFormat == settings.getString(KEY_COMPATIBLE_AI_FORMAT, "OPENAI")) readSecret(KEY_COMPATIBLE_AI_API_KEY) else ""
+        }
+        set(value) = writeSecret(compatibleKey(KEY_COMPATIBLE_AI_API_KEY), value.trim())
+
+    private fun compatibleKey(base: String): String = "${base}_${compatibleAiFormat.lowercase()}"
+
+    var isLocalAiEnabled: Boolean
+        get() = settings.getBoolean(KEY_LOCAL_AI_ENABLED, true)
+        set(value) = settings.putBoolean(KEY_LOCAL_AI_ENABLED, value)
 
     /**
      * `id` del modello di AI locale scelto (vedi `LocalAiCatalog`). Vuoto = nessuna scelta
@@ -182,6 +215,11 @@ class LocalSettingsManager(
     var isSystemNotificationsEnabled: Boolean
         get() = settings.getBoolean(KEY_SYSTEM_NOTIFICATIONS_ENABLED, true)
         set(value) = settings.putBoolean(KEY_SYSTEM_NOTIFICATIONS_ENABLED, value)
+
+    /** Il Rappresentante puo' nascondere il pannello di gestione dei fantocci nella Mappa Posti. */
+    var isSeatMapDummiesMenuEnabled: Boolean
+        get() = settings.getBoolean(KEY_SEATMAP_DUMMIES_MENU_ENABLED, true)
+        set(value) = settings.putBoolean(KEY_SEATMAP_DUMMIES_MENU_ENABLED, value)
 
     /**
      * Onboarding a 3 schermate già visto: mostrato una sola volta al primo avvio, prima del

@@ -174,7 +174,8 @@ private fun CircularDto.toDomain(baseUrl: String): Circular = Circular(
     publishDate = publishDate,
     r2PdfKey = pdfKey,
     downloadUrl = "$baseUrl/api/circulars/pdf/$pdfKey",
-    attachments = attachments.map { it.toDomain(baseUrl) }
+    attachments = attachments.map { it.toDomain(baseUrl) },
+    summaryReady = summaryReady
 )
 
 private fun CircularAttachmentDto.toDomain(baseUrl: String): CircularAttachment =

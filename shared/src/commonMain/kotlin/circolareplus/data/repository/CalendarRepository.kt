@@ -5,6 +5,7 @@ import circolareplus.data.remote.dto.CalendarEventDto
 import circolareplus.data.remote.dto.CalendarEventsListResponseDto
 import circolareplus.data.remote.dto.CreateCalendarEventRequestDto
 import circolareplus.data.remote.dto.CreateCalendarEventResponseDto
+import circolareplus.data.remote.dto.CustomEventDayDto
 import circolareplus.data.remote.dto.SuccessDto
 import circolareplus.domain.model.CalendarEvent
 import circolareplus.domain.model.CalendarEventCategory
@@ -35,13 +36,14 @@ class CalendarRepository(private val api: ApiClient) {
         force: Boolean = false,
         circularNumber: Int? = null,
         endDate: String? = null,
-        repeat: String = "NONE"
+        repeat: String = "NONE",
+        customSchedule: List<CustomEventDayDto>? = null
     ): CreateCalendarEventResponseDto = api.post(
         "/api/calendar",
         CreateCalendarEventRequestDto(
             title, eventDate, startTime, category.name, isForAll, isAiGenerated,
             visibleToUserIds = visibleToUserIds, notes = notes, circularNumber = circularNumber, force = force,
-            endDate = endDate, repeat = repeat
+            endDate = endDate, repeat = repeat, customSchedule = customSchedule
         )
     )
 

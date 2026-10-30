@@ -60,7 +60,8 @@ data class SeatMapProposal(
 data class SeatMapHistoryRecord(
     val mapIndex: Int, // 1 for N-1, 2 for N-2, 3 for N-3, 4 for N-4
     val pairs: Set<Pair<String, String>>,
-    val deskAssignments: Map<String, Pair<Int, Int>> // studentId -> (row, col)
+    val deskAssignments: Map<String, Pair<Int, Int>>, // studentId -> (row, col)
+    val publishedAt: String? = null
 )
 
 @Serializable
@@ -849,6 +850,7 @@ object SeatMapOptimizer {
 
         var current = if (slots != null) buildInitialLayoutFromSlots(students, socialPreferences, random, slots)
         else buildInitialLayout(students, socialPreferences, random, seatsPerDesk)
+        current = movePriorityPassOutOfCooldownRows(current, profiles, history)
         var currentScore = score(current)
         var best = current
         var bestScore = currentScore
@@ -871,6 +873,7 @@ object SeatMapOptimizer {
             if (seat2 == seat1) continue
 
             val candidate = swapSeats(current, seat1, seat2)
+            if (violatesPriorityCooldown(candidate, profiles, history)) continue
 
             val affectedDesks = if (seat1.deskIndex == seat2.deskIndex) {
                 listOf(candidate[seat1.deskIndex])
@@ -906,6 +909,50 @@ object SeatMapOptimizer {
         }
 
         return best
+    }
+
+    private fun movePriorityPassOutOfCooldownRows(
+        layout: List<DeskAssignment>, profiles: Map<String, StudentProfile>, history: List<SeatMapHistoryRecord>
+    ): List<DeskAssignment> {
+        fun restricted(id: String) = isPriorityPassCooldownActive(id, profiles, history)
+        var result = layout
+        for (deskIndex in result.indices) {
+            val desk = result[deskIndex]
+            val occupants = listOfNotNull(desk.studentAId, desk.studentBId, desk.studentCId)
+            if (desk.row > MAX_PRIORITY_ROW || occupants.none(::restricted)) continue
+            val target = result.indices.firstOrNull { index ->
+                result[index].row > MAX_PRIORITY_ROW && listOfNotNull(result[index].studentAId, result[index].studentBId, result[index].studentCId).none(::restricted)
+            } ?: continue
+            result = swapDesks(result, deskIndex, target)
+        }
+        require(result.all { desk ->
+            desk.row > MAX_PRIORITY_ROW || listOfNotNull(desk.studentAId, desk.studentBId, desk.studentCId).none(::restricted)
+        }) { "Impossibile rispettare il periodo di rotazione Priority Pass con i posti disponibili" }
+        return result
+    }
+
+    private fun violatesPriorityCooldown(
+        layout: List<DeskAssignment>, profiles: Map<String, StudentProfile>, history: List<SeatMapHistoryRecord>
+    ): Boolean = layout.any { desk ->
+        desk.row <= MAX_PRIORITY_ROW && listOfNotNull(desk.studentAId, desk.studentBId, desk.studentCId)
+            .any { isPriorityPassCooldownActive(it, profiles, history) }
+    }
+
+    private fun isPriorityPassCooldownActive(
+        studentId: String, profiles: Map<String, StudentProfile>, history: List<SeatMapHistoryRecord>
+    ): Boolean = profiles[studentId]?.priorityPass == true && history.any { record ->
+        val publishedDate = record.publishedAt?.take(10)
+        val stillCoolingDown = publishedDate?.let { published ->
+            val parts = published.split('-').mapNotNull { it.toIntOrNull() }
+            parts.size == 3 && run {
+                val totalMonth = parts[0] * 12 + parts[1] - 1 + 3
+                val year = totalMonth / 12
+                val month = totalMonth % 12 + 1
+                val lastDay = when (month) { 2 -> if (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) 29 else 28; 4, 6, 9, 11 -> 30; else -> 31 }
+                circolareplus.util.CivilDate(year, month, parts[2].coerceAtMost(lastDay)).toIso() > circolareplus.util.today().toIso()
+            }
+        } == true
+        stillCoolingDown && record.deskAssignments[studentId]?.first?.let { it <= MAX_PRIORITY_ROW } == true
     }
 
     // -----------------------------------------------------------------------------------------

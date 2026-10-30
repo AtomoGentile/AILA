@@ -69,6 +69,9 @@ fun SettingsScreen(
     onToggleBoardNotifications: (Boolean) -> Unit = {},
     systemNotificationsEnabled: Boolean = true,
     onToggleSystemNotifications: (Boolean) -> Unit = {},
+    isRepresentative: Boolean = false,
+    seatMapDummiesMenuEnabled: Boolean = true,
+    onSeatMapDummiesMenuChange: (Boolean) -> Unit = {},
     aiProvider: String = "AILA_CLOUD",
     onAiProviderChange: (String) -> Unit = {},
     compatibleAiFormat: String = "OPENAI",
@@ -76,9 +79,12 @@ fun SettingsScreen(
     compatibleAiModel: String = "",
     compatibleAiApiKey: String = "",
     onSaveCompatibleAiSettings: (format: String, baseUrl: String, model: String, apiKey: String) -> Unit = { _, _, _, _ -> },
+    onCompatibleAiFormatChange: (String) -> Unit = {},
     onTestCompatibleAi: suspend (format: String, baseUrl: String, model: String, apiKey: String) -> String = { _, _, _, _ -> "Non disponibile" },
     /** Frase da mostrare se l'AI locale non è utilizzabile qui (iPhone, emulatore non ARM). */
     localAiUnavailableReason: String? = null,
+    localAiEnabled: Boolean = true,
+    onLocalAiEnabledChange: (Boolean) -> Unit = {},
     /** false = sezione "AI locale" nascosta del tutto (vedi isOnDeviceAiOfferedHere). */
     showLocalAiSection: Boolean = true,
     /** RAM totale del telefono in MB, 0 se non rilevabile. */
@@ -396,6 +402,26 @@ fun SettingsScreen(
             
                 }
             }
+            if (isRepresentative) add {
+                Column {
+                    AilaSectionTitle(text = "Mappa posti", modifier = Modifier.ailaAppear(3))
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    AilaCard {
+                        AilaListRow(
+                            title = "Gestione fantocci",
+                            subtitle = "Mostra il menu per aggiungere o rimuovere fantocci nella Mappa Posti",
+                            tint = AppTheme.TintBlue,
+                            icon = { AppIcons.People(modifier = Modifier.size(19.dp), color = AppTheme.TintBlueInk) },
+                            trailing = {
+                                AilaSwitch(
+                                    checked = seatMapDummiesMenuEnabled,
+                                    onCheckedChange = onSeatMapDummiesMenuChange
+                                )
+                            }
+                        )
+                    }
+                }
+            }
             // Il provider va scelto sempre qui, anche su dispositivi senza AI locale: prima
             // la scelta compariva solo nel riquadro AI locale (o in fondo alla schermata PWA).
             add {
@@ -405,10 +431,11 @@ fun SettingsScreen(
                     AilaCard(modifier = Modifier.ailaAppear(5)) {
                         Column(modifier = Modifier.padding(AppTheme.Space16)) {
                             val localCanBeSelected = showLocalAiSection && localAiUnavailableReason == null
-                            val providerLabels = if (localCanBeSelected) {
-                                listOf("AILA", "Google", "API", "AI locale")
-                            } else {
-                                listOf("AILA", "Google", "API")
+                            val providerLabels = buildList {
+                                add("AILA")
+                                add("Google")
+                                add(if (compatibleFormat == "ANTHROPIC") "Anthropic" else "OpenAI")
+                                if (localCanBeSelected) add("AI locale")
                             }
                             AilaSegmentedTabs(
                                 labels = providerLabels,
@@ -420,8 +447,18 @@ fun SettingsScreen(
                                 },
                                 onSelect = { index ->
                                     selectedAiProvider = when (index) {
-                                        1 -> "GOOGLE_AI_STUDIO"
-                                        2 -> "COMPATIBLE_API"
+                                        1 -> {
+                                            compatibleFormat = "GOOGLE"
+                                            onCompatibleAiFormatChange("GOOGLE")
+                                            "GOOGLE_AI_STUDIO"
+                                        }
+                                        2 -> {
+                                            if (compatibleFormat == "GOOGLE") {
+                                                compatibleFormat = "OPENAI"
+                                                onCompatibleAiFormatChange("OPENAI")
+                                            }
+                                            "COMPATIBLE_API"
+                                        }
                                         3 -> "ON_DEVICE"
                                         else -> "AILA_CLOUD"
                                     }
@@ -461,7 +498,7 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.height(AppTheme.Space12))
                             Text("Formato API", style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
                             Spacer(modifier = Modifier.height(AppTheme.Space8))
-                            val apiFormats = listOf("OpenAI compatibile", "Anthropic compatibile", "Google compatibile")
+                            val apiFormats = listOf("OpenAI", "Anthropic", "Google")
                             val selectedFormatIndex = when (compatibleFormat) {
                                 "ANTHROPIC" -> 1
                                 "GOOGLE" -> 2
@@ -477,6 +514,8 @@ fun SettingsScreen(
                                         else -> "OPENAI"
                                     }
                                     compatibleStatus = null
+                                    onCompatibleAiFormatChange(compatibleFormat)
+                                    onAiProviderChange(if (compatibleFormat == "GOOGLE") "GOOGLE_AI_STUDIO" else "COMPATIBLE_API")
                                     if (compatibleFormat == "GOOGLE" && compatibleApiKey.isBlank() && apiKey.isNotBlank()) {
                                         compatibleApiKey = apiKey
                                     }
@@ -489,35 +528,46 @@ fun SettingsScreen(
                                 "GOOGLE" -> "https://generativelanguage.googleapis.com"
                                 else -> "https://api.openai.com/v1"
                             }
-                            OutlinedTextField(
-                                value = compatibleBaseUrl,
-                                onValueChange = { compatibleBaseUrl = it; compatibleStatus = null },
-                                label = { Text("Endpoint base") },
-                                placeholder = { Text(endpointPlaceholder) },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
-                                shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
-                                colors = ailaFieldColors(),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            if (compatibleFormat != "GOOGLE") {
+                                OutlinedTextField(
+                                    value = compatibleBaseUrl,
+                                    onValueChange = { compatibleBaseUrl = it; compatibleStatus = null },
+                                    label = { Text("Endpoint base") },
+                                    placeholder = { Text(endpointPlaceholder) },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
+                                    shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
+                                    colors = ailaFieldColors(),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            } else {
+                                Text(
+                                    "Google AI Studio usa solo la chiave personale, senza endpoint o modello.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = AppTheme.TextMuted
+                                )
+                                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            }
                             val modelPlaceholder = when (compatibleFormat) {
                                 "ANTHROPIC" -> "claude-3-5-sonnet-20241022"
                                 "GOOGLE" -> "gemini-2.5-flash"
                                 else -> "gpt-4o-mini"
                             }
-                            OutlinedTextField(
-                                value = compatibleModel,
-                                onValueChange = { compatibleModel = it; compatibleStatus = null },
-                                label = { Text("Modello") },
-                                placeholder = { Text(modelPlaceholder) },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
-                                shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
-                                colors = ailaFieldColors(),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            if (compatibleFormat != "GOOGLE") {
+                                OutlinedTextField(
+                                    value = compatibleModel,
+                                    onValueChange = { compatibleModel = it; compatibleStatus = null },
+                                    label = { Text("Modello") },
+                                    placeholder = { Text(modelPlaceholder) },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
+                                    shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
+                                    colors = ailaFieldColors(),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            }
                             var isApiKeyVisible by remember { mutableStateOf(false) }
                             OutlinedTextField(
                                 value = compatibleApiKey,
@@ -609,6 +659,21 @@ fun SettingsScreen(
                                     color = AppTheme.TextMuted
                                 )
                             } else {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("Usa l'AI sul dispositivo", style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
+                                        Text(
+                                            "Consente l'AI locale come provider o come ripiego.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = AppTheme.TextMuted
+                                        )
+                                    }
+                                    AilaSwitch(checked = localAiEnabled, onCheckedChange = onLocalAiEnabledChange)
+                                }
+                                Spacer(modifier = Modifier.height(AppTheme.Space12))
                                 if (selectedAiProvider == "AILA_CLOUD") {
                                     Text(
                                         text = "La chat di AILA Assistant gira sul servizio incluso " +
@@ -635,8 +700,8 @@ fun SettingsScreen(
                                     Spacer(modifier = Modifier.height(AppTheme.Space4))
                                 }
                                 Text(
-                                    text = "Qualunque sia la scelta, se il provider principale non " +
-                                        "risponde l'app prova in automatico con l'altro.",
+                                    text = if (localAiEnabled) "Se il provider principale non risponde, l'app può provare con l'AI locale."
+                                        else "L'AI locale è disattivata; l'app userà solo provider cloud.",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Normal,
                                     color = AppTheme.TextFaint
@@ -680,27 +745,42 @@ fun SettingsScreen(
                                 // completo: mostrare cinque schede tutte insieme renderebbe la
                                 // pagina illeggibile, e nella pratica si sceglie una volta sola.
                                 modelsRevision // rilegge lo stato su disco dopo download/eliminazione
-                                val shownModels = if (showAllModels) localModels else listOfNotNull(activeModel)
-                                shownModels.forEach { model ->
-                                    LocalModelRow(
-                                        model = model,
-                                        isSelected = model.id == activeModel?.id,
-                                        isInstalled = isInstalledCached(model),
-                                        isRecommended = model.id == localModels.firstOrNull()?.id,
-                                        fits = model.fitsComfortablyIn(deviceRamMb),
-                                        supportsActions = model.supportsActions,
-                                        onClick = {
-                                            if (model.id != activeModel?.id) {
-                                                selectedModelIdState = model.id
-                                                onSelectLocalModel(model)
-                                                downloadStatus = null
-                                                downloadedBytes = 0L
-                                                downloadTotalBytes = 0L
-                                            }
-                                            showAllModels = false
+                                androidx.compose.animation.AnimatedContent(
+                                    targetState = showAllModels,
+                                    transitionSpec = {
+                                        (androidx.compose.animation.fadeIn(circolareplus.design.ailaFadeSpec(220)) +
+                                            androidx.compose.animation.expandVertically(circolareplus.design.ailaNavigationSpring()) +
+                                            androidx.compose.animation.slideInVertically(circolareplus.design.ailaMoveSpec(220)) { it / 5 }) togetherWith
+                                            (androidx.compose.animation.fadeOut(circolareplus.design.ailaFadeSpec(120)) +
+                                                androidx.compose.animation.shrinkVertically(circolareplus.design.ailaNavigationSpring()) +
+                                                androidx.compose.animation.slideOutVertically(circolareplus.design.ailaMoveSpec(160)) { -it / 6 }) using
+                                            androidx.compose.animation.SizeTransform(clip = false)
+                                    },
+                                    label = "localModelList"
+                                ) { expanded ->
+                                    Column {
+                                        (if (expanded) localModels else listOfNotNull(activeModel)).forEach { model ->
+                                            LocalModelRow(
+                                                model = model,
+                                                isSelected = model.id == activeModel?.id,
+                                                isInstalled = isInstalledCached(model),
+                                                isRecommended = model.id == localModels.firstOrNull()?.id,
+                                                fits = model.fitsComfortablyIn(deviceRamMb),
+                                                supportsActions = model.supportsActions,
+                                                onClick = {
+                                                    if (model.id != activeModel?.id) {
+                                                        selectedModelIdState = model.id
+                                                        onSelectLocalModel(model)
+                                                        downloadStatus = null
+                                                        downloadedBytes = 0L
+                                                        downloadTotalBytes = 0L
+                                                    }
+                                                    showAllModels = false
+                                                }
+                                            )
+                                            Spacer(modifier = Modifier.height(AppTheme.Space8))
                                         }
-                                    )
-                                    Spacer(modifier = Modifier.height(AppTheme.Space8))
+                                    }
                                 }
 
                                 if (orphanModelBytes > 0 && !orphansCleared) {

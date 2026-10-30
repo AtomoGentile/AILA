@@ -182,11 +182,16 @@ async function resolveAttachments(
 /** Circolari recenti di cui si ricontrolla ogni giro che il PDF sia davvero su R2. */
 const PDF_RECHECK_WINDOW = 30;
 
-export async function syncSpaggiariCirculars(env: Env): Promise<void> {
+export interface AddedCircular {
+  number: number;
+  title: string;
+}
+
+export async function syncSpaggiariCirculars(env: Env): Promise<AddedCircular[]> {
   const baseUrl = env.SPAGGIARI_URL;
   if (!baseUrl) {
     console.log('[Spaggiari] SPAGGIARI_URL non configurata — skip');
-    return;
+    return [];
   }
 
   let circulars: ScrapedCircular[];
@@ -198,7 +203,7 @@ export async function syncSpaggiariCirculars(env: Env): Promise<void> {
 
     if (!res.ok) {
       console.error(`[Spaggiari] HTTP ${res.status} da ${baseUrl}`);
-      return;
+      return [];
     }
 
     const html = await res.text();
@@ -206,7 +211,7 @@ export async function syncSpaggiariCirculars(env: Env): Promise<void> {
     console.log(`[Spaggiari] Trovate ${circulars.length} circolari nella pagina`);
   } catch (err) {
     console.error('[Spaggiari] Errore fetch:', err);
-    return;
+    return [];
   }
 
   const recent = new Set(
@@ -223,21 +228,21 @@ export async function syncSpaggiariCirculars(env: Env): Promise<void> {
     }
   }
 
-  // Una sola notifica per giro, anche con piu' circolari nuove: ogni notifica e' una richiesta
-  // per dispositivo, e sul piano Free un'esecuzione ne puo' fare al massimo 50 in tutto.
-  if (added.length > 0) {
-    added.sort((a, b) => b.number - a.number);
-    const newest = added[0];
-    const title = added.length === 1 ? 'Nuova Circolare' : `${added.length} nuove circolari`;
-    const body =
-      added.length === 1
-        ? `Circolare n. ${newest.number}: ${newest.title}`
-        : added.map((c) => `n. ${c.number}: ${c.title}`).join(' · ').slice(0, 500);
-    try {
-      await notifyClass(env, title, body, { action: 'new_circular', circular_number: String(newest.number) });
-    } catch (err) {
-      console.error('[Spaggiari] Push delle circolari nuove non inviata:', err);
-    }
+  return added.sort((a, b) => b.number - a.number).map(({ number, title }) => ({ number, title }));
+}
+
+/** Invia la notifica solo per circolari con analisi server già salvata. */
+export async function notifySummarizedCirculars(env: Env, circulars: AddedCircular[]): Promise<void> {
+  if (circulars.length === 0) return;
+  const newest = circulars[0];
+  const title = circulars.length === 1 ? 'Nuova Circolare' : `${circulars.length} nuove circolari`;
+  const body = circulars.length === 1
+    ? `Circolare n. ${newest.number}: ${newest.title}`
+    : circulars.map((c) => `n. ${c.number}: ${c.title}`).join(' · ').slice(0, 500);
+  try {
+    await notifyClass(env, title, body, { action: 'new_circular', circular_number: String(newest.number) });
+  } catch (err) {
+    console.error('[Spaggiari] Push delle circolari riassunte non inviata:', err);
   }
 }
 

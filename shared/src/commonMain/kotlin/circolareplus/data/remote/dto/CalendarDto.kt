@@ -23,6 +23,9 @@ data class CalendarEventDto(
 data class CalendarEventsListResponseDto(val events: List<CalendarEventDto>)
 
 @Serializable
+data class CustomEventDayDto(val weekday: Int, val time: String? = null)
+
+@Serializable
 data class CreateCalendarEventRequestDto(
     val title: String,
     val eventDate: String,
@@ -36,7 +39,8 @@ data class CreateCalendarEventRequestDto(
     /** Inserisci anche se il server ha trovato lo stesso evento nello stesso giorno. */
     val force: Boolean = false,
     val endDate: String? = null,
-    val repeat: String = "NONE"
+    val repeat: String = "NONE",
+    val customSchedule: List<CustomEventDayDto>? = null
 )
 
 @Serializable

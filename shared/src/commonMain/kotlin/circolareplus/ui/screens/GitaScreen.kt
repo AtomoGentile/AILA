@@ -473,11 +473,11 @@ private fun GitaList(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = AppTheme.Space16, end = AppTheme.Space16, top = AppTheme.Space12, bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(AppTheme.Space16)
+        contentPadding = PaddingValues(start = AppTheme.Space16, end = AppTheme.Space16, top = AppTheme.Space8, bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)
     ) {
         item(key = "search") {
-            Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
+            Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
                 AilaPillTextField(
                     value = query,
                     onValueChange = { query = it },
@@ -512,7 +512,7 @@ private fun GitaList(
                 AilaSlidingChipRow(
                     selectedIndex = filters.indexOf(filter).coerceAtLeast(0),
                     itemCount = filters.size,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space4)
                 ) { chipModifier ->
                     filters.forEachIndexed { index, f ->
                         AnimatedFilterChip(

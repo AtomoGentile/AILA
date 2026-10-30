@@ -408,6 +408,19 @@ export async function summarizeCircular(
   }
 }
 
+/** Riassume subito le circolari appena inserite e restituisce solo quelle salvate correttamente. */
+export async function summarizeNewCirculars(env: Env, numbers: number[]): Promise<number[]> {
+  if (!env.GEMINI_API_KEY || numbers.length === 0) return [];
+  const ready: number[] = [];
+  for (const number of numbers) {
+    const row = await env.DB.prepare(
+      'SELECT number, title, r2_pdf_key, attachments_json FROM circulars WHERE number = ?'
+    ).bind(number).first<{ number: number; title: string; r2_pdf_key: string; attachments_json: string }>();
+    if (row && await summarizeCircular(env, row)) ready.push(number);
+  }
+  return ready;
+}
+
 /**
  * Le circolari più vecchie di BACKFILL_WINDOW il cron non le rifà: le rifà il server quando
  * qualcuno di una classe senza la sua parte ne apre una (GET /api/circulars/:number/analysis).

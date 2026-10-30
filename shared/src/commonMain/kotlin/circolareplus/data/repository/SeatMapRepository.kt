@@ -64,7 +64,7 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                     listOfNotNull(a.studentAId, a.studentBId, a.studentCId).forEach { put(it, a.row to a.column) }
                 }
             }
-            SeatMapHistoryRecord(mapIndex = mapIndex, pairs = pairs, deskAssignments = deskPositions)
+            SeatMapHistoryRecord(mapIndex = mapIndex, pairs = pairs, deskAssignments = deskPositions, publishedAt = entry.publishedAt)
         }
     }
 

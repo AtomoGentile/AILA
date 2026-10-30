@@ -89,10 +89,12 @@ private fun WavyProgressBar(progress: () -> Float, color: Color, trackColor: Col
             val endX = (activeEnd - stroke / 2f).coerceAtLeast(startX)
             val shift = phase.value * wavelength
             var x = startX
-            path.moveTo(x, cy + amplitude * sin(2f * PI.toFloat() * (x - shift) / wavelength))
+            // La traccia progredisce da sinistra a destra; l'onda di Android deve accompagnare
+            // l'avanzamento nello stesso verso, non scorrere all'indietro sul tratto completato.
+            path.moveTo(x, cy + amplitude * sin(2f * PI.toFloat() * (x + shift) / wavelength))
             while (x < endX) {
                 x = minOf(x + 2f, endX)
-                path.lineTo(x, cy + amplitude * sin(2f * PI.toFloat() * (x - shift) / wavelength))
+                path.lineTo(x, cy + amplitude * sin(2f * PI.toFloat() * (x + shift) / wavelength))
             }
             drawPath(path, color, style = Stroke(width = stroke, cap = StrokeCap.Round))
         }

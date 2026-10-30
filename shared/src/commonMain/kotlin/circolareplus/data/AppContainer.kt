@@ -131,6 +131,7 @@ object AppContainer {
      * classificano in anticipo o in sottofondo si comportano di conseguenza.
      */
     fun isUsingLocalAiFirst(): Boolean {
+        if (!settings.isLocalAiEnabled) return false
         if (AiProvider.fromId(settings.aiProvider) != AiProvider.ON_DEVICE) return false
         val plan = currentRoute(AiProvider.ON_DEVICE, pdfTextLength = null)
         val model = plan.localModel ?: return false
@@ -203,9 +204,13 @@ object AppContainer {
     ): AiClassifier {
         val google = ClientSideAiClassifier(userApiKey = settings.userAiApiKey)
         val provider = AiProvider.fromId(settings.aiProvider)
-        val cloud: AiClassifier = if (provider == AiProvider.COMPATIBLE_API) {
+        val format = CompatibleAiFormat.fromId(settings.compatibleAiFormat)
+        val effectiveProvider = if (provider == AiProvider.COMPATIBLE_API && format == CompatibleAiFormat.GOOGLE) {
+            AiProvider.GOOGLE_AI_STUDIO
+        } else provider
+        val cloud: AiClassifier = if (effectiveProvider == AiProvider.COMPATIBLE_API) {
             CompatibleApiAiClassifier(
-                format = CompatibleAiFormat.fromId(settings.compatibleAiFormat),
+                format = format,
                 baseUrl = settings.compatibleAiBaseUrl,
                 apiKey = settings.compatibleAiApiKey,
                 model = settings.compatibleAiModel
@@ -214,7 +219,7 @@ object AppContainer {
 
         // AICore in pausa (vedi AiCoreCooldown) si salta: al suo posto un modello LiteRT-LM gia'
         // scaricato, o il cloud se non ce n'e'.
-        val plan = currentRoute(provider, pdfTextLength)
+        val plan = currentRoute(effectiveProvider, pdfTextLength)
         val model = plan.localModel
         val local = LocalAiClassifier(
             model = model,
@@ -231,11 +236,11 @@ object AppContainer {
         val personal = ChainedAiClassifier(
             primary = cloud,
             secondary = local,
-            escalateToSecondary = allowLocalFallback,
+            escalateToSecondary = allowLocalFallback && settings.isLocalAiEnabled,
             answerAttemptTimeoutMs = answerAttemptTimeoutMs
         )
 
-        return when (provider) {
+        return when (effectiveProvider) {
             // Provider predefinito dalla v1.5.0: chat ed eventi su Gemma via Worker di AILA
             // ("vale per tutti"), circolari sulla catena classica, la quota di Cloudflare come
             // unica contatrice (nessuna stima fatta in casa).
@@ -247,7 +252,7 @@ object AppContainer {
                 attemptTimeoutMs = answerAttemptTimeoutMs
             )
             AiProvider.ON_DEVICE ->
-                if (!plan.cloudFirst) {
+                if (settings.isLocalAiEnabled && !plan.cloudFirst) {
                     ChainedAiClassifier(
                         primary = local,
                         secondary = cloud,
