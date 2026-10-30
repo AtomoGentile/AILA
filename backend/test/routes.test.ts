@@ -751,6 +751,41 @@ describe('storico delle mappe pubblicate', () => {
     expect((await call('GET', '/api/seat-map/history?archive=true', undefined, rep)).json.history).toHaveLength(7);
   });
 
+  it('elimina una sola mappa e ricompatta gli indici senza toccare le date o le altre pubblicazioni', async () => {
+    const { rep, student } = await setup();
+    const ids: string[] = [];
+    for (let i = 0; i < 5; i++) ids.unshift((await call('POST', '/api/seat-map/publish', { layout: [{ row: i }] }, rep)).json.id);
+    const before = (await call('GET', '/api/seat-map/history?archive=true', undefined, rep)).json.history;
+    expect((await call('DELETE', `/api/seat-map/history/${ids[2]}`, undefined, student)).status).toBe(403);
+    expect((await call('DELETE', `/api/seat-map/history/${ids[2]}`, undefined, rep)).status).toBe(200);
+    const after = (await call('GET', '/api/seat-map/history?archive=true', undefined, rep)).json.history;
+    expect(after).toEqual(before.filter((m: any) => m.id !== ids[2]).map((m: any, i: number) => ({ ...m, mapIndex: i + 1 })));
+    expect((await call('GET', '/api/seat-map/current', undefined, student)).json.seatMap.id).toBe(ids[0]);
+    expect((await call('DELETE', `/api/seat-map/history/${ids[2]}`, undefined, rep)).status).toBe(404);
+    expect((await call('GET', '/api/seat-map/history?archive=true', undefined, rep)).json.history).toEqual(after);
+  });
+
+  it('eliminando la corrente ripristina la precedente, fino a uno storico vuoto', async () => {
+    const { rep } = await setup();
+    const first = (await call('POST', '/api/seat-map/publish', { layout: [{ row: 0 }] }, rep)).json.id;
+    const second = (await call('POST', '/api/seat-map/publish', { layout: [{ row: 1 }] }, rep)).json.id;
+    expect((await call('DELETE', `/api/seat-map/history/${second}`, undefined, rep)).status).toBe(200);
+    expect((await call('GET', '/api/seat-map/current', undefined, rep)).json.seatMap.id).toBe(first);
+    expect((await call('GET', '/api/seat-map/history', undefined, rep)).json.history[0].mapIndex).toBe(1);
+    expect((await call('DELETE', `/api/seat-map/history/${first}`, undefined, rep)).status).toBe(200);
+    expect((await call('GET', '/api/seat-map/current', undefined, rep)).json.seatMap).toBeNull();
+    expect((await call('GET', '/api/seat-map/history', undefined, rep)).json.history).toEqual([]);
+  });
+
+  it('non permette di eliminare la mappa di un’altra classe', async () => {
+    const { rep } = await setup();
+    const other = await register('altro', { classLabel: '5 A', representativeCode: await repCode('5 A') });
+    const id = (await call('POST', '/api/seat-map/publish', { layout: [] }, rep)).json.id;
+    const before = (await call('GET', '/api/seat-map/history?archive=true', undefined, rep)).json.history;
+    expect((await call('DELETE', `/api/seat-map/history/${id}`, undefined, other.json.token)).status).toBe(404);
+    expect((await call('GET', '/api/seat-map/history?archive=true', undefined, rep)).json.history).toEqual(before);
+  });
+
   it('isola le classi e consente il reset solo al rappresentante della classe', async () => {
     const { rep, student } = await setup();
     const other = await register('altro', { classLabel: '5 A', representativeCode: await repCode('5 A') });

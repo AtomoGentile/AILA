@@ -1,6 +1,5 @@
 package circolareplus.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,7 +10,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import circolareplus.design.*
@@ -21,13 +19,18 @@ import circolareplus.platform.localUtcOffsetMillis
 import circolareplus.util.ITALIAN_MONTHS
 import circolareplus.util.civilFromEpochMillis
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import kotlin.time.Instant
 
-/** Archivio in sola lettura: non seleziona proposte e non modifica lo storico dell'algoritmo. */
+/** Pubblicazioni condivise; soltanto i rappresentanti possono eliminarle. */
 @Composable
 fun SeatMapHistoryDialog(
     studentsMap: Map<String, User>,
     loadHistory: suspend () -> List<PublishedSeatMap>,
+    canManage: Boolean,
+    onDeleteMap: suspend (String) -> Unit,
+    onClearHistory: suspend () -> Unit,
+    onHistoryChanged: (List<PublishedSeatMap>) -> Unit,
     onDismiss: () -> Unit
 ) {
     var history by remember { mutableStateOf<List<PublishedSeatMap>>(emptyList()) }
@@ -35,11 +38,41 @@ fun SeatMapHistoryDialog(
     var error by remember { mutableStateOf<String?>(null) }
     var refresh by remember { mutableStateOf(0) }
     var selected by remember { mutableStateOf<PublishedSeatMap?>(null) }
+    var pendingDelete by remember { mutableStateOf<PublishedSeatMap?>(null) }
+    var confirmClear by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
+    var actionError by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    fun deletePublication(map: PublishedSeatMap?) {
+        if (!canManage || deleting) return
+        deleting = true
+        actionError = null
+        scope.launch {
+            try {
+                if (map == null) onClearHistory() else onDeleteMap(map.id)
+                // Aggiorna subito dopo la conferma del server, anche se il ricaricamento
+                // successivo fallisce: una pubblicazione eliminata non deve riapparire.
+                history = if (map == null) emptyList() else history.filterNot { it.id == map.id }
+                    .mapIndexed { index, entry -> entry.copy(mapIndex = index + 1) }
+                selected = null
+                onHistoryChanged(history)
+                refresh++
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                actionError = "Eliminazione non riuscita: ${e.message}"
+            } finally {
+                deleting = false
+            }
+        }
+    }
     LaunchedEffect(refresh) {
         loading = true
         error = null
         try {
             history = loadHistory()
+            if (refresh > 0) onHistoryChanged(history)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -48,7 +81,7 @@ fun SeatMapHistoryDialog(
             loading = false
         }
     }
-    val back: () -> Unit = { if (selected != null) selected = null else onDismiss() }
+    val back: () -> Unit = { if (!deleting) { if (selected != null) selected = null else onDismiss() } }
     Dialog(onDismissRequest = back, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(color = AppTheme.BackgroundLight, modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.fillMaxSize().appSafeDrawingPadding()) {
@@ -57,7 +90,7 @@ fun SeatMapHistoryDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12)
                 ) {
-                    AilaIconButton(contentDescription = "Indietro", onClick = back) { tint ->
+                    AilaIconButton(contentDescription = "Indietro", enabled = !deleting, onClick = back) { tint ->
                         AppIcons.ChevronLeft(color = tint)
                     }
                     Text(
@@ -67,9 +100,18 @@ fun SeatMapHistoryDialog(
                         modifier = Modifier.weight(1f)
                     )
                     if (selected == null) AilaIconButton(
-                        contentDescription = "Aggiorna storico", enabled = !loading,
+                        contentDescription = "Aggiorna storico", enabled = !loading && !deleting,
                         onClick = { refresh++ }
                     ) { tint -> AppIcons.Refresh(color = tint) }
+                    if (selected != null && canManage) AilaIconButton(
+                        contentDescription = "Elimina questa mappa", enabled = !loading && !deleting,
+                        onClick = { pendingDelete = selected }
+                    ) { tint -> AppIcons.Trash(color = tint) }
+                }
+                if (deleting) LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = AppTheme.PrimaryBlue)
+                actionError?.let { message ->
+                    Text(message, color = AppTheme.TintRedInk,
+                        modifier = Modifier.padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space8))
                 }
                 val entry = selected
                 when {
@@ -128,8 +170,15 @@ fun SeatMapHistoryDialog(
                             Text("Nessuna mappa pubblicata nello storico.", color = AppTheme.TextMuted,
                                 modifier = Modifier.padding(vertical = AppTheme.Space24))
                         }
+                        if (canManage && history.isNotEmpty()) item {
+                            AilaDestructiveButton(
+                                text = if (deleting) "Eliminazione in corso…" else "Elimina storico mappe",
+                                modifier = Modifier.fillMaxWidth(),
+                                onClick = { if (!deleting) confirmClear = true }
+                            )
+                        }
                         items(history, key = { it.id }) { map ->
-                            AilaCard(onClick = { selected = map }) {
+                            AilaCard(onClick = if (deleting) null else ({ selected = map })) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(AppTheme.Space16),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -146,6 +195,11 @@ fun SeatMapHistoryDialog(
                                         Text("$occupied studenti", color = AppTheme.TextMuted,
                                             style = MaterialTheme.typography.bodySmall)
                                     }
+                                    if (canManage) AilaIconButton(
+                                        contentDescription = "Elimina mappa del ${publicationLabel(map.publishedAt)}",
+                                        enabled = !deleting,
+                                        onClick = { pendingDelete = map }
+                                    ) { tint -> AppIcons.Trash(color = tint) }
                                     AppIcons.ChevronRight(color = AppTheme.TextMuted)
                                 }
                             }
@@ -154,6 +208,25 @@ fun SeatMapHistoryDialog(
                 }
             }
         }
+        pendingDelete?.let { map ->
+            AilaConfirmDialog(
+                title = "Eliminare questa mappa?",
+                message = "La pubblicazione del ${publicationLabel(map.publishedAt)} non conterà più per la rotazione delle file. " +
+                    (if (map.mapIndex == 1) "La mappa precedente, se presente, diventerà quella attuale. " else "") +
+                    "L'azione non può essere annullata.",
+                onDismiss = { pendingDelete = null },
+                onConfirm = { pendingDelete = null; deletePublication(map) },
+                confirmLabel = "Elimina"
+            )
+        }
+        if (confirmClear) AilaConfirmDialog(
+            title = "Eliminare lo storico?",
+            message = "Tutte le mappe dell'archivio, compresa quella attualmente pubblicata, saranno eliminate. " +
+                "L'algoritmo non terrà più conto delle disposizioni passate. L'azione non può essere annullata.",
+            onDismiss = { confirmClear = false },
+            onConfirm = { confirmClear = false; deletePublication(null) },
+            confirmLabel = "Elimina"
+        )
     }
 }
 

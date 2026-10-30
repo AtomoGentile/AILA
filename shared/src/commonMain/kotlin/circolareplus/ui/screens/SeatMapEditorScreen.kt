@@ -223,7 +223,7 @@ fun SeatMapEditorScreen(
         ) {
             Column(modifier = Modifier.padding(AppTheme.Space12)) {
                 Text(
-                    text = satisfactionLabel(satisfaction),
+                    text = satisfactionLabel(satisfaction, assignments),
                     style = MaterialTheme.typography.labelLarge,
                     color = AppTheme.TextDark
                 )

@@ -90,6 +90,9 @@ class SeatMapRepository(private val api: ApiClient? = null) {
     /** Solo Rappresentante: azzera lo storico (inizio quadrimestre / cambio aula). */
     suspend fun resetHistory(): SuccessDto = requireApi().post("/api/seat-map/reset-history", Unit)
 
+    /** Elimina una sola pubblicazione; il server ricompatta gli indici dello storico. */
+    suspend fun deletePublishedMap(id: String): SuccessDto = requireApi().delete("/api/seat-map/history/$id")
+
     // -------------------------------------------------------------------------
     // Fantocci: studenti inventati dal Rappresentante, con nome e cognome, che
     // occupano un posto come tutti. Non sono utenti: non votano le preferenze e
@@ -164,6 +167,11 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                 slots = slots
             )
             val assignments = if (customDeskSlots != null) SeatMapOptimizer.withVacantDesks(generated, customDeskSlots) else generated
+            val assignedIds = assignments.flatMap { listOfNotNull(it.studentAId, it.studentBId, it.studentCId) }
+            check(assignedIds.size == students.size && assignedIds.toSet().size == assignedIds.size &&
+                assignedIds.toSet() == students.map { it.id }.toSet()) {
+                "La proposta non assegna esattamente un posto a ogni studente. Ricalcola le proposte."
+            }
             val breakdown = SeatMapOptimizer.scoreLayout(
                 assignments = assignments,
                 profiles = profiles,

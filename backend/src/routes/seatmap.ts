@@ -56,6 +56,25 @@ seatmap.get('/history', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// DELETE /api/seat-map/history/:id — Elimina una pubblicazione della propria classe
+// ---------------------------------------------------------------------------
+seatmap.delete('/history/:id', requireRole('REPRESENTATIVE'), async (c) => {
+  const classId = await resolveClassId(c);
+  const id = c.req.param('id');
+  // Legge l'indice nella stessa transazione della cancellazione: anche due rappresentanti
+  // che intervengono insieme mantengono gli indici consecutivi e la mappa attuale corretta.
+  const results = await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE seat_map_history SET map_index = map_index - 1
+      WHERE class_id = ? AND map_index >
+        (SELECT map_index FROM seat_map_history WHERE id = ? AND class_id = ?)`)
+      .bind(classId, id, classId),
+    c.env.DB.prepare('DELETE FROM seat_map_history WHERE id = ? AND class_id = ?').bind(id, classId),
+  ]);
+  if (!results[1].meta.changes) return c.json({ error: 'Mappa pubblicata non trovata' }, 404);
+  return c.json({ success: true });
+});
+
+// ---------------------------------------------------------------------------
 // POST /api/seat-map/publish — Pubblica nuova mappa (solo REPRESENTATIVE)
 // layoutJson: oggetto con la disposizione, es. { seats: [{studentId, row, col}, ...] }
 // ---------------------------------------------------------------------------

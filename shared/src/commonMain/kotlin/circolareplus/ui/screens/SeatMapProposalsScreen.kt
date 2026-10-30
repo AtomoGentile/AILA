@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import circolareplus.algorithms.SeatMapOptimizer
+import circolareplus.algorithms.DeskAssignment
 import circolareplus.algorithms.SeatMapProposal
 import circolareplus.design.AilaCard
 import circolareplus.design.AilaConfirmDialog
@@ -94,6 +95,13 @@ fun SeatMapProposalsScreen(
                     Text(
                         text = "Tocca l'occhio per guardare la mappa di una proposta senza sceglierla: " +
                             "le altre restano disponibili. Dopo la scelta potrai ancora modificare i posti.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTheme.TextMuted
+                    )
+                    Spacer(modifier = Modifier.height(AppTheme.Space8))
+                    Text(
+                        text = "La media considera chi ha espresso preferenze non neutre e siede con almeno un compagno. " +
+                            "Il totale degli studenti in mappa è indicato separatamente.",
                         style = MaterialTheme.typography.bodySmall,
                         color = AppTheme.TextMuted
                     )
@@ -272,7 +280,7 @@ private fun ProposalCard(
                         }
                     }
                     Text(
-                        text = satisfactionLabel(proposal.satisfaction),
+                        text = satisfactionLabel(proposal.satisfaction, proposal.assignments),
                         style = MaterialTheme.typography.bodySmall,
                         color = AppTheme.TextMuted
                     )
@@ -338,9 +346,11 @@ private fun ProposalCard(
 /** Testo della soddisfazione: media dei singoli studenti in base ai compagni di banco che hanno
  * davvero, con quanti siedono con qualcuno che hanno votato in negativo; oppure l'avviso che nessuno
  * ha votato e quindi non c'è nulla da misurare. */
-internal fun satisfactionLabel(satisfaction: SeatMapOptimizer.VoteSatisfaction?): String {
-    if (satisfaction == null) return "Nessun voto espresso: soddisfazione non calcolabile"
-    val base = "Soddisfazione media: ${satisfaction.percentage.toInt()}% (${satisfaction.evaluatedStudents} studenti)"
+internal fun satisfactionLabel(satisfaction: SeatMapOptimizer.VoteSatisfaction?, assignments: List<DeskAssignment>): String {
+    val total = assignments.flatMap { listOfNotNull(it.studentAId, it.studentBId, it.studentCId) }.toSet().size
+    val occupants = "$total studenti in mappa"
+    if (satisfaction == null) return "$occupants\nSoddisfazione non calcolabile: nessun voto utile"
+    val base = "$occupants\nSoddisfazione media: ${satisfaction.percentage.toInt()}% (${satisfaction.evaluatedStudents} valutati)"
     return if (satisfaction.uncomfortableStudents > 0) {
         "$base • ${satisfaction.uncomfortableStudents} con un compagno sgradito"
     } else base

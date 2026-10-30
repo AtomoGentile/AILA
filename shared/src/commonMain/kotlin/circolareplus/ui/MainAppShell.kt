@@ -1126,8 +1126,6 @@ fun MainAppShell(
     val seatMapGenerationStudents = remember(classmates, seatMapDummies) {
         classmates + seatMapDummies.map { it.asUser() }
     }
-    // Richiesta "Elimina storico mappe" in volo (rotta /api/seat-map/reset-history).
-    var isDeletingSeatMapHistory by remember { mutableStateOf(false) }
     // Avviso NON d'errore della gestione della mappa (es. storico eliminato): stessa forma del
     // dialogo errori qui sotto.
     var seatMapInfoMessage by remember { mutableStateOf<String?>(null) }
@@ -3187,33 +3185,19 @@ fun MainAppShell(
                                                         }
                                                     }
                                                 },
-                                                isDeletingHistory = isDeletingSeatMapHistory,
-                                                onDeleteSeatMapHistory = {
-                                                    coroutineScope.launch {
-                                                        isDeletingSeatMapHistory = true
-                                                        try {
-                                                            AppContainer.seatMapRepository.resetHistory()
-                                                            seatMapAssignments = emptyList()
-                                                            // Lo storico pesa solo nell'ottimizzatore (penalita'
-                                                            // memoria): qui lo si azzera, dalla prossima
-                                                            // generazione le disposizioni passate non contano piu'.
-                                                            seatMapOptimizerHistory = emptyList()
-                                                            // La bozza salvata (se c'e') riparte anch'essa senza il
-                                                            // vecchio storico: il restore non deve resuscitare
-                                                            // disposizioni che non contano piu'. Una generazione
-                                                            // nuova ricarica comunque lo storico dal repository.
-                                                            savedSeatMapDraft?.let { draft ->
-                                                                updateSeatMapDraft(draft.copy(history = emptyList()))
-                                                            }
-                                                            seatMapInfoMessage =
-                                                                "Storico delle mappe eliminato: l'algoritmo non terrà più conto delle disposizioni passate."
-                                                        } catch (e: CancellationException) {
-                                                            throw e
-                                                        } catch (e: Exception) {
-                                                            seatMapActionError = "Impossibile eliminare lo storico: ${e.message}"
-                                                        } finally {
-                                                            isDeletingSeatMapHistory = false
-                                                        }
+                                                onDeletePublishedMap = { id ->
+                                                    AppContainer.seatMapRepository.deletePublishedMap(id)
+                                                },
+                                                onClearPublishedHistory = {
+                                                    AppContainer.seatMapRepository.resetHistory()
+                                                },
+                                                onPublishedHistoryChanged = { publishedMaps ->
+                                                    // Il dialog passa solo pubblicazioni confermate dal server.
+                                                    // Eliminando la corrente, la precedente torna visibile.
+                                                    seatMapAssignments = publishedMaps.firstOrNull()?.assignments ?: emptyList()
+                                                    seatMapOptimizerHistory = emptyList()
+                                                    savedSeatMapDraft?.let { draft ->
+                                                        updateSeatMapDraft(draft.copy(history = emptyList()))
                                                     }
                                                 },
                                                 onGenerateProposals = { weights, seatsPerDesk, rowSeats, customDeskSlots ->
