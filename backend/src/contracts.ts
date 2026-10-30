@@ -138,6 +138,9 @@ export interface CalendarResponse {
 }
 
 export interface CreateEventRequest {
+  endDate?: string;
+  repeat?: 'NONE' | 'DAILY' | 'WEEKLY' | 'CUSTOM';
+  customSchedule?: Array<{ weekday: number; time?: string | null }>;
   title: string;
   eventDate: string;
   startTime?: string;

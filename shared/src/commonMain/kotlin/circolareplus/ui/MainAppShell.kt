@@ -5388,7 +5388,18 @@ private fun AddCalendarEventDialog(
     // submit estratto in funzione locale: il ramo iOS lo richiama anche dal "Fine" dell'intestazione,
     // il ramo Android solo dal pulsante in fondo — nessuna logica duplicata fra i due punti.
     fun submitManualEvent() {
-        val date = selectedDateMillis?.let { epochMillisToIsoDate(it) }
+        val firstOccurrenceMillis = selectedDateMillis?.let { start ->
+            if (repeatFrequency == "CUSTOM") {
+                (0 until eventRangeDays).firstOrNull { offset ->
+                    circolareplus.util.weekdayOf(circolareplus.util.civilFromEpochMillis(start + offset * EVENT_DAY_MILLIS)) in customWeekdays
+                }?.let { start + it * EVENT_DAY_MILLIS }
+            } else start
+        }
+        val date = firstOccurrenceMillis?.let { epochMillisToIsoDate(it) }
+        val occurrenceTime = if (repeatFrequency == "CUSTOM" && firstOccurrenceMillis != null) {
+            val weekday = circolareplus.util.weekdayOf(circolareplus.util.civilFromEpochMillis(firstOccurrenceMillis))
+            lessonHoursLabel(customTimes[weekday], customTimes[weekday])
+        } else time
         if (title.isNotBlank() && date != null && !isPastDate) {
             val finalTitle = if (subject.isNotBlank()) "${subject.trim()}: ${title.trim()}" else title.trim()
             val visibleToUserIds = if (isForAllClass) null else selectedRecipientUserIds.ifEmpty { null }
@@ -5397,7 +5408,7 @@ private fun AddCalendarEventDialog(
                 date,
                 selectedEndDateMillis?.let { epochMillisToIsoDate(it) } ?: date,
                 repeatFrequency,
-                time.trim().ifBlank { null },
+                occurrenceTime.trim().ifBlank { null },
                 category,
                 visibleToUserIds,
                 notes.trim().ifBlank { null },
@@ -5469,9 +5480,9 @@ private fun AddCalendarEventDialog(
                 .fillMaxWidth()
                 .appImePadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = AppTheme.Space20)
-                .padding(top = AppTheme.Space8)
-                .padding(bottom = AppTheme.Space32)
+                .padding(horizontal = AppTheme.Space16)
+                .padding(top = AppTheme.Space12)
+                .padding(bottom = AppTheme.Space24)
         ) {
             // Intestazione Material: freccia indietro (fuori dal menu iniziale) + titolo + chiudi.
             // La freccia entra e esce, il titolo si dissolve da uno all'altro, e i pulsanti sono
@@ -5830,6 +5841,7 @@ private fun AddCalendarEventDialog(
                                 Text(circolareplus.util.ITALIAN_WEEKDAYS[weekday].replaceFirstChar { it.uppercase() }, modifier = Modifier.weight(1f), color = AppTheme.TextDark)
                                 HourDropdown(
                                     label = "Ora",
+                                    modifier = Modifier.weight(1f),
                                     value = customTimes[weekday],
                                     maxHour = maxHours,
                                     expanded = expandedHourPicker == "CUSTOM_$weekday",
