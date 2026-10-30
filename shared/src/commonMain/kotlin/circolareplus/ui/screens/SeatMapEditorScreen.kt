@@ -355,6 +355,7 @@ fun SeatMapEditorScreen(
                     ) {
                         VacantDeskSlot(
                             desk = desk,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 152.dp),
                             isDragged = isDragged,
                             isHoverTarget = isHovered
                         )
@@ -469,7 +470,8 @@ fun SeatMapEditorScreen(
         val offset = bounds.position - screenOrigin + (dragPointer - dragStartPointer)
         Box(modifier = Modifier.width(with(density) { bounds.size.width.toDp() }).zIndex(10f)
             .graphicsLayer { translationX = offset.x; translationY = offset.y; alpha = 0.95f; shadowElevation = 10.dp.toPx() }) {
-            if (source.isVacantDesk) VacantDeskSlot(source)
+            if (source.isVacantDesk) VacantDeskSlot(source,
+                modifier = Modifier.fillMaxWidth().height(with(density) { bounds.size.height.toDp() }))
             else SeatMapDeskCard(source, studentsMap, showThirdSeat = source.hasThirdSeat)
         }
     }
