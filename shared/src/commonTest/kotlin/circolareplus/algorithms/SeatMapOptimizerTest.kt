@@ -12,6 +12,27 @@ import kotlin.test.assertTrue
 class SeatMapOptimizerTest {
 
     @Test
+    fun priorityCooldownExpiresAfterThreeCalendarMonthsIncludingMonthEnd() {
+        val profiles = mapOf("s1" to StudentProfile(userId = "s1", heightCm = 170, priorityPass = true))
+        val history = listOf(SeatMapHistoryRecord(1, emptySet(), mapOf("s1" to (2 to 0)), "2026-08-31T10:00:00Z"))
+        assertTrue(SeatMapOptimizer.isPriorityPassCooldownActive("s1", profiles, history, "2026-11-29"))
+        assertEquals(false, SeatMapOptimizer.isPriorityPassCooldownActive("s1", profiles, history, "2026-11-30"))
+        assertEquals(false, SeatMapOptimizer.isPriorityPassCooldownActive("s1", profiles, history, "2026-12-01"))
+    }
+
+    @Test
+    fun optimizerKeepsRecentPriorityPassOccupantsBehindThirdRow() {
+        val students = (1..22).map { User("s$it", "Nome", "$it", "s$it") }
+        val profiles = mapOf("s1" to StudentProfile(userId = "s1", heightCm = 170, priorityPass = true))
+        val history = listOf(SeatMapHistoryRecord(1, emptySet(), mapOf("s1" to (0 to 0)), circolareplus.util.today().toIso()))
+        for (seed in 1L..5L) {
+            val result = SeatMapOptimizer.optimize(students, profiles, emptyMap(), emptyMap(), history,
+                OptimizerWeights(), false, seed, maxIterations = 100)
+            assertTrue(result.first { it.studentAId == "s1" || it.studentBId == "s1" }.row > 2)
+        }
+    }
+
+    @Test
     fun testBlindaturaRifiutiAssoluti() {
         // Rifiuto assoluto doppio (-2 / -2) deve restituire -1000 pt
         val scoreDoubleRejection = SeatMapOptimizer.calculateSocialScore(

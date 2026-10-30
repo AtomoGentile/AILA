@@ -946,8 +946,9 @@ object SeatMapOptimizer {
             .any { isPriorityPassCooldownActive(it, profiles, history) }
     }
 
-    private fun isPriorityPassCooldownActive(
-        studentId: String, profiles: Map<String, StudentProfile>, history: List<SeatMapHistoryRecord>
+    internal fun isPriorityPassCooldownActive(
+        studentId: String, profiles: Map<String, StudentProfile>, history: List<SeatMapHistoryRecord>,
+        todayIso: String = circolareplus.util.today().toIso()
     ): Boolean = profiles[studentId]?.priorityPass == true && history.any { record ->
         val publishedDate = record.publishedAt?.take(10)
         val stillCoolingDown = publishedDate?.let { published ->
@@ -957,7 +958,7 @@ object SeatMapOptimizer {
                 val year = totalMonth / 12
                 val month = totalMonth % 12 + 1
                 val lastDay = when (month) { 2 -> if (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) 29 else 28; 4, 6, 9, 11 -> 30; else -> 31 }
-                circolareplus.util.CivilDate(year, month, parts[2].coerceAtMost(lastDay)).toIso() > circolareplus.util.today().toIso()
+                circolareplus.util.CivilDate(year, month, parts[2].coerceAtMost(lastDay)).toIso() > todayIso
             }
         } == true
         stillCoolingDown && record.deskAssignments[studentId]?.first?.let { it <= MAX_PRIORITY_ROW } == true

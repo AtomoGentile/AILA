@@ -174,7 +174,7 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     title TEXT NOT NULL,
     event_date DATE NOT NULL,
     start_time TEXT,
-    category TEXT NOT NULL CHECK(category IN ('VERIFICA', 'INTERROGAZIONE', 'PAGAMENTO', 'USCITA_DIDATTICA', 'AVVISO', 'ALTRO')),
+    category TEXT NOT NULL CHECK(category IN ('VERIFICA', 'INTERROGAZIONE', 'PAGAMENTO', 'USCITA_DIDATTICA', 'ENTRATA', 'AVVISO', 'ALTRO')),
     is_for_all BOOLEAN NOT NULL DEFAULT 1,
     is_ai_generated BOOLEAN NOT NULL DEFAULT 0,
     created_by TEXT REFERENCES users(id) ON DELETE SET NULL,

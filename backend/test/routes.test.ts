@@ -776,3 +776,21 @@ describe('fantocci della Mappa Posti', () => {
     expect(list.json.dummies).toEqual([]);
   });
 });
+
+describe('ricorrenza personalizzata', () => {
+  it('salva martedì, venerdì e sabato con ore diverse e categoria Entrata', async () => {
+    const user = await register('ricorrenza');
+    const token = user.json.token;
+    const created = await call('POST', '/api/calendar', {
+      title: 'Entrata posticipata', category: 'ENTRATA', eventDate: '2026-11-02', endDate: '2026-11-08', repeat: 'CUSTOM',
+      customSchedule: [{ weekday: 1, time: '2ª ora' }, { weekday: 4, time: '3ª ora' }, { weekday: 5, time: '4ª ora' }],
+    }, token);
+    expect(created.status).toBe(201);
+    expect(created.json.count).toBe(3);
+    const events = (await call('GET', '/api/calendar', undefined, token)).json.events;
+    expect(events.map((e: any) => [e.eventDate, e.startTime]).sort()).toEqual([
+      ['2026-11-03', '2ª ora'], ['2026-11-06', '3ª ora'], ['2026-11-07', '4ª ora'],
+    ]);
+    expect(events.every((e: any) => e.category === 'ENTRATA')).toBe(true);
+  });
+});

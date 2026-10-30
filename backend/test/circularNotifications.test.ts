@@ -1,0 +1,28 @@
+import { beforeEach, expect, it, vi } from 'vitest';
+import { createD1 } from './d1shim';
+import { notifySummarizedCirculars } from '../src/services/spaggiari';
+import type { Env } from '../src/types';
+const send = vi.hoisted(() => vi.fn());
+vi.mock('../src/services/fcm', () => ({ notifyClass: send }));
+beforeEach(() => { send.mockReset(); });
+it('attende il riassunto server, conserva i fallimenti e non ripete notifiche inviate', async () => {
+  const { db, d1 } = createD1();
+  const env = { DB: d1 } as Env;
+  db.exec("INSERT INTO circulars (number,title,publish_date,r2_pdf_key,notification_pending) VALUES (1,'Titolo','2026-10-30','circulars/1.pdf',1)");
+  await notifySummarizedCirculars(env);
+  expect(send).not.toHaveBeenCalled();
+  db.exec("INSERT INTO circular_ai_analysis (circular_number,badge,summary,tier) VALUES (1,'RELEVANT','Riassunto locale',1)");
+  await notifySummarizedCirculars(env);
+  expect(send).not.toHaveBeenCalled();
+  db.exec("UPDATE circular_ai_analysis SET tier=2, summary='Riassunto server' WHERE circular_number=1");
+  send.mockRejectedValueOnce(new Error('Rete indisponibile'));
+  await notifySummarizedCirculars(env);
+  expect(db.prepare('SELECT notification_pending FROM circulars').get()?.notification_pending).toBe(1);
+  send.mockResolvedValue(undefined);
+  await notifySummarizedCirculars(env);
+  expect(db.prepare('SELECT notification_pending FROM circulars').get()?.notification_pending).toBe(0);
+  expect(send).toHaveBeenCalledTimes(2);
+  await notifySummarizedCirculars(env);
+  expect(send).toHaveBeenCalledTimes(2);
+  db.close();
+});

@@ -644,7 +644,7 @@ class LocalSettingsManager(
     fun clearUserData() {
         listOf(
             KEY_AUTH_TOKEN, KEY_USER_ID, KEY_CACHED_USER, KEY_USER_AI_API_KEY, KEY_COMPATIBLE_AI_API_KEY,
-            KEY_COMPATIBLE_AI_FORMAT, KEY_COMPATIBLE_AI_BASE_URL, KEY_COMPATIBLE_AI_MODEL,
+            KEY_COMPATIBLE_AI_FORMAT, KEY_COMPATIBLE_AI_BASE_URL, KEY_COMPATIBLE_AI_MODEL, KEY_COMPATIBLE_AI_CONFIGS_MIGRATED,
             KEY_NOTIFICATION_LOG, KEY_ASSISTANT_HISTORY, KEY_CIRCULAR_ANALYSES,
             KEY_RECENT_SEARCHES, KEY_SUBMITTED_POLLS,
             KEY_LAST_SEEN_CIRCULAR, KEY_LAST_SEEN_PROPOSAL, KEY_LAST_SEEN_SEATMAP,
@@ -653,6 +653,10 @@ class LocalSettingsManager(
             KEY_LAST_ONLINE_SYNC, KEY_LAST_FULL_OFFLINE_SYNC, KEY_DATA_OWNER,
             KEY_SEATMAP_DRAFTS
         ).forEach { settings.remove(it) }
+        for (format in listOf("openai", "anthropic", "google")) {
+            listOf(KEY_COMPATIBLE_AI_BASE_URL, KEY_COMPATIBLE_AI_MODEL, KEY_COMPATIBLE_AI_API_KEY)
+                .forEach { settings.remove("${it}_$format") }
+        }
         clearSecrets()
     }
 
@@ -711,7 +715,9 @@ class LocalSettingsManager(
 
     private fun clearSecrets() {
         if (!separateSecureStorage) return
-        listOf(KEY_AUTH_TOKEN, KEY_USER_AI_API_KEY, KEY_COMPATIBLE_AI_API_KEY).forEach { key -> runCatching { secure.remove(key) } }
+        (listOf(KEY_AUTH_TOKEN, KEY_USER_AI_API_KEY, KEY_COMPATIBLE_AI_API_KEY) +
+            listOf("openai", "anthropic", "google").map { "${KEY_COMPATIBLE_AI_API_KEY}_$it" })
+            .forEach { key -> runCatching { secure.remove(key) } }
     }
 }
 
