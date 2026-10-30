@@ -631,7 +631,7 @@ object SeatMapOptimizer {
         assignments.flatMapIndexed { deskIndex, desk ->
             // Con una disposizione personalizzata i banchi hanno capienze diverse (coppie e trii
             // nella stessa mappa): vale la capienza del banco, non quella richiesta in generale.
-            (0 until (if (desk.seats in SEATS_PER_DESK_PAIR..SEATS_PER_DESK_TRIO) desk.seats else seatsPerDesk))
+            (0 until (if (desk.seats in 0..SEATS_PER_DESK_TRIO) desk.seats else seatsPerDesk))
                 .map { SeatRef(deskIndex, it) }
         }
 
@@ -850,7 +850,11 @@ object SeatMapOptimizer {
 
         var current = if (slots != null) buildInitialLayoutFromSlots(students, socialPreferences, random, slots)
         else buildInitialLayout(students, socialPreferences, random, seatsPerDesk)
-        current = movePriorityPassOutOfCooldownRows(current, profiles, history, socialPreferences)
+        val rowCount = ((slots?.maxOfOrNull { it.row } ?: current.maxOf { it.row }) + 1)
+        val allowedRows = students.associate { student ->
+            student.id to allowedRowsForStudent(student.id, profiles, history, rowCount)
+        }
+        current = arrangeWithRowRotation(current, students, allowedRows, socialPreferences, random)
         var currentScore = score(current)
         var best = current
         var bestScore = currentScore
@@ -873,7 +877,7 @@ object SeatMapOptimizer {
             if (seat2 == seat1) continue
 
             val candidate = swapSeats(current, seat1, seat2)
-            if (violatesPriorityCooldown(candidate, profiles, history)) continue
+            if (candidate.any { desk -> deskOccupantIds(desk).any { desk.row !in allowedRows.getValue(it) } }) continue
 
             val affectedDesks = if (seat1.deskIndex == seat2.deskIndex) {
                 listOf(candidate[seat1.deskIndex])
@@ -911,57 +915,95 @@ object SeatMapOptimizer {
         return best
     }
 
-    private fun movePriorityPassOutOfCooldownRows(
-        layout: List<DeskAssignment>, profiles: Map<String, StudentProfile>, history: List<SeatMapHistoryRecord>,
-        socialPreferences: Map<Pair<String, String>, SocialPreferenceScore>
+    /** Una fila visitata a ottobre torna disponibile a febbraio con quattro file,
+     * a gennaio per un Priority Pass con tre file. Si contano i mesi di calendario. */
+    internal fun allowedRowsForStudent(
+        studentId: String,
+        profiles: Map<String, StudentProfile>,
+        history: List<SeatMapHistoryRecord>,
+        rowCount: Int,
+        todayIso: String = circolareplus.util.today().toIso()
+    ): Set<Int> {
+        val cycle = if (profiles[studentId]?.priorityPass == true) minOf(rowCount, MAX_PRIORITY_ROW + 1) else rowCount
+        val now = circolareplus.util.parseIsoDate(todayIso) ?: error("Data di rotazione non valida")
+        val recentRows = history.mapNotNull { record ->
+            val date = record.publishedAt?.take(10)?.let { circolareplus.util.parseIsoDate(it) }
+                ?: return@mapNotNull null // Le vecchie bozze senza data non permettono di dedurre un mese.
+            val months = (now.year - date.year) * 12 + now.month - date.month
+            if (months in 0 until cycle) record.deskAssignments[studentId]?.first else null
+        }.toSet()
+        return (0 until cycle).filterTo(mutableSetOf()) { it !in recentRows }
+    }
+
+    fun rowRotationViolations(
+        layout: List<DeskAssignment>, profiles: Map<String, StudentProfile>, history: List<SeatMapHistoryRecord>
+    ): List<String> {
+        val rowCount = (layout.maxOfOrNull { it.row } ?: return emptyList()) + 1
+        return layout.flatMap { desk -> deskOccupantIds(desk).filter {
+            desk.row !in allowedRowsForStudent(it, profiles, history, rowCount)
+        } }.distinct()
+    }
+
+    /** Parte da una disposizione lecita: i vincoli di fila e i rifiuti reciproci restano
+     * rigidi anche durante la ricerca locale. Matching per capienza, poi ricerca sui banchi. */
+    private fun arrangeWithRowRotation(
+        layout: List<DeskAssignment>, students: List<User>, allowedRows: Map<String, Set<Int>>,
+        preferences: Map<Pair<String, String>, SocialPreferenceScore>, random: Random
     ): List<DeskAssignment> {
-        fun restricted(id: String) = isPriorityPassCooldownActive(id, profiles, history)
-        var result = layout
+        if (layout.all { desk -> deskOccupantIds(desk).all { desk.row in allowedRows.getValue(it) } &&
+                !hasForbiddenPairAtDesk(desk, preferences) }) return layout
         val seats = allSeats(layout, SEATS_PER_DESK_PAIR)
-        for (seat in seats) {
-            if (result[seat.deskIndex].row > MAX_PRIORITY_ROW) continue
-            val student = seat.studentId(result) ?: continue
-            if (!restricted(student)) continue
-            val repaired = seats.firstNotNullOfOrNull { target ->
-                if (result[target.deskIndex].row <= MAX_PRIORITY_ROW || target.studentId(result)?.let(::restricted) == true) {
-                    null
-                } else {
-                    val candidate = swapSeats(result, seat, target)
-                    candidate.takeIf {
-                        !hasForbiddenPairAtDesk(it[seat.deskIndex], socialPreferences) &&
-                            !hasForbiddenPairAtDesk(it[target.deskIndex], socialPreferences)
-                    }
+        val matched = mutableMapOf<SeatRef, String>()
+        fun match(student: String, visited: MutableSet<SeatRef>): Boolean {
+            for (seat in seats) {
+                if (layout[seat.deskIndex].row !in allowedRows.getValue(student) || !visited.add(seat)) continue
+                val previous = matched[seat]
+                if (previous == null || match(previous, visited)) {
+                    matched[seat] = student
+                    return true
                 }
             }
-            require(repaired != null) { "Impossibile rispettare la rotazione Priority Pass e le preferenze con i posti disponibili" }
-            result = repaired
+            return false
         }
-        return result
-    }
-
-    private fun violatesPriorityCooldown(
-        layout: List<DeskAssignment>, profiles: Map<String, StudentProfile>, history: List<SeatMapHistoryRecord>
-    ): Boolean = layout.any { desk ->
-        desk.row <= MAX_PRIORITY_ROW && listOfNotNull(desk.studentAId, desk.studentBId, desk.studentCId)
-            .any { isPriorityPassCooldownActive(it, profiles, history) }
-    }
-
-    internal fun isPriorityPassCooldownActive(
-        studentId: String, profiles: Map<String, StudentProfile>, history: List<SeatMapHistoryRecord>,
-        todayIso: String = circolareplus.util.today().toIso()
-    ): Boolean = profiles[studentId]?.priorityPass == true && history.any { record ->
-        val publishedDate = record.publishedAt?.take(10)
-        val stillCoolingDown = publishedDate?.let { published ->
-            val parts = published.split('-').mapNotNull { it.toIntOrNull() }
-            parts.size == 3 && run {
-                val totalMonth = parts[0] * 12 + parts[1] - 1 + 3
-                val year = totalMonth / 12
-                val month = totalMonth % 12 + 1
-                val lastDay = when (month) { 2 -> if (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) 29 else 28; 4, 6, 9, 11 -> 30; else -> 31 }
-                circolareplus.util.CivilDate(year, month, parts[2].coerceAtMost(lastDay)).toIso() > todayIso
+        require(students.all { match(it.id, mutableSetOf()) }) {
+            "Rotazione delle file impossibile con lo storico e i posti disponibili. " +
+                "Modifica i banchi o le capienze delle file. Il Priority Pass ruota solo nelle prime tre file."
+        }
+        val members = Array(layout.size) { mutableListOf<String>() }
+        var remaining = students.map { it.id }.shuffled(random)
+        val deskOrder = layout.indices.shuffled(random)
+        var budget = 200_000
+        fun options(id: String) = deskOrder.filter { index ->
+            val desk = layout[index]
+            desk.row in allowedRows.getValue(id) && members[index].size < desk.seats &&
+                members[index].none { isForbiddenPair(id, it, preferences) }
+        }
+        fun search(): Boolean {
+            if (remaining.isEmpty()) return true
+            if (--budget <= 0) return false
+            val id = remaining.minBy { options(it).size }
+            val targets = options(id)
+            if (targets.isEmpty()) return false
+            remaining = remaining - id
+            val equivalentDesks = mutableSetOf<Triple<Int, Int, Set<String>>>()
+            for (index in targets) {
+                val desk = layout[index]
+                if (!equivalentDesks.add(Triple(desk.row, desk.seats, members[index].toSet()))) continue
+                members[index].add(id)
+                if (search()) return true
+                members[index].removeAt(members[index].lastIndex)
             }
-        } == true
-        stillCoolingDown && record.deskAssignments[studentId]?.first?.let { it <= MAX_PRIORITY_ROW } == true
+            remaining = remaining + id
+            return false
+        }
+        require(search()) {
+            "Non è stata trovata una disposizione che rispetti rotazione e coppie vietate. " +
+                "Modifica i banchi o le preferenze e riprova."
+        }
+        return layout.mapIndexed { index, desk -> desk.copy(
+            studentAId = members[index].getOrNull(0), studentBId = members[index].getOrNull(1),
+            studentCId = members[index].getOrNull(2)
+        ) }
     }
 
     // -----------------------------------------------------------------------------------------
@@ -980,6 +1022,21 @@ object SeatMapOptimizer {
         rowSeats.flatMapIndexed { row, seats ->
             partitionRow(seats, preferred).mapIndexed { column, size -> DeskSlot(row, column, size) }
         }
+
+    /** Griglia esplicita: zero indica una posizione senza banco. */
+    fun rectangularDeskSlots(rowSeats: List<Int>, preferred: Int): List<DeskSlot> {
+        val occupied = fullDeskSlots(rowSeats, preferred)
+        val columns = (occupied.maxOfOrNull { it.column } ?: 0) + 1
+        return resizeDeskSlots(occupied, rowSeats.size, columns, preferred)
+    }
+
+    fun resizeDeskSlots(slots: List<DeskSlot>, rows: Int, columns: Int, preferred: Int): List<DeskSlot> {
+        val oldRows = (slots.maxOfOrNull { it.row } ?: -1) + 1
+        val byPosition = slots.associateBy { it.row to it.column }
+        return (0 until rows).flatMap { row -> (0 until columns).map { column ->
+            byPosition[row to column] ?: DeskSlot(row, column, if (row >= oldRows) preferred else 0)
+        } }
+    }
 
     /**
      * Scambia due banchi INTERI (fra essi anche banchi vuoti: trascinare un banco pieno sul posto

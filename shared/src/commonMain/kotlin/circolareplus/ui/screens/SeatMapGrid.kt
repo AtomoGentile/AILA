@@ -31,13 +31,11 @@ typealias DeskCell = IndexedValue<DeskAssignment>?
  */
 fun deskGridCells(assignments: List<DeskAssignment>): Pair<Int, List<DeskCell>> {
     if (assignments.isEmpty()) return 1 to emptyList()
-    val rows = assignments.withIndex().groupBy { it.value.row }.toList().sortedBy { it.first }.toMap()
-    val columns = rows.values.maxOf { it.size }.coerceAtLeast(1)
-    val cells = mutableListOf<DeskCell>()
-    for ((_, desks) in rows) {
-        val ordered = desks.sortedBy { it.value.column }
-        cells.addAll(ordered)
-        repeat(columns - ordered.size) { cells.add(null) }
+    val columns = ((assignments.maxOfOrNull { it.column } ?: 0) + 1).coerceAtLeast(1)
+    val rowCount = ((assignments.maxOfOrNull { it.row } ?: 0) + 1).coerceAtLeast(1)
+    val positions = assignments.withIndex().associateBy { it.value.row to it.value.column }
+    val cells = (0 until rowCount).flatMap { row ->
+        (0 until columns).map { column -> positions[row to column] }
     }
     return columns to cells
 }

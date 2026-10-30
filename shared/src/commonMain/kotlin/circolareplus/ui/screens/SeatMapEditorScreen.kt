@@ -5,6 +5,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
+import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.drag
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -23,6 +27,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -41,7 +46,7 @@ import circolareplus.design.ailaDeskLabel
 import circolareplus.design.ailaDeskBadge
 import circolareplus.domain.model.SocialPreferenceScore
 import circolareplus.domain.model.User
-import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.delay
 
 /** Riferimento a un posto selezionato nell'editor: indice del banco + indice del posto (0=A,
  * 1=B, 2=C — quest'ultimo solo per i banchi da trio). */
@@ -49,7 +54,7 @@ private data class EditableSeatRef(val deskIndex: Int, val seatIndex: Int)
 
 /** Bordo di un banco nella griglia, in coordinate schermo: serve a individuare il banco sotto
  * il dito durante un trascinamento (long-press) fra banchi. */
-private data class DeskBounds(val position: Offset, val size: androidx.compose.ui.unit.IntSize) {
+internal data class DeskBounds(val position: Offset, val size: androidx.compose.ui.unit.IntSize) {
     val center: Offset
         get() = Offset(position.x + size.width / 2f, position.y + size.height / 2f)
 }
@@ -82,12 +87,19 @@ fun SeatMapEditorScreen(
     // Modalità scelta per QUESTA generazione (coppia o trio), come in SeatMapProposalsScreen:
     // dedurla dai dati (nessun banco con un terzo occupante -> "coppie") faceva sparire il terzo
     // posto anche in modalità trio quando la classe è piccola o i trii vengono spezzati dai vincoli.
-    seatsPerDesk: Int = SeatMapOptimizer.SEATS_PER_DESK_PAIR
+    seatsPerDesk: Int = SeatMapOptimizer.SEATS_PER_DESK_PAIR,
+    rotationWarning: String? = null
 ) {
     var selectedSeat by remember { mutableStateOf<EditableSeatRef?>(null) }
     var selectedDeskForMove by remember { mutableStateOf<Int?>(null) }
     val (deskColumns, deskCells) = remember(assignments) { deskGridCells(assignments) }
     val gridState = rememberLazyGridState()
+    val density = LocalDensity.current
+    var screenOrigin by remember { mutableStateOf(Offset.Zero) }
+    var gridBounds by remember { mutableStateOf<DeskBounds?>(null) }
+    var dragStartPointer by remember { mutableStateOf(Offset.Zero) }
+    var dragPointer by remember { mutableStateOf(Offset.Zero) }
+    var dragSourceBounds by remember { mutableStateOf<DeskBounds?>(null) }
 
     // --- Stato del drag&drop dei banchi --------------------------------------------------
     // Banco in trascinamento e banco evidenziato come bersaglio: gli indici sono deskIndex
@@ -115,10 +127,13 @@ fun SeatMapEditorScreen(
     }
 
     // --- Presa di trascinamento dei banchi ------------------------------------------------
-    fun startGripDrag(from: Int) {
+    fun startGripDrag(from: Int, pointer: Offset) {
         selectedDeskForMove = null
         selectedSeat = null
         if (draggingDeskIndex == null) {
+            dragStartPointer = pointer
+            dragPointer = pointer
+            dragSourceBounds = deskBounds[from]
             draggingDeskIndex = from
             hoveredDeskIndex = null
         }
@@ -128,11 +143,13 @@ fun SeatMapEditorScreen(
     // coordinate root (posizione della presa + offset locale dell'evento).
     fun dragGripFrom(deskIndex: Int, pointerInRoot: Offset) {
         if (draggingDeskIndex == deskIndex) {
+            dragPointer = pointerInRoot
             hoveredDeskIndex = deskIndexUnderPointer(
                 pointerInRoot = pointerInRoot,
                 deskBounds = deskBounds,
                 visibleCellIndexes = gridState.layoutInfo.visibleItemsInfo.map { it.index },
-                cells = deskCells
+                cells = deskCells,
+                tolerance = with(density) { 12.dp.toPx() }
             )
         }
     }
@@ -155,6 +172,33 @@ fun SeatMapEditorScreen(
         }
     }
 
+    fun cancelDeskDrag() {
+        draggingDeskIndex = null
+        hoveredDeskIndex = null
+        selectedDeskForMove = null
+    }
+
+    LaunchedEffect(draggingDeskIndex) {
+        val from = draggingDeskIndex ?: return@LaunchedEffect
+        while (draggingDeskIndex == from) {
+            val bounds = gridBounds
+            if (bounds != null) {
+                val edge = with(density) { 48.dp.toPx() }
+                val y = dragPointer.y - bounds.position.y
+                val speed = when {
+                    y < edge -> -((edge - y) / edge).coerceIn(0f, 1f)
+                    y > bounds.size.height - edge -> ((y - bounds.size.height + edge) / edge).coerceIn(0f, 1f)
+                    else -> 0f
+                }
+                if (speed != 0f) {
+                    gridState.scrollBy(speed * with(density) { 12.dp.toPx() })
+                    dragGripFrom(from, dragPointer)
+                }
+            }
+            delay(16)
+        }
+    }
+
     // Uno scambio può cambiare la composizione dei banchi: se la selezione punta a un indice
     // ormai fuori range, la si azzera invece di lasciarla puntare a un posto inesistente. Stessa
     // ragione per il drag in corso: se la lista cambia a trascinamento avviato, si resetta.
@@ -163,11 +207,10 @@ fun SeatMapEditorScreen(
         if (seat != null && seat.deskIndex >= assignments.size) {
             selectedSeat = null
         }
-        draggingDeskIndex = null
-        hoveredDeskIndex = null
-        selectedDeskForMove = null
+        cancelDeskDrag()
     }
 
+    Box(modifier = Modifier.fillMaxSize().onGloballyPositioned { screenOrigin = it.positionInRoot() }) {
     Column(modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
         AilaCard(
             containerColor = if (AppTheme.isGlass) AppTheme.CardSurface else AppTheme.SurfaceWhite,
@@ -216,17 +259,23 @@ fun SeatMapEditorScreen(
                     compact = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                rotationWarning?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = AppTheme.PollDarkRed,
+                        modifier = Modifier.padding(top = AppTheme.Space8))
+                }
                 Spacer(modifier = Modifier.height(AppTheme.Space8))
                 AilaPrimaryButton(
                     text = "Pubblica questa disposizione",
                     onClick = onPublish,
                     fillMaxWidth = true,
-                    enabled = !isPublishing
+                    enabled = !isPublishing && rotationWarning == null
                 )
             }
         }
 
         LazyVerticalGrid(
+            state = gridState,
+            userScrollEnabled = draggingDeskIndex == null,
             columns = GridCells.Fixed(deskColumns),
             horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12),
             verticalArrangement = Arrangement.spacedBy(AppTheme.Space12),
@@ -236,8 +285,18 @@ fun SeatMapEditorScreen(
                 bottom = AppTheme.Space32
             ),
             modifier = Modifier.fillMaxSize()
+                .onGloballyPositioned { gridBounds = DeskBounds(it.positionInRoot(), it.size) }
+                .seatMapDragInput(
+                    origin = { gridBounds?.position ?: screenOrigin },
+                    deskAt = { point -> deskIndexUnderPointer(point, deskBounds,
+                        gridState.layoutInfo.visibleItemsInfo.map { it.index }, deskCells, 0f) },
+                    onStart = { index, point -> startGripDrag(index, point) },
+                    onDrag = { index, point -> dragGripFrom(index, point) },
+                    onEnd = { index -> endGripDrag(index) },
+                    onCancel = { cancelDeskDrag() }
+                )
         ) {
-            items(count = deskCells.size) { cellIndex ->
+            items(count = deskCells.size, key = { "cell_$it" }) { cellIndex ->
                 val cell = deskCells[cellIndex]
                 if (cell == null) {
                     Spacer(modifier = Modifier)
@@ -272,8 +331,8 @@ fun SeatMapEditorScreen(
                     // Card "sollevata" (v1.1.6): sopra le altre card (zIndex) e con ombra, oltre
                     // a scala/trasparenza come prima (pattern di RankingPollsScreen).
                     isDragged -> Modifier.zIndex(1f).graphicsLayer {
-                        alpha = 0.55f
-                        scaleX = 1.03f; scaleY = 1.03f
+                        alpha = 0.35f
+                        scaleX = 1f; scaleY = 1f
                         shadowElevation = 8.dp.toPx()
                         shape = deskShape
                         clip = true
@@ -288,14 +347,7 @@ fun SeatMapEditorScreen(
                     // presa sta SOPRA lo slot (VacantDeskSlot resta com'e', sta in SeatMapGrid):
                     // un Box esterno porta bounds/drag/feedback senza cambiarne il layout.
                     Box(
-                        modifier = boundsModifier
-                            .seatMapDragInput(
-                                deskIndex = deskIndex,
-                                deskBounds = deskBounds,
-                                onStart = { startGripDrag(deskIndex) },
-                                onDrag = { pointerInRoot -> dragGripFrom(deskIndex, pointerInRoot) },
-                                onEnd = { endGripDrag(deskIndex) }
-                            )
+                        modifier = boundsModifier.fillMaxWidth().heightIn(min = 152.dp)
                             .then(dragVisualModifier)
                     ) {
                         VacantDeskSlot(
@@ -329,13 +381,6 @@ fun SeatMapEditorScreen(
                         .then(if (isForbidden) Modifier.border(2.dp, AppTheme.PollDarkRed, deskShape) else Modifier)
                     else Modifier)
                         .then(boundsModifier)
-                        .seatMapDragInput(
-                            deskIndex = deskIndex,
-                            deskBounds = deskBounds,
-                            onStart = { startGripDrag(deskIndex) },
-                            onDrag = { pointerInRoot -> dragGripFrom(deskIndex, pointerInRoot) },
-                            onEnd = { endGripDrag(deskIndex) }
-                        )
                         .then(dragVisualModifier)
                 ) {
                     Column(
@@ -346,12 +391,12 @@ fun SeatMapEditorScreen(
                         // mentre l'icona di trascinamento rimane allineata a destra.
                         Box(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), contentAlignment = Alignment.Center) {
                             Text(
-                                text = "Banco F${desk.row + 1}C${desk.column + 1}",
+                                text = "F${desk.row + 1} · C${desk.column + 1}",
                                 style = MaterialTheme.typography.ailaDeskLabel,
                                 color = AppTheme.TextMuted,
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                 maxLines = 1,
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 48.dp)
+                                modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 36.dp)
                             )
                             DeskGripHandle(
                                 modifier = Modifier.matchParentSize(),
@@ -415,6 +460,17 @@ fun SeatMapEditorScreen(
             }
         }
     }
+    val source = draggingDeskIndex?.let { assignments.getOrNull(it) }
+    val bounds = dragSourceBounds
+    if (source != null && bounds != null) {
+        val offset = bounds.position - screenOrigin + (dragPointer - dragStartPointer)
+        Box(modifier = Modifier.width(with(density) { bounds.size.width.toDp() }).zIndex(10f)
+            .graphicsLayer { translationX = offset.x; translationY = offset.y; alpha = 0.95f; shadowElevation = 10.dp.toPx() }) {
+            if (source.isVacantDesk) VacantDeskSlot(source)
+            else SeatMapDeskCard(source, studentsMap, showThirdSeat = source.hasThirdSeat)
+        }
+    }
+    }
 }
 
 /**
@@ -445,19 +501,20 @@ private fun handleSeatTap(
  * dito che sfiora il bordo fra due banchi ottiene comunque un bersaglio stabile.
  * Banchi fuori schermo (bordi stanti o ignoti) non sono bersagli.
  */
-private fun deskIndexUnderPointer(
+internal fun deskIndexUnderPointer(
     pointerInRoot: Offset,
     deskBounds: Map<Int, DeskBounds>,
     visibleCellIndexes: List<Int>,
-    cells: List<DeskCell>
+    cells: List<DeskCell>,
+    tolerance: Float
 ): Int? {
     var best: Pair<Float, Int>? = null
-    val maxDistanceSq = 250f * 250f
     for (cellIndex in visibleCellIndexes) {
         val deskIndex = cells.getOrNull(cellIndex)?.index ?: continue
         val bounds = deskBounds[deskIndex] ?: continue
         val distance = (bounds.center - pointerInRoot).getDistanceSquared()
-        if (distance <= maxDistanceSq) {
+        if (pointerInRoot.x in (bounds.position.x - tolerance)..(bounds.position.x + bounds.size.width + tolerance) &&
+            pointerInRoot.y in (bounds.position.y - tolerance)..(bounds.position.y + bounds.size.height + tolerance)) {
             if (best == null || distance < best.first) best = distance to deskIndex
         }
     }
@@ -486,74 +543,38 @@ private fun SeatSlotLabel(name: String?, isSelected: Boolean, onClick: () -> Uni
 
 /** Gesto sulla superficie del banco: press-and-drag touch, drag immediato con mouse. */
 private fun Modifier.seatMapDragInput(
-    deskIndex: Int,
-    deskBounds: Map<Int, DeskBounds>,
-    onStart: () -> Unit,
-    onDrag: (pointerInRoot: Offset) -> Unit,
-    onEnd: () -> Unit
-): Modifier = pointerInput(deskIndex) {
+    origin: () -> Offset,
+    deskAt: (Offset) -> Int?,
+    onStart: (Int, Offset) -> Unit,
+    onDrag: (Int, Offset) -> Unit,
+    onEnd: (Int) -> Unit,
+    onCancel: () -> Unit
+): Modifier = pointerInput(Unit) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
-        var dragActive = false
-        val originAtStart = deskBounds[deskIndex]?.position ?: Offset.Zero
-
+        val downInRoot = origin() + down.position
+        val deskIndex = deskAt(downInRoot) ?: return@awaitEachGesture
+        var active = false
+        var ended = false
         try {
-            if (down.type == PointerType.Mouse) {
-                while (true) {
-                    val event = awaitPointerEvent()
-                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                    if (!change.pressed) break
-                    val dist = (change.position - down.position).getDistance()
-                    if (dist >= viewConfiguration.touchSlop) {
-                        change.consume()
-                        onStart()
-                        dragActive = true
-                        val currentOrigin = deskBounds[deskIndex]?.position ?: originAtStart
-                        onDrag(currentOrigin + change.position)
-                        break
-                    }
-                }
+            val recognized = if (down.type == PointerType.Mouse) {
+                awaitTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
             } else {
-                val longPressRecognized = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id }
-                        if (change == null || !change.pressed ||
-                            (change.position - down.position).getDistance() > viewConfiguration.touchSlop
-                        ) return@withTimeoutOrNull false
-                    }
-                    @Suppress("UNREACHABLE_CODE")
-                    false
-                } == null
-
-                if (longPressRecognized) {
-                    onStart()
-                    dragActive = true
-                    val currentOrigin = deskBounds[deskIndex]?.position ?: originAtStart
-                    onDrag(currentOrigin + down.position)
-                }
+                awaitLongPressOrCancellation(down.id)
             }
-
-            while (dragActive) {
-                val event = awaitPointerEvent()
-                val change = event.changes.firstOrNull { it.id == down.id }
-                if (change == null || !change.pressed) {
-                    if (change != null) {
-                        change.consume()
-                        val currentOrigin = deskBounds[deskIndex]?.position ?: originAtStart
-                        onDrag(currentOrigin + change.position)
-                    }
-                    break
-                } else {
+            if (recognized != null) {
+                active = true
+                onStart(deskIndex, downInRoot)
+                onDrag(deskIndex, origin() + recognized.position)
+                ended = drag(recognized.id) { change ->
                     change.consume()
-                    val currentOrigin = deskBounds[deskIndex]?.position ?: originAtStart
-                    onDrag(currentOrigin + change.position)
+                    onDrag(deskIndex, origin() + change.position)
                 }
+                currentEvent.changes.filter { !it.pressed }.forEach { it.consume() }
             }
         } finally {
-            if (dragActive) {
-                dragActive = false
-                onEnd()
+            if (active) {
+                if (ended) onEnd(deskIndex) else onCancel()
             }
         }
     }

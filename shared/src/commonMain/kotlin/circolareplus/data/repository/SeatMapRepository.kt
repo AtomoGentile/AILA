@@ -46,7 +46,7 @@ class SeatMapRepository(private val api: ApiClient? = null) {
         return response.seatMap?.let { apiJson.decodeFromJsonElement<List<DeskAssignment>>(it.layout) }
     }
 
-    /** Storico regressivo (max 4 mappe) usato da [SeatMapOptimizer.calculateMemoryPenalty]. Un
+    /** Storico regressivo (almeno 4 mappe e gli ultimi 12 mesi) usato da [SeatMapOptimizer.calculateMemoryPenalty]. Un
      * banco da trio genera tutte e tre le coppie possibili (A-B, A-C, B-C): sono tre fatti
      * storici distinti ("erano insieme"), coerenti con come SeatMapOptimizer li ricontrolla uno
      * per uno per i banchi futuri — vedi il commento su SeatMapOptimizer.pairRepeatPenalty. */
@@ -127,15 +127,18 @@ class SeatMapRepository(private val api: ApiClient? = null) {
         // Coppie da separare per disciplina (Scheda Classe): penalizzate, non vietate.
         disciplinePairs: Set<Pair<String, String>> = emptySet(),
         // Posti di ogni fila (da davanti a dietro), es. [7, 8, 7]. Vuoto = disposizione automatica.
-        rowSeats: List<Int> = emptyList()
+        rowSeats: List<Int> = emptyList(),
+        customDeskSlots: List<SeatMapOptimizer.DeskSlot>? = null
     ): List<SeatMapProposal> {
-        val slots = if (rowSeats.isEmpty()) null else SeatMapOptimizer.buildDeskSlots(rowSeats, seatsPerDesk, students.size)
+        val slots = customDeskSlots?.filter { it.seats > 0 }
+            ?: if (rowSeats.isEmpty()) null else SeatMapOptimizer.buildDeskSlots(rowSeats, seatsPerDesk, students.size)
+        require(slots == null || slots.sumOf { it.seats } >= students.size) { "Posti insufficienti per gli studenti della classe" }
         val isSmallClass = students.size < 22
         val baseSeed = kotlin.random.Random.nextLong()
 
         val proposals = (1..3).map { i ->
             val seed = baseSeed + i
-            val assignments = SeatMapOptimizer.optimize(
+            val generated = SeatMapOptimizer.optimize(
                 students = students,
                 profiles = profiles,
                 ratings = ratings,
@@ -148,6 +151,7 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                 disciplinePairs = disciplinePairs,
                 slots = slots
             )
+            val assignments = if (customDeskSlots != null) SeatMapOptimizer.withVacantDesks(generated, customDeskSlots) else generated
             val breakdown = SeatMapOptimizer.scoreLayout(
                 assignments = assignments,
                 profiles = profiles,

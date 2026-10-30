@@ -435,7 +435,7 @@ fun SettingsScreen(
                             val providerLabels = buildList {
                                 add("AILA")
                                 add("API")
-                                if (localCanBeSelected) add("AI locale")
+                                if (localCanBeSelected) add("Locale")
                             }
                             AilaSegmentedTabs(
                                 labels = providerLabels,

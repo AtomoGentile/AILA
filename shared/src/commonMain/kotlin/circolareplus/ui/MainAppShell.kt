@@ -3214,7 +3214,7 @@ fun MainAppShell(
                                                         }
                                                     }
                                                 },
-                                                onGenerateProposals = { weights, seatsPerDesk, rowSeats ->
+                                                onGenerateProposals = { weights, seatsPerDesk, rowSeats, customDeskSlots ->
                                                     coroutineScope.launch {
                                                         // Porta nel generatore con una bozza in sospeso (generate e
                                                         // non pubblicate, v1.1.6): invece di ricalcolare si ripristina
@@ -3230,7 +3230,7 @@ fun MainAppShell(
                                                         // Griglia COMPLETA scelta (v1.1.6, layout personalizzato):
                                                         // serve all'editor per materializzare i banchi vuoti in
                                                         // surplus con withVacantDesks. Layout automatico: vuoto.
-                                                        lastRequestedDeskSlots = if (rowSeats.isEmpty()) emptyList()
+                                                        lastRequestedDeskSlots = customDeskSlots ?: if (rowSeats.isEmpty()) emptyList()
                                                         else SeatMapOptimizer.fullDeskSlots(rowSeats, seatsPerDesk)
                                                         try {
                                                             val disciplinePairsDeferred = async {
@@ -3288,7 +3288,8 @@ fun MainAppShell(
                                                                     weights = weights,
                                                                     seatsPerDesk = seatsPerDesk,
                                                                     disciplinePairs = disciplinePairs,
-                                                                    rowSeats = rowSeats
+                                                                    rowSeats = rowSeats,
+                                                                    customDeskSlots = customDeskSlots
                                                                 )
                                                             }
                                                             // La pagina delle proposte si apre dal pulsante "Calcola":
@@ -4712,7 +4713,14 @@ fun MainAppShell(
                     // slot vuoti -> disposizioni identiche (nessun banco fantasma).
                     val currentAssignments = SeatMapOptimizer.withVacantDesks(
                         editingSeatMapProposal ?: lastEditorAssignments[0],
-                        lastRequestedDeskSlots
+                        lastRequestedDeskSlots.ifEmpty {
+                            val layout = editingSeatMapProposal ?: lastEditorAssignments[0]
+                            val columns = (layout.maxOfOrNull { it.column } ?: 0) + 1
+                            val rows = (layout.maxOfOrNull { it.row } ?: 0) + 1
+                            (0 until rows).flatMap { row -> (0 until columns).map { column ->
+                                SeatMapOptimizer.DeskSlot(row, column, 0)
+                            } }
+                        }
                     )
                     // La bozza in sospeso segue l'editing (v1.1.6): ogni scambio o ripristino aggiorna
                     // la proposta scelta DENTRO la bozza salvata, cosi' rientrando in app la si
@@ -4764,6 +4772,15 @@ fun MainAppShell(
                             seatMapDummies.associateBy { it.id }.mapValues { it.value.asUser() }
                     }
 
+                    val rowRotationViolations = remember(currentAssignments, seatMapOptimizerProfiles, seatMapOptimizerHistory) {
+                        SeatMapOptimizer.rowRotationViolations(currentAssignments, seatMapOptimizerProfiles, seatMapOptimizerHistory)
+                    }
+                    val rotationWarning = rowRotationViolations.takeIf { it.isNotEmpty() }?.let { ids ->
+                        "Rotazione delle file non rispettata: " + ids.joinToString(", ") { id ->
+                            editorStudentsMap[id]?.let { "${it.firstName} ${it.lastName}" } ?: id
+                        } + ". Sposta questi studenti in una fila consentita prima di pubblicare."
+                    }
+
                     Column(modifier = Modifier.fillMaxSize()) {
                         ScreenBackBar(
                             title = "Modifica disposizione",
@@ -4779,6 +4796,7 @@ fun MainAppShell(
                             breakdown = editorBreakdown,
                             satisfaction = editorSatisfaction,
                             seatsPerDesk = lastRequestedSeatsPerDesk,
+                            rotationWarning = rotationWarning,
                             isPublishing = isGeneratingProposals,
                             onSwapSeats = { deskIndex1, seatIndex1, deskIndex2, seatIndex2 ->
                                 editingSeatMapProposal = SeatMapOptimizer.swapSeats(
@@ -4805,6 +4823,10 @@ fun MainAppShell(
                             },
                             onPublish = {
                                 coroutineScope.launch {
+                                    if (rotationWarning != null) {
+                                        seatMapActionError = rotationWarning
+                                        return@launch
+                                    }
                                     isGeneratingProposals = true
                                     try {
                                         AppContainer.seatMapRepository.publish(currentAssignments)

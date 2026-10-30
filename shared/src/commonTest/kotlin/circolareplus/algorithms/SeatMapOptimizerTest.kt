@@ -8,28 +8,75 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
 
 class SeatMapOptimizerTest {
 
     @Test
-    fun priorityCooldownExpiresAfterThreeCalendarMonthsIncludingMonthEnd() {
-        val profiles = mapOf("s1" to StudentProfile(userId = "s1", heightCm = 170, priorityPass = true))
-        val history = listOf(SeatMapHistoryRecord(1, emptySet(), mapOf("s1" to (2 to 0)), "2026-08-31T10:00:00Z"))
-        assertTrue(SeatMapOptimizer.isPriorityPassCooldownActive("s1", profiles, history, "2026-11-29"))
-        assertEquals(false, SeatMapOptimizer.isPriorityPassCooldownActive("s1", profiles, history, "2026-11-30"))
-        assertEquals(false, SeatMapOptimizer.isPriorityPassCooldownActive("s1", profiles, history, "2026-12-01"))
+    fun fourRowsRotateThroughOtherRowsBeforeReturningInFourthMonth() {
+        val history = listOf(SeatMapHistoryRecord(1, emptySet(), mapOf("s1" to (0 to 0)), "2026-10-30"))
+        assertEquals(setOf(1, 2, 3), SeatMapOptimizer.allowedRowsForStudent("s1", emptyMap(), history, 4, "2027-01-31"))
+        assertEquals(setOf(0, 1, 2, 3), SeatMapOptimizer.allowedRowsForStudent("s1", emptyMap(), history, 4, "2027-02-01"))
     }
 
     @Test
-    fun optimizerKeepsRecentPriorityPassOccupantsBehindThirdRow() {
-        val students = (1..22).map { User("s$it", "Nome", "$it", "s$it") }
-        val profiles = mapOf("s1" to StudentProfile(userId = "s1", heightCm = 170, priorityPass = true))
-        val history = listOf(SeatMapHistoryRecord(1, emptySet(), mapOf("s1" to (0 to 0)), circolareplus.util.today().toIso()))
-        for (seed in 1L..5L) {
-            val result = SeatMapOptimizer.optimize(students, profiles, emptyMap(), emptyMap(), history,
-                OptimizerWeights(), false, seed, maxIterations = 100)
-            assertTrue(result.first { it.studentAId == "s1" || it.studentBId == "s1" }.row > 2)
+    fun priorityPassRotatesOnlyThroughFirstThreeRows() {
+        val profiles = mapOf("s1" to StudentProfile("s1", 170, priorityPass = true))
+        val history = listOf(
+            SeatMapHistoryRecord(2, emptySet(), mapOf("s1" to (0 to 0)), "2026-08-31"),
+            SeatMapHistoryRecord(1, emptySet(), mapOf("s1" to (1 to 0)), "2026-09-30")
+        )
+        assertEquals(setOf(2), SeatMapOptimizer.allowedRowsForStudent("s1", profiles, history, 4, "2026-10-01"))
+        assertEquals(setOf(0, 2), SeatMapOptimizer.allowedRowsForStudent("s1", profiles, history, 4, "2026-11-01"))
+        assertEquals(setOf(0, 1, 2), SeatMapOptimizer.allowedRowsForStudent("s1", profiles, history, 4, "2026-12-01"))
+    }
+
+    @Test
+    fun optimizerHonorsFourMonthCycleForEveryStudentAcrossSeeds() {
+        val students = (0 until 8).map { User("s$it", "Nome", "$it", "s$it") }
+        val now = circolareplus.util.today()
+        val history = (1..3).map { ago ->
+            val month = now.year * 12 + now.month - 1 - ago
+            SeatMapHistoryRecord(ago, emptySet(), students.mapIndexed { index, student ->
+                student.id to ((index + ago) % 4 to 0)
+            }.toMap(), circolareplus.util.CivilDate(month / 12, month % 12 + 1, 1).toIso())
         }
+        val slots = (0..3).map { SeatMapOptimizer.DeskSlot(it, 0, 2) }
+        for (seed in 1L..5L) {
+            val result = SeatMapOptimizer.optimize(students, emptyMap(), emptyMap(), emptyMap(), history,
+                OptimizerWeights(), true, seed, maxIterations = 60, slots = slots)
+            result.forEach { desk -> listOfNotNull(desk.studentAId, desk.studentBId).forEach {
+                assertEquals(it.removePrefix("s").toInt() % 4, desk.row)
+            } }
+            assertEquals(8, result.sumOf { listOfNotNull(it.studentAId, it.studentBId).size })
+        }
+    }
+
+    @Test
+    fun reportsInsufficientRowCapacityWithoutBreakingRotation() {
+        val students = (0 until 8).map { User("s$it", "Nome", "$it", "s$it") }
+        val now = circolareplus.util.today()
+        val history = (1..3).map { ago ->
+            val month = now.year * 12 + now.month - 1 - ago
+            SeatMapHistoryRecord(ago, emptySet(), students.associate { it.id to (ago - 1 to 0) },
+                circolareplus.util.CivilDate(month / 12, month % 12 + 1, 1).toIso())
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SeatMapOptimizer.optimize(students, emptyMap(), emptyMap(), emptyMap(), history,
+                OptimizerWeights(), true, 1L, slots = (0..3).map { SeatMapOptimizer.DeskSlot(it, 0, 2) })
+        }
+    }
+
+    @Test
+    fun wholeDeskMovesToHoleWithItsOccupantsAndCapacity() {
+        val layout = listOf(DeskAssignment(3, 0, "a", "b"), DeskAssignment(3, 1, null, null, seats = 0),
+            DeskAssignment(3, 2, "c", "d", "e", seats = 3))
+        val moved = SeatMapOptimizer.swapDesks(layout, 0, 1)
+        assertEquals(listOf("a", "b"), listOf(moved[1].studentAId, moved[1].studentBId))
+        assertEquals(2, moved[1].seats)
+        assertEquals(0, moved[0].seats)
+        assertEquals("e", moved[2].studentCId)
+        assertEquals(1, moved[1].column)
     }
 
     @Test

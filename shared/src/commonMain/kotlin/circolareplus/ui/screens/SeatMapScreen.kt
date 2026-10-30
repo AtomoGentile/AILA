@@ -75,7 +75,7 @@ fun SeatMapScreen(
     onAddDummy: (firstName: String, lastName: String) -> Unit = { _, _ -> },
     onDeleteDummy: (String) -> Unit = {},
     onTogglePreferencesWindow: (Boolean) -> Unit = {},
-    onGenerateProposals: (OptimizerWeights, seatsPerDesk: Int, rowSeats: List<Int>) -> Unit = { _, _, _ -> },
+    onGenerateProposals: (OptimizerWeights, seatsPerDesk: Int, rowSeats: List<Int>, deskSlots: List<SeatMapOptimizer.DeskSlot>?) -> Unit = { _, _, _, _ -> },
     /** Solo Rappresentante: azzera lo storico delle mappe pubblicate (rotta /api/seat-map/reset-history):
      *  le ultime 4 disposizioni smettono di pesare nella penalita' memoria dell'ottimizzatore. */
     onDeleteSeatMapHistory: () -> Unit = {},
@@ -137,8 +137,9 @@ fun SeatMapScreen(
     // ogni fila scelti dal Rappresentante (es. 8, 7, 7).
     val studentCount = studentsMap.size
     var customLayout by remember { mutableStateOf(false) }
-    var rowSeats by remember { mutableStateOf(defaultRowSeats(studentCount)) }
-    var rowsEdited by remember { mutableStateOf(false) }
+    var customDeskSlots by remember(studentCount, seatsPerDesk) {
+        mutableStateOf(SeatMapOptimizer.rectangularDeskSlots(defaultRowSeats(studentCount), seatsPerDesk))
+    }
     // Conferma "Elimina storico mappe": e' un'azione che cambia il comportamento
     // dell'algoritmo per tutti, non se ne perde per un tocco di troppo.
     var showResetHistoryConfirm by remember { mutableStateOf(false) }
@@ -422,21 +423,16 @@ fun SeatMapScreen(
                         selectedIndex = if (customLayout) 1 else 0,
                         onSelect = {
                             customLayout = it == 1
-                            // Gli iscritti possono arrivare dopo il primo disegno: i valori proposti si
-                            // ricalcolano finche' non li si e' toccati a mano.
-                            if (customLayout && !rowsEdited) rowSeats = defaultRowSeats(studentCount)
                         },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    val layoutOk = !customLayout || (rowSeats.sum() >= studentCount && rowSeats.all { it >= 2 })
+                    val layoutOk = !customLayout || (customDeskSlots.sumOf { it.seats } >= studentCount &&
+                        customDeskSlots.groupBy { it.row }.values.all { row -> row.any { it.seats > 0 } })
                     if (customLayout) {
                         Spacer(modifier = Modifier.height(AppTheme.Space8))
-                        RowSeatsEditor(
-                            rowSeats = rowSeats,
-                            onChange = {
-                                rowsEdited = true
-                                rowSeats = it
-                            },
+                        DeskPositionsEditor(
+                            slots = customDeskSlots,
+                            onChange = { customDeskSlots = it },
                             studentCount = studentCount,
                             preferredDeskSeats = seatsPerDesk
                         )
@@ -470,7 +466,8 @@ fun SeatMapScreen(
                                     wDidactic = wDidactic.toDouble()
                                 ),
                                 seatsPerDesk,
-                                if (customLayout) rowSeats else emptyList()
+                                if (customLayout) customDeskSlots.groupBy { it.row }.entries.sortedBy { it.key }.map { entry -> entry.value.sumOf { it.seats } } else emptyList(),
+                                if (customLayout) customDeskSlots else null
                             )
                         },
                         fillMaxWidth = true
@@ -956,47 +953,57 @@ internal fun defaultRowSeats(students: Int): List<Int> {
  * dei posti rispetto agli iscritti e come verranno formati i banchi di ogni fila (es. "3 + 2 + 2").
  */
 @Composable
-private fun RowSeatsEditor(
-    rowSeats: List<Int>,
-    onChange: (List<Int>) -> Unit,
+private fun DeskPositionsEditor(
+    slots: List<SeatMapOptimizer.DeskSlot>,
+    onChange: (List<SeatMapOptimizer.DeskSlot>) -> Unit,
     studentCount: Int,
     preferredDeskSeats: Int
 ) {
-    val capacity = rowSeats.sum()
-    Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space4)) {
-        Stepper(
-            label = "File",
-            value = rowSeats.size,
-            min = 1,
-            max = 10,
-            onValueChange = { rows ->
-                onChange(
-                    if (rows > rowSeats.size) rowSeats + List(rows - rowSeats.size) { rowSeats.lastOrNull() ?: 6 }
-                    else rowSeats.take(rows)
-                )
+    val rows = (slots.maxOfOrNull { it.row } ?: 0) + 1
+    val columns = (slots.maxOfOrNull { it.column } ?: 0) + 1
+    val capacity = slots.sumOf { it.seats }
+    Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+        Stepper("File", rows, 1, 10, { onChange(SeatMapOptimizer.resizeDeskSlots(slots, it, columns, preferredDeskSeats)) })
+        Stepper("Colonne", columns, 1, 8, { onChange(SeatMapOptimizer.resizeDeskSlots(slots, rows, it, preferredDeskSeats)) })
+        Text("Tocca una posizione per scegliere: coppia, trio o spazio libero. Gli spazi restano dove li metti.",
+            style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+        Text("Lavagna e cattedra", style = MaterialTheme.typography.labelLarge, color = AppTheme.PrimaryBlue,
+            modifier = Modifier.align(Alignment.CenterHorizontally))
+        repeat(rows) { row ->
+            Text("Fila ${row + 1}", style = MaterialTheme.typography.labelMedium, color = AppTheme.TextMuted)
+            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space4)) {
+                repeat(columns) { column ->
+                    val slot = slots.first { it.row == row && it.column == column }
+                    val label = when (slot.seats) { 2 -> "Coppia"; 3 -> "Trio"; else -> "Libero" }
+                    Box(
+                        modifier = Modifier.weight(1f).heightIn(min = 56.dp)
+                            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                            .background(if (slot.seats == 0) AppTheme.TintSlate else AppTheme.TintBlue)
+                            .clickable {
+                                val next = when (slot.seats) { 2 -> 3; 3 -> 0; else -> 2 }
+                                onChange(slots.map { if (it.row == row && it.column == column) it.copy(seats = next) else it })
+                            }
+                            .semantics { contentDescription = "Fila ${row + 1}, colonna ${column + 1}: $label. Tocca per cambiare." }
+                            .padding(AppTheme.Space4),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("C${column + 1}", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
+                            Text(label, style = MaterialTheme.typography.labelSmall, color = AppTheme.TextDark)
+                        }
+                    }
+                }
             }
-        )
-        rowSeats.forEachIndexed { index, seats ->
-            Stepper(
-                label = "Fila ${index + 1}",
-                value = seats,
-                min = 2,
-                max = 16,
-                suffix = SeatMapOptimizer.partitionRow(seats, preferredDeskSeats).joinToString(" + "),
-                onValueChange = { v -> onChange(rowSeats.toMutableList().also { it[index] = v }) }
-            )
         }
-        val ok = capacity >= studentCount
+        val valid = capacity >= studentCount && slots.groupBy { it.row }.values.all { row -> row.any { it.seats > 0 } }
         Text(
-            text = when {
-                capacity < studentCount -> "Posti: $capacity. Ne servono almeno $studentCount (ne mancano ${studentCount - capacity})"
-                capacity == studentCount -> "Posti: $capacity, esattamente gli iscritti"
-                else -> "Posti: $capacity, ${capacity - studentCount} resteranno vuoti"
+            when {
+                capacity < studentCount -> "Posti: $capacity su $studentCount necessari (ne mancano ${studentCount - capacity})."
+                !valid -> "Ogni fila deve contenere almeno un banco."
+                else -> "Posti: $capacity per $studentCount studenti. Gli eventuali posti in più resteranno vuoti."
             },
             style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = if (ok) AppTheme.TintGreenInk else AppTheme.PollDarkRed,
-            modifier = Modifier.padding(top = AppTheme.Space4)
+            color = if (valid) AppTheme.TintGreenInk else AppTheme.PollDarkRed
         )
     }
 }
