@@ -131,8 +131,10 @@
   }
 
   var pending = null;
+  var cancelArm = null;
 
   function arm(box) {
+    if (cancelArm) cancelArm();
     var el = getDecoy();
     if (!el.isConnected) document.body.appendChild(el);
     // Vicino al campo vero, cosi' iOS scorre la pagina come farebbe per quello.
@@ -145,24 +147,27 @@
     // Compose abbia creato e preso il fuoco sul campo nascosto. Se Compose non interviene entro
     // qualche secondo, l'appoggio si rimuove come fallback ma senza il timeout da 0,5s che
     // causava la chiusura immediata su login/registrazione.
-    var composeTookFocus = false;
     var rr = getRoot();
+    var timer;
+    function cleanup() {
+      clearTimeout(timer);
+      if (rr) rr.removeEventListener('focusin', onComposeFocus, true);
+      if (cancelArm === cleanup) cancelArm = null;
+    }
+    cancelArm = cleanup;
     function onComposeFocus() {
       var r = getRoot();
       if (r && isEditable(r.activeElement)) {
-        composeTookFocus = true;
-        if (document.activeElement === el) el.blur();
-        try { if (r && r.removeEventListener) r.removeEventListener('focusin', onComposeFocus, true); } catch (err) {}
+        cleanup();
       }
     }
     try { if (rr && rr.addEventListener) rr.addEventListener('focusin', onComposeFocus, true); } catch (err) {}
 
-    setTimeout(function () {
-      if (composeTookFocus) return;
+    timer = setTimeout(function () {
+      cleanup();
       if (document.activeElement !== el) return;
       var rr2 = getRoot();
       if (rr2 && isEditable(rr2.activeElement)) return;
-      try { if (rr2 && rr2.removeEventListener) rr2.removeEventListener('focusin', onComposeFocus, true); } catch (err) {}
       el.blur();
     }, 5000);
   }
@@ -178,12 +183,18 @@
     pending = null;
     if (!p || Date.now() - p.t > 800) return;
     if (e.cancelable) e.preventDefault();
+    if (cancelArm) cancelArm();
     var r = getRoot();
     var bk = r && r.querySelector('input, textarea');
     if (bk) {
       // Il campo nascosto di Compose esiste gia' (lo crea durante il pointerup): il fuoco lo si da'
       // qui, dentro il gesto. Le focus() successive di Compose vengono ignorate (vedi in cima).
-      if (r.activeElement === bk) bk.blur();
+      // Anche sul campo gia' attivo annulliamo gli eventi mouse di compatibilita':
+      // altrimenti il canvas puo' rubare il fuoco. Non fare blur(): Compose riceve
+      // focusout e puo' terminare la sessione di input al fotogramma successivo.
+      if (r.activeElement === bk && keyboardVisible()) return;
+      // Chiamata nativa dentro il gesto: consente di riaprire una tastiera chiusa
+      // manualmente anche se il campo risulta ancora attivo nel DOM.
       try { origFocus.call(bk, { preventScroll: true }); } catch (err) { origFocus.call(bk); }
       return;
     }
@@ -202,7 +213,13 @@
   }, { capture: true, passive: true });
 
   document.addEventListener('pointerdown', function (e) {
+    pending = null;
     down = e.pointerType === 'mouse' ? null : { x: e.clientX, y: e.clientY, t: Date.now() };
+  }, { capture: true, passive: true });
+
+  document.addEventListener('pointercancel', function () {
+    down = null;
+    pending = null;
   }, { capture: true, passive: true });
 
   document.addEventListener('pointerup', function (e) {
@@ -217,20 +234,8 @@
     var box = textboxAt(r, e.clientX, e.clientY);
     if (!box) return;
 
-    // Gia' in modifica proprio su questo campo (spostare il cursore): non si ruba il fuoco.
-    var active = r.activeElement;
-    if (isEditable(active)) {
-      var ar = active.getBoundingClientRect();
-      var cx = ar.left + ar.width / 2;
-      var cy = ar.top + ar.height / 2;
-      // Il campo nascosto di Compose sta dentro il campo vero: se il suo centro e' nel riquadro
-      // toccato, e' lo stesso campo (spostare il cursore) e non si ruba il fuoco.
-      if (contains(box, cx, cy, 2) || contains(ar, e.clientX, e.clientY, 2)) {
-        if (keyboardVisible()) return;
-        // Tastiera non visibile: si riprova ad aprirla (pending qui sotto).
-      }
-    }
-
+    // Serve anche a tastiera gia' aperta: touchend deve sempre proteggere il
+    // fuoco dagli eventi mouse di compatibilita' sui campi di testo.
     pending = { box: box, t: Date.now() };
   }, { capture: true, passive: true });
 })();
