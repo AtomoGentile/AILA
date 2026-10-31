@@ -40,3 +40,18 @@ Per provare senza toccare dati reali si può far girare il Worker in locale (`np
 Workflow `.github/workflows/web-deploy.yml`: su ogni push a `main` che tocca `shared/` o `webApp/` compila
 e pubblica su Cloudflare Pages; sulle pull request compila soltanto. Controlla che nessun file superi i
 25 MiB del limite di Pages.
+
+## Avvio e schermo blu
+
+La lettura della cache offline precede la UI. Apertura e lettura di IndexedDB hanno ciascuna un
+limite di 8 secondi: se il browser non risponde, l'app prosegue in memoria per quell'avvio, senza
+cancellare i dati persistenti. I documenti gia' salvati tornano disponibili quando una successiva
+apertura riesce a leggere il database.
+
+Se dopo 20 secondi lo splash e' ancora presente, lo script `startup.js` mostra un pulsante
+"Riprova". Non ricarica automaticamente e non cancella cache, sessione o documenti. Il timer
+funziona anche se WebAssembly non si avvia, purche' il browser esegua ancora JavaScript.
+
+Verifiche senza dipendenze: `node --test webApp/tests/*.test.cjs`. Su un dispositivo interessato
+dal blocco, verificare anche versione iOS, primo avvio online, avvio offline e riapertura dopo un
+aggiornamento. Il fallback non identifica da solo la causa di un errore del runtime.

@@ -26,8 +26,12 @@ actual object OfflineStore {
     suspend fun init() {
         requestPersistentStorage()
         val opened = idbOpen().await<JsAny?>() ?: return
+        val rows = idbReadAll(opened).await<JsAny?>()
+        if (rows == null) {
+            idbClose(opened)
+            return
+        }
         db = opened
-        val rows = idbReadAll(opened).await<JsAny?>() ?: return
         val count = rowCount(rows)
         for (i in 0 until count) {
             val name = rowName(rows, i)
@@ -68,21 +72,60 @@ actual object OfflineStore {
 // fanno con le origini "non persistenti"). La risposta non serve: se negata, restano valide le
 // regole di default.
 private fun requestPersistentStorage() {
-    js("try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}")
+    js("try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {}); } catch (e) {}")
 }
 
 private fun idbOpen(): Promise<JsAny?> = js(
-    "new Promise(function (res) { try { var r = indexedDB.open('aila-offline', 1); " +
-        "r.onupgradeneeded = function () { r.result.createObjectStore('files'); }; " +
-        "r.onsuccess = function () { res(r.result); }; r.onerror = function () { res(null); }; r.onblocked = function () { res(null); }; " +
-        "} catch (e) { res(null); } })"
+    """new Promise(function (res) {
+      var done = false;
+      function finish(value) {
+        if (done) { if (value) value.close(); return; }
+        done = true;
+        clearTimeout(timer);
+        res(value);
+      }
+      // Safari puo' lasciare la richiesta sospesa: la cache offline non deve bloccare la UI.
+      var timer = setTimeout(function () { finish(null); }, 8000);
+      try {
+        var r = indexedDB.open('aila-offline', 1);
+        r.onupgradeneeded = function () {
+          if (!r.result.objectStoreNames.contains('files')) r.result.createObjectStore('files');
+        };
+        r.onsuccess = function () { finish(r.result); };
+        r.onerror = r.onblocked = function () { finish(null); };
+      } catch (e) { finish(null); }
+    })"""
 )
 
 private fun idbReadAll(db: JsAny): Promise<JsAny?> = js(
-    "new Promise(function (res) { var out = []; try { var c = db.transaction('files', 'readonly').objectStore('files').openCursor(); " +
-        "c.onsuccess = function () { var cur = c.result; if (cur) { out.push([cur.key, cur.value]); cur.continue(); } else { res(out); } }; " +
-        "c.onerror = function () { res(out); }; } catch (e) { res(out); } })"
+    """new Promise(function (res) {
+      var out = [], tx, done = false;
+      function finish(value) {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        res(value);
+      }
+      var timer = setTimeout(function () {
+        finish(null);
+        try { if (tx) tx.abort(); } catch (e) {}
+      }, 8000);
+      try {
+        tx = db.transaction('files', 'readonly');
+        tx.oncomplete = function () { finish(out); };
+        tx.onerror = tx.onabort = function () { finish(null); };
+        var c = tx.objectStore('files').openCursor();
+        c.onsuccess = function () {
+          if (done) return;
+          var cur = c.result;
+          if (cur) { out.push([cur.key, cur.value]); cur.continue(); }
+        };
+        c.onerror = function () { finish(null); };
+      } catch (e) { finish(null); }
+    })"""
 )
+
+private fun idbClose(db: JsAny) { js("try { db.close(); } catch (e) {}") }
 
 private fun rowCount(rows: JsAny): Int = js("rows.length")
 

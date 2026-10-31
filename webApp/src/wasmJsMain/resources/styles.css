@@ -26,6 +26,7 @@ input, textarea, [contenteditable], [contenteditable] * {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-direction: column;
   background: #0F1535;
   color: #fff;
   font: 700 34px/1 system-ui, -apple-system, sans-serif;
@@ -34,3 +35,20 @@ input, textarea, [contenteditable], [contenteditable] * {
   transition: opacity 0.25s ease;
 }
 #aila-splash.done { opacity: 0; pointer-events: none; }
+#aila-splash.startup-slow { z-index: 2147483647; }
+#aila-startup-recovery {
+  max-width: 320px;
+  padding: 0 24px;
+  text-align: center;
+  font: 16px/1.5 system-ui, -apple-system, sans-serif;
+  letter-spacing: normal;
+}
+#aila-startup-retry {
+  border: 0;
+  border-radius: 12px;
+  padding: 12px 24px;
+  font: inherit;
+  background: #fff;
+  color: #16204A;
+  cursor: pointer;
+}

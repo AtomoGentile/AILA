@@ -16,12 +16,19 @@
     <meta name="format-detection" content="telephone=no" />
     <link rel="stylesheet" href="styles.css" />
     <script src="perf-debug.js"></script>
+    <script src="startup.js?v=1" defer></script>
     <script src="ios-keyboard.js?v=11" defer></script>
     <script src="aila.js" defer></script>
   </head>
   <body>
     <!-- Schermata di avvio: resta finche' Compose non disegna il primo fotogramma. -->
-    <div id="aila-splash"><div class="mark">AILA</div></div>
+    <div id="aila-splash">
+      <div class="mark">AILA</div>
+      <div id="aila-startup-recovery" role="status" hidden>
+        <p>L’avvio sta impiegando più del previsto. Controlla la connessione e riprova.</p>
+        <button id="aila-startup-retry" type="button">Riprova</button>
+      </div>
+    </div>
     <noscript>AILA ha bisogno di JavaScript.</noscript>
   </body>
 </html>

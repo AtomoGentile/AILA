@@ -29,6 +29,9 @@
 /perf-debug.js
   Cache-Control: no-cache
 
+/startup.js
+  Cache-Control: no-cache
+
 # Il service worker va sempre ricontrollato, altrimenti gli aggiornamenti tardano.
 /sw.js
   Cache-Control: no-cache

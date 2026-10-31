@@ -51,5 +51,5 @@ fun main() {
 private fun a11yRequested(): Boolean = js("window.__ailaA11y === true")
 
 private fun hideSplash() {
-    js("var s = document.getElementById('aila-splash'); if (s) { s.classList.add('done'); setTimeout(function () { s.remove(); }, 400); }")
+    js("if (window.__ailaStartupReady) window.__ailaStartupReady(); var s = document.getElementById('aila-splash'); if (s) { s.classList.add('done'); setTimeout(function () { s.remove(); }, 400); }")
 }
