@@ -101,6 +101,18 @@ class PollsRepository(private val api: ApiClient) {
     suspend fun previewAssignments(pollId: String, basis: String? = null): circolareplus.data.remote.dto.PollAssignmentPreviewDto =
         api.get("/api/polls/$pollId/assignments/preview?basis=${basis ?: "AUTO"}", offlineCopy = false)
 
+    suspend fun publishRevision(pollId: String, basis: String, revisionToken: String) {
+        api.post<circolareplus.data.remote.dto.PublishPollRevisionRequestDto, SuccessDto>(
+            "/api/polls/$pollId/assignments/revisions",
+            circolareplus.data.remote.dto.PublishPollRevisionRequestDto(basis, revisionToken))
+    }
+
+    suspend fun restoreRevision(pollId: String, revisionId: String, revisionToken: String) {
+        api.post<circolareplus.data.remote.dto.RestorePollRevisionRequestDto, SuccessDto>(
+            "/api/polls/$pollId/assignments/revisions/$revisionId/restore",
+            circolareplus.data.remote.dto.RestorePollRevisionRequestDto(revisionToken))
+    }
+
     /**
      * Fa girare l'algoritmo. Il server rifiuta con 409 finché non hanno inviato tutti e la
      * scadenza non è passata; [force] serve al Rappresentante per procedere lo stesso quando si

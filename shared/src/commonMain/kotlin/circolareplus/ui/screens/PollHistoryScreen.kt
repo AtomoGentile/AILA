@@ -54,6 +54,8 @@ fun PollHistoryScreen(
     calendarAddMessage: String? = null,
     calendarAddIsError: Boolean = false,
     onAddToCalendar: (PollSummaryDto, List<PollAssignmentDto>) -> Unit = { _, _ -> },
+    publishRevision: (suspend (String, circolareplus.data.remote.dto.PollAssignmentPreviewDto) -> Unit)? = null,
+    restoreRevision: (suspend (String, circolareplus.data.remote.dto.PollAssignmentPreviewDto) -> Unit)? = null,
     loadAssignmentPreview: (suspend (String, String?) -> circolareplus.data.remote.dto.PollAssignmentPreviewDto)? = null
 ) {
     var pendingDeleteId by remember { mutableStateOf<String?>(null) }
@@ -63,6 +65,8 @@ fun PollHistoryScreen(
             pollId = poll.id,
             subject = poll.subject,
             loadPreview = { basis -> loadAssignmentPreview(poll.id, basis) },
+            publishRevision = publishRevision?.let { action -> { data -> action(poll.id, data) } },
+            restoreRevision = restoreRevision?.let { action -> { data -> action(poll.id, data) } },
             onDismiss = { previewPoll = null }
         )
     }

@@ -86,9 +86,54 @@ solo voti. L'anteprima non salva una nuova fotografia permanente.
 Il nuovo algoritmo è già il default per ogni nuovo calcolo. Lista e dettaglio dei
 sondaggi espongono la versione attiva e quella del calcolo salvato; l'app indica quali
 calendari sono precedenti all'aggiornamento. Non esiste un interruttore da attivare e
-l'anteprima non applica automaticamente modifiche ai calendari già pubblicati.
+l'anteprima non applica automaticamente modifiche ai calendari già pubblicati; dalla beta 4 è possibile pubblicarle con conferma esplicita.
 
 Il confronto riguarda soltanto gli studenti ancora assegnati al sondaggio: non aggiunge
 nuovi iscritti. Quando la cancellazione di un account rende incompleta la fotografia,
 la modalità con bonus iniziali viene disabilitata. Gli scambi già accettati sono indicati;
 a parità di punteggio ottimo si mantiene il maggior numero possibile di date attuali.
+
+## Pubblicazione e ripristino di una revisione
+
+Dalla beta 4 il rappresentante può scegliere il confronto e premere **Pubblica calendario
+rivisto**. La conferma mostra conteggi, peggioramenti, elenco degli spostamenti e politica
+dei bonus. Il confronto rimane in sola lettura fino alla conferma esplicita.
+
+`POST /api/polls/:id/assignments/revisions` richiede `basis` e `revisionToken` restituiti
+dall'anteprima. Il token identifica gli input, i bonus, le assegnazioni, gli scambi,
+i calcoli successivi della materia e gli eventi coinvolti. Una nuova lettura e un
+confronto SQL dentro la transazione impediscono di pubblicare un risultato superato.
+Non vengono accettate assegnazioni arbitrarie inviate dal client.
+
+La transazione salva il prima/dopo in `interrogation_revisions`, aggiorna i posti,
+crea le date pubbliche del calendario collegate alla griglia e rifiuta gli scambi
+ancora in attesa. Gli eventi generati dalle vecchie app senza collegamento vengono
+sostituiti soltanto se titolo, data, nomi e caratteristiche corrispondono esattamente;
+eventi manuali, circolari e note diverse restano intatti. Una corrispondenza ambigua con
+un'altra griglia della materia ferma la pubblicazione. Le operazioni sono collettive
+su JSON, senza una query separata per ogni studente.
+
+Politiche dei bonus, visibili prima della conferma:
+
+- `RECONCILE`: soltanto con modalità ORIGINAL, fotografia e regole complete, saldi
+  ancora uguali ai risultati iniziali e nessun calcolo/revisione successivo della
+  materia. Sostituisce il saldo risultante con quello corretto, senza aggiungere
+  nuovamente gli accrediti. La fotografia iniziale resta immutata.
+- `PRESERVE`: vecchie griglie senza fotografia, simulazioni con bonus attuali o soli
+  voti, oppure storico successivo incompatibile. Pubblica le date e mantiene i saldi
+  attuali. Non inventa bonus iniziali e non attribuisce nuovi accrediti.
+
+Dopo la pubblicazione compare **Ripristina calendario precedente**, con l'elenco degli
+spostamenti di ritorno. `POST /api/polls/:id/assignments/revisions/:revisionId/restore`
+richiede il token aggiornato. Ripristina posti, date precedenti ed eventuali saldi
+riconciliati solo se lo stato è ancora esattamente quello post-pubblicazione. Nuovi
+scambi, bonus, eventi modificati o dati eliminati bloccano il ripristino automatico.
+Gli scambi rifiutati non vengono riaperti. Una sola revisione può essere attiva per
+griglia; per pubblicare un confronto diverso occorre prima ripristinare.
+
+Applicare **una sola volta** `backend/migrations/027_poll_revisions.sql` prima del
+Worker: contiene un ALTER TABLE non ripetibile. Non pubblica revisioni né cambia
+risultati, bonus o eventi esistenti. La cancellazione di un account cancella anche
+le fotografie delle revisioni della classe, che possono contenere nomi negli eventi.
+I test coprono migrazione, autorizzazioni, conferme duplicate, conflitti prima della
+transazione, riconciliazione, ripristino e rollback totale in caso di errore.

@@ -1,6 +1,9 @@
 package circolareplus.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
@@ -15,12 +18,15 @@ import circolareplus.data.remote.dto.PollPreviewAssignmentDto
 import circolareplus.design.*
 import circolareplus.util.formatDayMonth
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 @Composable
 internal fun PollAssignmentPreviewDialog(
     pollId: String,
     subject: String,
     loadPreview: suspend (String?) -> PollAssignmentPreviewDto,
+    publishRevision: (suspend (PollAssignmentPreviewDto) -> Unit)? = null,
+    restoreRevision: (suspend (PollAssignmentPreviewDto) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     var basis by remember(pollId) { mutableStateOf<String?>(null) }
@@ -29,6 +35,46 @@ internal fun PollAssignmentPreviewDialog(
     var error by remember(pollId) { mutableStateOf<String?>(null) }
     var refresh by remember(pollId) { mutableStateOf(0) }
     var onlyChanges by remember(pollId) { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
+    var busy by remember(pollId) { mutableStateOf(false) }
+    var actionError by remember(pollId) { mutableStateOf<String?>(null) }
+    var actionMessage by remember(pollId) { mutableStateOf<String?>(null) }
+    var confirmation by remember(pollId) { mutableStateOf<PollAssignmentPreviewDto?>(null) }
+    var restoring by remember(pollId) { mutableStateOf(false) }
+    confirmation?.let { data ->
+        AlertDialog(
+            onDismissRequest = { confirmation = null },
+            title = { Text(if (restoring) "Ripristinare il calendario precedente?" else "Pubblicare il calendario rivisto?") },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
+                Text(if (restoring) "Verranno ripristinati i posti e le date presenti prima della revisione. Il ripristino si ferma se nel frattempo sono cambiati dati, scambi o bonus."
+                    else "${data.moved} studenti cambieranno data: ${data.improved} migliorerebbero e ${data.worsened} peggiorerebbero. Il nuovo calendario sarà visibile alla classe.")
+                Text(if (data.bonusPolicy == "RECONCILE") "I bonus saranno riconciliati usando la fotografia iniziale, senza ripetere gli accrediti."
+                    else "I saldi dei bonus attuali resteranno invariati: i dati storici disponibili non consentono una riconciliazione certa per questa modalità.")
+                if (!restoring) Text("Gli scambi ancora in attesa saranno annullati. La versione precedente resterà disponibile per il ripristino.")
+                Column(Modifier.heightIn(max = 240.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                    (if (restoring) data.restoreAssignments else data.assignments).filter { it.changed }.forEach { row ->
+                        Text("${row.studentName}: ${formatDayMonth(row.beforeDate)} → ${formatDayMonth(row.afterDate)}")
+                    }
+                }
+            } },
+            confirmButton = { TextButton(onClick = {
+                confirmation = null
+                busy = true
+                actionError = null
+                actionMessage = null
+                scope.launch {
+                    try {
+                        if (restoring) restoreRevision?.invoke(data) else publishRevision?.invoke(data)
+                        actionMessage = if (restoring) "Calendario precedente ripristinato." else "Calendario rivisto pubblicato."
+                        refresh++
+                    } catch (e: CancellationException) { throw e
+                    } catch (e: Exception) { actionError = e.message ?: "Operazione non riuscita. Aggiorna e riprova."
+                    } finally { busy = false }
+                }
+            }) { Text(if (restoring) "Ripristina" else "Pubblica") } },
+            dismissButton = { TextButton(onClick = { confirmation = null }) { Text("Annulla") } }
+        )
+    }
     LaunchedEffect(pollId, refresh) {
         loading = true
         error = null
@@ -38,17 +84,17 @@ internal fun PollAssignmentPreviewDialog(
         } catch (e: Exception) { error = e.message ?: "Impossibile caricare il confronto. Riprova."
         } finally { loading = false }
     }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Dialog(onDismissRequest = { if (!busy) onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(color = AppTheme.BackgroundLight, modifier = Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().appSafeDrawingPadding()) {
                 Row(Modifier.fillMaxWidth().padding(AppTheme.Space16), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
-                    AilaIconButton(contentDescription = "Chiudi anteprima", onClick = onDismiss) { tint -> AppIcons.ChevronLeft(color = tint) }
+                    AilaIconButton(contentDescription = "Chiudi anteprima", enabled = !busy, onClick = onDismiss) { tint -> AppIcons.ChevronLeft(color = tint) }
                     Column(Modifier.weight(1f)) {
                         Text("Anteprima nuovo algoritmo", style = MaterialTheme.typography.titleMedium, color = AppTheme.TextDark)
                         Text(subject, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
                     }
-                    AilaIconButton(contentDescription = "Aggiorna confronto", enabled = !loading, onClick = { refresh++ }) { tint -> AppIcons.Refresh(color = tint) }
+                    AilaIconButton(contentDescription = "Aggiorna confronto", enabled = !loading && !busy, onClick = { actionError = null; refresh++ }) { tint -> AppIcons.Refresh(color = tint) }
                 }
                 when {
                     loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AppTheme.PrimaryBlue) }
@@ -63,8 +109,8 @@ internal fun PollAssignmentPreviewDialog(
                             item {
                                 AilaCard {
                                     Column(Modifier.padding(AppTheme.Space16), verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
-                                        Text("Solo anteprima", color = AppTheme.TintBlueInk, fontWeight = FontWeight.SemiBold)
-                                        Text("Il confronto non cambia date, calendario o bonus.", color = AppTheme.TextMuted)
+                                        Text("Confronto prima della pubblicazione", color = AppTheme.TintBlueInk, fontWeight = FontWeight.SemiBold)
+                                        Text("Il confronto non cambia i dati finché non confermi la pubblicazione.", color = AppTheme.TextMuted)
                                         Text(when (data.basis) {
                                             "ORIGINAL" -> "Usa i voti e i bonus iniziali salvati al momento del calcolo."
                                             "CURRENT_BONUSES" -> "Usa i bonus attuali, fissati quando generi questa anteprima."
@@ -79,9 +125,9 @@ internal fun PollAssignmentPreviewDialog(
                                         if (data.historicalDataIncomplete) Text("Sono considerati soltanto gli studenti e i dati ancora presenti.", color = AppTheme.TintAmberInk)
                                         if (data.acceptedSwaps > 0) Text("Il calendario attuale include ${data.acceptedSwaps} scambi accettati.", color = AppTheme.TextMuted)
                                         FlowRow(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
-                                            if (data.originalAvailable) FilterChip(selected = data.basis == "ORIGINAL", onClick = { basis = "ORIGINAL" }, label = { Text("Bonus iniziali") })
-                                            FilterChip(selected = data.basis == "CURRENT_BONUSES", onClick = { basis = "CURRENT_BONUSES" }, label = { Text("Bonus attuali") })
-                                            FilterChip(selected = data.basis == "VOTES_ONLY", onClick = { basis = "VOTES_ONLY" }, label = { Text("Solo voti") })
+                                            if (data.originalAvailable) FilterChip(enabled = !busy, selected = data.basis == "ORIGINAL", onClick = { basis = "ORIGINAL" }, label = { Text("Bonus iniziali") })
+                                            FilterChip(enabled = !busy, selected = data.basis == "CURRENT_BONUSES", onClick = { basis = "CURRENT_BONUSES" }, label = { Text("Bonus attuali") })
+                                            FilterChip(enabled = !busy, selected = data.basis == "VOTES_ONLY", onClick = { basis = "VOTES_ONLY" }, label = { Text("Solo voti") })
                                         }
                                     }
                                 }
@@ -99,6 +145,26 @@ internal fun PollAssignmentPreviewDialog(
                                         Text("${data.moved} cambierebbero data · ${data.totalStudents - data.moved} resterebbero nella stessa data", color = AppTheme.TextDark)
                                         Text("${data.improved} migliorerebbero · ${data.worsened} peggiorerebbero",
                                             color = if (data.worsened > 0) AppTheme.TintRedInk else AppTheme.TintGreenInk)
+                                    }
+                                }
+                            }
+                            item {
+                                Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                                    actionMessage?.let { Text(it, color = AppTheme.TintGreenInk) }
+                                    actionError?.let { Text(it, color = AppTheme.TintRedInk) }
+                                    if (data.activeRevisionId != null && restoreRevision != null) {
+                                        Text("Questa revisione è pubblicata. Per pubblicare un confronto diverso, ripristina prima la versione precedente.", color = AppTheme.TextMuted)
+                                        if (data.canRestore && !busy && data.revisionToken != null) AilaSecondaryButton(
+                                            text = "Ripristina calendario precedente", modifier = Modifier.fillMaxWidth(),
+                                            onClick = { restoring = true; confirmation = data })
+                                        else Text(if (busy) "Operazione in corso…" else "Il ripristino automatico non è disponibile: dopo la pubblicazione sono cambiati dati o lo storico è incompleto.", color = AppTheme.TintAmberInk)
+                                    } else if (data.canPublish && publishRevision != null && data.revisionToken != null) {
+                                        Text(if (data.bonusPolicy == "RECONCILE") "Pubblicando, i bonus saranno riconciliati con quelli iniziali."
+                                            else "Pubblicando, i saldi dei bonus attuali resteranno invariati.", color = AppTheme.TextMuted)
+                                        AilaPrimaryButton(text = if (busy) "Pubblicazione…" else "Pubblica calendario rivisto",
+                                            enabled = !busy && data.moved > 0, modifier = Modifier.fillMaxWidth(),
+                                            onClick = { restoring = false; confirmation = data })
+                                        if (data.moved == 0) Text("Nessuna data da modificare in questo confronto.", color = AppTheme.TextMuted)
                                     }
                                 }
                             }

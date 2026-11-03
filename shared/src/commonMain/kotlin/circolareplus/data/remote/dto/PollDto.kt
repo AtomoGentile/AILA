@@ -121,5 +121,17 @@ data class PollAssignmentPreviewDto(
     val before: PollPreviewDistributionDto,
     val after: PollPreviewDistributionDto,
     val assignments: List<PollPreviewAssignmentDto>,
+    val revisionToken: String? = null,
+    val activeRevisionId: String? = null,
+    val canPublish: Boolean = false,
+    val canRestore: Boolean = false,
+    val restoreAssignments: List<PollPreviewAssignmentDto> = emptyList(),
+    val bonusPolicy: String = "PRESERVE",
     val comparisons: List<PollAssignmentPreviewDto> = emptyList()
 )
+
+@Serializable
+data class PublishPollRevisionRequestDto(val basis: String, val revisionToken: String)
+
+@Serializable
+data class RestorePollRevisionRequestDto(val revisionToken: String)

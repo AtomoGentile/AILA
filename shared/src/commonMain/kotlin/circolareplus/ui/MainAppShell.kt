@@ -3630,6 +3630,18 @@ fun MainAppShell(
                                 } else if (showPollHistory) {
                                     PollHistoryScreen(
                                         loadAssignmentPreview = { pollId, basis -> AppContainer.pollsRepository.previewAssignments(pollId, basis) },
+                                        publishRevision = { pollId, data ->
+                                            AppContainer.pollsRepository.publishRevision(pollId, data.basis, requireNotNull(data.revisionToken))
+                                            expandedResultsPollId = null
+                                            pollsRefreshTrigger++
+                                            reloadCalendar()
+                                        },
+                                        restoreRevision = { pollId, data ->
+                                            AppContainer.pollsRepository.restoreRevision(pollId, requireNotNull(data.activeRevisionId), requireNotNull(data.revisionToken))
+                                            expandedResultsPollId = null
+                                            pollsRefreshTrigger++
+                                            reloadCalendar()
+                                        },
                                         polls = allPolls,
                                         canManage = isRepresentative,
                                         expandedPollId = expandedResultsPollId,

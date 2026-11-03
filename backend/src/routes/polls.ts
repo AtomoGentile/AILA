@@ -10,6 +10,7 @@ import { notifyClass, notifyUser, notifyUsers } from '../services/fcm';
 import { classMemberIds, effectiveAudience, isInAudience, normalizeAudience, parseAudience } from '../services/audience';
 import { inBackground } from '../services/background';
 import { fullName } from '../names';
+import { publishRevision, restoreRevision } from '../services/pollRevisions';
 import { previewAssignments } from '../services/pollPreview';
 import { ALGORITHM_VERSION, computeAndPersistAssignments, isGridCalculated, PollCalculationError } from '../services/pollAssignments';
 
@@ -49,7 +50,7 @@ polls.get('/', async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT g.id, g.subject, g.is_published, g.closes_at, g.created_at, g.audience_json,
             (SELECT COUNT(*) FROM interrogation_submissions WHERE grid_id = g.id) AS submitted_count,
-            (SELECT algorithm_version FROM interrogation_calculations WHERE grid_id = g.id) AS calculation_algorithm,
+            CASE WHEN EXISTS(SELECT 1 FROM interrogation_revisions WHERE grid_id = g.id AND restored_at IS NULL) THEN 'global-score-v1' ELSE (SELECT algorithm_version FROM interrogation_calculations WHERE grid_id = g.id) END AS calculation_algorithm,
             (EXISTS(SELECT 1 FROM interrogation_calculations r WHERE r.grid_id = g.id) OR EXISTS(
               SELECT 1 FROM interrogation_assignments a
               JOIN interrogation_slots s ON s.id = a.slot_id
@@ -533,6 +534,29 @@ polls.get('/:id/assignments/preview', requireRole('REPRESENTATIVE'), async (c) =
   } catch (error) {
     if (error instanceof PollCalculationError) return c.json({ error: error.message }, 409);
     throw error;
+  }
+});
+
+// La pubblicazione richiede il token della precisa anteprima confermata.
+polls.post('/:id/assignments/revisions', requireRole('REPRESENTATIVE'), async (c) => {
+  const body = await c.req.json<{ basis?: string; revisionToken?: string }>();
+  if (!['ORIGINAL', 'CURRENT_BONUSES', 'VOTES_ONLY'].includes(body.basis ?? '') || typeof body.revisionToken !== 'string' || !/^[a-f0-9]{64}$/.test(body.revisionToken)) return c.json({ error: 'Confronto da confermare non valido' }, 400);
+  try {
+    return c.json(await publishRevision(c.env, c.req.param('id')!, await resolveClassId(c), c.get('jwtPayload').sub,
+      body.basis as 'ORIGINAL' | 'CURRENT_BONUSES' | 'VOTES_ONLY', body.revisionToken!));
+  } catch (e) {
+    if (e instanceof PollCalculationError) return c.json({ error: e.message }, 409);
+    throw e;
+  }
+});
+polls.post('/:id/assignments/revisions/:revisionId/restore', requireRole('REPRESENTATIVE'), async (c) => {
+  const body = await c.req.json<{ revisionToken?: string }>();
+  if (typeof body.revisionToken !== 'string' || !/^[a-f0-9]{64}$/.test(body.revisionToken)) return c.json({ error: 'Conferma di ripristino non valida' }, 400);
+  try {
+    return c.json(await restoreRevision(c.env, c.req.param('id')!, await resolveClassId(c), c.req.param('revisionId')!, body.revisionToken));
+  } catch (e) {
+    if (e instanceof PollCalculationError) return c.json({ error: e.message }, 409);
+    throw e;
   }
 });
 

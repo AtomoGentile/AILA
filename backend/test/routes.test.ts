@@ -7,6 +7,7 @@ import { normalizeTitle } from '../src/routes/calendar';
 import { isDeadToken } from '../src/services/fcm';
 import { italianToday, upsertAnalysis } from '../src/services/summarizer';
 import type { Env } from '../src/types';
+import { POLL_RULES } from '../src/services/pollAssignments';
 
 // Le notifiche si registrano invece di partire: servono a controllare chi viene avvisato.
 const notified = vi.hoisted(() => [] as { userIds: string[]; title: string; data?: Record<string, string> }[]);
@@ -1282,5 +1283,168 @@ describe('bonus attuali fissati nella nuova anteprima', () => {
     const refreshed = await call('GET', `/api/polls/${id}/assignments/preview?basis=CURRENT_BONUSES`, undefined, rep.json.token);
     expect(refreshed.json.assignments.find((a: any) => a.studentId === student.json.user.id).bonusUsed).toBe(180);
     expect((await call('GET', `/api/polls/${id}/assignments/preview?basis=CURRENT_BONUSES`, undefined, student.json.token)).status).toBe(403);
+  });
+});
+
+describe('pubblicazione e ripristino dei calendari rivisti', () => {
+  async function setup(snapshot = false) {
+    const rep = await register('revisionerep', { representativeCode: await repCode() });
+    const student = await register('revisionestudente', { classCode: await classCodeOf(rep.json.token) });
+    const created = await call('POST', '/api/polls', { subject: 'Revisione', slots: [{ slotDate: '2090-12-01', capacity: 1 }, { slotDate: '2090-12-02', capacity: 1 }] }, rep.json.token);
+    const id = created.json.id;
+    await call('PUT', `/api/polls/${id}/publish`, {}, rep.json.token);
+    const slots = (await call('GET', `/api/polls/${id}`, undefined, rep.json.token)).json.slots;
+    for (const slot of slots) await call('POST', `/api/polls/${id}/vote`, { slotId: slot.id, voteScore: 50 }, rep.json.token);
+    await call('POST', `/api/polls/${id}/vote`, { slotId: slots[0].id, voteScore: 50 }, student.json.token);
+    await call('POST', `/api/polls/${id}/vote`, { slotId: slots[1].id, voteScore: -60 }, student.json.token);
+    await env.DB.batch([
+      env.DB.prepare('INSERT INTO interrogation_assignments(id,slot_id,student_id) VALUES(?,?,?)').bind('revision-a1', slots[0].id, rep.json.user.id),
+      env.DB.prepare('INSERT INTO interrogation_assignments(id,slot_id,student_id) VALUES(?,?,?)').bind('revision-a2', slots[1].id, student.json.user.id),
+      env.DB.prepare('INSERT INTO student_sacrifice_bonus VALUES(?,?,?)').bind(student.json.user.id, 'Revisione', 120),
+    ]);
+    if (snapshot) {
+      const input = { subject: 'Revisione', closesAt: null, slots: slots.map((s: any) => ({ id: s.id, date: s.slotDate, capacity: s.capacity })), students: {
+        [rep.json.user.id]: { bonus: 0, submitted: 1, votes: { [slots[0].id]: 50, [slots[1].id]: 50 } },
+        [student.json.user.id]: { bonus: 80, submitted: 1, votes: { [slots[0].id]: 50, [slots[1].id]: -60 } },
+      } };
+      await env.DB.prepare(`INSERT INTO interrogation_calculations(grid_id,run_id,algorithm_version,input_json,result_json,rules_json) VALUES(?,?,'legacy-snapshot',?,?,?)`)
+        .bind(id, `old:${id}`, JSON.stringify(input), JSON.stringify({ [rep.json.user.id]: { bonusAfter: 0 }, [student.json.user.id]: { bonusAfter: 120 } }), JSON.stringify(POLL_RULES)).run();
+    }
+    const preview = async (basis = 'CURRENT_BONUSES') => (await call('GET', `/api/polls/${id}/assignments/preview?basis=${basis}`, undefined, rep.json.token)).json;
+    const publish = (p: any, token = rep.json.token) => call('POST', `/api/polls/${id}/assignments/revisions`, { basis: p.basis, revisionToken: p.revisionToken }, token);
+    const restore = (p: any, token = rep.json.token) => call('POST', `/api/polls/${id}/assignments/revisions/${p.activeRevisionId}/restore`, { revisionToken: p.revisionToken }, token);
+    return { rep, student, id, slots, preview, publish, restore };
+  }
+
+  it('pubblica la precisa anteprima, sostituisce le date riconosciute e ripristina senza duplicare bonus o eventi', async () => {
+    const { rep, student, id, slots, preview, publish, restore } = await setup();
+    const classId = (await env.DB.prepare('SELECT class_id FROM users WHERE id=?').bind(rep.json.user.id).first<any>()).class_id;
+    const old = await call('POST', '/api/calendar', { title: 'Interrogazione di Revisione', eventDate: slots[0].slotDate, category: 'INTERROGAZIONE', isForAll: true, isAiGenerated: true, notes: `Studenti: ${rep.json.user.firstName} ${rep.json.user.lastName}` }, rep.json.token);
+    expect(old.status).toBe(201);
+    await env.DB.prepare(`INSERT INTO calendar_events(id,title,event_date,category,class_id,notes) VALUES('unrelated','Interrogazione di Revisione','2090-12-05','INTERROGAZIONE',?,'Nota manuale')`).bind(classId).run();
+    const oldRows = (await env.DB.prepare('SELECT * FROM calendar_events ORDER BY id').all()).results;
+    const pending = await call('POST', `/api/polls/${id}/swap-request`, { targetStudentId: student.json.user.id }, rep.json.token);
+    const p = await preview();
+    expect(p).toMatchObject({ moved: 2, bonusPolicy: 'PRESERVE', canPublish: true });
+    const published = await publish(p);
+    expect(published.status).toBe(200);
+    expect((await publish(p)).status).toBe(409);
+    const assignments = (await call('GET', `/api/polls/${id}/assignments`, undefined, rep.json.token)).json.assignments;
+    for (const a of p.assignments) expect(assignments.find((r: any) => r.studentId === a.studentId).slotId).toBe(a.afterSlotId);
+    expect((await env.DB.prepare('SELECT bonus_points FROM student_sacrifice_bonus WHERE student_id=?').bind(student.json.user.id).first<any>()).bonus_points).toBe(120);
+    expect((await env.DB.prepare('SELECT status FROM swap_requests WHERE id=?').bind(pending.json.swapId).first<any>()).status).toBe('REJECTED');
+    const events = (await env.DB.prepare('SELECT * FROM calendar_events').all<any>()).results;
+    expect(events.filter(e => e.poll_grid_id === id)).toHaveLength(2);
+    expect(events.some(e => e.id === old.json.id)).toBe(false);
+    expect(events.find(e => e.id === 'unrelated')?.notes).toBe('Nota manuale');
+    const active = await preview();
+    expect(active).toMatchObject({ canPublish: false, activeRevisionId: published.json.revisionId });
+    expect((await restore(active)).status).toBe(200);
+    expect((await restore(active)).status).toBe(409);
+    expect((await env.DB.prepare('SELECT * FROM calendar_events ORDER BY id').all()).results).toEqual(oldRows);
+    expect((await env.DB.prepare('SELECT slot_id FROM interrogation_assignments WHERE id=?').bind('revision-a1').first<any>()).slot_id).toBe(slots[0].id);
+    expect((await env.DB.prepare('SELECT status FROM swap_requests WHERE id=?').bind(pending.json.swapId).first<any>()).status).toBe('REJECTED');
+    expect((await publish(await preview())).status).toBe(200);
+  });
+
+  it('riconcilia i bonus soltanto con la fotografia completa e ripristina i saldi precedenti', async () => {
+    const { id, student, preview, publish, restore } = await setup(true);
+    const initial = await env.DB.prepare('SELECT * FROM interrogation_calculations WHERE grid_id=?').bind(id).first();
+    const p = await preview('ORIGINAL');
+    expect(p).toMatchObject({ bonusPolicy: 'RECONCILE', originalAvailable: true });
+    expect((await publish(p)).status).toBe(200);
+    expect((await env.DB.prepare('SELECT bonus_points FROM student_sacrifice_bonus WHERE student_id=?').bind(student.json.user.id).first<any>()).bonus_points).toBe(0);
+    expect((await restore(await preview('ORIGINAL'))).status).toBe(200);
+    expect((await env.DB.prepare('SELECT bonus_points FROM student_sacrifice_bonus WHERE student_id=?').bind(student.json.user.id).first<any>()).bonus_points).toBe(120);
+    expect(await env.DB.prepare('SELECT * FROM interrogation_calculations WHERE grid_id=?').bind(id).first()).toEqual(initial);
+  });
+
+  it('rifiuta anteprime superate da bonus, calendario e operazioni concorrenti', async () => {
+    const { student, preview, publish } = await setup();
+    const p = await preview();
+    await env.DB.prepare('UPDATE student_sacrifice_bonus SET bonus_points=180 WHERE student_id=?').bind(student.json.user.id).run();
+    expect((await publish(p)).status).toBe(409);
+    const fresh = await preview();
+    const originalBatch = env.DB.batch.bind(env.DB);
+    env.DB.batch = async (statements: D1PreparedStatement[]) => {
+      await env.DB.prepare('UPDATE student_sacrifice_bonus SET bonus_points=200 WHERE student_id=?').bind(student.json.user.id).run();
+      return originalBatch(statements);
+    };
+    expect((await publish(fresh)).status).toBe(409);
+    env.DB.batch = originalBatch;
+    expect((await env.DB.prepare('SELECT COUNT(*) n FROM interrogation_revisions').first<any>()).n).toBe(0);
+  });
+
+  it('non sovrascrive i bonus cambiati dopo la pubblicazione durante il ripristino', async () => {
+    const { student, preview, publish, restore } = await setup();
+    expect((await publish(await preview())).status).toBe(200);
+    const active = await preview();
+    await env.DB.prepare('UPDATE student_sacrifice_bonus SET bonus_points=160 WHERE student_id=?').bind(student.json.user.id).run();
+    expect((await restore(active)).status).toBe(409);
+    expect((await restore(await preview())).status).toBe(409);
+    expect((await env.DB.prepare('SELECT bonus_points FROM student_sacrifice_bonus WHERE student_id=?').bind(student.json.user.id).first<any>()).bonus_points).toBe(160);
+  });
+
+  it('nega pubblicazione e ripristino agli studenti e ai rappresentanti di altre classi', async () => {
+    const { student, preview, publish, restore } = await setup();
+    const other = await register('revisionerepaltro', { classLabel: '5 Z', representativeCode: await repCode('5 Z') });
+    const p = await preview();
+    expect((await publish(p, student.json.token)).status).toBe(403);
+    expect((await publish(p, other.json.token)).status).toBe(409);
+    expect((await publish(p)).status).toBe(200);
+    const active = await preview();
+    expect((await restore(active, student.json.token)).status).toBe(403);
+    expect((await restore(active, other.json.token)).status).toBe(409);
+  });
+
+  it('annulla l’intera transazione se la sincronizzazione del calendario fallisce', async () => {
+    const { id, preview, publish } = await setup();
+    const before = (await env.DB.prepare('SELECT * FROM interrogation_assignments ORDER BY id').all()).results;
+    const db = env.DB;
+    const originalBatch = db.batch.bind(db);
+    // Forza un errore certo di chiave esterna dentro la medesima transazione.
+    db.batch = async (statements: D1PreparedStatement[]) => originalBatch([...statements, db.prepare("INSERT INTO interrogation_assignments(id,slot_id,student_id) VALUES('failure','missing','missing')")]);
+    expect((await publish(await preview())).status).toBe(500);
+    db.batch = originalBatch;
+    expect((await env.DB.prepare('SELECT * FROM interrogation_assignments ORDER BY id').all()).results).toEqual(before);
+    expect((await env.DB.prepare('SELECT COUNT(*) n FROM interrogation_revisions WHERE grid_id=?').bind(id).first<any>()).n).toBe(0);
+    expect((await env.DB.prepare('SELECT COUNT(*) n FROM calendar_events WHERE poll_grid_id=?').bind(id).first<any>()).n).toBe(0);
+  });
+
+  it('mantiene i bonus se un altro calcolo della materia è successivo alla fotografia iniziale', async () => {
+    const { rep, student, preview, publish } = await setup(true);
+    expect((await preview('ORIGINAL')).bonusPolicy).toBe('RECONCILE');
+    const other = await call('POST', '/api/polls', { subject: 'Revisione', slots: [{ slotDate: '2091-01-01', capacity: 2 }] }, rep.json.token);
+    await env.DB.prepare("INSERT INTO interrogation_calculations(grid_id,run_id,algorithm_version,calculated_at) VALUES(?,?,'global-score-v1','2091-01-01')").bind(other.json.id, 'later').run();
+    const p = await preview('ORIGINAL');
+    expect(p.bonusPolicy).toBe('PRESERVE');
+    expect((await publish(p)).status).toBe(200);
+    expect((await env.DB.prepare('SELECT bonus_points FROM student_sacrifice_bonus WHERE student_id=?').bind(student.json.user.id).first<any>()).bonus_points).toBe(120);
+  });
+
+  it('blocca un ripristino concorrente e mostra gli spostamenti di ritorno', async () => {
+    const { student, preview, publish, restore } = await setup(true);
+    expect((await publish(await preview('ORIGINAL'))).status).toBe(200);
+    const active = await preview();
+    expect(active.canRestore).toBe(true);
+    expect(active.restoreAssignments.filter((a: any) => a.changed)).toHaveLength(2);
+    const originalBatch = env.DB.batch.bind(env.DB);
+    env.DB.batch = async (statements: D1PreparedStatement[]) => {
+      await env.DB.prepare('UPDATE student_sacrifice_bonus SET bonus_points=20 WHERE student_id=?').bind(student.json.user.id).run();
+      return originalBatch(statements);
+    };
+    expect((await restore(active)).status).toBe(409);
+    env.DB.batch = originalBatch;
+    expect((await preview()).canRestore).toBe(false);
+    expect((await env.DB.prepare('SELECT bonus_points FROM student_sacrifice_bonus WHERE student_id=?').bind(student.json.user.id).first<any>()).bonus_points).toBe(20);
+  });
+
+  it('rimuove i dati personali dalle revisioni quando uno studente cancella l’account', async () => {
+    const { student, preview, publish, restore } = await setup();
+    expect((await publish(await preview())).status).toBe(200);
+    expect((await call('DELETE', '/api/users/me', { password: 'password123' }, student.json.token)).status).toBe(200);
+    const row = await env.DB.prepare('SELECT before_state,after_state FROM interrogation_revisions').first<any>();
+    expect(row).toEqual({ before_state: null, after_state: null });
+    expect((await restore(await preview())).status).toBe(409);
   });
 });

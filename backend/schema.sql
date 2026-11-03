@@ -184,7 +184,8 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     -- Array JSON di id utente (es. '["u1","u2"]'), NULL quando is_for_all = 1.
     visible_to_user_ids_json TEXT,
     -- Circolare da cui l'ha ricavato AILA Assistant (migrazione 015).
-    circular_number INTEGER
+    circular_number INTEGER,
+    poll_grid_id TEXT REFERENCES interrogation_grids(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_calendar_class ON calendar_events(class_id);
@@ -610,4 +611,27 @@ BEGIN
     result_json = json_remove(result_json, '$.' || json_quote(OLD.id)),
     redacted_students = redacted_students + 1
   WHERE json_type(input_json, '$.students.' || json_quote(OLD.id)) IS NOT NULL;
+END;
+
+-- Revisioni esplicite: la fotografia del calcolo iniziale rimane immutabile.
+CREATE INDEX IF NOT EXISTS idx_calendar_poll_grid ON calendar_events(poll_grid_id);
+CREATE TABLE IF NOT EXISTS interrogation_revisions (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  id TEXT NOT NULL UNIQUE,
+  grid_id TEXT NOT NULL REFERENCES interrogation_grids(id) ON DELETE CASCADE,
+  basis TEXT NOT NULL,
+  bonus_policy TEXT NOT NULL,
+  before_state TEXT CHECK(before_state IS NULL OR json_valid(before_state)),
+  after_state TEXT CHECK(after_state IS NULL OR json_valid(after_state)),
+  created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  restore_run_id TEXT,
+  restored_at DATETIME
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_interrogation_active_revision ON interrogation_revisions(grid_id) WHERE restored_at IS NULL;
+-- Rimuove anche nomi, voti e bonus dalle fotografie di revisione dopo la cancellazione.
+CREATE TRIGGER IF NOT EXISTS redact_interrogation_revisions BEFORE DELETE ON users
+BEGIN
+  UPDATE interrogation_revisions SET before_state = NULL, after_state = NULL
+  WHERE grid_id IN (SELECT id FROM interrogation_grids WHERE class_id = OLD.class_id);
 END;
