@@ -3624,6 +3624,7 @@ fun MainAppShell(
                                     }
                                 } else if (showPollHistory) {
                                     PollHistoryScreen(
+                                        loadAssignmentPreview = { pollId, basis -> AppContainer.pollsRepository.previewAssignments(pollId, basis) },
                                         polls = allPolls,
                                         canManage = isRepresentative,
                                         expandedPollId = expandedResultsPollId,

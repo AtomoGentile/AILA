@@ -77,6 +77,7 @@ class LocalSettingsManager(
         /** Bozze delle proposte della mappa posti (generate e non ancora pubblicate), in JSON. */
         private const val KEY_SEATMAP_DRAFTS = "seatmap_proposals_draft_json"
         private const val KEY_UPDATE_LAST_CHECK = "update_last_check_millis"
+        private const val KEY_UPDATE_DOWNLOADED_IDENTITY = "update_downloaded_identity"
         private const val KEY_UPDATE_DISMISSED_TAG = "update_dismissed_tag"
         private const val KEY_DEBUG_MENU = "debug_menu_enabled"
         /** Nelle impostazioni normali: i segreti nel Portachiavi sono di questa installazione. */
@@ -310,6 +311,10 @@ class LocalSettingsManager(
         set(value) = settings.putLong(KEY_UPDATE_LAST_CHECK, value)
 
     /** Tag per cui l'utente ha toccato "Piu' tardi": l'avviso automatico non si ripete per quello. */
+    var updateDownloadedIdentity: String
+        get() = settings.getString(KEY_UPDATE_DOWNLOADED_IDENTITY, "")
+        set(value) = settings.putString(KEY_UPDATE_DOWNLOADED_IDENTITY, value)
+
     var updateDismissedTag: String
         get() = settings.getString(KEY_UPDATE_DISMISSED_TAG, "")
         set(value) = settings.putString(KEY_UPDATE_DISMISSED_TAG, value)

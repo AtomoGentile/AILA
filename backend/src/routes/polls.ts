@@ -10,6 +10,8 @@ import { notifyClass, notifyUser, notifyUsers } from '../services/fcm';
 import { classMemberIds, effectiveAudience, isInAudience, normalizeAudience, parseAudience } from '../services/audience';
 import { inBackground } from '../services/background';
 import { fullName } from '../names';
+import { previewAssignments } from '../services/pollPreview';
+import { computeAndPersistAssignments, isGridCalculated, PollCalculationError } from '../services/pollAssignments';
 
 const polls = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();
 
@@ -31,44 +33,11 @@ const VOTE_LIMITS: Record<VoteScore, number> = {
   [-300]: 2,      // ROSSO SCURO (veto): max 2
 };
 
-// Contro chi "gioca" col sondaggio: una data Verde e tutte le altre Rosso Chiaro.
-//
-// Senza tetti sui voti negativi (vedi VOTE_LIMITS) quella strategia rendeva: i "meglio di no"
-// tenevano lo studente lontano da ogni data tranne la sua a spese di chi aveva risposto con
-// onestà, e se l'algoritmo lo metteva comunque su una data "rossa" incassava pure il bonus
-// sacrificio — per una data che in realtà gli andava benissimo. Invece di rimettere un tetto
-// (che costringeva al Giallo su date su cui si aveva un'opinione vera) i voti negativi si
-// diluiscono: fino al 40% delle date valgono pieni, oltre quella quota ognuno pesa in
-// proporzione meno, e lo stesso fattore riduce il bonus sacrificio guadagnato. Chi rifiuta
-// tutto finisce, di fatto, come chi ha messo Giallo ovunque.
-const FAIR_NEGATIVE_SHARE = 0.4;
-
-// Tetto al bonus sacrificio accumulato: senza, qualche giro "sfortunato" di fila dava un
-// credito tale da vincere qualunque data contro chiunque per il resto dell'anno.
-const MAX_SACRIFICE_BONUS = 300;
-
-// Bonus guadagnato quando l'algoritmo ti mette su una data che avevi rifiutato.
-const SACRIFICE_LIGHT_RED = 40;
-const SACRIFICE_DARK_RED = 150;
-
-/** Le assegnazioni di questa griglia sono gia' state calcolate (sondaggio chiuso)? */
-async function isGridCalculated(env: Env, gridId: string): Promise<boolean> {
-  const row = await env.DB.prepare(
-    `SELECT 1 AS done FROM interrogation_assignments a
-     JOIN interrogation_slots s ON s.id = a.slot_id
-     WHERE s.grid_id = ? LIMIT 1`
-  ).bind(gridId).first<{ done: number }>();
-  return !!row;
-}
+// Frammento SQL interno: le due bind corrispondono allo stesso gridId.
+const OPEN_GRID = `NOT EXISTS(SELECT 1 FROM interrogation_calculations WHERE grid_id = ?)
+  AND NOT EXISTS(SELECT 1 FROM interrogation_assignments a JOIN interrogation_slots s ON s.id = a.slot_id WHERE s.grid_id = ?)`;
 
 const ALREADY_CALCULATED = 'Il sondaggio è già chiuso: il calendario delle interrogazioni è stato calcolato';
-
-/** Peso (0-1] dei voti negativi di uno studente che ne ha dati `negatives` su `slotCount` date. */
-function negativeVoteWeight(negatives: number, slotCount: number): number {
-  if (negatives <= 0) return 1;
-  const fair = Math.max(1, Math.floor(slotCount * FAIR_NEGATIVE_SHARE));
-  return Math.min(1, fair / negatives);
-}
 
 // ---------------------------------------------------------------------------
 // GET /api/polls — Lista griglie
@@ -80,11 +49,11 @@ polls.get('/', async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT g.id, g.subject, g.is_published, g.closes_at, g.created_at, g.audience_json,
             (SELECT COUNT(*) FROM interrogation_submissions WHERE grid_id = g.id) AS submitted_count,
-            EXISTS(
+            (EXISTS(SELECT 1 FROM interrogation_calculations r WHERE r.grid_id = g.id) OR EXISTS(
               SELECT 1 FROM interrogation_assignments a
               JOIN interrogation_slots s ON s.id = a.slot_id
               WHERE s.grid_id = g.id
-            ) AS is_calculated
+            )) AS is_calculated
      FROM interrogation_grids g
      WHERE g.class_id = ?
      ORDER BY g.created_at DESC`
@@ -375,8 +344,10 @@ polls.post('/:id/vote', async (c) => {
 
   if (voteScore === null) {
     // Remove vote
-    await c.env.DB.prepare('DELETE FROM interrogation_votes WHERE slot_id = ? AND student_id = ?')
-      .bind(slotId, payload.sub).run();
+    await c.env.DB.prepare(`DELETE FROM interrogation_votes WHERE slot_id = ? AND student_id = ? AND ${OPEN_GRID}
+      AND NOT EXISTS(SELECT 1 FROM interrogation_submissions WHERE grid_id = ? AND student_id = ?)`)
+      .bind(slotId, payload.sub, gridId, gridId, gridId, payload.sub).run();
+    if (await isGridCalculated(c.env, gridId)) return c.json({ error: ALREADY_CALCULATED }, 409);
     return c.json({ success: true });
   }
 
@@ -407,11 +378,16 @@ polls.post('/:id/vote', async (c) => {
   }
 
   // Upsert vote
-  await c.env.DB.prepare(
+  const written = await c.env.DB.prepare(
     `INSERT INTO interrogation_votes (slot_id, student_id, vote_score)
-     VALUES (?, ?, ?)
+     SELECT ?, ?, ? WHERE ${OPEN_GRID}
+     AND NOT EXISTS(SELECT 1 FROM interrogation_submissions WHERE grid_id = ? AND student_id = ?)
+     AND EXISTS(SELECT 1 FROM interrogation_grids WHERE id = ? AND (closes_at IS NULL OR julianday(closes_at) > julianday('now')))
+     AND (? != -300 OR (SELECT COUNT(*) FROM interrogation_votes v JOIN interrogation_slots s ON s.id = v.slot_id
+       WHERE s.grid_id = ? AND v.student_id = ? AND v.vote_score = -300 AND v.slot_id != ?) < 2)
      ON CONFLICT(slot_id, student_id) DO UPDATE SET vote_score = excluded.vote_score`
-  ).bind(slotId, payload.sub, voteScore).run();
+  ).bind(slotId, payload.sub, voteScore, gridId, gridId, gridId, payload.sub, gridId, voteScore, gridId, payload.sub, slotId).run();
+  if (!written.meta.changes) return c.json({ error: 'Il sondaggio o il tuo invio sono cambiati. Aggiorna prima di votare.' }, 409);
 
   return c.json({ success: true });
 });
@@ -443,11 +419,12 @@ polls.post('/:id/submit', async (c) => {
     return c.json({ error: ALREADY_CALCULATED }, 409);
   }
 
-  await c.env.DB.prepare(
+  const written = await c.env.DB.prepare(
     `INSERT INTO interrogation_submissions (grid_id, student_id, submitted_at)
-     VALUES (?, ?, CURRENT_TIMESTAMP)
+     SELECT ?, ?, CURRENT_TIMESTAMP WHERE ${OPEN_GRID}
      ON CONFLICT(grid_id, student_id) DO UPDATE SET submitted_at = excluded.submitted_at`
-  ).bind(gridId, payload.sub).run();
+  ).bind(gridId, payload.sub, gridId, gridId).run();
+  if (!written.meta.changes) return c.json({ error: ALREADY_CALCULATED }, 409);
 
   const progress = await c.env.DB.prepare(
     'SELECT COUNT(*) AS submitted_count FROM interrogation_submissions WHERE grid_id = ?'
@@ -461,7 +438,13 @@ polls.post('/:id/submit', async (c) => {
   // da mostrare, invece di restare "aperto" in attesa che il Rappresentante lo faccia partire
   // a mano.
   if (totalStudents > 0 && submittedCount >= totalStudents) {
-    await computeAndPersistAssignments(c.env, gridId, classId, grid.subject);
+    let assignments;
+    try { assignments = await computeAndPersistAssignments(c.env, gridId, classId); }
+    catch (error) {
+      if (error instanceof PollCalculationError) return c.json({ error: error.message }, 409);
+      throw error;
+    }
+    if (assignments === null) return c.json({ success: true, submittedCount, totalStudents });
 
     const doneTitle = 'Sondaggio completo';
     const doneText = `Tutti hanno inviato le proprie scelte per ${grid.subject}: il calendario è pronto nello storico.`;
@@ -502,8 +485,8 @@ polls.delete('/:id/submit', async (c) => {
   }
 
   await c.env.DB.prepare(
-    'DELETE FROM interrogation_submissions WHERE grid_id = ? AND student_id = ?'
-  ).bind(gridId, payload.sub).run();
+    `DELETE FROM interrogation_submissions WHERE grid_id = ? AND student_id = ? AND ${OPEN_GRID}`
+  ).bind(gridId, payload.sub, gridId, gridId).run();
 
   return c.json({ success: true });
 });
@@ -532,138 +515,46 @@ polls.put('/:id/deadline', requireRole('REPRESENTATIVE'), async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// Calcola e persiste le assegnazioni per una griglia (algoritmo con bonus sacrificio).
-// Condivisa fra l'endpoint manuale /assignments/run e l'invio automatico quando l'ultimo
-// studente della classe manda le proprie scelte.
-// ---------------------------------------------------------------------------
-async function computeAndPersistAssignments(
-  env: Env,
-  gridId: string,
-  classId: string,
-  subject: string
-): Promise<Array<{ studentId: string; slotId: string; voteScore: number }>> {
-  const slots = await env.DB.prepare(
-    'SELECT id, slot_date, capacity FROM interrogation_slots WHERE grid_id = ? ORDER BY slot_date ASC'
-  ).bind(gridId).all<{ id: string; slot_date: string; capacity: number }>();
-
-  const votes = await env.DB.prepare(
-    `SELECT iv.student_id, iv.slot_id, iv.vote_score,
-            COALESCE(ssb.bonus_points, 0) as sacrifice_bonus
-     FROM interrogation_votes iv
-     JOIN interrogation_slots s ON s.id = iv.slot_id AND s.grid_id = ?
-     LEFT JOIN student_sacrifice_bonus ssb ON ssb.student_id = iv.student_id AND ssb.subject = ?`
-  ).bind(gridId, subject).all<{
-    student_id: string;
-    slot_id: string;
-    vote_score: number;
-    sacrifice_bonus: number;
-  }>();
-
-  // Include anche il Rappresentante: vota ed è conteggiato in "hanno inviato tutti" (vedi
-  // progress query più sotto) esattamente come uno STUDENT, quindi deve poter essere assegnato
-  // a uno slot come chiunque altro. Escluderlo qui produceva un algoritmo che, in una classe
-  // dove il Rappresentante era l'unico ad aver votato (es. durante i test), non assegnava
-  // nessuno: zero righe in interrogation_assignments, quindi "isCalculated" restava falso e il
-  // sondaggio non si chiudeva mai, nonostante il pulsante "Calcola risultati" rispondesse 200 OK.
-  // Solo i destinatari della griglia, se il Rappresentante ne ha scelti alcuni.
-  const gridRow = await env.DB.prepare('SELECT audience_json FROM interrogation_grids WHERE id = ?')
-    .bind(gridId).first<{ audience_json: string | null }>();
-  const allStudentIds = effectiveAudience(parseAudience(gridRow?.audience_json), await classMemberIds(env, classId));
-
-  // Quanti voti negativi ha dato ciascuno: serve a diluirli (vedi negativeVoteWeight).
-  const negativeCount: Record<string, number> = {};
-  for (const v of votes.results) {
-    if (v.vote_score < 0) negativeCount[v.student_id] = (negativeCount[v.student_id] ?? 0) + 1;
-  }
-  const weightOf = (studentId: string) =>
-    negativeVoteWeight(negativeCount[studentId] ?? 0, slots.results.length);
-
-  const scoreMatrix: Record<string, Record<string, number>> = {};
-  for (const v of votes.results) {
-    if (!scoreMatrix[v.student_id]) scoreMatrix[v.student_id] = {};
-    const sacrifice = v.vote_score === 50 ? Math.min(v.sacrifice_bonus, MAX_SACRIFICE_BONUS) : 0;
-    const vote = v.vote_score < 0 ? v.vote_score * weightOf(v.student_id) : v.vote_score;
-    scoreMatrix[v.student_id][v.slot_id] = vote + sacrifice;
-  }
-
-  const allSlotIds = slots.results.map((s) => s.id);
-  for (const sid of allStudentIds) {
-    if (!scoreMatrix[sid]) scoreMatrix[sid] = {};
-    for (const slotId of allSlotIds) {
-      if (scoreMatrix[sid][slotId] === undefined) scoreMatrix[sid][slotId] = 0;
-    }
-  }
-
-  const slotCapacity = Object.fromEntries(slots.results.map((s) => [s.id, s.capacity]));
-  const slotUsed: Record<string, number> = Object.fromEntries(allSlotIds.map((id) => [id, 0]));
-  const assignments: Array<{ studentId: string; slotId: string; voteScore: number }> = [];
-  const assignedStudents = new Set<string>();
-
-  type Triple = { studentId: string; slotId: string; score: number };
-  const triples: Triple[] = [];
-  for (const sid of allStudentIds) {
-    for (const slotId of allSlotIds) {
-      triples.push({ studentId: sid, slotId, score: scoreMatrix[sid][slotId] });
-    }
-  }
-  triples.sort((a, b) => b.score - a.score);
-
-  for (const triple of triples) {
-    if (assignedStudents.has(triple.studentId)) continue;
-    if (slotUsed[triple.slotId] >= slotCapacity[triple.slotId]) continue;
-
-    assignments.push({
-      studentId: triple.studentId,
-      slotId: triple.slotId,
-      voteScore: scoreMatrix[triple.studentId][triple.slotId],
-    });
-    assignedStudents.add(triple.studentId);
-    slotUsed[triple.slotId]++;
-  }
-
-  const deleteStmt = env.DB.prepare('DELETE FROM interrogation_assignments WHERE slot_id IN (SELECT id FROM interrogation_slots WHERE grid_id = ?)').bind(gridId);
-
-  const insertStmts = assignments.map((a) =>
-    env.DB.prepare(
-      'INSERT INTO interrogation_assignments (id, slot_id, student_id) VALUES (?, ?, ?)'
-    ).bind(newUUID(), a.slotId, a.studentId)
-  );
-
-  const bonusStmts: D1PreparedStatement[] = [];
-  for (const a of assignments) {
-    const originalVoteScore = votes.results.find(
-      (v) => v.student_id === a.studentId && v.slot_id === a.slotId
-    )?.vote_score ?? 0;
-
-    if (originalVoteScore === -60 || originalVoteScore === -300) {
-      // Il bonus e' diluito come il voto: finire su una delle poche date rifiutate e' un
-      // sacrificio, finire su una delle nove "rosse" di chi ne ha lasciata libera una no.
-      const bonus = Math.round((originalVoteScore === -300 ? SACRIFICE_DARK_RED : SACRIFICE_LIGHT_RED) * weightOf(a.studentId));
-      bonusStmts.push(
-        env.DB.prepare(
-          `INSERT INTO student_sacrifice_bonus (student_id, subject, bonus_points)
-           VALUES (?, ?, MIN(?, ?))
-           ON CONFLICT(student_id, subject) DO UPDATE SET
-             bonus_points = MIN(bonus_points + excluded.bonus_points, ?)`
-        ).bind(a.studentId, subject, bonus, MAX_SACRIFICE_BONUS, MAX_SACRIFICE_BONUS)
-      );
-    } else if (originalVoteScore >= 0) {
-      bonusStmts.push(
-        env.DB.prepare(
-          'DELETE FROM student_sacrifice_bonus WHERE student_id = ? AND subject = ?'
-        ).bind(a.studentId, subject)
-      );
-    }
-  }
-
-  await env.DB.batch([deleteStmt, ...insertStmts, ...bonusStmts]);
-
-  return assignments;
-}
-
-// ---------------------------------------------------------------------------
 // GET /api/polls/:id/assignments — Risultati assegnazione (storico: tutta la classe)
 // ---------------------------------------------------------------------------
+// Anteprima: nessuna scrittura, nessuna notifica, nessun accredito dei bonus.
+polls.get('/:id/assignments/preview', requireRole('REPRESENTATIVE'), async (c) => {
+  const basis = c.req.query('basis');
+  if (basis !== undefined && basis !== 'ORIGINAL' && basis !== 'VOTES_ONLY') return c.json({ error: 'Modalità di confronto non valida' }, 400);
+  try {
+    const preview = await previewAssignments(c.env, c.req.param('id')!, await resolveClassId(c), basis);
+    if (!preview) return c.json({ error: 'Griglia non trovata' }, 404);
+    return c.json(preview);
+  } catch (error) {
+    if (error instanceof PollCalculationError) return c.json({ error: error.message }, 409);
+    throw error;
+  }
+});
+
+// Fotografia originale e scambi successivi: accesso solo al rappresentante della classe.
+polls.get('/:id/calculation', requireRole('REPRESENTATIVE'), async (c) => {
+  const gridId = c.req.param('id');
+  const grid = await c.env.DB.prepare('SELECT id FROM interrogation_grids WHERE id = ? AND class_id = ?')
+    .bind(gridId, await resolveClassId(c)).first();
+  if (!grid) return c.json({ error: 'Griglia non trovata' }, 404);
+  const row = await c.env.DB.prepare('SELECT * FROM interrogation_calculations WHERE grid_id = ?').bind(gridId).first<{
+    algorithm_version: string; input_json: string | null; result_json: string | null;
+    rules_json: string | null; calculated_at: string; redacted_students: number;
+  }>();
+  const events = await c.env.DB.prepare(`SELECT sequence, requester_id, target_id, requester_slot_id, target_slot_id, occurred_at
+    FROM interrogation_swap_events WHERE grid_id = ? ORDER BY sequence`).bind(gridId).all();
+  return c.json({
+    snapshotAvailable: !!row?.input_json,
+    algorithmVersion: row?.algorithm_version ?? null,
+    calculatedAt: row?.calculated_at ?? null,
+    redactedStudents: row?.redacted_students ?? 0,
+    input: row?.input_json ? JSON.parse(row.input_json) : null,
+    originalResult: row?.result_json ? JSON.parse(row.result_json) : null,
+    rules: row?.rules_json ? JSON.parse(row.rules_json) : null,
+    swaps: events.results,
+  });
+});
+
 polls.get('/:id/assignments', async (c) => {
   const gridId = c.req.param('id');
   const payload = c.get('jwtPayload');
@@ -756,7 +647,13 @@ polls.post('/:id/assignments/run', requireRole('REPRESENTATIVE'), async (c) => {
     }
   }
 
-  const assignments = await computeAndPersistAssignments(c.env, gridId!, classId, grid.subject);
+  let assignments;
+  try { assignments = await computeAndPersistAssignments(c.env, gridId!, classId, force); }
+  catch (error) {
+    if (error instanceof PollCalculationError) return c.json({ error: error.message }, 409);
+    throw error;
+  }
+  if (assignments === null) return c.json({ error: ALREADY_CALCULATED }, 409);
 
   return c.json({
     success: true,
@@ -847,7 +744,8 @@ polls.put('/swap/:swapId/confirm', async (c) => {
   if (swap.status !== 'PENDING') return c.json({ error: 'Questa richiesta non è più in attesa' }, 409);
 
   if (!accept) {
-    await c.env.DB.prepare("UPDATE swap_requests SET status = 'REJECTED' WHERE id = ?").bind(swapId).run();
+    const result = await c.env.DB.prepare("UPDATE swap_requests SET status = 'REJECTED' WHERE id = ? AND status = 'PENDING'").bind(swapId).run();
+    if (!result.meta.changes) return c.json({ error: 'Questa richiesta non è più in attesa' }, 409);
     return c.json({ success: true, accepted: false });
   }
 
@@ -868,14 +766,25 @@ polls.put('/swap/:swapId/confirm', async (c) => {
     return c.json({ error: 'Uno dei due studenti non ha più un posto assegnato' }, 409);
   }
 
-  // Swap slots
-  await c.env.DB.batch([
-    c.env.DB.prepare('UPDATE interrogation_assignments SET slot_id = ? WHERE id = ?')
-      .bind(theirAssignment.slot_id, myAssignment.id),
-    c.env.DB.prepare('UPDATE interrogation_assignments SET slot_id = ? WHERE id = ?')
-      .bind(myAssignment.slot_id, theirAssignment.id),
-    c.env.DB.prepare("UPDATE swap_requests SET status = 'ACCEPTED' WHERE id = ?").bind(swapId),
+  // Un solo evento può confermare la richiesta; controlla anche che nessun altro
+  // scambio abbia spostato i partecipanti durante la lettura delle assegnazioni.
+  const eventId = newUUID();
+  const ownEvent = 'EXISTS(SELECT 1 FROM interrogation_swap_events WHERE id = ?)';
+  const result = await c.env.DB.batch([
+    c.env.DB.prepare(`INSERT OR IGNORE INTO interrogation_swap_events
+      (id, request_id, grid_id, requester_id, target_id, requester_slot_id, target_slot_id)
+      SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS(SELECT 1 FROM swap_requests WHERE id = ? AND status = 'PENDING')
+      AND EXISTS(SELECT 1 FROM interrogation_assignments WHERE id = ? AND slot_id = ?)
+      AND EXISTS(SELECT 1 FROM interrogation_assignments WHERE id = ? AND slot_id = ?)`)
+      .bind(eventId, swapId, swap.grid_id, swap.requester_id, swap.target_id, theirAssignment.slot_id, myAssignment.slot_id,
+        swapId, theirAssignment.id, theirAssignment.slot_id, myAssignment.id, myAssignment.slot_id),
+    c.env.DB.prepare(`UPDATE interrogation_assignments SET slot_id = ? WHERE id = ? AND ${ownEvent}`)
+      .bind(theirAssignment.slot_id, myAssignment.id, eventId),
+    c.env.DB.prepare(`UPDATE interrogation_assignments SET slot_id = ? WHERE id = ? AND ${ownEvent}`)
+      .bind(myAssignment.slot_id, theirAssignment.id, eventId),
+    c.env.DB.prepare(`UPDATE swap_requests SET status = 'ACCEPTED' WHERE id = ? AND ${ownEvent}`).bind(swapId, eventId),
   ]);
+  if (!result[0].meta.changes) return c.json({ error: 'Lo scambio è già stato elaborato o i posti sono cambiati. Aggiorna e riprova.' }, 409);
 
   // Notify requester
   inBackground(c, notifyUser(

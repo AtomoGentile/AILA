@@ -4,6 +4,10 @@
      le modifiche vanno fatte li', questo file viene riscritto a ogni `xcodegen generate`. -->
 <plist version="1.0">
 <dict>
+	<key>AILAReleaseVersion</key>
+	<string>1.6.3-dev</string>
+	<key>AILAUpdateChannel</key>
+	<string>development</string>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>com.circolareplus.refresh</string>

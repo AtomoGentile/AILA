@@ -51,6 +51,8 @@ targets:
         CFBundleName: AILA
         CFBundleShortVersionString: "1.6.3"
         CFBundleVersion: "14"
+        AILAReleaseVersion: "1.6.3-dev"
+        AILAUpdateChannel: "development"
         LSRequiresIPhoneOS: true
         UIApplicationSupportsIndirectInputEvents: true
         # 120 Hz sugli iPhone ProMotion. Compose Multiplatform lo richiede e, senza, all'avvio

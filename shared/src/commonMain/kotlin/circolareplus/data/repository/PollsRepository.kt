@@ -97,6 +97,10 @@ class PollsRepository(private val api: ApiClient) {
 
     suspend fun getAssignments(pollId: String): PollAssignmentsResponseDto = api.get("/api/polls/$pollId/assignments")
 
+    /** Simulazione in sola lettura; senza cache offline per evitare confronti superati. */
+    suspend fun previewAssignments(pollId: String, basis: String? = null): circolareplus.data.remote.dto.PollAssignmentPreviewDto =
+        api.get("/api/polls/$pollId/assignments/preview${basis?.let { "?basis=$it" }.orEmpty()}", offlineCopy = false)
+
     /**
      * Fa girare l'algoritmo. Il server rifiuta con 409 finché non hanno inviato tutti e la
      * scadenza non è passata; [force] serve al Rappresentante per procedere lo stesso quando si

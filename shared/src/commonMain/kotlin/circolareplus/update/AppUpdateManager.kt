@@ -44,11 +44,13 @@ sealed interface UpdateState {
  * circolareplus.platform.isInAppUpdateSupported).
  *
  * Quando si pubblica una release (tag `vX.Y.Z`) la CI allega `AILA.apk`; l'app, all'avvio e al
- * ritorno in primo piano (al massimo ogni ora) legge `releases/latest`, e se la
- * versione e' piu' alta di quella installata propone di scaricarla e installarla. Lo stato e' di
+ * ritorno in primo piano (al massimo ogni ora) cerca nel canale dell'installazione.
+ * Le stabili leggono `releases/latest`; le beta confrontano anche le pre-release.
+ * Se la versione e' piu' alta di quella installata propone di scaricarla e installarla. Lo stato e' di
  * Compose, global come AppTheme: lo scaricamento continua anche se si chiude la finestra.
  */
 object AppUpdateManager {
+    private const val RELEASES_URL = "https://api.github.com/repos/AtomoGentile/AILA/releases?per_page=100"
     private const val LATEST_RELEASE_URL = "https://api.github.com/repos/AtomoGentile/AILA/releases/latest"
     // Al ritorno in primo piano non si ricontrolla piu' spesso di cosi': l'API di GitHub senza
     // token ha un limite per indirizzo, e una classe a scuola condivide quello del Wi-Fi. L'apertura
@@ -109,10 +111,11 @@ object AppUpdateManager {
                 if (update == null || !AppVersion.isNewer(update.version, appVersionName())) {
                     // Aggiornata: l'APK scaricato in passato non serve piu'.
                     clearDownloadedUpdate()
+                    AppContainer.settings.updateDownloadedIdentity = ""
                     state = UpdateState.UpToDate
                     return@launch
                 }
-                state = if (isUpdateApkDownloaded(update.apkSize)) {
+                state = if (hasDownloaded(update)) {
                     UpdateState.ReadyToInstall(update)
                 } else {
                     UpdateState.Available(update)
@@ -129,16 +132,28 @@ object AppUpdateManager {
     }
 
     private suspend fun fetchLatest(): AppUpdate? {
-        val response = http.get(LATEST_RELEASE_URL) {
-            header(HttpHeaders.Accept, "application/vnd.github+json")
-            // GitHub rifiuta le richieste senza User-Agent.
-            header(HttpHeaders.UserAgent, "AILA-app")
+        suspend fun fetch(url: String): String? {
+            val response = http.get(url) {
+                header(HttpHeaders.Accept, "application/vnd.github+json")
+                header(HttpHeaders.UserAgent, "AILA-app")
+            }
+            if (response.status.value == 404) return null
+            if (!response.status.isSuccess()) error("GitHub ha risposto ${response.status.value}")
+            return response.bodyAsText()
         }
-        // 404 = ancora nessuna release pubblicata (o solo pre-release): nessun aggiornamento.
-        if (response.status.value == 404) return null
-        if (!response.status.isSuccess()) error("GitHub ha risposto ${response.status.value}")
-        return AppUpdateParser.parseLatestRelease(response.bodyAsText())
+        val installed = appVersionName()
+        if (AppVersion.isBeta(installed)) {
+            fetch(RELEASES_URL)?.let { AppUpdateParser.selectLatestRelease(it, installed) }?.let { return it }
+        }
+        val stableJson = fetch(LATEST_RELEASE_URL) ?: return null
+        val stable = AppUpdateParser.parseLatestRelease(stableJson)
+        if (stable != null) return stable
+        // Anche un tag beta erroneamente marcato come latest non deve nascondere le stabili valide.
+        return fetch(RELEASES_URL)?.let { AppUpdateParser.selectLatestRelease(it, installed) }
     }
+
+    private fun hasDownloaded(update: AppUpdate): Boolean =
+        AppContainer.settings.updateDownloadedIdentity == update.downloadIdentity() && isUpdateApkDownloaded(update.apkSize)
 
     fun openDialog() {
         dialogVisible = true
@@ -167,13 +182,14 @@ object AppUpdateManager {
             else -> null
         } ?: return
 
-        if (isUpdateApkDownloaded(update.apkSize)) {
+        if (hasDownloaded(update)) {
             install(update)
             return
         }
         job = scope.launch {
             state = UpdateState.Downloading(update, 0L, update.apkSize)
             try {
+                AppContainer.settings.updateDownloadedIdentity = ""
                 downloadUpdateApk(update.apkUrl, update.apkSize, update.sha256) { done, total ->
                     state = UpdateState.Downloading(update, done, total)
                 }
@@ -186,11 +202,17 @@ object AppUpdateManager {
                 )
                 return@launch
             }
+            AppContainer.settings.updateDownloadedIdentity = update.downloadIdentity()
             install(update)
         }
     }
 
     private fun install(update: AppUpdate) {
+        if (!hasDownloaded(update)) {
+            state = UpdateState.Failed("Il file da installare non corrisponde a questa versione. Ripeti il download.", update)
+            dialogVisible = true
+            return
+        }
         if (!canInstallPackages()) {
             state = UpdateState.NeedsPermission(update)
             return
@@ -242,11 +264,17 @@ object AppUpdateManager {
         }
     }
 
+    private fun channelLabel(): String = when {
+        AppVersion.isBeta(appVersionName()) -> "Canale beta"
+        AppVersion.isPrerelease(appVersionName()) == true -> "Build di sviluppo"
+        else -> "Canale stabile"
+    }
+
     /** Testo sotto "Aggiornamenti" nelle Impostazioni. */
     fun statusLabel(): String = when (val s = state) {
-        UpdateState.Idle -> "Tocca per cercare una nuova versione"
+        UpdateState.Idle -> "${channelLabel()} · tocca per cercare aggiornamenti"
         UpdateState.Checking -> "Controllo in corso…"
-        UpdateState.UpToDate -> "AILA è aggiornata"
+        UpdateState.UpToDate -> "${channelLabel()} · AILA è aggiornata"
         is UpdateState.Available -> "Disponibile la versione ${s.update.version}"
         is UpdateState.Downloading -> "Scarico la versione ${s.update.version}…"
         is UpdateState.ReadyToInstall -> "Versione ${s.update.version} pronta da installare"

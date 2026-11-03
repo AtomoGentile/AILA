@@ -49,6 +49,14 @@ installato, nel formato `vX.Y.Z` (es. `v1.0.1`), non come bozza né pre-release.
 versione e lo allega alla release come `AILA.apk` dopo qualche minuto: da quel momento l'app lo propone.
 Le note della release compaiono nella finestra di aggiornamento (la sezione «Installazione» viene omessa).
 
+Le installazioni **stabili** ricevono solo stabili. Chi installa volontariamente una **beta
+Android** riceve le beta successive e può passare alla stabile definitiva della stessa
+versione: `1.6.3-beta.2 → 1.6.3`. Le beta non sono proposte agli utenti stabili e non si
+propongono versioni più vecchie di quella installata. Il canale è indicato nelle Impostazioni.
+Su iOS il feed SideStore resta stabile; le IPA beta si installano e aggiornano manualmente
+dalla relativa pre-release. I tag beta usano il formato `vX.Y.Z-beta.N` con `N >= 1`.
+
+
 ---
 
 ## Servizi usati

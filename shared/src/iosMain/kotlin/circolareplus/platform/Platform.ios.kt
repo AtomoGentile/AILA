@@ -16,8 +16,13 @@ actual fun displayCornerRadius(): androidx.compose.ui.unit.Dp = androidx.compose
     androidx.compose.ui.unit.Dp((value?.doubleValue ?: 0.0).toFloat())
 }
 
-actual fun appVersionName(): String =
-    (platform.Foundation.NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleShortVersionString") as? String) ?: "?"
+actual fun appVersionName(): String {
+    val bundle = platform.Foundation.NSBundle.mainBundle
+    val release = bundle.objectForInfoDictionaryKey("AILAReleaseVersion") as? String
+    val version = release ?: (bundle.objectForInfoDictionaryKey("CFBundleShortVersionString") as? String) ?: "?"
+    val build = bundle.objectForInfoDictionaryKey("CFBundleVersion") as? String
+    return if (release != null && build != null) "$version (build $build)" else version
+}
 
 // "Riduci movimento" di iOS. Si legge all'apertura e poi si resta in ascolto della notifica di
 // sistema, cosi' se lo si cambia dal Centro di controllo (o tornando dalle Impostazioni) l'app si

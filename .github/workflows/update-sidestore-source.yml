@@ -40,10 +40,9 @@ jobs:
           REPO="${{ github.repository }}"
 
           if [ -n "$INPUT_TAG" ]; then
-            REL=$(gh api "repos/$REPO/releases/tags/$INPUT_TAG")
+            REL=$(gh api "repos/$REPO/releases/tags/$INPUT_TAG" | python3 scripts/select_sidestore_release.py)
           else
-            REL=$(gh api "repos/$REPO/releases?per_page=30" \
-              --jq '[.[] | select(.draft|not) | select(.prerelease|not) | select(any(.assets[]; .name=="AILA.ipa"))][0]')
+            REL=$(gh api "repos/$REPO/releases?per_page=100" | python3 scripts/select_sidestore_release.py)
           fi
           [ -n "$REL" ] && [ "$REL" != "null" ] || { echo "Nessuna release con AILA.ipa: niente da fare"; exit 0; }
 
@@ -65,9 +64,12 @@ jobs:
           SHA=$(sha256sum AILA.ipa | cut -d' ' -f1)
 
           unzip -p AILA.ipa 'Payload/*.app/Info.plist' > Info.plist
-          read -r BUNDLE VERSION BUILD MINOS < <(python3 - <<'PY'
-          import plistlib
+          read -r BUNDLE VERSION BUILD MINOS < <(python3 - "$TAG" <<'PY'
+          import plistlib, sys
           p = plistlib.load(open("Info.plist", "rb"))
+          sys.path.insert(0, "scripts")
+          from select_sidestore_release import validate_ios_metadata
+          validate_ios_metadata(p, sys.argv[1])
           print(p["CFBundleIdentifier"], p["CFBundleShortVersionString"], p["CFBundleVersion"], p.get("MinimumOSVersion", "17.0"))
           PY
           )

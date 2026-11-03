@@ -94,4 +94,61 @@ class AppUpdateTest {
         assertEquals("Prima versione stabile.\n\nNovità\n\n• Più veloce\n• Nuovo tema", AppUpdateParser.cleanNotes(body))
         assertEquals("", AppUpdateParser.cleanNotes("## Installazione\n\n- solo istruzioni"))
     }
+    @Test
+    fun leBetaSiOrdinanoNumericamenteELaStabileSuperaLaPropriaBeta() {
+        assertTrue(AppVersion.isNewer("1.6.3-beta.10", "1.6.3-beta.2 (build 166, abcdef0)"))
+        assertTrue(AppVersion.isNewer("1.6.3", "1.6.3-beta.10"))
+        assertFalse(AppVersion.isNewer("1.6.3-beta.20", "1.6.3"))
+        assertFalse(AppVersion.isNewer("1.6.3-beta.2", "1.6.3-beta.10"))
+        assertFalse(AppVersion.isNewer("1.6.2", "1.6.3-beta.1"))
+        assertTrue(AppVersion.isNewer("1.6.4-beta.1", "1.6.3"))
+        assertTrue(AppVersion.isNewer("1.6.3", "1.6.3-dev"))
+        assertFalse(AppVersion.isNewer("1.6.3+build2", "1.6.3+build1"))
+    }
+
+    @Test
+    fun tagBetaEFlagDevonoConcordare() {
+        assertNull(AppUpdateParser.parseLatestRelease(release(tag = "v1.6.3-beta.1", prerelease = false)))
+        assertNull(AppUpdateParser.selectLatestRelease("[${release(tag = "v1.6.3-beta.1", prerelease = false)}]", "1.6.2-beta.1"))
+        assertNull(AppUpdateParser.selectLatestRelease("[${release(tag = "v1.6.3", prerelease = true)}]", "1.6.2-beta.1"))
+        assertNull(AppUpdateParser.selectLatestRelease("[${release(tag = "v1.7.0-rc.1", prerelease = true)}]", "1.6.3-beta.1"))
+    }
+
+    @Test
+    fun unaStabileNonPassaAutomaticamenteAllaBeta() {
+        val feed = "[${release(tag = "v1.7.0-beta.1", prerelease = true)},${release(tag = "v1.6.3")}]"
+        assertEquals("1.6.3", AppUpdateParser.selectLatestRelease(feed, "1.6.2")?.version)
+        assertNull(AppUpdateParser.selectLatestRelease("[${release(tag = "v1.7.0-beta.1", prerelease = true)}]", "1.6.3"))
+    }
+
+    @Test
+    fun unaBetaRiceveLaBetaPiuRecenteAncheSeLeReleaseNonSonoOrdinate() {
+        val feed = "[${release(tag = "v1.6.3-beta.2", prerelease = true)},${release(tag = "v1.6.2")},${release(tag = "v1.6.3-beta.10", prerelease = true)}]"
+        assertEquals("1.6.3-beta.10", AppUpdateParser.selectLatestRelease(feed, "1.6.3-beta.1")?.version)
+        assertNull(AppUpdateParser.selectLatestRelease(feed, "1.6.3-beta.10"))
+    }
+
+    @Test
+    fun unaBetaPassaAllaStabileSenzaDowngrade() {
+        val feed = "[${release(tag = "v1.6.3-beta.10", prerelease = true)},${release(tag = "v1.6.3")}]"
+        assertEquals("1.6.3", AppUpdateParser.selectLatestRelease(feed, "1.6.3-beta.10")?.version)
+        assertNull(AppUpdateParser.selectLatestRelease("[${release(tag = "v1.6.2")}]", "1.6.3-beta.1"))
+        assertNull(AppUpdateParser.selectLatestRelease(feed, "1.7.0-beta.1"))
+    }
+
+    @Test
+    fun laBetaPiuAltaSenzaApkNonNascondeUnaBetaInstallabile() {
+        val feed = "[${release(tag = "v1.6.3-beta.3", prerelease = true, assets = "")},${release(tag = "v1.6.3-beta.2", prerelease = true)}]"
+        assertEquals("1.6.3-beta.2", AppUpdateParser.selectLatestRelease(feed, "1.6.3-beta.1")?.version)
+    }
+
+    @Test
+    fun betaEStabileDellaStessaDimensioneNonRiutilizzanoLoStessoApk() {
+        val stable = assertNotNull(AppUpdateParser.parseLatestRelease(release(tag = "v1.6.3")))
+        val beta = assertNotNull(AppUpdateParser.selectLatestRelease("[${release(tag = "v1.6.3-beta.1", prerelease = true)}]", "1.6.2-beta.1"))
+        assertEquals(stable.apkSize, beta.apkSize)
+        assertFalse(stable.downloadIdentity() == beta.downloadIdentity())
+        assertFalse(stable.downloadIdentity() == stable.copy(sha256 = "b".repeat(64)).downloadIdentity())
+    }
+
 }

@@ -1,3 +1,5 @@
+DROP TABLE IF EXISTS interrogation_swap_events;
+DROP TABLE IF EXISTS interrogation_calculations;
 -- Cancella tutte le tabelle esistenti sul database D1 remoto, incluse quelle rimaste da uno
 -- schema precedente e incompatibile (es. "app_config" senza la colonna "class_label", causa
 -- dell'errore "table app_config has no column named class_label"). Da eseguire una tantum prima

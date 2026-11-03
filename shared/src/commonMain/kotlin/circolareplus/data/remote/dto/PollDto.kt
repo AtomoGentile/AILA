@@ -81,3 +81,40 @@ data class SwapRequestDto(val targetStudentId: String)
 
 @Serializable
 data class ConfirmSwapRequestDto(val accept: Boolean)
+
+@Serializable
+data class PollPreviewDistributionDto(
+    val green: Int, val yellow: Int, val redLight: Int, val redDark: Int, val missing: Int
+)
+
+@Serializable
+data class PollPreviewAssignmentDto(
+    val studentId: String,
+    val studentName: String,
+    val beforeSlotId: String,
+    val beforeDate: String,
+    val beforeVote: Int? = null,
+    val afterSlotId: String,
+    val afterDate: String,
+    val afterVote: Int? = null,
+    val changed: Boolean,
+    val preferenceChange: String
+)
+
+@Serializable
+data class PollAssignmentPreviewDto(
+    val subject: String,
+    val algorithmVersion: String,
+    val basis: String,
+    val originalAvailable: Boolean,
+    val generatedAt: String,
+    val acceptedSwaps: Int,
+    val historicalDataIncomplete: Boolean,
+    val totalStudents: Int,
+    val moved: Int,
+    val improved: Int,
+    val worsened: Int,
+    val before: PollPreviewDistributionDto,
+    val after: PollPreviewDistributionDto,
+    val assignments: List<PollPreviewAssignmentDto>
+)

@@ -116,13 +116,13 @@ android {
         // (may contain just the tag), and fall back to the older GITHUB_REF_TYPE/GITHUB_REF_NAME.
         val tagVersion = run {
             val ghRef = System.getenv("GITHUB_REF") ?: System.getenv("GITHUB_REF_NAME") ?: ""
-            Regex("refs/tags/[vV]?(\\d+(?:\\.\\d+)*(?:-beta\\.\\d+)?)$").find(ghRef)?.groupValues?.get(1)
-                ?: Regex("^[vV]?(\\d+(?:\\.\\d+)*(?:-beta\\.\\d+)?)$").find(ghRef)?.groupValues?.get(1)
+            Regex("refs/tags/[vV]?(\\d+(?:\\.\\d+)*(?:-beta\\.[1-9]\\d*)?)$").find(ghRef)?.groupValues?.get(1)
+                ?: Regex("^[vV]?(\\d+(?:\\.\\d+)*(?:-beta\\.[1-9]\\d*)?)$").find(ghRef)?.groupValues?.get(1)
                 ?: if (System.getenv("GITHUB_REF_TYPE") == "tag") {
-                    Regex("^[vV](\\d+(\\.\\d+)*(?:-beta\\.\\d+)?)$").find(System.getenv("GITHUB_REF_NAME").orEmpty())?.groupValues?.get(1)
+                    Regex("^[vV](\\d+(\\.\\d+)*(?:-beta\\.[1-9]\\d*)?)$").find(System.getenv("GITHUB_REF_NAME").orEmpty())?.groupValues?.get(1)
                 } else null
         }
-        val baseVersion = tagVersion ?: "1.6.2"
+        val baseVersion = tagVersion ?: "1.6.3-dev"
         versionName = if (ciRun != null) "$baseVersion (build $ciRun, $ciSha)" else baseVersion
 
         ndk {

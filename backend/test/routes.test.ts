@@ -944,3 +944,299 @@ describe('ricorrenza personalizzata', () => {
     expect(events.every((e: any) => e.category === 'ENTRATA')).toBe(true);
   });
 });
+
+describe('assegnazione globale e chiusura atomica dei sondaggi', () => {
+  async function setup(subject = 'Verifica', onlyStudent = false) {
+    const rep = await register('prof', { representativeCode: await repCode() });
+    const student = await register('alunno', { classCode: await classCodeOf(rep.json.token) });
+    const created = await call('POST', '/api/polls', { subject, audienceUserIds: onlyStudent ? [student.json.user.id] : null,
+      slots: [{ slotDate: '2090-12-01', capacity: 1 }, { slotDate: '2090-12-02', capacity: 1 }] }, rep.json.token);
+    expect(created.status).toBe(201);
+    const gridId = created.json.id;
+    await call('PUT', `/api/polls/${gridId}/publish`, {}, rep.json.token);
+    const slots = (await call('GET', `/api/polls/${gridId}`, undefined, rep.json.token)).json.slots;
+    return { rep, student, gridId, slots };
+  }
+  function overlapBatches(count = 2) {
+    const base = env.DB;
+    let arrived = 0;
+    let release: () => void = () => {};
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    env.DB = { prepare: base.prepare.bind(base), async batch(statements: D1PreparedStatement[]) {
+      if (++arrived === count) release();
+      await gate;
+      return base.batch(statements);
+    } } as D1Database;
+    return base;
+  }
+
+  it('assegna entrambi sul verde e salva voti, pesi e bonus prima/dopo il calcolo', async () => {
+    const { rep, student, gridId, slots } = await setup();
+    await env.DB.prepare('INSERT INTO student_sacrifice_bonus VALUES (?, ?, ?)').bind(rep.json.user.id, 'Verifica', 40).run();
+    for (const slot of slots) expect((await call('POST', `/api/polls/${gridId}/vote`, { slotId: slot.id, voteScore: 50 }, rep.json.token)).status).toBe(200);
+    await call('POST', `/api/polls/${gridId}/vote`, { slotId: slots[0].id, voteScore: 50 }, student.json.token);
+    await call('POST', `/api/polls/${gridId}/vote`, { slotId: slots[1].id, voteScore: -60 }, student.json.token);
+    const run = await call('POST', `/api/polls/${gridId}/assignments/run?force=1`, {}, rep.json.token);
+    expect(run.status).toBe(200);
+    expect(run.json.assignments.find((a: any) => a.studentId === student.json.user.id).slotId).toBe(slots[0].id);
+    const audit = await call('GET', `/api/polls/${gridId}/calculation`, undefined, rep.json.token);
+    expect(audit.json).toMatchObject({ snapshotAvailable: true, algorithmVersion: 'global-score-v1', redactedStudents: 0 });
+    expect(audit.json.input.students[rep.json.user.id].bonus).toBe(40);
+    expect(audit.json.originalResult[rep.json.user.id]).toMatchObject({ vote: 50, effectiveScore: 90, bonusBefore: 40, bonusAfter: 0 });
+    expect(audit.json.rules).toMatchObject({ fairNegativeShare: 0.4, maxSacrificeBonus: 300, lightRedBonus: 40, darkRedBonus: 150 });
+    expect((await call('GET', `/api/polls/${gridId}/calculation`, undefined, student.json.token)).status).toBe(403);
+    const other = await register('altro', { classLabel: '5 D', representativeCode: await repCode('5 D') });
+    expect((await call('GET', `/api/polls/${gridId}/calculation`, undefined, other.json.token)).status).toBe(404);
+  });
+
+  it('due chiusure sovrapposte applicano i bonus e creano il calendario una sola volta', async () => {
+    const { rep, student, gridId, slots } = await setup('Race');
+    for (const user of [rep, student]) for (const slot of slots) await call('POST', `/api/polls/${gridId}/vote`, { slotId: slot.id, voteScore: -60 }, user.json.token);
+    overlapBatches();
+    const results = await Promise.all([rep, student].map(() => call('POST', `/api/polls/${gridId}/assignments/run?force=1`, {}, rep.json.token)));
+    expect(results.map(r => r.status).sort()).toEqual([200, 409]);
+    expect((await env.DB.prepare("SELECT bonus_points FROM student_sacrifice_bonus WHERE subject = 'Race'").all()).results.map((r: any) => r.bonus_points)).toEqual([20, 20]);
+    expect((await env.DB.prepare('SELECT COUNT(*) AS n FROM interrogation_calculations').first<any>()).n).toBe(1);
+    expect((await call('GET', `/api/polls/${gridId}/assignments`, undefined, rep.json.token)).json.assignments).toHaveLength(2);
+  });
+
+  it('gli ultimi due invii simultanei chiudono automaticamente senza duplicare i bonus', async () => {
+    const { rep, student, gridId, slots } = await setup('Auto');
+    for (const user of [rep, student]) for (const slot of slots) await call('POST', `/api/polls/${gridId}/vote`, { slotId: slot.id, voteScore: -60 }, user.json.token);
+    const base = env.DB;
+    let arrived = 0;
+    let release: () => void = () => {};
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    env.DB = { prepare(sql: string) {
+      const statement = base.prepare(sql);
+      if (!sql.includes('INSERT INTO interrogation_submissions')) return statement;
+      return { bind(...args: unknown[]) { const bound = statement.bind(...args); return { async run() {
+        const result = await bound.run(); if (++arrived === 2) release(); await gate; return result;
+      } }; } };
+    }, batch: base.batch.bind(base) } as D1Database;
+    const results = await Promise.all([rep, student].map(user => call('POST', `/api/polls/${gridId}/submit`, {}, user.json.token)));
+    expect(results.map(r => r.status)).toEqual([200, 200]);
+    expect((await base.prepare("SELECT bonus_points FROM student_sacrifice_bonus WHERE subject = 'Auto'").all()).results.map((r: any) => r.bonus_points)).toEqual([20, 20]);
+  });
+
+  it('se cambia un bonus durante il calcolo riparte dagli input aggiornati', async () => {
+    const { rep, gridId } = await setup('Aggiornati');
+    const base = env.DB;
+    let first = true;
+    env.DB = { prepare: base.prepare.bind(base), async batch(statements: D1PreparedStatement[]) {
+      if (first) { first = false; await base.prepare('INSERT INTO student_sacrifice_bonus VALUES (?, ?, ?)').bind(rep.json.user.id, 'Aggiornati', 70).run(); }
+      return base.batch(statements);
+    } } as D1Database;
+    expect((await call('POST', `/api/polls/${gridId}/assignments/run?force=1`, {}, rep.json.token)).status).toBe(200);
+    const audit = await call('GET', `/api/polls/${gridId}/calculation`, undefined, rep.json.token);
+    expect(audit.json.input.students[rep.json.user.id].bonus).toBe(70);
+  });
+
+  it('un errore nella transazione non lascia un sondaggio bloccato o bonus parziali', async () => {
+    const { rep, gridId } = await setup();
+    const base = env.DB;
+    env.DB = { prepare: base.prepare.bind(base), batch(statements: D1PreparedStatement[]) {
+      return base.batch([statements[0], { runSync() { throw new Error('Scrittura interrotta'); } } as unknown as D1PreparedStatement, ...statements.slice(1)]);
+    } } as D1Database;
+    expect((await call('POST', `/api/polls/${gridId}/assignments/run?force=1`, {}, rep.json.token)).status).toBe(500);
+    expect((await base.prepare('SELECT COUNT(*) AS n FROM interrogation_calculations').first<any>()).n).toBe(0);
+    env.DB = base;
+    expect((await call('POST', `/api/polls/${gridId}/assignments/run?force=1`, {}, rep.json.token)).status).toBe(200);
+  });
+
+  it('la cancellazione dell’account cancella anche i suoi dati dalla fotografia e non riapre il sondaggio', async () => {
+    const { rep, student, gridId } = await setup('Privacy', true);
+    expect((await call('POST', `/api/polls/${gridId}/assignments/run?force=1`, {}, rep.json.token)).status).toBe(200);
+    expect((await call('DELETE', '/api/users/me', { password: 'password123' }, student.json.token)).status).toBe(200);
+    const audit = await call('GET', `/api/polls/${gridId}/calculation`, undefined, rep.json.token);
+    expect(audit.json.redactedStudents).toBe(1);
+    expect(JSON.stringify(audit.json)).not.toContain(student.json.user.id);
+    expect((await call('GET', '/api/polls', undefined, rep.json.token)).json.polls[0].isCalculated).toBe(true);
+    expect((await call('POST', `/api/polls/${gridId}/assignments/run?force=1`, {}, rep.json.token)).status).toBe(409);
+  });
+
+  it('gli scambi restano distinti dal risultato originale e una doppia conferma non li applica due volte', async () => {
+    const { rep, student, gridId } = await setup();
+    await call('POST', `/api/polls/${gridId}/assignments/run?force=1`, {}, rep.json.token);
+    const before = (await call('GET', `/api/polls/${gridId}/assignments`, undefined, rep.json.token)).json.assignments;
+    const swap = await call('POST', `/api/polls/${gridId}/swap-request`, { targetStudentId: student.json.user.id }, rep.json.token);
+    overlapBatches();
+    const confirms = await Promise.all([1, 2].map(() => call('PUT', `/api/polls/swap/${swap.json.swapId}/confirm`, { accept: true }, student.json.token)));
+    expect(confirms.map(c => c.status).sort()).toEqual([200, 409]);
+    const after = (await call('GET', `/api/polls/${gridId}/assignments`, undefined, rep.json.token)).json.assignments;
+    expect(after.find((a: any) => a.studentId === rep.json.user.id).slotId).toBe(before.find((a: any) => a.studentId === student.json.user.id).slotId);
+    const audit = (await call('GET', `/api/polls/${gridId}/calculation`, undefined, rep.json.token)).json;
+    expect(audit.swaps).toHaveLength(1);
+    expect(audit.originalResult[rep.json.user.id].slotId).toBe(before.find((a: any) => a.studentId === rep.json.user.id).slotId);
+  });
+});
+
+describe('richieste in volo durante la chiusura del sondaggio', () => {
+  it('un voto partito prima della chiusura non modifica i voti dopo la fotografia del calcolo', async () => {
+    const rep = await register('prof', { representativeCode: await repCode() });
+    const student = await register('alunno', { classCode: await classCodeOf(rep.json.token) });
+    const created = await call('POST', '/api/polls', { subject: 'Voto in volo', slots: [{ slotDate: '2090-12-01', capacity: 2 }] }, rep.json.token);
+    const id = created.json.id;
+    await call('PUT', `/api/polls/${id}/publish`, {}, rep.json.token);
+    const slot = (await call('GET', `/api/polls/${id}`, undefined, rep.json.token)).json.slots[0];
+    const base = env.DB;
+    let started: () => void = () => {}, release: () => void = () => {};
+    const ready = new Promise<void>(resolve => { started = resolve; });
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    env.DB = { prepare(sql: string) {
+      const statement = base.prepare(sql);
+      if (!sql.includes('INSERT INTO interrogation_votes')) return statement;
+      return { bind(...args: unknown[]) { const bound = statement.bind(...args); return { async run() {
+        started(); await gate; return bound.run();
+      } }; } };
+    }, batch: base.batch.bind(base) } as D1Database;
+    const vote = call('POST', `/api/polls/${id}/vote`, { slotId: slot.id, voteScore: -60 }, student.json.token);
+    await ready;
+    expect((await call('POST', `/api/polls/${id}/assignments/run?force=1`, {}, rep.json.token)).status).toBe(200);
+    release();
+    expect((await vote).status).toBe(409);
+    expect((await base.prepare('SELECT COUNT(*) AS n FROM interrogation_votes').first<any>()).n).toBe(0);
+    const audit = await call('GET', `/api/polls/${id}/calculation`, undefined, rep.json.token);
+    expect(audit.json.originalResult[student.json.user.id].vote).toBeNull();
+  });
+
+  it('riprova con i bonus aggiornati quando due sondaggi della stessa materia chiudono insieme', async () => {
+    const rep = await register('prof', { representativeCode: await repCode() });
+    const id = rep.json.user.id;
+    const grids = [];
+    for (let i = 0; i < 2; i++) {
+      const grid = await call('POST', '/api/polls', { subject: 'Materia', slots: [{ slotDate: `2090-12-0${i + 1}`, capacity: 1 }] }, rep.json.token);
+      await call('PUT', `/api/polls/${grid.json.id}/publish`, {}, rep.json.token);
+      const slot = (await call('GET', `/api/polls/${grid.json.id}`, undefined, rep.json.token)).json.slots[0];
+      await call('POST', `/api/polls/${grid.json.id}/vote`, { slotId: slot.id, voteScore: -60 }, rep.json.token);
+      grids.push(grid.json.id);
+    }
+    const base = env.DB;
+    let arrived = 0, release: () => void = () => {};
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    env.DB = { prepare: base.prepare.bind(base), async batch(statements: D1PreparedStatement[]) {
+      if (++arrived === 2) release();
+      await gate;
+      return base.batch(statements);
+    } } as D1Database;
+    const results = await Promise.all(grids.map(grid => call('POST', `/api/polls/${grid}/assignments/run?force=1`, {}, rep.json.token)));
+    expect(results.map(r => r.status)).toEqual([200, 200]);
+    expect((await base.prepare("SELECT bonus_points FROM student_sacrifice_bonus WHERE student_id = ? AND subject = 'Materia'").bind(id).first<any>()).bonus_points).toBe(80);
+    const snapshots = await Promise.all(grids.map(grid => call('GET', `/api/polls/${grid}/calculation`, undefined, rep.json.token)));
+    expect(snapshots.map(s => s.json.originalResult[id].bonusBefore).sort((a, b) => a - b)).toEqual([0, 40]);
+  });
+});
+
+describe('anteprima del nuovo algoritmo', () => {
+  async function legacySetup(secondVote: number | null = -60) {
+    const rep = await register('prof', { representativeCode: await repCode() });
+    const student = await register('alunno', { classCode: await classCodeOf(rep.json.token) });
+    const created = await call('POST', '/api/polls', { subject: 'Anteprima', slots: [{ slotDate: '2090-12-01', capacity: 1 }, { slotDate: '2090-12-02', capacity: 1 }] }, rep.json.token);
+    const id = created.json.id;
+    await call('PUT', `/api/polls/${id}/publish`, {}, rep.json.token);
+    const slots = (await call('GET', `/api/polls/${id}`, undefined, rep.json.token)).json.slots;
+    for (const slot of slots) await call('POST', `/api/polls/${id}/vote`, { slotId: slot.id, voteScore: 50 }, rep.json.token);
+    await call('POST', `/api/polls/${id}/vote`, { slotId: slots[0].id, voteScore: 50 }, student.json.token);
+    if (secondVote !== null) await call('POST', `/api/polls/${id}/vote`, { slotId: slots[1].id, voteScore: secondVote }, student.json.token);
+    // Risultato del vecchio greedy, anteriore al salvataggio delle fotografie.
+    await env.DB.batch([
+      env.DB.prepare('INSERT INTO interrogation_assignments(id,slot_id,student_id) VALUES(?,?,?)').bind('old-rep', slots[0].id, rep.json.user.id),
+      env.DB.prepare('INSERT INTO interrogation_assignments(id,slot_id,student_id) VALUES(?,?,?)').bind('old-student', slots[1].id, student.json.user.id),
+      env.DB.prepare('INSERT INTO student_sacrifice_bonus VALUES(?,?,?)').bind(student.json.user.id, 'Anteprima', 300),
+    ]);
+    return { rep, student, id, slots };
+  }
+
+  it('mostra i miglioramenti del calendario storico senza cambiare alcun dato', async () => {
+    const { rep, student, id, slots } = await legacySetup();
+    const tables = ['interrogation_assignments', 'interrogation_votes', 'student_sacrifice_bonus', 'interrogation_calculations', 'swap_requests'];
+    const readTables = () => Promise.all(tables.map(t => env.DB.prepare(`SELECT * FROM ${t}`).all()));
+    const before = await readTables();
+    const preview = await call('GET', `/api/polls/${id}/assignments/preview`, undefined, rep.json.token);
+    expect(preview.status).toBe(200);
+    expect(preview.json).toMatchObject({ basis: 'VOTES_ONLY', originalAvailable: false, moved: 2, improved: 1, worsened: 0, totalStudents: 2 });
+    expect(preview.json.before).toMatchObject({ green: 1, redLight: 1 });
+    expect(preview.json.after).toMatchObject({ green: 2, redLight: 0 });
+    expect(preview.json.assignments.find((a: any) => a.studentId === student.json.user.id)).toMatchObject({
+      beforeDate: slots[1].slotDate, beforeVote: -60, afterDate: slots[0].slotDate, afterVote: 50, preferenceChange: 'IMPROVED'
+    });
+    expect(await readTables()).toEqual(before);
+    expect((await call('GET', `/api/polls/${id}/assignments/preview?basis=ORIGINAL`, undefined, rep.json.token)).status).toBe(409);
+  });
+
+  it('distingue il giallo esplicito dalla risposta mancante', async () => {
+    const { rep, id } = await legacySetup(null);
+    const preview = await call('GET', `/api/polls/${id}/assignments/preview`, undefined, rep.json.token);
+    expect(preview.json.before).toMatchObject({ missing: 1, yellow: 0 });
+    expect(preview.json.after).toMatchObject({ missing: 0, green: 2 });
+  });
+
+  it('è accessibile solo al rappresentante della classe e non include nuovi iscritti', async () => {
+    const { rep, student, id } = await legacySetup();
+    await register('nuovo', { classCode: await classCodeOf(rep.json.token) });
+    expect((await call('GET', `/api/polls/${id}/assignments/preview`, undefined, student.json.token)).status).toBe(403);
+    const other = await register('altro', { classLabel: '5 D', representativeCode: await repCode('5 D') });
+    expect((await call('GET', `/api/polls/${id}/assignments/preview`, undefined, other.json.token)).status).toBe(404);
+    expect((await call('GET', `/api/polls/${id}/assignments/preview`, undefined, rep.json.token)).json.totalStudents).toBe(2);
+    expect((await call('GET', `/api/polls/${id}/assignments/preview?basis=CURRENT_BONUSES`, undefined, rep.json.token)).status).toBe(400);
+  });
+
+  it('usa i bonus originali e mantiene gli scambi che hanno già lo stesso punteggio ottimo', async () => {
+    const rep = await register('prof', { representativeCode: await repCode() });
+    const student = await register('alunno', { classCode: await classCodeOf(rep.json.token) });
+    const created = await call('POST', '/api/polls', { subject: 'Fotografia', slots: [{ slotDate: '2090-12-01', capacity: 1 }, { slotDate: '2090-12-02', capacity: 1 }] }, rep.json.token);
+    const id = created.json.id;
+    await call('PUT', `/api/polls/${id}/publish`, {}, rep.json.token);
+    const slots = (await call('GET', `/api/polls/${id}`, undefined, rep.json.token)).json.slots;
+    for (const user of [rep, student]) for (const slot of slots) await call('POST', `/api/polls/${id}/vote`, { slotId: slot.id, voteScore: 50 }, user.json.token);
+    await env.DB.prepare('INSERT INTO student_sacrifice_bonus VALUES(?,?,?)').bind(rep.json.user.id, 'Fotografia', 150).run();
+    await call('POST', `/api/polls/${id}/assignments/run?force=1`, {}, rep.json.token);
+    const swap = await call('POST', `/api/polls/${id}/swap-request`, { targetStudentId: student.json.user.id }, rep.json.token);
+    await call('PUT', `/api/polls/swap/${swap.json.swapId}/confirm`, { accept: true }, student.json.token);
+    const before = (await call('GET', `/api/polls/${id}/assignments`, undefined, rep.json.token)).json.assignments;
+    const preview = await call('GET', `/api/polls/${id}/assignments/preview`, undefined, rep.json.token);
+    expect(preview.status).toBe(200);
+    expect(preview.json).toMatchObject({ basis: 'ORIGINAL', originalAvailable: true, acceptedSwaps: 1, moved: 0, improved: 0, worsened: 0 });
+    for (const row of preview.json.assignments) expect(row.afterSlotId).toBe(before.find((a: any) => a.studentId === row.studentId).slotId);
+    expect((await call('GET', `/api/polls/${id}/assignments/preview?basis=VOTES_ONLY`, undefined, rep.json.token)).json.basis).toBe('VOTES_ONLY');
+  });
+});
+
+describe('confronto dei bonus e dei dati storici incompleti', () => {
+  it('mostra anche chi peggiorerebbe e non usa i bonus già consumati dopo il calcolo', async () => {
+    const rep = await register('prof', { representativeCode: await repCode() });
+    const student = await register('alunno', { classCode: await classCodeOf(rep.json.token) });
+    const created = await call('POST', '/api/polls', { subject: 'Priorità', slots: [{ slotDate: '2090-12-01', capacity: 1 }, { slotDate: '2090-12-02', capacity: 1 }] }, rep.json.token);
+    const id = created.json.id;
+    await call('PUT', `/api/polls/${id}/publish`, {}, rep.json.token);
+    const slots = (await call('GET', `/api/polls/${id}`, undefined, rep.json.token)).json.slots;
+    for (const user of [rep, student]) {
+      await call('POST', `/api/polls/${id}/vote`, { slotId: slots[0].id, voteScore: 50 }, user.json.token);
+      await call('POST', `/api/polls/${id}/vote`, { slotId: slots[1].id, voteScore: 0 }, user.json.token);
+    }
+    await env.DB.prepare('INSERT INTO student_sacrifice_bonus VALUES(?,?,?)').bind(student.json.user.id, 'Priorità', 300).run();
+    await call('POST', `/api/polls/${id}/assignments/run?force=1`, {}, rep.json.token);
+    const swap = await call('POST', `/api/polls/${id}/swap-request`, { targetStudentId: student.json.user.id }, rep.json.token);
+    await call('PUT', `/api/polls/swap/${swap.json.swapId}/confirm`, { accept: true }, student.json.token);
+    const original = await call('GET', `/api/polls/${id}/assignments/preview?basis=ORIGINAL`, undefined, rep.json.token);
+    expect(original.status).toBe(200);
+    expect(original.json).toMatchObject({ moved: 2, improved: 1, worsened: 1 });
+    expect(original.json.assignments.find((a: any) => a.studentId === rep.json.user.id).preferenceChange).toBe('WORSENED');
+    const onlyVotes = await call('GET', `/api/polls/${id}/assignments/preview?basis=VOTES_ONLY`, undefined, rep.json.token);
+    expect(onlyVotes.json).toMatchObject({ moved: 0, improved: 0, worsened: 0 });
+  });
+
+  it('se viene cancellato un account mostra solo una simulazione sui dati rimasti', async () => {
+    const rep = await register('prof', { representativeCode: await repCode() });
+    const student = await register('alunno', { classCode: await classCodeOf(rep.json.token) });
+    const created = await call('POST', '/api/polls', { subject: 'Cancellazione', slots: [{ slotDate: '2090-12-01', capacity: 2 }] }, rep.json.token);
+    const id = created.json.id;
+    await call('PUT', `/api/polls/${id}/publish`, {}, rep.json.token);
+    await call('POST', `/api/polls/${id}/assignments/run?force=1`, {}, rep.json.token);
+    await call('DELETE', '/api/users/me', { password: 'password123' }, student.json.token);
+    const preview = await call('GET', `/api/polls/${id}/assignments/preview`, undefined, rep.json.token);
+    expect(preview.json).toMatchObject({ basis: 'VOTES_ONLY', originalAvailable: false, historicalDataIncomplete: true, totalStudents: 1 });
+    expect(JSON.stringify(preview.json)).not.toContain(student.json.user.id);
+    expect((await call('GET', `/api/polls/${id}/assignments/preview?basis=ORIGINAL`, undefined, rep.json.token)).status).toBe(409);
+  });
+});

@@ -53,9 +53,19 @@ fun PollHistoryScreen(
     isAddingToCalendar: Boolean = false,
     calendarAddMessage: String? = null,
     calendarAddIsError: Boolean = false,
-    onAddToCalendar: (PollSummaryDto, List<PollAssignmentDto>) -> Unit = { _, _ -> }
+    onAddToCalendar: (PollSummaryDto, List<PollAssignmentDto>) -> Unit = { _, _ -> },
+    loadAssignmentPreview: (suspend (String, String?) -> circolareplus.data.remote.dto.PollAssignmentPreviewDto)? = null
 ) {
     var pendingDeleteId by remember { mutableStateOf<String?>(null) }
+    var previewPoll by remember { mutableStateOf<PollSummaryDto?>(null) }
+    previewPoll?.let { poll ->
+        if (canManage && loadAssignmentPreview != null) PollAssignmentPreviewDialog(
+            pollId = poll.id,
+            subject = poll.subject,
+            loadPreview = { basis -> loadAssignmentPreview(poll.id, basis) },
+            onDismiss = { previewPoll = null }
+        )
+    }
 
     if (pendingDeleteId != null) {
         circolareplus.design.AilaConfirmDialog(
@@ -184,6 +194,14 @@ fun PollHistoryScreen(
                                     }
 
                                     if (canManage) {
+                                        if (loadAssignmentPreview != null) {
+                                            Spacer(modifier = Modifier.height(AppTheme.Space12))
+                                            circolareplus.design.AilaSecondaryButton(
+                                                text = "Confronta con il nuovo algoritmo",
+                                                modifier = Modifier.fillMaxWidth(),
+                                                onClick = { previewPoll = poll }
+                                            )
+                                        }
                                         Spacer(modifier = Modifier.height(AppTheme.Space16))
                                         HorizontalDivider(color = AppTheme.Hairline)
                                         Spacer(modifier = Modifier.height(AppTheme.Space12))
