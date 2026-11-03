@@ -137,3 +137,37 @@ risultati, bonus o eventi esistenti. La cancellazione di un account cancella anc
 le fotografie delle revisioni della classe, che possono contenere nomi negli eventi.
 I test coprono migrazione, autorizzazioni, conferme duplicate, conflitti prima della
 transazione, riconciliazione, ripristino e rollback totale in caso di errore.
+
+## Sincronizzazione esplicita del calendario e PDF (beta 5)
+
+**Sondaggi → Storico → Interrogazioni → Aggiorna date nel calendario** legge i risultati
+pubblicati e mostra le nuove date con i nomi. Gli eventi già collegati alla griglia sono
+aggiornati senza duplicarli. Le vecchie voci senza collegamento sono selezionabili dal
+rappresentante: la conferma sostituisce solo quelle selezionate. Eventi di circolari,
+di altre griglie, privati o non selezionati restano intatti. Le corrispondenze complete
+riconosciute vengono preselezionate soltanto se la data non è ambigua con altri sondaggi.
+
+`GET /api/polls/:id/calendar/preview` e `POST /api/polls/:id/calendar/sync` sono riservati
+al rappresentante della classe. La POST richiede `syncToken` e `replaceEventIds`; un
+confronto SQL nello stesso batch protegge da modifiche tra anteprima e conferma. Le date
+usano ID stabili per griglia/slot. Assegnazioni e bonus non vengono modificati. La
+migrazione additiva e ripetibile `028_poll_calendar_sync.sql` va applicata prima del Worker.
+
+Se il ripristino di una revisione era ancora sicuro, la sincronizzazione aggiorna la
+fotografia post-pubblicazione e registra le vecchie voci selezionate da ripristinare.
+Non riabilita un ripristino già bloccato e non può riscrivere fotografie cancellate
+nel frattempo dalla rimozione di un account.
+
+**Esporta PDF date e studenti** è disponibile sulle card dello Storico a chi può leggere
+i risultati. `GET /api/polls/:id/assignments/pdf` applica gli stessi controlli di classe
+e destinatari delle assegnazioni; restituisce `application/pdf`, `private, no-store`.
+L'app disabilita la copia offline per questa richiesta e usa la condivisione PDF già
+presente sulle tre piattaforme. Sono esportati solo i risultati realmente pubblicati,
+con tutte le date (comprese quelle senza assegnati), ordinati per data e cognome.
+
+Il PDF A4 contiene testo selezionabile, nomi su più righe, intestazioni ripetute e numeri
+di pagina. Incorpora Liberation Sans, già incluso in PDF.js nell'app, con relativa
+licenza in `backend/src/assets`. Font e metriche sono generati offline da
+`scripts/generate_poll_pdf_font.py` (richiede fonttools); il Worker non analizza font né
+usa un motore PDF pesante a ogni richiesta. `pdf-lib` serve solo nei test come lettore
+indipendente del documento prodotto.

@@ -9,14 +9,14 @@ const EVENT_COLUMNS = ['id', 'title', 'event_date', 'start_time', 'category', 'i
 
 // Le vecchie date senza collegamento vengono riconosciute solo dal contenuto completo.
 // Un evento manuale, di una circolare o con note diverse non viene sovrascritto.
-function ownedEvents(data: PreviewData, gridId: string) {
+export function ownedEvents(data: PreviewData, gridId: string) {
   const groups = new Map<string, string[]>();
   for (const a of data.current) {
     const date = data.slots.find(s => s.id === a.slotId)!.date;
     const p = data.students[a.studentId];
     groups.set(date, [...(groups.get(date) ?? []), fullName(p.firstName, p.lastName)]);
   }
-  return data.calendar.filter(e => e.poll_grid_id === gridId || (
+  return data.calendar.filter(e => data.calendarRestoreEventIds?.includes(e.id) || e.poll_grid_id === gridId || (
     e.poll_grid_id == null && e.is_ai_generated === 1 && e.is_for_all === 1 && e.circular_number == null &&
     e.start_time == null && e.visible_to_user_ids_json == null &&
     e.title === `Interrogazione di ${data.subject}` && typeof e.notes === 'string' && e.notes.startsWith('Studenti: ') &&
@@ -38,13 +38,13 @@ function saveAssignments(env: Env, assignments: Record<string, string>, gridId: 
     .bind(JSON.stringify(assignments), gridId, guardId);
 }
 
-function insertEvents(env: Env, events: Record<string, any>[], guard: string, guardId: string) {
+export function insertEvents(env: Env, events: Record<string, any>[], guard: string, guardId: string) {
   return env.DB.prepare(`INSERT INTO calendar_events (${EVENT_COLUMNS.join(',')})
     SELECT ${EVENT_COLUMNS.map(c => `json_extract(j.value, '$.${c}')`).join(',')}
     FROM json_each(?) j WHERE ${guard}`).bind(JSON.stringify(events), guardId);
 }
 
-function deleteEvents(env: Env, events: Record<string, any>[], guard: string, guardId: string) {
+export function deleteEvents(env: Env, events: Record<string, any>[], guard: string, guardId: string) {
   return env.DB.prepare(`DELETE FROM calendar_events WHERE id IN (SELECT value FROM json_each(?)) AND ${guard}`)
     .bind(JSON.stringify(events.map(e => e.id)), guardId);
 }

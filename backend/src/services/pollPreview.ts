@@ -6,6 +6,7 @@ export type PreviewBasis = 'ORIGINAL' | 'VOTES_ONLY' | 'CURRENT_BONUSES';
 export type PreviewRequestBasis = PreviewBasis | 'AUTO';
 export interface PreviewData {
   subject: string;
+  calendarRestoreEventIds?: string[];
   calculation: { result_json: string | null; rules_json: string | null; calculated_at: string } | null;
   otherAssignedDates: string[];
   calendar: Record<string, any>[];

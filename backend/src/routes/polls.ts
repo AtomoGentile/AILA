@@ -10,6 +10,8 @@ import { notifyClass, notifyUser, notifyUsers } from '../services/fcm';
 import { classMemberIds, effectiveAudience, isInAudience, normalizeAudience, parseAudience } from '../services/audience';
 import { inBackground } from '../services/background';
 import { fullName } from '../names';
+import { previewCalendarSync, syncPollCalendar } from '../services/pollCalendar';
+import { buildPollPdf, readPollPdfData } from '../services/pollPdf';
 import { publishRevision, restoreRevision } from '../services/pollRevisions';
 import { previewAssignments } from '../services/pollPreview';
 import { ALGORITHM_VERSION, computeAndPersistAssignments, isGridCalculated, PollCalculationError } from '../services/pollAssignments';
@@ -554,6 +556,41 @@ polls.post('/:id/assignments/revisions/:revisionId/restore', requireRole('REPRES
   if (typeof body.revisionToken !== 'string' || !/^[a-f0-9]{64}$/.test(body.revisionToken)) return c.json({ error: 'Conferma di ripristino non valida' }, 400);
   try {
     return c.json(await restoreRevision(c.env, c.req.param('id')!, await resolveClassId(c), c.req.param('revisionId')!, body.revisionToken));
+  } catch (e) {
+    if (e instanceof PollCalculationError) return c.json({ error: e.message }, 409);
+    throw e;
+  }
+});
+
+polls.get('/:id/calendar/preview', requireRole('REPRESENTATIVE'), async (c) => {
+  try {
+    const preview = await previewCalendarSync(c.env, c.req.param('id')!, await resolveClassId(c), c.get('jwtPayload').sub);
+    if (!preview) return c.json({ error: 'Sondaggio non trovato' }, 404);
+    return c.json(preview);
+  } catch (e) {
+    if (e instanceof PollCalculationError) return c.json({ error: e.message }, 409);
+    throw e;
+  }
+});
+polls.post('/:id/calendar/sync', requireRole('REPRESENTATIVE'), async (c) => {
+  const body = await c.req.json<{ syncToken?: string; replaceEventIds?: unknown }>();
+  if (typeof body.syncToken !== 'string' || !/^[a-f0-9]{64}$/.test(body.syncToken) || !Array.isArray(body.replaceEventIds) ||
+      body.replaceEventIds.length > 500 || body.replaceEventIds.some(id => typeof id !== 'string')) return c.json({ error: 'Conferma del calendario non valida' }, 400);
+  try {
+    return c.json(await syncPollCalendar(c.env, c.req.param('id')!, await resolveClassId(c), c.get('jwtPayload').sub, body.syncToken, body.replaceEventIds));
+  } catch (e) {
+    if (e instanceof PollCalculationError) return c.json({ error: e.message }, 409);
+    throw e;
+  }
+});
+polls.get('/:id/assignments/pdf', async (c) => {
+  const data = await readPollPdfData(c.env, c.req.param('id')!, await resolveClassId(c));
+  const me = c.get('jwtPayload');
+  if (!data || (me.role !== 'REPRESENTATIVE' && !isInAudience(parseAudience(data.audience), me.sub))) return c.json({ error: 'Sondaggio non trovato' }, 404);
+  if (!data.slots.some(s => s.students.length)) return c.json({ error: 'Non ci sono risultati pubblicati da esportare' }, 409);
+  try {
+    const bytes = await buildPollPdf(data);
+    return new Response(bytes, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="calendario_interrogazioni.pdf"', 'Cache-Control': 'private, no-store' } });
   } catch (e) {
     if (e instanceof PollCalculationError) return c.json({ error: e.message }, 409);
     throw e;

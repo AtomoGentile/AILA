@@ -1448,3 +1448,132 @@ describe('pubblicazione e ripristino dei calendari rivisti', () => {
     expect((await restore(await preview())).status).toBe(409);
   });
 });
+
+describe('sincronizzazione del calendario dei sondaggi e PDF', () => {
+  async function setup() {
+    const rep = await register('calendariorep', { representativeCode: await repCode() });
+    const student = await register('calendariostudente', { classCode: await classCodeOf(rep.json.token) });
+    const created = await call('POST', '/api/polls', { subject: 'Calendario', slots: [{ slotDate: '2090-12-01', capacity: 1 }, { slotDate: '2090-12-02', capacity: 1 }] }, rep.json.token);
+    const id = created.json.id;
+    await call('PUT', `/api/polls/${id}/publish`, {}, rep.json.token);
+    const slots = (await call('GET', `/api/polls/${id}`, undefined, rep.json.token)).json.slots;
+    for (const slot of slots) await call('POST', `/api/polls/${id}/vote`, { slotId: slot.id, voteScore: 50 }, rep.json.token);
+    await call('POST', `/api/polls/${id}/vote`, { slotId: slots[0].id, voteScore: 50 }, student.json.token);
+    await call('POST', `/api/polls/${id}/vote`, { slotId: slots[1].id, voteScore: -60 }, student.json.token);
+    await env.DB.batch([
+      env.DB.prepare('INSERT INTO interrogation_assignments(id,slot_id,student_id) VALUES(?,?,?)').bind('sync-a1', slots[0].id, rep.json.user.id),
+      env.DB.prepare('INSERT INTO interrogation_assignments(id,slot_id,student_id) VALUES(?,?,?)').bind('sync-a2', slots[1].id, student.json.user.id),
+      env.DB.prepare('INSERT INTO student_sacrifice_bonus VALUES(?,?,?)').bind(student.json.user.id, 'Calendario', 90),
+    ]);
+    const old = await call('POST', '/api/calendar', { title: 'Interrogazione di Calendario', eventDate: slots[0].slotDate, category: 'INTERROGAZIONE', isForAll: true, isAiGenerated: false, notes: 'Vecchio elenco annotato a mano' }, rep.json.token);
+    expect(old.status).toBe(201);
+    const preview = async () => (await call('GET', `/api/polls/${id}/calendar/preview`, undefined, rep.json.token)).json;
+    const sync = (p: any, ids: string[], token = rep.json.token) => call('POST', `/api/polls/${id}/calendar/sync`, { syncToken: p.syncToken, replaceEventIds: ids }, token);
+    return { rep, student, id, slots, oldId: old.json.id, preview, sync };
+  }
+
+  it('sostituisce le vecchie date scelte, aggiorna quelle collegate e non duplica a una seconda sincronizzazione', async () => {
+    const { id, oldId, preview, sync } = await setup();
+    const before = (await env.DB.prepare('SELECT * FROM interrogation_assignments ORDER BY id').all()).results;
+    const bonus = (await env.DB.prepare('SELECT * FROM student_sacrifice_bonus').all()).results;
+    const p = await preview();
+    expect(p.dates).toHaveLength(2);
+    expect(p.previousEvents).toEqual([expect.objectContaining({ id: oldId, selectedByDefault: false })]);
+    const result = await sync(p, [oldId]);
+    expect(result).toMatchObject({ status: 200, json: { success: true, dateCount: 2, replacedCount: 1 } });
+    expect(await env.DB.prepare('SELECT id FROM calendar_events WHERE id=?').bind(oldId).first()).toBeNull();
+    expect((await env.DB.prepare('SELECT COUNT(*) n FROM calendar_events WHERE poll_grid_id=?').bind(id).first<any>()).n).toBe(2);
+    const refreshed = await preview();
+    expect(refreshed).toMatchObject({ linkedCount: 2, previousEvents: [] });
+    expect((await sync(refreshed, [])).status).toBe(200);
+    expect((await env.DB.prepare('SELECT COUNT(*) n FROM calendar_events').first<any>()).n).toBe(2);
+    expect((await env.DB.prepare('SELECT * FROM interrogation_assignments ORDER BY id').all()).results).toEqual(before);
+    expect((await env.DB.prepare('SELECT * FROM student_sacrifice_bonus').all()).results).toEqual(bonus);
+  });
+
+  it('conserva eventi non selezionati, di circolari e collegati ad altri sondaggi', async () => {
+    const { rep, id, preview, sync } = await setup();
+    const classId = (await env.DB.prepare('SELECT class_id FROM users WHERE id=?').bind(rep.json.user.id).first<any>()).class_id;
+    await env.DB.prepare(`INSERT INTO calendar_events(id,title,event_date,category,class_id,circular_number) VALUES('circular','Interrogazione di Calendario','2090-12-04','INTERROGAZIONE',?,42)`).bind(classId).run();
+    const otherGrid = await call('POST', '/api/polls', { subject: 'Calendario', slots: [{ slotDate: '2091-01-01', capacity: 2 }] }, rep.json.token);
+    await env.DB.prepare(`INSERT INTO calendar_events(id,title,event_date,category,class_id,poll_grid_id) VALUES('other-linked','Interrogazione di Calendario','2091-01-01','INTERROGAZIONE',?,?)`).bind(classId, otherGrid.json.id).run();
+    const p = await preview();
+    expect(p.previousEvents.some((e: any) => e.id === 'other-linked')).toBe(false);
+    expect((await sync(p, ['other-linked'])).status).toBe(409);
+    expect(p.previousEvents.some((e: any) => e.id === 'circular')).toBe(false);
+    expect((await sync(p, ['circular'])).status).toBe(409);
+    expect((await sync(p, [])).status).toBe(200);
+    expect((await env.DB.prepare('SELECT COUNT(*) n FROM calendar_events WHERE poll_grid_id IS NULL').first<any>()).n).toBe(2);
+  });
+
+  it('conserva il ripristino della revisione dopo la sostituzione esplicita di una vecchia data', async () => {
+    const { rep, id, oldId, preview, sync } = await setup();
+    const original = await env.DB.prepare('SELECT * FROM calendar_events WHERE id=?').bind(oldId).first();
+    const p = (await call('GET', `/api/polls/${id}/assignments/preview?basis=AUTO`, undefined, rep.json.token)).json;
+    expect((await call('POST', `/api/polls/${id}/assignments/revisions`, { basis: p.basis, revisionToken: p.revisionToken }, rep.json.token)).status).toBe(200);
+    expect((await sync(await preview(), [oldId])).status).toBe(200);
+    const active = (await call('GET', `/api/polls/${id}/assignments/preview?basis=AUTO`, undefined, rep.json.token)).json;
+    expect(active.canRestore).toBe(true);
+    expect((await call('POST', `/api/polls/${id}/assignments/revisions/${active.activeRevisionId}/restore`, { revisionToken: active.revisionToken }, rep.json.token)).status).toBe(200);
+    expect(await env.DB.prepare('SELECT * FROM calendar_events WHERE id=?').bind(oldId).first()).toEqual(original);
+    expect((await env.DB.prepare('SELECT COUNT(*) n FROM calendar_events').first<any>()).n).toBe(1);
+  });
+
+  it('non ripristina fotografie cancellate durante una sincronizzazione concorrente', async () => {
+    const { rep, id, preview, sync } = await setup();
+    const unassigned = await register('nonassegnato', { classCode: await classCodeOf(rep.json.token) });
+    const p = (await call('GET', `/api/polls/${id}/assignments/preview?basis=AUTO`, undefined, rep.json.token)).json;
+    expect((await call('POST', `/api/polls/${id}/assignments/revisions`, { basis: p.basis, revisionToken: p.revisionToken }, rep.json.token)).status).toBe(200);
+    const data = await preview();
+    const originalBatch = env.DB.batch.bind(env.DB);
+    env.DB.batch = async (statements: D1PreparedStatement[]) => {
+      await env.DB.prepare('DELETE FROM users WHERE id=?').bind(unassigned.json.user.id).run();
+      return originalBatch(statements);
+    };
+    expect((await sync(data, [])).status).toBe(200);
+    env.DB.batch = originalBatch;
+    expect(await env.DB.prepare('SELECT before_state,after_state FROM interrogation_revisions').first()).toEqual({ before_state: null, after_state: null });
+  });
+
+  it('rifiuta modifiche concorrenti e non elimina vecchie date con un’anteprima superata', async () => {
+    const { oldId, preview, sync } = await setup();
+    const p = await preview();
+    const originalBatch = env.DB.batch.bind(env.DB);
+    env.DB.batch = async (statements: D1PreparedStatement[]) => {
+      await env.DB.prepare("UPDATE calendar_events SET notes='Modifica successiva' WHERE id=?").bind(oldId).run();
+      return originalBatch(statements);
+    };
+    expect((await sync(p, [oldId])).status).toBe(409);
+    env.DB.batch = originalBatch;
+    expect((await env.DB.prepare('SELECT notes FROM calendar_events WHERE id=?').bind(oldId).first<any>()).notes).toBe('Modifica successiva');
+    expect((await env.DB.prepare('SELECT COUNT(*) n FROM interrogation_calendar_syncs').first<any>()).n).toBe(0);
+  });
+
+  it('limita la sincronizzazione al rappresentante della classe', async () => {
+    const { id, student, oldId, preview, sync } = await setup();
+    const p = await preview();
+    expect((await sync(p, [oldId], student.json.token)).status).toBe(403);
+    expect((await call('GET', `/api/polls/${id}/calendar/preview`, undefined, student.json.token)).status).toBe(403);
+    const other = await register('calendarioaltro', { classLabel: '5 W', representativeCode: await repCode('5 W') });
+    expect((await call('GET', `/api/polls/${id}/calendar/preview`, undefined, other.json.token)).status).toBe(404);
+    expect((await sync(p, [oldId], other.json.token)).status).toBe(409);
+  });
+
+  it('esporta un PDF privato con gli stessi permessi dei risultati, senza copia cache permanente', async () => {
+    const { id, rep, student } = await setup();
+    async function pdf(token: string) {
+      return worker.fetch(new Request(`https://api.test/api/polls/${id}/assignments/pdf`, { headers: { Authorization: `Bearer ${token}` } }), env, ctx);
+    }
+    const response = await pdf(student.json.token);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Type')).toBe('application/pdf');
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    expect(new TextDecoder().decode(bytes.slice(0, 5))).toBe('%PDF-');
+    const other = await register('pdfaltro', { classLabel: '5 V', representativeCode: await repCode('5 V') });
+    expect((await pdf(other.json.token)).status).toBe(404);
+    await env.DB.prepare('UPDATE interrogation_grids SET audience_json=? WHERE id=?').bind(JSON.stringify([rep.json.user.id]), id).run();
+    expect((await pdf(student.json.token)).status).toBe(404);
+    expect((await pdf(rep.json.token)).status).toBe(200);
+  });
+});

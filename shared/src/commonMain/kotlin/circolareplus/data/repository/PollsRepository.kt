@@ -101,6 +101,19 @@ class PollsRepository(private val api: ApiClient) {
     suspend fun previewAssignments(pollId: String, basis: String? = null): circolareplus.data.remote.dto.PollAssignmentPreviewDto =
         api.get("/api/polls/$pollId/assignments/preview?basis=${basis ?: "AUTO"}", offlineCopy = false)
 
+    suspend fun previewCalendarSync(pollId: String): circolareplus.data.remote.dto.PollCalendarSyncPreviewDto =
+        api.get("/api/polls/$pollId/calendar/preview", offlineCopy = false)
+
+    suspend fun syncCalendar(pollId: String, token: String, replaceEventIds: List<String>) {
+        api.post<circolareplus.data.remote.dto.PollCalendarSyncRequestDto, SuccessDto>(
+            "/api/polls/$pollId/calendar/sync", circolareplus.data.remote.dto.PollCalendarSyncRequestDto(token, replaceEventIds))
+    }
+
+    suspend fun exportAssignmentsPdf(pollId: String) {
+        val bytes = api.getBytes("/api/polls/$pollId/assignments/pdf", offlineCopy = false)
+        circolareplus.platform.sharePdfFile(bytes, "calendario_interrogazioni_$pollId.pdf")
+    }
+
     suspend fun publishRevision(pollId: String, basis: String, revisionToken: String) {
         api.post<circolareplus.data.remote.dto.PublishPollRevisionRequestDto, SuccessDto>(
             "/api/polls/$pollId/assignments/revisions",

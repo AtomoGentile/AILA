@@ -1246,9 +1246,6 @@ fun MainAppShell(
     // LocalSettingsManager.isPollSubmitted).
     var submittedPollIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     // Stato del pulsante "Aggiungi tutte le date al calendario" nello Storico sondaggi.
-    var isAddingPollToCalendar by remember { mutableStateOf(false) }
-    var pollCalendarMessage by remember { mutableStateOf<String?>(null) }
-    var pollCalendarMessageIsError by remember { mutableStateOf(false) }
 
     /**
      * Manda una domanda all'assistente globale e appende la risposta alla conversazione.
@@ -3650,8 +3647,6 @@ fun MainAppShell(
                                         assignments = pollAssignments,
                                         onToggleResults = { pollId ->
                                             expandedResultsPollId = if (expandedResultsPollId == pollId) null else pollId
-                                            pollCalendarMessage = null
-                                            pollCalendarMessageIsError = false
                                         },
                                         onDelete = { pollId ->
                                             coroutineScope.launch {
@@ -3664,72 +3659,12 @@ fun MainAppShell(
                                                 }
                                             }
                                         },
-                                        isAddingToCalendar = isAddingPollToCalendar,
-                                        calendarAddMessage = pollCalendarMessage,
-                                        calendarAddIsError = pollCalendarMessageIsError,
-                                        onAddToCalendar = { poll, assignmentsToAdd ->
-                                            coroutineScope.launch {
-                                                isAddingPollToCalendar = true
-                                                pollCalendarMessage = null
-                                                pollCalendarMessageIsError = false
-                                                try {
-                                                    // Un evento per data (non per studente): la stessa data
-                                                    // interrogazione riguarda più studenti insieme, ed è
-                                                    // anche l'unico modo per non far scattare subito il
-                                                    // controllo doppioni del server (stessa categoria+
-                                                    // periodo per la classe, vedi CalendarRepository.createEvent).
-                                                    val byDate = assignmentsToAdd
-                                                        .filter { it.slotDate != null }
-                                                        .groupBy { it.slotDate!! }
-                                                        // toSortedMap() e' solo JVM: non compila su iOS.
-                                                        // toMap() da una lista ordinata mantiene l'ordine.
-                                                        .toList()
-                                                        .sortedBy { it.first }
-                                                        .toMap()
-
-                                                    var added = 0
-                                                    var skipped = 0
-                                                    var failed = 0
-                                                    byDate.forEach { (date, group) ->
-                                                        val studentNames = group.map { it.studentName ?: it.studentId }
-                                                        try {
-                                                            val response = AppContainer.calendarRepository.createEvent(
-                                                                title = "Interrogazione di ${poll.subject}",
-                                                                eventDate = date,
-                                                                startTime = null,
-                                                                category = CalendarEventCategory.INTERROGAZIONE,
-                                                                // Tutta la classe vede le interrogazioni di tutti.
-                                                                isForAll = true,
-                                                                isAiGenerated = true,
-                                                                visibleToUserIds = null,
-                                                                notes = "Studenti: ${studentNames.joinToString(", ")}"
-                                                            )
-                                                            if (response.warning != null) skipped++ else added++
-                                                        } catch (e: Exception) {
-                                                            failed++
-                                                        }
-                                                    }
-
-                                                    if (added > 0) reloadCalendar()
-
-                                                    pollCalendarMessageIsError = added == 0
-                                                    pollCalendarMessage = buildString {
-                                                        if (added > 0) append("$added dat${if (added == 1) "a aggiunta" else "e aggiunte"} al calendario.")
-                                                        if (skipped > 0) {
-                                                            if (isNotEmpty()) append(" ")
-                                                            append("$skipped già presenti nel periodo.")
-                                                        }
-                                                        if (failed > 0) {
-                                                            if (isNotEmpty()) append(" ")
-                                                            append("$failed non riuscite.")
-                                                        }
-                                                        if (isEmpty()) append("Nessuna data da aggiungere.")
-                                                    }
-                                                } finally {
-                                                    isAddingPollToCalendar = false
-                                                }
-                                            }
-                                        }
+                                        loadCalendarSync = { pollId -> AppContainer.pollsRepository.previewCalendarSync(pollId) },
+                                        syncCalendar = { pollId, data, selectedIds ->
+                                            AppContainer.pollsRepository.syncCalendar(pollId, data.syncToken, selectedIds)
+                                            reloadCalendar()
+                                        },
+                                        exportPdf = { pollId -> AppContainer.pollsRepository.exportAssignmentsPdf(pollId) }
                                     )
                                 } else {
                                 LoadableContent(

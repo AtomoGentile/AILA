@@ -305,11 +305,11 @@ class ApiClient(
      * decodifica JSON usata dalle altre funzioni. Usata da [circolareplus.data.repository.CircularsRepository]
      * per alimentare l'estrazione testo PDF client-side.
      */
-    suspend fun getBytes(path: String, auth: Boolean = true): ByteArray {
-        // I PDF non cambiano mai una volta pubblicati: se c'e' la copia su disco si usa quella,
-        // anche online (piu' veloce e senza consumare dati).
+    suspend fun getBytes(path: String, auth: Boolean = true, offlineCopy: Boolean = true): ByteArray {
+        // Le circolari usano la copia su disco anche online. Gli export dinamici, come il
+        // calendario interrogazioni, disabilitano offlineCopy per scaricare i risultati aggiornati.
         val name = offlineName(path, "b")
-        withContext(Dispatchers.Default) { OfflineStore.readBytes(name) }?.let { return it }
+        if (offlineCopy) withContext(Dispatchers.Default) { OfflineStore.readBytes(name) }?.let { return it }
         val response = try {
             client.get(baseUrl + path) {
                 if (auth) authHeader()
@@ -321,11 +321,9 @@ class ApiClient(
             throw ApiException("Sei offline e questo file non e' ancora stato scaricato su questo dispositivo.", OFFLINE_STATUS)
         }
         ConnectivityState.markOnline()
-        if (!response.status.isSuccess()) {
-            throw ApiException("Impossibile scaricare il file (${response.status.value})", response.status.value)
-        }
+        if (!response.status.isSuccess()) response.parsedOrThrow()
         val bytes: ByteArray = response.body()
-        withContext(Dispatchers.Default) { OfflineStore.writeBytes(name, bytes) }
+        if (offlineCopy) withContext(Dispatchers.Default) { OfflineStore.writeBytes(name, bytes) }
         return bytes
     }
 

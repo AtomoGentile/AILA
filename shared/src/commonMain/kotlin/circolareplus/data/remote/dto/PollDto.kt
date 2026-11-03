@@ -135,3 +135,21 @@ data class PublishPollRevisionRequestDto(val basis: String, val revisionToken: S
 
 @Serializable
 data class RestorePollRevisionRequestDto(val revisionToken: String)
+
+@Serializable
+data class PollCalendarDateDto(val date: String, val notes: String)
+
+@Serializable
+data class PollCalendarPreviousEventDto(
+    val id: String, val date: String, val notes: String? = null, val startTime: String? = null,
+    val selectedByDefault: Boolean = false
+)
+
+@Serializable
+data class PollCalendarSyncPreviewDto(
+    val subject: String, val syncToken: String, val dates: List<PollCalendarDateDto>,
+    val linkedCount: Int, val previousEvents: List<PollCalendarPreviousEventDto>
+)
+
+@Serializable
+data class PollCalendarSyncRequestDto(val syncToken: String, val replaceEventIds: List<String>)
