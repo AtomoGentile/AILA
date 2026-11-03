@@ -3570,6 +3570,11 @@ fun MainAppShell(
                                         key = pollsSection
                                     )
                                 }
+                                if (pollsSection == 0 && allPolls.any { it.assignmentAlgorithmVersion == "global-score-v1" }) {
+                                    Text("Nuovo algoritmo attivo per i nuovi calcoli · confronta i calendari già pubblicati nello Storico",
+                                        modifier = Modifier.padding(horizontal = AppTheme.Space16).padding(bottom = AppTheme.Space8),
+                                        style = MaterialTheme.typography.bodySmall, color = AppTheme.TintBlueInk)
+                                }
                                 if (pollsSection == 1) {
                                     LoadableContent(
                                         isLoading = isRankingLoading && !rankingLoadedOnce,
@@ -3756,6 +3761,7 @@ fun MainAppShell(
                                                 )
                                             },
                                             sacrificeBonus = poll.mySacrificeBonus,
+                                            usesGlobalAssignment = poll.assignmentAlgorithmVersion == "global-score-v1",
                                             canVote = poll.isTarget,
                                             isRepresentative = isRepresentative,
                                             onClosePoll = {

@@ -61,8 +61,8 @@ sui voti reali, non una ricostruzione esatta dei bonus storici, che non erano re
 
 ## Anteprima nell'app
 
-Il rappresentante può aprire **Sondaggi → Storico → Vedi risultati → Confronta con il
-nuovo algoritmo**. L'anteprima mostra i conteggi prima/dopo per ogni colore, i voti
+Il rappresentante può aprire **Sondaggi → Storico → Interrogazioni → Confronta con il
+nuovo algoritmo**, direttamente dalla card del sondaggio. L'anteprima mostra i conteggi prima/dopo per ogni colore, i voti
 mancanti e, per ogni studente, data attuale, nuova data e voto su entrambe. Si possono
 vedere solo gli spostamenti oppure tutti gli studenti, inclusi eventuali peggioramenti.
 
@@ -70,11 +70,23 @@ L'endpoint `GET /api/polls/:id/assignments/preview` è riservato al rappresentan
 classe. Esegue solo letture e usa la stessa funzione di pianificazione del calcolo reale.
 Non pubblica assegnazioni, non aggiorna il calendario e non accredita o consuma bonus.
 
-Se la fotografia originale completa è disponibile, il confronto può usare i voti e i
-bonus iniziali (`basis=ORIGINAL`). In alternativa si possono confrontare i soli voti
-(`basis=VOTES_ONLY`). Per i sondaggi precedenti alla fotografia, come Biologia, la modalità
-predefinita è solo voti: i bonus correnti, già modificati dai risultati, non vengono
-spacciati per bonus storici. Il limite è visibile nell'anteprima.
+Se la fotografia originale completa è disponibile, il confronto usa i voti e i
+bonus iniziali (`basis=ORIGINAL`). Sono disponibili anche una simulazione con i bonus
+attuali (`basis=CURRENT_BONUSES`) e il confronto dei soli voti (`basis=VOTES_ONLY`).
+Ogni studente mostra il bonus usato. Per i sondaggi precedenti alla fotografia, come
+Biologia, l'app usa i bonus attuali con un avviso esplicito: non sono i bonus storici.
+
+L'app richiede `basis=AUTO`: riceve tutti i confronti calcolati sulla stessa lettura
+coerente e mantiene quei bonus fissi mentre si cambia modalità. Solo Aggiorna o la
+riapertura del confronto genera una nuova anteprima. AUTO preferisce i bonus iniziali
+quando disponibili, altrimenti quelli attuali. Le richieste senza basis dei client
+precedenti mantengono il comportamento compatibile: iniziali se presenti, altrimenti
+solo voti. L'anteprima non salva una nuova fotografia permanente.
+
+Il nuovo algoritmo è già il default per ogni nuovo calcolo. Lista e dettaglio dei
+sondaggi espongono la versione attiva e quella del calcolo salvato; l'app indica quali
+calendari sono precedenti all'aggiornamento. Non esiste un interruttore da attivare e
+l'anteprima non applica automaticamente modifiche ai calendari già pubblicati.
 
 Il confronto riguarda soltanto gli studenti ancora assegnati al sondaggio: non aggiunge
 nuovi iscritti. Quando la cancellazione di un account rende incompleta la fotografia,

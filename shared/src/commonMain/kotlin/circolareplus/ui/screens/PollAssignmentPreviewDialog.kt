@@ -29,11 +29,11 @@ internal fun PollAssignmentPreviewDialog(
     var error by remember(pollId) { mutableStateOf<String?>(null) }
     var refresh by remember(pollId) { mutableStateOf(0) }
     var onlyChanges by remember(pollId) { mutableStateOf(true) }
-    LaunchedEffect(pollId, basis, refresh) {
+    LaunchedEffect(pollId, refresh) {
         loading = true
         error = null
         preview = null
-        try { preview = loadPreview(basis)
+        try { preview = loadPreview(null)
         } catch (e: CancellationException) { throw e
         } catch (e: Exception) { error = e.message ?: "Impossibile caricare il confronto. Riprova."
         } finally { loading = false }
@@ -56,7 +56,8 @@ internal fun PollAssignmentPreviewDialog(
                         Text(error.orEmpty(), color = AppTheme.TintRedInk)
                         AilaPrimaryButton(text = "Riprova", onClick = { refresh++ })
                     }
-                    else -> preview?.let { data ->
+                    else -> preview?.let { generation ->
+                        val data = (listOf(generation) + generation.comparisons).firstOrNull { it.basis == basis } ?: generation
                         val shown = data.assignments.filter { !onlyChanges || it.changed }
                         LazyColumn(contentPadding = PaddingValues(AppTheme.Space16), verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
                             item {
@@ -64,15 +65,22 @@ internal fun PollAssignmentPreviewDialog(
                                     Column(Modifier.padding(AppTheme.Space16), verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
                                         Text("Solo anteprima", color = AppTheme.TintBlueInk, fontWeight = FontWeight.SemiBold)
                                         Text("Il confronto non cambia date, calendario o bonus.", color = AppTheme.TextMuted)
-                                        Text(if (data.basis == "ORIGINAL") "Usa i voti e i bonus iniziali salvati al momento del calcolo."
-                                            else "Simulazione basata sui soli voti, senza bonus.", color = AppTheme.TextDark)
+                                        Text(when (data.basis) {
+                                            "ORIGINAL" -> "Usa i voti e i bonus iniziali salvati al momento del calcolo."
+                                            "CURRENT_BONUSES" -> "Usa i bonus attuali, fissati quando generi questa anteprima."
+                                            else -> "Simulazione basata sui soli voti, senza bonus."
+                                        }, color = AppTheme.TextDark)
+                                        if (data.basis == "CURRENT_BONUSES") Text(
+                                            "I bonus restano fissi mentre guardi il confronto. Aggiorna genera una nuova simulazione con i valori di quel momento.",
+                                            color = AppTheme.TextMuted, style = MaterialTheme.typography.bodySmall)
                                         if (!data.originalAvailable) Text(
-                                            "I bonus iniziali completi non sono disponibili: questo confronto non ricostruisce esattamente il calcolo storico.",
+                                            "I bonus iniziali di questo vecchio calcolo non sono disponibili. I bonus attuali sono una simulazione, non una ricostruzione storica.",
                                             color = AppTheme.TintAmberInk, style = MaterialTheme.typography.bodySmall)
                                         if (data.historicalDataIncomplete) Text("Sono considerati soltanto gli studenti e i dati ancora presenti.", color = AppTheme.TintAmberInk)
                                         if (data.acceptedSwaps > 0) Text("Il calendario attuale include ${data.acceptedSwaps} scambi accettati.", color = AppTheme.TextMuted)
-                                        if (data.originalAvailable) Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
-                                            FilterChip(selected = data.basis == "ORIGINAL", onClick = { basis = "ORIGINAL" }, label = { Text("Con bonus iniziali") })
+                                        FlowRow(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                                            if (data.originalAvailable) FilterChip(selected = data.basis == "ORIGINAL", onClick = { basis = "ORIGINAL" }, label = { Text("Bonus iniziali") })
+                                            FilterChip(selected = data.basis == "CURRENT_BONUSES", onClick = { basis = "CURRENT_BONUSES" }, label = { Text("Bonus attuali") })
                                             FilterChip(selected = data.basis == "VOTES_ONLY", onClick = { basis = "VOTES_ONLY" }, label = { Text("Solo voti") })
                                         }
                                     }
@@ -127,6 +135,7 @@ private fun PreviewStudent(row: PollPreviewAssignmentDto) {
     AilaCard {
         Column(Modifier.padding(AppTheme.Space16), verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
             Text(row.studentName, style = MaterialTheme.typography.titleSmall, color = AppTheme.TextDark)
+            Text("Bonus usato nel confronto: ${row.bonusUsed}", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
             Text("Attuale: ${formatDayMonth(row.beforeDate)} · ${previewVoteLabel(row.beforeVote)}", color = AppTheme.TextMuted)
             Text("Anteprima: ${formatDayMonth(row.afterDate)} · ${previewVoteLabel(row.afterVote)}", color = AppTheme.TextDark)
             Text(when (row.preferenceChange) { "IMPROVED" -> "Voto migliore sulla nuova data"; "WORSENED" -> "Voto peggiore sulla nuova data"; else -> "Punteggio equivalente" },

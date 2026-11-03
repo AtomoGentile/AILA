@@ -153,6 +153,15 @@ fun PollHistoryScreen(
                             }
                         }
 
+                        if (poll.calculationAlgorithm == "legacy") {
+                            Spacer(Modifier.height(AppTheme.Space8))
+                            Text("Calendario calcolato prima dell’aggiornamento. Confronta per vedere cosa cambierebbe.",
+                                color = AppTheme.TextMuted, style = MaterialTheme.typography.bodySmall)
+                        } else if (poll.calculationAlgorithm == "global-score-v1") {
+                            Spacer(Modifier.height(AppTheme.Space8))
+                            Text("Calcolato con il nuovo algoritmo", color = AppTheme.TintGreenInk,
+                                style = MaterialTheme.typography.labelMedium)
+                        }
                         Spacer(modifier = Modifier.height(AppTheme.Space12))
                         TextButton(
                             onClick = { onToggleResults(poll.id) },
@@ -164,6 +173,15 @@ fun PollHistoryScreen(
                                 modifier = Modifier.size(14.dp).rotate(if (isExpanded) 90f else 0f),
                                 color = AppTheme.PrimaryBlue
                             )
+                        }
+
+                        if (canManage && loadAssignmentPreview != null) {
+                            circolareplus.design.AilaSecondaryButton(
+                                text = "Confronta con il nuovo algoritmo",
+                                modifier = Modifier.fillMaxWidth(),
+                                onClick = { previewPoll = poll }
+                            )
+                            Spacer(Modifier.height(AppTheme.Space8))
                         }
 
                         if (isExpanded) {
@@ -194,14 +212,6 @@ fun PollHistoryScreen(
                                     }
 
                                     if (canManage) {
-                                        if (loadAssignmentPreview != null) {
-                                            Spacer(modifier = Modifier.height(AppTheme.Space12))
-                                            circolareplus.design.AilaSecondaryButton(
-                                                text = "Confronta con il nuovo algoritmo",
-                                                modifier = Modifier.fillMaxWidth(),
-                                                onClick = { previewPoll = poll }
-                                            )
-                                        }
                                         Spacer(modifier = Modifier.height(AppTheme.Space16))
                                         HorizontalDivider(color = AppTheme.Hairline)
                                         Spacer(modifier = Modifier.height(AppTheme.Space12))

@@ -99,7 +99,7 @@ class PollsRepository(private val api: ApiClient) {
 
     /** Simulazione in sola lettura; senza cache offline per evitare confronti superati. */
     suspend fun previewAssignments(pollId: String, basis: String? = null): circolareplus.data.remote.dto.PollAssignmentPreviewDto =
-        api.get("/api/polls/$pollId/assignments/preview${basis?.let { "?basis=$it" }.orEmpty()}", offlineCopy = false)
+        api.get("/api/polls/$pollId/assignments/preview?basis=${basis ?: "AUTO"}", offlineCopy = false)
 
     /**
      * Fa girare l'algoritmo. Il server rifiuta con 409 finché non hanno inviato tutti e la

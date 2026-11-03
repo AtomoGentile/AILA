@@ -78,6 +78,7 @@ fun PollsScreen(
     subjectName: String,
     slots: List<SlotUiItem>,
     sacrificeBonus: Int,
+    usesGlobalAssignment: Boolean = false,
     onCastVote: (String, InterrogationVoteType) -> Unit,
     isSubmitted: Boolean = false,
     // Avanzamento della classe, non solo il proprio: l'invio ora arriva al server, quindi si
@@ -160,11 +161,16 @@ fun PollsScreen(
             AilaCard(modifier = Modifier.ailaAppear(0)) {
                 Column(modifier = Modifier.padding(AppTheme.Space16)) {
                     Text(
-                        text = "Come funziona",
+                        text = if (usesGlobalAssignment) "Nuovo algoritmo attivo" else "Come funziona",
                         style = MaterialTheme.typography.titleSmall,
                         color = AppTheme.TextDark
                     )
                     Spacer(modifier = Modifier.height(AppTheme.Space4))
+                    if (usesGlobalAssignment) {
+                        Text("Le date vengono scelte considerando tutto il calendario. Voti e bonus iniziali sono salvati per le verifiche.",
+                            style = MaterialTheme.typography.bodySmall, color = AppTheme.TintBlueInk)
+                        Spacer(Modifier.height(AppTheme.Space8))
+                    }
                     Text(
                         text = "Per ogni data dici quanto ti va bene. Chi accetta le date che " +
                             "gli altri rifiutano guadagna un bonus per i sondaggi futuri. " +

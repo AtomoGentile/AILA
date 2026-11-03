@@ -11,6 +11,8 @@ data class PollSummaryDto(
     val totalStudents: Int = 0,
     val submittedCount: Int = 0,
     val isCalculated: Boolean = false,
+    val assignmentAlgorithmVersion: String? = null,
+    val calculationAlgorithm: String? = null,
     /** Destinatari scelti dal Rappresentante; null = tutta la classe. */
     val audienceUserIds: List<String>? = null,
     /** False solo per il Rappresentante quando il sondaggio non è rivolto a lui. */
@@ -40,6 +42,7 @@ data class PollDetailDto(
     val isPublished: Boolean,
     val createdAt: String,
     val mySacrificeBonus: Int,
+    val assignmentAlgorithmVersion: String? = null,
     val slots: List<PollSlotDto>,
     val audienceUserIds: List<String>? = null,
     val isTarget: Boolean = true
@@ -90,6 +93,7 @@ data class PollPreviewDistributionDto(
 @Serializable
 data class PollPreviewAssignmentDto(
     val studentId: String,
+    val bonusUsed: Int = 0,
     val studentName: String,
     val beforeSlotId: String,
     val beforeDate: String,
@@ -116,5 +120,6 @@ data class PollAssignmentPreviewDto(
     val worsened: Int,
     val before: PollPreviewDistributionDto,
     val after: PollPreviewDistributionDto,
-    val assignments: List<PollPreviewAssignmentDto>
+    val assignments: List<PollPreviewAssignmentDto>,
+    val comparisons: List<PollAssignmentPreviewDto> = emptyList()
 )

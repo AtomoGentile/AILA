@@ -820,18 +820,22 @@ private fun CircularPicker(
     busy: Boolean, onLoadMore: () -> Unit, onPick: (Int) -> Unit
 ) {
     var query by remember { mutableStateOf("") }
-    AilaPillTextField(value = query, onValueChange = { query = it }, placeholder = "Cerca per titolo o numero")
-    error?.let { Text(it, color = AppTheme.TintRedInk) }
-    Column(Modifier.fillMaxWidth().height(320.dp).verticalScroll(rememberScrollState())) {
-        circulars.filter { query.isBlank() || it.title.contains(query, true) || it.number.toString().contains(query) }.forEach { circular ->
-            AilaCard {
-                AilaListRow(title = "Circolare n. ${circular.number}", subtitle = circular.title,
-                    tint = AppTheme.TintBlue, onClick = { if (!busy) onPick(circular.number) },
-                    icon = { AppIcons.Document(color = AppTheme.TintBlueInk) })
+    val matches = circulars.filter { query.isBlank() || it.title.contains(query, true) || it.number.toString().contains(query.trim()) }
+    // Un solo scorrimento, quello del foglio: evita il taglio fisso della lista sotto la ricerca.
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(AppTheme.Space16)) {
+        AilaPillTextField(value = query, onValueChange = { query = it }, placeholder = "Cerca per titolo o numero")
+        error?.let { Text(it, color = AppTheme.TintRedInk) }
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
+            matches.forEach { circular ->
+                AilaCard {
+                    AilaListRow(title = "Circolare n. ${circular.number}", subtitle = circular.title,
+                        tint = AppTheme.TintBlue, onClick = { if (!busy) onPick(circular.number) },
+                        icon = { AppIcons.Document(modifier = Modifier.size(20.dp), color = AppTheme.TintBlueInk) })
+                }
             }
-            Spacer(Modifier.height(AppTheme.Space8))
         }
-        androidx.compose.material3.TextButton(onClick = onLoadMore, enabled = !loading && !busy) {
+        if (matches.isEmpty() && !loading) Text("Nessuna circolare corrisponde alla ricerca.", color = AppTheme.TextMuted)
+        androidx.compose.material3.TextButton(onClick = onLoadMore, enabled = !loading && !busy, modifier = Modifier.fillMaxWidth()) {
             Text(if (loading) "Caricamento…" else "Carica altre circolari")
         }
     }

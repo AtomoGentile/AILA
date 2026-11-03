@@ -11,7 +11,7 @@ import { classMemberIds, effectiveAudience, isInAudience, normalizeAudience, par
 import { inBackground } from '../services/background';
 import { fullName } from '../names';
 import { previewAssignments } from '../services/pollPreview';
-import { computeAndPersistAssignments, isGridCalculated, PollCalculationError } from '../services/pollAssignments';
+import { ALGORITHM_VERSION, computeAndPersistAssignments, isGridCalculated, PollCalculationError } from '../services/pollAssignments';
 
 const polls = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();
 
@@ -49,6 +49,7 @@ polls.get('/', async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT g.id, g.subject, g.is_published, g.closes_at, g.created_at, g.audience_json,
             (SELECT COUNT(*) FROM interrogation_submissions WHERE grid_id = g.id) AS submitted_count,
+            (SELECT algorithm_version FROM interrogation_calculations WHERE grid_id = g.id) AS calculation_algorithm,
             (EXISTS(SELECT 1 FROM interrogation_calculations r WHERE r.grid_id = g.id) OR EXISTS(
               SELECT 1 FROM interrogation_assignments a
               JOIN interrogation_slots s ON s.id = a.slot_id
@@ -66,6 +67,7 @@ polls.get('/', async (c) => {
     audience_json: string | null;
     submitted_count: number;
     is_calculated: number;
+    calculation_algorithm: string | null;
   }>();
 
   // Chi non è fra i destinatari non vede la griglia; il Rappresentante le vede tutte.
@@ -83,6 +85,8 @@ polls.get('/', async (c) => {
         totalStudents: effectiveAudience(p.audience, members).length,
         submittedCount: p.submitted_count,
         isCalculated: Boolean(p.is_calculated),
+        assignmentAlgorithmVersion: ALGORITHM_VERSION,
+        calculationAlgorithm: p.calculation_algorithm,
         audienceUserIds: p.audience,
         isTarget: isInAudience(p.audience, payload.sub),
       })),
@@ -169,6 +173,7 @@ polls.get('/:id', async (c) => {
     createdAt: grid.created_at,
     closesAt: grid.closes_at,
     mySacrificeBonus: bonus?.bonus_points ?? 0,
+    assignmentAlgorithmVersion: ALGORITHM_VERSION,
     totalStudents,
     submittedCount,
     hasSubmitted: (progress?.mine ?? 0) > 0,
@@ -520,7 +525,7 @@ polls.put('/:id/deadline', requireRole('REPRESENTATIVE'), async (c) => {
 // Anteprima: nessuna scrittura, nessuna notifica, nessun accredito dei bonus.
 polls.get('/:id/assignments/preview', requireRole('REPRESENTATIVE'), async (c) => {
   const basis = c.req.query('basis');
-  if (basis !== undefined && basis !== 'ORIGINAL' && basis !== 'VOTES_ONLY') return c.json({ error: 'Modalità di confronto non valida' }, 400);
+  if (basis !== undefined && basis !== 'ORIGINAL' && basis !== 'VOTES_ONLY' && basis !== 'CURRENT_BONUSES' && basis !== 'AUTO') return c.json({ error: 'Modalità di confronto non valida' }, 400);
   try {
     const preview = await previewAssignments(c.env, c.req.param('id')!, await resolveClassId(c), basis);
     if (!preview) return c.json({ error: 'Griglia non trovata' }, 404);
