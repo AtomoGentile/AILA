@@ -92,30 +92,9 @@ jobs:
       - name: Test
         run: npm test
 
-      # Input passato via env e validato: estrae i nomi dei file .sql (es. "022_telegram_reminders.sql").
-      - name: Apply D1 migrations
-        if: inputs.migrations != ''
+      # Questo ramo di verifica non applica migrazioni e non esegue deploy.
+      - name: Read-only production preview check
+        if: inputs.deploy == false && inputs.migrations == ''
         env:
-          MIGRATIONS: ${{ inputs.migrations }}
-        run: |
-          set -e
-          # Estrae i nomi di file .sql validi anche se l'utente ha incollato l'intero comando wrangler
-          CLEAN_MIGRATIONS=$(echo "$MIGRATIONS" | grep -oE '[0-9]{3}_[a-z0-9_]+\.sql' | awk '!seen[$0]++' || true)
-          if [ -z "$CLEAN_MIGRATIONS" ]; then
-            echo "::error::Nessuna migrazione valida trovata nell'input '$MIGRATIONS'. Inserisci solo il nome del file, ad es.: 022_telegram_reminders.sql"
-            exit 1
-          fi
-          for m in $CLEAN_MIGRATIONS; do
-            if [ ! -f "migrations/$m" ]; then
-              echo "::error::File di migrazione inesistente: migrations/$m"
-              exit 1
-            fi
-          done
-          for m in $CLEAN_MIGRATIONS; do
-            echo "== Applico $m"
-            npx wrangler d1 execute circolare_d1 --remote --file="./migrations/$m"
-          done
-
-      - name: Deploy Worker
-        if: inputs.deploy
-        run: npx wrangler deploy
+          READ_ONLY_PRODUCTION_SMOKE: '1'
+        run: npx vitest run test/productionPreview.smoke.test.ts
