@@ -54,6 +54,17 @@ export function auditRows(rows) {
     const votes = new Map(allVotes.filter(v => slotIds.has(v.slotId)).map(v => [`${v.studentId}:${v.slotId}`, v.score]));
     const vote = (studentId, slotId) => votes.get(`${studentId}:${slotId}`);
     const optimum = minimumAssignment(students, slots, (student, slot) => (vote(student, slot.id) ?? 0) < 0 ? 1 : 0);
+    const currentSlot = new Map(assignments.map(a => [a.studentId, a.slotId]));
+    const n = students.length, unit = n + 1;
+    const raw = (student, slot) => vote(student, slot.id) ?? 0;
+    const improved = minimumAssignment(students, slots, (student, slot) =>
+      (raw(student, slot) < 0 ? unit * unit : 0) + (raw(student, slot) === 50 ? 0 : unit) + (currentSlot.get(student) === slot.id ? 0 : 1));
+    const pareto = minimumAssignment(students, slots, (student, slot) =>
+      (raw(student, slot) < (vote(student, currentSlot.get(student)) ?? 0) ? unit * unit : 0) +
+      (raw(student, slot) < 0 ? unit : 0) + (currentSlot.get(student) === slot.id ? 0 : 1));
+    const noWorse = pareto.flow === n && pareto.assignments.every(a =>
+      (vote(a.studentId, a.slotId) ?? 0) >= (vote(a.studentId, currentSlot.get(a.studentId)) ?? 0) && (vote(a.studentId, a.slotId) ?? 0) >= 0);
+    const selectedAlternative = noWorse ? pareto : improved;
     const actualNegatives = assignments.filter(a => (vote(a.studentId, a.slotId) ?? 0) < 0).length;
     const nick = id => `S${students.indexOf(id) + 1}`;
     const date = id => slots.find(s => s.id === id)?.date;
@@ -68,8 +79,14 @@ export function auditRows(rows) {
       minimumNegative: optimum.flow === students.length ? optimum.cost : null,
       avoidableNegative: optimum.flow === students.length ? actualNegatives - optimum.cost : null,
       acceptedSwaps,
+      currentGreen: assignments.filter(a => vote(a.studentId, a.slotId) === 50).length,
+      alternativeGreen: selectedAlternative.assignments.filter(a => vote(a.studentId, a.slotId) === 50).length,
+      zeroNegativesWithoutWorseningAnyone: noWorse,
+      movedStudents: selectedAlternative.assignments.filter(a => currentSlot.get(a.studentId) !== a.slotId).length,
+      slots: slots.map(slot => ({ date: slot.date, capacity: slot.capacity })),
+      votesByStudent: students.map(student => ({ student: nick(student), votes: slots.map(slot => ({date:slot.date, vote:vote(student,slot.id) ?? null})) })),
       current: assignments.map(a => ({ student: nick(a.studentId), date: date(a.slotId), vote: vote(a.studentId, a.slotId) ?? null })),
-      alternative: actualNegatives > optimum.cost && optimum.flow === students.length ? optimum.assignments.map(a => ({ student: nick(a.studentId), date: date(a.slotId), vote: vote(a.studentId, a.slotId) ?? null })) : [],
+      alternative: actualNegatives > optimum.cost && optimum.flow === students.length ? selectedAlternative.assignments.map(a => ({ student: nick(a.studentId), date: date(a.slotId), vote: vote(a.studentId, a.slotId) ?? null })) : [],
       caveat: 'Confronto sulle assegnazioni e sui voti ancora presenti. Bonus iniziali non conservati; eventuali scambi o eliminazioni impediscono di attribuire automaticamente il risultato al calcolo iniziale.'
     };
   });
