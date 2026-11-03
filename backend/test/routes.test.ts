@@ -571,6 +571,64 @@ describe('analisi delle circolari', () => {
 });
 
 describe('sondaggi interrogazioni', () => {
+  it('documenta il doppio bonus possibile se gli ultimi due invii chiudono insieme', async () => {
+    const rep = await register('prof', { representativeCode: await repCode() });
+    const student = await register('alunno', { classCode: await classCodeOf(rep.json.token) });
+    const created = await call('POST', '/api/polls', { subject:'Race', slots:[{slotDate:'2026-12-01',capacity:1},{slotDate:'2026-12-02',capacity:1}]},rep.json.token);
+    const id=created.json.id;
+    await call('PUT',`/api/polls/${id}/publish`,{},rep.json.token);
+    const slots=(await call('GET',`/api/polls/${id}`,undefined,rep.json.token)).json.slots;
+    for(const user of [rep,student]) for(const slot of slots) await call('POST',`/api/polls/${id}/vote`,{slotId:slot.id,voteScore:-60},user.json.token);
+    // Riproduce l'interleaving consentito dal D1 remoto: entrambi gli INSERT terminano
+    // prima delle due letture dell'avanzamento. Nessuna modifica alla logica delle rotte.
+    const baseDb=env.DB;
+    let arrived=0;
+    let release:()=>void=()=>{};
+    const gate=new Promise<void>(resolve=>{release=resolve;});
+    env.DB={
+      prepare(sql:string){
+        const stmt=baseDb.prepare(sql);
+        if(!sql.includes('INSERT INTO interrogation_submissions')) return stmt;
+        return {bind(...args:unknown[]){const bound=stmt.bind(...args);return {async run(){
+          const result=await bound.run();
+          if(++arrived===2) release();
+          await gate;
+          return result;
+        }};}};
+      },
+      batch:baseDb.batch.bind(baseDb)
+    } as D1Database;
+    const results=await Promise.all([call('POST',`/api/polls/${id}/submit`,{},rep.json.token),call('POST',`/api/polls/${id}/submit`,{},student.json.token)]);
+    expect(results.map(r=>r.status)).toEqual([200,200]);
+    const bonuses=await env.DB.prepare("SELECT bonus_points FROM student_sacrifice_bonus WHERE subject='Race'").all();
+    // Due rossi su due date: peso 1/2, quindi una chiusura dovrebbe dare 20 punti, non 40.
+    expect(bonuses.results.map((b:any)=>b.bonus_points)).toEqual([40,40]);
+  });
+
+  it('documenta una data negativa evitabile del greedy e mostra il voto realmente registrato', async () => {
+    const rep = await register('prof', { representativeCode: await repCode() });
+    const student = await register('alunno', { classCode: await classCodeOf(rep.json.token) });
+    const created = await call('POST', '/api/polls', { subject: 'Audit', slots: [
+      { slotDate: '2026-12-01', capacity: 1 }, { slotDate: '2026-12-02', capacity: 1 }
+    ] }, rep.json.token);
+    const id = created.json.id;
+    await call('PUT', `/api/polls/${id}/publish`, {}, rep.json.token);
+    const slots = (await call('GET', `/api/polls/${id}`, undefined, rep.json.token)).json.slots;
+    await env.DB.prepare('INSERT INTO student_sacrifice_bonus (student_id, subject, bonus_points) VALUES (?, ?, ?)')
+      .bind(rep.json.user.id, 'Audit', 40).run();
+    for (const slot of slots) await call('POST', `/api/polls/${id}/vote`, { slotId: slot.id, voteScore: 50 }, rep.json.token);
+    await call('POST', `/api/polls/${id}/vote`, { slotId: slots[0].id, voteScore: 50 }, student.json.token);
+    await call('POST', `/api/polls/${id}/vote`, { slotId: slots[1].id, voteScore: -60 }, student.json.token);
+    expect((await call('POST', `/api/polls/${id}/assignments/run?force=1`, {}, rep.json.token)).status).toBe(200);
+    const results = await call('GET', `/api/polls/${id}/assignments`, undefined, rep.json.token);
+    // Rep verde in entrambe: assegnarlo alla seconda data lascerebbe entrambi sul verde.
+    expect(results.json.assignments.find((a: any) => a.studentId === student.json.user.id))
+      .toMatchObject({ slotId: slots[1].id });
+    expect(results.json.assignments.find((a: any) => a.studentId === rep.json.user.id))
+      .toMatchObject({ slotId: slots[0].id });
+  });
+
+
   it('calcolato il calendario non si ricalcola e non si ritira l\'invio', async () => {
     const rep = await register('prof', { representativeCode: await repCode() });
     const s = await register('alunno', { classCode: await classCodeOf(rep.json.token) });
