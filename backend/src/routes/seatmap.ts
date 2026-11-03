@@ -197,4 +197,112 @@ seatmap.post('/reset-history', requireRole('REPRESENTATIVE'), async (c) => {
   return c.json({ success: true, message: 'Storico mappe azzerato' });
 });
 
+// Inserimento e correzione retroattiva: gli indici seguono la data effettiva.
+function validLayout(value: unknown): value is Array<Record<string, unknown>> {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 120) return false;
+  const ids = new Set<string>();
+  const positions = new Set<string>();
+  return value.every((desk) => {
+    if (!desk || !Number.isInteger(desk.row) || desk.row < 0 || desk.row > 30 ||
+        !Number.isInteger(desk.column) || desk.column < 0 || desk.column > 30 ||
+        (desk.seats !== undefined && desk.seats !== 2 && desk.seats !== 3)) return false;
+    const position = `${desk.row}:${desk.column}`;
+    if (positions.has(position)) return false;
+    positions.add(position);
+    return ['studentAId', 'studentBId', 'studentCId'].every((key) => {
+      const id = desk[key];
+      if (id == null) return true;
+      if (key === 'studentCId' && desk.seats !== 3) return false;
+      if (typeof id !== 'string' || !id || ids.has(id)) return false;
+      ids.add(id);
+      return true;
+    });
+  });
+}
+async function classLayoutIds(env: Env, classId: string): Promise<Set<string>> {
+  const members = await env.DB.prepare(`SELECT id FROM users WHERE class_id = ?
+    UNION SELECT id FROM class_dummies WHERE class_id = ?`).bind(classId, classId).all<{ id: string }>();
+  const ids = new Set(members.results.map(r => r.id));
+  const maps = await env.DB.prepare('SELECT layout_json FROM seat_map_history WHERE class_id = ?')
+    .bind(classId).all<{ layout_json: string }>();
+  for (const map of maps.results) {
+    const layout = JSON.parse(map.layout_json);
+    if (!Array.isArray(layout)) continue;
+    for (const desk of layout) for (const key of ['studentAId', 'studentBId', 'studentCId']) {
+      if (typeof desk?.[key] === 'string') ids.add(desk[key]);
+    }
+  }
+  return ids;
+}
+function knownLayout(layout: Array<Record<string, unknown>>, ids: Set<string>): boolean {
+  return layout.every(d => ['studentAId', 'studentBId', 'studentCId'].every(k => d[k] == null || ids.has(d[k] as string)));
+}
+
+const reindex = (env: Env, classId: string) => env.DB.prepare(`
+  WITH ordered AS (SELECT id, ROW_NUMBER() OVER (ORDER BY published_at DESC, map_index ASC, id) AS n
+    FROM seat_map_history WHERE class_id = ?)
+  UPDATE seat_map_history SET map_index = (SELECT n FROM ordered WHERE ordered.id = seat_map_history.id)
+  WHERE class_id = ?`).bind(classId, classId);
+
+seatmap.post('/history', requireRole('REPRESENTATIVE'), async (c) => {
+  const body = await c.req.json<{ layout: unknown; publishedAt: string }>();
+  const date = new Date(body.publishedAt);
+  if (!validLayout(body.layout) || typeof body.publishedAt !== 'string' || !Number.isFinite(date.getTime()) || date.getTime() > Date.now() || date.toISOString().slice(0, 10) !== body.publishedAt.slice(0, 10)) {
+    return c.json({ error: 'Disposizione o data passata non valida' }, 400);
+  }
+  const classId = await resolveClassId(c);
+  if (!knownLayout(body.layout, await classLayoutIds(c.env, classId))) return c.json({ error: 'La mappa contiene studenti estranei alla classe' }, 400);
+  const id = newUUID();
+  await c.env.DB.batch([
+    c.env.DB.prepare('INSERT INTO seat_map_history (id, map_index, layout_json, class_id, published_at) VALUES (?, 1, ?, ?, ?)')
+      .bind(id, JSON.stringify(body.layout), classId, date.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '')),
+    reindex(c.env, classId),
+  ]);
+  return c.json({ success: true, id }, 201);
+});
+
+seatmap.put('/history/:id', requireRole('REPRESENTATIVE'), async (c) => {
+  const body = await c.req.json<{ layout: unknown }>();
+  if (!validLayout(body.layout)) return c.json({ error: 'Disposizione non valida: controlla posti e duplicati' }, 400);
+  const classId = await resolveClassId(c);
+  const existing = await c.env.DB.prepare('SELECT id FROM seat_map_history WHERE id = ? AND class_id = ?').bind(c.req.param('id'), classId).first();
+  if (!existing) return c.json({ error: 'Mappa non trovata' }, 404);
+  if (!knownLayout(body.layout, await classLayoutIds(c.env, classId))) return c.json({ error: 'La mappa contiene studenti estranei alla classe' }, 400);
+  const result = await c.env.DB.prepare('UPDATE seat_map_history SET layout_json = ? WHERE id = ? AND class_id = ?')
+    .bind(JSON.stringify(body.layout), c.req.param('id'), classId).run();
+  if (!result.meta.changes) return c.json({ error: 'Mappa non trovata' }, 404);
+  return c.json({ success: true });
+});
+
+// Riconcilia solo un identificativo non più registrato, su scelta esplicita del rappresentante.
+seatmap.post('/relink-student', requireRole('REPRESENTATIVE'), async (c) => {
+  const body = await c.req.json<{ previousId: string; studentId: string }>();
+  const classId = await resolveClassId(c);
+  if (typeof body.previousId !== 'string' || typeof body.studentId !== 'string' || body.previousId === body.studentId) {
+    return c.json({ error: 'Identificativi non validi' }, 400);
+  }
+  const oldUser = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(body.previousId).first();
+  const target = await c.env.DB.prepare('SELECT id FROM users WHERE id = ? AND class_id = ?').bind(body.studentId, classId).first();
+  const oldDummy = await c.env.DB.prepare('SELECT id FROM class_dummies WHERE id = ?').bind(body.previousId).first();
+  if (oldUser || oldDummy || !target) return c.json({ error: 'Scegli un account precedente eliminato e uno studente della classe' }, 400);
+  const rows = await c.env.DB.prepare('SELECT layout_json FROM seat_map_history WHERE class_id = ?').bind(classId).all<{ layout_json: string }>();
+  let found = false;
+  for (const row of rows.results) {
+    const layout = JSON.parse(row.layout_json);
+    if (!Array.isArray(layout)) continue;
+    const ids = layout.flatMap(d => [d.studentAId, d.studentBId, d.studentCId]);
+    if (ids.includes(body.previousId)) {
+      found = true;
+      if (ids.includes(body.studentId)) return c.json({ error: 'I due studenti sono presenti nella stessa mappa: correggila prima del collegamento' }, 409);
+    }
+  }
+  if (!found) return c.json({ error: 'Account precedente non trovato nelle mappe della classe' }, 404);
+  await c.env.DB.batch([
+    c.env.DB.prepare('UPDATE seat_map_history SET layout_json = REPLACE(layout_json, ?, ?) WHERE class_id = ?')
+      .bind(JSON.stringify(body.previousId), JSON.stringify(body.studentId), classId),
+
+  ]);
+  return c.json({ success: true });
+});
+
 export default seatmap;

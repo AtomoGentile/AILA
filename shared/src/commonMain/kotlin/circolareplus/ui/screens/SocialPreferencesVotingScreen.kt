@@ -35,8 +35,28 @@ fun SocialPreferencesVotingScreen(
     classmates: List<User>,
     currentVotes: Map<String, SocialPreferenceScore>,
     onVoteChanged: (targetStudentId: String, score: SocialPreferenceScore) -> Unit,
+    loadHistory: suspend () -> List<circolareplus.domain.model.PublishedSeatMap> = { emptyList() },
+    studentsMap: Map<String, User> = classmates.associateBy { it.id },
+    currentUserId: String? = null,
     onSubmitVotes: () -> Unit
 ) {
+    var showHistory by remember { mutableStateOf(false) }
+    if (showHistory) SeatMapHistoryDialog(
+        studentsMap = studentsMap, loadHistory = loadHistory, canManage = false,
+        onDeleteMap = {}, onClearHistory = {}, onHistoryChanged = {}, onDismiss = { showHistory = false }
+    )
+    var publishedMaps by remember { mutableStateOf<List<circolareplus.domain.model.PublishedSeatMap>>(emptyList()) }
+    var historyError by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        try { publishedMaps = loadHistory() }
+        catch (e: kotlinx.coroutines.CancellationException) { throw e }
+        catch (e: Exception) { historyError = "Storico non disponibile: apri le mappe precedenti per riprovare." }
+    }
+    fun pastPositions(studentId: String): String = publishedMaps.take(4).mapNotNull { map ->
+        map.assignments.firstOrNull { studentId in listOfNotNull(it.studentAId, it.studentBId, it.studentCId) }?.let {
+            "${map.publishedAt.take(10)}: fila ${it.row + 1}, banco ${it.column + 1}"
+        }
+    }.joinToString(" · ")
     // Calcolo limiti massimi per prevenire abusi (max 2 voti +2 e max 2 voti -2)
     val plusTwoCount = currentVotes.values.count { it == SocialPreferenceScore.STRONG_AFFINITY }
     val minusTwoCount = currentVotes.values.count { it == SocialPreferenceScore.STRONG_REJECTION }
@@ -81,6 +101,12 @@ fun SocialPreferencesVotingScreen(
 
         Spacer(modifier = Modifier.height(AppTheme.Space12))
 
+        TextButton(onClick = { showHistory = true }) { Text("Dove eravamo seduti: mappe precedenti") }
+        historyError?.let { Text(it, color = AppTheme.TextMuted) }
+        currentUserId?.let { id ->
+            val positions = pastPositions(id)
+            if (positions.isNotBlank()) Text("I tuoi posti: $positions", color = AppTheme.TextMuted, style = MaterialTheme.typography.bodySmall)
+        }
         // Contatori di Budget (+2 e -2)
         Card(
             shape = RoundedCornerShape(AppTheme.CardCornerRadius),
@@ -141,6 +167,8 @@ fun SocialPreferencesVotingScreen(
                         }
                     }
 
+                    val positions = pastPositions(classmate.id)
+                    if (positions.isNotBlank()) Text(positions, color = AppTheme.TextMuted, style = MaterialTheme.typography.bodySmall)
                     Spacer(modifier = Modifier.height(AppTheme.Space8))
 
                     // Bottoni per i 5 valori (+2, +1, 0, -1, -2): colori fissi in ogni tema

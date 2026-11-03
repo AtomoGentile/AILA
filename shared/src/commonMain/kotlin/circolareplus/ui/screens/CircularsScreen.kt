@@ -126,7 +126,7 @@ fun CircularsScreen(
             val matchesSearch = searchQuery.isBlank() ||
                 circ.title.contains(searchQuery, ignoreCase = true) ||
                 circ.number.toString().contains(searchQuery.trim())
-            matchesFilter && matchesSearch
+            circ.summaryReady && classifications[circ.number]?.let { !it.isFallback && it.personalSummary.isNotBlank() } == true && matchesFilter && matchesSearch
         }
 
         // Cambiando filtro o ricerca si torna in cima: la lista tiene la posizione per chiave,
@@ -141,7 +141,12 @@ fun CircularsScreen(
             contentPadding = PaddingValues(bottom = AppTheme.Space24 + circolareplus.design.LocalBottomBarPadding.current),
             modifier = Modifier.fillMaxSize()
         ) {
-            if (filteredCirculars.isEmpty()) {
+            val pendingCount = circulars.count { circ -> !circ.summaryReady || classifications[circ.number]?.let { !it.isFallback && it.personalSummary.isNotBlank() } != true }
+            if (pendingCount > 0) item {
+                Text(if (pendingCount == 1) "1 circolare in analisi" else "$pendingCount circolari in analisi", color = AppTheme.TextMuted,
+                    modifier = Modifier.padding(vertical = AppTheme.Space8))
+            }
+            if (filteredCirculars.isEmpty() && pendingCount == 0) {
                 item {
                     AilaEmptyState(
                         title = if (circulars.isEmpty()) "Nessuna circolare" else "Nessun risultato",

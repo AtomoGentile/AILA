@@ -87,6 +87,20 @@ class SeatMapRepository(private val api: ApiClient? = null) {
         return requireApi().post("/api/seat-map/publish", PublishSeatMapRequestDto(layoutElement))
     }
 
+    suspend fun saveHistoricalMap(id: String?, assignments: List<DeskAssignment>, publishedAt: String) {
+        val layout = apiJson.parseToJsonElement(apiJson.encodeToString(assignments))
+        val body = kotlinx.serialization.json.buildJsonObject {
+            put("layout", layout)
+            put("publishedAt", kotlinx.serialization.json.JsonPrimitive(publishedAt))
+        }
+        if (id == null) requireApi().post<kotlinx.serialization.json.JsonObject, SuccessDto>("/api/seat-map/history", body)
+        else requireApi().put<kotlinx.serialization.json.JsonObject, SuccessDto>("/api/seat-map/history/$id", body)
+    }
+
+    suspend fun relinkStudent(previousId: String, studentId: String) {
+        requireApi().post<Map<String, String>, SuccessDto>("/api/seat-map/relink-student", mapOf("previousId" to previousId, "studentId" to studentId))
+    }
+
     /** Solo Rappresentante: azzera lo storico (inizio quadrimestre / cambio aula). */
     suspend fun resetHistory(): SuccessDto = requireApi().post("/api/seat-map/reset-history", Unit)
 

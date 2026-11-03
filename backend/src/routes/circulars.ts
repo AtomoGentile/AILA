@@ -52,7 +52,7 @@ circulars.get('/', authMiddleware(), async (c) => {
 
   const rows = await c.env.DB.prepare(
     `SELECT c.number, c.title, c.publish_date, c.r2_pdf_key, c.original_url, c.attachments_json, c.created_at,
-       EXISTS(SELECT 1 FROM circular_ai_analysis a WHERE a.circular_number = c.number AND a.tier >= 2) AS summary_ready
+       EXISTS(SELECT 1 FROM circular_ai_analysis a WHERE a.circular_number = c.number AND a.tier >= 1 AND a.is_fallback = 0 AND LENGTH(TRIM(a.summary)) > 0) AND c.notification_pending = 0 AS summary_ready
      FROM circulars c ORDER BY c.number DESC LIMIT ? OFFSET ?`
   ).bind(limit, offset).all<{
     number: number;

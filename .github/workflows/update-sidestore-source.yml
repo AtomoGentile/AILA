@@ -43,9 +43,14 @@ jobs:
             REL=$(gh api "repos/$REPO/releases/tags/$INPUT_TAG")
           else
             REL=$(gh api "repos/$REPO/releases?per_page=30" \
-              --jq '[.[] | select(.draft|not) | select(any(.assets[]; .name=="AILA.ipa"))][0]')
+              --jq '[.[] | select(.draft|not) | select(.prerelease|not) | select(any(.assets[]; .name=="AILA.ipa"))][0]')
           fi
           [ -n "$REL" ] && [ "$REL" != "null" ] || { echo "Nessuna release con AILA.ipa: niente da fare"; exit 0; }
+
+          if [ "$(jq -r .prerelease <<<"$REL")" = "true" ]; then
+            echo "Release beta: il feed SideStore stabile resta invariato"
+            exit 0
+          fi
 
           TAG=$(jq -r .tag_name <<<"$REL")
           ASSET=$(jq -c '.assets[] | select(.name=="AILA.ipa")' <<<"$REL")

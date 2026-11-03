@@ -3071,6 +3071,9 @@ fun MainAppShell(
                                                 onBackClick = { seatMapMode = "MAP" }
                                             )
                                             SocialPreferencesVotingScreen(
+                                                currentUserId = user.id,
+                                                loadHistory = { AppContainer.seatMapRepository.getPublishedHistory() },
+                                                studentsMap = classmates.associateBy { it.id } + (user.id to user) + seatMapDummies.associateBy { it.id }.mapValues { it.value.asUser() },
                                                 classmates = classmates.filter { it.id != user.id },
                                                 currentVotes = socialVotes,
                                                 onVoteChanged = { targetId, score ->
@@ -3196,9 +3199,8 @@ fun MainAppShell(
                                                     // Eliminando la corrente, la precedente torna visibile.
                                                     seatMapAssignments = publishedMaps.firstOrNull()?.assignments ?: emptyList()
                                                     seatMapOptimizerHistory = emptyList()
-                                                    savedSeatMapDraft?.let { draft ->
-                                                        updateSeatMapDraft(draft.copy(history = emptyList()))
-                                                    }
+                                                    proposalOptions = emptyList()
+                                                    updateSeatMapDraft(null)
                                                 },
                                                 onGenerateProposals = { weights, seatsPerDesk, rowSeats, customDeskSlots ->
                                                     coroutineScope.launch {
@@ -3213,17 +3215,21 @@ fun MainAppShell(
                                                                 // Una bozza conserva gli input di calcolo, mai un'autorità
                                                                 // sullo storico: un altro rappresentante può aver pubblicato.
                                                                 val publishedHistory = AppContainer.seatMapRepository.getHistoryForOptimizer()
-                                                                val refreshedDraft = draft.copy(history = publishedHistory)
-                                                                updateSeatMapDraft(refreshedDraft)
-                                                                restoreSeatMapDraft(refreshedDraft, showProposals = true)
+                                                                if (draft.history == publishedHistory) {
+                                                                    restoreSeatMapDraft(draft, showProposals = true)
+                                                                    return@launch
+                                                                }
+                                                                // Una correzione retroattiva cambia gli input: si rigenerano le proposte.
+                                                                updateSeatMapDraft(null)
+                                                                proposalOptions = emptyList()
                                                             } catch (e: CancellationException) {
                                                                 throw e
                                                             } catch (e: Exception) {
                                                                 seatMapActionError = "Impossibile verificare lo storico delle mappe pubblicate: ${e.message}"
+                                                                return@launch
                                                             } finally {
                                                                 isGeneratingProposals = false
                                                             }
-                                                            return@launch
                                                         }
                                                         isGeneratingProposals = true
                                                         lastRequestedSeatsPerDesk = seatsPerDesk

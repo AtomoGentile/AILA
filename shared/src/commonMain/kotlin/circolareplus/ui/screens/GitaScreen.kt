@@ -154,6 +154,24 @@ fun GitaScreen(
     // Voce da sostituire mentre si sceglie il file: il picker torna con il file, non con la voce.
     var replaceTarget by remember { mutableStateOf<GitaItem?>(null) }
     var refreshing by remember { mutableStateOf(false) }
+    var pickerCirculars by remember { mutableStateOf<List<circolareplus.domain.model.Circular>>(emptyList()) }
+    var pickerLoading by remember { mutableStateOf(false) }
+    var pickerError by remember { mutableStateOf<String?>(null) }
+    fun loadPickerCirculars() {
+        if (pickerLoading) return
+        pickerLoading = true
+        pickerError = null
+        scope.launch {
+            try {
+                val page = circolareplus.data.AppContainer.circularsRepository.listCirculars(offset = pickerCirculars.size)
+                pickerCirculars = (pickerCirculars + page).distinctBy { it.number }
+            } catch (e: CancellationException) { throw e
+            } catch (e: Exception) { pickerError = "Impossibile caricare le circolari. Riprova."
+            } finally { pickerLoading = false }
+        }
+    }
+    LaunchedEffect(addStep) { if (addStep == AddStep.Circulars && pickerCirculars.isEmpty()) loadPickerCirculars() }
+
 
     fun messageOf(e: Throwable): String = when (e) {
         is ApiException -> e.message ?: "Operazione non riuscita."
@@ -347,6 +365,11 @@ fun GitaScreen(
         GitaAddSheet(
             step = step,
             onStep = { addStep = it },
+            circulars = pickerCirculars.filter { candidate -> feed?.circulars?.none { it.number == candidate.number } != false },
+            circularsLoading = pickerLoading,
+            circularsError = pickerError,
+            onLoadMoreCirculars = { loadPickerCirculars() },
+            onPickCircular = { number -> write("Circolare aggiunta alla gita.") { repository.setCircularPinned(number, true) } },
             busy = busy,
             closeRequested = addClose,
             onDismiss = {

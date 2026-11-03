@@ -596,6 +596,21 @@ describe('sondaggi interrogazioni', () => {
   });
 });
 
+describe('pubblicazione delle circolari', () => {
+  it('la card è pronta solo dopo un riassunto effettivo e la fine della coda di invio', async () => {
+    const user = await register('lettore');
+    await env.DB.prepare("INSERT INTO circulars (number, title, publish_date, r2_pdf_key, notification_pending) VALUES (99, 'Titolo', '2026-10-01', '99.pdf', 1)").run();
+    const ready = async () => (await call('GET', '/api/circulars', undefined, user.json.token)).json.circulars[0].summaryReady;
+    expect(await ready()).toBe(false);
+    await env.DB.prepare("INSERT INTO circular_ai_analysis (circular_number, badge, summary, tier) VALUES (99, 'POTENTIAL', 'Riassunto completo', 2)").run();
+    expect(await ready()).toBe(false);
+    await env.DB.prepare('UPDATE circulars SET notification_pending = 0 WHERE number = 99').run();
+    expect(await ready()).toBe(true);
+    await env.DB.prepare('UPDATE circular_ai_analysis SET is_fallback = 1 WHERE circular_number = 99').run();
+    expect(await ready()).toBe(false);
+  });
+});
+
 describe('funzioni di supporto', () => {
   it('la matrice delle preferenze non dice chi ha votato cosa', () => {
     const out = anonymizePairs([
@@ -707,6 +722,43 @@ describe('storico delle mappe pubblicate', () => {
     const student = await register('alunno', { classCode: await classCodeOf(rep.json.token) });
     return { rep: rep.json.token, student: student.json.token, id: student.json.user.id };
   }
+
+  it('inserisce mappe passate, corregge lo storico e applica i permessi della classe', async () => {
+    const { rep, student, id } = await setup();
+    const layout = [{ row: 0, column: 0, studentAId: id, studentBId: null }];
+    const current = await call('POST', '/api/seat-map/publish', { layout }, rep);
+    expect((await call('POST', '/api/seat-map/history', { layout, publishedAt: '2026-01-01T12:00:00Z' }, student)).status).toBe(403);
+    const old = await call('POST', '/api/seat-map/history', { layout, publishedAt: '2026-01-01T12:00:00Z' }, rep);
+    expect(old.status).toBe(201);
+    const older = await call('POST', '/api/seat-map/history', { layout, publishedAt: '2025-01-01T12:00:00Z' }, rep);
+    const history = (await call('GET', '/api/seat-map/history?archive=true', undefined, student)).json.history;
+    expect(history.map((h: any) => h.id)).toEqual([current.json.id, old.json.id, older.json.id]);
+    expect(history.map((h: any) => h.mapIndex)).toEqual([1, 2, 3]);
+    const corrected = [{ ...layout[0], row: 2 }];
+    expect((await call('PUT', `/api/seat-map/history/${old.json.id}`, { layout: corrected }, rep)).status).toBe(200);
+    expect((await call('GET', '/api/seat-map/history?archive=true', undefined, rep)).json.history[1]).toMatchObject({ layout: corrected, publishedAt: '2026-01-01 12:00:00' });
+    const other = await register('altraclasse', { classLabel: '5 D', representativeCode: await repCode('5 D') });
+    expect((await call('PUT', `/api/seat-map/history/${old.json.id}`, { layout }, other.json.token)).status).toBe(404);
+    expect((await call('POST', '/api/seat-map/history', { layout: [...layout, { ...layout[0], column: 1 }], publishedAt: '2026-01-01' }, rep)).status).toBe(400);
+    expect((await call('POST', '/api/seat-map/history', { layout, publishedAt: '2099-01-01' }, rep)).status).toBe(400);
+  });
+
+  it('ricollega un account ricreato in tutte le mappe, senza duplicare studenti', async () => {
+    const { rep, student, id } = await setup();
+    const layout = [{ row: 0, column: 0, studentAId: id, studentBId: null }];
+    await call('POST', '/api/seat-map/publish', { layout }, rep);
+    await call('POST', '/api/seat-map/history', { layout, publishedAt: '2026-01-01' }, rep);
+    expect((await call('DELETE', '/api/users/me', { password: 'password123' }, student)).status).toBe(200);
+    const recreated = await register('alunno', { classCode: await classCodeOf(rep) });
+    const newId = recreated.json.user.id;
+    const body = { previousId: id, studentId: newId };
+    expect((await call('POST', '/api/seat-map/relink-student', body, recreated.json.token)).status).toBe(403);
+    expect((await call('POST', '/api/seat-map/relink-student', body, rep)).status).toBe(200);
+    const history = (await call('GET', '/api/seat-map/history?archive=true', undefined, rep)).json.history;
+    expect(history).toHaveLength(2);
+    expect(history.every((h: any) => h.layout[0].studentAId === newId)).toBe(true);
+    expect((await call('POST', '/api/seat-map/relink-student', { previousId: newId, studentId: id }, rep)).status).toBe(400);
+  });
 
   it('lettura, anteprime locali e proposte non pubblicate non cambiano lo storico', async () => {
     const { rep, student, id } = await setup();

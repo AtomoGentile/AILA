@@ -93,6 +93,7 @@ import kotlinx.coroutines.launch
 internal sealed interface AddStep {
     data object Choose : AddStep
     class Document(val fileName: String, val bytes: ByteArray) : AddStep
+    data object Circulars : AddStep
     data object Link : AddStep
 }
 
@@ -196,6 +197,11 @@ internal fun GitaAddSheet(
     closeRequested: Boolean,
     onDismiss: () -> Unit,
     onPickPdf: () -> Unit,
+    circulars: List<circolareplus.domain.model.Circular>,
+    circularsLoading: Boolean,
+    circularsError: String?,
+    onLoadMoreCirculars: () -> Unit,
+    onPickCircular: (Int) -> Unit,
     onSaveDocument: (title: String, category: GitaCategory, note: String?, fileName: String, bytes: ByteArray) -> Unit,
     onSaveLink: (title: String, url: String, note: String?) -> Unit,
 ) {
@@ -210,6 +216,7 @@ internal fun GitaAddSheet(
             title = when (step) {
                 AddStep.Choose -> "Aggiungi alla gita"
                 is AddStep.Document -> "Nuovo documento"
+                AddStep.Circulars -> "Scegli una circolare"
                 AddStep.Link -> "Nuovo link"
             },
             canGoBack = step !is AddStep.Choose,
@@ -229,6 +236,7 @@ internal fun GitaAddSheet(
                     when (shown) {
                         AddStep.Choose -> ChooseBody(
                             onDocument = onPickPdf,
+                            onCircular = { onStep(AddStep.Circulars) },
                             onLink = { onStep(AddStep.Link) }
                         )
                         is AddStep.Document -> DocumentForm(
@@ -236,6 +244,7 @@ internal fun GitaAddSheet(
                             busy = busy,
                             onSave = { title, category, note -> onSaveDocument(title, category, note, shown.fileName, shown.bytes) }
                         )
+                        AddStep.Circulars -> CircularPicker(circulars, circularsLoading, circularsError, busy, onLoadMoreCirculars, onPickCircular)
                         AddStep.Link -> LinkForm(
                             titleEditable = true,
                             initialTitle = "",
@@ -252,7 +261,7 @@ internal fun GitaAddSheet(
 }
 
 @Composable
-private fun ChooseBody(onDocument: () -> Unit, onLink: () -> Unit) {
+private fun ChooseBody(onDocument: () -> Unit, onLink: () -> Unit, onCircular: () -> Unit) {
     Text(
         text = "Che cosa vuoi aggiungere?",
         style = MaterialTheme.typography.bodyMedium,
@@ -260,6 +269,13 @@ private fun ChooseBody(onDocument: () -> Unit, onLink: () -> Unit) {
         modifier = Modifier.ailaSheetReveal(0).padding(bottom = AppTheme.Space12)
     )
     AilaCard(modifier = Modifier.ailaSheetReveal(1)) {
+        AilaListRow(
+            title = "Scegli una circolare",
+            subtitle = "Aggiungi le circolari utili alla classe",
+            tint = AppTheme.TintBlue,
+            onClick = onCircular,
+            icon = { AppIcons.Document(modifier = Modifier.size(20.dp), color = AppTheme.TintBlueInk) }
+        )
         AilaListRow(
             title = "Carica un PDF",
             subtitle = "Programma, preventivo, scadenze, regolamento",
@@ -795,5 +811,28 @@ private fun CategoryChip(label: String, tint: Color, ink: Color, selected: Boole
             color = text,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
         )
+    }
+}
+
+@Composable
+private fun CircularPicker(
+    circulars: List<circolareplus.domain.model.Circular>, loading: Boolean, error: String?,
+    busy: Boolean, onLoadMore: () -> Unit, onPick: (Int) -> Unit
+) {
+    var query by remember { mutableStateOf("") }
+    AilaPillTextField(value = query, onValueChange = { query = it }, placeholder = "Cerca per titolo o numero")
+    error?.let { Text(it, color = AppTheme.TintRedInk) }
+    Column(Modifier.fillMaxWidth().height(320.dp).verticalScroll(rememberScrollState())) {
+        circulars.filter { query.isBlank() || it.title.contains(query, true) || it.number.toString().contains(query) }.forEach { circular ->
+            AilaCard {
+                AilaListRow(title = "Circolare n. ${circular.number}", subtitle = circular.title,
+                    tint = AppTheme.TintBlue, onClick = { if (!busy) onPick(circular.number) },
+                    icon = { AppIcons.Document(color = AppTheme.TintBlueInk) })
+            }
+            Spacer(Modifier.height(AppTheme.Space8))
+        }
+        androidx.compose.material3.TextButton(onClick = onLoadMore, enabled = !loading && !busy) {
+            Text(if (loading) "Caricamento…" else "Carica altre circolari")
+        }
     }
 }

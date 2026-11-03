@@ -254,20 +254,23 @@ describe('gita: circolari per classe', () => {
       .bind(number, title, '2026-10-01', `circulars/${number}.pdf`).run();
   }
 
-  it('mostra le circolari con gita o uscita nel titolo, e quelle aggiunte dalla classe', async () => {
+  it('mostra solo le circolari scelte dal rappresentante, senza inferenze dal titolo', async () => {
     await circular(101, 'Uscita didattica al museo');
     await circular(102, 'Sciopero del personale');
     await circular(103, 'Viaggio d\'istruzione a Roma');
     const { rep, student } = await cast();
     const list = await call('GET', '/api/gita', undefined, student);
     const numbers = list.json.circulars.map((c: any) => c.number).sort();
-    expect(numbers).toEqual([101, 103]);
-    expect(list.json.circulars.every((c: any) => c.pinned === false)).toBe(true);
+    expect(numbers).toEqual([]);
+    expect(list.json.circulars).toHaveLength(0);
 
     expect((await call('POST', '/api/gita/circulars', { number: 102 }, student)).status).toBe(403);
     expect((await call('POST', '/api/gita/circulars', { number: 102 }, rep)).status).toBe(201);
     const after = await call('GET', '/api/gita', undefined, rep);
-    expect(after.json.circulars.find((c: any) => c.number === 102).pinned).toBe(true);
+    expect(after.json.circulars.map((c: any) => c.number)).toEqual([102]);
+    expect(after.json.circulars[0].pinned).toBe(true);
+    expect((await call('DELETE', '/api/gita/circulars/102', undefined, rep)).status).toBe(200);
+    expect((await call('GET', '/api/gita', undefined, rep)).json.circulars).toEqual([]);
   });
 
   it('le circolari aggiunte da una classe non compaiono nelle altre', async () => {

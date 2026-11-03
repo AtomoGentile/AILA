@@ -33,6 +33,9 @@ fun SeatMapHistoryDialog(
     onHistoryChanged: (List<PublishedSeatMap>) -> Unit,
     onDismiss: () -> Unit
 ) {
+    var editing by remember { mutableStateOf(false) }
+    var creating by remember { mutableStateOf(false) }
+    var relinkId by remember { mutableStateOf<String?>(null) }
     var history by remember { mutableStateOf<List<PublishedSeatMap>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -99,6 +102,8 @@ fun SeatMapHistoryDialog(
                         color = AppTheme.TextDark,
                         modifier = Modifier.weight(1f)
                     )
+                    if (canManage) TextButton(onClick = { creating = true; editing = true }, enabled = !loading && !deleting) { Text("Aggiungi") }
+                    if (selected != null && canManage) TextButton(onClick = { creating = false; editing = true }, enabled = !deleting) { Text("Modifica") }
                     if (selected == null) AilaIconButton(
                         contentDescription = "Aggiorna storico", enabled = !loading && !deleting,
                         onClick = { refresh++ }
@@ -170,6 +175,18 @@ fun SeatMapHistoryDialog(
                             Text("Nessuna mappa pubblicata nello storico.", color = AppTheme.TextMuted,
                                 modifier = Modifier.padding(vertical = AppTheme.Space24))
                         }
+                        if (canManage) {
+                            val orphanIds = history.flatMap { it.assignments }.flatMap { listOfNotNull(it.studentAId, it.studentBId, it.studentCId) }.distinct().filter { it !in studentsMap }
+                            items(orphanIds) { oldId ->
+                                AilaCard {
+                                    Column(Modifier.padding(AppTheme.Space12)) {
+                                        val desk = history.flatMap { it.assignments }.first { oldId in listOfNotNull(it.studentAId, it.studentBId, it.studentCId) }
+                                        Text("Studente non più registrato · fila ${desk.row + 1}, banco ${desk.column + 1}", color = AppTheme.TextMuted)
+                                        TextButton(onClick = { relinkId = oldId }) { Text("Collega allo studente registrato di nuovo") }
+                                    }
+                                }
+                            }
+                        }
                         if (canManage && history.isNotEmpty()) item {
                             AilaDestructiveButton(
                                 text = if (deleting) "Eliminazione in corso…" else "Elimina storico mappe",
@@ -207,6 +224,41 @@ fun SeatMapHistoryDialog(
                     }
                 }
             }
+        }
+        if (editing) HistoricalMapEditor(
+            initial = if (creating) selected?.assignments ?: history.firstOrNull()?.assignments.orEmpty() else selected?.assignments.orEmpty(),
+            studentsMap = studentsMap,
+            isNew = creating,
+            onDismiss = { editing = false },
+            onSave = { layout, date ->
+                circolareplus.data.AppContainer.seatMapRepository.saveHistoricalMap(if (creating) null else selected?.id, layout, date)
+                editing = false
+                selected = null
+                refresh++
+            }
+        )
+        relinkId?.let { previousId ->
+            AlertDialog(onDismissRequest = { relinkId = null }, title = { Text("Collega account ricreato") },
+                text = {
+                    LazyColumn {
+                        actionError?.let { message -> item { Text(message, color = AppTheme.TintRedInk) } }
+                        items(studentsMap.values.filter { it.username.isNotBlank() }, key = { it.id }) { student ->
+                            TextButton(enabled = !deleting, onClick = {
+                                deleting = true
+                                scope.launch {
+                                    try {
+                                        circolareplus.data.AppContainer.seatMapRepository.relinkStudent(previousId, student.id)
+                                        relinkId = null
+                                        selected = null
+                                        refresh++
+                                    } catch (e: CancellationException) { throw e
+                                    } catch (e: Exception) { actionError = e.message
+                                    } finally { deleting = false }
+                                }
+                            }) { Text("${student.firstName} ${student.lastName}") }
+                        }
+                    }
+                }, confirmButton = { TextButton(onClick = { relinkId = null }) { Text("Chiudi") } })
         }
         pendingDelete?.let { map ->
             AilaConfirmDialog(

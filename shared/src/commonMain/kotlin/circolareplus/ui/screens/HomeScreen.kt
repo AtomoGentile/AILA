@@ -78,7 +78,7 @@ fun HomeScreen(
     val scrollState = rememberScrollState()
 
     // Circolare più recente (numero più alto): mostrata in evidenza, se ce n'è almeno una.
-    val latestCircular = circulars.maxByOrNull { it.number }
+    val latestCircular = circulars.filter { it.summaryReady }.maxByOrNull { it.number }
     // Prime 3 scadenze **future**. Prima si prendevano le prime tre della lista e basta, poi si
     // confrontavano le date come stringhe: un "2026-9-5" scritto senza zeri (arriva dagli eventi
     // generati dall'AI) risultava "maggiore" di "2026-09-20" e una verifica di settembre restava
@@ -89,7 +89,7 @@ fun HomeScreen(
     val wide = circolareplus.design.LocalWideLayout.current
     val nextEvents = remember(calendarEvents, wide) { upcomingEvents(calendarEvents, limit = if (wide) 6 else 3) }
     val recentCirculars = remember(circulars, wide) {
-        if (wide) circulars.sortedByDescending { it.number }.take(5) else emptyList()
+        if (wide) circulars.filter { it.summaryReady }.sortedByDescending { it.number }.take(5) else emptyList()
     }
 
     // Circolare più recente in evidenza. Tipo esplicito sulla callback: un lambda scritto dentro
@@ -117,6 +117,12 @@ fun HomeScreen(
             onNavigateToSeatMap = onNavigateToSeatMap
         )
 
+        val pendingCount = circulars.count { !it.summaryReady }
+        if (pendingCount > 0) Text(
+            if (pendingCount == 1) "1 circolare in analisi" else "$pendingCount circolari in analisi",
+            color = AppTheme.TextMuted,
+            modifier = Modifier.padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12)
+        )
         val latestSection: @Composable () -> Unit = {
             LatestCircularCard(
                 latestCircular = latestCircular,

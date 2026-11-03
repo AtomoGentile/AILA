@@ -17,8 +17,6 @@ export const GITA_MAX_BYTES = 100 * 1024 * 1024;
 const MAX_TITLE = 200;
 const MAX_NOTE = 1000;
 const MAX_REASON = 500;
-/** Titoli di circolare che parlano di gita: minuscole, senza accenti (il confronto è LIKE). */
-export const GITA_KEYWORDS = ['gita', 'uscita', 'viaggio', 'pullman', 'escursione'];
 export const GITA_CATEGORIES = ['PROGRAMMA', 'PREVENTIVO', 'SCADENZA', 'REGOLAMENTO', 'PAGAMENTO', 'ALTRO'] as const;
 type GitaCategory = (typeof GITA_CATEGORIES)[number];
 
@@ -261,14 +259,13 @@ gita.get('/', async (c) => {
     out.push(itemJson(item, await currentVersion(c.env, item.id)));
   }
 
-  // Circolari della gita: quelle che il Rappresentante ha aggiunto per la classe, più quelle il cui
-  // titolo parla di gita o uscita (la parola chiave è in GITA_KEYWORDS).
+  // Solo circolari scelte esplicitamente dal Rappresentante per questa classe.
   const circulars = await c.env.DB.prepare(
     `SELECT c.number, c.title, c.publish_date, g.circular_number IS NOT NULL AS pinned
      FROM circulars c LEFT JOIN gita_circulars g ON g.circular_number = c.number AND g.class_id = ?
-     WHERE g.circular_number IS NOT NULL OR ${GITA_KEYWORDS.map(() => 'LOWER(c.title) LIKE ?').join(' OR ')}
+     WHERE g.circular_number IS NOT NULL
      ORDER BY c.publish_date DESC, c.number DESC LIMIT 100`
-  ).bind(classId, ...GITA_KEYWORDS.map((k) => `%${k}%`)).all<{ number: number; title: string; publish_date: string; pinned: number }>();
+  ).bind(classId).all<{ number: number; title: string; publish_date: string; pinned: number }>();
 
   // Il Rappresentante vede tutte le segnalazioni della classe; gli altri solo le proprie.
   const isRep = payload.role === 'REPRESENTATIVE';
