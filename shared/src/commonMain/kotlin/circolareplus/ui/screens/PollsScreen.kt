@@ -167,7 +167,7 @@ fun PollsScreen(
                     )
                     Spacer(modifier = Modifier.height(AppTheme.Space4))
                     if (usesGlobalAssignment) {
-                        Text("Le date vengono scelte considerando tutto il calendario. Voti e bonus iniziali sono salvati per le verifiche.",
+                        Text("Le assegnazioni considerano insieme tutte le date del sondaggio. Voti e bonus iniziali sono salvati per le verifiche.",
                             style = MaterialTheme.typography.bodySmall, color = AppTheme.TintBlueInk)
                         Spacer(Modifier.height(AppTheme.Space8))
                     }

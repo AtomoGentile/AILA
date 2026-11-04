@@ -26,8 +26,7 @@ data class InterrogationSlotInfo(
     val slotId: String,
     val dateIso: String,
     val capacity: Int,
-    val isTeacherMandatory: Boolean = false,
-    val isCompitoInClasseForAll: Boolean = false // Se per tutti nello stesso giorno, penalità azzerata (0 pt)
+    val isTeacherMandatory: Boolean = false
 )
 
 data class SlotAssignmentResult(
@@ -63,7 +62,6 @@ object SondaggiEngine {
     /**
      * Calcola il punteggio finale di associazione per lo Studente A allo Slot X:
      * Punteggio Finale = Pvoto + Psacrificio
-     * Dove se il giorno ha una verifica "Per Tutti", la penalità viene annullata (0 pt)
      */
     fun calculateSlotScore(
         vote: StudentInterrogationVote?,
@@ -72,18 +70,11 @@ object SondaggiEngine {
     ): Int {
         val baseScore = vote?.voteType?.score ?: InterrogationVoteType.YELLOW.score
 
-        // Gestione Sovrapposizioni: se presente verifica 'Per Tutti' nello stesso giorno, la penalità si annulla (0 pt)
-        val adjustedVoteScore = if (slot.isCompitoInClasseForAll && baseScore < 0) {
-            0
-        } else {
-            baseScore
-        }
-
         // Applicazione del Bonus Sacrificio: incrementa il valore del voto Verde (+50 + Psacrificio)
         val finalScore = if (vote?.voteType == InterrogationVoteType.GREEN) {
-            adjustedVoteScore + accumulatedSacrificeBonus
+            baseScore + accumulatedSacrificeBonus
         } else {
-            adjustedVoteScore
+            baseScore
         }
 
         return finalScore
@@ -91,7 +82,7 @@ object SondaggiEngine {
 
     /**
      * Aggiorna il bonus sacrificio per il giro successivo in base all'esito dell'assegnazione:
-     * - Assegnazione passata su Verde / Giallo: Psacrificio = 0 pt (Reset se ottenuto Verde tramite bonus)
+     * - Assegnazione passata su Verde / Giallo: Psacrificio = 0 pt
      * - Assegnazione passata su Rosso Chiaro: +40 pt
      * - Assegnazione passata su Rosso Scuro: +150 pt
      */
@@ -101,7 +92,7 @@ object SondaggiEngine {
     ): Int {
         return when (assignedVoteType) {
             InterrogationVoteType.GREEN -> 0 // Bonus consumato e azzerato
-            InterrogationVoteType.YELLOW -> currentBonus // Non consumato né aumentato
+            InterrogationVoteType.YELLOW -> 0
             InterrogationVoteType.LIGHT_RED -> (currentBonus + SACRIFICE_LIGHT_RED).coerceAtMost(MAX_SACRIFICE_BONUS)
             InterrogationVoteType.DARK_RED -> (currentBonus + SACRIFICE_DARK_RED).coerceAtMost(MAX_SACRIFICE_BONUS)
         }

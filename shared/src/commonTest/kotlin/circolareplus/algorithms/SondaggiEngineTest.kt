@@ -59,25 +59,12 @@ class SondaggiEngineTest {
             assignedVoteType = InterrogationVoteType.GREEN
         )
         assertEquals(0, resetBonus)
+        assertEquals(0, SondaggiEngine.calculateNextSacrificeBonus(bonusAfterDarkRed, InterrogationVoteType.YELLOW))
 
         // 5. L'accumulo ha un tetto
         var capped = 0
         repeat(10) { capped = SondaggiEngine.calculateNextSacrificeBonus(capped, InterrogationVoteType.DARK_RED) }
         assertEquals(SondaggiEngine.MAX_SACRIFICE_BONUS, capped)
-    }
-
-    @Test
-    fun testNeutralizzazionePenalitaCompitoPerTutti() {
-        // Se c'è un compito in classe "Per Tutti", il giorno non applica penalità (0 pt)
-        val slotWithExam = InterrogationSlotInfo(
-            slotId = "slot_exam",
-            dateIso = "2026-09-15",
-            capacity = 1,
-            isCompitoInClasseForAll = true
-        )
-        val redVote = StudentInterrogationVote("s1", "slot_exam", InterrogationVoteType.LIGHT_RED)
-        val score = SondaggiEngine.calculateSlotScore(redVote, slotWithExam, accumulatedSacrificeBonus = 0)
-        assertEquals(0, score, "Un compito in classe per tutti deve azzerare la penalità dello slot a 0 pt")
     }
 
     @Test
