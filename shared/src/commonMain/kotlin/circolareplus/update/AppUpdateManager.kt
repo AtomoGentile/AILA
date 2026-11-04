@@ -85,8 +85,8 @@ object AppUpdateManager {
 
     private fun loadBetaPreference(): Boolean {
         val settings = AppContainer.settings
-        if (settings.updateChannelPreference == "auto") {
-            settings.updateChannelPreference = if (AppVersion.isBeta(appVersionName())) "beta" else "stable"
+        if (settings.updateChannelPreference == "auto" && AppVersion.isBeta(appVersionName())) {
+            settings.updateChannelPreference = "beta"
         }
         betaProgramEnabled = settings.updateChannelPreference == "beta"
         return betaProgramEnabled
