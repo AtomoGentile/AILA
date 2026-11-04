@@ -1577,3 +1577,31 @@ describe('sincronizzazione del calendario dei sondaggi e PDF', () => {
     expect((await pdf(rep.json.token)).status).toBe(200);
   });
 });
+
+describe('modifica manuale degli eventi del calendario', () => {
+  it('salva titolo e data e permette di cancellare ora e note mantenendo i permessi di classe', async () => {
+    const rep = await register('editcalrep', { representativeCode: await repCode() });
+    const student = await register('editcalstud', { classCode: await classCodeOf(rep.json.token) });
+    const other = await register('editcalother', { classLabel: '5 H', representativeCode: await repCode('5 H') });
+    const created = await call('POST', '/api/calendar', { title: 'Evento originale', eventDate: '2026-12-03', startTime: '09:00', category: 'INTERROGAZIONE', notes: 'Note precedenti', isForAll: true }, rep.json.token);
+    expect(created.status).toBe(201);
+    const path = `/api/calendar/${created.json.id}`;
+    const update = { title: 'Evento corretto', eventDate: '2026-12-04', startTime: null, category: 'VERIFICA', notes: null };
+    expect((await call('PUT', path, update, student.json.token)).status).toBe(403);
+    expect((await call('PUT', path, update, other.json.token)).status).toBe(404);
+    expect((await call('PUT', path, update, rep.json.token)).status).toBe(200);
+    const list = await call('GET', '/api/calendar', undefined, rep.json.token);
+    expect(list.json.events.find((e: any) => e.id === created.json.id)).toMatchObject({ title: 'Evento corretto', eventDate: '2026-12-04', startTime: null, category: 'VERIFICA', notes: null });
+  });
+
+  it('rifiuta date inesistenti o di tipo errato senza alterare l’evento', async () => {
+    const rep = await register('editcaldate', { representativeCode: await repCode() });
+    const created = await call('POST', '/api/calendar', { title: 'Data da modificare', eventDate: '2026-12-03', category: 'ALTRO', isForAll: true }, rep.json.token);
+    for (const date of ['2026-02-30', '2026-13-01', 12345]) {
+      expect((await call('PUT', `/api/calendar/${created.json.id}`, { eventDate: date }, rep.json.token)).status).toBe(400);
+    }
+    const list = await call('GET', '/api/calendar', undefined, rep.json.token);
+    expect(list.json.events.find((e: any) => e.id === created.json.id).eventDate).toBe('2026-12-03');
+    expect((await call('PUT', `/api/calendar/${created.json.id}`, { eventDate: '2028-02-29' }, rep.json.token)).status).toBe(200);
+  });
+});

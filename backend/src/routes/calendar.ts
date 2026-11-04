@@ -287,8 +287,8 @@ calendar.put('/:id', async (c) => {
   if (body.title !== undefined && (typeof body.title !== 'string' || !body.title.trim() || body.title.length > MAX_TITLE_LENGTH)) {
     return c.json({ error: 'Titolo non valido' }, 400);
   }
-  if (body.eventDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(body.eventDate)) {
-    return c.json({ error: 'eventDate deve essere nel formato yyyy-mm-dd' }, 400);
+  if (body.eventDate !== undefined && (typeof body.eventDate !== 'string' || !isValidIsoDate(body.eventDate))) {
+    return c.json({ error: 'eventDate deve essere una data valida nel formato yyyy-mm-dd' }, 400);
   }
   if (body.startTime != null && !isValidEventTime(body.startTime)) {
     return c.json({ error: 'startTime deve essere HH:MM oppure ora di lezione (es. 3ª ora)' }, 400);

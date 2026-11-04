@@ -988,6 +988,8 @@ fun MainAppShell(
     // riassuntiva.
     var eventDetailToShow by remember { mutableStateOf<CalendarEvent?>(null) }
     var eventToEdit by remember { mutableStateOf<CalendarEvent?>(null) }
+    var isSavingCalendarEvent by remember { mutableStateOf(false) }
+    var calendarEditError by remember { mutableStateOf<String?>(null) }
 
     // --- Stato Bacheca ---------------------------------------------------------------------
     var proposals by remember { mutableStateOf<List<Proposal>>(emptyList()) }
@@ -2260,7 +2262,7 @@ fun MainAppShell(
             onOpenCircular = openCircularFromEvent,
             onDismiss = { eventDetailToShow = null },
             canEdit = event.isAiGenerated || event.createdByUserId == user.id || isRepresentative,
-            onEdit = { eventToEdit = event; eventDetailToShow = null },
+            onEdit = { calendarEditError = null; eventToEdit = event; eventDetailToShow = null },
             // Il foglio e' gia' sceso quando arriva qui (vedi EventDetailDialog): si toglie e
             // l'eliminazione parte con la card che esce dal calendario.
             onDelete = {
@@ -2273,8 +2275,13 @@ fun MainAppShell(
     eventToEdit?.let { event ->
         EditCalendarEventDialog(
             event = event,
-            onDismiss = { eventToEdit = null },
-            onSave = { title, date, time, category, notes ->
+            isSaving = isSavingCalendarEvent,
+            error = calendarEditError,
+            onDismiss = { if (!isSavingCalendarEvent) eventToEdit = null },
+            onSave = saveEvent@{ title, date, time, category, notes ->
+                if (isSavingCalendarEvent) return@saveEvent
+                isSavingCalendarEvent = true
+                calendarEditError = null
                 coroutineScope.launch {
                     try {
                         AppContainer.calendarRepository.updateEvent(event.id, title, date, time, category, notes)
@@ -2283,9 +2290,10 @@ fun MainAppShell(
                         }
                         eventToEdit = null
                         reloadCalendar()
+                    } catch (e: CancellationException) { throw e
                     } catch (e: Exception) {
-                        calendarError = "Impossibile modificare l'evento: ${e.message}"
-                    }
+                        calendarEditError = "Impossibile modificare l'evento: ${e.message}"
+                    } finally { isSavingCalendarEvent = false }
                 }
             }
         )
@@ -4943,7 +4951,7 @@ fun MainAppShell(
                     classmates = classmates,
                     currentUser = user,
                     canEdit = eventForDetail.isAiGenerated || eventForDetail.createdByUserId == user.id || isRepresentative,
-                    onEdit = { eventToEdit = eventForDetail; eventDetailToShow = null },
+                    onEdit = { calendarEditError = null; eventToEdit = eventForDetail; eventDetailToShow = null },
                     onOpenCircular = openCircularFromEvent,
                     onBack = { eventDetailToShow = null },
                     // La pagina si richiude nella card e poi la card esce (vedi deleteEventAnimated).
@@ -6526,6 +6534,8 @@ private fun EventDetailPage(
 @Composable
 private fun EditCalendarEventDialog(
     event: CalendarEvent,
+    isSaving: Boolean,
+    error: String?,
     onDismiss: () -> Unit,
     onSave: (String, String, String?, CalendarEventCategory, String?) -> Unit
 ) {
@@ -6536,28 +6546,29 @@ private fun EditCalendarEventDialog(
     var category by remember(event.id) { mutableStateOf(event.category) }
     var categoryMenu by remember { mutableStateOf(false) }
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isSaving) onDismiss() },
         title = { Text("Modifica evento") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(title, { title = it }, label = { Text("Titolo") }, singleLine = true)
-                OutlinedTextField(date, { date = it }, label = { Text("Data (AAAA-MM-GG)") }, singleLine = true)
-                OutlinedTextField(time, { time = it }, label = { Text("Ora o ora di lezione") }, singleLine = true)
+                OutlinedTextField(title, { title = it }, label = { Text("Titolo") }, singleLine = true, enabled = !isSaving)
+                OutlinedTextField(date, { date = it }, label = { Text("Data (AAAA-MM-GG)") }, singleLine = true, enabled = !isSaving)
+                OutlinedTextField(time, { time = it }, label = { Text("Ora o ora di lezione") }, singleLine = true, enabled = !isSaving)
                 Box {
-                    OutlinedButton(onClick = { categoryMenu = true }) { Text(eventCategoryLabel(category)) }
+                    OutlinedButton(enabled = !isSaving, onClick = { categoryMenu = true }) { Text(eventCategoryLabel(category)) }
                     DropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
                         CalendarEventCategory.entries.forEach { option ->
                             DropdownMenuItem(text = { Text(eventCategoryLabel(option)) }, onClick = { category = option; categoryMenu = false })
                         }
                     }
                 }
-                OutlinedTextField(notes, { notes = it }, label = { Text("Note") }, minLines = 2)
+                OutlinedTextField(notes, { notes = it }, label = { Text("Note") }, minLines = 2, enabled = !isSaving)
+                error?.let { Text(it, color = AppTheme.TintRedInk) }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(title.trim(), date.trim(), time.trim().ifBlank { null }, category, notes.trim().ifBlank { null }) }, enabled = title.isNotBlank() && date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) { Text("Salva") }
+            TextButton(onClick = { onSave(title.trim(), date.trim(), time.trim().ifBlank { null }, category, notes.trim().ifBlank { null }) }, enabled = !isSaving && title.isNotBlank() && date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) { Text(if (isSaving) "Salvataggio…" else "Salva") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Annulla") } }
+        dismissButton = { TextButton(enabled = !isSaving, onClick = onDismiss) { Text("Annulla") } }
     )
 }
 
