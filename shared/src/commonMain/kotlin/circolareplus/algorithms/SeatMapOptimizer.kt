@@ -175,7 +175,12 @@ object SeatMapOptimizer {
     const val DISCIPLINE_PAIR_PENALTY = -180
 
     fun calculateColumnNoisePenalty(noiseFront: Int, noiseBack: Int): Int {
-        return if (noiseFront == 5 && noiseBack == 5) -120 else 0
+        return when {
+            noiseFront == 5 && noiseBack == 5 -> -120
+            noiseFront >= 4 && noiseBack >= 4 && (noiseFront == 5 || noiseBack == 5) -> -80
+            noiseFront == 4 && noiseBack == 4 -> -40
+            else -> 0
+        }
     }
 
     /**

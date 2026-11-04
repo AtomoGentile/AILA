@@ -11,6 +11,14 @@ import kotlin.test.assertTrue
 import kotlin.test.assertFailsWith
 
 class SeatMapOptimizerTest {
+    @Test
+    fun columnNoisePenaltiesAreGraduatedAndSymmetric() {
+        assertEquals(-120, SeatMapOptimizer.calculateColumnNoisePenalty(5, 5))
+        assertEquals(-80, SeatMapOptimizer.calculateColumnNoisePenalty(5, 4))
+        assertEquals(-80, SeatMapOptimizer.calculateColumnNoisePenalty(4, 5))
+        assertEquals(-40, SeatMapOptimizer.calculateColumnNoisePenalty(4, 4))
+        assertEquals(0, SeatMapOptimizer.calculateColumnNoisePenalty(5, 3))
+    }
 
     @Test
     fun fourRowsRotateThroughOtherRowsBeforeReturningInFourthMonth() {
