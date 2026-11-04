@@ -5,6 +5,11 @@ name: iOS IPA (SideStore)
 # per ore a ogni push. Si riaccende quando lo decide Simone.
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Tag della release da compilare (vuoto = ref scelto)'
+        required: false
+        default: ''
 
 permissions:
   contents: write # serve solo per allegare l'IPA alla release sui tag
@@ -17,6 +22,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
 
       - name: Release channel tests
         run: python3 -m unittest discover -s scripts/tests -v
@@ -54,11 +61,17 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      # Kotlin/Native in release ha superato i 4 GB del demone standard.
+      - name: Increase Kotlin Native heap
+        run: |
+          echo 'org.gradle.jvmargs=-Xmx6144m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8' >> gradle.properties
+          echo 'kotlin.native.jvmArgs=-Xmx6144m' >> gradle.properties
+
       - name: Prepare release metadata
         id: release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         run: python3 scripts/prepare_release.py --tag "$RELEASE_TAG" --build "$GITHUB_RUN_NUMBER" --ios-project iosApp/project.yml --github-output "$GITHUB_OUTPUT"
 
       - name: Generate Xcode project
@@ -106,8 +119,9 @@ jobs:
           if-no-files-found: error
 
       - name: Attach IPA to release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
           prerelease: ${{ steps.release.outputs.prerelease == 'true' }}
           files: AILA.ipa
