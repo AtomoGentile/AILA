@@ -7,6 +7,7 @@ import circolareplus.data.remote.dto.CreateCalendarEventRequestDto
 import circolareplus.data.remote.dto.CreateCalendarEventResponseDto
 import circolareplus.data.remote.dto.CustomEventDayDto
 import circolareplus.data.remote.dto.SuccessDto
+import circolareplus.data.remote.dto.UpdateCalendarEventRequestDto
 import circolareplus.domain.model.CalendarEvent
 import circolareplus.domain.model.CalendarEventCategory
 
@@ -49,6 +50,13 @@ class CalendarRepository(private val api: ApiClient) {
 
     suspend fun deleteEvent(id: String) {
         api.delete<SuccessDto>("/api/calendar/$id")
+    }
+
+    suspend fun updateEvent(id: String, title: String, eventDate: String, startTime: String?, category: CalendarEventCategory, notes: String?) {
+        api.put<UpdateCalendarEventRequestDto, SuccessDto>(
+            "/api/calendar/$id",
+            UpdateCalendarEventRequestDto(title, eventDate, startTime, category.name, notes)
+        )
     }
 }
 
