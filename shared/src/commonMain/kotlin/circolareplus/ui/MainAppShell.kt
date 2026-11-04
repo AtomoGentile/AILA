@@ -5786,6 +5786,7 @@ private fun AddCalendarEventDialog(
                             )
                         }
                     }
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
                     val endDateLabel = selectedEndDateMillis?.let { millis ->
                         val civil = circolareplus.util.parseIsoDate(epochMillisToIsoDate(millis))
                         if (civil != null) "Fino al ${civil.day} ${circolareplus.util.ITALIAN_MONTHS.getOrNull(civil.month)?.lowercase().orEmpty()} ${civil.year}" else "Fino al"
