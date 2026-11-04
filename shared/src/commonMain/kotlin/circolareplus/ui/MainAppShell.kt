@@ -987,6 +987,7 @@ fun MainAppShell(
     // nulla, quindi orario, note e destinatari specifici erano invisibili fuori dalla card
     // riassuntiva.
     var eventDetailToShow by remember { mutableStateOf<CalendarEvent?>(null) }
+    var eventToEdit by remember { mutableStateOf<CalendarEvent?>(null) }
 
     // --- Stato Bacheca ---------------------------------------------------------------------
     var proposals by remember { mutableStateOf<List<Proposal>>(emptyList()) }
@@ -2258,11 +2259,34 @@ fun MainAppShell(
             currentUser = user,
             onOpenCircular = openCircularFromEvent,
             onDismiss = { eventDetailToShow = null },
+            canEdit = event.isAiGenerated || event.createdByUserId == user.id || isRepresentative,
+            onEdit = { eventToEdit = event; eventDetailToShow = null },
             // Il foglio e' gia' sceso quando arriva qui (vedi EventDetailDialog): si toglie e
             // l'eliminazione parte con la card che esce dal calendario.
             onDelete = {
                 eventDetailToShow = null
                 deleteEventAnimated(event)
+            }
+        )
+    }
+
+    eventToEdit?.let { event ->
+        EditCalendarEventDialog(
+            event = event,
+            onDismiss = { eventToEdit = null },
+            onSave = { title, date, time, category, notes ->
+                coroutineScope.launch {
+                    try {
+                        AppContainer.calendarRepository.updateEvent(event.id, title, date, time, category, notes)
+                        calendarEvents = calendarEvents.map { current ->
+                            if (current.id == event.id) current.copy(title = title, date = date, time = time, category = category, notes = notes) else current
+                        }
+                        eventToEdit = null
+                        reloadCalendar()
+                    } catch (e: Exception) {
+                        calendarError = "Impossibile modificare l'evento: ${e.message}"
+                    }
+                }
             }
         )
     }
@@ -4918,6 +4942,8 @@ fun MainAppShell(
                     event = eventForDetail,
                     classmates = classmates,
                     currentUser = user,
+                    canEdit = eventForDetail.isAiGenerated || eventForDetail.createdByUserId == user.id || isRepresentative,
+                    onEdit = { eventToEdit = eventForDetail; eventDetailToShow = null },
                     onOpenCircular = openCircularFromEvent,
                     onBack = { eventDetailToShow = null },
                     // La pagina si richiude nella card e poi la card esce (vedi deleteEventAnimated).
@@ -6179,6 +6205,8 @@ private fun EventDetailDialog(
     event: CalendarEvent,
     classmates: List<User>,
     currentUser: User,
+    canEdit: Boolean,
+    onEdit: () -> Unit,
     onOpenCircular: (Int) -> Unit,
     onDismiss: () -> Unit,
     onDelete: () -> Unit
@@ -6315,6 +6343,14 @@ private fun EventDetailDialog(
             }
 
             Spacer(modifier = Modifier.height(AppTheme.Space24))
+            if (canEdit) {
+                circolareplus.design.AilaSecondaryButton(
+                    text = "Modifica evento",
+                    onClick = { closeAnimated(onEdit) },
+                    modifier = Modifier.fillMaxWidth().ailaSheetReveal(6)
+                )
+                Spacer(modifier = Modifier.height(AppTheme.Space12))
+            }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -6348,6 +6384,8 @@ private fun EventDetailPage(
     event: CalendarEvent,
     classmates: List<User>,
     currentUser: User,
+    canEdit: Boolean,
+    onEdit: () -> Unit,
     onOpenCircular: (Int) -> Unit,
     onBack: () -> Unit,
     onDelete: () -> Unit
@@ -6455,6 +6493,14 @@ private fun EventDetailPage(
                 )
             }
             Spacer(modifier = Modifier.height(AppTheme.Space16))
+            if (canEdit) {
+                circolareplus.design.AilaSecondaryButton(
+                    text = "Modifica evento",
+                    onClick = onEdit,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(AppTheme.Space12))
+            }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -6475,6 +6521,44 @@ private fun EventDetailPage(
             }
         }
     }
+}
+
+@Composable
+private fun EditCalendarEventDialog(
+    event: CalendarEvent,
+    onDismiss: () -> Unit,
+    onSave: (String, String, String?, CalendarEventCategory, String?) -> Unit
+) {
+    var title by remember(event.id) { mutableStateOf(event.title) }
+    var date by remember(event.id) { mutableStateOf(event.date) }
+    var time by remember(event.id) { mutableStateOf(event.time.orEmpty()) }
+    var notes by remember(event.id) { mutableStateOf(event.notes.orEmpty()) }
+    var category by remember(event.id) { mutableStateOf(event.category) }
+    var categoryMenu by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Modifica evento") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(title, { title = it }, label = { Text("Titolo") }, singleLine = true)
+                OutlinedTextField(date, { date = it }, label = { Text("Data (AAAA-MM-GG)") }, singleLine = true)
+                OutlinedTextField(time, { time = it }, label = { Text("Ora o ora di lezione") }, singleLine = true)
+                Box {
+                    OutlinedButton(onClick = { categoryMenu = true }) { Text(eventCategoryLabel(category)) }
+                    DropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
+                        CalendarEventCategory.entries.forEach { option ->
+                            DropdownMenuItem(text = { Text(eventCategoryLabel(option)) }, onClick = { category = option; categoryMenu = false })
+                        }
+                    }
+                }
+                OutlinedTextField(notes, { notes = it }, label = { Text("Note") }, minLines = 2)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(title.trim(), date.trim(), time.trim().ifBlank { null }, category, notes.trim().ifBlank { null }) }, enabled = title.isNotBlank() && date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) { Text("Salva") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annulla") } }
+    )
 }
 
 @Composable

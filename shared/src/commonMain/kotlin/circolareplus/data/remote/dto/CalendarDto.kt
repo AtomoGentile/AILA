@@ -50,3 +50,12 @@ data class CreateCalendarEventResponseDto(
     val warning: String? = null,
     val existingEventId: String? = null
 )
+
+@Serializable
+data class UpdateCalendarEventRequestDto(
+    val title: String,
+    val eventDate: String,
+    val startTime: String? = null,
+    val category: String,
+    val notes: String? = null
+)
