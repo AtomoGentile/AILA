@@ -171,3 +171,9 @@ licenza in `backend/src/assets`. Font e metriche sono generati offline da
 `scripts/generate_poll_pdf_font.py` (richiede fonttools); il Worker non analizza font né
 usa un motore PDF pesante a ogni richiesta. `pdf-lib` serve solo nei test come lettore
 indipendente del documento prodotto.
+
+Il PDF raggruppa i nomi per data, mostrando il giorno una sola volta accanto al relativo
+elenco in ordine di cognome. Unisce gli slot dello stesso giorno e mantiene insieme
+i gruppi che entrano in una pagina. Per gruppi più lunghi ripete la data sulle pagine
+successive con l’indicazione «continua». La modifica è distribuita dal Worker ed è
+disponibile anche ai client beta 5 già installati, esportando nuovamente il PDF.

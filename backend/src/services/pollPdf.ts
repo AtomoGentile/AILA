@@ -90,7 +90,7 @@ const metadata = (text: string) => 'FEFF' + Array.from(text).map(c => {
 /** A4, testo selezionabile, font incorporato e intestazioni ripetute su ogni pagina. */
 export async function buildPollPdf(data: PollPdfData): Promise<Uint8Array> {
   const pages: string[][] = [];
-  let page: string[], y = 0, row = 0;
+  let page: string[], y = 0, pageTop = 0, row = 0;
   const text = (value: string, x: number, top: number, size: number, color = '0.06 0.09 0.16') =>
     page.push(`BT /F1 ${size} Tf ${color} rg 1 0 0 1 ${x} ${top} Tm <${textHex(value)}> Tj ET`);
   const rect = (x: number, top: number, w: number, h: number, color: string) => page.push(`${color} rg ${x} ${top} ${w} ${h} re f`);
@@ -101,18 +101,33 @@ export async function buildPollPdf(data: PollPdfData): Promise<Uint8Array> {
     for (const line of wrap(data.subject, 18, 515)) { text(line, 40, y, 18); y -= 23; }
     for (const line of wrap(`Classe ${data.classLabel} · Calendario pubblicato`, 10, 515)) { text(line, 40, y - 2, 10, '0.39 0.45 0.55'); y -= 14; }
     y -= 19; rect(40, y - 8, 515, 25, '0.93 0.95 0.99');
-    text('Data', 49, y, 11, '0.15 0.29 0.65'); text('Studente', 165, y, 11, '0.15 0.29 0.65'); y -= 30;
+    text('Data', 49, y, 11, '0.15 0.29 0.65'); text('Studenti', 165, y, 11, '0.15 0.29 0.65'); y -= 30; pageTop = y;
   }
   newPage();
-  for (const slot of [...data.slots].sort((a, b) => a.date.localeCompare(b.date))) {
-    const names = slot.students.length ? slot.students.map(s => fullName(s.firstName, s.lastName)) : ['Nessuno studente assegnato'];
-    for (const name of names) {
-      const lines = wrap(name, 11, 380), height = Math.max(26, lines.length * 15 + 10);
-      if (y - height < 55) newPage();
+  // Una riga per data: unisce anche eventuali slot distinti dello stesso giorno.
+  const byDate = new Map<string, PollPdfData['slots'][number]['students']>();
+  for (const slot of data.slots) byDate.set(slot.date, [...(byDate.get(slot.date) ?? []), ...slot.students]);
+  for (const [date, students] of [...byDate].sort(([a], [b]) => a.localeCompare(b))) {
+    const names = students.length ? [...students].sort((a, b) => a.lastName.localeCompare(b.lastName, 'it') || a.firstName.localeCompare(b.firstName, 'it'))
+      .map(s => fullName(s.firstName, s.lastName)) : ['Nessuno studente assegnato'];
+    const lines = names.flatMap(name => wrap(name, 11, 370).map((value, index) => ({ value, x: index === 0 ? 165 : 175 })));
+    const groupHeight = Math.max(30, lines.length * 16 + 14);
+    // Mantiene insieme i gruppi che possono stare interamente su una pagina.
+    if (groupHeight <= pageTop - 55 && y - groupHeight < 55) newPage();
+    let offset = 0;
+    while (offset < lines.length) {
+      let available = Math.floor((y - 55 - 14) / 16);
+      if (available < 1 || (offset > 0 && y - 55 < 40)) { newPage(); available = Math.floor((y - 55 - 14) / 16); }
+      const chunk = lines.slice(offset, offset + available);
+      const height = Math.max(offset > 0 ? 40 : 30, chunk.length * 16 + 14);
       if (row % 2 === 1) rect(40, y - height + 10, 515, height, '0.98 0.985 0.995');
-      text(dateLabel(slot.date), 49, y, 11);
-      lines.forEach((line, i) => text(line, 165, y - i * 15, 11)); y -= height; row++;
+      text(dateLabel(date), 49, y, 11);
+      if (offset > 0) text('(continua)', 49, y - 15, 9, '0.39 0.45 0.55');
+      chunk.forEach((line, i) => text(line.value, line.x, y - i * 16, 11));
+      y -= height; offset += chunk.length;
+      if (offset < lines.length) newPage();
     }
+    row++;
   }
   const exportedAt = new Date().toISOString().slice(0, 10);
   pages.forEach((p, i) => {
