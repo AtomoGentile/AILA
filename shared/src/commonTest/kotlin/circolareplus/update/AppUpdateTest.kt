@@ -122,6 +122,14 @@ class AppUpdateTest {
     }
 
     @Test
+    fun preferenzaEsplicitaConsenteBetaDallaStabileEDisattivaBetaSullaBeta() {
+        val feed = "[${release(tag = "v1.7.0-beta.1", prerelease = true)},${release(tag = "v1.6.4")}]"
+        assertEquals("1.7.0-beta.1", AppUpdateParser.selectLatestRelease(feed, "1.6.3", allowBeta = true)?.version)
+        assertEquals("1.6.4", AppUpdateParser.selectLatestRelease(feed, "1.6.3-beta.5", allowBeta = false)?.version)
+        assertNull(AppUpdateParser.selectLatestRelease(feed, "1.7.0-beta.2", allowBeta = false))
+    }
+
+    @Test
     fun unaBetaRiceveLaBetaPiuRecenteAncheSeLeReleaseNonSonoOrdinate() {
         val feed = "[${release(tag = "v1.6.3-beta.2", prerelease = true)},${release(tag = "v1.6.2")},${release(tag = "v1.6.3-beta.10", prerelease = true)}]"
         assertEquals("1.6.3-beta.10", AppUpdateParser.selectLatestRelease(feed, "1.6.3-beta.1")?.version)

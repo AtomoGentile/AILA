@@ -25,6 +25,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 /** In che punto e' l'aggiornamento: lo legge la riga delle Impostazioni e la finestra di dialogo. */
 sealed interface UpdateState {
@@ -45,7 +47,7 @@ sealed interface UpdateState {
  *
  * Quando si pubblica una release (tag `vX.Y.Z`) la CI allega `AILA.apk`; l'app, all'avvio e al
  * ritorno in primo piano (al massimo ogni ora) cerca nel canale dell'installazione.
- * Le stabili leggono `releases/latest`; le beta confrontano anche le pre-release.
+ * Il canale stabile legge `releases/latest`; il programma beta confronta anche le pre-release.
  * Se la versione e' piu' alta di quella installata propone di scaricarla e installarla. Lo stato e' di
  * Compose, global come AppTheme: lo scaricamento continua anche se si chiude la finestra.
  */
@@ -78,12 +80,34 @@ object AppUpdateManager {
         }
     }
 
+    var betaProgramEnabled: Boolean by mutableStateOf(false)
+        private set
+
+    private fun loadBetaPreference(): Boolean {
+        val settings = AppContainer.settings
+        if (settings.updateChannelPreference == "auto") {
+            settings.updateChannelPreference = if (AppVersion.isBeta(appVersionName())) "beta" else "stable"
+        }
+        betaProgramEnabled = settings.updateChannelPreference == "beta"
+        return betaProgramEnabled
+    }
+
+    fun setBetaProgram(enabled: Boolean) {
+        job?.cancel()
+        AppContainer.settings.updateChannelPreference = if (enabled) "beta" else "stable"
+        betaProgramEnabled = enabled
+        AppContainer.settings.updateLastCheckMillis = 0L
+        state = UpdateState.Idle
+        checkNow()
+    }
+
     private val busy: Boolean
         get() = state is UpdateState.Checking || state is UpdateState.Downloading
 
     /** All'apertura dell'app: controlla sempre, senza aspettare intervalli. */
     fun checkOnLaunch() {
         if (!isInAppUpdateSupported() || busy) return
+        loadBetaPreference()
         check(manual = false)
     }
 
@@ -107,6 +131,7 @@ object AppUpdateManager {
         job = scope.launch {
             try {
                 val update = fetchLatest()
+                currentCoroutineContext().ensureActive()
                 AppContainer.settings.updateLastCheckMillis = currentTimeMillis()
                 if (update == null || !AppVersion.isNewer(update.version, appVersionName())) {
                     // Aggiornata: l'APK scaricato in passato non serve piu'.
@@ -142,14 +167,14 @@ object AppUpdateManager {
             return response.bodyAsText()
         }
         val installed = appVersionName()
-        if (AppVersion.isBeta(installed)) {
-            fetch(RELEASES_URL)?.let { AppUpdateParser.selectLatestRelease(it, installed) }?.let { return it }
+        if (loadBetaPreference()) {
+            fetch(RELEASES_URL)?.let { AppUpdateParser.selectLatestRelease(it, installed, allowBeta = true) }?.let { return it }
         }
         val stableJson = fetch(LATEST_RELEASE_URL) ?: return null
         val stable = AppUpdateParser.parseLatestRelease(stableJson)
         if (stable != null) return stable
         // Anche un tag beta erroneamente marcato come latest non deve nascondere le stabili valide.
-        return fetch(RELEASES_URL)?.let { AppUpdateParser.selectLatestRelease(it, installed) }
+        return fetch(RELEASES_URL)?.let { AppUpdateParser.selectLatestRelease(it, installed, allowBeta = loadBetaPreference()) }
     }
 
     private fun hasDownloaded(update: AppUpdate): Boolean =
@@ -265,7 +290,7 @@ object AppUpdateManager {
     }
 
     private fun channelLabel(): String = when {
-        AppVersion.isBeta(appVersionName()) -> "Canale beta"
+        loadBetaPreference() -> "Canale beta"
         AppVersion.isPrerelease(appVersionName()) == true -> "Build di sviluppo"
         else -> "Canale stabile"
     }

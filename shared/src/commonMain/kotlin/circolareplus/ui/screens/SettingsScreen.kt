@@ -1,5 +1,8 @@
 package circolareplus.ui.screens
 
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -162,6 +165,18 @@ fun SettingsScreen(
     // senza questo contatore gli interruttori non si muoverebbero al tocco, pur salvando.
     var notificationRevision by remember { mutableStateOf(0) }
     var versionTaps by remember { mutableStateOf(0) }
+    var showBetaProgram by remember { mutableStateOf(false) }
+    if (showBetaProgram) {
+        val enabled = circolareplus.update.AppUpdateManager.betaProgramEnabled
+        AlertDialog(onDismissRequest = { showBetaProgram = false },
+            title = { Text("Programma beta") },
+            text = { Text(if (enabled) "Ricevi le beta e le versioni stabili più recenti. Puoi tornare al canale stabile; la versione installata rimane fino a un aggiornamento più recente." else "Iscriviti per ricevere anche le versioni beta. Potrebbero contenere errori. L’installazione degli aggiornamenti richiede sempre la tua conferma.") },
+            confirmButton = { TextButton(onClick = {
+                circolareplus.update.AppUpdateManager.setBetaProgram(!enabled)
+                showBetaProgram = false
+            }) { Text(if (enabled) "Esci dalla beta" else "Iscriviti alla beta") } },
+            dismissButton = { TextButton(onClick = { showBetaProgram = false }) { Text("Annulla") } })
+    }
     val scope = rememberCoroutineScope()
 
     Column(modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
@@ -1077,7 +1092,11 @@ fun SettingsScreen(
                             // Opzione nascosta: 7 tocchi sbloccano la diagnostica.
                             onClick = {
                                 versionTaps++
-                                if (versionTaps >= 7 && !showDebugMenu) onUnlockDebugMenu()
+                                if (versionTaps >= 7) {
+                                    if (!showDebugMenu) onUnlockDebugMenu()
+                                    if (circolareplus.platform.isAndroid() && circolareplus.platform.isInAppUpdateSupported()) showBetaProgram = true
+                                    versionTaps = 0
+                                }
                             },
                             icon = { AppIcons.Sparkle(modifier = Modifier.size(19.dp), color = AppTheme.TintSlateInk) }
                         )

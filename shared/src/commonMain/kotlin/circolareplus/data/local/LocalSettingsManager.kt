@@ -76,6 +76,7 @@ class LocalSettingsManager(
         private const val KEY_CLASS_LESSON_HOURS = "class_lesson_hours"
         /** Bozze delle proposte della mappa posti (generate e non ancora pubblicate), in JSON. */
         private const val KEY_SEATMAP_DRAFTS = "seatmap_proposals_draft_json"
+        private const val KEY_UPDATE_CHANNEL = "update_channel_preference"
         private const val KEY_UPDATE_LAST_CHECK = "update_last_check_millis"
         private const val KEY_UPDATE_DOWNLOADED_IDENTITY = "update_downloaded_identity"
         private const val KEY_UPDATE_DISMISSED_TAG = "update_dismissed_tag"
@@ -304,6 +305,10 @@ class LocalSettingsManager(
     }
 
     // --- Aggiornamenti dell'app (vedi circolareplus.update.AppUpdateManager) -------------------
+
+    var updateChannelPreference: String
+        get() = settings.getString(KEY_UPDATE_CHANNEL, "auto")
+        set(value) = settings.putString(KEY_UPDATE_CHANNEL, value)
 
     /** Ultimo controllo automatico delle release su GitHub: tra uno e l'altro passano ore. */
     var updateLastCheckMillis: Long

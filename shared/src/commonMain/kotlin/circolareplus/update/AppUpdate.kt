@@ -56,10 +56,10 @@ object AppUpdateParser {
     fun parseLatestRelease(json: String): AppUpdate? =
         parseRelease(apiJson.decodeFromString<GitHubReleaseDto>(json), allowBeta = false)
 
-    /** Una stabile resta nel canale stabile; chi ha installato una beta riceve beta e stabili più recenti. */
-    fun selectLatestRelease(json: String, installedVersion: String): AppUpdate? =
+    /** Il canale predefinito segue la build; la preferenza esplicita può abilitare o disabilitare le beta. */
+    fun selectLatestRelease(json: String, installedVersion: String, allowBeta: Boolean = AppVersion.isBeta(installedVersion)): AppUpdate? =
         apiJson.decodeFromString<List<GitHubReleaseDto>>(json)
-            .mapNotNull { parseRelease(it, allowBeta = AppVersion.isBeta(installedVersion)) }
+            .mapNotNull { parseRelease(it, allowBeta = allowBeta) }
             .filter { AppVersion.isNewer(it.version, installedVersion) }
             .maxWithOrNull { a, b -> AppVersion.compare(a.version, b.version) ?: 0 }
 
