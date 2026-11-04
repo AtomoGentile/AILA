@@ -46,6 +46,10 @@ internal data class GitHubAssetDto(
 /** Nome dell'asset che la CI allega alle release: e' l'unico che l'app sa installare. */
 const val APK_ASSET_NAME = "AILA.apk"
 
+/** Migra automaticamente una beta installata, senza sovrascrivere una scelta esplicita. */
+fun resolveUpdateChannelPreference(preference: String, installedVersion: String): String =
+    if (preference == "auto" && AppVersion.isBeta(installedVersion)) "beta" else preference
+
 object AppUpdateParser {
     /**
      * Legge la risposta di `GET /repos/{owner}/{repo}/releases/latest`. Restituisce `null` se la

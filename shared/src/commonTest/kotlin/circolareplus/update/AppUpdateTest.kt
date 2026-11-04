@@ -122,6 +122,14 @@ class AppUpdateTest {
     }
 
     @Test
+    fun iscrizioneAutomaticaDallaBetaRispettaLaSceltaEsplicita() {
+        assertEquals("auto", resolveUpdateChannelPreference("auto", "1.6.3"))
+        assertEquals("beta", resolveUpdateChannelPreference("auto", "1.6.3-beta.5"))
+        assertEquals("beta", resolveUpdateChannelPreference("beta", "1.6.4"))
+        assertEquals("stable", resolveUpdateChannelPreference("stable", "1.7.0-beta.1"))
+    }
+
+    @Test
     fun preferenzaEsplicitaConsenteBetaDallaStabileEDisattivaBetaSullaBeta() {
         val feed = "[${release(tag = "v1.7.0-beta.1", prerelease = true)},${release(tag = "v1.6.4")}]"
         assertEquals("1.7.0-beta.1", AppUpdateParser.selectLatestRelease(feed, "1.6.3", allowBeta = true)?.version)
