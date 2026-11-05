@@ -14,6 +14,9 @@ import io.ktor.http.isSuccess
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -32,14 +35,26 @@ enum class CompatibleAiFormat(val id: String, val label: String) {
 @Serializable
 private data class CompatibleMessage(val role: String, val content: String)
 
-@Serializable
-private data class OpenAiCompatibleRequest(
-    val model: String,
-    val messages: List<CompatibleMessage>,
-    val max_tokens: Int = 2048,
-    val temperature: Double = 0.2,
-    val response_format: Map<String, String>? = null
-)
+private fun isOpenAiReasoningModel(model:String)=Regex("^(gpt-[5-9](?:[.-]|$)|o[1-9](?:[.-]|$))",RegexOption.IGNORE_CASE).containsMatchIn(model)
+
+/** Explicit JSON omits unsupported fields entirely, regardless of HttpClient serializer defaults. */
+internal fun openAiCompatibleBody(endpoint:String,model:String,system:String,user:String,maxTokens:Int):JsonObject {
+    val reasoning=isOpenAiReasoningModel(model)
+    val official=io.ktor.http.Url(endpoint).host.equals("api.openai.com",ignoreCase=true)
+    return buildJsonObject {
+        put("model",JsonPrimitive(model))
+        put("messages",buildJsonArray {
+            listOf("system" to system,"user" to user).forEach{(role,text)->add(buildJsonObject {
+                put("role",JsonPrimitive(role));put("content",JsonPrimitive(text))
+            })}
+        })
+        put(if(official||reasoning)"max_completion_tokens"else"max_tokens",JsonPrimitive(maxTokens))
+        if(!reasoning)put("temperature",JsonPrimitive(0.2))
+        if(system.contains("JSON",ignoreCase=true))put("response_format",buildJsonObject {
+            put("type",JsonPrimitive("json_object"))
+        })
+    }
+}
 
 @Serializable
 private data class AnthropicCompatibleRequest(
@@ -150,7 +165,9 @@ class CompatibleApiAiClassifier(
     }
 
     override suspend fun testConfiguration(): String = try {
-        request("Rispondi solo con OK.", "Verifica di connessione.", 32)
+        // Reasoning tokens share the completion budget: 32 can yield no visible text.
+        val probeTokens=if(format==CompatibleAiFormat.OPENAI&&isOpenAiReasoningModel(model.trim()))1024 else 32
+        request("Rispondi solo con OK.", "Verifica di connessione.", probeTokens)
         "Connessione riuscita con ${format.label} (${model.ifBlank { "gemini-2.5-flash" }})."
     } catch (e: Exception) {
         "Connessione non riuscita: ${e.message ?: "errore sconosciuto"}"
@@ -175,12 +192,7 @@ class CompatibleApiAiClassifier(
             }
             setBody(
                 when (format) {
-                    CompatibleAiFormat.OPENAI -> OpenAiCompatibleRequest(
-                        model = effectiveModel,
-                        messages = listOf(CompatibleMessage("system", system), CompatibleMessage("user", user)),
-                        max_tokens = maxTokens,
-                        response_format = if (system.contains("JSON", ignoreCase = true)) mapOf("type" to "json_object") else null
-                    )
+                    CompatibleAiFormat.OPENAI -> openAiCompatibleBody(endpoint,effectiveModel,system,user,maxTokens)
                     CompatibleAiFormat.ANTHROPIC -> AnthropicCompatibleRequest(
                         model = effectiveModel, system = system,
                         messages = listOf(CompatibleMessage("user", user)), max_tokens = maxTokens
