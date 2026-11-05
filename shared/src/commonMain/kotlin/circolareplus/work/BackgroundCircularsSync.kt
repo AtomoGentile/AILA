@@ -40,6 +40,7 @@ object BackgroundCircularsSync {
             if (!shouldStop()) {
                 try {
                     circolareplus.data.OfflineSync.runIfDue(background = true)
+                    if (!shouldStop() && AppContainer.settings.currentUserId.isNotBlank()) AppContainer.synchronizeLocalAttachments()
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -50,6 +51,7 @@ object BackgroundCircularsSync {
     }
 
     private suspend fun classifyNewCirculars(maxCirculars: Int, shouldStop: () -> Boolean) {
+        if (!AppContainer.settings.cachedAiPreferences.let { it.aiEnabled && "CIRCULARS" in it.services }) return
         // Il motore locale e' uno solo: se e' il provider scelto, va usato una circolare alla
         // volta quando l'utente la apre, non da un giro che il telefono fa partire in tasca
         // (stesso motivo per cui MainAppShell ferma il suo ciclo in background in questo caso).

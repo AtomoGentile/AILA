@@ -3,7 +3,7 @@
 **AILA** (ex "Circolare+") è l'app per la vita di classe: circolari spiegate dall'AI, calendario condiviso, bacheca
 delle proposte, sondaggi, mappa dei posti in aula e notifiche in tempo reale. Per Android e iPhone/iPad.
 
-> **Versione 1.5.0**
+> **Versione 2.0.0-beta.1**
 
 ---
 
@@ -12,7 +12,7 @@ delle proposte, sondaggi, mappa dei posti in aula e notifiche in tempo reale. Pe
 | | |
 |---|---|
 | **Circolari** | Ogni circolare nuova della scuola arriva con un riassunto, una categoria per la tua classe (*Ti riguarda / Potenziale interesse / Non ti riguarda*) e le scadenze già estratte. Sei avvisato subito con una notifica. |
-| **AILA Assistant e Ricerca** | Fai una domanda in italiano e ricevi una risposta basata solo sui dati di AILA (circolari, calendario, bacheca, sondaggi, mappa posti), con le fonti da aprire. Le conversazioni restano in cronologia. |
+| **AILA Assistant e Ricerca** | Fai una domanda in italiano e ricevi una risposta con le fonti di AILA da aprire. Con ACA attiva puoi creare, modificare o eliminare impegni nel calendario interno: ogni azione richiede anteprima e conferma. Le conversazioni restano in cronologia. |
 | **Calendario** | Eventi della scuola e della classe, anche creati dalle scadenze delle circolari. L'orario si sceglie in ore di lezione (dalla 1ª alla 6ª). |
 | **Bacheca proposte** | Proponi, vota e commenta, anche in forma anonima. L'identità si svela solo con l'approvazione di più persone della classe, in caso di abuso. |
 | **Sondaggi interrogazioni** | Prenota le date delle interrogazioni con un sistema di voti equo, pensato per non poter essere aggirato. Lo storico lo vede tutta la classe. |
@@ -67,6 +67,13 @@ AILA usa **Firebase** (notifiche) e **Cloudflare** (server e dati).
 
 ## Privacy
 
-L'AI riceve solo i PDF pubblici delle circolari, mai i tuoi dati personali. Le preferenze sociali e le valutazioni
-dei compagni non vengono mai inviate all'AI. Se preferisci, puoi usare l'AI sul tuo telefono.
+L’AI elabora le circolari e i contenuti che scegli per i servizi attivati. L’elaborazione cloud richiede
+il relativo consenso; i motori locali restano disponibili sui dispositivi supportati. Le preferenze sociali
+e le valutazioni dei compagni sono escluse dal contesto ACA.
 L'informativa completa è in [PRIVACY.md](PRIVACY.md).
+
+### ACA, Educazione tra pere e nuova home
+
+AI e ACA sono opzionali: **Impostazioni → AI** raccoglie attivazione, singoli servizi, provider e informativa. Educazione tra pere aggiunge discussioni di classe con pseudonimi, risposte, allegati e assistenza AI esplicita. Puoi allegare documenti o vocali anche dal menu della chat classica, scegliere il contesto e preparare eventi da confermare. Le proposte automatiche dalle conversazioni sono un servizio opzionale: la scheda è condivisa e la prima conferma aggiorna lo stato per tutti. ACA si apre anche tenendo premuto per 2 secondi in un’area libera di qualsiasi schermata; il gesto si può disattivare nelle impostazioni AI. Le copie dei file sul dispositivo restano fino alla cancellazione manuale, mentre il download automatico si sceglie nelle impostazioni offline. La home presenta la nuova AILA e prevede un video opzionale; l’indicatore animato delle circolari in analisi compare soltanto in Circolari.
+
+Configurazione, migrazione, conservazione 90/7 giorni e verifiche: [ACA_IMPLEMENTATION.md](docs/ACA_IMPLEMENTATION.md).

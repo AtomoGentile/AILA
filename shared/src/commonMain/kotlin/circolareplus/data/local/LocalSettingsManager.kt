@@ -31,6 +31,13 @@ class LocalSettingsManager(
     // stesse preferenze).
     private val secure: Settings = createSecureSettings() ?: settings
 ) {
+    var cachedAiPreferences: circolareplus.data.remote.dto.AcaPreferencesDto
+        get() = runCatching { Json.decodeFromString<circolareplus.data.remote.dto.AcaPreferencesDto>(settings.getString("aca_policy_v1", "{}")) }
+            .getOrDefault(circolareplus.data.remote.dto.AcaPreferencesDto())
+        set(value) { settings.putString("aca_policy_v1", Json.encodeToString(value)); circolareplus.ai.AcaPolicyState.preferences = value }
+    var pendingAiPolicySync: Boolean
+        get() = settings.getBoolean("aca_policy_pending", false)
+        set(value) { settings.putBoolean("aca_policy_pending", value) }
     companion object {
         private const val KEY_USER_AI_API_KEY = "user_ai_api_key"
         private const val KEY_AI_PROVIDER = "ai_provider"
@@ -652,6 +659,9 @@ class LocalSettingsManager(
      * stesso telefono si ritrovava chiave Gemini e conversazioni dell'altro.
      */
     fun clearUserData() {
+        settings.remove("aca_policy_v1"); settings.remove("aca_policy_pending")
+        circolareplus.ai.AcaPolicyState.preferences = circolareplus.data.remote.dto.AcaPreferencesDto()
+        circolareplus.platform.IncomingContentInbox.clear()
         listOf(
             KEY_AUTH_TOKEN, KEY_USER_ID, KEY_CACHED_USER, KEY_USER_AI_API_KEY, KEY_COMPATIBLE_AI_API_KEY,
             KEY_COMPATIBLE_AI_FORMAT, KEY_COMPATIBLE_AI_BASE_URL, KEY_COMPATIBLE_AI_MODEL, KEY_COMPATIBLE_AI_CONFIGS_MIGRATED,

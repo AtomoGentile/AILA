@@ -1,38 +1,16 @@
 package circolareplus
 
-/**
- * Testo dell'informativa mostrato in Impostazioni → Privacy. Riassume PRIVACY.md (radice del repo):
- * se cambia uno, va aggiornato anche l'altro.
- */
+/** Kept aligned with PRIVACY.md. The AI section also exposes the corresponding controls. */
 object PrivacyPolicy {
-    /** Coppie (titolo, testo) nell'ordine in cui si mostrano. */
-    val sections: List<Pair<String, String>> = listOf(
-        "Cos'è AILA" to "Un\'app per la tua classe: circolari con riassunto, calendario, bacheca, sondaggi " +
-            "e mappa dei posti. Progetto scolastico non commerciale, senza pubblicità né profilazione. " +
-            "Titolare: Simone Bianchin. Per qualsiasi richiesta chiedimi di persona (sono un tuo compagno) " +
-            "o scrivi sulla pagina del progetto: github.com/AtomoGentile/AILA.",
-        "Quali dati raccogliamo" to "Nome, cognome, nome utente e classe; la password (sul server resta solo " +
-            "un\'impronta, mai la password); l\'altezza a scaglioni di 5 cm e le preferenze sui compagni, per " +
-            "la mappa dei posti; i voti di sondaggi e proposte; eventi di calendario, proposte e commenti; " +
-            "il codice del telefono per le notifiche. Non raccogliamo posizione, contatti, foto, microfono, " +
-            "e-mail o telefono, né usiamo statistiche o pubblicità.",
-        "Le valutazioni del Rappresentante" to "Le valutazioni riservate (didattica e comportamento) le vede solo " +
-            "il Rappresentante e non vengono mai inviate a servizi di intelligenza artificiale. Chi ha votato " +
-            "cosa nelle preferenze non è visibile al Rappresentante.",
-        "Chi tratta i dati" to "Cloudflare ospita server e database. Google Firebase recapita le notifiche. " +
-            "Google Gemini riassume le circolari (gli si invia il PDF della circolare, non dati personali " +
-            "degli studenti). Con la tua chiave personale di Google AI Studio le richieste partono dal tuo " +
-            "telefono e valgono le condizioni di Google; l\'assistente invia a Gemini le tue domande e il " +
-            "testo delle circolari. Con l\'AI locale non esce nulla dal telefono.",
-        "Cosa resta sul telefono" to "Chiave AI personale, cronologia dell\'assistente, campanella delle " +
-            "notifiche e copia offline restano solo sul telefono e si cancellano con \"Esci\". Sono esclusi " +
-            "dai backup.",
-        "Quanto li conserviamo" to "Finché esiste il tuo account. Dal Profilo puoi eliminarlo: spariscono " +
-            "account, profilo, preferenze, voti e codice per le notifiche. Eventi di calendario e analisi " +
-            "delle circolari restano, senza il tuo nome.",
-        "I tuoi diritti" to "Puoi chiedere accesso, correzione, cancellazione, limitazione e portabilità dei " +
-            "dati e opporti al trattamento (artt. 15-22 GDPR). Puoi rivolgerti al Garante per la protezione " +
-            "dei dati personali (garanteprivacy.it).",
-        "A chi è rivolta" to "Agli studenti di scuola superiore. Non è destinata ai minori di 14 anni."
-    )
+ val sections:List<Pair<String,String>> = listOf(
+  "Cos’è AILA" to "Un’app per la classe: circolari, calendario, bacheca, Educazione tra pere, sondaggi e mappa dei posti. Progetto scolastico non commerciale, senza pubblicità né profilazione. Titolare: Simone Bianchin. Per richieste chiedi di persona o usa la pagina github.com/AtomoGentile/AILA.",
+  "Dati e contenuti" to "Nome, cognome, nome utente, classe e impronta della password; preferenze e altezza per la mappa posti; voti di sondaggi e proposte; calendario, messaggi e allegati che scegli di pubblicare; identificatori per le notifiche. Non raccogliamo posizione o contatti. Il microfono viene usato solo per una registrazione richiesta da te, con il permesso del sistema. Ricevere o scegliere un file apre un’anteprima locale e non lo invia automaticamente all’AI.",
+  "Educazione tra pere" to "Le discussioni sono visibili alla tua classe e restano disponibili nel tempo. Puoi usare il nome reale o uno pseudonimo stabile per singola discussione: OP per l’autore, Pera educata e un numero per gli altri. Gli altri partecipanti non ricevono l’identità reale dietro gli pseudonimi; il server conserva il collegamento necessario per permessi, moderazione e notifiche. Autore e moderatori possono segnare una discussione risolta; non viene chiusa automaticamente. Le segnalazioni e gli interventi di moderazione sono registrati con dati limitati.",
+  "AI e ACA sono facoltative" to "In Impostazioni → AI puoi attivare o disattivare tutta l’AI, ACA e ciascun servizio, scegliere i provider e gestire i consensi. Le funzioni disattivate non avviano nuove elaborazioni sul dispositivo o nel cloud. Disattivarle non cancella messaggi pubblicati o eventi già confermati. Ogni creazione, modifica o eliminazione del calendario proposta da ACA richiede un’anteprima e una conferma esplicita. L’AI può sbagliare: verifica sempre le fonti.",
+  "Provider e contesto autorizzato" to "Cloudflare ospita backend, database e allegati e può elaborare le richieste con Workers AI. Firebase recapita le notifiche. Il servizio scolastico può riassumere le circolari pubbliche con Gemini. Le richieste personali usano i servizi e i consensi che hai attivato: testo selezionato o estratto, domande, messaggi e dati AILA pertinenti ai quali hai accesso. Un provider esterno personale o avanzato richiede il consenso esterno. Gli abbonamenti ChatGPT o Claude non includono automaticamente le API. Non viene avviato un altro provider dopo un errore di un’operazione ACA. Con elaborazione locale il contenuto resta sul dispositivo. La PWA non dispone dei modelli nativi Apple o Android.",
+  "Dati riservati" to "Le valutazioni dei compagni e le preferenze sociali non sono fornite al pianificatore ACA, alla ricerca del forum o a @perabot. La chat generale esclude dal cloud le valutazioni riservate. @perabot pubblica solo il contesto condiviso autorizzato della classe e non riceve il calendario personale dell’utente. I riassunti AI e le trascrizioni sono indicati come generati e distinti dagli originali.",
+  "Conservazione e cancellazione" to "Allegati fino a 3 MB: 90 giorni. Allegati superiori a 3 MB: 7 giorni. I file non pubblicati nel forum vengono rimossi dopo 24 ore. Questi termini valgono per il server: alla scadenza l’accesso remoto è bloccato e la pulizia elimina e verifica il file e il testo o la trascrizione memorizzati. Messaggi e discussioni restano. Le copie salvate sul dispositivo restano fino alla cancellazione manuale: la scadenza o la cancellazione sul server non le elimina, anche se sono già state scaricate da altri utenti. La copia server può essere cancellata prima dall’autore o da un moderatore autorizzato. Nelle impostazioni puoi scegliere il download automatico degli allegati; è inizialmente disattivato. Audio: massimo 10 minuti e 20 MB. Operazioni ACA e contatori tecnici vengono conservati fino a 30 giorni. Dal Profilo puoi eliminare l’account: i dati del profilo e le preferenze vengono rimossi, gli interventi condivisi restano senza collegamento all’account.",
+  "Sul tuo dispositivo" to "Chiavi personali, cronologia dell’assistente, notifiche e copia offline restano nel dispositivo e vengono cancellate con Esci. I file conservati nell’archivio locale sono separati per account e rimangono: li elimini da File sul dispositivo. Svuotare la cache temporanea non li elimina; disinstallare l’app o cancellare i dati del sito può rimuoverli. Nel browser la conservazione dipende anche dalle impostazioni e dallo spazio disponibile. Le app native usano l’archiviazione sicura disponibile; nel browser vale la protezione dell’archivio del sito. Le chiavi non sono pubblicate né registrate nei log. I messaggi condivisi nel forum possono essere analizzati da lettori autorizzati che attivano le proposte automatiche; la proposta è visibile alla classe e la prima conferma aggiorna lo stato per tutti. La propria AI disattivata non impedisce agli altri di analizzare i messaggi pubblicati. Le preferenze AI sono sincronizzate per account; una modifica fatta offline resta locale fino alla sincronizzazione.",
+  "Diritti e destinatari" to "Puoi chiedere accesso, correzione, cancellazione, limitazione e portabilità e opporti al trattamento (artt. 15–22 GDPR). Puoi rivolgerti al Garante per la protezione dei dati personali, garanteprivacy.it. AILA è rivolta agli studenti delle superiori e non è destinata ai minori di 14 anni."
+ )
 }

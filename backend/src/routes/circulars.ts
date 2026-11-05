@@ -1,3 +1,4 @@
+import { aiPreferences } from '../services/aiRouter';
 // =============================================================================
 // CIRCOLARE+ — Circulars Routes (/api/circulars/*)
 // =============================================================================
@@ -243,7 +244,8 @@ circulars.get('/:number/analysis', authMiddleware(), async (c) => {
   // un riassunto del server): la rifà il server in background, una volta sola anche se la aprono
   // in tanti (claimOnDemandSummary). Chi la sta aprendo vede intanto quello che c'è; il riassunto
   // nuovo arriva con il prossimo /analyses.
-  if (await needsServerSummary(c.env, number) && await claimOnDemandSummary(c.env, number)) {
+  const pref=await aiPreferences(c.env,c.get('jwtPayload').sub);
+  if (pref.aiEnabled && pref.cloudConsent && pref.services.includes('CIRCULARS') && await needsServerSummary(c.env, number) && await claimOnDemandSummary(c.env, number)) {
     const circ = await c.env.DB.prepare(
       'SELECT number, title, r2_pdf_key, attachments_json FROM circulars WHERE number = ?'
     ).bind(number).first<{ number: number; title: string; r2_pdf_key: string; attachments_json: string }>();

@@ -25,6 +25,7 @@ fun main() {
 
     // Service worker, notifiche push, rientro in primo piano (come onStart/onResume su Android).
     circolareplus.web.installWebLifecycle()
+    circolareplus.platform.initializeWebContentIngress()
 
     // La copia offline sta in IndexedDB (asincrona) ma l'app la legge in modo sincrono: va caricata
     // in memoria prima che parta la UI. Nel frattempo si vede la schermata di avvio di index.html.

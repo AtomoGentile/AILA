@@ -1,82 +1,51 @@
-# AILA — Informativa sulla privacy
+# Privacy di AILA
 
-Ultimo aggiornamento: 30 settembre 2026
+AILA è un progetto scolastico non commerciale per la classe, senza pubblicità, statistiche pubblicitarie o profilazione. Titolare: Simone Bianchin. Per richieste chiedi di persona o usa la pagina del progetto: https://github.com/AtomoGentile/AILA.
 
-AILA è un'app per le classi di una scuola superiore: circolari con riassunto, calendario di
-classe, bacheca delle proposte, sondaggi e mappa dei posti. È un progetto scolastico non
-commerciale, senza pubblicità e senza profilazione.
+## Dati e visibilità
 
-**Titolare del trattamento:** Simone Bianchin, sviluppatore di AILA.
-**Contatto per qualsiasi richiesta:** di persona (sono un tuo compagno di classe) oppure dalla
-pagina del progetto su GitHub (github.com/AtomoGentile/AILA).
+L’app tratta nome, cognome, nome utente, classe e impronta della password; altezza a scaglioni e preferenze per la mappa posti; voti di sondaggi e proposte; eventi, messaggi e file che scegli di condividere; identificatori per le notifiche. Non raccoglie posizione o contatti. Il microfono viene attivato soltanto su richiesta, con il permesso del sistema.
 
-> Questa informativa descrive ciò che l'app fa davvero, ricavato dal codice. Se qualcosa cambia,
-> viene aggiornata qui prima del rilascio.
+Educazione tra pere è visibile alla classe. Puoi usare il nome reale o uno pseudonimo stabile nella singola discussione: OP per l’autore, Pera educata e un numero per gli altri partecipanti anonimi. Il server conserva il collegamento necessario per permessi, moderazione e notifiche; gli altri partecipanti non ricevono l’identità reale dietro lo pseudonimo. Messaggi e discussioni non scadono per inattività. Risoluzione e risposta in evidenza sono indipendenti; il promemoria dopo tre giorni non chiude la discussione.
 
-## Quali dati raccogliamo
+## AI e ACA opzionali
 
-| Dato | A cosa serve |
-|---|---|
-| Nome, cognome, nome utente, classe | Riconoscerti e mostrarti ai compagni della tua classe |
-| Password | Accedere. Sul server resta solo un'impronta (hash) della password, mai la password |
-| Altezza (a scaglioni di 5 cm) | Calcolare la mappa dei posti |
-| Preferenze sui compagni (da −2 a +2) | Mappa dei posti; se il Rappresentante non le apre, non vengono raccolte. Il Rappresentante non vede chi ha votato cosa |
-| Voti nei sondaggi e nelle proposte | Mostrare i risultati; le proposte possono essere anonime |
-| Eventi di calendario, proposte, commenti | Le funzioni di classe |
-| Valutazioni riservate del Rappresentante (didattica, comportamento) | Mappa dei posti. Le vede solo il Rappresentante e **non vengono mai inviate a servizi di intelligenza artificiale** |
-| Token del dispositivo per le notifiche | Inviarti le notifiche push |
-| Tentativi di accesso (contatore temporaneo) | Bloccare i tentativi ripetuti di indovinare una password |
+In **Impostazioni → AI** puoi attivare o disattivare l’AI, ACA, i singoli servizi e i consensi; scegliere i provider e leggere l’informativa. AI e ACA sono inizialmente disattivate. Spegnerle impedisce nuove elaborazioni personali; non annulla eventi già confermati o messaggi pubblicati. Il servizio scolastico può continuare a riassumere circolari pubbliche condivise.
 
-Non raccogliamo posizione, contatti, foto, microfono, e-mail o numero di telefono. Non usiamo
-strumenti di statistica o pubblicità.
+Ricevere o scegliere un file apre un’anteprima e non lo invia automaticamente a un modello. Le richieste usano esclusivamente la fonte scelta e il contesto AILA pertinente e autorizzato. Il pianificatore, la ricerca del forum e Perabot escludono valutazioni riservate e preferenze sociali; il bot pubblico esclude anche il calendario personale. La chat generale esclude dal cloud le valutazioni riservate. Trascrizioni e riassunti sono indicati come generati e possono essere errati; gli originali restano distinguibili.
 
-## Dove sono i dati e chi li tratta
+Le proposte automatiche dalle conversazioni sono un servizio separato, inizialmente disattivato. Se un lettore lo attiva e consente il cloud, i messaggi umani visibili della discussione aperta possono essere analizzati per proporre impegni. Le proposte sono condivise con la classe e citano i messaggi di origine; chi ha ACA e Calendario attivi può confermare. La prima conferma aggiorna lo stato per tutti. Disattivare la propria AI non impedisce agli altri partecipanti autorizzati di riassumere o analizzare i messaggi già condivisi. Non sono usate chiavi personali di altri utenti.
 
-- **Cloudflare** (Workers, D1, R2): ospita il server e il database. I dati di tutte le classi
-  stanno lì, separati per classe.
-- **Google Firebase Cloud Messaging**: recapita le notifiche push. Riceve il token del dispositivo
-  e il testo della notifica.
-- **Google Gemini**: riassume le circolari della scuola. Al servizio si invia il PDF della
-  circolare (documento pubblico della scuola), non dati personali degli studenti. Se inserisci la tua
-  chiave personale di Google AI Studio, le richieste dal telefono partono con la tua chiave e sono
-  soggette alle condizioni di Google. L'assistente dell'app manda a Gemini le tue domande e il testo
-  delle circolari, non le valutazioni dei compagni. In alternativa puoi usare l'AI locale, che
-  funziona sul telefono senza inviare nulla.
-- **Registro elettronico della scuola**: l'app legge le circolari pubblicate dalla scuola. Non
-  accede ai dati di nessuno studente.
+Dal menu della chat puoi allegare file e vocali: prima scegli la fonte nell’anteprima. Il modello riceve il testo estratto, la trascrizione o la descrizione generata dell’immagine, con i servizi e i consensi richiesti. I byte originali restano nell’archivio locale; la cronologia conserva riferimenti ai file, senza duplicarli.
 
-Alcuni di questi fornitori possono trattare dati fuori dall'Unione Europea, con le garanzie
-previste dalle rispettive condizioni.
+Ogni creazione, modifica o eliminazione nel calendario interno proposta da ACA richiede anteprima e conferma esplicita. Il modello non riceve credenziali del database o capacità di scrittura arbitrarie.
 
-## Cosa resta sul tuo telefono
+## Servizi e credenziali
 
-La chiave AI personale, la cronologia dell'assistente, la campanella delle notifiche e la copia
-offline delle circolari restano **solo sul telefono**. Uscendo dall'account (“Esci”) vengono
-cancellati. L'app esclude questi dati dai backup del telefono.
+Cloudflare ospita backend, database e allegati e può elaborare richieste con Workers AI. Firebase recapita le notifiche. Gemini può riassumere circolari pubbliche per il servizio scolastico. Le funzioni personali possono usare un motore locale realmente disponibile, il servizio incluso o un provider esterno configurato e autorizzato. La PWA non dichiara disponibili i modelli nativi Apple o Android.
 
-## Quanto conserviamo i dati
+Le API personali sono opzionali e separate dagli abbonamenti ChatGPT o Claude. Le chiavi non sono incluse nella distribuzione, condivise con la classe o registrate nei log. Android usa cifratura con chiave in Keystore, iOS Keychain, il browser l’archivio dell’origine. I task ACA non avviano un secondo provider dopo un errore. L’elaborazione locale non trasmette il contenuto a un servizio AI.
 
-Finché il tuo account esiste. Quando lo elimini (Profilo → elimina account) spariscono account,
-profilo, preferenze, voti e token. Gli eventi di calendario e le analisi delle circolari restano,
-senza il tuo nome come autore. I contatori dei tentativi di accesso durano pochi minuti.
+## Conservazione sul server
 
-## I tuoi diritti
+Gli allegati **fino a 3 MiB inclusi restano 90 giorni**; quelli **oltre 3 MiB restano 7 giorni**. Le bozze forum non pubblicate vengono ripulite dopo 24 ore. Alla scadenza l’accesso remoto viene bloccato e la pulizia elimina il file, il testo estratto e la trascrizione conservati sul server, verificando la rimozione; i messaggi restano. Una trascrizione in corso non ripristina dati già eliminati. La copia server può essere eliminata prima dall’autore o da un moderatore autorizzato.
 
-Puoi chiedere accesso, correzione, cancellazione, limitazione e portabilità dei tuoi dati, e
-opporti al trattamento (artt. 15–22 GDPR). Puoi eliminare l'account da solo dall'app; per il resto
-usa il contatto qui sopra. Hai anche diritto di reclamo al Garante per la protezione dei dati
-personali (garanteprivacy.it).
+Audio: massimo 10 minuti e 20 MiB. Formati, firme e limiti vengono controllati; questi controlli non costituiscono una scansione antivirus completa. Operazioni ACA e contatori tecnici hanno conservazione fino a 30 giorni. Le discussioni restano disponibili nel tempo; moderazione e segnalazioni usano registrazioni limitate.
 
-## A chi è rivolta
+## Copie sul dispositivo
 
-AILA è pensata per gli studenti di scuola superiore, che hanno almeno 14 anni. Non è destinata
-a chi ha meno di 14 anni.
+I file importati, aperti o scaricati vengono conservati in un **archivio locale separato per account**, insieme all’eventuale testo o trascrizione disponibile. **Non hanno scadenza automatica: restano finché li elimini manualmente.** La scadenza o la cancellazione della copia server non elimina le copie locali, comprese quelle già scaricate da altri partecipanti.
 
-## Sicurezza
+In Impostazioni → Dati offline → File sul dispositivo puoi decidere se scaricare automaticamente gli allegati ricevuti. L’opzione è inizialmente disattivata. Il download automatico riguarda solo allegati pubblicati e accessibili nella classe; non avvia modelli AI o upload. Se elimini una copia locale, la sincronizzazione automatica non la ripristina.
 
-Connessioni cifrate (HTTPS), password conservate come hash, token di accesso che scadono, limite ai
-tentativi di accesso, dati di ogni classe visibili solo a quella classe.
+Da File sul dispositivo puoi eliminare una singola copia o tutte le copie del tuo account presenti su quel dispositivo. L’eliminazione locale non cancella la copia server. Uscire dall’account o svuotare la cache temporanea non elimina l’archivio dei file. Disinstallare l’app o cancellare i dati del sito può rimuoverlo; nella PWA la conservazione dipende anche dalle impostazioni e dallo spazio disponibile nel browser. Eventuali copie esportate e backup del sistema sono gestiti dall’utente e dalla piattaforma.
 
-## Modifiche
+Cronologia dell’assistente, notifiche e cache temporanea restano sul dispositivo e vengono cancellate con Esci. Le preferenze AI sono sincronizzate per account; una modifica offline resta locale fino alla sincronizzazione.
 
-Ogni modifica sostanziale viene scritta qui, con la nuova data in cima.
+## Account e diritti
+
+Dal Profilo puoi eliminare l’account: vengono rimossi profilo, preferenze e identificatori delle notifiche; gli interventi condivisi restano senza collegamento all’account. Le copie già salvate sui dispositivi restano soggette alla cancellazione locale descritta sopra.
+
+Puoi chiedere accesso, correzione, cancellazione, limitazione e portabilità e opporti al trattamento (artt. 15–22 GDPR). Puoi rivolgerti al Garante per la protezione dei dati personali: https://www.garanteprivacy.it. AILA è rivolta agli studenti delle superiori e non è destinata ai minori di 14 anni.
+
+Il testo sintetico nell’app è mantenuto in `shared/src/commonMain/kotlin/circolareplus/PrivacyPolicy.kt`.

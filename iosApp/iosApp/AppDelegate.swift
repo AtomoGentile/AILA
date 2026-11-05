@@ -70,6 +70,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         // prima ancora che MainAppShell venga composta (didReceive puo' arrivare dopo).
         if let remoteNotification = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
             let category = categoryFromUserInfo(remoteNotification)
+            PendingDeepLink.shared.forumThreadId = remoteNotification["thread_id"] as? String
             if !category.isEmpty {
                 PendingDeepLink.shared.category = category
             }
@@ -299,6 +300,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     ) {
         let content = response.notification.request.content
         let category = categoryFromUserInfo(content.userInfo)
+        PendingDeepLink.shared.forumThreadId = content.userInfo["thread_id"] as? String
         // Le notifiche locali del refresh in background non vanno in campanella (vedi willPresent).
         if !response.notification.request.identifier.hasPrefix(AilaBackground.localNotificationPrefix) {
             _ = AppContainer.shared.settings.onPushReceived(

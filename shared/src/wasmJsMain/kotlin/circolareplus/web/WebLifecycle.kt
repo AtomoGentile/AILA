@@ -80,7 +80,10 @@ private fun applyNotificationOpen(message: JsonObject) {
         ?.toMap()
         .orEmpty()
     val category = SwBridge.categoryOf(kind, data)
-    if (category.isNotBlank()) PendingDeepLink.category = category
+    if (category.isNotBlank()) {
+        PendingDeepLink.forumThreadId = data["thread_id"]
+        PendingDeepLink.category = category
+    }
 }
 
 /** Legge ?push=... e lo toglie dall'indirizzo, cosi' una ricarica non riapre la stessa schermata. */

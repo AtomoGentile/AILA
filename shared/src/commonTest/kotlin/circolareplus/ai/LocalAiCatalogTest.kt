@@ -1,7 +1,9 @@
 package circolareplus.ai
 
+import circolareplus.platform.isWeb
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -15,8 +17,9 @@ class LocalAiCatalogTest {
     private val all = LocalAiCatalog.all
 
     @Test
-    fun catalogoNonVuoto() {
-        assertTrue(all.isNotEmpty())
+    fun catalogoCoerenteConLaPiattaforma() {
+        // La PWA usa il backend: non deve proporre modelli nativi da scaricare.
+        assertEquals(!isWeb(), all.isNotEmpty())
     }
 
     @Test
@@ -64,7 +67,11 @@ class LocalAiCatalogTest {
     fun unModelloConsigliatoPerOgniFascia() {
         DeviceTier.entries.forEach { tier ->
             val recommended = LocalAiCatalog.recommendedFor(tier)
-            assertTrue(recommended in all, "Il consigliato per $tier non e' nel catalogo")
+            if (isWeb()) {
+                assertFalse(recommended in all, "La PWA non deve proporre un modello locale")
+            } else {
+                assertTrue(recommended in all, "Il consigliato per $tier non e' nel catalogo")
+            }
         }
     }
 
@@ -72,7 +79,11 @@ class LocalAiCatalogTest {
     fun ilConsigliatoEInCimaAllaScelta() {
         listOf(0, 3_000, 5_000, 12_000).forEach { ram ->
             val selectable = LocalAiCatalog.selectableFor(ram)
-            assertEquals(LocalAiCatalog.recommendedFor(deviceTierForRam(ram)), selectable.first(), "RAM $ram MB")
+            if (isWeb()) {
+                assertTrue(selectable.isEmpty(), "Nessun modello locale selezionabile nella PWA")
+            } else {
+                assertEquals(LocalAiCatalog.recommendedFor(deviceTierForRam(ram)), selectable.first(), "RAM $ram MB")
+            }
             assertEquals(all.toSet(), selectable.toSet(), "RAM $ram MB: la scelta deve contenere tutto il catalogo")
         }
     }

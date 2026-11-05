@@ -51,6 +51,15 @@ import kotlinx.coroutines.SupervisorJob
 private const val ASSISTANT_ATTEMPT_MS = 30_000L
 
 object AppContainer {
+    val localContents by lazy { circolareplus.data.repository.LocalContentRepository(
+        circolareplus.platform.createLocalContentStorage(), { settings.currentUserId }
+    ) }
+    suspend fun synchronizeLocalAttachments() {
+        localContents.synchronize({ acaRepository.inbox(it) }, { acaRepository.downloadFromServer(it) })
+    }
+
+    val acaRepository by lazy { circolareplus.data.repository.AcaRepository(api, pdfTextExtractor) }
+    val forumRepository by lazy { circolareplus.data.repository.ForumRepository(api) }
     val settings: LocalSettingsManager by lazy { LocalSettingsManager() }
     val api: ApiClient by lazy { ApiClient(settings) }
 
@@ -112,8 +121,10 @@ object AppContainer {
             newAiClassifier(localThinking = settings.assistantThinkingEnabled, answerAttemptTimeoutMs = ASSISTANT_ATTEMPT_MS)
         },
         circularsRepository = circularsRepository,
-        pdfTextExtractor = pdfTextExtractor
+        pdfTextExtractor = pdfTextExtractor,
+        actionsEnabled = settings.cachedAiPreferences.let { it.aiEnabled && it.acaEnabled && "CALENDAR" in it.services }
     )
+
 
     /**
      * Il modello di AI locale scelto dall'utente, oppure il consigliato per la RAM del telefono
@@ -208,7 +219,7 @@ object AppContainer {
         val effectiveProvider = if (provider == AiProvider.COMPATIBLE_API && format == CompatibleAiFormat.GOOGLE) {
             AiProvider.GOOGLE_AI_STUDIO
         } else provider
-        val cloud: AiClassifier = if (effectiveProvider == AiProvider.COMPATIBLE_API) {
+        val external: AiClassifier = if (effectiveProvider == AiProvider.COMPATIBLE_API) {
             CompatibleApiAiClassifier(
                 format = format,
                 baseUrl = settings.compatibleAiBaseUrl,
@@ -216,19 +227,20 @@ object AppContainer {
                 model = settings.compatibleAiModel
             )
         } else google
+        val cloud: AiClassifier = circolareplus.ai.PolicyAiClassifier(external,"EXTERNAL")
 
         // AICore in pausa (vedi AiCoreCooldown) si salta: al suo posto un modello LiteRT-LM gia'
         // scaricato, o il cloud se non ce n'e'.
         val plan = currentRoute(effectiveProvider, pdfTextLength)
         val model = plan.localModel
-        val local = LocalAiClassifier(
+        val local = circolareplus.ai.PolicyAiClassifier(LocalAiClassifier(
             model = model,
             modelPath = model?.let { localModelStore.installedPath(it) },
             llm = localLlm,
             enableThinking = localThinking,
             aiCoreCooldown = aiCoreCooldown,
             noModelReason = if (plan.aiCoreSkipped && model == null) aiCoreCooldown.skipReason() else null
-        )
+        ),"LOCAL")
 
         // La catena "classica" chiave Google / modello locale: e' com'era prima della v1.5.0 e
         // resta in piedi sotto il servizio incluso come riserva, e da sola per le circolari —
@@ -244,13 +256,13 @@ object AppContainer {
             // Provider predefinito dalla v1.5.0: chat ed eventi su Gemma via Worker di AILA
             // ("vale per tutti"), circolari sulla catena classica, la quota di Cloudflare come
             // unica contatrice (nessuna stima fatta in casa).
-            AiProvider.AILA_CLOUD -> AilaCloudClassifier(
+            AiProvider.AILA_CLOUD -> circolareplus.ai.PolicyAiClassifier(AilaCloudClassifier(
                 apiBaseUrl = { api.baseUrl },
                 authToken = { settings.authToken },
                 personal = personal,
                 enableThinking = localThinking,
                 attemptTimeoutMs = answerAttemptTimeoutMs
-            )
+            ),"AILA")
             AiProvider.ON_DEVICE ->
                 if (settings.isLocalAiEnabled && !plan.cloudFirst) {
                     ChainedAiClassifier(

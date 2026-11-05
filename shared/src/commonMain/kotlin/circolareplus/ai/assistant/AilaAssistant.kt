@@ -1,5 +1,7 @@
 package circolareplus.ai.assistant
 
+import circolareplus.ai.withAttachmentServices
+
 import circolareplus.ai.AiClassifier
 import circolareplus.ai.AiTextResult
 import circolareplus.ai.PdfTextExtractor
@@ -30,7 +32,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 class AilaAssistant(
     private val classifierFactory: () -> AiClassifier,
     private val circularsRepository: CircularsRepository,
-    private val pdfTextExtractor: PdfTextExtractor
+    private val pdfTextExtractor: PdfTextExtractor,
+    private val actionsEnabled: Boolean = false
 ) {
 
     companion object {
@@ -79,13 +82,48 @@ class AilaAssistant(
         question: String,
         history: List<AssistantMessage>,
         knowledge: AssistantKnowledge,
-        mode: AssistantMode = AssistantMode.GENERAL
+        mode: AssistantMode = AssistantMode.GENERAL,
+        onAgentPhase: (AssistantAgentPhase) -> Unit = {}
     ): AssistantReply {
+        if (mode == AssistantMode.GENERAL && !actionsEnabled && AssistantActionIntent.matches(question, history))
+            return AssistantReply("Le azioni di ACA sono disattivate. Puoi abilitarle in Impostazioni → AI → ACA e Calendario.", modelLabel = "AILA")
+        // Plan mutations before informational shortcuts. Planning never writes; only the
+        // separate confirmation handler can pass the displayed plan to the executor.
+        if (actionsEnabled && mode == AssistantMode.GENERAL && AssistantActionIntent.matches(question, history)) {
+            onAgentPhase(AssistantAgentPhase.READING)
+            val searchQuery = AssistantContext.searchQuery(question, history)
+            val texts = fetchCircularTexts(
+                AssistantContext.mostRelevantCirculars(knowledge, searchQuery, PREFETCHED_CIRCULARS),
+                knowledge.circulars, budgetMs = PREFETCH_BUDGET_MS
+            )
+            onAgentPhase(AssistantAgentPhase.PLANNING)
+            return when (val result = classifierFactory().generateAnswer(
+                AssistantActionPrompt.builderFor(knowledge, history, question, texts, searchQuery).withAttachmentServices(knowledge.attachedSources.map{it.file.service}.toSet())
+            )) {
+                is AiTextResult.Failure -> AssistantReply(result.reason, isError = true)
+                is AiTextResult.Success -> {
+                    val plan = AssistantActionPrompt.parse(result.text)?.copy(requestedByUserId = knowledge.user?.id)
+                    if (plan == null || !AssistantActionPrompt.validate(plan, knowledge)) {
+                        AssistantReply("Non ho ottenuto un piano valido. Specifica titolo e data degli eventi da inserire.",
+                            modelLabel = "AILA ACA", awaitingActionInput = true)
+                    } else if (plan.actions.isEmpty()) {
+                        AssistantReply(plan.clarification.ifBlank { "Quali eventi vuoi inserire e in quali date?" },
+                            modelLabel = "AILA ACA", awaitingActionInput = true)
+                    } else {
+                        AssistantReply("Ho preparato queste azioni. Controlla eventi, date, orari e destinatari, poi conferma." +
+                            plan.clarification.takeIf { it.isNotBlank() }?.let { "\n$it" }.orEmpty(),
+                            modelLabel = "AILA ACA", actionPlan = plan,
+                            awaitingActionInput = plan.clarification.isNotBlank())
+                    }
+                }
+            }
+        }
         // "Ciao", "grazie": niente dati e niente modello, vedi [AssistantGreeting].
         AssistantGreeting.answer(question)?.let { return it }
         // Le risposte pronte del codice rispondono sull'app intera: nella chat della Gita no,
         // li' l'unica fonte e' il materiale della gita e il modello la legge tutta.
-        if (mode == AssistantMode.GENERAL) {
+        val studyPlan = AssistantContext.normalize(question).let { "piano" in it && ("studio" in it || "ripasso" in it) }
+        if (mode == AssistantMode.GENERAL && !studyPlan && knowledge.attachedSources.isEmpty()) {
             // Scadenze, pagamenti, "cosa ho questa settimana": l'elenco lo fa il codice, esatto e
             // subito. Il modello sul telefono lo ricopiava storpiato (vedi [AssistantAgenda]).
             AssistantAgenda.answer(knowledge, question)?.let { return it }
@@ -116,9 +154,10 @@ class AilaAssistant(
             budgetMs = PREFETCH_BUDGET_MS
         )
 
+        onAgentPhase(AssistantAgentPhase.WRITING)
         val firstRaw = when (
             val result = classifier.generateAnswer(
-                AssistantPrompt.builderFor(known, history, question, prefetched, searchQuery, mode)
+                AssistantPrompt.builderFor(known, history, question, prefetched, searchQuery, mode).withAttachmentServices(known.attachedSources.map{it.file.service}.toSet())
             )
         ) {
             is AiTextResult.Failure -> return AssistantReply(
@@ -155,7 +194,7 @@ class AilaAssistant(
             return firstReply
         }
 
-        val secondPrompt = AssistantPrompt.builderFor(known, history, question, deepTexts, searchQuery, mode)
+        val secondPrompt = AssistantPrompt.builderFor(known, history, question, deepTexts, searchQuery, mode).withAttachmentServices(known.attachedSources.map{it.file.service}.toSet())
         val secondResult = classifier.generateAnswer(secondPrompt)
         if (secondResult !is AiTextResult.Success) {
             // Il secondo giro e' un miglioramento, non un requisito: se cade (tipicamente per

@@ -17,6 +17,9 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import circolareplus.ai.PdfBoxInit
 import circolareplus.data.AppContainer
 import circolareplus.platform.AndroidAppContext
@@ -64,6 +67,7 @@ class MainActivity : ComponentActivity() {
         // Avvio a freddo dal tocco su una notifica di sistema (vedi CircolareMessagingService):
         // l'extra viene letto qui e MainAppShell, non appena parte, ci naviga sopra da sé.
         applyPendingDeepLinkFrom(intent)
+        receiveContent(intent)
 
         // Telefoni solo in verticale; i tablet (lato corto >= 600dp) restano liberi di ruotare.
         // Fatto da codice e non con screenOrientation nel manifest, che bloccherebbe anche i tablet.
@@ -96,6 +100,18 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         applyPendingDeepLinkFrom(intent)
+        receiveContent(intent)
+    }
+
+    private fun receiveContent(source: Intent) {
+        if (source.action != Intent.ACTION_SEND && source.action != Intent.ACTION_VIEW) return
+        lifecycleScope.launch {
+            try {
+                val file = circolareplus.platform.readIncomingContent(this@MainActivity, source) ?: return@launch
+                circolareplus.platform.IncomingContentInbox.receive(file.fileName, file.mime, file.bytes)
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { circolareplus.platform.IncomingContentInbox.reject(e.message ?: "Contenuto non leggibile") }
+        }
     }
 
     // Tornando in primo piano si rilegge l'elenco: nel frattempo puo' essere arrivata una
@@ -184,6 +200,7 @@ class MainActivity : ComponentActivity() {
             NotificationCategoryMapper.categoryFrom(data)
         }
         if (category.isNotBlank()) {
+            PendingDeepLink.forumThreadId = intent.getStringExtra("thread_id")
             PendingDeepLink.category = category
         }
     }

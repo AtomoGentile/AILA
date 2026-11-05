@@ -4,28 +4,16 @@
 // /api/ai/status — servizio attivo? (nessuna generazione: non consuma neuron)
 // =============================================================================
 
-// Dalla v1.5.0 la chat dell'assistente non chiede piu' una chiave a chi la usa: passa dal
-// Worker di AILA, che gira la richiesta su Workers AI (binding `AI`, vedi types.ts) con
-// Gemma 4 26B A4B — il MoE di Google con 26B di parametri e 4B attivi per passata:
-// https://developers.cloudflare.com/workers-ai/models/gemma-4-26b-a4b-it/
-//
-// La quota vale per tutti e sta tutta qui: sul piano Workers Free Cloudflare concede
-// 10.000 neuron al giorno per l'intero account e li conta da sola, con precisione
-// esatta ("non deve andare a stima, deve essere preciso"): quando finiscono blocca la
-// richiesta con l'errore documentato 4006 (Workers AI "Errors" -> "Account limited",
-// HTTP 429). La rotta non tiene contatori in D1 e non stima nulla: si fida di quel blocco
-// e lo traduce in una risposta 429 pulita, che il client usa per passare alla riserva
-// (chiave personale / AI locale, vedi AilaCloudClassifier).
-//
-// Perimetro: solo la chat e la stesura di eventi calendario. La lettura delle circolari
-// resta dov'era — riassunti del server dalla cron con la chiave dedicata GEMINI_API_KEY
-// (services/summarizer.ts), mai toccata da questa rotta. La rotta e' affidabile solo a
-// utenti autenticati (authMiddleware), perche' la chat e' il servizio piu' esposto:
-// senza autenticazione chiunque potrebbe bruciare la quota di tutta la scuola.
+// Basic chat stays on Workers AI. Every authenticated generation respects account AI/service
+// preferences and cloud consent, including requests from older app versions. Complex ACA
+// planning uses the central router. Atomic D1 reservations bound feature/account usage;
+// the provider's own quota is an additional limit. Circular cron summaries remain separate.
 
 import { Hono } from 'hono';
+import {bodyLimit} from 'hono/body-limit';
 import type { Env, JWTPayload } from '../types';
 import { authMiddleware } from '../auth';
+import { reserveAiBudget,runAiTask,requireAiService } from '../services/aiRouter';
 
 const MODEL = '@cf/google/gemma-4-26b-a4b-it';
 
@@ -99,7 +87,7 @@ ai.get('/status', (c) => {
 // forma, traduzione dell'errore di quota. Nessun stato: l'assistente resta senza
 // memoria server-side come prima, la conversazione vive sul dispositivo.
 // ---------------------------------------------------------------------------
-ai.post('/chat', async (c) => {
+ai.post('/chat', bodyLimit({maxSize:256*1024}), async (c) => {
   if (!c.env.AI) {
     return c.json({
       error: 'Il servizio AI di AILA non e\' attivo: al Worker manca il binding [ai] di wrangler.toml',
@@ -107,7 +95,7 @@ ai.post('/chat', async (c) => {
     }, 503);
   }
 
-  let body: { messages?: unknown; json?: unknown; thinking?: unknown; maxTokens?: unknown };
+  let body: { messages?: unknown; json?: unknown; thinking?: unknown; maxTokens?: unknown; feature?: unknown;policyVersion?:unknown;attachmentServices?:unknown };
   try {
     body = await c.req.json();
   } catch {
@@ -154,6 +142,23 @@ ai.post('/chat', async (c) => {
   // locali). clear_thinking: il ragionamento resta nel turno che lo ha generato, non lo si
   // riporta dentro la conversazione.
   const thinking = body.thinking === true;
+  const attachmentServices=body.attachmentServices??[];
+  if(!Array.isArray(attachmentServices)||attachmentServices.length>3||!attachmentServices.every(x=>['DOCUMENTS','AUDIO','IMAGES'].includes(x)))return c.json({error:'Servizi degli allegati non validi'},400);
+  if(body.feature!==undefined&&!['CHAT','AGENT','STUDY_PLAN'].includes(String(body.feature)))return c.json({error:'Funzione non supportata da questa rotta'},400);
+  {
+    const pref=await requireAiService(c.env,c.get('jwtPayload').sub,body.feature==='AGENT'?'CALENDAR':body.feature==='STUDY_PLAN'?'STUDY_PLAN':'CHAT',body.feature==='AGENT'||body.feature==='STUDY_PLAN');
+    if(!pref.cloudConsent)return c.json({error:'Consenti il cloud in Impostazioni → AI prima di usare il servizio.'},403);
+    if(attachmentServices.length&&!pref.attachmentConsent)return c.json({error:'Consenti l’analisi degli allegati nelle impostazioni AI.'},403);
+    if(attachmentServices.includes('AUDIO')&&!pref.audioConsent)return c.json({error:'Consenti l’uso dell’audio nelle impostazioni AI.'},403);
+    for(const service of attachmentServices)await requireAiService(c.env,c.get('jwtPayload').sub,service);
+  }
+  if(body.feature==='AGENT'||body.feature==='STUDY_PLAN'){
+    const system=messages.filter(m=>m.role==='system').map(m=>m.content).join('\n');
+    const turns=messages.filter(m=>m.role!=='system').map(m=>`${m.role}: ${m.content}`).join('\n');
+    const result=await runAiTask(c.env,c.get('jwtPayload').sub,{feature:body.feature,question:'Rispondi alla richiesta e nel formato specificati nei messaggi.',system,context:turns,outputTokens:maxTokens});
+    return c.json({text:result.text,model:result.provider});
+  }
+  await reserveAiBudget(c.env,c.get('jwtPayload').sub,'CHAT',totalChars,maxTokens);
 
   const input: Record<string, unknown> = {
     messages,

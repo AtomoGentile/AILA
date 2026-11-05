@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.layout
 import dev.chrisbanes.haze.hazeEffect
+import circolareplus.design.acaHoldToOpen
 import circolareplus.design.ailaGlassBackdrop
 import dev.chrisbanes.haze.hazeSource
 import androidx.compose.ui.draw.clip
@@ -85,7 +86,12 @@ import circolareplus.domain.model.CalendarEventCategory
 import circolareplus.domain.model.Circular
 import circolareplus.domain.model.CircularAiClassification
 import circolareplus.ai.ATTACHMENT_TEXT_MARKER
+import circolareplus.ai.assistant.AssistantAttachedFile
+import circolareplus.ai.assistant.AssistantAttachedSource
 import circolareplus.ai.assistant.AssistantAuthor
+import circolareplus.ai.assistant.AssistantActionStatus
+import circolareplus.ai.assistant.AssistantAgentPhase
+import circolareplus.ai.assistant.confirmableAction
 import circolareplus.ai.assistant.AssistantConversation
 import circolareplus.ai.assistant.AssistantDynamicKnowledge
 import circolareplus.ai.assistant.AssistantKnowledge
@@ -171,6 +177,12 @@ fun MainAppShell(
 ) {
     var currentUser by remember { mutableStateOf<User?>(initialUser) }
     var currentProfile by remember { mutableStateOf<StudentProfile?>(initialProfile) }
+    val aiPolicy = circolareplus.ai.AcaPolicyState.preferences
+    LaunchedEffect(currentUser?.id) {
+        circolareplus.ai.AcaPolicyState.preferences = AppContainer.settings.cachedAiPreferences
+        if (currentUser != null) try { AppContainer.acaRepository.preferences() }
+        catch (e: CancellationException) { throw e } catch (_: Exception) {}
+    }
 
     // Sessione rifiutata dal server mentre l'app e' aperta (password cambiata altrove, account
     // eliminato): si chiude quella locale e si torna al login.
@@ -242,6 +254,14 @@ fun MainAppShell(
     val inFlightTier = remember { mutableMapOf<Int, Int>() }
     val analysisJobs = remember { mutableMapOf<Int, Job>() }
     val analysisTitles = remember { mutableMapOf<Int, String>() }
+    LaunchedEffect(aiPolicy.aiEnabled, aiPolicy.services) {
+        if (!aiPolicy.aiEnabled || "CIRCULARS" !in aiPolicy.services) {
+            analysisJobs.values.toList().forEach { it.cancel() }
+            analysisJobs.clear()
+            AnalysisActivity.update(AnalysisActivity.State())
+        }
+    }
+
     // Fermate a mano: non ripartono da sole riaprendo la circolare, solo col tasto "Analizza".
     val stoppedByUser = remember { mutableStateListOf<Int>() }
     // Circolari troppo lunghe per l'AI del telefono (ne leggerebbe solo l'inizio) che il server
@@ -314,6 +334,7 @@ fun MainAppShell(
          */
         waitForFreshServer: Boolean = false
     ) {
+        if (!AppContainer.settings.cachedAiPreferences.let { it.aiEnabled && "CIRCULARS" in it.services }) return
         if (waitForFreshServer && serverSyncInfo?.serverWillSummarize(circular.number) == true) {
             val since = awaitingServerSince.getOrPut(circular.number) { currentTimeMillis() }
             if (currentTimeMillis() - since < SERVER_WAIT_MILLIS) {
@@ -405,6 +426,8 @@ fun MainAppShell(
         forceReanalyze: Boolean = false,
         allowLocalFallback: Boolean = true
     ) {
+        val policy = AppContainer.settings.cachedAiPreferences
+        if (!policy.aiEnabled || "CIRCULARS" !in policy.services) return
         val number = circular.number
         if ((classifications.containsKey(number) && !forceReanalyze) || number in inFlightClassification) return
         inFlightClassification += number
@@ -499,7 +522,8 @@ fun MainAppShell(
         stoppedByUser -= circular.number
         if (forceReanalyze) awaitingServer -= circular.number
         val job = AnalysisActivity.scope.launch {
-            classifyCircularIfNeeded(circular, forceReanalyze, allowLocalFallback)
+            if (AppContainer.settings.cachedAiPreferences.let { it.aiEnabled && "CIRCULARS" in it.services })
+                classifyCircularIfNeeded(circular, forceReanalyze, allowLocalFallback)
         }
         analysisJobs[circular.number] = job
         job.invokeOnCompletion { if (analysisJobs[circular.number] === job) analysisJobs.remove(circular.number) }
@@ -741,7 +765,7 @@ fun MainAppShell(
                 isModelInstalled = { model -> AppContainer.localModelStore.isInstalled(model) },
                 testApiKey = { key ->
                     // Come in Impostazioni: si prova la chiave digitata, non quella salvata.
-                    circolareplus.ai.ClientSideAiClassifier(userApiKey = key).testKey()
+                    circolareplus.ai.PolicyAiClassifier(circolareplus.ai.ClientSideAiClassifier(userApiKey = key), "EXTERNAL").testConfiguration()
                 },
                 saveApiKey = { key ->
                     AppContainer.settings.userAiApiKey = key
@@ -938,6 +962,53 @@ fun MainAppShell(
         }
     }
     var isInSettingsScreen by rememberSaveable { mutableStateOf(false) }
+    var isInAiSettings by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(isInSettingsScreen) { if (!isInSettingsScreen) isInAiSettings = false }
+    var isInAcaHub by rememberSaveable { mutableStateOf(false) }
+    var isInLocalFiles by rememberSaveable { mutableStateOf(false) }
+    var filesOpenedFromSettings by rememberSaveable { mutableStateOf(false) }
+    val localFilesRepository = AppContainer.localContents
+    LaunchedEffect(currentUser?.id) {
+        try { localFilesRepository.preferences() }
+        catch (e: CancellationException) { throw e } catch (_: Exception) {}
+    }
+    val automaticallyDownloadFiles = localFilesRepository.automaticDownload && localFilesRepository.automaticOwner == currentUser?.id
+    LaunchedEffect(currentUser?.id, automaticallyDownloadFiles) {
+        if (automaticallyDownloadFiles) while (isActive) {
+            if (circolareplus.platform.AppForeground.isForeground) {
+                try { AppContainer.synchronizeLocalAttachments() }
+                catch (e: CancellationException) { throw e } catch (_: Exception) {}
+            }
+            delay(60_000)
+        }
+    }
+
+    var isInForum by rememberSaveable { mutableStateOf(false) }
+    var initialForumThread by rememberSaveable { mutableStateOf<String?>(null) }
+    var localContent by remember { mutableStateOf<circolareplus.platform.IncomingContent?>(null) }
+    var remoteContent by remember { mutableStateOf<circolareplus.data.remote.dto.ContentAttachmentDto?>(null) }
+    var contentActivity by remember { mutableStateOf<AssistantAgentPhase?>(null) }
+    var acaExperience by remember { mutableStateOf(circolareplus.data.remote.dto.AcaExperienceDto()) }
+    var acaNudges by remember { mutableStateOf<List<circolareplus.data.remote.dto.AcaNudgeDto>>(emptyList()) }
+    LaunchedEffect(currentUser?.id) {
+        try { acaExperience = AppContainer.acaRepository.experience() }
+        catch (e: CancellationException) { throw e } catch (_: Exception) {}
+    }
+    LaunchedEffect(currentUser?.id, aiPolicy) {
+        acaNudges = emptyList()
+        if (aiPolicy.aiEnabled && aiPolicy.acaEnabled && aiPolicy.nudgesEnabled && "NOW_NUDGE" in aiPolicy.services) {
+            try { acaNudges = AppContainer.acaRepository.nudges() }
+            catch (e: CancellationException) { throw e } catch (_: Exception) {}
+        }
+    }
+    val incomingContent = circolareplus.platform.IncomingContentInbox.pending
+    LaunchedEffect(incomingContent) {
+        if (incomingContent != null) {
+            localContent = incomingContent; remoteContent = null
+            circolareplus.platform.IncomingContentInbox.clear()
+        }
+    }
+
     // Diagnostica background (iOS), aperta dalle Impostazioni.
     var isInBackgroundDebugScreen by rememberSaveable { mutableStateOf(false) }
     var debugMenuUnlocked by remember { mutableStateOf(AppContainer.settings.isDebugMenuEnabled) }
@@ -1014,6 +1085,7 @@ fun MainAppShell(
     // La conversazione in corso ha un id suo, cosi' ogni salvataggio aggiorna la stessa voce
     // dello storico invece di aggiungerne una a ogni domanda.
     var assistantConversationId by rememberSaveable { mutableStateOf("c${currentTimeMillis()}") }
+    val assistantAttachments = remember { mutableStateMapOf<String,List<AssistantAttachedFile>>() }
     val assistantMessages = remember {
         mutableStateListOf<AssistantMessage>().also { list ->
             // Quando il sistema uccide il processo, l'id della conversazione torna (e'
@@ -1029,6 +1101,7 @@ fun MainAppShell(
     // "Nuova chat" mentre il modello sta ancora rispondendo deve vedere una chat pulita e libera,
     // mentre la risposta atterra nella conversazione da cui e' partita la domanda.
     val pendingAssistantConversations = remember { mutableStateListOf<String>() }
+    val assistantAgentPhases = remember { mutableStateMapOf<String, AssistantAgentPhase>() }
     val isAssistantThinking = assistantConversationId in pendingAssistantConversations
     // I dati che non sono gia' in memoria (sondaggi, mappa, storico, valutazioni) si caricano
     // una volta sola per conversazione: sono le stesse rotte che le altre schermate chiamano
@@ -1295,7 +1368,7 @@ fun MainAppShell(
      */
     fun appendAssistantMessage(conversationId: String, message: AssistantMessage) {
         if (conversationId == assistantConversationId) {
-            assistantMessages += message
+            if (assistantMessages.none { it.id == message.id }) assistantMessages += message
             saveAssistantConversation()
             return
         }
@@ -1306,34 +1379,155 @@ fun MainAppShell(
         AppContainer.settings.saveAssistantConversation(
             stored.copy(
                 updatedAtMillis = currentTimeMillis(),
-                messages = stored.messages + message
+                messages = (stored.messages + message).distinctBy { it.id }
             )
         )
         assistantConversations = AppContainer.settings.listAssistantConversations()
     }
 
+    fun updateAssistantMessage(conversationId: String, messageId: String, update: (AssistantMessage) -> AssistantMessage) {
+        if (conversationId == assistantConversationId) {
+            val index = assistantMessages.indexOfFirst { it.id == messageId }
+            if (index >= 0) {
+                assistantMessages[index] = update(assistantMessages[index])
+                saveAssistantConversation()
+            }
+        } else {
+            val stored = AppContainer.settings.listAssistantConversations().firstOrNull { it.id == conversationId } ?: return
+            AppContainer.settings.saveAssistantConversation(stored.copy(
+                updatedAtMillis = currentTimeMillis(),
+                messages = stored.messages.map { if (it.id == messageId) update(it) else it }
+            ))
+            assistantConversations = AppContainer.settings.listAssistantConversations()
+        }
+    }
+
+    fun applyAssistantOperation(conversationId: String, messageId: String, operation: circolareplus.data.remote.dto.AcaOperationDto) {
+        val status = when (operation.status) {
+            "PREVIEW" -> AssistantActionStatus.AWAITING_CONFIRMATION
+            "COMPLETED" -> AssistantActionStatus.COMPLETED
+            "PARTIAL" -> AssistantActionStatus.PARTIAL
+            "CANCELLED" -> AssistantActionStatus.CANCELLED
+            "EXPIRED" -> AssistantActionStatus.EXPIRED
+            "RUNNING" -> AssistantActionStatus.RUNNING
+            else -> AssistantActionStatus.ERROR
+        }
+        updateAssistantMessage(conversationId, messageId) { it.copy(actionStatus = status) }
+        if (status == AssistantActionStatus.COMPLETED || status == AssistantActionStatus.PARTIAL) {
+            appendAssistantMessage(conversationId, AssistantMessage(
+                id = "operation-${operation.id}", author = AssistantAuthor.ASSISTANT,
+                text = operation.text, isError = status == AssistantActionStatus.PARTIAL
+            ))
+            calendarRefreshTrigger++
+        }
+    }
+
+    fun recoverAssistantAction(messageId: String) {
+        val conversationId = assistantConversationId
+        val userId = currentUser?.id ?: return
+        val plan = assistantMessages.firstOrNull { it.id == messageId }?.actionPlan ?: return
+        val operationId = plan.operationId ?: return
+        coroutineScope.launch {
+            try {
+                val operation = AppContainer.acaRepository.operation(operationId)
+                if (currentUser?.id == userId) applyAssistantOperation(conversationId, messageId, operation)
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { appendAssistantMessage(conversationId, AssistantMessage(id = "recover-${currentTimeMillis()}", author = AssistantAuthor.ASSISTANT, text = "Stato non disponibile. Nessuna nuova azione inviata: riprova la verifica.", isError = true)) }
+        }
+    }
+
+    fun cancelAssistantAction(messageId: String) {
+        val conversationId = assistantConversationId
+        val plan = assistantMessages.firstOrNull { it.id == messageId }?.actionPlan
+        updateAssistantMessage(conversationId, messageId) { it.copy(actionStatus = AssistantActionStatus.CANCELLED, awaitingActionInput = false) }
+        plan?.operationId?.let { id -> coroutineScope.launch {
+            try { AppContainer.acaRepository.cancel(id) } catch (e: CancellationException) { throw e } catch (_: Exception) {}
+        } }
+    }
+
+    fun confirmAssistantAction(messageId: String) {
+        val conversationId = assistantConversationId
+        if (conversationId in pendingAssistantConversations) return
+        val userAtConfirmation = currentUser ?: return
+        val plan = assistantMessages.firstOrNull { it.id == messageId }?.confirmableAction(userAtConfirmation.id) ?: return
+        val operationId = plan.operationId ?: return
+        val digest = plan.digest ?: return
+        updateAssistantMessage(conversationId, messageId) { it.copy(actionStatus = AssistantActionStatus.RUNNING) }
+        assistantAttachments.remove(conversationId)
+        pendingAssistantConversations += conversationId
+        assistantAgentPhases[conversationId] = AssistantAgentPhase.EXECUTING
+        coroutineScope.launch {
+            try {
+                val result = AppContainer.acaRepository.confirm(operationId, digest)
+                if (currentUser?.id == userAtConfirmation.id) applyAssistantOperation(conversationId, messageId, result)
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) {
+                if (currentUser?.id == userAtConfirmation.id) {
+                    updateAssistantMessage(conversationId, messageId) { it.copy(actionStatus = AssistantActionStatus.ERROR) }
+                    appendAssistantMessage(conversationId, AssistantMessage(
+                        id = "operation-error-${currentTimeMillis()}", author = AssistantAuthor.ASSISTANT,
+                        text = "Non è arrivato un esito verificato. Usa ‘Verifica esito’ per leggere lo stato dell’operazione prima di riprovare.", isError = true
+                    ))
+                }
+            } finally {
+                pendingAssistantConversations -= conversationId
+                assistantAgentPhases.remove(conversationId)
+            }
+        }
+    }
+
     fun askAssistant(question: String) {
         val trimmed = question.trim()
+        if (!circolareplus.ai.AcaPolicyState.preferences.aiEnabled || "CHAT" !in circolareplus.ai.AcaPolicyState.preferences.services) {
+            isInSettingsScreen = true; isInAiSettings = true; return
+        }
         if (trimmed.isEmpty() || assistantConversationId in pendingAssistantConversations) return
 
         // La conversazione a cui appartiene questa domanda, fissata adesso: quando la risposta
         // arriva `assistantConversationId` potrebbe essere cambiato.
         val conversationId = assistantConversationId
+        val requestedMode = assistantMode
+        val userAtRequest = currentUser
+        val history = assistantMessages.toList()
+        val filesForTurn = assistantAttachments[conversationId].orEmpty()
+        val sourceFiles = (history.flatMap{it.attachedFiles}+filesForTurn).distinctBy{it.localId}.takeLast(5)
+
+        // A new turn replaces older previews, so a later click cannot execute an obsolete plan.
+        assistantMessages.indices.forEach { index ->
+            val old = assistantMessages[index]
+            if (old.actionStatus == AssistantActionStatus.AWAITING_CONFIRMATION) {
+                cancelAssistantAction(old.id)
+            }
+        }
 
         assistantMessageCounter++
         assistantMessages += AssistantMessage(
             id = "q${currentTimeMillis()}-$assistantMessageCounter",
             author = AssistantAuthor.USER,
-            text = trimmed
+            text = trimmed,
+            attachedFiles = filesForTurn
         )
         // La cronologia che vede il modello non deve contenere la domanda appena fatta: quella
         // gli arriva a parte, come domanda corrente.
-        val history = assistantMessages.dropLast(1).toList()
         pendingAssistantConversations += conversationId
+        if (requestedMode == AssistantMode.GENERAL && circolareplus.ai.assistant.AssistantActionIntent.matches(trimmed, history)) {
+            assistantAgentPhases[conversationId] = AssistantAgentPhase.READING
+        }
         saveAssistantConversation()
 
         coroutineScope.launch {
             try {
+                val attachedSources = sourceFiles.map { reference ->
+                    val p=circolareplus.ai.AcaPolicyState.preferences
+                    check(p.aiEnabled && p.acaEnabled && reference.service in p.services) {
+                        "Il servizio per ${reference.name} è disattivato. Attivalo nelle impostazioni AI o apri una nuova chat senza allegati."
+                    }
+                    val entry=AppContainer.localContents.entry(reference.localId)
+                        ?: error("La copia locale di ${reference.name} è stata eliminata. Allegala di nuovo per continuare.")
+                    val text=AppContainer.localContents.text(entry)?.takeIf{it.isNotBlank()}
+                        ?: error("Non è disponibile un testo leggibile per ${reference.name}. Apri il file per estrarlo o trascriverlo.")
+                    AssistantAttachedSource(reference,text)
+                }
                 val dynamic = assistantDynamic
                     ?: AppContainer.assistantKnowledgeLoader
                         .load(currentUser?.role ?: UserRole.STUDENT)
@@ -1365,13 +1559,18 @@ fun MainAppShell(
                     emptyList()
                 }
 
+                if (currentUser?.id != userAtRequest?.id) return@launch
+                if (circolareplus.ai.assistant.AssistantActionIntent.matches(trimmed, history)) {
+                    calendarEvents = AppContainer.calendarRepository.listEvents()
+                }
                 val reply = AppContainer.newAssistant().ask(
                     question = trimmed,
                     history = history,
-                    mode = assistantMode,
+                    mode = requestedMode,
+                    onAgentPhase = { assistantAgentPhases[conversationId] = it },
                     knowledge = AssistantKnowledge(
                         todayIso = circolareplus.util.today().toIso(),
-                        user = currentUser,
+                        user = userAtRequest,
                         profile = currentProfile,
                         classmates = classmates,
                         circulars = circulars,
@@ -1379,10 +1578,17 @@ fun MainAppShell(
                         calendarEvents = calendarEvents,
                         proposals = boardProposals,
                         dynamic = boardUnavailable?.let { dynamic.copy(unavailable = dynamic.unavailable + it) } ?: dynamic,
-                        gita = gita
+                        gita = gita,
+                        attachedSources = attachedSources
                     )
                 )
 
+                if (currentUser?.id != userAtRequest?.id) return@launch
+
+                val verifiedPlan = reply.actionPlan?.let { proposed ->
+                    val operation = AppContainer.acaRepository.preview(proposed)
+                    operation.plan.copy(operationId = operation.id, digest = operation.digest, expiresAt = operation.expiresAt)
+                }
                 assistantMessageCounter++
                 appendAssistantMessage(
                     conversationId,
@@ -1392,7 +1598,10 @@ fun MainAppShell(
                         text = reply.text,
                         sources = reply.sources,
                         isError = reply.isError,
-                        modelLabel = reply.modelLabel
+                        modelLabel = reply.modelLabel,
+                        actionPlan = verifiedPlan,
+                        actionStatus = if (verifiedPlan != null) AssistantActionStatus.AWAITING_CONFIRMATION else null,
+                        awaitingActionInput = reply.awaitingActionInput
                     )
                 )
             } catch (e: CancellationException) {
@@ -1412,6 +1621,7 @@ fun MainAppShell(
                 // Nel `finally` perche' vale per tutti e tre gli esiti: risposta, errore
                 // riportato dall'assistente ed eccezione inattesa.
                 pendingAssistantConversations -= conversationId
+                assistantAgentPhases.remove(conversationId)
             }
         }
     }
@@ -1435,6 +1645,11 @@ fun MainAppShell(
             NotificationKind.CIRCULARS.key -> {
                 classSection = ClassSection.CIRCULARS
                 selectedTab = MainTab.CLASS
+            }
+            NotificationKind.FORUM.key -> {
+                initialForumThread = circolareplus.ui.PendingDeepLink.forumThreadId
+                circolareplus.ui.PendingDeepLink.forumThreadId = null
+                isInForum = true
             }
             NotificationKind.BOARD.key -> {
                 classSection = ClassSection.BOARD
@@ -1836,7 +2051,7 @@ fun MainAppShell(
             //
             // In rete l'anticipo ha senso — un secondo a circolare, e trovarle gia' pronte e'
             // meglio. Sul telefono no: si classifica quello che si apre, quando lo si apre.
-            if (AppContainer.isUsingLocalAiFirst()) {
+            if (!AppContainer.settings.cachedAiPreferences.let { it.aiEnabled && "CIRCULARS" in it.services } || AppContainer.isUsingLocalAiFirst()) {
                 delay(3000L)
             } else if (next != null) {
                 // Come Job a parte e non chiamata diretta: cosi' anche questa si ferma col tasto Stop.
@@ -2457,6 +2672,10 @@ fun MainAppShell(
     val shellRoute = when {
         isInSettingsScreen && isInBackgroundDebugScreen -> ShellRoute.BACKGROUND_DEBUG
         isInSettingsScreen -> ShellRoute.SETTINGS
+        localContent != null || remoteContent != null -> ShellRoute.CONTENT
+        isInLocalFiles -> ShellRoute.LOCAL_FILES
+        isInForum -> ShellRoute.FORUM
+        isInAcaHub -> ShellRoute.ACA
         isInClassRosterScreen -> ShellRoute.CLASS_ROSTER
         isInProfileScreen -> ShellRoute.PROFILE
         isInAssistantScreen -> ShellRoute.ASSISTANT
@@ -2573,6 +2792,17 @@ fun MainAppShell(
     val circularDetailContent: @Composable (Circular, () -> Unit) -> Unit = { circular, onClose ->
         CircularDetailScreen(
             circular = circular,
+            aiEnabled = aiPolicy.aiEnabled && "CIRCULARS" in aiPolicy.services,
+            onAskAila = {
+                coroutineScope.launch {
+                    try {
+                        val bytes = AppContainer.circularsRepository.downloadPdfBytes(circular.r2PdfKey)
+                        localContent = circolareplus.platform.IncomingContent("Circolare ${circular.number}.pdf", "application/pdf", bytes)
+                        selectedCircularForDetail = null
+                    } catch (e: CancellationException) { throw e }
+                    catch (_: Exception) { circolareplus.platform.IncomingContentInbox.reject("Documento non disponibile. Riprova ad aprire il PDF.") }
+                }
+            },
             classification = classifications[circular.number],
             isClassifying = circular.number in inFlightClassification,
             isQueued = circular.number in queuedClassification,
@@ -2666,6 +2896,21 @@ fun MainAppShell(
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
+            .acaHoldToOpen(
+                enabled = aiPolicy.aiEnabled && aiPolicy.acaEnabled && aiPolicy.holdToOpen &&
+                    !isInAssistantScreen && circolareplus.design.AilaSheetBackdrop.openSheets == 0,
+                surfaceKey = listOf(shellRoute, selectedTab, selectedCircularForDetail?.number, eventDetailToShow)
+            ) {
+                selectedCircularForDetail = null
+                eventDetailToShow = null
+                localContent = null; remoteContent = null
+                isInSettingsScreen = false; isInBackgroundDebugScreen = false
+                isInLocalFiles = false; isInForum = false; isInAcaHub = false
+                isInClassRosterScreen = false; isInProfileScreen = false
+                isInSearchScreen = false; isInNotificationsScreen = false; isInGitaScreen = false
+                assistantMode = AssistantMode.GENERAL
+                isInAssistantScreen = true
+            }
             .then(if (AppTheme.isGlass) Modifier else Modifier.background(AppTheme.BackgroundLight))
             .graphicsLayer {
                 // Sul web la sfocatura a tutto schermo e' troppo pesante: resta il velo del foglio.
@@ -3015,6 +3260,16 @@ fun MainAppShell(
                         MainTab.HOME -> {
                             HomeScreen(
                                 studentFirstName = user.firstName,
+                                experience = acaExperience,
+                                aiEnabled = aiPolicy.aiEnabled && "CIRCULARS" in aiPolicy.services,
+                                onOpenAca = { isInAcaHub = true },
+                                onOpenForum = { isInForum = true },
+                                nudges = acaNudges,
+                                onDismissNudge = { id ->
+                                    acaNudges = acaNudges.filterNot { it.id == id }
+                                    coroutineScope.launch { try { AppContainer.acaRepository.dismissNudge(id) } catch (e: CancellationException) { throw e } catch (_: Exception) {} }
+                                },
+                                onPlanStudy = { prompt -> isInAssistantScreen = true; askAssistant(prompt) },
                                 circulars = circulars,
                                 calendarEvents = calendarEvents,
                                 openProposalsCount = proposals.size,
@@ -3435,7 +3690,7 @@ fun MainAppShell(
                                             CircularsScreen(
                                                 circulars = circulars,
                                                 classifications = classifications,
-                                                analyzingNumbers = inFlightClassification,
+                                                analyzingNumbers = (inFlightClassification + queuedClassification + awaitingServer).distinct(),
                                                 onSelectCircular = { openCircularInClass(it) },
                                                 selectedNumber = if (circularsPane) paneCircular?.number else null
                                             )
@@ -4138,6 +4393,46 @@ fun MainAppShell(
             // stirata a tutta larghezza.
             androidx.compose.runtime.CompositionLocalProvider(circolareplus.design.LocalWideLayout provides twoPane) {
             when (route) {
+                ShellRoute.LOCAL_FILES -> {
+                    LocalFilesScreen(onBack = {
+                        isInLocalFiles = false
+                        if (filesOpenedFromSettings) { filesOpenedFromSettings = false; isInSettingsScreen = true }
+                    }, onOpen = { localContent = it; remoteContent = null })
+                }
+                ShellRoute.ACA -> {
+                    circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { isInAcaHub = false }
+                    AcaHubScreen(
+                        onBack = { isInAcaHub = false },
+                        onOpenAssistant = { isInAcaHub = false; isInAssistantScreen = true },
+                        onOpenForum = { isInForum = true },
+                        onOpenContent = { localContent = it; remoteContent = null },
+                        onStudyPlan = { isInAcaHub = false; isInAssistantScreen = true; askAssistant("Prepara un piano di studio basato sui miei impegni reali") },
+                        onOpenLocalFiles = { filesOpenedFromSettings = false; isInLocalFiles = true },
+                        onOpenAiSettings = { isInSettingsScreen = true; isInAiSettings = true }
+                    )
+                }
+                ShellRoute.FORUM -> {
+                    ForumScreen(isModerator = isRepresentative, initialThreadId = initialForumThread, onBack = { isInForum = false; initialForumThread = null },
+                        onOpenAttachment = { remoteContent = it; localContent = null },
+                        onPrepareCalendar = { text -> isInForum = false; isInAcaHub = false; isInLocalFiles = false; isInAssistantScreen = true; askAssistant("Prepara gli eventi da confermare da questa fonte:\n$text") },
+                        onCalendarChanged = { reloadCalendar() },
+                        onActivity = { contentActivity = it })
+                }
+                ShellRoute.CONTENT -> {
+                    circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { localContent = null; remoteContent = null }
+                    ContentAssistanceScreen(content = localContent, attachment = remoteContent,
+                        onUseInChat = { file ->
+                            val pending=assistantAttachments[assistantConversationId].orEmpty()
+                            check(pending.any{it.localId==file.localId}||pending.size<5){"Allega al massimo 5 file per messaggio."}
+                            assistantAttachments[assistantConversationId]=(pending+file).distinctBy{it.localId}
+                            localContent=null;remoteContent=null;isInForum=false;isInAcaHub=false;isInLocalFiles=false
+                            assistantMode=AssistantMode.GENERAL;isInAssistantScreen=true
+                        },
+                        onOpenLocalFiles = { localContent = null; remoteContent = null; filesOpenedFromSettings = false; isInLocalFiles = true },
+                        onBack = { localContent = null; remoteContent = null },
+                        onPrepareCalendar = { text -> localContent = null; remoteContent = null; isInForum = false; isInAcaHub = false; isInLocalFiles = false; isInAssistantScreen = true; askAssistant("Prepara gli eventi da confermare da questa fonte:\n$text") },
+                        onActivity = { contentActivity = it })
+                }
                 ShellRoute.BACKGROUND_DEBUG -> {
                     circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { isInBackgroundDebugScreen = false }
                     BackgroundDebugScreen(
@@ -4151,8 +4446,11 @@ fun MainAppShell(
                     )
                 }
                 ShellRoute.SETTINGS -> {
-                    circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { isInSettingsScreen = false }
+                    circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { if (isInAiSettings) isInAiSettings = false else isInSettingsScreen = false }
                     SettingsScreen(
+                        aiOnly = isInAiSettings,
+                        onOpenLocalFiles = { filesOpenedFromSettings = true; isInSettingsScreen = false; isInLocalFiles = true },
+                        onOpenAiSettings = { isInAiSettings = true },
                         isRepresentative = isRepresentative,
                         seatMapDummiesMenuEnabled = run {
                             seatMapSettingsRevision
@@ -4175,7 +4473,7 @@ fun MainAppShell(
                         onTestApiKey = { key ->
                             // Si costruisce un classificatore con la chiave appena digitata, non
                             // con quella salvata: così si può provare una chiave prima di salvarla.
-                            circolareplus.ai.ClientSideAiClassifier(userApiKey = key).testKey()
+                            circolareplus.ai.PolicyAiClassifier(circolareplus.ai.ClientSideAiClassifier(userApiKey = key), "EXTERNAL").testConfiguration()
                         },
                         isDarkMode = AppTheme.isDarkMode,
                         onDarkModeChange = { enabled ->
@@ -4246,14 +4544,12 @@ fun MainAppShell(
                         },
                         onTestCompatibleAi = { format, baseUrl, model, key ->
                             if (format == "GOOGLE") {
-                                circolareplus.ai.ClientSideAiClassifier(userApiKey = key).testKey()
+                                circolareplus.ai.PolicyAiClassifier(circolareplus.ai.ClientSideAiClassifier(userApiKey = key), "EXTERNAL").testConfiguration()
                             } else {
-                                circolareplus.ai.CompatibleApiAiClassifier(
+                                circolareplus.ai.PolicyAiClassifier(circolareplus.ai.CompatibleApiAiClassifier(
                                     format = circolareplus.ai.CompatibleAiFormat.fromId(format),
-                                    baseUrl = baseUrl,
-                                    apiKey = key,
-                                    model = model
-                                ).testConfiguration()
+                                    baseUrl = baseUrl, apiKey = key, model = model
+                                ), "EXTERNAL").testConfiguration()
                             }
                         },
                         // Calcolati una volta sola: prima si rileggevano (memoria del telefono,
@@ -4298,12 +4594,10 @@ fun MainAppShell(
                         onDeleteOrphanModels = { AppContainer.localModelStore.deleteOrphans() },
                         onTestLocalModel = {
                             val model = AppContainer.selectedLocalModel()
-                            circolareplus.ai.LocalAiClassifier(
-                                model = model,
-                                modelPath = AppContainer.localModelStore.installedPath(model),
-                                llm = AppContainer.localLlm,
-                                aiCoreCooldown = AppContainer.aiCoreCooldown
-                            ).testConfiguration()
+                            circolareplus.ai.PolicyAiClassifier(circolareplus.ai.LocalAiClassifier(
+                                model = model, modelPath = AppContainer.localModelStore.installedPath(model),
+                                llm = AppContainer.localLlm, aiCoreCooldown = AppContainer.aiCoreCooldown
+                            ), "LOCAL").testConfiguration()
                         },
                         showDebugMenu = debugMenuUnlocked || circolareplus.platform.isDebugBuild(),
                         onUnlockDebugMenu = {
@@ -4311,7 +4605,7 @@ fun MainAppShell(
                             debugMenuUnlocked = true
                         },
                         onOpenBackgroundDebug = { isInBackgroundDebugScreen = true },
-                        onBackClick = { isInSettingsScreen = false }
+                        onBackClick = { if (isInAiSettings) isInAiSettings = false else isInSettingsScreen = false }
                     )
                 }
                 ShellRoute.PROFILE -> {
@@ -4535,6 +4829,21 @@ fun MainAppShell(
                         isThinking = isAssistantThinking,
                         conversations = assistantConversations,
                         onSend = { question -> askAssistant(question) },
+                        onAttachContent = { file -> localContent=file;remoteContent=null },
+                        attachedFiles = assistantAttachments[assistantConversationId].orEmpty(),
+                        onRemoveAttachedFile = { id -> assistantAttachments[assistantConversationId]=assistantAttachments[assistantConversationId].orEmpty().filterNot{it.localId==id} },
+                        onOpenAttachedFile = { file -> coroutineScope.launch {
+                            try{val entry=AppContainer.localContents.entry(file.localId)?:error("La copia locale è stata eliminata.")
+                                localContent=AppContainer.localContents.read(entry);remoteContent=null
+                            }catch(e:CancellationException){throw e}catch(e:Exception){
+                                assistantMessageCounter++
+                                appendAssistantMessage(assistantConversationId,AssistantMessage("file-${currentTimeMillis()}-$assistantMessageCounter",AssistantAuthor.ASSISTANT,e.message?:"File non disponibile",isError=true))
+                            }
+                        } },
+                        onConfirmAction = { confirmAssistantAction(it) },
+                        agentPhase = assistantAgentPhases[assistantConversationId],
+                        onCancelAction = { cancelAssistantAction(it) },
+                        onRecoverAction = { recoverAssistantAction(it) },
                         thinkingEnabled = assistantThinking,
                         thinkingAvailable = AppContainer.selectedLocalModel().supportsThinking,
                         onThinkingChange = { enabled ->
@@ -4962,6 +5271,41 @@ fun MainAppShell(
                 )
             }
         }
+        circolareplus.platform.IncomingContentInbox.error?.let { message ->
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { circolareplus.platform.IncomingContentInbox.clear() },
+                title = { Text("Contenuto non disponibile") }, text = { Text(message) },
+                confirmButton = { androidx.compose.material3.TextButton(onClick = { circolareplus.platform.IncomingContentInbox.clear() }) { Text("Chiudi") } }
+            )
+        }
+        val acaConversationId = assistantAgentPhases.keys.firstOrNull()
+            ?: assistantConversations.firstOrNull { conversation ->
+                conversation.messages.lastOrNull()?.actionStatus == AssistantActionStatus.AWAITING_CONFIRMATION
+            }?.id
+        circolareplus.design.AilaAcaIndicator(
+            phase = if (aiPolicy.aiEnabled && aiPolicy.acaEnabled) contentActivity ?: acaConversationId?.let { assistantAgentPhases[it] } else null,
+            awaitingConfirmation = false,
+            showPopup = true,
+            operationKey = if (contentActivity != null) "content" else acaConversationId,
+            onOpenAssistant = {
+                if (acaConversationId != null && acaConversationId != assistantConversationId) {
+                    val stored = AppContainer.settings.listAssistantConversations().firstOrNull { it.id == acaConversationId }
+                    if (stored != null) {
+                        assistantMessages.clear()
+                        assistantMessages.addAll(stored.messages)
+                        assistantConversationId = stored.id
+                    }
+                }
+                selectedCircularForDetail = null
+                eventDetailToShow = null
+                isInSettingsScreen = false
+                isInBackgroundDebugScreen = false
+                isInClassRosterScreen = false
+                isInProfileScreen = false
+                assistantMode = AssistantMode.GENERAL
+                isInAssistantScreen = true
+            }
+        )
     }
 }
 
@@ -7288,6 +7632,10 @@ private class ReturnPoint(
 /** Le schermate a tutto schermo della shell; `depth` decide il verso del push/pop. */
 private enum class ShellRoute(val depth: Int) {
     TABS(0),
+    ACA(1),
+    FORUM(2),
+    CONTENT(3),
+    LOCAL_FILES(2),
     PROFILE(1),
     SETTINGS(2),
     BACKGROUND_DEBUG(3),

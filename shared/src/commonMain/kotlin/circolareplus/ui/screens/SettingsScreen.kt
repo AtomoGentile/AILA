@@ -47,6 +47,7 @@ enum class NotificationKind(val key: String, val label: String, val description:
     CALENDAR("calendar", "Calendario", "Nuove verifiche, scadenze e pagamenti"),
     BOARD("board", "Bacheca", "Nuove proposte della classe"),
     SEATMAP("seatmap", "Mappa posti", "Nuova disposizione o votazione aperta"),
+    FORUM("forum", "Educazione tra pere", "Risposte e promemoria delle discussioni seguite"),
     POLLS("polls", "Sondaggi", "Nuovi sondaggi, interrogazioni e a ordinamento")
 }
 
@@ -124,7 +125,10 @@ fun SettingsScreen(
     showDebugMenu: Boolean = false,
     onUnlockDebugMenu: () -> Unit = {},
     onOpenBackgroundDebug: () -> Unit = {},
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    aiOnly: Boolean = false,
+    onOpenLocalFiles: () -> Unit = {},
+    onOpenAiSettings: () -> Unit = {}
 ) {
     var apiKeyInput by remember(apiKey) { mutableStateOf(apiKey) }
     var apiKeyStatus by remember { mutableStateOf<String?>(null) }
@@ -180,11 +184,12 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
 
     Column(modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
-        AilaBackBar(title = "Impostazioni", onBackClick = onBackClick)
+        AilaBackBar(title = if(aiOnly)"AI"else"Impostazioni", onBackClick = onBackClick)
 
         // Ogni sezione (titolo + card) e' un elemento: su tablet e iPad larghi le sezioni si
         // dispongono su due colonne (vedi AilaAdaptiveCardList), sul telefono una sotto l'altra.
         val sections = buildList<@Composable () -> Unit> {
+            if(!aiOnly){
             // --- Aspetto ------------------------------------------------------------------
             add {
                 Column {
@@ -335,6 +340,8 @@ fun SettingsScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
                             Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            LocalFilePreferencesControls(onOpenFiles = onOpenLocalFiles)
+                            Spacer(modifier = Modifier.height(AppTheme.Space12))
                             var confirmClearOffline by remember { mutableStateOf(false) }
                             AilaSecondaryButton(
                                 text = "Svuota dati offline",
@@ -362,6 +369,16 @@ fun SettingsScreen(
             
                 }
             }
+            add {
+                Column {
+                    AilaSectionTitle("AI")
+                    Spacer(Modifier.height(AppTheme.Space12))
+                    AilaCard(onClick=onOpenAiSettings){AilaListRow(title="AI",subtitle="Attivazione, ACA, provider, servizi e privacy",tint=AppTheme.TintBlue,
+                        icon={AppIcons.Sparkle(Modifier.size(20.dp),AppTheme.PrimaryBlue)},onClick=onOpenAiSettings)}
+                }
+            }
+            }
+            if(!aiOnly){
             // --- Notifiche ----------------------------------------------------------------
             add {
                 Column {
@@ -438,6 +455,9 @@ fun SettingsScreen(
                     }
                 }
             }
+            }
+            if(aiOnly){
+            add { AiPreferencesControls() }
             // Il provider va scelto sempre qui, anche su dispositivi senza AI locale: prima
             // la scelta compariva solo nel riquadro AI locale (o in fondo alla schermata PWA).
             add {
@@ -944,6 +964,8 @@ fun SettingsScreen(
             
                 }
             }
+            }
+            if(!aiOnly){
             // --- Telegram & Firma iOS --------------------------------------------------------
             add {
                 var telegramStatus by remember { mutableStateOf<circolareplus.data.remote.dto.TelegramStatusDto?>(null) }
@@ -1143,6 +1165,7 @@ fun SettingsScreen(
             
                 }
             }
+        }
         }
         circolareplus.design.AilaAdaptiveCardList(
             items = sections,

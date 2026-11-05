@@ -75,7 +75,7 @@ class CircolareMessagingService : FirebaseMessagingService() {
         val show = AppContainer.settings.onPushReceived(message.messageId, title, body, category)
         // A schermata aperta la lista deve aggiornarsi da sola, non solo mostrare la notifica.
         circolareplus.push.DataRefreshEvents.request()
-        if (show) showSystemNotification(title, body, category)
+        if (show) showSystemNotification(title, body, category, message.data["thread_id"])
         // Circolare nuova: un giro di classificazione subito (solo cloud, vedi
         // BackgroundCircularsSync), senza aspettare il periodico da 15 minuti.
         if (category == "circulars") CircularsSyncWorker.runOnce(applicationContext)
@@ -88,7 +88,7 @@ class CircolareMessagingService : FirebaseMessagingService() {
         // qui non serve altro, un token rinnovato verrà ripreso al prossimo avvio.
     }
 
-    private fun showSystemNotification(title: String, body: String, category: String) {
+    private fun showSystemNotification(title: String, body: String, category: String, threadId: String?) {
         val manager = getSystemService(NotificationManager::class.java) ?: return
 
         ensureNotificationChannel(this)
@@ -104,6 +104,7 @@ class CircolareMessagingService : FirebaseMessagingService() {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             if (category.isNotBlank()) {
                 putExtra("notification_category", category)
+                if (threadId != null) putExtra("thread_id", threadId)
             }
         }
         // Un id per notifica, usato sia per la notifica sia come requestCode del PendingIntent:

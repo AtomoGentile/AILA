@@ -6,6 +6,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { HTTPException } from 'hono/http-exception';
 
 import type { Env } from './types';
 import { summarizePendingCirculars } from './services/summarizer';
@@ -30,6 +31,13 @@ import webPushRoutes from './routes/webpush';
 import telegramRoutes from './routes/telegram';
 import adminRoutes from './routes/admin';
 import aiRoutes from './routes/ai';
+import forumRoutes from './routes/forum';
+import forumCalendarRoutes from './routes/forumCalendar';
+import contentRoutes from './routes/content';
+import acaOperations from './routes/acaOperations';
+import acaRoutes from './routes/aca';
+import { cleanupContent } from './services/content';
+import { forumResolutionNudges } from './services/forum';
 import { adminPage } from './routes/adminPage';
 
 // ---------------------------------------------------------------------------
@@ -82,6 +90,11 @@ app.route('/api/telegram', telegramRoutes);
 app.route('/api/admin', adminRoutes);
 // Chat di AILA Assistant inclusa per tutti (v1.5.0): proxy verso Workers AI con Gemma.
 app.route('/api/ai', aiRoutes);
+app.route('/api/forum', forumCalendarRoutes);
+app.route('/api/forum', forumRoutes);
+app.route('/api/content', contentRoutes);
+app.route('/api/aca/operations', acaOperations);
+app.route('/api/aca', acaRoutes);
 // Pagina per emettere i codici Rappresentante dal browser (routes/adminPage.ts).
 app.get('/admin', adminPage);
 
@@ -94,6 +107,7 @@ app.notFound((c) => c.json({ error: 'Endpoint non trovato' }, 404));
 // Error handler
 // ---------------------------------------------------------------------------
 app.onError((err, c) => {
+  if (err instanceof HTTPException) return c.json({ error: err.message }, err.status);
   // Corpo della richiesta che non e' JSON: e' un errore di chi chiama, non del server.
   if (err instanceof SyntaxError) {
     return c.json({ error: 'Richiesta non valida' }, 400);
@@ -113,6 +127,7 @@ export default {
 
   // Cron handler — Spaggiari sync ogni 15 minuti + Promemoria Telegram
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(Promise.allSettled([cleanupContent(env), forumResolutionNudges(env)]).then(() => undefined));
     console.log(`[Cron] Avvio sync Spaggiari: ${new Date().toISOString()}`);
     // I riassunti e i promemoria Telegram partono dopo la sync. Un errore Telegram non blocca
     // le altre attività del cron né la pulizia dei rate limit.

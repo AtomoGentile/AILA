@@ -21,6 +21,15 @@ enum class AssistantSourceKind { CIRCULAR, CALENDAR, BOARD, POLL, SEAT_MAP, CLAS
  */
 enum class AssistantMode { GENERAL, GITA_ONLY }
 
+enum class AssistantActionStatus { AWAITING_CONFIRMATION, RUNNING, COMPLETED, PARTIAL, CANCELLED, EXPIRED, ERROR }
+
+enum class AssistantAgentPhase { READING, PLANNING, EXECUTING, WRITING, TRANSCRIBING }
+
+@Serializable
+data class AssistantAttachedFile(val localId:String,val name:String,val service:String="DOCUMENTS",val generated:Boolean=false)
+
+data class AssistantAttachedSource(val file:AssistantAttachedFile,val text:String)
+
 @Serializable
 data class AssistantSource(
     val kind: AssistantSourceKind,
@@ -44,13 +53,28 @@ data class AssistantMessage(
     val sources: List<AssistantSource> = emptyList(),
     val isError: Boolean = false,
     /** Modello che ha prodotto la risposta, mostrato in piccolo sotto il messaggio. */
-    val modelLabel: String? = null
+    val modelLabel: String? = null,
+    val actionPlan: AssistantActionPlan? = null,
+    val actionStatus: AssistantActionStatus? = null,
+    val awaitingActionInput: Boolean = false,
+    val attachedFiles: List<AssistantAttachedFile> = emptyList()
 )
+
+/** Confirmation belongs to an assistant preview and to the account that requested it. */
+internal fun AssistantMessage.confirmableAction(userId: String): AssistantActionPlan? =
+    actionPlan?.takeIf {
+        author == AssistantAuthor.ASSISTANT && !isError &&
+            actionStatus == AssistantActionStatus.AWAITING_CONFIRMATION && it.requestedByUserId == userId
+    }
 
 /** Quello che [AilaAssistant] restituisce per una domanda. */
 data class AssistantReply(
     val text: String,
     val sources: List<AssistantSource> = emptyList(),
     val modelLabel: String? = null,
-    val isError: Boolean = false
+    val isError: Boolean = false,
+    val actionPlan: AssistantActionPlan? = null,
+    val awaitingActionInput: Boolean = false,
+    val createdCalendarEvents: List<circolareplus.domain.model.CalendarEvent> = emptyList(),
+    val calendarChanged: Boolean = false
 )

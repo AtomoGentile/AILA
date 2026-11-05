@@ -48,10 +48,22 @@ targets:
       path: iosApp/Info.plist
       properties:
         CFBundleDisplayName: AILA
+        NSMicrophoneUsageDescription: Registra un vocale da condividere o trascrivere con AILA solo quando lo scegli.
+        LSSupportsOpeningDocumentsInPlace: true
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Contenuti AILA
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - com.adobe.pdf
+              - public.plain-text
+              - public.image
+              - public.audio
+              - org.openxmlformats.wordprocessingml.document
         CFBundleName: AILA
-        CFBundleShortVersionString: "1.6.3"
+        CFBundleShortVersionString: "2.0.0"
         CFBundleVersion: "14"
-        AILAReleaseVersion: "1.6.3-dev"
+        AILAReleaseVersion: "2.0.0-dev"
         AILAUpdateChannel: "development"
         LSRequiresIPhoneOS: true
         UIApplicationSupportsIndirectInputEvents: true

@@ -50,7 +50,9 @@ async function register(username: string): Promise<string> {
   );
   const json = (await res.json()) as { token?: string };
   expect(res.status).toBe(201);
-  return json.token as string;
+  const token=json.token as string;
+  expect((await call("PUT","/api/aca/preferences",{aiEnabled:true,cloudConsent:true},token)).status).toBe(200);
+  return token;
 }
 
 describe('rotta /api/ai', () => {

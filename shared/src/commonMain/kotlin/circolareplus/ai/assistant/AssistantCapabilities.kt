@@ -8,8 +8,8 @@ import circolareplus.domain.model.UserRole
  *
  * Il modello le trattava come domande sui dati e rispondeva "Non risulta" (visto con Gemini
  * Nano): la regola "se il dato non c'e', dillo" e' giusta per le circolari e sbagliata qui.
- * L'assistente non esegue azioni, quindi la risposta utile e' sempre la stessa: dove si fa, e
- * chi puo' farlo.
+ * Le richieste operative sul calendario passano prima dal pianificatore ACA; qui restano
+ * le istruzioni per la compilazione manuale e le funzioni non ancora esposte come strumenti.
  *
  * Scatta solo se nella domanda c'e' un verbo di creazione e uno degli oggetti qui sotto: il
  * resto ("come faccio a votare il sondaggio?") resta al modello.
@@ -51,9 +51,8 @@ internal object AssistantCapabilities {
                     "chiediglielo o proponilo in Bacheca."
             }
             Target.EVENT ->
-                "Dalla chat non posso aggiungerlo io, ma puoi farlo dalla tab Calendario con " +
-                    "\"Aggiungi evento\": puoi anche scriverlo a parole (es. \"verifica di " +
-                    "matematica giovedi' alle 10\") e l'AI compila i campi."
+                "Puoi chiedermi di inserirlo indicando titolo e data: preparo un'anteprima e lo " +
+                    "aggiungo dopo la tua conferma. Puoi anche usare \"Aggiungi evento\" dalla tab Calendario."
             Target.PROPOSAL ->
                 "Dalla chat non posso pubblicarla io, ma puoi farlo tu: apri la tab Classe, poi " +
                     "Bacheca, e tocca il pulsante \"+\" in basso a destra (Nuova proposta)."

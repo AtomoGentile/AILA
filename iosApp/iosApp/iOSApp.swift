@@ -25,6 +25,7 @@ struct iOSApp: App {
         PushTokenBridgeHolder.shared.bridge = FirebasePushTokenBridge()
         SeatMapPdfShareBridgeHolder.shared.bridge = SeatMapPdfShareBridgeImpl()
         GitaFileBridgeHolder.shared.bridge = GitaFileBridgeImpl()
+        ContentFileBridgeHolder.shared.bridge = ContentFileBridgeImpl()
         // Analisi sul telefono che continua con l'app in background (vedi BackgroundWorkBridge.swift).
         BackgroundWorkBridgeHolder.shared.bridge = BackgroundWorkBridgeImpl()
         IosBackgroundWork.shared.start()
@@ -40,6 +41,7 @@ struct iOSApp: App {
         WindowGroup {
             ComposeView()
                 .ignoresSafeArea(.all)
+                .onOpenURL { ContentFileBridgeImpl.receiveIncomingURL($0) }
         }
         // Ogni volta che l'app va in background si (ri)programma il prossimo risveglio.
         .onChange(of: scenePhase) { _, phase in

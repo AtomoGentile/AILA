@@ -39,6 +39,14 @@ export interface Env {
   TELEGRAM_WEBHOOK_SECRET?: string;
   // Origini ammesse dal CORS, separate da virgola (in [vars] di wrangler.toml).
   WEB_ORIGINS?: string;
+  AI_ADVANCED_PROVIDER?: 'openai' | 'gemini';
+  AI_ADVANCED_MODEL?: string;
+  AI_ADVANCED_API_KEY?: string;
+  AI_DAILY_TOKEN_BUDGET?: string;
+  AI_USER_DAILY_TOKEN_BUDGET?: string;
+  AI_FEATURE_DAILY_REQUESTS?: string;
+  HOME_VIDEO_URL?: string;
+  HOME_VIDEO_POSTER_URL?: string;
 }
 
 /**
@@ -53,6 +61,9 @@ export interface AiBinding {
 /** Risposta "messages" di un modello di testo di Workers AI: il testo e' in `response`. */
 export interface AiRunResult {
   response?: string;
+  text?: string;
+  description?: string;
+  choices?: Array<{ message?: { content?: string | null } }>;
 }
 
 export interface JWTPayload {

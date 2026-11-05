@@ -24,7 +24,7 @@ export type ProposalOutcome = 'ACCETTATA' | 'RIFIUTATA';
 export type RelevanceBadge = 'RELEVANT' | 'POTENTIAL' | 'NOT_RELEVANT';
 
 // Categorie delle preferenze notifiche (Impostazioni dell'app e della PWA).
-export type NotificationKind = 'circulars' | 'calendar' | 'board' | 'seatmap' | 'polls';
+export type NotificationKind = 'circulars' | 'calendar' | 'board' | 'seatmap' | 'polls' | 'forum';
 
 // --- Auth / utenti ----------------------------------------------------------
 

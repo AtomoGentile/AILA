@@ -46,7 +46,8 @@ fun CircularsScreen(
     /** Numeri delle circolari la cui analisi e' in corso adesso (anche se non si e' nel dettaglio). */
     analyzingNumbers: List<Int> = emptyList(),
     /** Circolare aperta accanto alla lista (tablet e iPad): la sua card e' evidenziata. */
-    selectedNumber: Int? = null
+    selectedNumber: Int? = null,
+    aiEnabled: Boolean = circolareplus.ai.AcaPolicyState.preferences.let { it.aiEnabled && "CIRCULARS" in it.services }
 ) {
     var selectedFilter by remember { mutableStateOf<CircularRelevanceBadge?>(null) }
     var searchQuery by remember { mutableStateOf("") }
@@ -80,7 +81,7 @@ fun CircularsScreen(
         // Filtri per Badge: pill scorrevole condiviso (AilaSlidingChipRow) invece del cross-fade di
         // colore su ogni singola chip.
         val relevanceFilterOptions = remember { listOf<CircularRelevanceBadge?>(null, CircularRelevanceBadge.RELEVANT, CircularRelevanceBadge.POTENTIAL, CircularRelevanceBadge.NOT_RELEVANT) }
-        circolareplus.design.AilaSlidingChipRow(
+        if (aiEnabled) circolareplus.design.AilaSlidingChipRow(
             selectedIndex = relevanceFilterOptions.indexOf(selectedFilter),
             itemCount = relevanceFilterOptions.size,
             modifier = Modifier.fillMaxWidth()
@@ -126,7 +127,7 @@ fun CircularsScreen(
             val matchesSearch = searchQuery.isBlank() ||
                 circ.title.contains(searchQuery, ignoreCase = true) ||
                 circ.number.toString().contains(searchQuery.trim())
-            circ.summaryReady && classifications[circ.number]?.let { !it.isFallback && it.personalSummary.isNotBlank() } == true && matchesFilter && matchesSearch
+            (!aiEnabled || circ.number !in analyzingNumbers || circ.summaryReady && classifications[circ.number]?.let { !it.isFallback && it.personalSummary.isNotBlank() } == true) && (!aiEnabled || matchesFilter) && matchesSearch
         }
 
         // Cambiando filtro o ricerca si torna in cima: la lista tiene la posizione per chiave,
@@ -141,10 +142,11 @@ fun CircularsScreen(
             contentPadding = PaddingValues(bottom = AppTheme.Space24 + circolareplus.design.LocalBottomBarPadding.current),
             modifier = Modifier.fillMaxSize()
         ) {
-            val pendingCount = circulars.count { circ -> !circ.summaryReady || classifications[circ.number]?.let { !it.isFallback && it.personalSummary.isNotBlank() } != true }
-            if (pendingCount > 0) item {
-                Text(if (pendingCount == 1) "1 circolare in analisi" else "$pendingCount circolari in analisi", color = AppTheme.TextMuted,
-                    modifier = Modifier.padding(vertical = AppTheme.Space8))
+            val pending = (if (aiEnabled) circulars else emptyList()).filter { circ -> circ.number in analyzingNumbers }
+                .sortedWith(compareByDescending<Circular> { it.number in analyzingNumbers }.thenByDescending { it.number })
+            val pendingCount = pending.size
+            if (pendingCount > 0) item(key = "analysis-disclosure") {
+                circolareplus.design.CircularAnalysisDisclosure(pending)
             }
             if (filteredCirculars.isEmpty() && pendingCount == 0) {
                 item {
@@ -165,9 +167,10 @@ fun CircularsScreen(
             // La chiave e' il numero: quando arriva una circolare nuova le altre restano dove
             // sono invece di essere ridisegnate per posizione (e di perdere lo stato).
             itemsIndexed(filteredCirculars, key = { _, circ -> circ.number }) { index, circ ->
-                val classification = classifications[circ.number]
+                val classification = if (aiEnabled) classifications[circ.number] else null
                 CircularListItem(
                     circular = circ,
+                    aiEnabled = aiEnabled,
                     classification = classification,
                     isAnalyzing = circ.number in analyzingNumbers,
                     onClick = { onSelectCircular(circ) },
@@ -190,7 +193,8 @@ fun CircularListItem(
     classification: CircularAiClassification?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    isAnalyzing: Boolean = false
+    isAnalyzing: Boolean = false,
+    aiEnabled: Boolean = true
 ) {
     // Pallino con la tinta, testo con l'inchiostro leggibile (vedi AppTheme.Badge*Ink).
     val (badgeColor, badgeInk, badgeText) = when (classification?.badge) {
@@ -211,7 +215,7 @@ fun CircularListItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                if (aiEnabled) Row(verticalAlignment = Alignment.CenterVertically) {
                     if (classification == null && isAnalyzing) {
                         SmoothAnalysisSpinner(
                             color = badgeColor,

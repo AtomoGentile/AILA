@@ -272,6 +272,10 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const request = event.request;
+  if (request.method === 'POST' && new URL(request.url).pathname === new URL('share-content', scopeUrl).pathname) {
+    event.respondWith(receiveSharedContent(request));
+    return;
+  }
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   // Il Worker e Google AI Studio sono di un'altra origine: si lasciano alla rete (e all'app).
@@ -510,3 +514,33 @@ async function checkNewCirculars() {
 self.addEventListener('periodicsync', (event) => {
   if (event.tag === SYNC_TAG) event.waitUntil(checkNewCirculars().catch(() => {}));
 });
+
+// Device-local inbox: sharing never uploads content or invokes a model.
+async function receiveSharedContent(request) {
+  try {
+    const length = Number(request.headers.get('content-length') || 0);
+    if (length > 21 * 1024 * 1024) return new Response('File troppo grande. Massimo 20 MB.', {status:413});
+    const form = await request.formData();
+    const files = form.getAll('files').filter(f => f instanceof File && f.size);
+    if (files.length > 1) return new Response('Condividi un file alla volta.', {status:400});
+    let file = files[0];
+    if (!file) {
+      const text = String(form.get('text') || '').slice(0, 100000);
+      if (!text) return new Response('Scegli un documento o un testo.', {status:400});
+      file = new File([text], 'Testo condiviso.txt', {type:'text/plain'});
+    }
+    if (file.size > 20 * 1024 * 1024) return new Response('File troppo grande. Massimo 20 MB.', {status:413});
+    const bytes = await file.arrayBuffer();
+    const db = await new Promise((resolve,reject) => {
+      const req=indexedDB.open('aila-content-ingress',1);
+      req.onupgradeneeded=()=>req.result.createObjectStore('files');
+      req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
+    });
+    try { await new Promise((resolve,reject) => {
+      const tx=db.transaction('files','readwrite');
+      tx.objectStore('files').put({name:file.name,mime:file.type,bytes},'pending');
+      tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);
+    }); } finally { db.close(); }
+    return Response.redirect(new URL('./?aila_import=1',scopeUrl).href,303);
+  } catch (_) { return new Response('Importazione non riuscita. Apri AILA e usa Scegli file.',{status:400}); }
+}

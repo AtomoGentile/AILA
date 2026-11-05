@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- Generato da XcodeGen a partire da iosApp/project.yml (targets.iosApp.info.properties):
-     le modifiche vanno fatte li', questo file viene riscritto a ogni `xcodegen generate`. -->
 <plist version="1.0">
 <dict>
 	<key>AILAReleaseVersion</key>
@@ -58,6 +56,29 @@
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Registra un vocale solo quando lo richiedi. Puoi ascoltarlo e scegliere se condividerlo o trascriverlo.</string>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Documenti AILA</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.adobe.pdf</string>
+				<string>public.plain-text</string>
+				<string>public.image</string>
+				<string>public.audio</string>
+				<string>org.openxmlformats.wordprocessingml.document</string>
+			</array>
+		</dict>
 	</array>
 </dict>
 </plist>

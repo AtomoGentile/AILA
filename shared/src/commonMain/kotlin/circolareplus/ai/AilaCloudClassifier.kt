@@ -54,7 +54,10 @@ internal data class AilaChatRequest(
     val json: Boolean = false,
     /** Il ragionamento di Gemma sulla domanda, come lo accetta l'assistente sui modelli locali. */
     val thinking: Boolean = false,
-    val maxTokens: Int = DEFAULT_CHAT_MAX_TOKENS
+    val maxTokens: Int = DEFAULT_CHAT_MAX_TOKENS,
+    val feature: String = "CHAT",
+    val policyVersion: Int? = null,
+    val attachmentServices: List<String> = emptyList()
 )
 
 /** Esito di una chiamata verso il Worker: fine quota e' un flag esplicito, non da indovinare. */
@@ -144,7 +147,8 @@ class AilaCloudClassifier(
                     AilaChatMessage("user", EventGenerationPrompt.buildUserPrompt(userPrompt))
                 ),
                 json = true,
-                maxTokens = MAX_EVENT_TOKENS
+                maxTokens = MAX_EVENT_TOKENS,
+                feature = "AGENT"
             )
             val text = (chatOrTimeout(request) as? AilaChatResult.Success)?.text
             if (text != null) {
@@ -159,7 +163,7 @@ class AilaCloudClassifier(
         } catch (e: Exception) {
             // Rete assente o endpoint irraggiungibile: sotto c'e' comunque la riserva.
         }
-        return personal.parseEventPrompt(userPrompt)
+        return EventDraft("", "", "ALTRO", null, null, null)
     }
 
     /**
@@ -177,7 +181,9 @@ class AilaCloudClassifier(
                     AilaChatMessage("system", built.systemPrompt),
                     AilaChatMessage("user", built.userPrompt)
                 ),
-                thinking = enableThinking
+                thinking = enableThinking,
+                feature = prompt.feature.name,
+                attachmentServices = prompt.attachmentServices.toList()
             )
         )
         val firstReason = when (first) {
@@ -185,6 +191,7 @@ class AilaCloudClassifier(
             is AilaChatResult.Failure -> first.reason
         }
 
+        if (prompt.feature != AiFeature.CHAT) return AiTextResult.Failure(firstReason)
         val fallback = personal.generateAnswer(prompt)
         if (fallback is AiTextResult.Success) return fallback
         val fallbackReason = (fallback as AiTextResult.Failure).reason
@@ -275,7 +282,7 @@ class AilaCloudClassifier(
             }
             header(HttpHeaders.Authorization, "Bearer ${authToken()}")
             contentType(ContentType.Application.Json)
-            setBody(request)
+            setBody(request.copy(policyVersion = 1))
         }
         val body = try { response.bodyAsText() } catch (e: Exception) { "" }
         if (response.status.isSuccess()) {

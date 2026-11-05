@@ -85,13 +85,8 @@ class ChainedAiClassifier(
         return if (second.isFallback) first else second
     }
 
-    override suspend fun parseEventPrompt(userPrompt: String): EventDraft {
-        val first = primary.parseEventPrompt(userPrompt)
-        if (first.title.isNotBlank()) return first
-
-        val second = secondary.parseEventPrompt(userPrompt)
-        return if (second.title.isNotBlank()) second else first
-    }
+    // Calendar content never switches providers implicitly after a failed attempt.
+    override suspend fun parseEventPrompt(userPrompt: String): EventDraft = primary.parseEventPrompt(userPrompt)
 
     /**
      * Implementazione di [AiClassifier.generateAnswer]: si prova il primario e, se fallisce, il
@@ -121,6 +116,7 @@ class ChainedAiClassifier(
         // Lo stesso builder, non lo stesso prompt: ognuno dei due se lo fa costruire della
         // misura che regge. E' quello che rende la riserva una riserva vera anche quando il
         // primario e' il cloud con il suo contesto largo.
+        if (prompt.feature != AiFeature.CHAT) return first
         val second = attempt { secondary.generateAnswer(prompt) }
         val firstReason = (first as AiTextResult.Failure).reason
         if (second is AiTextResult.Success) {

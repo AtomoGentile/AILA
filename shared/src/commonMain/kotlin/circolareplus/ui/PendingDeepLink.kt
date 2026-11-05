@@ -21,5 +21,6 @@ import androidx.compose.runtime.setValue
  * subito, non solo alla prima composizione.
  */
 object PendingDeepLink {
+    var forumThreadId: String? = null
     var category by mutableStateOf<String?>(null)
 }

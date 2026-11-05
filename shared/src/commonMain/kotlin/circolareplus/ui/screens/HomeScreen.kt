@@ -73,12 +73,19 @@ fun HomeScreen(
     onNavigateToSearch: () -> Unit = {},
     // Primo caricamento in corso: le card vuote dicono "carico" invece di "non c'e' niente".
     isCircularsLoading: Boolean = false,
+    experience: circolareplus.data.remote.dto.AcaExperienceDto = circolareplus.data.remote.dto.AcaExperienceDto(),
+    onOpenAca: () -> Unit = {},
+    onOpenForum: () -> Unit = {},
+    nudges: List<circolareplus.data.remote.dto.AcaNudgeDto> = emptyList(),
+    onDismissNudge: (String) -> Unit = {},
+    onPlanStudy: (String) -> Unit = {},
+    aiEnabled: Boolean = true,
     isEventsLoading: Boolean = false
 ) {
     val scrollState = rememberScrollState()
 
     // Circolare più recente (numero più alto): mostrata in evidenza, se ce n'è almeno una.
-    val latestCircular = circulars.filter { it.summaryReady }.maxByOrNull { it.number }
+    val latestCircular = circulars.filter { !aiEnabled || it.summaryReady }.maxByOrNull { it.number } ?: circulars.maxByOrNull { it.number }
     // Prime 3 scadenze **future**. Prima si prendevano le prime tre della lista e basta, poi si
     // confrontavano le date come stringhe: un "2026-9-5" scritto senza zeri (arriva dagli eventi
     // generati dall'AI) risultava "maggiore" di "2026-09-20" e una verifica di settembre restava
@@ -88,8 +95,8 @@ fun HomeScreen(
     // lasciare meta' schermo vuoto sotto le tre righe del telefono.
     val wide = circolareplus.design.LocalWideLayout.current
     val nextEvents = remember(calendarEvents, wide) { upcomingEvents(calendarEvents, limit = if (wide) 6 else 3) }
-    val recentCirculars = remember(circulars, wide) {
-        if (wide) circulars.filter { it.summaryReady }.sortedByDescending { it.number }.take(5) else emptyList()
+    val recentCirculars = remember(circulars, wide, aiEnabled) {
+        if (wide) circulars.filter { !aiEnabled || it.summaryReady }.sortedByDescending { it.number }.take(5) else emptyList()
     }
 
     // Circolare più recente in evidenza. Tipo esplicito sulla callback: un lambda scritto dentro
@@ -117,12 +124,21 @@ fun HomeScreen(
             onNavigateToSeatMap = onNavigateToSeatMap
         )
 
-        val pendingCount = circulars.count { !it.summaryReady }
-        if (pendingCount > 0) Text(
-            if (pendingCount == 1) "1 circolare in analisi" else "$pendingCount circolari in analisi",
-            color = AppTheme.TextMuted,
-            modifier = Modifier.padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12)
-        )
+        circolareplus.design.NewAilaHomeHero(experience, onOpenAca, onOpenForum,
+            Modifier.padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space16))
+        nudges.forEach { nudge ->
+            AilaCard(modifier = Modifier.padding(horizontal = AppTheme.Space16, vertical = 6.dp)) {
+                Column(Modifier.padding(16.dp)) {
+                    Text(nudge.title, style = MaterialTheme.typography.titleMedium, color = AppTheme.TextDark)
+                    Text(nudge.message, color = AppTheme.TextMuted)
+                    Row {
+                        if (nudge.canPlanStudy) androidx.compose.material3.TextButton(onClick = { onPlanStudy(nudge.suggestion) }) { Text("Organizza lo studio") }
+                        androidx.compose.material3.TextButton(onClick = { onDismissNudge(nudge.id) }) { Text("Non ora") }
+                    }
+                }
+            }
+        }
+
         val latestSection: @Composable () -> Unit = {
             LatestCircularCard(
                 latestCircular = latestCircular,

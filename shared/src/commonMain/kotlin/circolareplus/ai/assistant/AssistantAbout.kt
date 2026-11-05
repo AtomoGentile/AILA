@@ -72,6 +72,10 @@ internal object AssistantAbout {
         • "Riassumimi le ultime circolari" o "Cosa dice la circolare 12?"
         • "Quali proposte della bacheca sono aperte?"
         • "Dove sono seduto in aula?"
-        Per lo studio e le domande generali rispondo con le mie conoscenze. Non posso creare eventi o sondaggi dalla chat, ma ti dico dove si fanno nell'app.
+        • "Metti questi impegni a calendario": con ACA attiva preparo gli eventi e li inserisco dopo la tua conferma.
+        • "Sposta la verifica a venerdì" o "Elimina questo evento": mostro prima il riepilogo esatto.
+        • Da Educazione tra pere puoi chiedere riassunti e richiamare @perabot.
+        • Puoi aprire un documento o un vocale in ACA per scegliere cosa analizzare.
+        Per lo studio e le domande generali rispondo con le mie conoscenze. Per creare sondaggi ti indico dove farlo nell'app.
     """.trimIndent()
 }

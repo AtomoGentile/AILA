@@ -1,5 +1,7 @@
 package circolareplus.ai
 
+enum class AiFeature { CHAT, DOCUMENT, SUMMARIZE, STUDY_PLAN, AGENT, TRANSCRIBE, IMAGE, PERABOT }
+
 /** Le due parti di un prompt: le istruzioni fisse e la richiesta vera e propria. */
 data class AiPrompt(val systemPrompt: String, val userPrompt: String) {
     val totalChars: Int get() = systemPrompt.length + userPrompt.length
@@ -21,9 +23,26 @@ data class AiPrompt(val systemPrompt: String, val userPrompt: String) {
  * nessuno dei due debba sapere dell'altro.
  */
 fun interface AiPromptBuilder {
+    val feature: AiFeature get() = AiFeature.CHAT
+    val attachmentServices: Set<String> get() = emptySet()
     /**
      * [maxChars] e' lo spazio **totale** (istruzioni + richiesta) che questo motore puo'
      * accettare. Chi implementa deve stare sotto quel tetto, non limitarsi a puntarci.
      */
     fun build(maxChars: Int): AiPrompt
+}
+
+/** Metadata follows the same request through every provider and fallback. */
+fun AiPromptBuilder.withAttachmentServices(services: Set<String>): AiPromptBuilder {
+    val source = this
+    return object : AiPromptBuilder {
+        override val feature = source.feature
+        override val attachmentServices = source.attachmentServices + services
+        override fun build(maxChars: Int) = source.build(maxChars)
+    }
+}
+
+fun aiPromptBuilder(feature: AiFeature, factory: (Int) -> AiPrompt): AiPromptBuilder = object : AiPromptBuilder {
+    override val feature = feature
+    override fun build(maxChars: Int): AiPrompt = factory.invoke(maxChars)
 }

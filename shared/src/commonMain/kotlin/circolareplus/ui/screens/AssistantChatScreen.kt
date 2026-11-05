@@ -51,6 +51,8 @@ import circolareplus.design.ailaPulse
 import circolareplus.design.ailaTopicSurface
 import androidx.compose.ui.unit.dp
 import circolareplus.ai.assistant.AssistantAuthor
+import circolareplus.ai.assistant.AssistantActionStatus
+import circolareplus.ai.assistant.AssistantAgentPhase
 import circolareplus.ai.assistant.AssistantConversation
 import circolareplus.ai.assistant.AssistantMessage
 import circolareplus.ai.assistant.AssistantSource
@@ -92,6 +94,7 @@ import kotlinx.coroutines.delay
  * se si torna indietro un attimo.
  */
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun AssistantChatScreen(
     messages: List<AssistantMessage>,
     isThinking: Boolean,
@@ -106,10 +109,21 @@ fun AssistantChatScreen(
     thinkingEnabled: Boolean = false,
     onThinkingChange: (Boolean) -> Unit = {},
     /** `false` quando il modello locale scelto non ha un ragionamento (Phi): niente interruttore. */
-    thinkingAvailable: Boolean = true
+    thinkingAvailable: Boolean = true,
+    onConfirmAction: (String) -> Unit = {},
+    onCancelAction: (String) -> Unit = {},
+    agentPhase: AssistantAgentPhase? = null,
+    onRecoverAction: (String) -> Unit = {},
+    onAttachContent: ((circolareplus.platform.IncomingContent) -> Unit)? = null,
+    attachedFiles: List<circolareplus.ai.assistant.AssistantAttachedFile> = emptyList(),
+    onRemoveAttachedFile: (String) -> Unit = {},
+    onOpenAttachedFile: (circolareplus.ai.assistant.AssistantAttachedFile) -> Unit = {}
 ) {
     var draft by remember { mutableStateOf("") }
     var isHistoryOpen by remember { mutableStateOf(false) }
+    var attachmentsMenu by remember { mutableStateOf(false) }
+    var attachmentError by remember { mutableStateOf<String?>(null) }
+    var recording by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
     // Ogni messaggio nuovo (e l'indicatore "sto pensando") porta la lista in fondo: in una chat
@@ -214,6 +228,7 @@ fun AssistantChatScreen(
                         fadeOutSpec = ailaFadeSpec(AilaDuration.Quick)
                     )
                 ) {
+                Column {
                 when {
                     message.author == AssistantAuthor.USER -> UserBubble(
                         text = message.text,
@@ -230,11 +245,23 @@ fun AssistantChatScreen(
                         onArrived = { if (arrivalHolder[0] == message.id) arrivalHolder[0] = null }
                     )
                 }
+                message.attachedFiles.forEach { file ->
+                    androidx.compose.material3.TextButton(onClick={onOpenAttachedFile(file)}) {
+                        Text("↗ ${file.name}${if(file.generated) " · testo AI" else ""}")
+                    }
+                }
+                if (message.actionPlan != null) AssistantActionPreview(
+                    message = message, isBusy = isThinking,
+                    onConfirm = { onConfirmAction(message.id) },
+                    onCancel = { onCancelAction(message.id) },
+                    onRecover = { onRecoverAction(message.id) }
+                )
+                }
                 }
             }
 
             if (isThinking) {
-                item { ThinkingBubble() }
+                item { ThinkingBubble(agentPhase) }
             }
         }
         }
@@ -294,7 +321,19 @@ fun AssistantChatScreen(
                 draft = ""
                 onSend(question)
             }
+            if(attachedFiles.isNotEmpty())Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())){
+                attachedFiles.forEach{file->
+                    androidx.compose.material3.TextButton(onClick={onOpenAttachedFile(file)}){Text(file.name)}
+                    androidx.compose.material3.TextButton(onClick={onRemoveAttachedFile(file.localId)},enabled=!isThinking){Text("Rimuovi ${file.name}")}
+                }
+            }
+            attachmentError?.let{Text(it,color=AppTheme.TintRedInk,style=MaterialTheme.typography.bodySmall)}
+            if(recording)Text("Registrazione in corso: apri il menu allegati per terminarla o annullarla.",color=AppTheme.PrimaryBlue,style=MaterialTheme.typography.bodySmall)
             Row(verticalAlignment = Alignment.Bottom) {
+                if(onAttachContent!=null){
+                    AilaIconButton(contentDescription="Menu allegati",onClick={attachmentsMenu=true}){tint->AppIcons.Plus(Modifier.size(24.dp),tint)}
+                    Spacer(Modifier.width(4.dp))
+                }
                 // Capsula con l'anello dell'Assistant al focus: stessa della ricerca.
                 circolareplus.design.AilaPillTextField(
                     value = draft,
@@ -321,6 +360,21 @@ fun AssistantChatScreen(
         }
     }
 
+    if(onAttachContent!=null){
+        val picker=circolareplus.platform.rememberContentPicker({attachmentError=it}){file->attachmentsMenu=false;onAttachContent(file)}
+        val recorder=circolareplus.platform.rememberVoiceRecorder({recording=it},{attachmentError=it}){file->attachmentsMenu=false;onAttachContent(file)}
+        if(attachmentsMenu)circolareplus.design.AilaBottomSheet(onDismissRequest={attachmentsMenu=false}){
+            Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+                Text("Allegati della chat",style=MaterialTheme.typography.titleLarge,color=AppTheme.TextDark)
+                Text("Scegli un file o registra un vocale. Nell’anteprima puoi controllare il contenuto, selezionare un passaggio e allegarlo alla chat.",color=AppTheme.TextMuted)
+                androidx.compose.material3.OutlinedButton(onClick={attachmentsMenu=false;picker()},enabled=!isThinking&&!recording,modifier=Modifier.fillMaxWidth()){Text("Allega un file o un vocale")}
+                androidx.compose.material3.OutlinedButton(onClick={if(recording)recorder.stop()else recorder.start()},enabled=!isThinking,modifier=Modifier.fillMaxWidth()){
+                    Text(if(recording)"Termina e allega il vocale"else"Registra un vocale")
+                }
+                if(recording)androidx.compose.material3.TextButton(onClick=recorder.cancel){Text("Annulla registrazione")}
+            }
+        }
+    }
     if (isHistoryOpen) {
         AssistantHistorySheet(
             conversations = conversations,
@@ -994,6 +1048,70 @@ private fun AssistantBubble(
     }
 }
 
+/** Reviewable, persisted plan. Only this explicit confirmation can start a calendar write. */
+@Composable
+private fun AssistantActionPreview(
+    message: AssistantMessage,
+    isBusy: Boolean,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+    onRecover: () -> Unit
+) {
+    val plan = message.actionPlan ?: return
+    Column(
+        Modifier.fillMaxWidth().padding(top = AppTheme.Space12)
+            .chatSurface(RoundedCornerShape(AppTheme.SmallElementRadius))
+            .padding(AppTheme.Space16),
+        verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)
+    ) {
+        Text("Azioni sul calendario · ${plan.actions.size}", style = MaterialTheme.typography.titleMedium, color = AppTheme.TextDark)
+        plan.actions.forEach { action ->
+            Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space4)) {
+                Text("${when(action.tool){"calendar.delete"->"Elimina";"calendar.update"->"Modifica";else->"Aggiungi"}}: ${action.title}", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = AppTheme.TextDark)
+                if(action.tool=="calendar.update"&&action.previousTitle!=null)Text(
+                    "Prima: ${action.previousTitle} · ${action.previousDate.orEmpty()} ${action.previousTime.orEmpty()}",
+                    style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
+                Text(
+                    "${circolareplus.util.formatItalianDateWithWeekday(action.date)} ${action.date.take(4)} · ${action.time ?: "Orario non specificato"}",
+                    style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextDark
+                )
+                Text(
+                    "${action.audienceLabel ?: if (action.visibility == "CLASS") "Tutta la classe" else "Solo tu"} · ${action.category.name.lowercase().replace('_', ' ')}" +
+                        action.circularNumber?.let { " · Circolare n. $it" }.orEmpty(),
+                    style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted
+                )
+                action.notes?.takeIf(String::isNotBlank)?.let {
+                    Text(it, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
+                }
+            }
+        }
+        when (message.actionStatus) {
+            AssistantActionStatus.AWAITING_CONFIRMATION -> {
+                Text(if(plan.operationId==null)"Anteprima precedente: invia una nuova richiesta per confermare."else"Nessuna modifica è stata ancora effettuata.", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+                androidx.compose.material3.Button(onClick = onConfirm, enabled = !isBusy&&plan.operationId!=null, modifier = Modifier.fillMaxWidth()) {
+                    Text("Conferma le azioni")
+                }
+                androidx.compose.material3.TextButton(onClick = onCancel, enabled = !isBusy, modifier = Modifier.fillMaxWidth()) {
+                    Text("Annulla")
+                }
+            }
+            else -> Text(
+                when (message.actionStatus) {
+                    AssistantActionStatus.RUNNING -> if (isBusy) "Inserimento in corso…" else "Operazione interrotta: verifica il calendario."
+                    AssistantActionStatus.COMPLETED -> "Elaborazione terminata: leggi l'esito qui sotto."
+                    AssistantActionStatus.PARTIAL -> "Operazione completata in parte: leggi gli esiti qui sotto."
+                    AssistantActionStatus.EXPIRED -> "Anteprima scaduta: prepara una nuova richiesta."
+                    AssistantActionStatus.ERROR -> "Operazione interrotta: verifica il calendario."
+                    else -> "Anteprima annullata. Nessuna nuova azione da questa anteprima."
+                },
+                style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted
+            )
+        }
+        if(message.actionStatus in setOf(AssistantActionStatus.ERROR,AssistantActionStatus.RUNNING)&&!isBusy&&plan.operationId!=null)
+            androidx.compose.material3.OutlinedButton(onClick=onRecover,modifier=Modifier.fillMaxWidth()){Text("Verifica l’esito sul server")}
+    }
+}
+
 /** Sotto la risposta: da dove viene (le fonti) e quale modello l'ha scritta. */
 @Composable
 private fun AnswerExtras(
@@ -1075,12 +1193,20 @@ private fun AssistantErrorBubble(text: String) {
  * posizione: per questo qui la riga e' costruita come quella dell'intestazione della risposta.
  */
 @Composable
-private fun ThinkingBubble() {
+private fun ThinkingBubble(phase: AssistantAgentPhase? = null) {
     val glass = AppTheme.isGlass
+    val phaseLabel = when (phase) {
+        AssistantAgentPhase.READING -> "Leggo il contesto degli eventi…"
+        AssistantAgentPhase.PLANNING -> "Preparo l'anteprima…"
+        AssistantAgentPhase.EXECUTING -> "Salvo e verifico nel calendario…"
+        AssistantAgentPhase.WRITING -> "Elaboro la risposta…"
+        AssistantAgentPhase.TRANSCRIBING -> "Trascrivo l’audio…"
+        null -> "Sto cercando in AILA…"
+    }
     Row(
         modifier = Modifier
             .padding(top = if (glass) 4.dp else AppTheme.Space4)
-            .semantics { contentDescription = "AILA Assistant sta cercando" },
+            .semantics { contentDescription = phaseLabel },
         verticalAlignment = Alignment.CenterVertically
     ) {
         AilaAssistantWave(active = true, size = if (glass) 26.dp else 22.dp)
@@ -1089,7 +1215,7 @@ private fun ThinkingBubble() {
         // calendario…) che il modello fa tutti insieme. Solo respira, come l'onda. Glass: in una
         // capsula di vetro, come un avviso di iOS; Material: solo testo accanto all'onda.
         Text(
-            text = "Sto cercando in AILA…",
+            text = phaseLabel,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Normal,
             color = AppTheme.TextMuted,

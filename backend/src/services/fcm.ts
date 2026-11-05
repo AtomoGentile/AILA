@@ -59,6 +59,9 @@ export function notificationKind(data: Record<string, string>): string {
       return 'polls';
     case 'new_circular':
       return 'circulars';
+    case 'forum_reply':
+    case 'forum_nudge':
+      return 'forum';
     case 'new_proposal':
       return 'board';
   }

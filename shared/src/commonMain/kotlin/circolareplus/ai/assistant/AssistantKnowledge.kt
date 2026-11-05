@@ -46,7 +46,8 @@ data class AssistantKnowledge(
     /** Documenti della Gita con il testo estratto, versione corrente (vedi GitaRepository). */
     val gita: List<circolareplus.domain.model.GitaSourceDoc> = emptyList(),
     /** Riscontri nel testo integrale delle circolari sul telefono: vedi [CircularTextStore]. */
-    val textHits: AssistantTextHits = AssistantTextHits()
+    val textHits: AssistantTextHits = AssistantTextHits(),
+    val attachedSources: List<AssistantAttachedSource> = emptyList()
 ) {
     val role: UserRole get() = user?.role ?: UserRole.STUDENT
 
