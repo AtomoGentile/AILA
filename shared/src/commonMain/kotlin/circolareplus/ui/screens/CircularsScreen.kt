@@ -127,7 +127,7 @@ fun CircularsScreen(
             val matchesSearch = searchQuery.isBlank() ||
                 circ.title.contains(searchQuery, ignoreCase = true) ||
                 circ.number.toString().contains(searchQuery.trim())
-            (!aiEnabled || circ.number !in analyzingNumbers || circ.summaryReady && classifications[circ.number]?.let { !it.isFallback && it.personalSummary.isNotBlank() } == true) && (!aiEnabled || matchesFilter) && matchesSearch
+            (!aiEnabled || matchesFilter) && matchesSearch
         }
 
         // Cambiando filtro o ricerca si torna in cima: la lista tiene la posizione per chiave,

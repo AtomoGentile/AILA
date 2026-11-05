@@ -15,30 +15,34 @@ import circolareplus.data.remote.dto.AcaCapabilitiesDto
 import circolareplus.design.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** All AI and ACA switches are explicit, per-account, and disabled by default. */
 @Composable fun AiPreferencesControls(){
- val scope=rememberCoroutineScope();val p=AcaPolicyState.preferences
+ val scope=rememberCoroutineScope();val live=AcaPolicyState.preferences
+ var draft by remember{mutableStateOf<AcaPreferencesDto?>(null)};val p=draft?:live
+ val saveLock=remember{Mutex()}
  var saving by remember{mutableStateOf(false)};var error by remember{mutableStateOf<String?>(null)}
  var capabilities by remember{mutableStateOf(AcaCapabilitiesDto())};var privacy by remember{mutableStateOf(false)}
  LaunchedEffect(Unit){try{capabilities=AppContainer.acaRepository.preferences().capabilities}
   catch(e:CancellationException){throw e}catch(e:Exception){error=e.message}}
- fun save(next:AcaPreferencesDto){if(saving)return;saving=true;error=null;scope.launch{try{capabilities=AppContainer.acaRepository.savePreferences(next).capabilities}
-  catch(e:CancellationException){throw e}catch(e:Exception){error="La scelta resta salvata sul dispositivo e verrà sincronizzata appena possibile. ${e.message.orEmpty()}"}finally{saving=false}}}
+ fun save(next:AcaPreferencesDto){draft=next;AppContainer.settings.cachedAiPreferences=next;saving=true;error=null;scope.launch{saveLock.withLock{try{val result=AppContainer.acaRepository.savePreferences(next);if(result.capabilities.cloud)capabilities=result.capabilities;if(draft==next){draft=null;error=null}}
+  catch(e:CancellationException){throw e}catch(e:Exception){error="La scelta resta salvata sul dispositivo e verrà sincronizzata appena possibile. ${e.message.orEmpty()}"}finally{saving=false}}}}
  Column(verticalArrangement=Arrangement.spacedBy(16.dp)){
   AilaSectionTitle("AI e servizi")
   AilaCard{Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){
-   AiControlRow("Attiva l’AI","Se disattivata, puoi continuare a usare circolari, calendario e forum senza avviare elaborazioni AI.",p.aiEnabled,!saving){save(p.copy(aiEnabled=it))}
-   AiControlRow("Attiva ACA","Opzionale. Aggiunge strumenti contestuali e azioni sul calendario da confermare. Scegli i servizi qui sotto.",p.acaEnabled,!saving&&p.aiEnabled){save(p.copy(acaEnabled=it))}
-   AiControlRow("Apri ACA tenendo premuto","Tieni fermo il dito per 2 secondi in un’area libera di qualsiasi schermata. Scorrimento, controlli e selezione del testo hanno precedenza.",p.holdToOpen,!saving&&p.aiEnabled&&p.acaEnabled){save(p.copy(holdToOpen=it))}
+   AiControlRow("Attiva l’AI","Se disattivata, puoi continuare a usare circolari, calendario e forum senza avviare elaborazioni AI.",p.aiEnabled,true){save(p.copy(aiEnabled=it))}
+   AiControlRow("Attiva ACA","Opzionale. Aggiunge strumenti contestuali e azioni sul calendario da confermare. Scegli i servizi qui sotto.",p.acaEnabled,p.aiEnabled){save(p.copy(acaEnabled=it))}
+   AiControlRow("Apri ACA tenendo premuto","Tieni premuto brevemente in un’area libera di qualsiasi schermata. Scorrimento, controlli e selezione del testo hanno precedenza.",p.holdToOpen,p.aiEnabled&&p.acaEnabled){save(p.copy(holdToOpen=it))}
   }}
   AilaSectionTitle("Servizi da attivare")
   AilaCard{Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
    val services=listOf("CIRCULARS" to "Analisi delle circolari","CHAT" to "Chat con AILA","CALENDAR" to "Azioni sul calendario",
     "DOCUMENTS" to "Documenti e testi selezionati","AUDIO" to "Trascrizione dei vocali","IMAGES" to "Analisi delle immagini",
-    "FORUM" to "Riassunti e @perabot nel forum","FORUM_SUGGESTIONS" to "Proposte automatiche dalle conversazioni","STUDY_PLAN" to "Piani di studio","NOW_NUDGE" to "Now Nudge nella home")
+    "FORUM" to "Riassunti e @perabot nel forum","FORUM_SUGGESTIONS" to "Proposte automatiche dalle conversazioni","STUDY_PLAN" to "Piani di studio","NOW_NUDGE" to "AILA brief nella home")
    services.forEach{(id,label)->val aca=id !in setOf("CIRCULARS","CHAT")
-    AiControlRow(label,if(id=="FORUM_SUGGESTIONS")"Opzionale: con il consenso cloud, analizza i messaggi della discussione aperta e propone impegni visibili alla classe. Nessun inserimento senza conferma."else if(aca)"Richiede ACA attiva."else"Servizio AI di base.",id in p.services,!saving&&p.aiEnabled&&(!aca||p.acaEnabled)){enabled->
+    AiControlRow(label,if(id=="FORUM_SUGGESTIONS")"Opzionale: con il consenso cloud, analizza i messaggi della discussione aperta e propone impegni visibili alla classe. Nessun inserimento senza conferma."else if(aca)"Richiede ACA attiva."else"Servizio AI di base.",id in p.services,p.aiEnabled&&(!aca||p.acaEnabled)){enabled->
      val next=if(enabled)(p.services+id).distinct()else p.services-id
      save(p.copy(services=next,nudgesEnabled=if(id=="NOW_NUDGE")enabled else p.nudgesEnabled))
     }
@@ -46,11 +50,10 @@ import kotlinx.coroutines.launch
   }}
   AilaSectionTitle("Consensi e instradamento")
   AilaCard{Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
-   AiControlRow("Consenti il cloud","Permetti l’elaborazione dei contenuti che scegli da parte del servizio AILA. Il dispositivo resta disponibile quando supportato.",p.cloudConsent,!saving&&p.aiEnabled){save(p.copy(cloudConsent=it))}
-   AiControlRow("Consenti analisi degli allegati","Solo i file o i passaggi scelti. Prima di ogni richiesta il contenuto di riferimento è visibile.",p.attachmentConsent,!saving&&p.aiEnabled){save(p.copy(attachmentConsent=it))}
-   AiControlRow("Consenti trascrizione audio","Le trascrizioni generate sono separate dai vocali originali e possono contenere errori.",p.audioConsent,!saving&&p.aiEnabled){save(p.copy(audioConsent=it))}
-   AiControlRow("Consenti provider esterni","Vale per le API personali e per un eventuale servizio avanzato. Le credenziali non vengono condivise con la classe.",p.externalConsent,!saving&&p.aiEnabled){save(p.copy(externalConsent=it))}
-   AiControlRow("Usa il servizio avanzato",if(capabilities.advanced)"Solo per attività complesse e nei limiti della quota."else"Non ancora disponibile. Il servizio AILA e le opzioni locali restano utilizzabili se attivati.",p.advancedEnabled,!saving&&p.aiEnabled&&p.externalConsent&&capabilities.advanced){save(p.copy(advancedEnabled=it))}
+   AiControlRow("Consenti il cloud","Permetti l’elaborazione dei contenuti che scegli da parte del servizio AILA. Il dispositivo resta disponibile quando supportato.",p.cloudConsent,p.aiEnabled){save(p.copy(cloudConsent=it))}
+   AiControlRow("Consenti analisi degli allegati","Solo i file o i passaggi scelti. Prima di ogni richiesta il contenuto di riferimento è visibile.",p.attachmentConsent,p.aiEnabled){save(p.copy(attachmentConsent=it))}
+   AiControlRow("Consenti trascrizione audio","Le trascrizioni generate sono separate dai vocali originali e possono contenere errori.",p.audioConsent,p.aiEnabled){save(p.copy(audioConsent=it))}
+   AiControlRow("Consenti provider esterni","Vale per le API personali e per un eventuale servizio avanzato. Le credenziali non vengono condivise con la classe.",p.externalConsent,p.aiEnabled){save(p.copy(externalConsent=it))}
   }}
   AilaCard{Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
    TextButton(onClick={privacy=!privacy}){Text(if(privacy)"Chiudi informativa AI e privacy"else"Informativa AI e privacy")}

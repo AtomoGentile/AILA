@@ -17,7 +17,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 
-private const val AcaHoldMillis = 2_000L
+private const val AcaHoldMillis = 650L
 
 /** Observes unclaimed touches without stealing scrolling, controls or text selection. */
 @Composable

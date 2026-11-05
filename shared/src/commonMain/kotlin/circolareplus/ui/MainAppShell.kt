@@ -1,5 +1,7 @@
 package circolareplus.ui.screens
 
+import circolareplus.domain.model.isStudyRelevantFor
+
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.fadeOut
@@ -1082,6 +1084,10 @@ fun MainAppShell(
     // una decina di secondi fra chiamata al modello ed eventuale lettura di un PDF, e chi torna
     // indietro un attimo per controllare una circolare non deve perderla ne' doverla rifare.
     var isInAssistantScreen by rememberSaveable { mutableStateOf(false) }
+    var acaOverlay by remember { mutableStateOf(false) }
+    var acaOverlayStart by remember { mutableStateOf(0) }
+    var acaForumContext by remember{mutableStateOf("")}
+    var acaDocumentContext by remember{mutableStateOf("")}
     // La conversazione in corso ha un id suo, cosi' ogni salvataggio aggiorna la stessa voce
     // dello storico invece di aggiungerne una a ogni domanda.
     var assistantConversationId by rememberSaveable { mutableStateOf("c${currentTimeMillis()}") }
@@ -1453,7 +1459,6 @@ fun MainAppShell(
         val operationId = plan.operationId ?: return
         val digest = plan.digest ?: return
         updateAssistantMessage(conversationId, messageId) { it.copy(actionStatus = AssistantActionStatus.RUNNING) }
-        assistantAttachments.remove(conversationId)
         pendingAssistantConversations += conversationId
         assistantAgentPhases[conversationId] = AssistantAgentPhase.EXECUTING
         coroutineScope.launch {
@@ -1476,10 +1481,10 @@ fun MainAppShell(
         }
     }
 
-    fun askAssistant(question: String) {
+    fun askAssistant(question: String, screenContext:String="") {
         val trimmed = question.trim()
         if (!circolareplus.ai.AcaPolicyState.preferences.aiEnabled || "CHAT" !in circolareplus.ai.AcaPolicyState.preferences.services) {
-            isInSettingsScreen = true; isInAiSettings = true; return
+            acaOverlay=false; isInSettingsScreen = true; isInAiSettings = true; return
         }
         if (trimmed.isEmpty() || assistantConversationId in pendingAssistantConversations) return
 
@@ -1509,8 +1514,9 @@ fun MainAppShell(
         )
         // La cronologia che vede il modello non deve contenere la domanda appena fatta: quella
         // gli arriva a parte, come domanda corrente.
+        assistantAttachments.remove(conversationId)
         pendingAssistantConversations += conversationId
-        if (requestedMode == AssistantMode.GENERAL && circolareplus.ai.assistant.AssistantActionIntent.matches(trimmed, history)) {
+        if (requestedMode == AssistantMode.GENERAL) {
             assistantAgentPhases[conversationId] = AssistantAgentPhase.READING
         }
         saveAssistantConversation()
@@ -1575,11 +1581,12 @@ fun MainAppShell(
                         classmates = classmates,
                         circulars = circulars,
                         classifications = classifications.toMap(),
-                        calendarEvents = calendarEvents,
+                        calendarEvents = calendarEvents.filter{it.isStudyRelevantFor(userAtRequest)},
                         proposals = boardProposals,
                         dynamic = boardUnavailable?.let { dynamic.copy(unavailable = dynamic.unavailable + it) } ?: dynamic,
                         gita = gita,
-                        attachedSources = attachedSources
+                        attachedSources = attachedSources,
+                        screenContext = screenContext
                     )
                 )
 
@@ -1589,6 +1596,8 @@ fun MainAppShell(
                     val operation = AppContainer.acaRepository.preview(proposed)
                     operation.plan.copy(operationId = operation.id, digest = operation.digest, expiresAt = operation.expiresAt)
                 }
+                assistantAgentPhases.remove(conversationId)
+                delay(140)
                 assistantMessageCounter++
                 appendAssistantMessage(
                     conversationId,
@@ -2351,6 +2360,17 @@ fun MainAppShell(
     val addEventDialog: @Composable () -> Unit = {
     if (showAddEventDialog) {
         AddCalendarEventDialog(
+            onPlanAi={prompt->
+                showAddEventDialog=false
+                addEventCloseRequested=false
+                assistantMode=AssistantMode.GENERAL
+                assistantMode=AssistantMode.GENERAL
+                acaOverlayStart=assistantMessages.size
+                acaOverlay=true
+                askAssistant("Prepara gli eventi da inserire nel calendario:\n$prompt",addEventInitialDateIso?.let{"Giorno scelto nel calendario: $it"}.orEmpty())
+                addEventInitialStep=EventCreationStep.MENU
+                addEventInitialDateIso=null
+            },
             onDismiss = {
                 showAddEventDialog = false
                 addEventCloseRequested = false
@@ -2675,7 +2695,7 @@ fun MainAppShell(
         localContent != null || remoteContent != null -> ShellRoute.CONTENT
         isInLocalFiles -> ShellRoute.LOCAL_FILES
         isInForum -> ShellRoute.FORUM
-        isInAcaHub -> ShellRoute.ACA
+        isInAcaHub -> ShellRoute.ASSISTANT
         isInClassRosterScreen -> ShellRoute.CLASS_ROSTER
         isInProfileScreen -> ShellRoute.PROFILE
         isInAssistantScreen -> ShellRoute.ASSISTANT
@@ -2887,6 +2907,23 @@ fun MainAppShell(
             }
         )
     }
+    fun receiveAssistantAttachment(file:circolareplus.platform.IncomingContent,voice:Boolean){
+        val target=assistantConversationId
+        coroutineScope.launch {
+            var spoken:String?=null
+            pendingAssistantConversations+=target
+            assistantAgentPhases[target]=if(file.mime.startsWith("audio/"))AssistantAgentPhase.TRANSCRIBING else AssistantAgentPhase.READING
+            try{
+                val attached=circolareplus.ai.prepareChatAttachment(file){original->assistantAttachments[target]=(assistantAttachments[target].orEmpty()+original).distinctBy{it.localId}.takeLast(5)}
+                assistantAttachments[target]=(assistantAttachments[target].orEmpty()+attached).distinctBy{it.localId}.takeLast(5)
+                if(voice)AppContainer.localContents.entry(attached.localId)?.let{spoken=AppContainer.localContents.text(it)}
+            }catch(e:CancellationException){throw e}catch(e:Exception){
+                appendAssistantMessage(target,AssistantMessage("attachment-${currentTimeMillis()}",AssistantAuthor.ASSISTANT,e.message?:"Allegato non disponibile",isError=true))
+            }finally{pendingAssistantConversations.remove(target);assistantAgentPhases.remove(target)}
+            // Only a voice recorded as a user message is an instruction. Imported audio stays a source.
+            if(voice&&assistantConversationId==target)spoken?.takeIf{it.isNotBlank()}?.let{askAssistant(it)}
+        }
+    }
     // Material: fondo pieno dietro alle tab, perche' in "fade through" le tab stesse svaniscono.
     // Liquid Glass: con un menu dal basso aperto l'app dietro si sfoca, cosi' il foglio di vetro
     // trasparente resta leggibile (vedi AilaBottomSheet).
@@ -2898,18 +2935,11 @@ fun MainAppShell(
             .fillMaxSize()
             .acaHoldToOpen(
                 enabled = aiPolicy.aiEnabled && aiPolicy.acaEnabled && aiPolicy.holdToOpen &&
-                    !isInAssistantScreen && circolareplus.design.AilaSheetBackdrop.openSheets == 0,
+                    !acaOverlay && circolareplus.design.AilaSheetBackdrop.openSheets == 0,
                 surfaceKey = listOf(shellRoute, selectedTab, selectedCircularForDetail?.number, eventDetailToShow)
             ) {
-                selectedCircularForDetail = null
-                eventDetailToShow = null
-                localContent = null; remoteContent = null
-                isInSettingsScreen = false; isInBackgroundDebugScreen = false
-                isInLocalFiles = false; isInForum = false; isInAcaHub = false
-                isInClassRosterScreen = false; isInProfileScreen = false
-                isInSearchScreen = false; isInNotificationsScreen = false; isInGitaScreen = false
-                assistantMode = AssistantMode.GENERAL
-                isInAssistantScreen = true
+                acaOverlayStart=assistantMessages.size
+                acaOverlay=true
             }
             .then(if (AppTheme.isGlass) Modifier else Modifier.background(AppTheme.BackgroundLight))
             .graphicsLayer {
@@ -3262,14 +3292,14 @@ fun MainAppShell(
                                 studentFirstName = user.firstName,
                                 experience = acaExperience,
                                 aiEnabled = aiPolicy.aiEnabled && "CIRCULARS" in aiPolicy.services,
-                                onOpenAca = { isInAcaHub = true },
+                                onOpenAca = { assistantMode=AssistantMode.GENERAL;isInAssistantScreen=true },
                                 onOpenForum = { isInForum = true },
                                 nudges = acaNudges,
                                 onDismissNudge = { id ->
                                     acaNudges = acaNudges.filterNot { it.id == id }
                                     coroutineScope.launch { try { AppContainer.acaRepository.dismissNudge(id) } catch (e: CancellationException) { throw e } catch (_: Exception) {} }
                                 },
-                                onPlanStudy = { prompt -> isInAssistantScreen = true; askAssistant(prompt) },
+                                onPlanStudy = { prompt -> assistantMode=AssistantMode.GENERAL;acaOverlayStart=assistantMessages.size;acaOverlay=true;askAssistant(prompt) },
                                 circulars = circulars,
                                 calendarEvents = calendarEvents,
                                 openProposalsCount = proposals.size,
@@ -3653,10 +3683,10 @@ fun MainAppShell(
                                         circolareplus.design.AilaBrandMark(size = 44.dp)
                                         Spacer(modifier = Modifier.width(AppTheme.Space12))
                                         circolareplus.design.AilaSegmentedTabs(
-                                            labels = listOf(ClassSection.CIRCULARS.title, ClassSection.BOARD.title),
+                                            labels = listOf(ClassSection.CIRCULARS.title, ClassSection.BOARD.title,"Pere"),
                                             selectedIndex = if (classSection == ClassSection.CIRCULARS) 0 else 1,
                                             onSelect = { index ->
-                                                classSection = if (index == 0) ClassSection.CIRCULARS else ClassSection.BOARD
+                                                if(index==2)isInForum=true else classSection = if (index == 0) ClassSection.CIRCULARS else ClassSection.BOARD
                                             },
                                             modifier = Modifier.weight(1f)
                                         )
@@ -4412,7 +4442,7 @@ fun MainAppShell(
                     )
                 }
                 ShellRoute.FORUM -> {
-                    ForumScreen(isModerator = isRepresentative, initialThreadId = initialForumThread, onBack = { isInForum = false; initialForumThread = null },
+                    ForumScreen(onContextChange={acaForumContext=it},isModerator = isRepresentative, initialThreadId = initialForumThread, onBack = { isInForum = false; initialForumThread = null },
                         onOpenAttachment = { remoteContent = it; localContent = null },
                         onPrepareCalendar = { text -> isInForum = false; isInAcaHub = false; isInLocalFiles = false; isInAssistantScreen = true; askAssistant("Prepara gli eventi da confermare da questa fonte:\n$text") },
                         onCalendarChanged = { reloadCalendar() },
@@ -4420,7 +4450,7 @@ fun MainAppShell(
                 }
                 ShellRoute.CONTENT -> {
                     circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { localContent = null; remoteContent = null }
-                    ContentAssistanceScreen(content = localContent, attachment = remoteContent,
+                    ContentAssistanceScreen(onContextChange={acaDocumentContext=it},content = localContent, attachment = remoteContent,
                         onUseInChat = { file ->
                             val pending=assistantAttachments[assistantConversationId].orEmpty()
                             check(pending.any{it.localId==file.localId}||pending.size<5){"Allega al massimo 5 file per messaggio."}
@@ -4821,6 +4851,7 @@ fun MainAppShell(
                             assistantConversationId = "c${currentTimeMillis()}"
                         } else {
                             isInAssistantScreen = false
+                            isInAcaHub = false
                         }
                     }
                     circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { assistantBack() }
@@ -4829,12 +4860,16 @@ fun MainAppShell(
                         isThinking = isAssistantThinking,
                         conversations = assistantConversations,
                         onSend = { question -> askAssistant(question) },
-                        onAttachContent = { file -> localContent=file;remoteContent=null },
+                        onOpenFiles={filesOpenedFromSettings=false;isInLocalFiles=true;isInAssistantScreen=false},
+                        onStudyPlan={askAssistant("Prepara un piano di ripasso solo per gli impegni destinati a me. Spiega come distribuire lo studio, senza creare eventi.")},
+                        onOpenAiSettings={isInSettingsScreen=true;isInAiSettings=true},
+                        onAttachContent = { receiveAssistantAttachment(it,false) },
+                        onVoiceContent = { receiveAssistantAttachment(it,true) },
                         attachedFiles = assistantAttachments[assistantConversationId].orEmpty(),
                         onRemoveAttachedFile = { id -> assistantAttachments[assistantConversationId]=assistantAttachments[assistantConversationId].orEmpty().filterNot{it.localId==id} },
                         onOpenAttachedFile = { file -> coroutineScope.launch {
                             try{val entry=AppContainer.localContents.entry(file.localId)?:error("La copia locale è stata eliminata.")
-                                localContent=AppContainer.localContents.read(entry);remoteContent=null
+                                val original=AppContainer.localContents.read(entry);circolareplus.platform.openContentFile(original.bytes,original.fileName,original.mime)
                             }catch(e:CancellationException){throw e}catch(e:Exception){
                                 assistantMessageCounter++
                                 appendAssistantMessage(assistantConversationId,AssistantMessage("file-${currentTimeMillis()}-$assistantMessageCounter",AssistantAuthor.ASSISTANT,e.message?:"File non disponibile",isError=true))
@@ -5282,6 +5317,34 @@ fun MainAppShell(
             ?: assistantConversations.firstOrNull { conversation ->
                 conversation.messages.lastOrNull()?.actionStatus == AssistantActionStatus.AWAITING_CONFIRMATION
             }?.id
+        val acaPageContext=("Schermata: $shellRoute; sezione: $selectedTab / $classSection\n"+
+            (selectedCircularForDetail?:paneCircular)?.let{"Circolare ${it.number}: ${it.title}\n${classifications[it.number]?.personalSummary.orEmpty()}"}.orEmpty()+
+            eventDetailToShow?.toString().orEmpty()+when(shellRoute){ShellRoute.FORUM->acaForumContext;ShellRoute.CONTENT->acaDocumentContext;else->""}).take(6000)
+        if(acaOverlay){
+        circolareplus.platform.PlatformBackHandler{acaOverlay=false}
+        circolareplus.design.AcaContextOverlay(
+            thinking=isAssistantThinking,
+            contextPreview=acaPageContext,
+            providerLabel=if(AppContainer.settings.aiProvider==circolareplus.ai.AiProvider.COMPATIBLE_API.id)runCatching{io.ktor.http.Url(AppContainer.settings.compatibleAiBaseUrl).host}.getOrDefault("API personale")else circolareplus.ai.AiProvider.fromId(AppContainer.settings.aiProvider).label,
+            action=assistantMessages.drop(acaOverlayStart).lastOrNull{it.author==AssistantAuthor.ASSISTANT},
+            onConfirm={assistantMessages.drop(acaOverlayStart).lastOrNull{it.actionPlan!=null}?.let{confirmAssistantAction(it.id)}},
+            onCancel={assistantMessages.drop(acaOverlayStart).lastOrNull{it.actionPlan!=null}?.let{cancelAssistantAction(it.id)}},
+            answer=assistantMessages.drop(acaOverlayStart).lastOrNull{it.author==AssistantAuthor.ASSISTANT}?.text,
+            onClose={acaOverlay=false},
+            onOpenChat={acaOverlay=false;selectedCircularForDetail=null;paneCircular=null;eventDetailToShow=null;isInSettingsScreen=false;isInBackgroundDebugScreen=false;isInProfileScreen=false;isInClassRosterScreen=false;localContent=null;remoteContent=null;isInForum=false;isInAcaHub=false;isInLocalFiles=false;assistantMode=AssistantMode.GENERAL;isInAssistantScreen=true},
+            onSend={question,includeContext->
+                acaOverlayStart=assistantMessages.size
+                val p=circolareplus.ai.AcaPolicyState.preferences
+                val permitted=!includeContext||when(shellRoute){
+                    ShellRoute.CONTENT->p.acaEnabled&&"DOCUMENTS" in p.services&&p.attachmentConsent
+                    ShellRoute.FORUM->p.acaEnabled&&"FORUM" in p.services
+                    else->true
+                }
+                if(permitted)askAssistant(question,if(includeContext)acaPageContext else "")
+                else appendAssistantMessage(assistantConversationId,AssistantMessage("context-${currentTimeMillis()}",AssistantAuthor.ASSISTANT,"Attiva il servizio e i consensi per questo contesto nelle impostazioni AI.",isError=true))
+            }
+        )
+        }
         circolareplus.design.AilaAcaIndicator(
             phase = if (aiPolicy.aiEnabled && aiPolicy.acaEnabled) contentActivity ?: acaConversationId?.let { assistantAgentPhases[it] } else null,
             awaitingConfirmation = false,
@@ -5496,7 +5559,8 @@ private val AI_PROMPT_EXAMPLES = listOf(
     "Compito di inglese domani",
     "Interrogazione di storia lunedì alla 3ª ora",
     "Verifica di matematica venerdì alle 10",
-    "Uscita didattica al museo giovedì"
+    "Uscita didattica al museo giovedì",
+    "Verifica di matematica domani e compito di inglese lunedì"
 )
 
 /**
@@ -5620,7 +5684,8 @@ private fun AddCalendarEventDialog(
     initialStep: EventCreationStep = EventCreationStep.MENU,
     initialDateIso: String? = null,
     /** true quando il chiamante vuole chiudere il foglio (evento creato): scende e poi chiama [onDismiss]. */
-    closeRequested: Boolean = false
+    closeRequested: Boolean = false,
+    onPlanAi:(String)->Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var step by remember { mutableStateOf(initialStep) }
@@ -5951,7 +6016,7 @@ private fun AddCalendarEventDialog(
                     ) {
                         EventCreationOptionCard(
                             title = "AILA Assistant",
-                            subtitle = "Descrivi l'evento, l'AI lo inserisce per te",
+                            subtitle = "Uno o più eventi, con anteprima e conferma",
                             highlighted = true,
                             icon = { color ->
                                 circolareplus.design.AilaAssistantMark(
@@ -5975,7 +6040,7 @@ private fun AddCalendarEventDialog(
 
                 EventCreationStep.ASSISTANT -> {
                     Text(
-                        text = "Descrivi cosa vuoi inserire e AILA Assistant compila tutto per te.",
+                        text = "Descrivi gli eventi e le rispettive date. Prima del salvataggio vedrai l’elenco completo da confermare.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = AppTheme.TextMuted,
                         modifier = Modifier.ailaSheetReveal(0).padding(bottom = AppTheme.Space12)
@@ -6018,57 +6083,8 @@ private fun AddCalendarEventDialog(
                     }
                     Spacer(modifier = Modifier.height(AppTheme.Space20))
                     circolareplus.design.AilaPrimaryButton(
-                        text = if (isGeneratingEvent) "Generando..." else "Genera evento",
-                        onClick = {
-                            scope.launch {
-                                isGeneratingEvent = true
-                                try {
-                                    // Se l'AI non è disponibile (nessuna chiave, modello locale non
-                                    // scaricato, rete assente, timeout) parseEventPrompt torna una
-                                    // bozza vuota: prima il foglio passava comunque ai campi
-                                    // manuali, vuoti, come se non fosse successo niente.
-                                    val aiDraft = try {
-                                        AppContainer.newAiClassifier().parseEventPrompt(aiPrompt)
-                                    } catch (e: kotlinx.coroutines.CancellationException) {
-                                        throw e
-                                    } catch (e: Exception) {
-                                        null
-                                    }
-                                    val fromAi = aiDraft?.takeIf { it.title.isNotBlank() }
-                                    val draft = if (fromAi != null) {
-                                        aiEventDraftFromAi(fromAi)
-                                    } else {
-                                        parseAiEventPrompt(aiPrompt)
-                                    }
-                                    title = draft.title
-                                    subject = draft.subject
-                                    category = draft.category
-                                    selectedDateMillis = draft.dateMillis
-                                    // Le ore di lezione dette dall'utente ("3ª ora", "dalla 2 alla 4")
-                                    // si leggono con regole fisse, che battono il modello: uno piccolo
-                                    // le ignorava o le scambiava per un orario dell'orologio.
-                                    val spoken = circolareplus.ai.LessonHours.parse(aiPrompt, maxHours)
-                                    // Un orario dell'orologio ("alle 9") diventa l'ora di lezione in
-                                    // corso a quell'ora (vedi LessonHours.fromClock).
-                                    val fromClock = circolareplus.ai.LessonHours.fromClock(draft.time, maxHours)
-                                    // Un'ora oltre quelle della classe (la 6ª in una classe da 5) non vale.
-                                    val modelFrom = draft.fromHour?.takeIf { it <= maxHours }
-                                    val modelTo = draft.toHour?.takeIf { it <= maxHours }
-                                    fromHour = spoken?.from ?: modelFrom ?: fromClock
-                                    toHour = spoken?.to ?: modelTo ?: fromClock
-                                    // Fuori dalle ore di lezione (es. "alle 15") il foglio non ha dove
-                                    // metterlo: resta nelle note invece di perdersi.
-                                    val clock = if (fromHour == null) draft.time?.let { "Orario indicato: $it" } else null
-                                    listOfNotNull(draft.notes, clock).joinToString("\n")
-                                        .takeIf { it.isNotBlank() }?.let { notes = it }
-                                    aiFilled = fromAi != null
-                                    aiFallbackNotice = fromAi == null
-                                    step = EventCreationStep.MANUAL
-                                } finally {
-                                    isGeneratingEvent = false
-                                }
-                            }
-                        },
+                        text = "Prepara gli eventi",
+                        onClick = { onPlanAi(aiPrompt) },
                         enabled = aiPrompt.isNotBlank() && !isGeneratingEvent,
                         fillMaxWidth = true,
                         icon = { color -> AppIcons.Sparkle(modifier = Modifier.size(14.dp), color = color) }
@@ -6973,7 +6989,7 @@ private fun EventCreationOptionCard(
                     .background(AppTheme.SurfaceWhite)
                     .border(1.dp, AppTheme.FieldOutline, RoundedCornerShape(AppTheme.CardCornerRadius))
             )
-            .clickable { onClick() }
+            .clickable(role=Role.Button,onClick=onClick)
             .padding(AppTheme.Space16)
     ) {
         Box(

@@ -24,15 +24,24 @@ export function audioDuration(bytes:Uint8Array,mime:string):number|null {
  }
  if(mime==='audio/mp4'){
   function boxes(start:number,end:number,depth:number):number|null{
-   if(depth>4)return null;
-   for(let pos=start;pos+8<=end;){const size=view.getUint32(pos);if(size<8||pos+size>end)return null;
-    const type=ascii(bytes,pos+4,pos+8);
-    if(type==='mvhd'&&size>=32){const v=bytes[pos+8];const scaleOffset=pos+(v===1?28:20);const durOffset=scaleOffset+4;
-     if(durOffset+(v===1?8:4)>pos+size)return null;const scale=view.getUint32(scaleOffset);
-     const duration=v===1?Number(view.getBigUint64(durOffset)):view.getUint32(durOffset);
-     return scale>0&&duration>0?duration/scale:null;
+   if(depth>8)return null;
+   for(let pos=start;pos+8<=end;){
+    let size=view.getUint32(pos);let header=8;
+    if(size===1){if(pos+16>end)return null;const large=view.getBigUint64(pos+8);if(large>BigInt(Number.MAX_SAFE_INTEGER))return null;size=Number(large);header=16;}
+    else if(size===0)size=end-pos;
+    if(size<header||pos+size>end)return null;
+    const type=ascii(bytes,pos+4,pos+8);const data=pos+header;
+    if((type==='mvhd'||type==='mdhd')&&data+20<=pos+size){
+     const version=bytes[data];if(version!==0&&version!==1)return null;
+     const scaleOffset=data+(version===1?20:12);const durationOffset=scaleOffset+4;
+     if(durationOffset+(version===1?8:4)>pos+size)return null;
+     const scale=view.getUint32(scaleOffset);
+     const duration=version===1?view.getBigUint64(durationOffset):BigInt(view.getUint32(durationOffset));
+     const unknown=version===1?0xffffffffffffffffn:0xffffffffn;
+     if(scale>0&&duration>0n&&duration!==unknown)return Number(duration)/scale;
     }
-    if(type==='moov'){const d=boxes(pos+8,pos+size,depth+1);if(d!==null)return d;}pos+=size;
+    if(['moov','trak','mdia'].includes(type)){const d=boxes(data,pos+size,depth+1);if(d!==null)return d;}
+    pos+=size;
    }return null;
   }return boxes(0,bytes.length,0);
  }

@@ -10,6 +10,34 @@ import kotlinx.serialization.encodeToString
 import kotlin.test.*
 
 class AssistantActionsTest {
+    @Test fun calendarPlanningKeepsEveryExplicitDateInTheBatch(){
+        val first=Json.encodeToString(action)
+        val second=Json.encodeToString(action.copy(title="Prova orale",date="2027-03-22"))
+        val parsed=assertNotNull(AssistantActionPrompt.parse("{\"actions\":[$first,$second],\"clarification\":\"\"}"))
+        assertEquals(listOf("2027-03-20","2027-03-22"),parsed.actions.map{it.date})
+        assertTrue(AssistantActionPrompt.validate(parsed,knowledge))
+    }
+
+    @Test fun publicExamVisibilityDoesNotAuthorizeUsingItAsMyStudyObligation(){
+        val events=listOf(
+            CalendarEvent("public-peer","PUBBLICO_ALTRUI","2026-11-06",category=CalendarEventCategory.INTERROGAZIONE,isRelevantToMe=false),
+            CalendarEvent("legacy-peer","LEGACY_ALTRUI","2026-11-06",category=CalendarEventCategory.INTERROGAZIONE,notes="Studenti: Altro Studente"),
+            CalendarEvent("mine","PUBBLICO_MIO","2026-11-07",category=CalendarEventCategory.INTERROGAZIONE,isRelevantToMe=true))
+        val prompt=AssistantPrompt.builderFor(knowledge.copy(calendarEvents=events),emptyList(),"Prepara un piano di ripasso",emptyMap()).build(16000)
+        assertFalse(prompt.userPrompt.contains("PUBBLICO_ALTRUI"))
+        assertFalse(prompt.userPrompt.contains("LEGACY_ALTRUI"))
+        assertTrue(prompt.userPrompt.contains("PUBBLICO_MIO"))
+    }
+
+    @Test fun personalStudyNeverUsesAnExamCreatedForAnotherRecipient(){
+        val events=listOf(
+            CalendarEvent("other","RISERVATO_INTERROGAZIONE_ALTRUI","2026-11-06",category=CalendarEventCategory.INTERROGAZIONE,isForAll=false,createdByUserId="u1",visibleToUserIds=listOf("peer")),
+            CalendarEvent("mine","MIO_IMPEGNO","2026-11-07",category=CalendarEventCategory.VERIFICA,isForAll=false,visibleToUserIds=listOf("u1")))
+        val prompt=AssistantPrompt.builderFor(knowledge.copy(calendarEvents=events),emptyList(),"Prepara un piano di ripasso",emptyMap()).build(16000)
+        assertFalse(prompt.userPrompt.contains("RISERVATO_INTERROGAZIONE_ALTRUI"))
+        assertTrue(prompt.userPrompt.contains("MIO_IMPEGNO"))
+    }
+
     @Test fun attachmentsStaySeparateFromIntentAndSurviveHistoryWithoutEmbeddingTheFile() {
         val file=AssistantAttachedFile("local-1","Programma.txt")
         val message=AssistantMessage("q",AssistantAuthor.USER,"Riassumi",attachedFiles=listOf(file))
@@ -46,6 +74,8 @@ class AssistantActionsTest {
                 "Attività prevista: ESAME DI CERTIFICAZIONE parte scritta\nmetti tutto ciò a calendario nelle rispettive date", emptyList()
         ))
         assertTrue(AssistantActionIntent.matches("Metti tutto ciò a calendario", emptyList()))
+        assertTrue(AssistantActionIntent.matches("Prepara gli eventi da confermare da questa fonte", emptyList()))
+        assertFalse(AssistantActionIntent.matches("Prepara un piano di ripasso", emptyList()))
         assertTrue(AssistantActionIntent.matches("Aggiungi una verifica di matematica domani", emptyList()))
         assertTrue(AssistantActionIntent.matches("Mi fai un evento domani?", emptyList()))
     }

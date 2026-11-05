@@ -1,3 +1,4 @@
+import { studyAudience } from '../services/studyAudience';
 // =============================================================================
 // CIRCOLARE+ — Calendar Routes (/api/calendar/*)
 // =============================================================================
@@ -57,10 +58,10 @@ calendar.get('/', async (c) => {
   // Gli eventi per "Persone specifiche" li vedono solo chi li ha creati e i destinatari: prima
   // arrivavano a tutta la classe (li filtrava solo l'assistente).
   const me = c.get('jwtPayload').sub;
-  let query = `SELECT * FROM calendar_events WHERE class_id = ?
+  let query = `SELECT *, ${studyAudience("calendar_events")} AS is_relevant_to_me FROM calendar_events WHERE class_id = ?
     AND (is_for_all = 1 OR visible_to_user_ids_json IS NULL OR created_by = ?
          OR EXISTS (SELECT 1 FROM json_each(calendar_events.visible_to_user_ids_json) WHERE value = ?))`;
-  const params: (string | number)[] = [classId, me, me];
+  const params: (string | number)[] = [me,me,me,classId, me, me];
 
   if (category && VALID_CATEGORIES.includes(category)) {
     query += ' AND category = ?';
@@ -85,6 +86,7 @@ calendar.get('/', async (c) => {
     start_time: string | null;
     category: string;
     is_for_all: number;
+    is_relevant_to_me:number;
     is_ai_generated: number;
     created_by: string | null;
     created_at: string;
@@ -101,6 +103,7 @@ calendar.get('/', async (c) => {
       startTime: e.start_time,
       category: e.category,
       isForAll: Boolean(e.is_for_all),
+      isRelevantToMe:Boolean(e.is_relevant_to_me),
       isAiGenerated: Boolean(e.is_ai_generated),
       createdBy: e.created_by,
       createdAt: e.created_at,

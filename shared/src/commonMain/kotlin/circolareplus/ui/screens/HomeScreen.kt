@@ -85,7 +85,7 @@ fun HomeScreen(
     val scrollState = rememberScrollState()
 
     // Circolare più recente (numero più alto): mostrata in evidenza, se ce n'è almeno una.
-    val latestCircular = circulars.filter { !aiEnabled || it.summaryReady }.maxByOrNull { it.number } ?: circulars.maxByOrNull { it.number }
+    val latestCircular = circulars.maxByOrNull { it.number } ?: circulars.maxByOrNull { it.number }
     // Prime 3 scadenze **future**. Prima si prendevano le prime tre della lista e basta, poi si
     // confrontavano le date come stringhe: un "2026-9-5" scritto senza zeri (arriva dagli eventi
     // generati dall'AI) risultava "maggiore" di "2026-09-20" e una verifica di settembre restava
@@ -96,7 +96,7 @@ fun HomeScreen(
     val wide = circolareplus.design.LocalWideLayout.current
     val nextEvents = remember(calendarEvents, wide) { upcomingEvents(calendarEvents, limit = if (wide) 6 else 3) }
     val recentCirculars = remember(circulars, wide, aiEnabled) {
-        if (wide) circulars.filter { !aiEnabled || it.summaryReady }.sortedByDescending { it.number }.take(5) else emptyList()
+        if (wide) circulars.sortedByDescending { it.number }.take(5) else emptyList()
     }
 
     // Circolare più recente in evidenza. Tipo esplicito sulla callback: un lambda scritto dentro
@@ -124,18 +124,26 @@ fun HomeScreen(
             onNavigateToSeatMap = onNavigateToSeatMap
         )
 
-        circolareplus.design.NewAilaHomeHero(experience, onOpenAca, onOpenForum,
-            Modifier.padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space16))
-        nudges.forEach { nudge ->
-            AilaCard(modifier = Modifier.padding(horizontal = AppTheme.Space16, vertical = 6.dp)) {
-                Column(Modifier.padding(16.dp)) {
-                    Text(nudge.title, style = MaterialTheme.typography.titleMedium, color = AppTheme.TextDark)
-                    Text(nudge.message, color = AppTheme.TextMuted)
-                    Row {
-                        if (nudge.canPlanStudy) androidx.compose.material3.TextButton(onClick = { onPlanStudy(nudge.suggestion) }) { Text("Organizza lo studio") }
-                        androidx.compose.material3.TextButton(onClick = { onDismissNudge(nudge.id) }) { Text("Non ora") }
-                    }
+        AilaCard(modifier=Modifier.padding(horizontal=AppTheme.Space16,vertical=12.dp)){
+            Column(Modifier.padding(16.dp)){
+                Text("La tua classe",style=MaterialTheme.typography.titleMedium,color=AppTheme.TextDark)
+                Row{
+                    androidx.compose.material3.TextButton(onClick=onOpenForum){Text("Educazione tra pere")}
+                    androidx.compose.material3.TextButton(onClick=onOpenAca){Text("AILA Assistant")}
                 }
+            }
+        }
+        if(circolareplus.ai.AcaPolicyState.preferences.let{it.aiEnabled&&it.acaEnabled&&it.nudgesEnabled&&"NOW_NUDGE" in it.services})AilaCard(modifier=Modifier.padding(horizontal=AppTheme.Space16,vertical=8.dp)){
+            Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+                Text("AILA brief",style=MaterialTheme.typography.titleLarge,color=AppTheme.PrimaryBlue)
+                Text(if(nudges.isEmpty())"Nessun impegno urgente per te nei prossimi tre giorni."else"I tuoi prossimi impegni e un aiuto per prepararti.",color=AppTheme.TextMuted)
+                nudges.forEach{nudge->Column{
+                    Text(nudge.message,color=AppTheme.TextDark)
+                    Row{
+                        if(nudge.canPlanStudy)androidx.compose.material3.TextButton(onClick={onPlanStudy("Prepara un piano di ripasso per questo mio impegno, senza aggiungere eventi: ${nudge.title}, data ${nudge.eventDate}.")}){Text("Prepara il ripasso")}
+                        androidx.compose.material3.TextButton(onClick={onDismissNudge(nudge.id)}){Text("Non ora")}
+                    }
+                }}
             }
         }
 
@@ -653,6 +661,7 @@ internal fun upcomingEvents(events: List<CalendarEvent>, limit: Int): List<Calen
     val nowMinutes = nowMinutesOfDay()
 
     return events
+        .filter{it.isRelevantToMe!=false}
         .mapNotNull { event ->
             val date = parseIsoDate(event.date.take(10).trim()) ?: return@mapNotNull null
             val dayKey = date.year * 10_000 + date.month * 100 + date.day

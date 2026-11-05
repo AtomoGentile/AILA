@@ -77,5 +77,6 @@ private fun CalendarEventDto.toDomain(): CalendarEvent = CalendarEvent(
     // sempre null, indipendentemente da cosa fosse stato salvato.
     visibleToUserIds = visibleToUserIds,
     notes = notes,
-    circularNumber = circularNumber
+    circularNumber = circularNumber,
+    isRelevantToMe=isRelevantToMe
 )

@@ -16,7 +16,8 @@ data class CalendarEventDto(
     val visibleToUserIds: List<String>? = null,
     val notes: String? = null,
     /** Circolare da cui AILA Assistant ha ricavato l'evento. */
-    val circularNumber: Int? = null
+    val circularNumber: Int? = null,
+    val isRelevantToMe:Boolean?=null
 )
 
 @Serializable

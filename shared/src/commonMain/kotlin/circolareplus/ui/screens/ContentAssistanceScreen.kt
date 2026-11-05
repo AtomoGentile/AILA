@@ -27,7 +27,7 @@ private data class ContentRequest(val action:String,val question:String,val text
 fun ContentAssistanceScreen(
  content:IncomingContent?, attachment:ContentAttachmentDto?, onBack:()->Unit,
  onPrepareCalendar:(String)->Unit,onActivity:(AssistantAgentPhase?)->Unit,onOpenLocalFiles:()->Unit={},
- onUseInChat:((circolareplus.ai.assistant.AssistantAttachedFile)->Unit)?=null
+ onUseInChat:((circolareplus.ai.assistant.AssistantAttachedFile)->Unit)?=null,onContextChange:(String)->Unit={}
 ) {
  val scope=rememberCoroutineScope()
  var activeFile by remember(content,attachment?.id){mutableStateOf(content)}
@@ -119,6 +119,8 @@ fun ContentAssistanceScreen(
    finally{busy=false;onActivity(null)}
   }
  }
+ LaunchedEffect(source,selected,page){onContextChange("File: $name · pagina di testo ${page+1}\n"+selected.ifBlank{sourceValue.value.text}.take(6000))}
+ DisposableEffect(Unit){onDispose{onContextChange("")}}
  fun action(id:String){val prompts=mapOf("SUMMARIZE" to "Riassumi il contenuto usando solo la fonte.","EXPLAIN" to "Spiega questo passaggio con parole semplici.",
   "KEY_POINTS" to "Estrai i punti chiave e i riferimenti alla fonte.","REVIEW_QUESTIONS" to "Crea domande di ripasso basate sul documento.",
   "COMPARE" to "Confronta le sezioni del documento e indica i riferimenti.","EXTRACT_DATES" to "Elenca gli impegni con le date certe presenti nella fonte. Separa quelli senza data o ancora da definire. Non creare eventi.",

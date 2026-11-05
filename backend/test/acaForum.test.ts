@@ -425,3 +425,51 @@ describe('Classic chatbot attachment consent',()=>{
   expect(run).toHaveBeenCalledTimes(1);
  });
 });
+
+describe('Android voice containers and personal brief audience',()=>{
+ it('reads M4A duration after a 64-bit mdat box',()=>{
+  const bytes=new Uint8Array(64);const v=new DataView(bytes.buffer);
+  const name=(at:number,s:string)=>bytes.set(new TextEncoder().encode(s),at);
+  v.setUint32(0,1);name(4,'mdat');v.setBigUint64(8,16n);
+  v.setUint32(16,48);name(20,'moov');v.setUint32(24,40);name(28,'mvhd');
+  v.setUint32(44,1000);v.setUint32(48,5000);
+  expect(audioDuration(bytes,'audio/mp4')).toBe(5);
+  v.setBigUint64(8,99999n);expect(audioDuration(bytes,'audio/mp4')).toBe(null);
+ });
+ it('excludes events created for other recipients from personal study and brief',async()=>{
+  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome'}).format(new Date());
+  await consent();await call('PUT','/api/aca/preferences',{nudgesEnabled:true});
+  db.prepare('INSERT INTO calendar_events(id,title,event_date,category,is_for_all,created_by,class_id,visible_to_user_ids_json) VALUES (?,?,?,?,?,?,?,?)')
+   .run('others-exam','Interrogazione di un compagno',today,'INTERROGAZIONE',0,'op','C1','["peer"]');
+  expect((await call('GET','/api/aca/nudges')).json.nudges).toEqual([]);
+  await call('POST','/api/aca/task',{feature:'STUDY_PLAN',question:'Organizza il mio ripasso'});
+  expect(JSON.stringify(run.mock.calls)).not.toContain('Interrogazione di un compagno');
+ });
+});
+
+describe('Visible class oral-exam calendars are not everyone’s personal obligations',()=>{
+ it('uses poll assignments and annotates public events without hiding them from the class',async()=>{
+  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome'}).format(new Date());
+  const tomorrow=new Date(Date.parse(today+'T00:00:00Z')+86400000).toISOString().slice(0,10);
+  db.prepare("INSERT INTO interrogation_grids(id,subject,is_published,class_id) VALUES ('study-grid','Storia',1,'C1')").run();
+  db.prepare('INSERT INTO interrogation_slots(id,grid_id,slot_date) VALUES (?,?,?)').run('peer-slot','study-grid',today);
+  db.prepare('INSERT INTO interrogation_slots(id,grid_id,slot_date) VALUES (?,?,?)').run('my-slot','study-grid',tomorrow);
+  db.prepare('INSERT INTO interrogation_assignments(id,slot_id,student_id) VALUES (?,?,?)').run('a-peer','peer-slot','peer');
+  db.prepare('INSERT INTO interrogation_assignments(id,slot_id,student_id) VALUES (?,?,?)').run('a-me','my-slot','op');
+  const insert=db.prepare('INSERT INTO calendar_events(id,title,event_date,category,is_for_all,created_by,class_id,notes,poll_grid_id) VALUES (?,?,?,?,?,?,?,?,?)');
+  insert.run('public-peer','INTERROGAZIONE_ALTRUI_PUBBLICA',today,'INTERROGAZIONE',1,'op','C1','Studenti: Nome peer','study-grid');
+  insert.run('public-mine','MIA_INTERROGAZIONE_PUBBLICA',tomorrow,'INTERROGAZIONE',1,'rep','C1','Studenti: Nome op','study-grid');
+  insert.run('legacy-peer','INTERROGAZIONE_ALTRUI_LEGACY',today,'INTERROGAZIONE',1,'rep','C1','Studenti: Nome peer',null);
+  const events=(await call('GET','/api/calendar')).json.events;
+  expect(events).toHaveLength(3);
+  expect(events.find((e:any)=>e.id==='public-peer').isRelevantToMe).toBe(false);
+  expect(events.find((e:any)=>e.id==='public-mine').isRelevantToMe).toBe(true);
+  expect(events.find((e:any)=>e.id==='legacy-peer').isRelevantToMe).toBe(false);
+  await consent();await call('PUT','/api/aca/preferences',{nudgesEnabled:true});
+  const nudges=(await call('GET','/api/aca/nudges')).json.nudges;
+  expect(nudges.map((n:any)=>n.eventId)).toEqual(['public-mine']);
+  await call('POST','/api/aca/task',{feature:'STUDY_PLAN',question:'Organizza il mio ripasso'});
+  expect(JSON.stringify(run.mock.calls)).toContain('MIA_INTERROGAZIONE_PUBBLICA');
+  expect(JSON.stringify(run.mock.calls)).not.toContain('INTERROGAZIONE_ALTRUI');
+ });
+});

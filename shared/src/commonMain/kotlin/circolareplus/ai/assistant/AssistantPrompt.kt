@@ -1,5 +1,7 @@
 package circolareplus.ai.assistant
 
+import circolareplus.domain.model.isStudyRelevantFor
+
 import circolareplus.ai.AiPrompt
 import circolareplus.ai.AiPromptBuilder
 import kotlinx.serialization.json.Json
@@ -192,7 +194,14 @@ A un saluto ("ciao", "buongiorno") rispondi con un saluto breve e chiedi come pu
         if (AssistantContext.normalize(question).let { "piano" in it && ("studio" in it || "ripasso" in it) })
             circolareplus.ai.AiFeature.STUDY_PLAN else circolareplus.ai.AiFeature.CHAT
     ) { maxChars ->
-        build(maxChars, knowledge, history, question, deepTexts, searchQuery, mode)
+        val study=AssistantContext.normalize(question).let{"piano" in it&&("studio" in it||"ripasso" in it)}
+        val source=if(study)knowledge.copy(
+            classmates=emptyList(),dynamic=AssistantDynamicKnowledge(),
+            calendarEvents=knowledge.calendarEvents.filter{it.isStudyRelevantFor(knowledge.user)},
+            circulars=knowledge.circulars.filter{knowledge.classifications[it.number]?.badge==circolareplus.domain.model.CircularRelevanceBadge.RELEVANT}
+        )else knowledge
+        val prompt=build(if(study)maxChars-400 else maxChars, source, history, question, deepTexts, searchQuery, mode)
+        if(study)prompt.copy(systemPrompt=prompt.systemPrompt+"\nPIANO DI RIPASSO: usa solo gli impegni destinati all’utente e quelli comuni alla classe. Ignora interrogazioni altrui e vecchi piani della chat. Se non ci sono impegni chiedi materia e obiettivo. I blocchi di studio sono suggerimenti, non creare eventi né fingere di averli creati.")else prompt
     }
 
     /** La versione corta delle regole sulla gita, per i modelli con la finestra stretta. */

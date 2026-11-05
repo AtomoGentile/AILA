@@ -222,9 +222,10 @@ class ApiClient(
             request()
         } catch (e: CancellationException) {
             throw e
+        } catch(e:kotlinx.serialization.SerializationException){
+            throw ApiException("La richiesta non è stata preparata correttamente: ${e.message}",400)
         } catch (e: Exception) {
-            ConnectivityState.markOffline()
-            throw ApiException("Sei offline: questa azione richiede la connessione. Riprova quando torni online.", OFFLINE_STATUS)
+            throw ApiException("Impossibile contattare il servizio: ${e.message?:"connessione interrotta"}. Riprova.", OFFLINE_STATUS)
         }
         ConnectivityState.markOnline()
         return response.parsedOrThrow()

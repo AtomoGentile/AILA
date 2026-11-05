@@ -98,7 +98,8 @@ data class CalendarEvent(
     // Note aggiuntive sull'evento
     val notes: String? = null,
     // Circolare da cui AILA Assistant ha ricavato l'evento (null = scritto a mano o creato prima)
-    val circularNumber: Int? = null
+    val circularNumber: Int? = null,
+    val isRelevantToMe:Boolean?=null
 )
 
 @Serializable
@@ -189,3 +190,14 @@ data class UnlockRequest(
     val approverNames: List<String> = emptyList(),
     val createdAt: String
 )
+
+/** Personal study uses assigned students, not the person who published a class calendar. */
+fun CalendarEvent.isStudyRelevantFor(user:User?):Boolean {
+    isRelevantToMe?.let{return it}
+    visibleToUserIds?.let{return user?.id in it}
+    if(category==CalendarEventCategory.INTERROGAZIONE&&notes?.startsWith("Studenti: ")==true){
+        val name=user?.let{"${it.firstName.trim()} ${it.lastName.trim()}"}?:return false
+        return notes.removePrefix("Studenti: ").split(',').any{it.trim().equals(name,ignoreCase=true)}
+    }
+    return isForAll
+}

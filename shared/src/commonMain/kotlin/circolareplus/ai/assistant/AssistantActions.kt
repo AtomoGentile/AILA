@@ -26,7 +26,7 @@ internal object AssistantActionIntent {
         if (history.lastOrNull()?.actionStatus == AssistantActionStatus.AWAITING_CONFIRMATION &&
             words.any { it in setOf("invece", "sposta", "cambia", "correggi", "personale") }) return true
         val create = words.any { it in setOf(
-            "crea", "creami", "creare", "aggiungi", "aggiungimi", "aggiungere", "inserisci",
+            "prepara", "crea", "creami", "creare", "aggiungi", "aggiungimi", "aggiungere", "inserisci",
             "inserire", "segna", "segnami", "segnare", "metti", "mettimi", "mettere", "programma",
             "aggiungerlo", "aggiungerli", "aggiungilo", "aggiungili", "inseriscilo", "inseriscili",
             "sposta", "modifica", "cambia", "correggi", "rimanda", "posticipa", "anticipa", "elimina", "cancella", "rimuovi", "annulla"

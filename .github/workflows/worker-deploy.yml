@@ -116,6 +116,12 @@ jobs:
             npx wrangler d1 execute circolare_d1 --remote --file="./migrations/$m"
           done
 
+      # Read-only readiness check: the study filter needs the existing poll linkage.
+      # Stop before deployment if the production database lacks the base migration.
+      - name: Verify calendar schema
+        if: inputs.deploy
+        run: npx wrangler d1 execute circolare_d1 --remote --command="SELECT poll_grid_id FROM calendar_events LIMIT 0"
+
       - name: Deploy Worker
         if: inputs.deploy
         run: npx wrangler deploy

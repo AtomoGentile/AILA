@@ -115,6 +115,8 @@ fun AssistantChatScreen(
     agentPhase: AssistantAgentPhase? = null,
     onRecoverAction: (String) -> Unit = {},
     onAttachContent: ((circolareplus.platform.IncomingContent) -> Unit)? = null,
+    onVoiceContent: ((circolareplus.platform.IncomingContent) -> Unit)? = null,
+    onOpenFiles:()->Unit={},onStudyPlan:()->Unit={},onOpenAiSettings:()->Unit={},
     attachedFiles: List<circolareplus.ai.assistant.AssistantAttachedFile> = emptyList(),
     onRemoveAttachedFile: (String) -> Unit = {},
     onOpenAttachedFile: (circolareplus.ai.assistant.AssistantAttachedFile) -> Unit = {}
@@ -124,6 +126,9 @@ fun AssistantChatScreen(
     var attachmentsMenu by remember { mutableStateOf(false) }
     var attachmentError by remember { mutableStateOf<String?>(null) }
     var recording by remember { mutableStateOf(false) }
+    val picker=if(onAttachContent!=null)circolareplus.platform.rememberContentPicker({attachmentError=it}){file->attachmentsMenu=false;onAttachContent(file)}else null
+    val recorder=if(onAttachContent!=null)circolareplus.platform.rememberVoiceRecorder({recording=it},{attachmentError=it}){file->attachmentsMenu=false;(onVoiceContent?:onAttachContent)(file)}else null
+
     val listState = rememberLazyListState()
 
     // Ogni messaggio nuovo (e l'indicatore "sto pensando") porta la lista in fondo: in una chat
@@ -247,7 +252,7 @@ fun AssistantChatScreen(
                 }
                 message.attachedFiles.forEach { file ->
                     androidx.compose.material3.TextButton(onClick={onOpenAttachedFile(file)}) {
-                        Text("↗ ${file.name}${if(file.generated) " · testo AI" else ""}")
+                        Text("${file.name}${if(file.generated) " · testo AI" else ""}")
                     }
                 }
                 if (message.actionPlan != null) AssistantActionPreview(
@@ -315,21 +320,23 @@ fun AssistantChatScreen(
                 )
             }
 
-            val canSend = draft.trim().isNotEmpty() && !isThinking
+            val canSend = (draft.trim().isNotEmpty()||attachedFiles.isNotEmpty()) && !isThinking
             val send = {
-                val question = draft.trim()
+                val question = draft.trim().ifBlank{"Riassumi gli allegati di questo messaggio."}
                 draft = ""
                 onSend(question)
             }
             if(attachedFiles.isNotEmpty())Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())){
                 attachedFiles.forEach{file->
-                    androidx.compose.material3.TextButton(onClick={onOpenAttachedFile(file)}){Text(file.name)}
-                    androidx.compose.material3.TextButton(onClick={onRemoveAttachedFile(file.localId)},enabled=!isThinking){Text("Rimuovi ${file.name}")}
+                    androidx.compose.material3.InputChip(selected=true,onClick={onOpenAttachedFile(file)},modifier=Modifier.widthIn(max=240.dp).padding(horizontal=4.dp),
+                        label={Text(file.name,maxLines=1,overflow=TextOverflow.Ellipsis)},
+                        trailingIcon={androidx.compose.material3.IconButton(onClick={onRemoveAttachedFile(file.localId)},enabled=!isThinking,modifier=Modifier.size(32.dp).semantics{contentDescription="Rimuovi allegato ${file.name}"}){AppIcons.Close(Modifier.size(16.dp),AppTheme.TextMuted)}})
+
                 }
             }
             attachmentError?.let{Text(it,color=AppTheme.TintRedInk,style=MaterialTheme.typography.bodySmall)}
-            if(recording)Text("Registrazione in corso: apri il menu allegati per terminarla o annullarla.",color=AppTheme.PrimaryBlue,style=MaterialTheme.typography.bodySmall)
-            Row(verticalAlignment = Alignment.Bottom) {
+            if(recording)Text("Registrazione in corso · premi di nuovo il microfono per terminarla.",color=AppTheme.PrimaryBlue,style=MaterialTheme.typography.bodySmall)
+            Row(Modifier.fillMaxWidth().background(AppTheme.CardSurface,RoundedCornerShape(28.dp)).padding(4.dp),verticalAlignment = Alignment.CenterVertically) {
                 if(onAttachContent!=null){
                     AilaIconButton(contentDescription="Menu allegati",onClick={attachmentsMenu=true}){tint->AppIcons.Plus(Modifier.size(24.dp),tint)}
                     Spacer(Modifier.width(4.dp))
@@ -345,7 +352,13 @@ fun AssistantChatScreen(
                     maxLines = 4
                 )
                 Spacer(modifier = Modifier.width(AppTheme.Space8))
-                SendButton(enabled = canSend, onClick = send)
+                if(draft.isBlank()&&attachedFiles.isEmpty()&&recorder!=null)AilaIconButton(contentDescription=if(recording)"Termina vocale"else"Registra vocale",onClick={if(recording)recorder?.stop()else if(!isThinking)recorder?.start()}){tint->
+                    androidx.compose.foundation.Canvas(Modifier.size(24.dp)){
+                        drawRoundRect(tint,androidx.compose.ui.geometry.Offset(size.width*.35f,size.height*.1f),androidx.compose.ui.geometry.Size(size.width*.3f,size.height*.55f),androidx.compose.ui.geometry.CornerRadius(size.width*.15f))
+                        drawArc(tint,0f,180f,false,androidx.compose.ui.geometry.Offset(size.width*.2f,size.height*.3f),androidx.compose.ui.geometry.Size(size.width*.6f,size.height*.5f),style=androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
+                        drawLine(tint,androidx.compose.ui.geometry.Offset(size.width*.5f,size.height*.8f),androidx.compose.ui.geometry.Offset(size.width*.5f,size.height*.95f),2.dp.toPx())
+                    }
+                }else SendButton(enabled = canSend, onClick = send)
             }
 
             Spacer(modifier = Modifier.height(AppTheme.Space8))
@@ -361,17 +374,20 @@ fun AssistantChatScreen(
     }
 
     if(onAttachContent!=null){
-        val picker=circolareplus.platform.rememberContentPicker({attachmentError=it}){file->attachmentsMenu=false;onAttachContent(file)}
-        val recorder=circolareplus.platform.rememberVoiceRecorder({recording=it},{attachmentError=it}){file->attachmentsMenu=false;onAttachContent(file)}
         if(attachmentsMenu)circolareplus.design.AilaBottomSheet(onDismissRequest={attachmentsMenu=false}){
             Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
                 Text("Allegati della chat",style=MaterialTheme.typography.titleLarge,color=AppTheme.TextDark)
-                Text("Scegli un file o registra un vocale. Nell’anteprima puoi controllare il contenuto, selezionare un passaggio e allegarlo alla chat.",color=AppTheme.TextMuted)
-                androidx.compose.material3.OutlinedButton(onClick={attachmentsMenu=false;picker()},enabled=!isThinking&&!recording,modifier=Modifier.fillMaxWidth()){Text("Allega un file o un vocale")}
-                androidx.compose.material3.OutlinedButton(onClick={if(recording)recorder.stop()else recorder.start()},enabled=!isThinking,modifier=Modifier.fillMaxWidth()){
+                Text("File e vocali restano come fonti di questa conversazione. Le azioni richiedono sempre conferma.",color=AppTheme.TextMuted)
+                androidx.compose.material3.OutlinedButton(onClick={attachmentsMenu=false;picker?.invoke()},enabled=!isThinking&&!recording,modifier=Modifier.fillMaxWidth()){Text("Allega un file o un vocale")}
+                androidx.compose.material3.OutlinedButton(onClick={if(recording)recorder?.stop()else if(!isThinking)recorder?.start()},enabled=!isThinking,modifier=Modifier.fillMaxWidth()){
                     Text(if(recording)"Termina e allega il vocale"else"Registra un vocale")
                 }
-                if(recording)androidx.compose.material3.TextButton(onClick=recorder.cancel){Text("Annulla registrazione")}
+                if(recording)androidx.compose.material3.TextButton(onClick={recorder?.cancel()}){Text("Annulla registrazione")}
+                androidx.compose.material3.TextButton(onClick={attachmentsMenu=false;onOpenFiles()}){Text("File sul dispositivo")}
+                androidx.compose.material3.TextButton(onClick={attachmentsMenu=false;onStudyPlan()}){Text("Piano di ripasso per i miei impegni")}
+                Text("Distribuisce il ripasso prima dei tuoi impegni; non aggiunge eventi senza conferma.",style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
+                androidx.compose.material3.TextButton(onClick={attachmentsMenu=false;onOpenAiSettings()}){Text("Impostazioni AI")}
+
             }
         }
     }
@@ -866,7 +882,7 @@ private fun AssistantHeader(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = "AILA Assistant",
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.titleMedium,
                 color = AppTheme.TextDark,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -1050,7 +1066,7 @@ private fun AssistantBubble(
 
 /** Reviewable, persisted plan. Only this explicit confirmation can start a calendar write. */
 @Composable
-private fun AssistantActionPreview(
+internal fun AssistantActionPreview(
     message: AssistantMessage,
     isBusy: Boolean,
     onConfirm: () -> Unit,

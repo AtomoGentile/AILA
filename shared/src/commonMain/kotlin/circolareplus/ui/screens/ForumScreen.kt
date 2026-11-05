@@ -28,7 +28,7 @@ import kotlinx.coroutines.*
 fun ForumScreen(
  isModerator:Boolean,onBack:()->Unit,onOpenAttachment:(ContentAttachmentDto)->Unit,
  onPrepareCalendar:(String)->Unit,onActivity:(AssistantAgentPhase?)->Unit,
- initialThreadId:String?=null,inline:Boolean=false,onCalendarChanged:()->Unit={}
+ initialThreadId:String?=null,inline:Boolean=false,onCalendarChanged:()->Unit={},onContextChange:(String)->Unit={}
 ) {
  val scope=rememberCoroutineScope();val repo=AppContainer.forumRepository
  var manualPhase by remember{mutableStateOf<AssistantAgentPhase?>(null)}
@@ -117,6 +117,10 @@ fun ForumScreen(
   }}){Text("Conferma per la classe")}},
   dismissButton={TextButton(onClick={confirmingProposal=null}){Text("Annulla")}}
  )}
+ LaunchedEffect(snapshot?.posts,focusPostId){
+  onContextChange(snapshot?.let{snap->"Discussione: ${snap.thread.title}\n"+snap.posts.filter{!it.hidden}.takeLast(30).joinToString("\n"){"${it.author.label}: ${it.body}"}.take(6000)}.orEmpty())
+ }
+ DisposableEffect(Unit){onDispose{onContextChange("")}}
  val goBack:()->Unit={when{focusPostId!=null->focusPostId=null;threadId!=null->{threadId=null;snapshot=null};else->onBack()}}
  PlatformBackHandler{goBack()}
  Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight).then(if(inline)Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing))){

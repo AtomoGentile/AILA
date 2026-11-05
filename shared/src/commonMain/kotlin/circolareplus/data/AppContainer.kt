@@ -216,9 +216,7 @@ object AppContainer {
         val google = ClientSideAiClassifier(userApiKey = settings.userAiApiKey)
         val provider = AiProvider.fromId(settings.aiProvider)
         val format = CompatibleAiFormat.fromId(settings.compatibleAiFormat)
-        val effectiveProvider = if (provider == AiProvider.COMPATIBLE_API && format == CompatibleAiFormat.GOOGLE) {
-            AiProvider.GOOGLE_AI_STUDIO
-        } else provider
+        val effectiveProvider = provider
         val external: AiClassifier = if (effectiveProvider == AiProvider.COMPATIBLE_API) {
             CompatibleApiAiClassifier(
                 format = format,
