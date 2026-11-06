@@ -99,6 +99,7 @@ fun PollsScreen(
     onDeletePoll: () -> Unit = {}
 ) {
     var pendingAction by remember { mutableStateOf<String?>(null) }
+    var showPollHelp by remember { mutableStateOf(false) }
     when (pendingAction) {
         "close" -> circolareplus.design.AilaConfirmDialog(
             title = "Chiudere il sondaggio?",
@@ -158,29 +159,18 @@ fun PollsScreen(
             }
         }
         val howItWorksCard: @Composable () -> Unit = {
-            AilaCard(modifier = Modifier.ailaAppear(0)) {
-                Column(modifier = Modifier.padding(AppTheme.Space16)) {
-                    Text(
-                        text = if (usesGlobalAssignment) "Nuovo algoritmo attivo" else "Come funziona",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = AppTheme.TextDark
-                    )
-                    Spacer(modifier = Modifier.height(AppTheme.Space4))
-                    if (usesGlobalAssignment) {
-                        Text("Le date vengono scelte considerando tutto il calendario. Voti e bonus iniziali sono salvati per le verifiche.",
-                            style = MaterialTheme.typography.bodySmall, color = AppTheme.TintBlueInk)
-                        Spacer(Modifier.height(AppTheme.Space8))
+            AilaCard(containerColor=androidx.compose.material3.MaterialTheme.colorScheme.secondaryContainer) {
+                Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment=Alignment.CenterVertically) {
+                        Text("Come scegliere le date",Modifier.weight(1f),style=MaterialTheme.typography.titleSmall,color=androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer)
+                        androidx.compose.material3.TextButton(onClick={showPollHelp=!showPollHelp}){Text(if(showPollHelp) "Chiudi" else "Dettagli")}
                     }
-                    Text(
-                        text = "Per ogni data dici quanto ti va bene. Chi accetta le date che " +
-                            "gli altri rifiutano guadagna un bonus per i sondaggi futuri. " +
-                            "I \"meglio di no\" contano pieni fino al 40% delle date: " +
-                            "se ne metti di più ognuno pesa meno, e vale meno bonus.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = AppTheme.TextMuted
-                    )
-                    Spacer(modifier = Modifier.height(AppTheme.Space12))
-                    VoteLegend(darkRedLeft = MAX_DARK_RED - darkRedCount)
+                    VoteLegend(darkRedLeft=MAX_DARK_RED-darkRedCount)
+                    androidx.compose.animation.AnimatedVisibility(showPollHelp) {
+                        Text((if(usesGlobalAssignment) "Le date vengono scelte considerando tutto il calendario. " else "")+
+                            "Per ogni data indica quanto ti va bene. Chi accetta date rifiutate dagli altri guadagna un bonus per i sondaggi futuri. I «meglio di no» contano pieni fino al 40% delle date: oltre questa soglia, ognuno pesa meno e vale meno bonus.",
+                            style=MaterialTheme.typography.bodyMedium,color=androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer)
+                    }
                 }
             }
         }
@@ -348,7 +338,7 @@ private fun PollProgressHeader(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal=AppTheme.Space16, vertical=AppTheme.Space8)
-            .background(AppTheme.CardSurface, RoundedCornerShape(24.dp))
+            .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(AppTheme.CardSurface,androidx.compose.material3.MaterialTheme.colorScheme.secondaryContainer)), RoundedCornerShape(28.dp))
             .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12)
     ) {
         Row(

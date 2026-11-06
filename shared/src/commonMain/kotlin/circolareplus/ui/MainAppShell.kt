@@ -3909,6 +3909,18 @@ fun MainAppShell(
                             }
                             Column(modifier = Modifier.fillMaxSize()) {
                                 circolareplus.design.AilaScreenHeader(title = "Sondaggi")
+                                val showPollIntro = showPollHistory || pollsSection == 1 || currentPoll == null
+                                if(showPollIntro) circolareplus.ui.screens.SectionFeatureCard(
+                                    title=if(showPollHistory) "Le scelte della classe" else "Decidiamo insieme",
+                                    description=if(showPollHistory) "Ritrova i risultati e le date assegnate." else "Esprimi le tue preferenze sulle date o metti in ordine le proposte.",
+                                    modifier=Modifier.padding(horizontal=16.dp,vertical=8.dp),
+                                    icon={AppIcons.Poll(Modifier.size(24.dp),MaterialTheme.colorScheme.tertiary)},
+                                    actions=if(isRepresentative) ({
+                                        androidx.compose.material3.Button(onClick={if(pollsSection==1)showCreateRankingPollDialog=true else showCreatePollDialog=true},shape=RoundedCornerShape(18.dp)) {
+                                            AppIcons.Plus(Modifier.size(18.dp),MaterialTheme.colorScheme.onPrimary);Spacer(Modifier.width(6.dp));Text("Nuovo sondaggio")
+                                        }
+                                    }) else null
+                                )
                                 // Sopra: sondaggi in corso o storico (vale per entrambi i tipi), con
                                 // l'azione "nuovo" accanto. Sotto: il tipo di sondaggio.
                                 Row(
@@ -3923,15 +3935,8 @@ fun MainAppShell(
                                         modifier = Modifier.weight(1f),
                                         key = showPollHistory
                                     )
-                                    if (isRepresentative) {
-                                        circolareplus.design.AilaIconButton(
-                                            contentDescription = "Nuovo sondaggio",
-                                            onClick = {
-                                                if (pollsSection == 1) showCreateRankingPollDialog = true else showCreatePollDialog = true
-                                            },
-                                            primary = true,
-                                            opensPage = true
-                                        ) { tint -> AppIcons.Plus(modifier = Modifier.size(18.dp), color = tint) }
+                                    if(isRepresentative && !showPollIntro) androidx.compose.material3.TextButton(onClick={showCreatePollDialog=true}) {
+                                        AppIcons.Plus(Modifier.size(18.dp),AppTheme.PrimaryBlue);Spacer(Modifier.width(4.dp));Text("Nuovo")
                                     }
                                 }
                                 Row(
@@ -4062,15 +4067,11 @@ fun MainAppShell(
                                                 null
                                             }
                                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-                                            circolareplus.design.AilaEmptyState(
-                                                title = "Nessun sondaggio aperto",
-                                                message = if (isRepresentative)
-                                                    "Crea un sondaggio per far prenotare alla classe le date delle interrogazioni."
-                                                else
-                                                    "Quando il Rappresentante apre un sondaggio, lo trovi qui.",
-                                                actionLabel = if (isRepresentative) "+ Nuovo sondaggio" else null,
-                                                onAction = createPollAction,
-                                                icon = { AppIcons.Check(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
+                                            circolareplus.ui.screens.SectionEmptyCard(
+                                                title="Ancora nessun sondaggio",
+                                                description=if(isRepresentative) "Apri un sondaggio dal pulsante in alto: ogni compagno potrà dare le proprie preferenze." else "Quando la classe ha una scelta da fare, troverai qui il sondaggio a cui partecipare.",
+                                                modifier=Modifier.padding(16.dp),
+                                                icon={AppIcons.Poll(Modifier.size(28.dp),MaterialTheme.colorScheme.onSecondaryContainer)}
                                             )
                                         }
                                     } else {
@@ -4577,6 +4578,10 @@ fun MainAppShell(
                             AppTheme.uiStyle = style
                             AppContainer.settings.uiStyleKey = style.key
                         },
+                        secondaryAccent = AppTheme.secondaryAccent,
+                        onSecondaryAccentChange = { AppTheme.secondaryAccent=it;AppContainer.settings.secondaryAccentKey=it.key },
+                        tertiaryAccent = AppTheme.tertiaryAccent,
+                        onTertiaryAccentChange = { AppTheme.tertiaryAccent=it;AppContainer.settings.tertiaryAccentKey=it.key },
                         accent = AppTheme.accent,
                         onAccentChange = { accent ->
                             AppTheme.accent = accent

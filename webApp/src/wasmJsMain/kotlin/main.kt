@@ -22,6 +22,8 @@ fun main() {
     AppTheme.isDarkMode = AppContainer.settings.isDarkMode
     AppTheme.uiStyle = UiStyle.fromKey(AppContainer.settings.uiStyleKey)
     AppTheme.accent = AilaAccent.fromKey(AppContainer.settings.accentKey)
+    AppTheme.secondaryAccent = circolareplus.design.AilaAccent.fromKey(AppContainer.settings.secondaryAccentKey)
+    AppTheme.tertiaryAccent = circolareplus.design.AilaAccent.fromKey(AppContainer.settings.tertiaryAccentKey)
 
     // Service worker, notifiche push, rientro in primo piano (come onStart/onResume su Android).
     circolareplus.web.installWebLifecycle()

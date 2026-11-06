@@ -86,6 +86,7 @@ fun SeatMapScreen(
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var showHistory by remember { mutableStateOf(false) }
+    var adminExpanded by remember { mutableStateOf(false) }
     if (showHistory) SeatMapHistoryDialog(
         studentsMap = studentsMap,
         loadHistory = loadPublishedHistory,
@@ -317,10 +318,12 @@ fun SeatMapScreen(
                         AppIcons.Sliders(modifier = Modifier.size(16.dp), color = AppTheme.TextDark)
                         Spacer(modifier = Modifier.width(AppTheme.Space8))
                         Text(
-                            text = "Pannello Rappresentante",
+                            text = "Gestione aula",
                             style = MaterialTheme.typography.titleSmall,
-                            color = AppTheme.TextDark
+                            color = AppTheme.TextDark,
+                            modifier = Modifier.weight(1f)
                         )
+                        TextButton(onClick={adminExpanded=!adminExpanded}) { Text(if(adminExpanded) "Chiudi" else "Opzioni") }
                     }
 
                     Spacer(modifier = Modifier.height(AppTheme.Space8))
@@ -367,6 +370,8 @@ fun SeatMapScreen(
                         PreferencesProgressBlock(progress = preferencesProgress)
                     }
 
+                    AnimatedVisibility(adminExpanded || isGeneratingProposals) {
+                    Column {
                     if (showDummiesMenu) {
                         Spacer(modifier = Modifier.height(AppTheme.Space12))
                         DummiesBlock(
@@ -486,7 +491,8 @@ fun SeatMapScreen(
                         fillMaxWidth = true
                     )
 
-
+                    }
+                    }
                 }
             }
         }
@@ -524,6 +530,14 @@ fun SeatMapScreen(
             state = gridState,
             modifier = Modifier.weight(1f).fillMaxHeight()
         ) {
+        fullRow {
+            SectionFeatureCard(
+                title="La tua aula",
+                description=if(assignments.isEmpty()) "La disposizione della classe comparirà qui. Nel frattempo puoi seguire la raccolta delle preferenze." else "Cerca un compagno o trova il tuo posto. Puoi esportare e consultare le disposizioni precedenti dall’intestazione.",
+                badge=if(isPreferencesOpen) "Preferenze aperte" else if(assignments.isNotEmpty()) "${assignments.size} banchi · disposizione pubblicata" else "In attesa della disposizione",
+                icon={AppIcons.Chair(Modifier.size(24.dp),MaterialTheme.colorScheme.tertiary)}
+            )
+        }
         if (!wide) {
             fullRow { searchBlock() }
             if (isRepresentative) fullRow { adminPanel() }
@@ -536,14 +550,14 @@ fun SeatMapScreen(
                     .ailaAppear(2)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                    .background(AppTheme.HeroGradient)
-                    .padding(vertical = AppTheme.Space12),
+                    .background(MaterialTheme.colorScheme.secondaryContainer)
+                    .padding(vertical = AppTheme.Space16),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "LAVAGNA & CATTEDRA",
+                    text = "Lavagna e cattedra",
                     style = MaterialTheme.typography.labelMedium,
-                    color = AppTheme.OnHeroPrimary
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
                 )
             }
         }
@@ -552,14 +566,10 @@ fun SeatMapScreen(
         // semplicemente vuota, senza spiegare perché: ora c'è uno stato vuoto esplicito.
         if (assignments.isEmpty()) {
             fullRow {
-                AilaEmptyState(
-                    modifier = Modifier.ailaAppear(3),
-                    title = "Nessuna disposizione pubblicata",
-                    message = if (isRepresentative)
-                        "Apri la votazione delle preferenze, poi calcola e pubblica una delle tre proposte."
-                    else
-                        "Il Rappresentante non ha ancora pubblicato la disposizione dei banchi.",
-                    icon = { AppIcons.Chair(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
+                SectionEmptyCard(
+                    title="L’aula prende forma qui",
+                    description=if(isRepresentative) "Raccogli le preferenze della classe, poi confronta le proposte e pubblica la disposizione." else "La mappa sarà disponibile quando il Rappresentante pubblicherà i posti.",
+                    icon={AppIcons.Chair(Modifier.size(28.dp),MaterialTheme.colorScheme.onSecondaryContainer)}
                 )
             }
         }

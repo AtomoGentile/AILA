@@ -365,6 +365,13 @@ class LocalSettingsManager(
         get() = settings.getString(KEY_ACCENT, "blue")
         set(value) = settings.putString(KEY_ACCENT, value)
 
+    var secondaryAccentKey: String
+        get() = settings.getString("secondary_accent_color", "violet")
+        set(value) = settings.putString("secondary_accent_color", value)
+    var tertiaryAccentKey: String
+        get() = settings.getString("tertiary_accent_color", "teal")
+        set(value) = settings.putString("tertiary_accent_color", value)
+
     // --- Filtri delle notifiche ----------------------------------------------------------------
 
     /**

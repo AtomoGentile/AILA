@@ -103,6 +103,10 @@ object AppTheme {
 
     /** Colore principale scelto (Impostazioni); persiste in LocalSettingsManager. */
     var accent by mutableStateOf(AilaAccent.Default)
+    var secondaryAccent by mutableStateOf(AilaAccent.VIOLET)
+    var tertiaryAccent by mutableStateOf(AilaAccent.TEAL)
+    val SecondaryContainer get() = Color(if(isDarkMode) secondaryAccent.containerDark else secondaryAccent.containerLight)
+    val OnSecondaryContainer get() = Color(if(isDarkMode) secondaryAccent.onContainerDark else secondaryAccent.onContainerLight)
 
     /** Primario, container e toni profondi del colore scelto (vedi [AilaAccent]). */
     val AccentContainer get() = Color(if (isDarkMode) accent.containerDark else accent.containerLight)
@@ -155,8 +159,8 @@ object AppTheme {
     } else {
         Color(if (isDarkMode) accent.primaryDark else accent.primaryLight)
     }
-    val SecondaryIndigo get() = if (isDarkMode) Color(0xFFA78BFA) else Color(0xFF8B5CF6)
-    val AccentCyan = Color(0xFF06B6D4)
+    val SecondaryIndigo get() = Color(if(isDarkMode) secondaryAccent.primaryDark else secondaryAccent.primaryLight)
+    val AccentCyan get() = Color(if(isDarkMode) tertiaryAccent.primaryDark else tertiaryAccent.primaryLight)
 
     // --- Superfici e testo -------------------------------------------------------------------
     // Glass: sfondo grigio-azzurro chiaro (nero quasi puro in scuro, come iOS), testi dai toni di

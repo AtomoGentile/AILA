@@ -97,29 +97,13 @@ fun RankingPollsScreen(
         )
     }
 
-    if (polls.isEmpty() && showingHistory) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-            AilaEmptyState(
-                title = "Nessun sondaggio chiuso",
-                message = "Quando un sondaggio a ordinamento viene chiuso, la classifica finale resta qui.",
-                icon = { AppIcons.History(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
-            )
-        }
-        return
-    }
-    if (polls.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-            AilaEmptyState(
-                title = "Nessun sondaggio aperto",
-                message = if (isRepresentative)
-                    "Proponi delle opzioni e fai mettere in ordine alla classe quelle che preferisce."
-                else
-                    "Quando il Rappresentante ne apre uno, lo trovi qui.",
-                actionLabel = if (isRepresentative) "+ Nuovo sondaggio" else null,
-                onAction = if (isRepresentative) onCreatePoll else null,
-                icon = { AppIcons.Sliders(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
-            )
-        }
+    if(polls.isEmpty()) {
+        SectionEmptyCard(
+            title=if(showingHistory) "Le classifiche resteranno qui" else "Qual è la tua prima scelta?",
+            description=if(showingHistory) "Quando un sondaggio si conclude, puoi ritrovare qui il risultato della classe." else if(isRepresentative) "Crea il sondaggio dal pulsante in alto: i compagni potranno ordinare le proposte." else "Quando si apre un sondaggio potrai mettere le proposte nell’ordine che preferisci.",
+            modifier=Modifier.padding(16.dp),
+            icon={AppIcons.Poll(Modifier.size(28.dp),MaterialTheme.colorScheme.onSecondaryContainer)}
+        )
         return
     }
 

@@ -26,6 +26,8 @@ fun MainViewController(): UIViewController = ComposeUIViewController {
     AppTheme.isDarkMode = AppContainer.settings.isDarkMode
     AppTheme.uiStyle = circolareplus.design.UiStyle.fromKey(AppContainer.settings.uiStyleKey)
     AppTheme.accent = circolareplus.design.AilaAccent.fromKey(AppContainer.settings.accentKey)
+    AppTheme.secondaryAccent = circolareplus.design.AilaAccent.fromKey(AppContainer.settings.secondaryAccentKey)
+    AppTheme.tertiaryAccent = circolareplus.design.AilaAccent.fromKey(AppContainer.settings.tertiaryAccentKey)
     SyncWindowInterfaceStyle()
     AilaTheme {
         MainAppShell()

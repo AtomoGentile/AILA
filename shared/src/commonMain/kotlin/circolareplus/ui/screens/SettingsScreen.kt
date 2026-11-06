@@ -7,6 +7,10 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -68,6 +72,10 @@ fun SettingsScreen(
     onUiStyleChange: (circolareplus.design.UiStyle) -> Unit = {},
     accent: circolareplus.design.AilaAccent = circolareplus.design.AilaAccent.Default,
     onAccentChange: (circolareplus.design.AilaAccent) -> Unit = {},
+    secondaryAccent: circolareplus.design.AilaAccent = circolareplus.design.AilaAccent.VIOLET,
+    onSecondaryAccentChange: (circolareplus.design.AilaAccent) -> Unit = {},
+    tertiaryAccent: circolareplus.design.AilaAccent = circolareplus.design.AilaAccent.TEAL,
+    onTertiaryAccentChange: (circolareplus.design.AilaAccent) -> Unit = {},
     isNotificationKindEnabled: (NotificationKind) -> Boolean,
     onNotificationKindChange: (NotificationKind, Boolean) -> Unit,
     boardNotificationsEnabled: Boolean = true,
@@ -243,15 +251,18 @@ fun SettingsScreen(
                                 color = AppTheme.TextDark
                             )
                             Spacer(modifier = Modifier.height(AppTheme.Space8))
-                            AccentPicker(selected = accent, onSelect = onAccentChange)
-                            Spacer(modifier = Modifier.height(AppTheme.Space8))
-                            Text(
-                                text = if (accent == circolareplus.design.AilaAccent.Default)
-                                    "${accent.label} (predefinito)"
-                                else "${accent.label} \u2022 tocca il primo per tornare al predefinito",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = AppTheme.TextMuted
-                            )
+                            AccentPicker(selected = accent, onSelect = onAccentChange, label="Primario")
+                            Spacer(Modifier.height(16.dp))
+                            Text("Colore secondario",style=MaterialTheme.typography.labelLarge,color=AppTheme.TextDark)
+                            Text("Schede, dettagli e superfici di supporto.",style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
+                            Spacer(Modifier.height(8.dp))
+                            AccentPicker(selected=secondaryAccent,onSelect=onSecondaryAccentChange,label="Secondario")
+                            Spacer(Modifier.height(16.dp))
+                            Text("Colore terziario",style=MaterialTheme.typography.labelLarge,color=AppTheme.TextDark)
+                            Text("Gradienti e introduzioni delle sezioni.",style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
+                            Spacer(Modifier.height(8.dp))
+                            AccentPicker(selected=tertiaryAccent,onSelect=onTertiaryAccentChange,label="Terziario")
+
                         }
                     }
             
@@ -1327,7 +1338,8 @@ private fun formatRam(totalRamMb: Int): String {
 @Composable
 private fun AccentPicker(
     selected: circolareplus.design.AilaAccent,
-    onSelect: (circolareplus.design.AilaAccent) -> Unit
+    onSelect: (circolareplus.design.AilaAccent) -> Unit,
+    label: String
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1351,7 +1363,8 @@ private fun AccentPicker(
                     .size(40.dp)
                     .clip(androidx.compose.foundation.shape.CircleShape)
                     .border(ring, swatch.copy(alpha = 0.45f), androidx.compose.foundation.shape.CircleShape)
-                    .clickable { onSelect(option) }
+                    .selectable(selected=isSelected,role=Role.RadioButton,onClick={onSelect(option)})
+                    .semantics { contentDescription = "$label: ${option.label}" }
                     .padding(if (isSelected) 6.dp else 3.dp)
                     .clip(androidx.compose.foundation.shape.CircleShape)
                     .background(swatch),
