@@ -190,14 +190,21 @@ class CompatibleApiAiClassifier(
                     header("x-goog-api-key", apiKey.trim())
                 }
             }
-            setBody(
-                when (format) {
-                    CompatibleAiFormat.OPENAI -> openAiCompatibleBody(endpoint,effectiveModel,system,user,maxTokens)
-                    CompatibleAiFormat.ANTHROPIC -> AnthropicCompatibleRequest(
+            // A mixed `when` passed to setBody is inferred as Any. That makes Ktor
+            // guess serializers for JsonObject's values, including internal JsonLiteral.
+            // Preserve the concrete reified type at each call instead.
+            when (format) {
+                CompatibleAiFormat.OPENAI -> setBody<JsonObject>(
+                    openAiCompatibleBody(endpoint, effectiveModel, system, user, maxTokens)
+                )
+                CompatibleAiFormat.ANTHROPIC -> setBody<AnthropicCompatibleRequest>(
+                    AnthropicCompatibleRequest(
                         model = effectiveModel, system = system,
                         messages = listOf(CompatibleMessage("user", user)), max_tokens = maxTokens
                     )
-                    CompatibleAiFormat.GOOGLE -> GoogleRequest(
+                )
+                CompatibleAiFormat.GOOGLE -> setBody<GoogleRequest>(
+                    GoogleRequest(
                         systemInstruction = if (system.isNotBlank()) {
                             GoogleSystemInstruction(listOf(GooglePart(system)))
                         } else null,
@@ -208,8 +215,8 @@ class CompatibleApiAiClassifier(
                             responseMimeType = if (system.contains("JSON", ignoreCase = true)) "application/json" else null
                         )
                     )
-                }
-            )
+                )
+            }
         }
         val body = response.bodyAsText()
         if (!response.status.isSuccess()) error("HTTP ${response.status.value}: ${body.take(240)}")
