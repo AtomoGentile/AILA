@@ -24,6 +24,7 @@ import circolareplus.design.*
 import circolareplus.platform.*
 import kotlinx.coroutines.*
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ForumScreen(
  isModerator:Boolean,onBack:()->Unit,onOpenAttachment:(ContentAttachmentDto)->Unit,
@@ -130,10 +131,8 @@ fun ForumScreen(
   error?.let{Text(it,Modifier.padding(16.dp),color=AppTheme.TintRedInk)}
   if(threadId==null){
    LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
-    item{Text("Educazione tra pere",style=MaterialTheme.typography.headlineSmall,color=AppTheme.TextDark)
-     Text("Chiedi aiuto, condividi quello che sai e ritrova le risposte anche in seguito.",color=AppTheme.TextMuted)
-     Row{Button(onClick={creating=true},enabled=!busy){Text("Nuova domanda")};TextButton(onClick={showRules=true}){Text("Come funziona")}}}
-    if(threads.isEmpty()&&!busy)item{Text("Nessuna discussione. Puoi aprire la prima domanda della classe.",color=AppTheme.TextMuted)}
+    item { ForumIntroduction(busy, onCreate = { creating = true }, onRules = { showRules = true }) }
+    if(threads.isEmpty()&&!busy) item { ForumEmptyState() }
     items(threads,key={it.id}){t->AilaCard(onClick={threadId=t.id}){
      Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){
       Text(t.title,style=MaterialTheme.typography.titleMedium,color=AppTheme.TextDark)
@@ -230,14 +229,12 @@ fun ForumScreen(
    }else if(error==null)Box(Modifier.weight(1f).fillMaxWidth(),contentAlignment=Alignment.Center){CircularProgressIndicator()}
   }
  }
- if(creating)AlertDialog(onDismissRequest={if(!busy)creating=false},title={Text("Nuova domanda")},text={Column(verticalArrangement=Arrangement.spacedBy(10.dp)){
-  OutlinedTextField(createTitle,{createTitle=it},label={Text("Titolo")},maxLines=2)
-  OutlinedTextField(createBody,{createBody=it},label={Text("La tua domanda")},minLines=3,maxLines=6)
-  Row(verticalAlignment=Alignment.CenterVertically){Checkbox(anonymous,{anonymous=it});Text("Anonima: sarai OP")}
-  Row(verticalAlignment=Alignment.CenterVertically){Checkbox(rulesAccepted,{rulesAccepted=it});TextButton(onClick={showRules=true}){Text("Regole e informativa")}}
- }},confirmButton={TextButton(enabled=!busy&&rulesAccepted&&createTitle.isNotBlank()&&createBody.isNotBlank(),onClick={launchWork{
-  val created=repo.create(createTitle,createBody,anonymous);creating=false;createTitle="";createBody="";threadId=created.thread.id
- }}){Text("Pubblica")}},dismissButton={TextButton(onClick={creating=false}){Text("Annulla")}})
+ if(creating) ForumNewQuestionSheet(
+  title=createTitle,question=createBody,anonymous=anonymous,accepted=rulesAccepted,busy=busy,error=error,
+  onTitle={createTitle=it},onQuestion={createBody=it},onAnonymous={anonymous=it},onAccepted={rulesAccepted=it},
+  onRules={showRules=true},onClose={if(!busy)creating=false},onPublish={launchWork{
+   val created=repo.create(createTitle,createBody,anonymous);creating=false;createTitle="";createBody="";threadId=created.thread.id
+  }})
  if(showRules)AlertDialog(onDismissRequest={showRules=false},title={Text("Educazione tra pere")},text={Column(Modifier.verticalScroll(rememberScrollState())){
   Text("Le discussioni sono visibili alla tua classe e restano disponibili nel tempo. Scegli nome reale o pseudonimo al primo intervento: l’identità resta fissa in quella discussione. Non pubblicare dati personali o contenuti offensivi. Puoi segnalare gli abusi; i moderatori possono rimuovere i contenuti.")
   Spacer(Modifier.height(12.dp));Text("Puoi richiamare @perabot o chiedere un riassunto esplicitamente. I messaggi condivisi possono essere analizzati anche da altri lettori autorizzati che attivano le proposte automatiche: le proposte sono visibili alla classe e nessun evento viene aggiunto senza conferma. Disattivare la tua AI non impedisce l’analisi dei messaggi già condivisi da parte degli altri lettori. Le risposte AI sono assistenza e possono contenere errori. L’elaborazione cloud richiede il consenso in Impostazioni → AI. Sul server: 90 giorni fino a 3 MB; oltre: 7 giorni. Le copie sul dispositivo restano fino alla cancellazione manuale. Gli audio durano al massimo 10 minuti. La scadenza degli allegati non elimina i messaggi.")
