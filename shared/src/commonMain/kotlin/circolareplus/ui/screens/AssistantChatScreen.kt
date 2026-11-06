@@ -251,8 +251,16 @@ fun AssistantChatScreen(
                     )
                 }
                 message.attachedFiles.forEach { file ->
-                    androidx.compose.material3.TextButton(onClick={onOpenAttachedFile(file)}) {
-                        Text("${file.name}${if(file.generated) " · testo AI" else ""}")
+                    Row(Modifier.padding(top = 6.dp).widthIn(max = 300.dp).clip(RoundedCornerShape(20.dp))
+                        .background(AppTheme.CardSurface).border(1.dp, AppTheme.PrimaryBlue.copy(alpha = .15f), RoundedCornerShape(20.dp))
+                        .clickable { onOpenAttachedFile(file) }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(36.dp).background(AppTheme.TintViolet, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) { AppIcons.Document(Modifier.size(20.dp), AppTheme.TintVioletInk) }
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(file.name, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
+                            Text(if(file.generated) "Testo elaborato da AILA" else "Apri l’originale", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
+                        }
+                        AppIcons.ChevronRight(Modifier.size(17.dp), AppTheme.TextMuted)
                     }
                 }
                 if (message.actionPlan != null) AssistantActionPreview(
@@ -326,16 +334,31 @@ fun AssistantChatScreen(
                 draft = ""
                 onSend(question)
             }
-            if(attachedFiles.isNotEmpty())Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())){
-                attachedFiles.forEach{file->
-                    androidx.compose.material3.InputChip(selected=true,onClick={onOpenAttachedFile(file)},modifier=Modifier.widthIn(max=240.dp).padding(horizontal=4.dp),
-                        label={Text(file.name,maxLines=1,overflow=TextOverflow.Ellipsis)},
-                        trailingIcon={androidx.compose.material3.IconButton(onClick={onRemoveAttachedFile(file.localId)},enabled=!isThinking,modifier=Modifier.size(32.dp).semantics{contentDescription="Rimuovi allegato ${file.name}"}){AppIcons.Close(Modifier.size(16.dp),AppTheme.TextMuted)}})
-
+            if(attachedFiles.isNotEmpty()) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                attachedFiles.forEach { file ->
+                    Row(Modifier.width(242.dp).clip(RoundedCornerShape(20.dp)).background(AppTheme.CardSurface)
+                        .border(1.dp, AppTheme.PrimaryBlue.copy(alpha = .20f), RoundedCornerShape(20.dp))
+                        .clickable { onOpenAttachedFile(file) }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(36.dp).background(AppTheme.TintViolet, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                            AppIcons.Document(Modifier.size(20.dp), AppTheme.TintVioletInk)
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(file.name, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, color = AppTheme.TextDark)
+                            Text("Pronto per l’invio", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
+                        }
+                        androidx.compose.material3.IconButton(onClick = { onRemoveAttachedFile(file.localId) }, enabled = !isThinking,
+                            modifier = Modifier.size(32.dp).semantics { contentDescription = "Rimuovi allegato ${file.name}" }) {
+                            AppIcons.Close(Modifier.size(16.dp), AppTheme.TextMuted)
+                        }
+                    }
                 }
             }
             attachmentError?.let{Text(it,color=AppTheme.TintRedInk,style=MaterialTheme.typography.bodySmall)}
-            if(recording)Text("Registrazione in corso · premi di nuovo il microfono per terminarla.",color=AppTheme.PrimaryBlue,style=MaterialTheme.typography.bodySmall)
+            if(recording) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Registrazione in corso…", Modifier.weight(1f), color = AppTheme.PrimaryBlue, style = MaterialTheme.typography.bodySmall)
+                androidx.compose.material3.TextButton(onClick = { recorder?.cancel() }) { Text("Annulla", style = MaterialTheme.typography.labelMedium) }
+            }
             Row(Modifier.fillMaxWidth().background(AppTheme.CardSurface,RoundedCornerShape(28.dp)).padding(4.dp),verticalAlignment = Alignment.CenterVertically) {
                 if(onAttachContent!=null){
                     AilaIconButton(contentDescription="Menu allegati",onClick={attachmentsMenu=true}){tint->AppIcons.Plus(Modifier.size(24.dp),tint)}
@@ -353,11 +376,7 @@ fun AssistantChatScreen(
                 )
                 Spacer(modifier = Modifier.width(AppTheme.Space8))
                 if(draft.isBlank()&&attachedFiles.isEmpty()&&recorder!=null)AilaIconButton(contentDescription=if(recording)"Termina vocale"else"Registra vocale",onClick={if(recording)recorder?.stop()else if(!isThinking)recorder?.start()}){tint->
-                    androidx.compose.foundation.Canvas(Modifier.size(24.dp)){
-                        drawRoundRect(tint,androidx.compose.ui.geometry.Offset(size.width*.35f,size.height*.1f),androidx.compose.ui.geometry.Size(size.width*.3f,size.height*.55f),androidx.compose.ui.geometry.CornerRadius(size.width*.15f))
-                        drawArc(tint,0f,180f,false,androidx.compose.ui.geometry.Offset(size.width*.2f,size.height*.3f),androidx.compose.ui.geometry.Size(size.width*.6f,size.height*.5f),style=androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
-                        drawLine(tint,androidx.compose.ui.geometry.Offset(size.width*.5f,size.height*.8f),androidx.compose.ui.geometry.Offset(size.width*.5f,size.height*.95f),2.dp.toPx())
-                    }
+                    MicrophoneGlyph(if(recording) AppTheme.TintRedInk else tint)
                 }else SendButton(enabled = canSend, onClick = send)
             }
 
@@ -375,19 +394,37 @@ fun AssistantChatScreen(
 
     if(onAttachContent!=null){
         if(attachmentsMenu)circolareplus.design.AilaBottomSheet(onDismissRequest={attachmentsMenu=false}){
-            Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
-                Text("Allegati della chat",style=MaterialTheme.typography.titleLarge,color=AppTheme.TextDark)
-                Text("File e vocali restano come fonti di questa conversazione. Le azioni richiedono sempre conferma.",color=AppTheme.TextMuted)
-                androidx.compose.material3.OutlinedButton(onClick={attachmentsMenu=false;picker?.invoke()},enabled=!isThinking&&!recording,modifier=Modifier.fillMaxWidth()){Text("Allega un file o un vocale")}
-                androidx.compose.material3.OutlinedButton(onClick={if(recording)recorder?.stop()else if(!isThinking)recorder?.start()},enabled=!isThinking,modifier=Modifier.fillMaxWidth()){
-                    Text(if(recording)"Termina e allega il vocale"else"Registra un vocale")
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Aggiungi alla chat", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, color = AppTheme.TextDark)
+                        Text("Scegli una fonte per la conversazione.", style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
+                    }
+                    androidx.compose.material3.IconButton(onClick = { attachmentsMenu = false }, modifier = Modifier.size(36.dp).semantics { contentDescription = "Chiudi allegati" }) {
+                        AppIcons.Close(Modifier.size(19.dp), AppTheme.TextMuted)
+                    }
                 }
-                if(recording)androidx.compose.material3.TextButton(onClick={recorder?.cancel()}){Text("Annulla registrazione")}
-                androidx.compose.material3.TextButton(onClick={attachmentsMenu=false;onOpenFiles()}){Text("File sul dispositivo")}
-                androidx.compose.material3.TextButton(onClick={attachmentsMenu=false;onStudyPlan()}){Text("Piano di ripasso per i miei impegni")}
-                Text("Distribuisce il ripasso prima dei tuoi impegni; non aggiunge eventi senza conferma.",style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
-                androidx.compose.material3.TextButton(onClick={attachmentsMenu=false;onOpenAiSettings()}){Text("Impostazioni AI")}
-
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    AttachmentMenuTile("File e foto", "Documenti, immagini, audio", AppTheme.TintViolet, AppTheme.TintVioletInk,
+                        enabled = !isThinking && !recording, onClick = { attachmentsMenu = false; picker?.invoke() }, modifier = Modifier.weight(1f)) {
+                        AppIcons.Document(Modifier.size(24.dp), AppTheme.TintVioletInk)
+                    }
+                    AttachmentMenuTile(if(recording) "Termina vocale" else "Vocale", "Registra un messaggio", AppTheme.TintGreen, AppTheme.TintGreenInk,
+                        enabled = !isThinking, onClick = { attachmentsMenu = false; if(recording) recorder?.stop() else recorder?.start() }, modifier = Modifier.weight(1f)) {
+                        MicrophoneGlyph(AppTheme.TintGreenInk)
+                    }
+                }
+                Column(Modifier.clip(RoundedCornerShape(24.dp)).background(AppTheme.TrackFill)) {
+                    AttachmentMenuRow("File sul dispositivo", "Riapri una copia già salvata", onClick = { attachmentsMenu = false; onOpenFiles() }) { AppIcons.Download(Modifier.size(21.dp), AppTheme.PrimaryBlue) }
+                    androidx.compose.material3.HorizontalDivider(Modifier.padding(horizontal = 18.dp), color = AppTheme.Hairline.copy(alpha = .25f))
+                    AttachmentMenuRow("Prepara il ripasso", "Parti dai tuoi prossimi impegni", onClick = { attachmentsMenu = false; onStudyPlan() }) { AppIcons.Calendar(Modifier.size(21.dp), AppTheme.TintAmberInk) }
+                }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    AppIcons.Shield(Modifier.size(16.dp), AppTheme.TextMuted)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Le azioni richiedono la tua conferma.", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
+                    androidx.compose.material3.TextButton(onClick = { attachmentsMenu = false; onOpenAiSettings() }) { Text("Impostazioni AI", style = MaterialTheme.typography.labelMedium) }
+                }
             }
         }
     }
@@ -403,6 +440,39 @@ fun AssistantChatScreen(
             onNewChat = if (messages.isNotEmpty()) ({ isHistoryOpen = false; onClearChat() }) else null,
             onDismiss = { isHistoryOpen = false }
         )
+    }
+}
+
+@Composable
+private fun AttachmentMenuTile(title: String, subtitle: String, fill: Color, ink: Color,
+    enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, icon: @Composable () -> Unit) {
+    Column(modifier.clip(RoundedCornerShape(26.dp)).background(fill).alpha(if(enabled) 1f else .45f)
+        .clickable(enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
+        .padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.size(42.dp).background(ink.copy(alpha = .10f), RoundedCornerShape(15.dp)), contentAlignment = Alignment.Center) { icon() }
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = ink)
+        Text(subtitle, minLines = 2, style = MaterialTheme.typography.labelMedium, color = ink.copy(alpha = .8f))
+    }
+}
+
+@Composable
+private fun AttachmentMenuRow(title: String, subtitle: String, onClick: () -> Unit, icon: @Composable () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        icon(); Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, color = AppTheme.TextDark)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+        }
+        AppIcons.ChevronRight(Modifier.size(18.dp), AppTheme.TextMuted)
+    }
+}
+
+@Composable
+private fun MicrophoneGlyph(tint: Color) {
+    androidx.compose.foundation.Canvas(Modifier.size(24.dp)) {
+        drawRoundRect(tint, androidx.compose.ui.geometry.Offset(size.width * .35f, size.height * .1f), androidx.compose.ui.geometry.Size(size.width * .3f, size.height * .55f), androidx.compose.ui.geometry.CornerRadius(size.width * .15f))
+        drawArc(tint, 0f, 180f, false, androidx.compose.ui.geometry.Offset(size.width * .2f, size.height * .3f), androidx.compose.ui.geometry.Size(size.width * .6f, size.height * .5f), style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
+        drawLine(tint, androidx.compose.ui.geometry.Offset(size.width * .5f, size.height * .8f), androidx.compose.ui.geometry.Offset(size.width * .5f, size.height * .95f), 2.dp.toPx())
     }
 }
 
@@ -433,7 +503,6 @@ private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
     val fill = AppTheme.PrimaryGradient
     Box(
         modifier = Modifier
-            .padding(bottom = AppTheme.Space4)
             .size(48.dp)
             // Sotto, il pulsante spento (vetro o pillola tonale); sopra, il blu con l'opacita'
             // che segue `on`.

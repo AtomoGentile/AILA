@@ -17,7 +17,7 @@ internal object AssistantActionIntent {
     fun matches(question: String, history: List<AssistantMessage>): Boolean {
         val words = AssistantContext.normalize(question).split(' ').filter(String::isNotBlank)
         val normalized = words.joinToString(" ")
-        if (Regex("\\bnon (?:mi |lo |li |le )?(?:crea\\w*|aggiung\\w*|inser\\w*|met\\w*|segn\\w*|programma\\w*|sposta\\w*|modifica\\w*|elimina\\w*|cancella\\w*|rimuov\\w*)").containsMatchIn(normalized)) return false
+        if (Regex("\\b(?:non|senza) (?:mi |lo |li |le )?(?:crea\\w*|aggiung\\w*|inser\\w*|met\\w*|segn\\w*|programma\\w*|sposta\\w*|modifica\\w*|elimina\\w*|cancella\\w*|rimuov\\w*)").containsMatchIn(normalized)) return false
         if (words.firstOrNull() in setOf("lascia", "stop") || normalized in setOf("annulla", "annulla tutto")) return false
         if (words.firstOrNull() in setOf("come", "dove") || words.take(3).contains("posso")) return false
         if (AssistantGreeting.answer(question) != null) return false

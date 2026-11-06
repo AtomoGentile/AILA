@@ -124,27 +124,9 @@ fun HomeScreen(
             onNavigateToSeatMap = onNavigateToSeatMap
         )
 
-        AilaCard(modifier=Modifier.padding(horizontal=AppTheme.Space16,vertical=12.dp)){
-            Column(Modifier.padding(16.dp)){
-                Text("La tua classe",style=MaterialTheme.typography.titleMedium,color=AppTheme.TextDark)
-                Row{
-                    androidx.compose.material3.TextButton(onClick=onOpenForum){Text("Educazione tra pere")}
-                    androidx.compose.material3.TextButton(onClick=onOpenAca){Text("AILA Assistant")}
-                }
-            }
-        }
-        if(circolareplus.ai.AcaPolicyState.preferences.let{it.aiEnabled&&it.acaEnabled&&it.nudgesEnabled&&"NOW_NUDGE" in it.services})AilaCard(modifier=Modifier.padding(horizontal=AppTheme.Space16,vertical=8.dp)){
-            Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
-                Text("AILA brief",style=MaterialTheme.typography.titleLarge,color=AppTheme.PrimaryBlue)
-                Text(if(nudges.isEmpty())"Nessun impegno urgente per te nei prossimi tre giorni."else"I tuoi prossimi impegni e un aiuto per prepararti.",color=AppTheme.TextMuted)
-                nudges.forEach{nudge->Column{
-                    Text(nudge.message,color=AppTheme.TextDark)
-                    Row{
-                        if(nudge.canPlanStudy)androidx.compose.material3.TextButton(onClick={onPlanStudy("Prepara un piano di ripasso per questo mio impegno, senza aggiungere eventi: ${nudge.title}, data ${nudge.eventDate}.")}){Text("Prepara il ripasso")}
-                        androidx.compose.material3.TextButton(onClick={onDismissNudge(nudge.id)}){Text("Non ora")}
-                    }
-                }}
-            }
+        if (circolareplus.ai.AcaPolicyState.preferences.let { it.aiEnabled && it.acaEnabled && it.nudgesEnabled && "NOW_NUDGE" in it.services }) {
+            AilaBriefCard(nudges, onDismissNudge, onPlanStudy,
+                Modifier.padding(horizontal = AppTheme.Space16).padding(top = 18.dp, bottom = 4.dp))
         }
 
         val latestSection: @Composable () -> Unit = {

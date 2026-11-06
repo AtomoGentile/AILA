@@ -145,10 +145,11 @@ enum class MainTab(val title: String) {
     SEATMAP("Mappa posti")
 }
 
-/** Sotto-sezione mostrata dentro la tab "Classe" (Circolari e Bacheca condividono la stessa tab). */
+/** Sezioni della pagina Classe, con navigazione condivisa. */
 enum class ClassSection(val title: String) {
     CIRCULARS("Circolari"),
-    BOARD("Bacheca")
+    BOARD("Bacheca"),
+    PERE("Pere")
 }
 
 /**
@@ -1658,7 +1659,8 @@ fun MainAppShell(
             NotificationKind.FORUM.key -> {
                 initialForumThread = circolareplus.ui.PendingDeepLink.forumThreadId
                 circolareplus.ui.PendingDeepLink.forumThreadId = null
-                isInForum = true
+                classSection = ClassSection.PERE
+                selectedTab = MainTab.CLASS
             }
             NotificationKind.BOARD.key -> {
                 classSection = ClassSection.BOARD
@@ -2938,6 +2940,7 @@ fun MainAppShell(
                     !acaOverlay && circolareplus.design.AilaSheetBackdrop.openSheets == 0,
                 surfaceKey = listOf(shellRoute, selectedTab, selectedCircularForDetail?.number, eventDetailToShow)
             ) {
+                assistantMode=AssistantMode.GENERAL
                 acaOverlayStart=assistantMessages.size
                 acaOverlay=true
             }
@@ -3293,7 +3296,7 @@ fun MainAppShell(
                                 experience = acaExperience,
                                 aiEnabled = aiPolicy.aiEnabled && "CIRCULARS" in aiPolicy.services,
                                 onOpenAca = { assistantMode=AssistantMode.GENERAL;isInAssistantScreen=true },
-                                onOpenForum = { isInForum = true },
+                                onOpenForum = { isInAcaHub = false; classSection = ClassSection.PERE; selectedTab = MainTab.CLASS },
                                 nudges = acaNudges,
                                 onDismissNudge = { id ->
                                     acaNudges = acaNudges.filterNot { it.id == id }
@@ -3667,29 +3670,10 @@ fun MainAppShell(
                                         .fillMaxWidth()
                                         .background(AppTheme.BackgroundLight)
                                 ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(
-                                                start = AppTheme.Space16,
-                                                end = AppTheme.Space16,
-                                                top = AppTheme.Space20,
-                                                bottom = AppTheme.Space12
-                                            ),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        // Stesso marchio grande a sinistra delle altre intestazioni
-                                        // (AilaScreenHeader): qui al posto del titolo c'e' il selettore.
-                                        circolareplus.design.AilaBrandMark(size = 44.dp)
-                                        Spacer(modifier = Modifier.width(AppTheme.Space12))
-                                        circolareplus.design.AilaSegmentedTabs(
-                                            labels = listOf(ClassSection.CIRCULARS.title, ClassSection.BOARD.title,"Pere"),
-                                            selectedIndex = if (classSection == ClassSection.CIRCULARS) 0 else 1,
-                                            onSelect = { index ->
-                                                if(index==2)isInForum=true else classSection = if (index == 0) ClassSection.CIRCULARS else ClassSection.BOARD
-                                            },
-                                            modifier = Modifier.weight(1f)
-                                        )
+                                    Row(Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16).padding(top = AppTheme.Space16, bottom = AppTheme.Space12), verticalAlignment = Alignment.CenterVertically) {
+                                        circolareplus.design.AilaBrandMark(size = 40.dp)
+                                        Spacer(Modifier.width(12.dp))
+                                        Text("Classe", Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall, color = AppTheme.TextDark)
                                         if (isRepresentative) {
                                             Spacer(modifier = Modifier.width(AppTheme.Space8))
                                             circolareplus.design.AilaIconButton(
@@ -3703,6 +3687,12 @@ fun MainAppShell(
                                             circolareplus.design.AilaProfileButton(entry)
                                         }
                                     }
+                                    circolareplus.design.AilaSegmentedTabs(
+                                        labels = ClassSection.entries.map { it.title },
+                                        selectedIndex = classSection.ordinal,
+                                        onSelect = { classSection = ClassSection.entries[it] },
+                                        modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16).padding(bottom = AppTheme.Space12)
+                                    )
                                 }
                                 // Dissolvenza tra le due sezioni: prima il contenuto veniva
                                 // sostituito di colpo, e con liste lunghe sembrava un salto.
@@ -3725,6 +3715,25 @@ fun MainAppShell(
                                                 selectedNumber = if (circularsPane) paneCircular?.number else null
                                             )
                                         }
+                                    }
+                                    ClassSection.PERE -> {
+                                        ForumScreen(
+                                            inline = true,
+                                            isActive = selectedTab == MainTab.CLASS && shellRoute == ShellRoute.TABS,
+                                            isModerator = isRepresentative,
+                                            initialThreadId = initialForumThread,
+                                            onBack = { initialForumThread = null; classSection = ClassSection.CIRCULARS },
+                                            onContextChange = { acaForumContext = it },
+                                            onOpenAttachment = { remoteContent = it; localContent = null },
+                                            onPrepareCalendar = { text ->
+                                                assistantMode = AssistantMode.GENERAL
+                                                acaOverlayStart = assistantMessages.size
+                                                acaOverlay = true
+                                                askAssistant("Prepara gli eventi da confermare da questa fonte:\n$text")
+                                            },
+                                            onCalendarChanged = { reloadCalendar() },
+                                            onActivity = { contentActivity = it }
+                                        )
                                     }
                                     ClassSection.BOARD -> {
                                         // Lo spinner a tutto schermo solo al primo caricamento: prima ogni
@@ -4434,7 +4443,7 @@ fun MainAppShell(
                     AcaHubScreen(
                         onBack = { isInAcaHub = false },
                         onOpenAssistant = { isInAcaHub = false; isInAssistantScreen = true },
-                        onOpenForum = { isInForum = true },
+                        onOpenForum = { isInAcaHub = false; classSection = ClassSection.PERE; selectedTab = MainTab.CLASS },
                         onOpenContent = { localContent = it; remoteContent = null },
                         onStudyPlan = { isInAcaHub = false; isInAssistantScreen = true; askAssistant("Prepara un piano di studio basato sui miei impegni reali") },
                         onOpenLocalFiles = { filesOpenedFromSettings = false; isInLocalFiles = true },
@@ -5313,13 +5322,9 @@ fun MainAppShell(
                 confirmButton = { androidx.compose.material3.TextButton(onClick = { circolareplus.platform.IncomingContentInbox.clear() }) { Text("Chiudi") } }
             )
         }
-        val acaConversationId = assistantAgentPhases.keys.firstOrNull()
-            ?: assistantConversations.firstOrNull { conversation ->
-                conversation.messages.lastOrNull()?.actionStatus == AssistantActionStatus.AWAITING_CONFIRMATION
-            }?.id
         val acaPageContext=("Schermata: $shellRoute; sezione: $selectedTab / $classSection\n"+
             (selectedCircularForDetail?:paneCircular)?.let{"Circolare ${it.number}: ${it.title}\n${classifications[it.number]?.personalSummary.orEmpty()}"}.orEmpty()+
-            eventDetailToShow?.toString().orEmpty()+when(shellRoute){ShellRoute.FORUM->acaForumContext;ShellRoute.CONTENT->acaDocumentContext;else->""}).take(6000)
+            eventDetailToShow?.toString().orEmpty()+when { shellRoute == ShellRoute.FORUM || (shellRoute == ShellRoute.TABS && selectedTab == MainTab.CLASS && classSection == ClassSection.PERE) -> acaForumContext; shellRoute == ShellRoute.CONTENT -> acaDocumentContext; else -> "" }).take(6000)
         if(acaOverlay){
         circolareplus.platform.PlatformBackHandler{acaOverlay=false}
         circolareplus.design.AcaContextOverlay(
@@ -5338,6 +5343,7 @@ fun MainAppShell(
                 val permitted=!includeContext||when(shellRoute){
                     ShellRoute.CONTENT->p.acaEnabled&&"DOCUMENTS" in p.services&&p.attachmentConsent
                     ShellRoute.FORUM->p.acaEnabled&&"FORUM" in p.services
+                    ShellRoute.TABS->if(selectedTab==MainTab.CLASS&&classSection==ClassSection.PERE)p.acaEnabled&&"FORUM" in p.services else true
                     else->true
                 }
                 if(permitted)askAssistant(question,if(includeContext)acaPageContext else "")
@@ -5345,29 +5351,11 @@ fun MainAppShell(
             }
         )
         }
+        // Only the explicitly invoked contextual surface owns the perimeter.
         circolareplus.design.AilaAcaIndicator(
-            phase = if (aiPolicy.aiEnabled && aiPolicy.acaEnabled) contentActivity ?: acaConversationId?.let { assistantAgentPhases[it] } else null,
-            awaitingConfirmation = false,
-            showPopup = true,
-            operationKey = if (contentActivity != null) "content" else acaConversationId,
-            onOpenAssistant = {
-                if (acaConversationId != null && acaConversationId != assistantConversationId) {
-                    val stored = AppContainer.settings.listAssistantConversations().firstOrNull { it.id == acaConversationId }
-                    if (stored != null) {
-                        assistantMessages.clear()
-                        assistantMessages.addAll(stored.messages)
-                        assistantConversationId = stored.id
-                    }
-                }
-                selectedCircularForDetail = null
-                eventDetailToShow = null
-                isInSettingsScreen = false
-                isInBackgroundDebugScreen = false
-                isInClassRosterScreen = false
-                isInProfileScreen = false
-                assistantMode = AssistantMode.GENERAL
-                isInAssistantScreen = true
-            }
+            active = acaOverlay && aiPolicy.aiEnabled && aiPolicy.acaEnabled &&
+                (assistantAgentPhases[assistantConversationId] != null ||
+                    (!isAssistantThinking && assistantMessages.drop(acaOverlayStart).none { it.author == AssistantAuthor.ASSISTANT }))
         )
     }
 }

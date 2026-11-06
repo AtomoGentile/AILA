@@ -87,6 +87,14 @@ class AssistantActionsTest {
         }
     }
 
+    @Test fun briefStudyRequestDoesNotBecomeACalendarAction() {
+        val question = "Prepara un piano di ripasso per questo mio impegno, senza aggiungere eventi: Matematica: verifica sui limiti, data 2026-11-06."
+        assertFalse(AssistantActionIntent.matches(question, emptyList()))
+        assertFalse(AssistantActionIntent.matches(question, listOf(
+            AssistantMessage("pending", AssistantAuthor.ASSISTANT, "Quale evento?", awaitingActionInput = true)
+        )))
+    }
+
     @Test fun clarificationSurvivesConversationSerialization() {
         val message = AssistantMessage("a1", AssistantAuthor.ASSISTANT, "In quale data?", awaitingActionInput = true)
         val restored = Json.decodeFromString<AssistantMessage>(Json.encodeToString(message))

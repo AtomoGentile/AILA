@@ -28,7 +28,7 @@ import kotlinx.coroutines.*
 fun ForumScreen(
  isModerator:Boolean,onBack:()->Unit,onOpenAttachment:(ContentAttachmentDto)->Unit,
  onPrepareCalendar:(String)->Unit,onActivity:(AssistantAgentPhase?)->Unit,
- initialThreadId:String?=null,inline:Boolean=false,onCalendarChanged:()->Unit={},onContextChange:(String)->Unit={}
+ initialThreadId:String?=null,inline:Boolean=false,isActive:Boolean=true,onCalendarChanged:()->Unit={},onContextChange:(String)->Unit={}
 ) {
  val scope=rememberCoroutineScope();val repo=AppContainer.forumRepository
  var manualPhase by remember{mutableStateOf<AssistantAgentPhase?>(null)}
@@ -122,15 +122,15 @@ fun ForumScreen(
  }
  DisposableEffect(Unit){onDispose{onContextChange("")}}
  val goBack:()->Unit={when{focusPostId!=null->focusPostId=null;threadId!=null->{threadId=null;snapshot=null};else->onBack()}}
- PlatformBackHandler{goBack()}
- Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight).then(if(inline)Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing))){
-  AilaBackBar(title=when{focusPostId!=null->"Conversazione";threadId!=null->"Educazione tra pere";else->"Educazione tra pere"},onBackClick=goBack,
+ PlatformBackHandler(enabled=isActive&&(!inline||threadId!=null||focusPostId!=null)){goBack()}
+ Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight).then(if(inline)Modifier.padding(bottom=LocalBottomBarPadding.current) else Modifier.windowInsetsPadding(WindowInsets.safeDrawing)).imePadding()){
+  if(!inline || threadId!=null)AilaBackBar(title=when{focusPostId!=null->"Conversazione";threadId!=null->"Educazione tra pere";else->"Educazione tra pere"},onBackClick=goBack,
    action={if(threadId!=null)AilaIconButton("Preferenze della discussione",{notificationDialog=true}){tint->AppIcons.Bell(color=tint)}})
   if(busy)LinearProgressIndicator(Modifier.fillMaxWidth())
   error?.let{Text(it,Modifier.padding(16.dp),color=AppTheme.TintRedInk)}
   if(threadId==null){
    LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
-    item{Text("Una domanda, tante pere educate.",style=MaterialTheme.typography.headlineSmall,color=AppTheme.TextDark)
+    item{Text("Educazione tra pere",style=MaterialTheme.typography.headlineSmall,color=AppTheme.TextDark)
      Text("Chiedi aiuto, condividi quello che sai e ritrova le risposte anche in seguito.",color=AppTheme.TextMuted)
      Row{Button(onClick={creating=true},enabled=!busy){Text("Nuova domanda")};TextButton(onClick={showRules=true}){Text("Come funziona")}}}
     if(threads.isEmpty()&&!busy)item{Text("Nessuna discussione. Puoi aprire la prima domanda della classe.",color=AppTheme.TextMuted)}
