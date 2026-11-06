@@ -216,8 +216,7 @@ fun AssistantChatScreen(
                 AssistantWelcome(
                     conversations = conversations,
                     onOpenConversation = onOpenConversation,
-                    onOpenSource = onOpenSource,
-                    onStudyPlan = onStudyPlan
+                    onOpenSource = onOpenSource
                 )
             }
         } else LazyColumn(
@@ -358,7 +357,7 @@ fun AssistantChatScreen(
             }
             attachmentError?.let{Text(it,color=AppTheme.TintRedInk,style=MaterialTheme.typography.bodySmall)}
             if(recording) VoiceRecordingPanel(onStop={recorder?.stop()},onCancel={recorder?.cancel()})
-            else Row(Modifier.fillMaxWidth().background(AppTheme.CardSurface,RoundedCornerShape(28.dp)).border(1.dp, AppTheme.PrimaryBlue.copy(alpha = .12f), RoundedCornerShape(28.dp)).padding(4.dp),verticalAlignment = Alignment.CenterVertically) {
+            else Row(Modifier.fillMaxWidth().background(AppTheme.CardSurface,RoundedCornerShape(28.dp)).border(1.dp, AppTheme.PrimaryBlue.copy(alpha = .12f), RoundedCornerShape(28.dp)).padding(horizontal = 12.dp, vertical = 6.dp),verticalAlignment = Alignment.CenterVertically) {
                 if(onAttachContent!=null){
                     AilaIconButton(contentDescription="Menu allegati",onClick={attachmentsMenu=true}){tint->AppIcons.Plus(Modifier.size(24.dp),tint)}
                     Spacer(Modifier.width(4.dp))
@@ -791,8 +790,7 @@ private fun relativeTimeLabel(atMillis: Long): String {
 private fun AssistantWelcome(
     conversations: List<AssistantConversation>,
     onOpenConversation: (AssistantConversation) -> Unit,
-    onOpenSource: (AssistantSource) -> Unit,
-    onStudyPlan: () -> Unit
+    onOpenSource: (AssistantSource) -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = AppTheme.Space12),
@@ -808,10 +806,6 @@ private fun AssistantWelcome(
                 Text("Come posso aiutarti?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = AppTheme.TextDark)
                 Text("Troviamo risposte nella tua scuola e prepariamo insieme le azioni.", style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
             }
-        }
-        androidx.compose.material3.TextButton(onClick = onStudyPlan, modifier = Modifier.align(Alignment.Start).padding(top = 8.dp)) {
-            AppIcons.Calendar(Modifier.size(18.dp), AppTheme.PrimaryBlue)
-            Spacer(Modifier.width(8.dp)); Text("Prepara il ripasso")
         }
         val recent = conversations.sortedByDescending { it.updatedAtMillis }.take(3)
         if (recent.isNotEmpty()) {
