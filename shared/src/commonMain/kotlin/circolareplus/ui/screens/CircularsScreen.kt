@@ -57,7 +57,7 @@ fun CircularsScreen(
             .fillMaxSize()
             .background(AppTheme.BackgroundLight)
             .padding(horizontal = AppTheme.Space16)
-            .padding(top = AppTheme.Space16)
+            .padding(top = AppTheme.Space8)
     ) {
         // Niente titolo ne' riga "Aggiornato da Spaggiari": l'intestazione la da' gia' il selettore
         // Circolari/Bacheca in cima, e lo spazio serve per leggere.
@@ -94,7 +94,7 @@ fun CircularsScreen(
                 modifier = chipModifier(0)
             )
             circolareplus.design.AnimatedFilterChip(
-                label = "Ti riguarda",
+                label = "Per te",
                 isSelected = selectedFilter == CircularRelevanceBadge.RELEVANT,
                 onClick = { selectedFilter = CircularRelevanceBadge.RELEVANT },
                 icon = { AilaDot(color = AppTheme.BadgeRelevantGreen, size = 8.dp) },
@@ -102,7 +102,7 @@ fun CircularsScreen(
                 modifier = chipModifier(1)
             )
             circolareplus.design.AnimatedFilterChip(
-                label = "Potenziale",
+                label = "Possibili",
                 isSelected = selectedFilter == CircularRelevanceBadge.POTENTIAL,
                 onClick = { selectedFilter = CircularRelevanceBadge.POTENTIAL },
                 icon = { AilaDot(color = AppTheme.BadgePotentialYellow, size = 8.dp) },
@@ -110,7 +110,7 @@ fun CircularsScreen(
                 modifier = chipModifier(2)
             )
             circolareplus.design.AnimatedFilterChip(
-                label = "Non rilevanti",
+                label = "Altre",
                 isSelected = selectedFilter == CircularRelevanceBadge.NOT_RELEVANT,
                 onClick = { selectedFilter = CircularRelevanceBadge.NOT_RELEVANT },
                 icon = { AilaDot(color = AppTheme.BadgeNotRelevantGray, size = 8.dp) },
@@ -251,13 +251,17 @@ fun CircularListItem(
                 Spacer(modifier = Modifier.height(AppTheme.Space8))
                 val summaryContent: @Composable () -> Unit = {
                     Column(modifier = Modifier.padding(AppTheme.Space12)) {
-                        AilaAssistantBadge(text = "Analisi AILA Assistant")
+                        AilaAssistantBadge(text = "In breve · AILA")
                         Spacer(modifier = Modifier.height(AppTheme.Space8))
                         Text(
                             text = classification.personalSummary,
+                            maxLines = 3,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.bodyMedium,
                             color = AppTheme.TextMuted
                         )
+                        Spacer(Modifier.height(8.dp))
+                        Text("Apri la circolare per leggere tutto",style=MaterialTheme.typography.labelSmall,color=AppTheme.PrimaryBlue)
                     }
                 }
                 if (AppTheme.isGlass) {

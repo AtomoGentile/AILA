@@ -82,10 +82,12 @@ fun AcaContextOverlay(
             focus.requestFocus()
         } else keyboard?.hide()
     }
-    val expanded = question.isNotBlank() || attachedScreen || attachedFiles.isNotEmpty() || recording || transcribing || thinking || answer != null || action?.actionPlan != null || voiceError != null
+    val expanded = question.isNotBlank() || attachedScreen || attachedFiles.isNotEmpty() || recording || transcribing || voiceError != null
     val expansion by animateFloatAsState(if(expanded) 1f else 0f, tween(if(AppTheme.reduceMotion) 0 else 280, easing=FastOutSlowInEasing),label="ACA composer expansion")
     val dark = AppTheme.isDarkMode
-    val shape = RoundedCornerShape(32.dp)
+    val shape = RoundedCornerShape(28.dp)
+    val composerRadius by animateDpAsState(if(expanded) 28.dp else 48.dp, tween(if(AppTheme.reduceMotion) 0 else 280),label="ACA composer corners")
+    val composerShape = RoundedCornerShape(composerRadius)
     // Opaque ink surfaces keep text from the page underneath out of the controls.
     val surface = if(dark) listOf(Color(0xFF08090E), Color(0xFF0B0C13), Color(0xFF161827))
         else listOf(Color(0xFFF7F9FF), Color(0xFFECF0FA))
@@ -104,25 +106,59 @@ fun AcaContextOverlay(
         }
     }
     BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)).imePadding()) {
+        val availableHeight = maxHeight
+        val panelSurface = if(AppTheme.isGlass) Modifier.ailaGlassSurface(shape,
+            tint=(if(dark) Color(0xFF090C13) else Color.White).copy(alpha=.88f))
+            else Modifier.background(Brush.linearGradient(surface)).border(1.dp,edge,shape)
         Column(Modifier.align(Alignment.TopCenter).padding(horizontal = 16.dp, vertical = 8.dp)
-            .widthIn(max = 600.dp).fillMaxWidth().heightIn(max = maxHeight * .86f)
-            .shadow(18.dp, shape).clip(shape)
-            .then(if(AppTheme.isGlass) Modifier.ailaGlassSurface(shape,tint=(if(dark) Color(0xFF090C13) else Color.White).copy(alpha=.76f)) else Modifier.background(Brush.linearGradient(surface)).border(1.dp,edge,shape))
-            .padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Column(Modifier.weight(1f, fill=false).verticalScroll(rememberScrollState()), verticalArrangement=Arrangement.spacedBy(6.dp)) {
-            Box(Modifier.fillMaxWidth().height(28.dp)) {
-                IconButton(onClick={keyboard?.hide();onClose()},modifier=Modifier.align(Alignment.CenterEnd).size(28.dp).semantics{contentDescription="Chiudi ACA"}){AppIcons.Close(Modifier.size(15.dp),muted)}
+            .widthIn(max = 600.dp).fillMaxWidth().heightIn(max = availableHeight * .86f),
+            verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // The response owns its scroll area; the composer stays available below it.
+            if(action?.actionPlan != null || answer != null) {
+                Column(Modifier.weight(1f, fill=false).heightIn(max=320.dp).fillMaxWidth()
+                    .shadow(12.dp,shape).clip(shape).then(panelSurface).padding(16.dp),
+                    verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                        Text("AILA",Modifier.weight(1f),style=MaterialTheme.typography.labelLarge,color=muted)
+                        TextButton(onClick=openChat,enabled=isInteractive&&!recording&&!transcribing) { Text("Apri chat") }
+                        IconButton(onClick={keyboard?.hide();onClose()},modifier=Modifier.size(40.dp)
+                            .semantics{contentDescription="Chiudi ACA"}) { AppIcons.Close(Modifier.size(18.dp),muted) }
+                    }
+                    Column(Modifier.weight(1f,fill=false).verticalScroll(rememberScrollState())) {
+                        if(action?.actionPlan != null) {
+                            circolareplus.ui.screens.AssistantActionPreview(message = action, isBusy = thinking,
+                                onConfirm = { if(isInteractive) onConfirm() }, onCancel = { if(isInteractive) onCancel() }, onRecover = {})
+                        } else answer?.let {
+                            AilaResponseText(text=androidx.compose.ui.text.AnnotatedString(it),responseId=action?.id ?: it)
+                        }
+                    }
+                }
             }
-            if(action?.actionPlan != null) {
-                circolareplus.ui.screens.AssistantActionPreview(message = action, isBusy = thinking, onConfirm = { if(isInteractive) onConfirm() }, onCancel = { if(isInteractive) onCancel() }, onRecover = {})
-            } else answer?.let {
-                AilaResponseText(
-                    text = androidx.compose.ui.text.AnnotatedString(it),
-                    responseId = action?.id ?: it,
-                    modifier = Modifier.animateContentSize(ailaSpatialSpring()).heightIn(max = 250.dp)
-                        .verticalScroll(rememberScrollState())
-                )
-            }
+            val composerSurface = if(AppTheme.isGlass) Modifier.ailaGlassSurface(composerShape,
+                tint=(if(dark) Color(0xFF090C13) else Color.White).copy(alpha=.88f))
+                else Modifier.background(Brush.linearGradient(surface)).border(1.dp,edge,composerShape)
+            Column(Modifier.fillMaxWidth().shadow(12.dp,composerShape).clip(composerShape).then(composerSurface)
+                .padding(horizontal=12.dp,vertical=8.dp),
+                verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                Box(Modifier.fillMaxWidth().height(20.dp),contentAlignment=Alignment.Center) {
+                    Box(Modifier.width(64.dp).fillMaxHeight()
+                        .semantics { contentDescription="Apri la chat di ACA" }
+                        .clickable(enabled=isInteractive&&!recording&&!transcribing,onClick=openChat)
+                        .pointerInput(isInteractive,recording,transcribing) {
+                            var distance=0f
+                            detectVerticalDragGestures(onDragStart={distance=0f},
+                                onVerticalDrag={change,amount->change.consume();distance+=amount},
+                                onDragEnd={if(distance>48.dp.toPx())openChat()},onDragCancel={distance=0f})
+                        },contentAlignment=Alignment.Center) {
+                        Box(Modifier.width(32.dp).height(3.dp).background(muted.copy(alpha=.4f),RoundedCornerShape(2.dp)))
+                    }
+                    if(answer==null && action?.actionPlan==null) IconButton(onClick={keyboard?.hide();onClose()},
+                        modifier=Modifier.align(Alignment.CenterEnd).size(32.dp).semantics{contentDescription="Chiudi ACA"}) {
+                        AppIcons.Close(Modifier.size(15.dp),muted)
+                    }
+                }
+                Column(Modifier.heightIn(max=availableHeight*.25f).verticalScroll(rememberScrollState()),
+                    verticalArrangement=Arrangement.spacedBy(4.dp)) {
             if(attachedScreen) Row(Modifier.fillMaxWidth().background(insetFill,RoundedCornerShape(14.dp)).padding(start=12.dp,end=4.dp,top=4.dp,bottom=4.dp),verticalAlignment=Alignment.CenterVertically) {
                 AppIcons.Document(Modifier.size(17.dp),AppTheme.PrimaryBlue)
                 Spacer(Modifier.width(8.dp))
@@ -141,12 +177,13 @@ fun AcaContextOverlay(
                 Text(voiceError ?: if(recording) "Registrazione vocale in corso…" else "Trascrivo il vocale…",Modifier.weight(1f),style=MaterialTheme.typography.labelMedium,color=if(voiceError!=null) AppTheme.TintRedInk else muted)
                 if(recording) TextButton(onClick={recorder.cancel()}) { Text("Annulla") }
             }
+            }
             Layout(modifier=Modifier.fillMaxWidth(),content={
-            TextField(question,{question=it},placeholder={Text("Chiedi ad AILA…",style=MaterialTheme.typography.titleMedium)},modifier=Modifier.focusRequester(focus),readOnly=!isInteractive||recording||transcribing,minLines=1,maxLines=4,
+            TextField(question,{question=it},placeholder={Text("Chiedi ad AILA…",style=MaterialTheme.typography.bodyLarge,maxLines=1)},modifier=Modifier.focusRequester(focus),readOnly=!isInteractive||recording||transcribing,minLines=1,maxLines=4,
                 colors=TextFieldDefaults.colors(focusedContainerColor=Color.Transparent,unfocusedContainerColor=Color.Transparent,focusedTextColor=AppTheme.TextDark,unfocusedTextColor=AppTheme.TextDark,focusedIndicatorColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent,focusedPlaceholderColor=muted,unfocusedPlaceholderColor=muted))
 
                 IconButton(onClick={keyboard?.hide();attachmentMenu=true},enabled=isInteractive&&!thinking&&!recording&&!transcribing,modifier=Modifier.size(48.dp).semantics{contentDescription="Aggiungi allegato"}) { AppIcons.Plus(Modifier.size(28.dp),AppTheme.TextDark) }
-                IconButton(onClick={if(recording)recorder.stop()else{keyboard?.hide();recorder.start()}},enabled=isInteractive&&!transcribing&&!thinking,modifier=Modifier.size(48.dp).semantics{contentDescription=if(recording)"Termina vocale ACA"else"Registra un vocale per ACA"}) { if(recording)AppIcons.Close(Modifier.size(22.dp),AppTheme.TintRedInk)else AcaMic() }
+                IconButton(onClick={if(recording)recorder.stop()else{keyboard?.hide();recorder.start()}},enabled=isInteractive&&!transcribing&&!thinking,modifier=Modifier.size(48.dp).background(if(!expanded && !thinking && !transcribing) AppTheme.PrimaryBlue else Color.Transparent,RoundedCornerShape(24.dp)).semantics{contentDescription=if(recording)"Termina vocale ACA"else"Registra un vocale per ACA"}) { if(recording)AppIcons.Close(Modifier.size(22.dp),AppTheme.TintRedInk)else AcaMic(if(!expanded && !thinking && !transcribing) Color.White else AppTheme.TextDark) }
                 IconButton(onClick=submit,enabled=canSend&&isInteractive&&!recording&&!transcribing,modifier=Modifier.size(48.dp).background(sendFill,RoundedCornerShape(24.dp)).semantics{contentDescription="Invia ad ACA"}) {
                     if(thinking||transcribing)CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp,color=muted)else AppIcons.ArrowUp(Modifier.size(25.dp),if(canSend)Color.White else muted)
                 }
@@ -168,22 +205,8 @@ fun AcaContextOverlay(
                 }
             }
             }
-            // The handle stays outside scrolling content and owns only this drag gesture.
-            Box(Modifier.fillMaxWidth().height(32.dp)
-                .semantics { contentDescription="Apri la chat di ACA" }
-                .clickable(enabled=isInteractive&&!recording&&!transcribing, onClick=openChat)
-                .pointerInput(isInteractive, recording, transcribing) {
-                    var distance=0f
-                    detectVerticalDragGestures(
-                        onDragStart={distance=0f},
-                        onVerticalDrag={change,amount->change.consume();distance+=amount},
-                        onDragEnd={if(distance>48.dp.toPx())openChat()},
-                        onDragCancel={distance=0f}
-                    )
-                },contentAlignment=Alignment.Center) {
-                Box(Modifier.width(36.dp).height(4.dp).background(muted.copy(alpha=.5f),RoundedCornerShape(2.dp)))
-            }
         }
+
 
         if(attachmentMenu) ModalBottomSheet(
             onDismissRequest={attachmentMenu=false},
@@ -221,4 +244,4 @@ private fun AcaAttachmentOption(title:String,subtitle:String,fill:Color,muted:Co
     }
 }
 
-@Composable private fun AcaMic() { androidx.compose.foundation.Canvas(Modifier.size(23.dp)) { val c=Color.White;drawRoundRect(c,androidx.compose.ui.geometry.Offset(size.width*.36f,size.height*.08f),androidx.compose.ui.geometry.Size(size.width*.28f,size.height*.52f),androidx.compose.ui.geometry.CornerRadius(size.width*.14f));drawArc(c,0f,180f,false,androidx.compose.ui.geometry.Offset(size.width*.22f,size.height*.2f),androidx.compose.ui.geometry.Size(size.width*.56f,size.height*.58f),style=androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()));drawLine(c,androidx.compose.ui.geometry.Offset(size.width*.5f,size.height*.78f),androidx.compose.ui.geometry.Offset(size.width*.5f,size.height*.94f),2.dp.toPx()) } }
+@Composable private fun AcaMic(c: Color) { androidx.compose.foundation.Canvas(Modifier.size(23.dp)) { drawRoundRect(c,androidx.compose.ui.geometry.Offset(size.width*.36f,size.height*.08f),androidx.compose.ui.geometry.Size(size.width*.28f,size.height*.52f),androidx.compose.ui.geometry.CornerRadius(size.width*.14f));drawArc(c,0f,180f,false,androidx.compose.ui.geometry.Offset(size.width*.22f,size.height*.2f),androidx.compose.ui.geometry.Size(size.width*.56f,size.height*.58f),style=androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()));drawLine(c,androidx.compose.ui.geometry.Offset(size.width*.5f,size.height*.78f),androidx.compose.ui.geometry.Offset(size.width*.5f,size.height*.94f),2.dp.toPx()) } }

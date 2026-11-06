@@ -905,7 +905,7 @@ private fun WeightSlider(
     value: Float,
     onValueChange: (Float) -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(bottom = AppTheme.Space8)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -926,7 +926,14 @@ private fun WeightSlider(
             value = value,
             onValueChange = onValueChange,
             valueRange = 0.5f..1.5f,
-            steps = 9
+            steps = 9,
+            colors = SliderDefaults.colors(
+                thumbColor = MaterialTheme.colorScheme.primary,
+                activeTrackColor = MaterialTheme.colorScheme.primary,
+                inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+                activeTickColor = MaterialTheme.colorScheme.onPrimary.copy(alpha=.5f),
+                inactiveTickColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=.35f)
+            )
         )
     }
 }
