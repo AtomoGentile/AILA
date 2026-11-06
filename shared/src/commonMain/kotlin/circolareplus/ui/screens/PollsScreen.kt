@@ -347,7 +347,8 @@ private fun PollProgressHeader(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(AppTheme.SurfaceWhite)
+            .padding(horizontal=AppTheme.Space16, vertical=AppTheme.Space8)
+            .background(AppTheme.CardSurface, RoundedCornerShape(24.dp))
             .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12)
     ) {
         Row(

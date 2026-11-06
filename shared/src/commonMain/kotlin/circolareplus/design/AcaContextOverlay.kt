@@ -98,24 +98,12 @@ fun AcaContextOverlay(
                 Text("Schermata allegata",Modifier.weight(1f),style=MaterialTheme.typography.labelMedium,color=AppTheme.TextDark)
                 IconButton(onClick={attachedScreen=false},modifier=Modifier.size(32.dp).semantics{contentDescription="Rimuovi schermata"}){AppIcons.Close(Modifier.size(15.dp),muted)}
             }
-            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                IconButton(onClick={keyboard?.hide();attachmentMenu=true},enabled=isInteractive,
-                    modifier=Modifier.size(48.dp).background(insetFill,RoundedCornerShape(24.dp)).semantics{contentDescription="Aggiungi allegato"}) {
-                    AppIcons.Plus(Modifier.size(23.dp),AppTheme.TextDark)
-                }
-                TextField(question, { question = it }, placeholder = { Text("Chiedi ad AILA…", style = MaterialTheme.typography.bodyLarge) },
-                    modifier = Modifier.weight(1f).border(1.dp, edge, RoundedCornerShape(24.dp)).focusRequester(focus), readOnly = !isInteractive, maxLines = 3, shape = RoundedCornerShape(24.dp),
-                    trailingIcon = {
-                        IconButton(enabled = canSend && isInteractive, onClick = submit,
-                            modifier = Modifier.padding(end = 6.dp).size(42.dp).background(sendFill, RoundedCornerShape(16.dp)).semantics { contentDescription = "Invia ad ACA" }) {
-                            if(thinking) CircularProgressIndicator(Modifier.size(18.dp),strokeWidth=2.dp,color=muted)
-                            else AppIcons.ArrowUp(Modifier.size(19.dp), if(canSend) Color.White else AppTheme.TextFaint)
-                        }
-                    },
-                    colors = TextFieldDefaults.colors(focusedContainerColor = fieldFocus, unfocusedContainerColor = fieldFill,
-                        focusedTextColor = AppTheme.TextDark, unfocusedTextColor = AppTheme.TextDark,
-                        focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-                        focusedPlaceholderColor = muted, unfocusedPlaceholderColor = muted))
+            Row(Modifier.fillMaxWidth().background(fieldFocus,RoundedCornerShape(40.dp)).border(1.dp,edge.copy(alpha=.7f),RoundedCornerShape(40.dp)).padding(horizontal=8.dp,vertical=5.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(4.dp)) {
+                IconButton(onClick={keyboard?.hide();attachmentMenu=true},enabled=isInteractive,modifier=Modifier.size(44.dp).semantics{contentDescription="Aggiungi allegato"}) { AppIcons.Plus(Modifier.size(25.dp),AppTheme.TextDark) }
+                TextField(question,{question=it},placeholder={Text("Chiedi ad AILA…")},modifier=Modifier.weight(1f).focusRequester(focus),readOnly=!isInteractive,maxLines=3,
+                    colors=TextFieldDefaults.colors(focusedContainerColor=Color.Transparent,unfocusedContainerColor=Color.Transparent,focusedTextColor=AppTheme.TextDark,unfocusedTextColor=AppTheme.TextDark,focusedIndicatorColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent,focusedPlaceholderColor=muted,unfocusedPlaceholderColor=muted))
+                if(question.isBlank()) IconButton(onClick={keyboard?.hide();attachmentMenu=true},enabled=isInteractive,modifier=Modifier.size(48.dp).background(AppTheme.PrimaryBlue,RoundedCornerShape(24.dp)).semantics{contentDescription="Microfono ACA"}) { AcaMic() }
+                else IconButton(onClick=submit,enabled=canSend&&isInteractive,modifier=Modifier.size(48.dp).background(sendFill,RoundedCornerShape(24.dp)).semantics{contentDescription="Invia ad ACA"}) { AppIcons.ArrowUp(Modifier.size(22.dp),Color.White) }
             }
             TextButton(onClick = { if(isInteractive) { keyboard?.hide(); onOpenChat() } }, modifier = Modifier.align(Alignment.CenterHorizontally).heightIn(min = 36.dp), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
                 Text("Continua nell’assistente", style = MaterialTheme.typography.labelLarge)
@@ -141,3 +129,5 @@ fun AcaContextOverlay(
         }
     }
 }
+
+@Composable private fun AcaMic() { androidx.compose.foundation.Canvas(Modifier.size(23.dp)) { val c=Color.White;drawRoundRect(c,androidx.compose.ui.geometry.Offset(size.width*.36f,size.height*.08f),androidx.compose.ui.geometry.Size(size.width*.28f,size.height*.52f),androidx.compose.ui.geometry.CornerRadius(size.width*.14f));drawArc(c,0f,180f,false,androidx.compose.ui.geometry.Offset(size.width*.22f,size.height*.2f),androidx.compose.ui.geometry.Size(size.width*.56f,size.height*.58f),style=androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()));drawLine(c,androidx.compose.ui.geometry.Offset(size.width*.5f,size.height*.78f),androidx.compose.ui.geometry.Offset(size.width*.5f,size.height*.94f),2.dp.toPx()) } }

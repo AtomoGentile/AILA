@@ -205,7 +205,7 @@ fun SeatMapScreen(
                 })
             }
         }
-        Column(modifier = Modifier.ailaAppear(0)) {
+        Column(modifier = Modifier.fillMaxWidth().background(AppTheme.CardSurface,RoundedCornerShape(24.dp)).padding(12.dp).ailaAppear(0)) {
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = {
