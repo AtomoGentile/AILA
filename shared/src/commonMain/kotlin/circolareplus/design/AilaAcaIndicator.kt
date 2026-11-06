@@ -30,7 +30,7 @@ import kotlin.math.sin
     )
     if(!active && opacity.value == 0f) return
     val travel = if(reduced) null else rememberInfiniteTransition(label = "aca light").animateFloat(
-        0f, 1f, infiniteRepeatable(tween(9000, easing = LinearEasing)), label = "aca drift"
+        0f, 1f, infiniteRepeatable(tween(4200, easing = LinearEasing)), label = "aca drift"
     )
     val radius = maxOf(circolareplus.platform.displayCornerRadius(), 28.dp)
     Canvas(Modifier.fillMaxSize().semantics { contentDescription = "ACA attiva · bordo luminoso" }) {
@@ -60,15 +60,15 @@ import kotlin.math.sin
         val outline = Path().apply { addRoundRect(RoundRect(Rect(Offset.Zero,size), CornerRadius(radius.toPx()))) }
         clipPath(outline) {
             val side = minOf(70.dp.toPx(), width * .18f)
-            cloud(-side * .16f, height * (.28f + .16f * wave(0f)), side, height * .63f, lerp(blue,violet,wave(2f)), .68f)
-            cloud(width + side * .13f, height * (.22f + .17f * wave(2.5f)), side, height * .63f, lerp(blue,teal,wave(1f)), .74f)
+            cloud(-side * .16f, height * (.12f + .70f * wave(0f)), side, height * .36f, lerp(blue,violet,wave(2f)), .68f)
+            cloud(width + side * .13f, height * (.12f + .70f * wave(2.5f)), side, height * .36f, lerp(blue,teal,wave(1f)), .74f)
             val lower = minOf(160.dp.toPx(), width * .40f)
-            cloud(-lower * .12f, height - 30.dp.toPx() - 20.dp.toPx() * wave(1f), lower, lower * 1.65f, violet, .82f)
-            cloud(width + lower * .10f, height - 34.dp.toPx() - 22.dp.toPx() * wave(3f), lower, lower * 1.55f, lerp(blue,violet,wave(3f)), .76f)
+            cloud(-lower * .12f, height - 30.dp.toPx() - 85.dp.toPx() * wave(1f), lower, lower * 1.65f, violet, .82f)
+            cloud(width + lower * .10f, height - 34.dp.toPx() - 90.dp.toPx() * wave(3f), lower, lower * 1.55f, lerp(blue,violet,wave(3f)), .76f)
             cloud(-10.dp.toPx(), height + 8.dp.toPx(), lower * .63f, lower * .95f, lerp(peach,rose,wave(4f)), .72f)
-            cloud(width * (.35f + .16f * wave(4f)), height + 22.dp.toPx(), width * .70f, 95.dp.toPx(), lerp(violet,blue,wave(5f)), .54f)
-            cloud(width * .18f, -15.dp.toPx(), width * .50f, 52.dp.toPx(), blue, .32f)
-            cloud(width * .88f, -12.dp.toPx(), width * .38f, 46.dp.toPx(), teal, .30f)
+            cloud(width * (.15f + .70f * wave(4f)), height + 22.dp.toPx(), width * .70f, 95.dp.toPx(), lerp(violet,blue,wave(5f)), .54f)
+            cloud(width * (.08f + .84f * wave(3f)), -15.dp.toPx(), width * .50f, 52.dp.toPx(), blue, .32f)
+            cloud(width * (.08f + .84f * wave(0f)), -12.dp.toPx(), width * .38f, 46.dp.toPx(), teal, .30f)
         }
     }
 }

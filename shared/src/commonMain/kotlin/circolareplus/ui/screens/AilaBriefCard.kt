@@ -6,7 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,6 +30,12 @@ internal fun AilaBriefCard(
     onOpen: (AilaBriefItemDto) -> Unit, onStudy: (String) -> Unit,
     loading: Boolean = false, error: String? = null, onRefresh: () -> Unit = {}, modifier: Modifier = Modifier
 ) {
+    var expanded by remember { mutableStateOf(false) }
+    val relevant = items.filterNot { it.kind == AilaBriefKind.CIRCULAR }
+    val visible = if(expanded) relevant else {
+        val first = relevant.firstOrNull()
+        listOfNotNull(first, relevant.drop(1).firstOrNull { it.kind != first?.kind } ?: relevant.getOrNull(1))
+    }
     val white = Color.White
     val soft = Color(0xFFCFD9F4)
     Box(modifier.fillMaxWidth().clip(RoundedCornerShape(32.dp))
@@ -50,17 +56,15 @@ internal fun AilaBriefCard(
                 }
                 AilaAssistantMark(modifier = Modifier.size(34.dp))
             }
-            if(loading && items.isEmpty()) Text("Preparo il tuo riepilogo…", color = soft, style = MaterialTheme.typography.bodyMedium)
+            if(loading && relevant.isEmpty()) Text("Preparo il tuo riepilogo…", color = soft, style = MaterialTheme.typography.bodyMedium)
             if(error != null) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(error, Modifier.weight(1f), color = soft, style = MaterialTheme.typography.bodySmall)
                 TextButton(onClick = onRefresh, colors = ButtonDefaults.textButtonColors(contentColor = white)) { Text("Riprova") }
             }
-            if(items.isEmpty() && !loading && error == null) {
+            if(relevant.isEmpty() && !loading && error == null) {
                 Text("Sei in pari. Qui troverai novità, risposte e cose da fare per te.", color = soft, style = MaterialTheme.typography.bodyMedium)
             }
-            items.forEach { item ->
-                val canStudy = item.canPlanStudy && item.kind == AilaBriefKind.EVENT &&
-                    "STUDY_PLAN" in circolareplus.ai.AcaPolicyState.preferences.services
+            visible.forEach { item ->
                 val tint = when(item.kind) {
                     AilaBriefKind.EVENT -> Color(0xFF9EDFD8)
                     AilaBriefKind.CIRCULAR -> Color(0xFFF2D398)
@@ -90,29 +94,31 @@ internal fun AilaBriefCard(
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(label, color = tint, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                            Text(item.title, color = white, style = MaterialTheme.typography.titleMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                            Text(item.title, color = white, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
                         IconButton(onClick = { onDismiss(item) }, modifier = Modifier.size(32.dp).semantics { contentDescription = "Non ora: ${item.title}" }) {
                             AppIcons.Close(Modifier.size(17.dp), soft)
                         }
                     }
-                    Text(item.message, color = soft, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    if(item.kind != AilaBriefKind.EVENT) Text(item.message, color = soft, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = {
-                                if(canStudy) onStudy("Prepara un piano di ripasso per questo mio impegno, senza aggiungere eventi: ${item.title}, data ${item.date}.")
-                                else onOpen(item)
+                                onOpen(item)
                             },
                             modifier = Modifier.weight(1f, fill = false),
                             colors = ButtonDefaults.buttonColors(containerColor = white.copy(alpha = .13f), contentColor = white),
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp), shape = RoundedCornerShape(16.dp)
                         ) {
-                            Text(if(canStudy) "Prepara il ripasso" else item.actionLabel, style = MaterialTheme.typography.labelLarge)
+                            Text(if(item.kind == AilaBriefKind.EVENT) "Apri calendario" else item.actionLabel, style = MaterialTheme.typography.labelLarge)
                             Spacer(Modifier.width(6.dp)); AppIcons.ChevronRight(Modifier.size(16.dp), white)
                         }
-                        if(canStudy) TextButton(onClick = { onOpen(item) }, colors = ButtonDefaults.textButtonColors(contentColor = white), contentPadding = PaddingValues(horizontal = 6.dp)) { Text("Calendario", style = MaterialTheme.typography.labelMedium) }
+
                     }
                 }
+            }
+            if(relevant.size > 2) TextButton(onClick={expanded=!expanded},colors=ButtonDefaults.textButtonColors(contentColor=soft),modifier=Modifier.fillMaxWidth()) {
+                Text(if(expanded) "Mostra meno" else "Altre ${relevant.size-2} novità")
             }
         }
     }

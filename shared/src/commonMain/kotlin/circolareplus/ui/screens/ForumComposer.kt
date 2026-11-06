@@ -20,18 +20,20 @@ import androidx.compose.ui.unit.dp
 import circolareplus.design.*
 
 @Composable
-internal fun ForumIntroduction(busy: Boolean, onCreate: () -> Unit, onRules: () -> Unit) {
+internal fun ForumIntroduction(busy: Boolean, onCreate: () -> Unit, onRules: () -> Unit,
+    title: String = "Educazione tra pere", description: String = "Un posto per chiedere, capire e dare una mano ai compagni.",
+    createLabel: String = "Nuova domanda") {
     Column(Modifier.fillMaxWidth().background(Brush.linearGradient(listOf(AppTheme.CardSurface, AppTheme.TintGreen.copy(alpha = .65f))), RoundedCornerShape(28.dp))
         .border(1.dp, AppTheme.TintGreenInk.copy(alpha = .13f), RoundedCornerShape(28.dp)).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(44.dp).background(AppTheme.TintGreen, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) { AppIcons.ChatBubble(Modifier.size(24.dp), AppTheme.TintGreenInk) }
             Spacer(Modifier.width(12.dp))
-            Text("Educazione tra pere", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = AppTheme.TextDark)
+            Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = AppTheme.TextDark)
         }
-        Text("Un posto per chiedere, capire e dare una mano ai compagni.", style = MaterialTheme.typography.bodyLarge, color = AppTheme.TextMuted)
+        Text(description, style = MaterialTheme.typography.bodyLarge, color = AppTheme.TextMuted)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = onCreate, enabled = !busy, modifier = Modifier.weight(1f), shape = RoundedCornerShape(18.dp)) {
-                AppIcons.Plus(Modifier.size(18.dp), MaterialTheme.colorScheme.onPrimary); Spacer(Modifier.width(6.dp)); Text("Nuova domanda")
+                AppIcons.Plus(Modifier.size(18.dp), MaterialTheme.colorScheme.onPrimary); Spacer(Modifier.width(6.dp)); Text(createLabel)
             }
             TextButton(onClick = onRules) { Text("Come funziona") }
         }
@@ -39,17 +41,19 @@ internal fun ForumIntroduction(busy: Boolean, onCreate: () -> Unit, onRules: () 
 }
 
 @Composable
-internal fun ForumEmptyState() {
+internal fun ForumEmptyState(title: String = "La prima domanda può essere la tua",
+    description: String = "Un dubbio sui compiti o un passaggio da spiegare? Inizia una conversazione: le risposte resteranno qui per tutta la classe.",
+    privacyLabel: String = "Puoi partecipare con uno pseudonimo.") {
     Column(Modifier.fillMaxWidth().background(AppTheme.CardSurface, RoundedCornerShape(26.dp)).padding(horizontal = 24.dp, vertical = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         AppIcons.People(Modifier.size(38.dp), AppTheme.TintGreenInk)
-        Text("La prima domanda può essere la tua", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
             color = AppTheme.TextDark, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        Text("Un dubbio sui compiti o un passaggio da spiegare? Inizia una conversazione: le risposte resteranno qui per tutta la classe.",
+        Text(description,
             style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             AppIcons.Shield(Modifier.size(14.dp), AppTheme.TextFaint)
-            Text("Puoi partecipare con uno pseudonimo.", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextFaint)
+            Text(privacyLabel, style = MaterialTheme.typography.labelSmall, color = AppTheme.TextFaint)
         }
     }
 }

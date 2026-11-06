@@ -64,6 +64,10 @@ fun BoardScreen(
     onRejectUnlock: (String) -> Unit = {}
 ) {
     var selectedStatusFilter by remember(focusProposalId) { mutableStateOf<ProposalStatus?>(null) }
+    var showHelp by remember { mutableStateOf(false) }
+    if(showHelp) AlertDialog(onDismissRequest={showHelp=false}, title={Text("La bacheca della classe")},
+        text={Text("Proponi un’idea per la classe: i compagni possono votarla e commentarla. Segui lo stato della proposta, da nuova a chiusa, e il suo esito. Puoi scegliere se pubblicare con il tuo nome o in forma anonima.")},
+        confirmButton={TextButton(onClick={showHelp=false}){Text("Ho capito")}})
 
     Box(modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
     Column(
@@ -72,11 +76,9 @@ fun BoardScreen(
             .padding(horizontal = AppTheme.Space16)
             .padding(top = AppTheme.Space16)
     ) {
-        // Il "+" per una nuova proposta sta nell'intestazione della tab Classe (MainAppShell),
-        // allineato con il selettore Circolari/Bacheca come gli altri pulsanti delle intestazioni.
-        // Colonne / Filtri per Stato: stesso pill scorrevole di Sondaggio/Storico, generalizzato a
-        // chip di larghezza diversa (vedi AilaSlidingChipRow). "Chiuse" raccoglie sia le accettate
-        // sia le rifiutate: l'esito si legge sulla card.
+        ForumIntroduction(false, onCreateProposalClick, {showHelp=true}, title="Bacheca",
+            description="Le idee della classe, uno spazio per proporle e farle crescere insieme.", createLabel="Nuova proposta")
+        Spacer(Modifier.height(12.dp))
         val statusFilterOptions = remember { listOf<ProposalStatus?>(null, ProposalStatus.NUOVA, ProposalStatus.IN_ANALISI, ProposalStatus.CHIUSA) }
         val statusFilterLabels = remember { listOf("Tutte", "Nuove", "In analisi", "Chiuse") }
         circolareplus.design.AilaSlidingChipRow(
@@ -109,7 +111,7 @@ fun BoardScreen(
             }
         }
 
-        val contentPadding = PaddingValues(bottom = AppTheme.Space24 + 72.dp + circolareplus.design.LocalBottomBarPadding.current)
+        val contentPadding = PaddingValues(bottom = AppTheme.Space24 + circolareplus.design.LocalBottomBarPadding.current)
         val unlockPanel: @Composable () -> Unit = {
             UnlockRequestsPanel(
                 requests = unlockRequests,
@@ -118,15 +120,11 @@ fun BoardScreen(
             )
         }
         val emptyState: @Composable () -> Unit = {
-            AilaEmptyState(
-                title = if (proposals.isEmpty()) "Bacheca vuota" else "Nessuna proposta qui",
-                message = if (proposals.isEmpty())
-                    "Hai un'idea per la classe? Proponila: i compagni possono votarla e commentarla."
-                else
-                    "Nessuna proposta in questo stato. Prova a togliere il filtro.",
-                actionLabel = if (proposals.isEmpty()) "+ Proponi qualcosa" else null,
-                onAction = if (proposals.isEmpty()) onCreateProposalClick else null,
-                icon = { AppIcons.ChatBubble(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
+            ForumEmptyState(
+                title = if(proposals.isEmpty()) "La prossima idea può essere la tua" else "Nessuna proposta qui",
+                description = if(proposals.isEmpty()) "Un’iniziativa, un miglioramento o qualcosa da decidere insieme? Condividi la tua proposta e ascolta la classe."
+                    else "Non ci sono proposte in questo stato. Prova un altro filtro.",
+                privacyLabel = "Puoi proporre anche in forma anonima."
             )
         }
         val proposalCard: @Composable (Proposal, Modifier) -> Unit = { proposal, modifier ->
@@ -214,14 +212,7 @@ fun BoardScreen(
             }
         }
     }
-    // "Nuova proposta": pulsante flottante in basso a destra, sopra la barra delle tab.
-    circolareplus.design.AilaFab(
-        contentDescription = "Nuova proposta",
-        onClick = onCreateProposalClick,
-        modifier = Modifier
-            .align(Alignment.BottomEnd)
-            .padding(end = AppTheme.Space16, bottom = circolareplus.design.LocalBottomBarPadding.current + AppTheme.Space16)
-    ) { tint -> AppIcons.Plus(modifier = Modifier.size(22.dp), color = tint) }
+
     }
 }
 

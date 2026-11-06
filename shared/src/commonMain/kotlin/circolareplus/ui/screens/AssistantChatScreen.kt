@@ -357,11 +357,8 @@ fun AssistantChatScreen(
                 }
             }
             attachmentError?.let{Text(it,color=AppTheme.TintRedInk,style=MaterialTheme.typography.bodySmall)}
-            if(recording) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Registrazione in corso…", Modifier.weight(1f), color = AppTheme.PrimaryBlue, style = MaterialTheme.typography.bodySmall)
-                androidx.compose.material3.TextButton(onClick = { recorder?.cancel() }) { Text("Annulla", style = MaterialTheme.typography.labelMedium) }
-            }
-            Row(Modifier.fillMaxWidth().background(AppTheme.CardSurface,RoundedCornerShape(28.dp)).border(1.dp, AppTheme.PrimaryBlue.copy(alpha = .12f), RoundedCornerShape(28.dp)).padding(4.dp),verticalAlignment = Alignment.CenterVertically) {
+            if(recording) VoiceRecordingPanel(onStop={recorder?.stop()},onCancel={recorder?.cancel()})
+            else Row(Modifier.fillMaxWidth().background(AppTheme.CardSurface,RoundedCornerShape(28.dp)).border(1.dp, AppTheme.PrimaryBlue.copy(alpha = .12f), RoundedCornerShape(28.dp)).padding(4.dp),verticalAlignment = Alignment.CenterVertically) {
                 if(onAttachContent!=null){
                     AilaIconButton(contentDescription="Menu allegati",onClick={attachmentsMenu=true}){tint->AppIcons.Plus(Modifier.size(24.dp),tint)}
                     Spacer(Modifier.width(4.dp))

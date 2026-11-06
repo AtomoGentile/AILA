@@ -50,9 +50,9 @@ fun AcaContextOverlay(
         } else keyboard?.hide()
     }
     val dark = AppTheme.isDarkMode
-    val shape = RoundedCornerShape(32.dp)
+    val shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp, bottomStart = 38.dp, bottomEnd = 38.dp)
     // Opaque ink surfaces keep text from the page underneath out of the controls.
-    val surface = if(dark) listOf(Color(0xFF101520), Color(0xFF090C13))
+    val surface = if(dark) listOf(Color(0xFF141524), Color(0xFF090C13), Color(0xFF0D191F))
         else listOf(Color(0xFFF7F9FF), Color(0xFFECF0FA))
     val insetFill = if(dark) Color(0xFF151B27) else Color(0xFFE3E9F5)
     val fieldFill = if(dark) Color(0xFF191F2C) else Color(0xFFE2E8F5)
@@ -76,30 +76,42 @@ fun AcaContextOverlay(
             .border(1.dp, edge, shape)
             .verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                AilaAssistantMark(modifier = Modifier.size(26.dp))
+                AcaNeuralMark(thinking, Modifier.size(44.dp))
                 Spacer(Modifier.width(10.dp))
-                Text("AILA ACA", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = AppTheme.TextDark)
+                Column(Modifier.weight(1f), verticalArrangement=Arrangement.spacedBy(2.dp)) {
+                    Text("AILA ACA", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = AppTheme.TextDark)
+                    Text(if(thinking) "Collego le informazioni…" else "Un aiuto, qui con te", style=MaterialTheme.typography.labelSmall, color=muted)
+                }
                 IconButton(onClick = { if(isInteractive) { keyboard?.hide(); onClose() } }, modifier = Modifier.size(36.dp).background(insetFill, RoundedCornerShape(18.dp)).semantics { contentDescription = "Chiudi ACA" }) {
                     AppIcons.Close(Modifier.size(16.dp), muted)
                 }
-            }
-            if(thinking) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 1.5.dp, color = AppTheme.PrimaryBlue)
-                Text("Ci sto pensando…", style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
             }
             if(action?.actionPlan != null) {
                 circolareplus.ui.screens.AssistantActionPreview(message = action, isBusy = thinking, onConfirm = { if(isInteractive) onConfirm() }, onCancel = { if(isInteractive) onCancel() }, onRecover = {})
             } else answer?.let {
                 Text(it, Modifier.heightIn(max = 250.dp).verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodyLarge, color = AppTheme.TextDark)
             }
+            TextField(question, { question = it }, placeholder = { Text("Chiedi ad AILA…", style = MaterialTheme.typography.bodyLarge) },
+                modifier = Modifier.fillMaxWidth().border(1.dp, edge, RoundedCornerShape(24.dp)).focusRequester(focus), readOnly = !isInteractive, maxLines = 3, shape = RoundedCornerShape(24.dp),
+                trailingIcon = {
+                    IconButton(enabled = canSend && isInteractive, onClick = submit,
+                        modifier = Modifier.padding(end = 6.dp).size(42.dp).background(sendFill, RoundedCornerShape(16.dp)).semantics { contentDescription = "Invia ad ACA" }) {
+                        if(thinking) CircularProgressIndicator(Modifier.size(18.dp),strokeWidth=2.dp,color=muted)
+                        else AppIcons.ArrowUp(Modifier.size(19.dp), if(canSend) Color.White else AppTheme.TextFaint)
+                    }
+                },
+                colors = TextFieldDefaults.colors(focusedContainerColor = fieldFocus, unfocusedContainerColor = fieldFill,
+                    focusedTextColor = AppTheme.TextDark, unfocusedTextColor = AppTheme.TextDark,
+                    focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
+                    focusedPlaceholderColor = muted, unfocusedPlaceholderColor = muted))
             // The checkbox remains an explicit choice before any screen text leaves the device.
             Column(Modifier.fillMaxWidth().background(insetFill, RoundedCornerShape(20.dp))) {
                 Row(Modifier.fillMaxWidth().toggleable(value = includeContext, role = Role.Checkbox,
                     onValueChange = { if(isInteractive) includeContext = it }).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(includeContext, onCheckedChange = null, modifier = Modifier.size(40.dp))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text("Usa il contesto della schermata", style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextDark)
-                        Text(if(includeContext) providerLabel else "Controlla cosa condividere con AILA", style = MaterialTheme.typography.labelSmall, color = muted)
+                        Text("Includi questa schermata", style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextDark)
+                        Text(if(includeContext) providerLabel else "Solo se scegli di condividerla", style = MaterialTheme.typography.labelSmall, color = muted)
                     }
                 }
                 AnimatedVisibility(includeContext,
@@ -108,18 +120,6 @@ fun AcaContextOverlay(
                     Text(contextPreview.take(6000), Modifier.padding(horizontal = 14.dp).padding(bottom = 12.dp).heightIn(max = 100.dp).verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodySmall, color = muted)
                 }
             }
-            TextField(question, { question = it }, placeholder = { Text("Chiedi ad AILA…", style = MaterialTheme.typography.bodyLarge) },
-                modifier = Modifier.fillMaxWidth().border(1.dp, edge, RoundedCornerShape(24.dp)).focusRequester(focus), readOnly = !isInteractive, maxLines = 3, shape = RoundedCornerShape(24.dp),
-                trailingIcon = {
-                    IconButton(enabled = canSend, onClick = submit,
-                        modifier = Modifier.padding(end = 6.dp).size(38.dp).background(if(canSend && isInteractive) AppTheme.PrimaryBlue else AppTheme.TextMuted.copy(alpha = .12f), RoundedCornerShape(19.dp)).semantics { contentDescription = "Invia ad ACA" }) {
-                        AppIcons.ArrowUp(Modifier.size(19.dp), if(canSend && isInteractive) Color.White else AppTheme.TextFaint)
-                    }
-                },
-                colors = TextFieldDefaults.colors(focusedContainerColor = fieldFocus, unfocusedContainerColor = fieldFill,
-                    focusedTextColor = AppTheme.TextDark, unfocusedTextColor = AppTheme.TextDark,
-                    focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-                    focusedPlaceholderColor = muted, unfocusedPlaceholderColor = muted))
             TextButton(onClick = { if(isInteractive) { keyboard?.hide(); onOpenChat() } }, modifier = Modifier.align(Alignment.CenterHorizontally).heightIn(min = 36.dp), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
                 Text("Continua nell’assistente", style = MaterialTheme.typography.labelLarge)
                 Spacer(Modifier.width(6.dp)); AppIcons.ChevronRight(Modifier.size(15.dp), AppTheme.PrimaryBlue)
