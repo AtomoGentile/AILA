@@ -22,6 +22,44 @@ class LocalContentRepositoryTest {
         file.bytes.size.toLong(), if (expired) "2000-01-01T00:00:00Z" else "2099-01-01T00:00:00Z", expired = expired)
     private fun page(item: ContentAttachmentDto = remote()) = ContentInboxDto(listOf(ContentDeliveryDto(item, "1:1")), false, "C1")
 
+    @Test fun chatAttachmentsNeverWriteToDiskAndDisappearAfterRestart() = runTest {
+        val store=MemoryStorage(); val repo=LocalContentRepository(store) { "u1" }
+        val entry=repo.saveTemporary(file)
+        assertEquals(file.extractedText,repo.text(entry))
+        assertContentEquals(file.bytes,repo.read(entry).bytes)
+        assertNotNull(repo.entry(entry.id))
+        assertTrue(repo.list().isEmpty())
+        assertTrue(store.data.isEmpty())
+        assertNull(LocalContentRepository(store) { "u1" }.entry(entry.id))
+    }
+    @Test fun temporaryAttachmentsRespectAccountIsolationAndDoNotOverwriteSavedOriginals() = runTest {
+        val store=MemoryStorage(); var owner="u1"; val repo=LocalContentRepository(store) { owner }
+        val saved=repo.save(file)
+        val temporary=repo.saveTemporary(file.copy(localId=saved.id,extractedText="Nuovo testo"))
+        assertNotEquals(saved.id,temporary.id)
+        assertEquals(file.extractedText,repo.text(saved))
+        owner="u2"
+        assertNull(repo.entry(temporary.id))
+        assertFailsWith<IllegalArgumentException> { repo.read(temporary) }
+        assertFailsWith<IllegalArgumentException> { repo.text(temporary) }
+    }
+    @Test fun temporaryAttachmentLimitDoesNotDeleteSavedDocuments() = runTest {
+        val store=MemoryStorage(); val repo=LocalContentRepository(store) { "u1" }
+        val saved=repo.save(file)
+        val first=repo.saveTemporary(file)
+        repeat(5) { repo.saveTemporary(file) }
+        assertNull(repo.entry(first.id))
+        assertNotNull(repo.entry(saved.id))
+        assertEquals(1,repo.list().size)
+    }
+    @Test fun originalMemoryLimitRetainsExtractedTextForTheConversation() = runTest {
+        val repo=LocalContentRepository(MemoryStorage()) { "u1" }
+        val large=file.copy(bytes=ByteArray(15*1024*1024))
+        val first=repo.saveTemporary(large)
+        repeat(2) { repo.saveTemporary(large) }
+        assertEquals(file.extractedText,repo.text(first))
+        assertFailsWith<IllegalStateException> { repo.read(first) }
+    }
     @Test fun localCopiesSurviveServerExpiryRestartAndLogout() = runTest {
         val store = MemoryStorage(); var owner = "u1"
         val repo = LocalContentRepository(store) { owner }

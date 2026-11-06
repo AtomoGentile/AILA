@@ -57,6 +57,7 @@ import circolareplus.ai.assistant.AssistantConversation
 import circolareplus.ai.assistant.AssistantMessage
 import circolareplus.ai.assistant.AssistantSource
 import circolareplus.ai.assistant.AssistantSourceKind
+import circolareplus.design.AilaResponseText
 import circolareplus.design.AilaAssistantMark
 import circolareplus.design.AilaDuration
 import circolareplus.design.AilaBackBar
@@ -100,6 +101,7 @@ fun AssistantChatScreen(
     isThinking: Boolean,
     conversations: List<AssistantConversation>,
     onSend: (String) -> Unit,
+    initialDraft: String = "",
     onBackClick: () -> Unit,
     onClearChat: () -> Unit,
     onOpenConversation: (AssistantConversation) -> Unit,
@@ -121,7 +123,8 @@ fun AssistantChatScreen(
     onRemoveAttachedFile: (String) -> Unit = {},
     onOpenAttachedFile: (circolareplus.ai.assistant.AssistantAttachedFile) -> Unit = {}
 ) {
-    var draft by remember { mutableStateOf("") }
+    var draft by remember { mutableStateOf(initialDraft) }
+    LaunchedEffect(initialDraft) { if(initialDraft.isNotBlank())draft=initialDraft }
     var isHistoryOpen by remember { mutableStateOf(false) }
     var attachmentsMenu by remember { mutableStateOf(false) }
     var fileSources by remember { mutableStateOf(false) }
@@ -1050,14 +1053,15 @@ private fun AssistantBubble(
     // calma fino al marchio fermo mentre la risposta si apre sotto. E' un solo segno che smette
     // di parlare, in entrambi gli stili.
     val arriving = remember(message.id) { animateArrival }
-    var revealed by remember(message.id) { mutableStateOf(!arriving) }
+    var revealed by remember(message.id) { mutableStateOf(!arriving || AppTheme.reduceMotion) }
+    var textComplete by remember(message.id) { mutableStateOf(!arriving || AppTheme.reduceMotion) }
+    val formattedText = remember(message.text) { formatAssistantText(message.text) }
     if (arriving) {
         LaunchedEffect(message.id) {
             // Un attimo di onda ancora attiva: senza, l'indicatore spariva e la risposta compariva
             // nello stesso fotogramma e il passaggio non si vedeva.
-            delay(120)
+            if(!AppTheme.reduceMotion)delay(120)
             revealed = true
-            onArrived()
         }
     }
     if (AppTheme.isGlass) {
@@ -1093,13 +1097,12 @@ private fun AssistantBubble(
                             )
                             .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12)
                     ) {
-                        Text(
-                            text = formatAssistantText(message.text),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = AppTheme.TextDark
+                        AilaResponseText(
+                            text = formattedText, responseId = message.id, animate = arriving,
+                            onComplete = { textComplete = true; onArrived() }
                         )
                     }
-                    AnswerExtras(message, arriving, onOpenSource)
+                    if(textComplete)AnswerExtras(message, arriving, onOpenSource)
                 }
             }
         }
@@ -1123,13 +1126,12 @@ private fun AssistantBubble(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.fillMaxWidth().padding(top = AppTheme.Space8)) {
-                    Text(
-                        text = formatAssistantText(message.text),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = AppTheme.TextDark,
-                        modifier = Modifier.padding(horizontal = AppTheme.Space4)
+                    AilaResponseText(
+                        text = formattedText, responseId = message.id, animate = arriving,
+                        modifier = Modifier.padding(horizontal = AppTheme.Space4),
+                        onComplete = { textComplete = true; onArrived() }
                     )
-                    AnswerExtras(message, arriving, onOpenSource)
+                    if(textComplete)AnswerExtras(message, arriving, onOpenSource)
                 }
             }
         }

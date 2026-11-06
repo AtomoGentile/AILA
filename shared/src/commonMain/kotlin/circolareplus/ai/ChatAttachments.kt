@@ -9,13 +9,11 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.*
 import kotlinx.serialization.json.*
 
-suspend fun prepareChatAttachment(file:IncomingContent,question:String?=null,onSaved:(AssistantAttachedFile)->Unit={}):AssistantAttachedFile {
+suspend fun prepareChatAttachment(file:IncomingContent,question:String?=null):AssistantAttachedFile {
  var p=AppContainer.settings.cachedAiPreferences
  val audio=file.mime.startsWith("audio/");val image=file.mime.startsWith("image/")
  val service=if(audio)"AUDIO"else if(image)"IMAGES"else"DOCUMENTS"
  val archive=AppContainer.localContents
- val saved=archive.save(file)
- onSaved(AssistantAttachedFile(saved.id,file.fileName,service,audio||image))
  check(p.allows(service)){"Attiva il servizio $service nelle impostazioni AI per leggere questo allegato."}
  var text=file.extractedText?:when(file.mime){"text/plain"->file.bytes.decodeToString();"application/pdf"->AppContainer.pdfTextExtractor.extractText(file.bytes);else->""}
  if(text.isBlank()){
@@ -50,12 +48,12 @@ suspend fun prepareChatAttachment(file:IncomingContent,question:String?=null,onS
    text=Json.parseToJsonElement(response.bodyAsText()).jsonObject["choices"]?.jsonArray?.firstOrNull()?.jsonObject?.get("message")?.jsonObject?.get("content")?.jsonPrimitive?.content.orEmpty()
   }else{
    check(!personal||(!image&&!audio)){"Questo formato non è ancora supportato dal provider selezionato. Scegli un provider compatibile; non verrà usata automaticamente la quota AILA."}
-   val remote=AppContainer.acaRepository.upload(file.copy(localId=saved.id))
+   val remote=AppContainer.acaRepository.upload(file, persistLocal=false)
    check(AppContainer.settings.cachedAiPreferences.allows(service)&&AppContainer.settings.cachedAiPreferences.attachmentConsent){"L’analisi degli allegati è stata disattivata."}
    text=if(audio||image)AppContainer.acaRepository.analyze(remote.id,if(audio)"TRANSCRIBE"else"EXPLAIN").text else AppContainer.acaRepository.text(remote.id).text
   }
  }
  check(text.isNotBlank()){ "Non ho trovato testo leggibile nell’allegato. Puoi aprire l’originale dalla chat." }
- archive.save(file.copy(localId=saved.id,extractedText=text,isTranscript=audio))
+ val saved=archive.saveTemporary(file.copy(extractedText=text,isTranscript=audio))
  return AssistantAttachedFile(saved.id,file.fileName,service,audio||image)
 }

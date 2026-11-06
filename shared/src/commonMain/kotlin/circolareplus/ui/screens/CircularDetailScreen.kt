@@ -94,8 +94,7 @@ fun CircularDetailScreen(
      * "Aggiungi al calendario", che creava un evento doppio.
      */
     calendarEvents: List<CalendarEvent> = emptyList(),
-    aiEnabled: Boolean = true,
-    onAskAila: (() -> Unit)? = null
+    aiEnabled: Boolean = true
 ) {
     val scope = rememberCoroutineScope()
     // Scadenze già aggiunte in questa visita, con l'esito: evita di ricreare due volte lo stesso
@@ -218,9 +217,6 @@ fun CircularDetailScreen(
                 )
             }
 
-            if (onAskAila != null) item {
-                AilaSecondaryButton(text = "Chiedi ad AILA su questo documento", onClick = onAskAila)
-            }
             // --- Analisi di AILA Assistant ---------------------------------------------------------------
             if (aiEnabled) item {
                 AilaCard(containerColor = AppTheme.TintSlate, modifier = Modifier.ailaAppear(2)) {
