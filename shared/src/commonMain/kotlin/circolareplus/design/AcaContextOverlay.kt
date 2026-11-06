@@ -28,6 +28,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import circolareplus.platform.rememberVoiceRecorder
+import circolareplus.data.AppContainer
+import circolareplus.ai.prepareChatAttachment
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,6 +46,25 @@ fun AcaContextOverlay(
     var question by remember { mutableStateOf("") }
     var attachedScreen by remember(contextPreview, providerLabel) { mutableStateOf(false) }
     var attachmentMenu by remember { mutableStateOf(false) }
+    var recording by remember { mutableStateOf(false) }
+    var transcribing by remember { mutableStateOf(false) }
+    var voiceError by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val recorder = rememberVoiceRecorder({ recording = it }, { voiceError = it }) { audio ->
+        scope.launch {
+            transcribing = true; voiceError = null
+            try {
+                val prepared = prepareChatAttachment(audio)
+                val entry = AppContainer.localContents.list().firstOrNull { it.id == prepared.localId }
+                val transcript = entry?.let { AppContainer.localContents.text(it) }.orEmpty()
+                check(transcript.isNotBlank()) { "Non sono riuscito a trascrivere il vocale." }
+                question = listOf(question.trim(), transcript).filter { it.isNotBlank() }.joinToString("\n")
+                withFrameNanos { }
+                focus.requestFocus()
+            } catch (e: Exception) { voiceError = e.message ?: "Trascrizione non riuscita." }
+            finally { transcribing = false }
+        }
+    }
     LaunchedEffect(isInteractive) {
         if (isInteractive) {
             attachedScreen = false
@@ -98,11 +121,15 @@ fun AcaContextOverlay(
                 Text("Schermata allegata",Modifier.weight(1f),style=MaterialTheme.typography.labelMedium,color=AppTheme.TextDark)
                 IconButton(onClick={attachedScreen=false},modifier=Modifier.size(32.dp).semantics{contentDescription="Rimuovi schermata"}){AppIcons.Close(Modifier.size(15.dp),muted)}
             }
+            if(recording || transcribing || voiceError != null) Row(Modifier.fillMaxWidth().background(insetFill,RoundedCornerShape(16.dp)).padding(horizontal=12.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
+                Text(voiceError ?: if(recording) "Registrazione vocale in corso…" else "Trascrivo il vocale…",Modifier.weight(1f),style=MaterialTheme.typography.labelMedium,color=if(voiceError!=null) AppTheme.TintRedInk else muted)
+                if(recording) TextButton(onClick={recorder.cancel()}) { Text("Annulla") }
+            }
             Row(Modifier.fillMaxWidth().background(fieldFocus,RoundedCornerShape(40.dp)).border(1.dp,edge.copy(alpha=.7f),RoundedCornerShape(40.dp)).padding(horizontal=8.dp,vertical=5.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(4.dp)) {
                 IconButton(onClick={keyboard?.hide();attachmentMenu=true},enabled=isInteractive,modifier=Modifier.size(44.dp).semantics{contentDescription="Aggiungi allegato"}) { AppIcons.Plus(Modifier.size(25.dp),AppTheme.TextDark) }
                 TextField(question,{question=it},placeholder={Text("Chiedi ad AILA…")},modifier=Modifier.weight(1f).focusRequester(focus),readOnly=!isInteractive,maxLines=3,
                     colors=TextFieldDefaults.colors(focusedContainerColor=Color.Transparent,unfocusedContainerColor=Color.Transparent,focusedTextColor=AppTheme.TextDark,unfocusedTextColor=AppTheme.TextDark,focusedIndicatorColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent,focusedPlaceholderColor=muted,unfocusedPlaceholderColor=muted))
-                if(question.isBlank()) IconButton(onClick={keyboard?.hide();attachmentMenu=true},enabled=isInteractive,modifier=Modifier.size(48.dp).background(AppTheme.PrimaryBlue,RoundedCornerShape(24.dp)).semantics{contentDescription="Microfono ACA"}) { AcaMic() }
+                if(question.isBlank()) IconButton(onClick={if(recording) recorder.stop() else {keyboard?.hide();recorder.start()}},enabled=isInteractive&&!transcribing,modifier=Modifier.size(48.dp).background(if(recording) AppTheme.TintRedInk else AppTheme.PrimaryBlue,RoundedCornerShape(24.dp)).semantics{contentDescription=if(recording) "Termina vocale ACA" else "Registra un vocale per ACA"}) { if(recording) AppIcons.Close(Modifier.size(20.dp),Color.White) else AcaMic() }
                 else IconButton(onClick=submit,enabled=canSend&&isInteractive,modifier=Modifier.size(48.dp).background(sendFill,RoundedCornerShape(24.dp)).semantics{contentDescription="Invia ad ACA"}) { AppIcons.ArrowUp(Modifier.size(22.dp),Color.White) }
             }
             TextButton(onClick = { if(isInteractive) { keyboard?.hide(); onOpenChat() } }, modifier = Modifier.align(Alignment.CenterHorizontally).heightIn(min = 36.dp), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
