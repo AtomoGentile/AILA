@@ -9,14 +9,12 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.*
 import kotlinx.serialization.json.*
 
-suspend fun prepareChatAttachment(file:IncomingContent,question:String?=null,onSaved:(AssistantAttachedFile)->Unit={}):AssistantAttachedFile {
+suspend fun prepareChatAttachment(file:IncomingContent,question:String?=null):AssistantAttachedFile {
  var processingLabel:String?=null
  var p=AppContainer.settings.cachedAiPreferences
  val audio=file.mime.startsWith("audio/");val image=file.mime.startsWith("image/")
  val service=if(audio)"AUDIO"else if(image)"IMAGES"else"DOCUMENTS"
  val archive=AppContainer.localContents
- val saved=archive.save(file)
- onSaved(AssistantAttachedFile(saved.id,file.fileName,service,audio||image))
  check(p.allows(service)){"Attiva il servizio $service nelle impostazioni AI per leggere questo allegato."}
  var text=file.extractedText?:when(file.mime){"text/plain"->file.bytes.decodeToString();"application/pdf"->AppContainer.pdfTextExtractor.extractText(file.bytes);else->""}
  if(text.isBlank() && audio) {
@@ -27,7 +25,7 @@ suspend fun prepareChatAttachment(file:IncomingContent,question:String?=null,onS
    cloudAllowed={AppContainer.settings.cachedAiPreferences.let{it.cloudConsent&&it.attachmentConsent&&it.audioConsent&&
      (AiProvider.fromId(AppContainer.settings.aiProvider)==AiProvider.AILA_CLOUD||it.externalConsent)}&&AiProvider.fromId(AppContainer.settings.aiProvider)!=AiProvider.ON_DEVICE},
    local={circolareplus.platform.transcribeAudioLocally(file)},
-   cloud={transcribeWithCloudProvider(file,saved.id)}
+   cloud={transcribeWithCloudProvider(file)}
   )
   text=result.text;processingLabel=result.label
  }
@@ -53,7 +51,7 @@ suspend fun prepareChatAttachment(file:IncomingContent,question:String?=null,onS
    text=Json.parseToJsonElement(response.bodyAsText()).jsonObject["choices"]?.jsonArray?.firstOrNull()?.jsonObject?.get("message")?.jsonObject?.get("content")?.jsonPrimitive?.content.orEmpty()
   }else{
    check(!personal||(!image&&!audio)){"Questo formato non è ancora supportato dal provider selezionato. Scegli un provider compatibile; non verrà usata automaticamente la quota AILA."}
-   val remote=AppContainer.acaRepository.upload(file.copy(localId=saved.id))
+   val remote=AppContainer.acaRepository.upload(file,persistLocal=false)
    check(AppContainer.settings.cachedAiPreferences.allows(service)&&AppContainer.settings.cachedAiPreferences.attachmentConsent){"L’analisi degli allegati è stata disattivata."}
    text=if(audio||image)AppContainer.acaRepository.analyze(remote.id,if(audio)"TRANSCRIBE"else"EXPLAIN").text else AppContainer.acaRepository.text(remote.id).text
    if(audio)processingLabel="Trascritto con Whisper · AILA"
@@ -62,11 +60,11 @@ suspend fun prepareChatAttachment(file:IncomingContent,question:String?=null,onS
  check(text.isNotBlank()){ "Non ho trovato testo leggibile nell’allegato. Puoi aprire l’originale dalla chat." }
  check(AppContainer.settings.cachedAiPreferences.allows(service)){"Questo servizio AI è stato disattivato."}
  if(audio)check(AppContainer.settings.cachedAiPreferences.audioConsent){"Consenti la trascrizione dei vocali in Impostazioni → AI."}
- archive.save(file.copy(localId=saved.id,extractedText=text,isTranscript=audio))
+ val saved=archive.saveTemporary(file.copy(extractedText=text,isTranscript=audio))
  return AssistantAttachedFile(saved.id,file.fileName,service,audio||image,processingLabel)
 }
 
-private suspend fun transcribeWithCloudProvider(file:IncomingContent,savedId:String):AudioTranscription {
+private suspend fun transcribeWithCloudProvider(file:IncomingContent):AudioTranscription {
  val settings=AppContainer.settings
  val selected=AiProvider.fromId(settings.aiProvider)
  if(selected==AiProvider.COMPATIBLE_API&&CompatibleAiFormat.fromId(settings.compatibleAiFormat)==CompatibleAiFormat.OPENAI){
@@ -81,7 +79,7 @@ private suspend fun transcribeWithCloudProvider(file:IncomingContent,savedId:Str
   return AudioTranscription(text,"Trascritto con Whisper · API personale")
  }
  check(selected==AiProvider.AILA_CLOUD){"La trascrizione cloud non è supportata dal provider selezionato."}
- val remote=AppContainer.acaRepository.upload(file.copy(localId=savedId))
+ val remote=AppContainer.acaRepository.upload(file,persistLocal=false)
  check(settings.cachedAiPreferences.let{it.allows("AUDIO")&&it.cloudConsent&&it.attachmentConsent&&it.audioConsent}){"L’elaborazione audio è stata disattivata."}
  return AudioTranscription(AppContainer.acaRepository.analyze(remote.id,"TRANSCRIBE").text,"Trascritto con Whisper · AILA")
 }

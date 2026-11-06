@@ -87,6 +87,7 @@ import circolareplus.domain.model.CalendarEvent
 import circolareplus.domain.model.CalendarEventCategory
 import circolareplus.domain.model.Circular
 import circolareplus.domain.model.CircularAiClassification
+import circolareplus.ai.allows
 import circolareplus.ai.ATTACHMENT_TEXT_MARKER
 import circolareplus.ai.assistant.AssistantAttachedFile
 import circolareplus.ai.assistant.AssistantAttachedSource
@@ -1099,6 +1100,8 @@ fun MainAppShell(
     var acaOverlayStart by remember { mutableStateOf(0) }
     var acaForumContext by remember{mutableStateOf("")}
     var acaDocumentContext by remember{mutableStateOf("")}
+    var acaChatDraft by remember { mutableStateOf("") }
+    var acaChatContext by remember { mutableStateOf("") }
     // La conversazione in corso ha un id suo, cosi' ogni salvataggio aggiorna la stessa voce
     // dello storico invece di aggiungerne una a ogni domanda.
     var assistantConversationId by rememberSaveable { mutableStateOf("c${currentTimeMillis()}") }
@@ -1542,13 +1545,15 @@ fun MainAppShell(
 
         coroutineScope.launch {
             try {
-                val attachedSources = sourceFiles.map { reference ->
+                val attachedSources = sourceFiles.mapNotNull { reference ->
+                    // Previous temporary originals can expire; they must not block every later turn.
+                    val entry=AppContainer.localContents.entry(reference.localId)
+                    if(entry==null && filesForTurn.none { it.localId==reference.localId })return@mapNotNull null
                     val p=circolareplus.ai.AcaPolicyState.preferences
                     check(p.aiEnabled && p.acaEnabled && reference.service in p.services) {
                         "Il servizio per ${reference.name} è disattivato. Attivalo nelle impostazioni AI o apri una nuova chat senza allegati."
                     }
-                    val entry=AppContainer.localContents.entry(reference.localId)
-                        ?: error("La copia locale di ${reference.name} è stata eliminata. Allegala di nuovo per continuare.")
+                    checkNotNull(entry) { "L’allegato temporaneo ${reference.name} non è più disponibile. Allegalo di nuovo per continuare." }
                     val text=AppContainer.localContents.text(entry)?.takeIf{it.isNotBlank()}
                         ?: error("Non è disponibile un testo leggibile per ${reference.name}. Apri il file per estrarlo o trascriverlo.")
                     AssistantAttachedSource(reference,text)
@@ -2833,16 +2838,6 @@ fun MainAppShell(
         CircularDetailScreen(
             circular = circular,
             aiEnabled = aiPolicy.aiEnabled && "CIRCULARS" in aiPolicy.services,
-            onAskAila = {
-                coroutineScope.launch {
-                    try {
-                        val bytes = AppContainer.circularsRepository.downloadPdfBytes(circular.r2PdfKey)
-                        localContent = circolareplus.platform.IncomingContent("Circolare ${circular.number}.pdf", "application/pdf", bytes)
-                        selectedCircularForDetail = null
-                    } catch (e: CancellationException) { throw e }
-                    catch (_: Exception) { circolareplus.platform.IncomingContentInbox.reject("Documento non disponibile. Riprova ad aprire il PDF.") }
-                }
-            },
             classification = classifications[circular.number],
             isClassifying = circular.number in inFlightClassification,
             isQueued = circular.number in queuedClassification,
@@ -2929,13 +2924,19 @@ fun MainAppShell(
     }
     fun receiveAssistantAttachment(file:circolareplus.platform.IncomingContent,voice:Boolean){
         val target=assistantConversationId
+        if(target in pendingAssistantConversations)return
+        if(assistantAttachments[target].orEmpty().size >= 5) {
+            appendAssistantMessage(target,AssistantMessage("attachment-limit-${currentTimeMillis()}",AssistantAuthor.ASSISTANT,"Puoi allegare al massimo 5 file per messaggio. Rimuovine uno prima di aggiungerne un altro.",isError=true))
+            return
+        }
+        pendingAssistantConversations+=target
         coroutineScope.launch {
             var spoken:String?=null
-            pendingAssistantConversations+=target
             assistantAgentPhases[target]=if(file.mime.startsWith("audio/"))AssistantAgentPhase.TRANSCRIBING else AssistantAgentPhase.READING
             try{
-                val attached=circolareplus.ai.prepareChatAttachment(file){original->assistantAttachments[target]=(assistantAttachments[target].orEmpty()+original).distinctBy{it.localId}.takeLast(5)}
+                val attached=circolareplus.ai.prepareChatAttachment(file)
                 assistantAttachments[target]=(assistantAttachments[target].orEmpty().filterNot{it.localId==attached.localId}+attached).takeLast(5)
+
                 if(voice)AppContainer.localContents.entry(attached.localId)?.let{spoken=AppContainer.localContents.text(it)}
             }catch(e:CancellationException){throw e}catch(e:Exception){
                 appendAssistantMessage(target,AssistantMessage("attachment-${currentTimeMillis()}",AssistantAuthor.ASSISTANT,e.message?:"Allegato non disponibile",isError=true))
@@ -4513,18 +4514,9 @@ fun MainAppShell(
                 }
                 ShellRoute.CONTENT -> {
                     circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { localContent = null; remoteContent = null }
-                    ContentAssistanceScreen(onContextChange={acaDocumentContext=it},content = localContent, attachment = remoteContent,
-                        onUseInChat = { file ->
-                            val pending=assistantAttachments[assistantConversationId].orEmpty()
-                            check(pending.any{it.localId==file.localId}||pending.size<5){"Allega al massimo 5 file per messaggio."}
-                            assistantAttachments[assistantConversationId]=(pending+file).distinctBy{it.localId}
-                            localContent=null;remoteContent=null;isInForum=false;isInAcaHub=false;isInLocalFiles=false
-                            assistantMode=AssistantMode.GENERAL;isInAssistantScreen=true
-                        },
-                        onOpenLocalFiles = { localContent = null; remoteContent = null; filesOpenedFromSettings = false; isInLocalFiles = true },
-                        onBack = { localContent = null; remoteContent = null },
-                        onPrepareCalendar = { text -> localContent = null; remoteContent = null; isInForum = false; isInAcaHub = false; isInLocalFiles = false; isInAssistantScreen = true; askAssistant("Prepara gli eventi da confermare da questa fonte:\n$text") },
-                        onActivity = { contentActivity = it })
+                    ContentPreviewScreen(
+                        onContextChange={acaDocumentContext=it},content=localContent,attachment=remoteContent,
+                        onBack={localContent=null;remoteContent=null})
                 }
                 ShellRoute.BACKGROUND_DEBUG -> {
                     circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { isInBackgroundDebugScreen = false }
@@ -4913,6 +4905,7 @@ fun MainAppShell(
                     // (marchio e ultime chat), non a quella da cui si e' arrivati: la conversazione
                     // e' gia' nello storico. Solo da li' si esce.
                     val assistantBack = {
+                        acaChatDraft="";acaChatContext=""
                         if (assistantMessages.isNotEmpty()) {
                             assistantMessages.clear()
                             assistantConversationId = "c${currentTimeMillis()}"
@@ -4926,7 +4919,8 @@ fun MainAppShell(
                         messages = assistantMessages,
                         isThinking = isAssistantThinking,
                         conversations = assistantConversations,
-                        onSend = { question -> askAssistant(question) },
+                        initialDraft = acaChatDraft,
+                        onSend = { question -> askAssistant(question, acaChatContext); acaChatDraft=""; acaChatContext="" },
                         onOpenFiles={filesOpenedFromSettings=false;isInLocalFiles=true;isInAssistantScreen=false},
                         onStudyPlan={askAssistant("Prepara un piano di ripasso solo per gli impegni destinati a me. Spiega come distribuire lo studio, senza creare eventi.")},
                         onOpenAiSettings={isInSettingsScreen=true;isInAiSettings=true},
@@ -5383,6 +5377,15 @@ fun MainAppShell(
         val acaPageContext=("Schermata: $shellRoute; sezione: $selectedTab / $classSection\n"+
             (selectedCircularForDetail?:paneCircular)?.let{"Circolare ${it.number}: ${it.title}\n${classifications[it.number]?.personalSummary.orEmpty()}"}.orEmpty()+
             eventDetailToShow?.toString().orEmpty()+when { shellRoute == ShellRoute.FORUM || (shellRoute == ShellRoute.TABS && selectedTab == MainTab.CLASS && classSection == ClassSection.PERE) -> acaForumContext; shellRoute == ShellRoute.CONTENT -> acaDocumentContext; else -> "" }).take(6000)
+        val acaHasDocument = shellRoute == ShellRoute.CONTENT || selectedCircularForDetail != null || paneCircular != null
+        val acaContextPermitted = circolareplus.ai.AcaPolicyState.preferences.let { p ->
+            when {
+                shellRoute == ShellRoute.CONTENT -> p.allows("DOCUMENTS") && p.attachmentConsent
+                selectedCircularForDetail != null || paneCircular != null -> p.allows("CIRCULARS")
+                shellRoute == ShellRoute.FORUM || (shellRoute == ShellRoute.TABS && selectedTab == MainTab.CLASS && classSection == ClassSection.PERE) -> p.allows("FORUM")
+                else -> true
+            }
+        }
         if(acaOverlay) circolareplus.platform.PlatformBackHandler { acaOverlay = false }
         androidx.compose.animation.AnimatedVisibility(
             visible = acaOverlay,
@@ -5404,17 +5407,21 @@ fun MainAppShell(
             onCancel={assistantMessages.drop(acaOverlayStart).lastOrNull{it.actionPlan!=null}?.let{cancelAssistantAction(it.id)}},
             answer=assistantMessages.drop(acaOverlayStart).lastOrNull{it.author==AssistantAuthor.ASSISTANT}?.text,
             onClose={acaOverlay=false},
-            onOpenChat={acaOverlay=false;selectedCircularForDetail=null;paneCircular=null;eventDetailToShow=null;isInSettingsScreen=false;isInBackgroundDebugScreen=false;isInProfileScreen=false;isInClassRosterScreen=false;localContent=null;remoteContent=null;isInForum=false;isInAcaHub=false;isInLocalFiles=false;assistantMode=AssistantMode.GENERAL;isInAssistantScreen=true},
+            attachedFiles=assistantAttachments[assistantConversationId].orEmpty(),
+            onAttachContent={receiveAssistantAttachment(it,false)},
+            onRemoveAttachedFile={id->assistantAttachments[assistantConversationId]=assistantAttachments[assistantConversationId].orEmpty().filterNot{it.localId==id}},
+            onOpenChat={draft,includeContext->
+                acaChatDraft=draft
+                acaChatContext=if((includeContext || acaHasDocument) && acaContextPermitted)acaPageContext else ""
+                acaOverlay=false;selectedCircularForDetail=null;paneCircular=null;eventDetailToShow=null
+                isInSettingsScreen=false;isInBackgroundDebugScreen=false;isInProfileScreen=false;isInClassRosterScreen=false
+                localContent=null;remoteContent=null;isInForum=false;isInAcaHub=false;isInLocalFiles=false
+                assistantMode=AssistantMode.GENERAL;isInAssistantScreen=true
+            },
             onSend={question,includeContext->
                 acaOverlayStart=assistantMessages.size
-                val p=circolareplus.ai.AcaPolicyState.preferences
-                val permitted=!includeContext||when(shellRoute){
-                    ShellRoute.CONTENT->p.acaEnabled&&"DOCUMENTS" in p.services&&p.attachmentConsent
-                    ShellRoute.FORUM->p.acaEnabled&&"FORUM" in p.services
-                    ShellRoute.TABS->if(selectedTab==MainTab.CLASS&&classSection==ClassSection.PERE)p.acaEnabled&&"FORUM" in p.services else true
-                    else->true
-                }
-                if(permitted)askAssistant(question,if(includeContext)acaPageContext else "")
+                val useContext=includeContext || acaHasDocument
+                if(!useContext || acaContextPermitted)askAssistant(question,if(useContext)acaPageContext else "")
                 else appendAssistantMessage(assistantConversationId,AssistantMessage("context-${currentTimeMillis()}",AssistantAuthor.ASSISTANT,"Attiva il servizio e i consensi per questo contesto nelle impostazioni AI.",isError=true))
             }
         )

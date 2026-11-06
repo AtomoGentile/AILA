@@ -50,9 +50,9 @@ class AcaRepository(private val api:ApiClient,private val pdf:PdfTextExtractor) 
   }
   return api.post("/api/aca/task",AcaTaskRequestDto(feature,question,context,includeAppContext))
  }
- suspend fun upload(content:IncomingContent,threadId:String?=null):ContentAttachmentDto {
-  val saved=AppContainer.localContents.save(content)
-  val local=content.copy(localId=saved.id)
+ suspend fun upload(content:IncomingContent,threadId:String?=null,persistLocal:Boolean=true):ContentAttachmentDto {
+  val saved=if(persistLocal)AppContainer.localContents.save(content)else null
+  val local=content.copy(localId=saved?.id)
   val text=content.extractedText?:if(content.mime=="application/pdf")pdf.extractText(content.bytes) else ""
   val response:ContentUploadedDto=api.postMultipart("/api/content",formData {
    append("file",content.bytes,Headers.build {
@@ -61,7 +61,7 @@ class AcaRepository(private val api:ApiClient,private val pdf:PdfTextExtractor) 
    })
    if(threadId!=null)append("threadId",threadId)
    if(text.isNotBlank())append("text",text.take(100_000))
-  });AppContainer.localContents.save(local,response.attachment);return response.attachment
+  });if(persistLocal)AppContainer.localContents.save(local,response.attachment);return response.attachment
  }
  suspend fun attachment(id:String):ContentAttachmentDto=api.get<ContentUploadedDto>("/api/content/$id",offlineCopy=false).attachment
  suspend fun inbox(cursor:String):ContentInboxDto=api.get("/api/content/inbox?cursor=${cursor.encodeURLParameter()}",offlineCopy=false)

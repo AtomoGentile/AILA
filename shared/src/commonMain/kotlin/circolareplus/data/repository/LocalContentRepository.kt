@@ -33,6 +33,27 @@ class LocalContentRepository(
 ) {
     private val lock = Mutex()
     private val synchronization = Mutex()
+    // Chat attachments live only in this process; explicit user saves still use storage.
+    private val temporary = linkedMapOf<String, Pair<LocalContentEntry, IncomingContent>>()
+    suspend fun saveTemporary(file: IncomingContent): LocalContentEntry = lock.withLock {
+        val owner = owner()
+        require(file.bytes.isNotEmpty() && file.bytes.size <= CONTENT_MAX_BYTES) { "File non valido: massimo 20 MB." }
+        temporary.entries.removeAll { it.value.first.ownerId != owner }
+        val id = file.localId?.takeIf { temporary[it]?.first?.ownerId == owner }
+            ?: "temp-${currentTimeMillis()}-${Random.nextLong().toULong().toString(16)}"
+        val entry = LocalContentEntry(id, owner, file.fileName, file.mime, file.bytes.size.toLong(), currentTimeMillis(),
+            extractedText = file.extractedText.takeUnless { file.isTranscript },
+            transcript = file.extractedText.takeIf { file.isTranscript })
+        temporary.remove(id)
+        temporary[id] = entry to file.copy(localId = id)
+        // Keep at most five originals, bounded to 40 MB, without accumulating phone files.
+        while (temporary.size > 5) temporary.remove(temporary.keys.first())
+        while (temporary.values.sumOf { it.second.bytes.size.toLong() } > 40L * 1024 * 1024) {
+            val oldest = temporary.entries.first { it.value.second.bytes.isNotEmpty() }
+            temporary[oldest.key] = oldest.value.first to oldest.value.second.copy(bytes=byteArrayOf())
+        }
+        entry
+    }
     private val json = Json { ignoreUnknownKeys = true }
     private val metadataCache=mutableMapOf<String,List<LocalContentEntry>>()
     private val pendingPreferences=mutableMapOf<String,LocalContentPreferences>()
@@ -56,11 +77,16 @@ class LocalContentRepository(
     suspend fun findByRemote(remoteId: String): LocalContentEntry? = lock.withLock { entries(owner()).firstOrNull { remoteId in it.remoteIds } }
     suspend fun entry(id: String): LocalContentEntry? {
         val owner = owner()
+        temporary[id]?.takeIf { it.first.ownerId == owner }?.let { return it.first }
         return storage.read(key(owner, id, "meta"))?.let { json.decodeFromString<LocalContentEntry>(it.decodeToString()) }
             ?.takeIf { it.ownerId == owner }
     }
     suspend fun read(entry: LocalContentEntry): IncomingContent = lock.withLock {
         require(entry.ownerId == owner()) { "Questo file appartiene a un altro account." }
+        temporary[entry.id]?.takeIf { it.first.ownerId == owner() }?.let {
+            check(it.second.bytes.isNotEmpty()) { "L’originale temporaneo non è più disponibile. Allega nuovamente il file." }
+            return@withLock it.second
+        }
         val bytes = storage.read(key(entry.ownerId, entry.id, "data")) ?: error("La copia sul dispositivo non è disponibile.")
         val derived=storage.read(key(entry.ownerId,entry.id,"derived"))?.let{json.decodeFromString<LocalDerivedContent>(it.decodeToString())}
         val transcript=derived?.transcript?:entry.transcript
@@ -70,6 +96,7 @@ class LocalContentRepository(
     }
     suspend fun text(entry: LocalContentEntry): String? = lock.withLock {
         require(entry.ownerId == owner())
+        temporary[entry.id]?.takeIf { it.first.ownerId == owner() }?.let { return@withLock it.second.extractedText }
         val derived=storage.read(key(entry.ownerId,entry.id,"derived"))?.let{json.decodeFromString<LocalDerivedContent>(it.decodeToString())}
         require(entry.ownerId == owner())
         derived?.transcript?:derived?.extractedText?:entry.transcript?:entry.extractedText
