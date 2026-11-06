@@ -7,7 +7,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -25,12 +24,12 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AcaContextOverlay(
     thinking: Boolean, answer: String?, onClose: () -> Unit, onOpenChat: () -> Unit,
@@ -41,10 +40,11 @@ fun AcaContextOverlay(
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     var question by remember { mutableStateOf("") }
-    var includeContext by remember(contextPreview, providerLabel) { mutableStateOf(false) }
+    var attachedScreen by remember(contextPreview, providerLabel) { mutableStateOf(false) }
+    var attachmentMenu by remember { mutableStateOf(false) }
     LaunchedEffect(isInteractive) {
         if (isInteractive) {
-            includeContext = false
+            attachedScreen = false
             withFrameNanos { }
             focus.requestFocus()
         } else keyboard?.hide()
@@ -66,7 +66,8 @@ fun AcaContextOverlay(
     )
     val submit = {
         if(canSend && isInteractive) {
-            val text = question; question = ""; keyboard?.hide(); onSend(text, includeContext)
+            val text = question; question = ""; keyboard?.hide(); onSend(text, attachedScreen)
+            attachedScreen = false
         }
     }
     BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)).imePadding()) {
@@ -91,38 +92,51 @@ fun AcaContextOverlay(
             } else answer?.let {
                 Text(it, Modifier.heightIn(max = 250.dp).verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodyLarge, color = AppTheme.TextDark)
             }
-            TextField(question, { question = it }, placeholder = { Text("Chiedi ad AILA…", style = MaterialTheme.typography.bodyLarge) },
-                modifier = Modifier.fillMaxWidth().border(1.dp, edge, RoundedCornerShape(24.dp)).focusRequester(focus), readOnly = !isInteractive, maxLines = 3, shape = RoundedCornerShape(24.dp),
-                trailingIcon = {
-                    IconButton(enabled = canSend && isInteractive, onClick = submit,
-                        modifier = Modifier.padding(end = 6.dp).size(42.dp).background(sendFill, RoundedCornerShape(16.dp)).semantics { contentDescription = "Invia ad ACA" }) {
-                        if(thinking) CircularProgressIndicator(Modifier.size(18.dp),strokeWidth=2.dp,color=muted)
-                        else AppIcons.ArrowUp(Modifier.size(19.dp), if(canSend) Color.White else AppTheme.TextFaint)
-                    }
-                },
-                colors = TextFieldDefaults.colors(focusedContainerColor = fieldFocus, unfocusedContainerColor = fieldFill,
-                    focusedTextColor = AppTheme.TextDark, unfocusedTextColor = AppTheme.TextDark,
-                    focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-                    focusedPlaceholderColor = muted, unfocusedPlaceholderColor = muted))
-            // The checkbox remains an explicit choice before any screen text leaves the device.
-            Column(Modifier.fillMaxWidth().background(insetFill, RoundedCornerShape(20.dp))) {
-                Row(Modifier.fillMaxWidth().toggleable(value = includeContext, role = Role.Checkbox,
-                    onValueChange = { if(isInteractive) includeContext = it }).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(includeContext, onCheckedChange = null, modifier = Modifier.size(40.dp))
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text("Includi questa schermata", style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextDark)
-                        Text(if(includeContext) providerLabel else "Solo se scegli di condividerla", style = MaterialTheme.typography.labelSmall, color = muted)
-                    }
+            if(attachedScreen) Row(Modifier.fillMaxWidth().background(insetFill,RoundedCornerShape(14.dp)).padding(start=12.dp,end=4.dp,top=4.dp,bottom=4.dp),verticalAlignment=Alignment.CenterVertically) {
+                AppIcons.Document(Modifier.size(17.dp),AppTheme.PrimaryBlue)
+                Spacer(Modifier.width(8.dp))
+                Text("Schermata allegata",Modifier.weight(1f),style=MaterialTheme.typography.labelMedium,color=AppTheme.TextDark)
+                IconButton(onClick={attachedScreen=false},modifier=Modifier.size(32.dp).semantics{contentDescription="Rimuovi schermata"}){AppIcons.Close(Modifier.size(15.dp),muted)}
+            }
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                IconButton(onClick={keyboard?.hide();attachmentMenu=true},enabled=isInteractive,
+                    modifier=Modifier.size(48.dp).background(insetFill,RoundedCornerShape(24.dp)).semantics{contentDescription="Aggiungi allegato"}) {
+                    AppIcons.Plus(Modifier.size(23.dp),AppTheme.TextDark)
                 }
-                AnimatedVisibility(includeContext,
-                    enter = fadeIn(tween(140)) + expandVertically(tween(if(AppTheme.reduceMotion) 0 else 180)),
-                    exit = fadeOut(tween(100)) + shrinkVertically(tween(if(AppTheme.reduceMotion) 0 else 140))) {
-                    Text(contextPreview.take(6000), Modifier.padding(horizontal = 14.dp).padding(bottom = 12.dp).heightIn(max = 100.dp).verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodySmall, color = muted)
-                }
+                TextField(question, { question = it }, placeholder = { Text("Chiedi ad AILA…", style = MaterialTheme.typography.bodyLarge) },
+                    modifier = Modifier.weight(1f).border(1.dp, edge, RoundedCornerShape(24.dp)).focusRequester(focus), readOnly = !isInteractive, maxLines = 3, shape = RoundedCornerShape(24.dp),
+                    trailingIcon = {
+                        IconButton(enabled = canSend && isInteractive, onClick = submit,
+                            modifier = Modifier.padding(end = 6.dp).size(42.dp).background(sendFill, RoundedCornerShape(16.dp)).semantics { contentDescription = "Invia ad ACA" }) {
+                            if(thinking) CircularProgressIndicator(Modifier.size(18.dp),strokeWidth=2.dp,color=muted)
+                            else AppIcons.ArrowUp(Modifier.size(19.dp), if(canSend) Color.White else AppTheme.TextFaint)
+                        }
+                    },
+                    colors = TextFieldDefaults.colors(focusedContainerColor = fieldFocus, unfocusedContainerColor = fieldFill,
+                        focusedTextColor = AppTheme.TextDark, unfocusedTextColor = AppTheme.TextDark,
+                        focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
+                        focusedPlaceholderColor = muted, unfocusedPlaceholderColor = muted))
             }
             TextButton(onClick = { if(isInteractive) { keyboard?.hide(); onOpenChat() } }, modifier = Modifier.align(Alignment.CenterHorizontally).heightIn(min = 36.dp), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
                 Text("Continua nell’assistente", style = MaterialTheme.typography.labelLarge)
                 Spacer(Modifier.width(6.dp)); AppIcons.ChevronRight(Modifier.size(15.dp), AppTheme.PrimaryBlue)
+            }
+        }
+
+        if(attachmentMenu) AilaBottomSheet(onDismissRequest={attachmentMenu=false}) {
+            Column(Modifier.fillMaxWidth().padding(horizontal=20.dp).padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
+                Text("Aggiungi alla richiesta",style=MaterialTheme.typography.titleLarge,color=AppTheme.TextDark,fontWeight=FontWeight.SemiBold)
+                Row(Modifier.fillMaxWidth().background(insetFill,RoundedCornerShape(20.dp))
+                    .semantics{contentDescription="Schermata, allega il contenuto aperto"}, verticalAlignment=Alignment.CenterVertically) {
+                    TextButton(onClick={if(isInteractive){attachedScreen=true;attachmentMenu=false}}) {
+                        AppIcons.Document(Modifier.size(22.dp),AppTheme.PrimaryBlue);Spacer(Modifier.width(12.dp))
+                        Column(horizontalAlignment=Alignment.Start) {
+                            Text("Schermata",style=MaterialTheme.typography.titleSmall,color=AppTheme.TextDark)
+                            Text("Allega il contenuto aperto",style=MaterialTheme.typography.bodySmall,color=muted)
+                        }
+                    }
+                }
+                Text("Condividi solo le informazioni che vuoi inviare ad AILA.",style=MaterialTheme.typography.labelSmall,color=muted)
             }
         }
     }
