@@ -2385,9 +2385,8 @@ fun MainAppShell(
                 showAddEventDialog=false
                 addEventCloseRequested=false
                 assistantMode=AssistantMode.GENERAL
-                assistantMode=AssistantMode.GENERAL
-                acaOverlayStart=assistantMessages.size
-                acaOverlay=true
+                acaOverlay=false
+                isInAssistantScreen=true
                 askAssistant("Prepara gli eventi da inserire nel calendario:\n$prompt",addEventInitialDateIso?.let{"Giorno scelto nel calendario: $it"}.orEmpty())
                 addEventInitialStep=EventCreationStep.MENU
                 addEventInitialDateIso=null
