@@ -992,16 +992,26 @@ fun MainAppShell(
     var remoteContent by remember { mutableStateOf<circolareplus.data.remote.dto.ContentAttachmentDto?>(null) }
     var contentActivity by remember { mutableStateOf<AssistantAgentPhase?>(null) }
     var acaExperience by remember { mutableStateOf(circolareplus.data.remote.dto.AcaExperienceDto()) }
-    var acaNudges by remember { mutableStateOf<List<circolareplus.data.remote.dto.AcaNudgeDto>>(emptyList()) }
+    var briefItems by remember(currentUser?.id) { mutableStateOf<List<circolareplus.data.remote.dto.AilaBriefItemDto>>(emptyList()) }
+    var briefError by remember(currentUser?.id) { mutableStateOf<String?>(null) }
+    var briefLoading by remember { mutableStateOf(false) }
+    var briefRefreshTrigger by remember { mutableStateOf(0) }
     LaunchedEffect(currentUser?.id) {
         try { acaExperience = AppContainer.acaRepository.experience() }
         catch (e: CancellationException) { throw e } catch (_: Exception) {}
     }
-    LaunchedEffect(currentUser?.id, aiPolicy) {
-        acaNudges = emptyList()
-        if (aiPolicy.aiEnabled && aiPolicy.acaEnabled && aiPolicy.nudgesEnabled && "NOW_NUDGE" in aiPolicy.services) {
-            try { acaNudges = AppContainer.acaRepository.nudges() }
-            catch (e: CancellationException) { throw e } catch (_: Exception) {}
+    LaunchedEffect(currentUser?.id, aiPolicy, selectedTab, circolareplus.platform.AppForeground.isForeground, briefRefreshTrigger) {
+        if (!aiPolicy.aiEnabled || !aiPolicy.acaEnabled || !aiPolicy.nudgesEnabled || "NOW_NUDGE" !in aiPolicy.services) {
+            briefItems = emptyList(); briefError = null; return@LaunchedEffect
+        }
+        if (selectedTab != MainTab.HOME || !circolareplus.platform.AppForeground.isForeground) return@LaunchedEffect
+        while (isActive) {
+            briefLoading = true
+            try { briefItems = AppContainer.acaRepository.brief(); briefError = null }
+            catch (e: CancellationException) { throw e }
+            catch (_: Exception) { briefError = "Il brief non è aggiornato. Riprova." }
+            finally { briefLoading = false }
+            delay(60_000)
         }
     }
     val incomingContent = circolareplus.platform.IncomingContentInbox.pending
@@ -1286,6 +1296,14 @@ fun MainAppShell(
     }
 
     // --- Stato Sondaggi Interrogazioni ------------------------------------------------------
+    var briefPollId by remember { mutableStateOf<String?>(null) }
+    var briefRankingId by remember { mutableStateOf<String?>(null) }
+    var briefProposalId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(selectedTab, classSection) {
+        if (selectedTab != MainTab.CLASS || classSection != ClassSection.PERE) initialForumThread = null
+        if (selectedTab != MainTab.CLASS || classSection != ClassSection.BOARD) briefProposalId = null
+        if (selectedTab != MainTab.POLLS) { briefPollId = null; briefRankingId = null }
+    }
     var currentPoll by remember { mutableStateOf<PollDetailDto?>(null) }
     var isPollLoading by remember { mutableStateOf(false) }
     // Lo spinner a tutto schermo serve solo alla prima lettura: rientrando in una tab i dati gia'
@@ -2147,7 +2165,7 @@ fun MainAppShell(
         }
     }
 
-    LaunchedEffect(isInPollsScreen, pollsRefreshTrigger) {
+    LaunchedEffect(isInPollsScreen, pollsRefreshTrigger, briefPollId) {
         if (isInPollsScreen) {
             isPollLoading = true
             pollError = null
@@ -2186,7 +2204,7 @@ fun MainAppShell(
                     }
                 }
 
-                val target = openPolls.firstOrNull() ?: polls.firstOrNull { !it.isCalculated }
+                val target = openPolls.firstOrNull { it.id == briefPollId } ?: openPolls.firstOrNull() ?: polls.firstOrNull { !it.isCalculated }
                 if (target != null) {
                     val loaded = AppContainer.pollsRepository.getPollWithProgress(target.id)
                     currentPoll = loaded.detail
@@ -2226,7 +2244,8 @@ fun MainAppShell(
             circolareplus.platform.awaitForeground()
             try {
                 val polls = AppContainer.pollsRepository.listPolls()
-                val target = polls.filter { it.isPublished }.firstOrNull { !it.isCalculated }
+                val target = polls.firstOrNull { it.id == briefPollId && it.isPublished && !it.isCalculated }
+                    ?: polls.filter { it.isPublished }.firstOrNull { !it.isCalculated }
                     ?: polls.firstOrNull { !it.isCalculated }
                 if (target?.id != currentPoll?.id) {
                     // Sondaggio nuovo, chiuso o eliminato: rilettura completa.
@@ -3297,10 +3316,44 @@ fun MainAppShell(
                                 aiEnabled = aiPolicy.aiEnabled && "CIRCULARS" in aiPolicy.services,
                                 onOpenAca = { assistantMode=AssistantMode.GENERAL;isInAssistantScreen=true },
                                 onOpenForum = { isInAcaHub = false; classSection = ClassSection.PERE; selectedTab = MainTab.CLASS },
-                                nudges = acaNudges,
-                                onDismissNudge = { id ->
-                                    acaNudges = acaNudges.filterNot { it.id == id }
-                                    coroutineScope.launch { try { AppContainer.acaRepository.dismissNudge(id) } catch (e: CancellationException) { throw e } catch (_: Exception) {} }
+                                briefItems = briefItems.filterNot { item ->
+                                    item.kind == circolareplus.data.remote.dto.AilaBriefKind.CIRCULAR &&
+                                        item.sourceId.toIntOrNull()?.let { classifications[it]?.badge == circolareplus.domain.model.CircularRelevanceBadge.NOT_RELEVANT } == true
+                                },
+                                briefLoading = briefLoading,
+                                briefError = briefError,
+                                onRefreshBrief = { briefRefreshTrigger++ },
+                                onDismissBrief = { item ->
+                                    val owner = currentUser?.id
+                                    briefItems = briefItems.filterNot { it.id == item.id }
+                                    coroutineScope.launch {
+                                        if (owner != currentUser?.id) return@launch
+                                        try { AppContainer.acaRepository.dismissBrief(item); briefRefreshTrigger++ }
+                                        catch (e: CancellationException) { throw e }
+                                        catch (_: Exception) {
+                                            briefItems = (briefItems + item).distinctBy { it.id }
+                                            briefError = "Non sono riuscito a nascondere la voce. Riprova."
+                                        }
+                                    }
+                                },
+                                onOpenBrief = { item ->
+                                    when (item.kind) {
+                                        circolareplus.data.remote.dto.AilaBriefKind.EVENT -> { calendarFocusDateIso = item.date; selectedTab = MainTab.CALENDAR }
+                                        circolareplus.data.remote.dto.AilaBriefKind.CIRCULAR -> {
+                                            classSection = ClassSection.CIRCULARS; selectedTab = MainTab.CLASS
+                                            item.sourceId.toIntOrNull()?.let { number ->
+                                                coroutineScope.launch {
+                                                    try { openCircularInClass(circulars.firstOrNull { it.number == number } ?: AppContainer.circularsRepository.getCircular(number)) }
+                                                    catch (e: CancellationException) { throw e }
+                                                    catch (_: Exception) { circularsError = "Circolare non disponibile. Aggiorna l’elenco." }
+                                                }
+                                            }
+                                        }
+                                        circolareplus.data.remote.dto.AilaBriefKind.FORUM -> { initialForumThread = item.sourceId; classSection = ClassSection.PERE; selectedTab = MainTab.CLASS }
+                                        circolareplus.data.remote.dto.AilaBriefKind.PROPOSAL -> { briefProposalId = item.sourceId; classSection = ClassSection.BOARD; selectedTab = MainTab.CLASS }
+                                        circolareplus.data.remote.dto.AilaBriefKind.POLL -> { briefPollId = item.sourceId; showPollHistory = false; pollsSection = 0; selectedTab = MainTab.POLLS }
+                                        circolareplus.data.remote.dto.AilaBriefKind.RANKING_POLL -> { briefRankingId = item.sourceId; showPollHistory = false; pollsSection = 1; selectedTab = MainTab.POLLS }
+                                    }
                                 },
                                 onPlanStudy = { prompt -> assistantMode=AssistantMode.GENERAL;acaOverlayStart=assistantMessages.size;acaOverlay=true;askAssistant(prompt) },
                                 circulars = circulars,
@@ -3745,7 +3798,8 @@ fun MainAppShell(
                                             onRetry = { reloadProposals() }
                                         ) {
                                             BoardScreen(
-                                                proposals = proposals,
+                                                proposals = proposals.sortedByDescending { it.id == briefProposalId },
+                                                focusProposalId = briefProposalId,
                                                 currentUserId = user.id,
                                                 isRepresentative = isRepresentative,
                                                 canModerateIdentity = canModerateIdentity,
@@ -3905,7 +3959,7 @@ fun MainAppShell(
                                         onRetry = { rankingRefreshTrigger++ }
                                     ) {
                                         RankingPollsScreen(
-                                            polls = rankingPolls.filter { it.isClosed == showPollHistory },
+                                            polls = rankingPolls.filter { it.isClosed == showPollHistory }.sortedByDescending { it.id == briefRankingId },
                                             showingHistory = showPollHistory,
                                             totalStudents = rankingTotalStudents,
                                             isRepresentative = isRepresentative,

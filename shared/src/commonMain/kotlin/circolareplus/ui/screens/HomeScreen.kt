@@ -76,8 +76,12 @@ fun HomeScreen(
     experience: circolareplus.data.remote.dto.AcaExperienceDto = circolareplus.data.remote.dto.AcaExperienceDto(),
     onOpenAca: () -> Unit = {},
     onOpenForum: () -> Unit = {},
-    nudges: List<circolareplus.data.remote.dto.AcaNudgeDto> = emptyList(),
-    onDismissNudge: (String) -> Unit = {},
+    briefItems: List<circolareplus.data.remote.dto.AilaBriefItemDto> = emptyList(),
+    briefLoading: Boolean = false,
+    briefError: String? = null,
+    onRefreshBrief: () -> Unit = {},
+    onDismissBrief: (circolareplus.data.remote.dto.AilaBriefItemDto) -> Unit = {},
+    onOpenBrief: (circolareplus.data.remote.dto.AilaBriefItemDto) -> Unit = {},
     onPlanStudy: (String) -> Unit = {},
     aiEnabled: Boolean = true,
     isEventsLoading: Boolean = false
@@ -125,7 +129,7 @@ fun HomeScreen(
         )
 
         if (circolareplus.ai.AcaPolicyState.preferences.let { it.aiEnabled && it.acaEnabled && it.nudgesEnabled && "NOW_NUDGE" in it.services }) {
-            AilaBriefCard(nudges, onDismissNudge, onPlanStudy,
+            AilaBriefCard(briefItems, onDismissBrief, onOpenBrief, onPlanStudy, briefLoading, briefError, onRefreshBrief,
                 Modifier.padding(horizontal = AppTheme.Space16).padding(top = 18.dp, bottom = 4.dp))
         }
 

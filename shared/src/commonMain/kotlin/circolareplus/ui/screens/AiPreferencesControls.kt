@@ -42,7 +42,7 @@ import kotlinx.coroutines.sync.withLock
     "DOCUMENTS" to "Documenti e testi selezionati","AUDIO" to "Trascrizione dei vocali","IMAGES" to "Analisi delle immagini",
     "FORUM" to "Riassunti e @perabot nel forum","FORUM_SUGGESTIONS" to "Proposte automatiche dalle conversazioni","STUDY_PLAN" to "Piani di studio","NOW_NUDGE" to "AILA brief nella home")
    services.forEach{(id,label)->val aca=id !in setOf("CIRCULARS","CHAT")
-    AiControlRow(label,if(id=="FORUM_SUGGESTIONS")"Opzionale: con il consenso cloud, analizza i messaggi della discussione aperta e propone impegni visibili alla classe. Nessun inserimento senza conferma."else if(aca)"Richiede ACA attiva."else"Servizio AI di base.",id in p.services,p.aiEnabled&&(!aca||p.acaEnabled)){enabled->
+    AiControlRow(label,if(id=="FORUM_SUGGESTIONS")"Opzionale: con il consenso cloud, analizza i messaggi della discussione aperta e propone impegni visibili alla classe. Nessun inserimento senza conferma."else if(id=="NOW_NUDGE")"Impegni personali, circolari pertinenti, sondaggi e novità della classe. Non avvia modelli in automatico."else if(aca)"Richiede ACA attiva."else"Servizio AI di base.",id in p.services,p.aiEnabled&&(!aca||p.acaEnabled)){enabled->
      val next=if(enabled)(p.services+id).distinct()else p.services-id
      save(p.copy(services=next,nudgesEnabled=if(id=="NOW_NUDGE")enabled else p.nudgesEnabled))
     }

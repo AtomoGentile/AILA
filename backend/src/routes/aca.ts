@@ -5,6 +5,7 @@ import {authMiddleware,resolveClassId} from '../auth';
 import type {Env,JWTPayload} from '../types';
 import {AI_FEATURES,AI_SERVICES,aiPreferences,saveAiPreferences,runAiTask,type AiFeature,type AiPreferences} from '../services/aiRouter';
 import {searchAuthorized} from '../services/acaSearch';
+import {briefCandidates,loadBrief} from '../services/brief';
 const aca=new Hono<{Bindings:Env;Variables:{jwtPayload:JWTPayload}}>();aca.use('*',authMiddleware());aca.use('*',bodyLimit({maxSize:256*1024}));
 aca.get('/preferences',async c=>c.json({preferences:await aiPreferences(c.env,c.get('jwtPayload').sub),
  capabilities:{cloud:!!c.env.AI,advanced:!!c.env.AI_ADVANCED_API_KEY&&!!c.env.AI_ADVANCED_MODEL&&!!c.env.AI_ADVANCED_PROVIDER,
@@ -58,6 +59,24 @@ aca.post('/nudges/:id/dismiss',async c=>{
  AND ${studyAudience('calendar_events')}`).bind(c.req.param('id'),await resolveClassId(c),user.sub,user.sub,user.sub).first<{id:string;event_date:string}>();
  if(!row)return c.json({error:'Evento non trovato'},404);
  await c.env.DB.prepare('INSERT OR IGNORE INTO aca_nudge_dismissals(user_id,event_id,event_date) VALUES (?,?,?)').bind(user.sub,row.id,row.event_date).run();return c.json({success:true});
+});
+aca.get('/brief',async c=>{
+ const user=c.get('jwtPayload');const p=await aiPreferences(c.env,user.sub);
+ if(!p.aiEnabled||!p.acaEnabled||!p.nudgesEnabled||!p.services.includes('NOW_NUDGE'))return c.json({items:[]});
+ return c.json({items:await loadBrief(c.env,await resolveClassId(c),user.sub)});
+});
+aca.post('/brief/:id/dismiss',async c=>{
+ const user=c.get('jwtPayload');const p=await aiPreferences(c.env,user.sub);
+ if(!p.aiEnabled||!p.acaEnabled||!p.nudgesEnabled||!p.services.includes('NOW_NUDGE'))return c.json({error:'AILA brief è disattivato'},403);
+ const body=await c.req.json<{revision?:unknown}>();
+ if(typeof body.revision!=='string'||!/^[a-f0-9]{64}$/.test(body.revision))return c.json({error:'Revisione non valida'},400);
+ const item=(await briefCandidates(c.env,await resolveClassId(c),user.sub)).find(i=>i.id===c.req.param('id')&&i.revision===body.revision);
+ if(!item)return c.json({error:'Contenuto non disponibile o aggiornato'},404);
+ const dismiss=c.env.DB.prepare(`INSERT INTO aca_brief_dismissals(user_id,item_id,revision,expires_at) VALUES (?,?,?,?)
+ ON CONFLICT(user_id,item_id,revision) DO UPDATE SET expires_at=excluded.expires_at`)
+ .bind(user.sub,item.id,item.revision,new Date(Date.now()+30*86400000).toISOString());
+ await c.env.DB.batch([dismiss,...(item.kind==='EVENT'?[c.env.DB.prepare('INSERT OR IGNORE INTO aca_nudge_dismissals(user_id,event_id,event_date) VALUES (?,?,?)').bind(user.sub,item.sourceId,item.date)]:[])]);
+ return c.json({success:true});
 });
 aca.get('/experience',c=>{
  const safe=(s:string|undefined)=>{try{const u=new URL(s??'');return u.protocol==='https:'&&!u.username&&!u.password?u.href:null;}catch{return null;}};

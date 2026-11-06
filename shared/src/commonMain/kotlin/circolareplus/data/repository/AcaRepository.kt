@@ -32,6 +32,8 @@ class AcaRepository(private val api:ApiClient,private val pdf:PdfTextExtractor) 
  suspend fun experience():AcaExperienceDto=api.get("/api/aca/experience",offlineCopy=false)
  suspend fun nudges():List<AcaNudgeDto> = api.get<AcaNudgesResponseDto>("/api/aca/nudges",offlineCopy=false).nudges
  suspend fun dismissNudge(id:String){api.post<Map<String,String>,SuccessDto>("/api/aca/nudges/$id/dismiss",emptyMap())}
+ suspend fun brief():List<AilaBriefItemDto> = api.get<AilaBriefResponseDto>("/api/aca/brief",offlineCopy=false).items
+ suspend fun dismissBrief(item:AilaBriefItemDto){api.post<AilaBriefDismissDto,SuccessDto>("/api/aca/brief/${item.id.encodeURLParameter()}/dismiss",AilaBriefDismissDto(item.revision))}
  suspend fun task(feature:String,question:String,context:String="",includeAppContext:Boolean=false):AcaAiResultDto {
   val selected=circolareplus.ai.AiProvider.fromId(api.settings.aiProvider)
   if(selected!=circolareplus.ai.AiProvider.AILA_CLOUD&&!includeAppContext){

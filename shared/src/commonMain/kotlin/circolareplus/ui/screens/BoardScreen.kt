@@ -46,6 +46,7 @@ import kotlinx.coroutines.launch
 fun BoardScreen(
     proposals: List<Proposal>,
     currentUserId: String = "",
+    focusProposalId: String? = null,
     isRepresentative: Boolean = false,
     // Rappresentanti e Guardia di Sicurezza: i tre ruoli che firmano lo svelamento di un autore
     // anonimo (2 Rappresentanti + 1 Guardia). Il Rappresentante da solo non basta.
@@ -62,7 +63,7 @@ fun BoardScreen(
     onApproveUnlock: (String) -> Unit = {},
     onRejectUnlock: (String) -> Unit = {}
 ) {
-    var selectedStatusFilter by remember { mutableStateOf<ProposalStatus?>(null) }
+    var selectedStatusFilter by remember(focusProposalId) { mutableStateOf<ProposalStatus?>(null) }
 
     Box(modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
     Column(
