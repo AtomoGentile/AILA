@@ -5382,9 +5382,9 @@ fun MainAppShell(
         androidx.compose.animation.AnimatedVisibility(
             visible = acaOverlay,
             modifier = Modifier.fillMaxSize(),
-            enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(if(AppTheme.reduceMotion) 90 else 220)) +
+            enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(if(AppTheme.reduceMotion) 90 else 380)) +
                 if(AppTheme.reduceMotion) androidx.compose.animation.EnterTransition.None else androidx.compose.animation.slideInVertically(
-                    animationSpec = androidx.compose.animation.core.tween(240, easing = androidx.compose.animation.core.LinearOutSlowInEasing), initialOffsetY = { -it / 56 }),
+                    animationSpec = androidx.compose.animation.core.tween(420, easing = androidx.compose.animation.core.LinearOutSlowInEasing), initialOffsetY = { -it / 28 }),
             exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(if(AppTheme.reduceMotion) 80 else 160)) +
                 if(AppTheme.reduceMotion) androidx.compose.animation.ExitTransition.None else androidx.compose.animation.slideOutVertically(
                     animationSpec = androidx.compose.animation.core.tween(160), targetOffsetY = { -it / 80 })

@@ -32,6 +32,8 @@ import circolareplus.platform.rememberVoiceRecorder
 import circolareplus.data.AppContainer
 import circolareplus.ai.prepareChatAttachment
 import kotlinx.coroutines.launch
+import androidx.compose.ui.layout.Layout
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,10 +70,12 @@ fun AcaContextOverlay(
     LaunchedEffect(isInteractive) {
         if (isInteractive) {
             attachedScreen = false
-            withFrameNanos { }
+            delay(if(AppTheme.reduceMotion) 0 else 220)
             focus.requestFocus()
         } else keyboard?.hide()
     }
+    val expanded = question.isNotBlank() || attachedScreen || recording || transcribing || thinking || answer != null || action?.actionPlan != null || voiceError != null
+    val expansion by animateFloatAsState(if(expanded) 1f else 0f, tween(if(AppTheme.reduceMotion) 0 else 280, easing=FastOutSlowInEasing),label="ACA composer expansion")
     val dark = AppTheme.isDarkMode
     val shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp, bottomStart = 38.dp, bottomEnd = 38.dp)
     // Opaque ink surfaces keep text from the page underneath out of the controls.
@@ -94,12 +98,12 @@ fun AcaContextOverlay(
         }
     }
     BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)).imePadding()) {
-        Column(Modifier.align(Alignment.BottomCenter).padding(horizontal = 16.dp, vertical = 8.dp)
+        Column(Modifier.align(Alignment.TopCenter).padding(horizontal = 16.dp, vertical = 8.dp)
             .widthIn(max = 600.dp).fillMaxWidth().heightIn(max = maxHeight * .86f)
             .shadow(18.dp, shape).clip(shape).background(Brush.linearGradient(surface))
             .border(1.dp, edge, shape)
-            .verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(Modifier.fillMaxWidth().height(20.dp)) {
+            .verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(Modifier.fillMaxWidth().height(12.dp)) {
                 Box(Modifier.align(Alignment.TopCenter).width(34.dp).height(4.dp).background(muted.copy(alpha=.35f),RoundedCornerShape(2.dp)))
                 IconButton(onClick={keyboard?.hide();onClose()},modifier=Modifier.align(Alignment.CenterEnd).size(28.dp).semantics{contentDescription="Chiudi ACA"}){AppIcons.Close(Modifier.size(15.dp),muted)}
             }
@@ -118,16 +122,33 @@ fun AcaContextOverlay(
                 Text(voiceError ?: if(recording) "Registrazione vocale in corso…" else "Trascrivo il vocale…",Modifier.weight(1f),style=MaterialTheme.typography.labelMedium,color=if(voiceError!=null) AppTheme.TintRedInk else muted)
                 if(recording) TextButton(onClick={recorder.cancel()}) { Text("Annulla") }
             }
-            TextField(question,{question=it},placeholder={Text("Chiedi ad AILA…",style=MaterialTheme.typography.titleMedium)},modifier=Modifier.fillMaxWidth().focusRequester(focus),readOnly=!isInteractive||recording||transcribing,minLines=1,maxLines=4,
+            Layout(modifier=Modifier.fillMaxWidth(),content={
+            TextField(question,{question=it},placeholder={Text("Chiedi ad AILA…",style=MaterialTheme.typography.titleMedium)},modifier=Modifier.focusRequester(focus),readOnly=!isInteractive||recording||transcribing,minLines=1,maxLines=4,
                 colors=TextFieldDefaults.colors(focusedContainerColor=Color.Transparent,unfocusedContainerColor=Color.Transparent,focusedTextColor=AppTheme.TextDark,unfocusedTextColor=AppTheme.TextDark,focusedIndicatorColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent,focusedPlaceholderColor=muted,unfocusedPlaceholderColor=muted))
-            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+
                 IconButton(onClick={keyboard?.hide();attachmentMenu=true},enabled=isInteractive&&!recording&&!transcribing,modifier=Modifier.size(48.dp).semantics{contentDescription="Aggiungi allegato"}) { AppIcons.Plus(Modifier.size(28.dp),AppTheme.TextDark) }
-                Spacer(Modifier.weight(1f))
                 IconButton(onClick={if(recording)recorder.stop()else{keyboard?.hide();recorder.start()}},enabled=isInteractive&&!transcribing&&!thinking,modifier=Modifier.size(48.dp).semantics{contentDescription=if(recording)"Termina vocale ACA"else"Registra un vocale per ACA"}) { if(recording)AppIcons.Close(Modifier.size(22.dp),AppTheme.TintRedInk)else AcaMic() }
                 IconButton(onClick=submit,enabled=canSend&&isInteractive&&!recording&&!transcribing,modifier=Modifier.size(48.dp).background(sendFill,RoundedCornerShape(24.dp)).semantics{contentDescription="Invia ad ACA"}) {
                     if(thinking||transcribing)CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp,color=muted)else AppIcons.ArrowUp(Modifier.size(25.dp),if(canSend)Color.White else muted)
                 }
+            }) { measurables, constraints ->
+                val w=constraints.maxWidth
+                val button=48.dp.roundToPx()
+                val gap=4.dp.roundToPx()
+                val fieldWidth=(w-(1f-expansion)*(button*3+gap*2)).toInt().coerceAtLeast(1)
+                val field=measurables[0].measure(constraints.copy(minWidth=fieldWidth,maxWidth=fieldWidth,minHeight=0))
+                val controls=measurables.drop(1).map { it.measure(androidx.compose.ui.unit.Constraints.fixed(button,button)) }
+                val compactH=maxOf(field.height,button)
+                val rowY=((field.height+gap)*expansion).toInt()
+                val h=(compactH+(field.height+gap+button-compactH)*expansion).toInt()
+                layout(w,h) {
+                    field.placeRelative(((button+gap)*(1f-expansion)).toInt(),((compactH-field.height)/2*(1f-expansion)).toInt())
+                    controls[0].placeRelative(0,rowY)
+                    controls[1].placeRelative(w-button*2-gap,rowY)
+                    controls[2].placeRelative(w-button,rowY)
+                }
             }
+
 
         }
 
