@@ -124,6 +124,7 @@ fun AssistantChatScreen(
     var draft by remember { mutableStateOf("") }
     var isHistoryOpen by remember { mutableStateOf(false) }
     var attachmentsMenu by remember { mutableStateOf(false) }
+    var fileSources by remember { mutableStateOf(false) }
     var attachmentError by remember { mutableStateOf<String?>(null) }
     var recording by remember { mutableStateOf(false) }
     val picker=if(onAttachContent!=null)circolareplus.platform.rememberContentPicker({attachmentError=it}){file->attachmentsMenu=false;onAttachContent(file)}else null
@@ -215,7 +216,8 @@ fun AssistantChatScreen(
                 AssistantWelcome(
                     conversations = conversations,
                     onOpenConversation = onOpenConversation,
-                    onOpenSource = onOpenSource
+                    onOpenSource = onOpenSource,
+                    onStudyPlan = onStudyPlan
                 )
             }
         } else LazyColumn(
@@ -359,7 +361,7 @@ fun AssistantChatScreen(
                 Text("Registrazione in corso…", Modifier.weight(1f), color = AppTheme.PrimaryBlue, style = MaterialTheme.typography.bodySmall)
                 androidx.compose.material3.TextButton(onClick = { recorder?.cancel() }) { Text("Annulla", style = MaterialTheme.typography.labelMedium) }
             }
-            Row(Modifier.fillMaxWidth().background(AppTheme.CardSurface,RoundedCornerShape(28.dp)).padding(4.dp),verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().background(AppTheme.CardSurface,RoundedCornerShape(28.dp)).border(1.dp, AppTheme.PrimaryBlue.copy(alpha = .12f), RoundedCornerShape(28.dp)).padding(4.dp),verticalAlignment = Alignment.CenterVertically) {
                 if(onAttachContent!=null){
                     AilaIconButton(contentDescription="Menu allegati",onClick={attachmentsMenu=true}){tint->AppIcons.Plus(Modifier.size(24.dp),tint)}
                     Spacer(Modifier.width(4.dp))
@@ -372,6 +374,7 @@ fun AssistantChatScreen(
                     rotatingPlaceholders = if (messages.isEmpty()) ExamplePlaceholders else emptyList(),
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(24.dp),
+                    containerColor = Color.Transparent,
                     maxLines = 4
                 )
                 Spacer(modifier = Modifier.width(AppTheme.Space8))
@@ -406,18 +409,13 @@ fun AssistantChatScreen(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     AttachmentMenuTile("File e foto", "Documenti, immagini, audio", AppTheme.TintViolet, AppTheme.TintVioletInk,
-                        enabled = !isThinking && !recording, onClick = { attachmentsMenu = false; picker?.invoke() }, modifier = Modifier.weight(1f)) {
+                        enabled = !isThinking && !recording, onClick = { fileSources = true }, modifier = Modifier.weight(1f)) {
                         AppIcons.Document(Modifier.size(24.dp), AppTheme.TintVioletInk)
                     }
                     AttachmentMenuTile(if(recording) "Termina vocale" else "Vocale", "Registra un messaggio", AppTheme.TintGreen, AppTheme.TintGreenInk,
                         enabled = !isThinking, onClick = { attachmentsMenu = false; if(recording) recorder?.stop() else recorder?.start() }, modifier = Modifier.weight(1f)) {
                         MicrophoneGlyph(AppTheme.TintGreenInk)
                     }
-                }
-                Column(Modifier.clip(RoundedCornerShape(24.dp)).background(AppTheme.TrackFill)) {
-                    AttachmentMenuRow("File sul dispositivo", "Riapri una copia già salvata", onClick = { attachmentsMenu = false; onOpenFiles() }) { AppIcons.Download(Modifier.size(21.dp), AppTheme.PrimaryBlue) }
-                    androidx.compose.material3.HorizontalDivider(Modifier.padding(horizontal = 18.dp), color = AppTheme.Hairline.copy(alpha = .25f))
-                    AttachmentMenuRow("Prepara il ripasso", "Parti dai tuoi prossimi impegni", onClick = { attachmentsMenu = false; onStudyPlan() }) { AppIcons.Calendar(Modifier.size(21.dp), AppTheme.TintAmberInk) }
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     AppIcons.Shield(Modifier.size(16.dp), AppTheme.TextMuted)
@@ -428,6 +426,15 @@ fun AssistantChatScreen(
             }
         }
     }
+    if(fileSources) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { fileSources = false },
+        title = { Text("File e foto") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            AttachmentMenuRow("Importa dal dispositivo", "Scegli un documento, una foto o un audio", onClick = { fileSources = false; attachmentsMenu = false; picker?.invoke() }) { AppIcons.Document(Modifier.size(22.dp), AppTheme.TintVioletInk) }
+            AttachmentMenuRow("Copie già salvate", "Riapri un file conservato da AILA", onClick = { fileSources = false; attachmentsMenu = false; onOpenFiles() }) { AppIcons.Download(Modifier.size(22.dp), AppTheme.PrimaryBlue) }
+        } },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { fileSources = false }) { Text("Chiudi") } }
+    )
     if (isHistoryOpen) {
         AssistantHistorySheet(
             conversations = conversations,
@@ -711,7 +718,10 @@ private fun ConversationRow(
         Spacer(modifier = Modifier.width(AppTheme.Space12))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = conversation.title,
+                text = conversation.messages.firstOrNull { it.author == AssistantAuthor.USER }?.text
+                                ?.takeIf { it.startsWith("Prepara gli eventi da inserire nel calendario:") }
+                                ?.removePrefix("Prepara gli eventi da inserire nel calendario:")?.trim()?.takeIf { it.isNotBlank() }
+                                ?: conversation.title,
                 style = MaterialTheme.typography.titleSmall,
                 color = AppTheme.TextDark,
                 maxLines = 1,
@@ -784,34 +794,32 @@ private fun relativeTimeLabel(atMillis: Long): String {
 private fun AssistantWelcome(
     conversations: List<AssistantConversation>,
     onOpenConversation: (AssistantConversation) -> Unit,
-    onOpenSource: (AssistantSource) -> Unit
+    onOpenSource: (AssistantSource) -> Unit,
+    onStudyPlan: () -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = AppTheme.Space12),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // L'unico elemento che si muove (cookie che ruota piano, alone che respira, barre che si
-        // alzano): il resto della pagina e' gia' al suo posto, niente cascate.
-        AilaAssistantHalo(size = 80.dp, intro = true)
-        Text(
-            text = "AILA Assistant",
-            style = MaterialTheme.typography.headlineMedium,
-            color = AppTheme.TextDark,
-            textAlign = TextAlign.Center
-        )
-        Spacer(modifier = Modifier.height(AppTheme.Space4))
-        Text(
-            text = "Chiedimi come lo chiederesti a un compagno: cerco io fra i dati della tua scuola.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = AppTheme.TextMuted,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = AppTheme.Space16)
-        )
-
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp))
+            .background(Brush.linearGradient(listOf(AppTheme.CardSurface, AppTheme.TintViolet.copy(alpha = .55f))))
+            .border(1.dp, AppTheme.PrimaryBlue.copy(alpha = .12f), RoundedCornerShape(28.dp)).padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            AilaAssistantHalo(size = 56.dp, intro = true)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Come posso aiutarti?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = AppTheme.TextDark)
+                Text("Troviamo risposte nella tua scuola e prepariamo insieme le azioni.", style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
+            }
+        }
+        androidx.compose.material3.TextButton(onClick = onStudyPlan, modifier = Modifier.align(Alignment.Start).padding(top = 8.dp)) {
+            AppIcons.Calendar(Modifier.size(18.dp), AppTheme.PrimaryBlue)
+            Spacer(Modifier.width(8.dp)); Text("Prepara il ripasso")
+        }
         val recent = conversations.sortedByDescending { it.updatedAtMillis }.take(3)
         if (recent.isNotEmpty()) {
             Spacer(modifier = Modifier.height(AppTheme.Space24))
-            WelcomeLabel("RIPRENDI")
+            WelcomeLabel("Conversazioni recenti")
             recent.forEach { conversation ->
                 Row(
                     modifier = Modifier
@@ -826,7 +834,10 @@ private fun AssistantWelcome(
                     Spacer(modifier = Modifier.width(AppTheme.Space12))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = conversation.title,
+                            text = conversation.messages.firstOrNull { it.author == AssistantAuthor.USER }?.text
+                                ?.takeIf { it.startsWith("Prepara gli eventi da inserire nel calendario:") }
+                                ?.removePrefix("Prepara gli eventi da inserire nel calendario:")?.trim()?.takeIf { it.isNotBlank() }
+                                ?: conversation.title,
                             style = MaterialTheme.typography.titleSmall,
                             color = AppTheme.TextDark,
                             maxLines = 1,
@@ -846,7 +857,7 @@ private fun AssistantWelcome(
         }
 
         Spacer(modifier = Modifier.height(AppTheme.Space16))
-        WelcomeLabel("DA DOVE PRENDO LE RISPOSTE")
+        WelcomeLabel("Esplora le fonti")
         WelcomeSources.chunked(2).forEach { pair ->
             Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = AppTheme.Space8),
@@ -856,19 +867,20 @@ private fun AssistantWelcome(
                     Row(
                         modifier = Modifier
                             .weight(1f)
-                            .ailaTopicSurface(RoundedCornerShape(AppTheme.ButtonCornerRadius), kind.tint(), kind.ink())
+                            .chatSurface(RoundedCornerShape(20.dp))
+                            .border(1.dp, kind.ink().copy(alpha = .12f), RoundedCornerShape(20.dp))
                             .ailaPressable(pressedScale = 0.98f) {
                                 onOpenSource(AssistantSource(kind = kind, label = label))
                             }
                             .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        kind.Icon(kind.ink(), 16.dp)
+                        Box(Modifier.size(30.dp).background(kind.tint(), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) { kind.Icon(kind.ink(), 16.dp) }
                         Spacer(modifier = Modifier.width(AppTheme.Space8))
                         Text(
                             text = label,
                             style = MaterialTheme.typography.labelLarge,
-                            color = kind.ink(),
+                            color = AppTheme.TextDark,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )

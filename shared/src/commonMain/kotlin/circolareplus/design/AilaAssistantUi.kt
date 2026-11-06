@@ -271,6 +271,7 @@ fun AilaPillTextField(
     shape: Shape = RoundedCornerShape(100.dp),
     singleLine: Boolean = false,
     maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
+    containerColor: Color? = null,
     leadingIcon: (@Composable () -> Unit)? = null,
     trailingIcon: (@Composable () -> Unit)? = null
 ) {
@@ -280,7 +281,7 @@ fun AilaPillTextField(
         modifier = modifier
             .then(
                 if (AppTheme.isGlass) Modifier.ailaGlassSurface(shape)
-                else Modifier.clip(shape).background(AppTheme.TrackFill)
+                else Modifier.clip(shape).background(containerColor ?: AppTheme.TrackFill)
             )
             .ailaFocusRing(focused, shape)
     ) {
