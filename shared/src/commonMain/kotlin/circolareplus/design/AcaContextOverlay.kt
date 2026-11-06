@@ -75,7 +75,7 @@ fun AcaContextOverlay(
     val dark = AppTheme.isDarkMode
     val shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp, bottomStart = 38.dp, bottomEnd = 38.dp)
     // Opaque ink surfaces keep text from the page underneath out of the controls.
-    val surface = if(dark) listOf(Color(0xFF141524), Color(0xFF090C13), Color(0xFF0D191F))
+    val surface = if(dark) listOf(Color(0xFF08090E), Color(0xFF0B0C13), Color(0xFF161827))
         else listOf(Color(0xFFF7F9FF), Color(0xFFECF0FA))
     val insetFill = if(dark) Color(0xFF151B27) else Color(0xFFE3E9F5)
     val fieldFill = if(dark) Color(0xFF191F2C) else Color(0xFFE2E8F5)
@@ -93,22 +93,15 @@ fun AcaContextOverlay(
             attachedScreen = false
         }
     }
-    BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)).imePadding()) {
-        Column(Modifier.align(Alignment.TopCenter).padding(horizontal = 12.dp, vertical = 10.dp)
+    BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)).imePadding()) {
+        Column(Modifier.align(Alignment.BottomCenter).padding(horizontal = 16.dp, vertical = 8.dp)
             .widthIn(max = 600.dp).fillMaxWidth().heightIn(max = maxHeight * .86f)
             .shadow(18.dp, shape).clip(shape).background(Brush.linearGradient(surface))
             .border(1.dp, edge, shape)
             .verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                AcaNeuralMark(thinking, Modifier.size(44.dp))
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f), verticalArrangement=Arrangement.spacedBy(2.dp)) {
-                    Text("AILA ACA", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = AppTheme.TextDark)
-                    Text(if(thinking) "Collego le informazioni…" else "Un aiuto, qui con te", style=MaterialTheme.typography.labelSmall, color=muted)
-                }
-                IconButton(onClick = { if(isInteractive) { keyboard?.hide(); onClose() } }, modifier = Modifier.size(36.dp).background(insetFill, RoundedCornerShape(18.dp)).semantics { contentDescription = "Chiudi ACA" }) {
-                    AppIcons.Close(Modifier.size(16.dp), muted)
-                }
+            Box(Modifier.fillMaxWidth().height(20.dp)) {
+                Box(Modifier.align(Alignment.TopCenter).width(34.dp).height(4.dp).background(muted.copy(alpha=.35f),RoundedCornerShape(2.dp)))
+                IconButton(onClick={keyboard?.hide();onClose()},modifier=Modifier.align(Alignment.CenterEnd).size(28.dp).semantics{contentDescription="Chiudi ACA"}){AppIcons.Close(Modifier.size(15.dp),muted)}
             }
             if(action?.actionPlan != null) {
                 circolareplus.ui.screens.AssistantActionPreview(message = action, isBusy = thinking, onConfirm = { if(isInteractive) onConfirm() }, onCancel = { if(isInteractive) onCancel() }, onRecover = {})
@@ -125,17 +118,17 @@ fun AcaContextOverlay(
                 Text(voiceError ?: if(recording) "Registrazione vocale in corso…" else "Trascrivo il vocale…",Modifier.weight(1f),style=MaterialTheme.typography.labelMedium,color=if(voiceError!=null) AppTheme.TintRedInk else muted)
                 if(recording) TextButton(onClick={recorder.cancel()}) { Text("Annulla") }
             }
-            Row(Modifier.fillMaxWidth().background(fieldFocus,RoundedCornerShape(40.dp)).border(1.dp,edge.copy(alpha=.7f),RoundedCornerShape(40.dp)).padding(horizontal=8.dp,vertical=5.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(4.dp)) {
-                IconButton(onClick={keyboard?.hide();attachmentMenu=true},enabled=isInteractive,modifier=Modifier.size(44.dp).semantics{contentDescription="Aggiungi allegato"}) { AppIcons.Plus(Modifier.size(25.dp),AppTheme.TextDark) }
-                TextField(question,{question=it},placeholder={Text("Chiedi ad AILA…")},modifier=Modifier.weight(1f).focusRequester(focus),readOnly=!isInteractive,maxLines=3,
-                    colors=TextFieldDefaults.colors(focusedContainerColor=Color.Transparent,unfocusedContainerColor=Color.Transparent,focusedTextColor=AppTheme.TextDark,unfocusedTextColor=AppTheme.TextDark,focusedIndicatorColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent,focusedPlaceholderColor=muted,unfocusedPlaceholderColor=muted))
-                if(question.isBlank()) IconButton(onClick={if(recording) recorder.stop() else {keyboard?.hide();recorder.start()}},enabled=isInteractive&&!transcribing,modifier=Modifier.size(48.dp).background(if(recording) AppTheme.TintRedInk else AppTheme.PrimaryBlue,RoundedCornerShape(24.dp)).semantics{contentDescription=if(recording) "Termina vocale ACA" else "Registra un vocale per ACA"}) { if(recording) AppIcons.Close(Modifier.size(20.dp),Color.White) else AcaMic() }
-                else IconButton(onClick=submit,enabled=canSend&&isInteractive,modifier=Modifier.size(48.dp).background(sendFill,RoundedCornerShape(24.dp)).semantics{contentDescription="Invia ad ACA"}) { AppIcons.ArrowUp(Modifier.size(22.dp),Color.White) }
+            TextField(question,{question=it},placeholder={Text("Chiedi ad AILA…",style=MaterialTheme.typography.titleMedium)},modifier=Modifier.fillMaxWidth().focusRequester(focus),readOnly=!isInteractive||recording||transcribing,minLines=1,maxLines=4,
+                colors=TextFieldDefaults.colors(focusedContainerColor=Color.Transparent,unfocusedContainerColor=Color.Transparent,focusedTextColor=AppTheme.TextDark,unfocusedTextColor=AppTheme.TextDark,focusedIndicatorColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent,focusedPlaceholderColor=muted,unfocusedPlaceholderColor=muted))
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                IconButton(onClick={keyboard?.hide();attachmentMenu=true},enabled=isInteractive&&!recording&&!transcribing,modifier=Modifier.size(48.dp).semantics{contentDescription="Aggiungi allegato"}) { AppIcons.Plus(Modifier.size(28.dp),AppTheme.TextDark) }
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick={if(recording)recorder.stop()else{keyboard?.hide();recorder.start()}},enabled=isInteractive&&!transcribing&&!thinking,modifier=Modifier.size(48.dp).semantics{contentDescription=if(recording)"Termina vocale ACA"else"Registra un vocale per ACA"}) { if(recording)AppIcons.Close(Modifier.size(22.dp),AppTheme.TintRedInk)else AcaMic() }
+                IconButton(onClick=submit,enabled=canSend&&isInteractive&&!recording&&!transcribing,modifier=Modifier.size(48.dp).background(sendFill,RoundedCornerShape(24.dp)).semantics{contentDescription="Invia ad ACA"}) {
+                    if(thinking||transcribing)CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp,color=muted)else AppIcons.ArrowUp(Modifier.size(25.dp),if(canSend)Color.White else muted)
+                }
             }
-            TextButton(onClick = { if(isInteractive) { keyboard?.hide(); onOpenChat() } }, modifier = Modifier.align(Alignment.CenterHorizontally).heightIn(min = 36.dp), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
-                Text("Continua nell’assistente", style = MaterialTheme.typography.labelLarge)
-                Spacer(Modifier.width(6.dp)); AppIcons.ChevronRight(Modifier.size(15.dp), AppTheme.PrimaryBlue)
-            }
+
         }
 
         if(attachmentMenu) AilaBottomSheet(onDismissRequest={attachmentMenu=false}) {
@@ -151,6 +144,7 @@ fun AcaContextOverlay(
                         }
                     }
                 }
+                TextButton(onClick={attachmentMenu=false;keyboard?.hide();onOpenChat()}) { Text("Continua nell’assistente") }
                 Text("Condividi solo le informazioni che vuoi inviare ad AILA.",style=MaterialTheme.typography.labelSmall,color=muted)
             }
         }
