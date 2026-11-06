@@ -5379,9 +5379,19 @@ fun MainAppShell(
         val acaPageContext=("Schermata: $shellRoute; sezione: $selectedTab / $classSection\n"+
             (selectedCircularForDetail?:paneCircular)?.let{"Circolare ${it.number}: ${it.title}\n${classifications[it.number]?.personalSummary.orEmpty()}"}.orEmpty()+
             eventDetailToShow?.toString().orEmpty()+when { shellRoute == ShellRoute.FORUM || (shellRoute == ShellRoute.TABS && selectedTab == MainTab.CLASS && classSection == ClassSection.PERE) -> acaForumContext; shellRoute == ShellRoute.CONTENT -> acaDocumentContext; else -> "" }).take(6000)
-        if(acaOverlay){
-        circolareplus.platform.PlatformBackHandler{acaOverlay=false}
+        if(acaOverlay) circolareplus.platform.PlatformBackHandler { acaOverlay = false }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = acaOverlay,
+            modifier = Modifier.fillMaxSize(),
+            enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(if(AppTheme.reduceMotion) 90 else 220)) +
+                if(AppTheme.reduceMotion) androidx.compose.animation.EnterTransition.None else androidx.compose.animation.slideInVertically(
+                    animationSpec = androidx.compose.animation.core.tween(240, easing = androidx.compose.animation.core.LinearOutSlowInEasing), initialOffsetY = { -it / 56 }),
+            exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(if(AppTheme.reduceMotion) 80 else 160)) +
+                if(AppTheme.reduceMotion) androidx.compose.animation.ExitTransition.None else androidx.compose.animation.slideOutVertically(
+                    animationSpec = androidx.compose.animation.core.tween(160), targetOffsetY = { -it / 80 })
+        ) {
         circolareplus.design.AcaContextOverlay(
+            isInteractive=acaOverlay,
             thinking=isAssistantThinking,
             contextPreview=acaPageContext,
             providerLabel=if(AppContainer.settings.aiProvider==circolareplus.ai.AiProvider.COMPATIBLE_API.id)runCatching{io.ktor.http.Url(AppContainer.settings.compatibleAiBaseUrl).host}.getOrDefault("API personale")else circolareplus.ai.AiProvider.fromId(AppContainer.settings.aiProvider).label,

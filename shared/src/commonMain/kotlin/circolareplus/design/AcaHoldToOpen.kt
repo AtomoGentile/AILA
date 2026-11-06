@@ -69,14 +69,15 @@ fun Modifier.acaHoldToOpen(enabled: Boolean, surfaceKey: Any?, onOpen: () -> Uni
     }.drawWithContent {
         drawContent()
         origin?.let { point ->
-            val radius = 25.dp.toPx()
-            drawCircle(accent.copy(alpha = .18f), radius, point, style = Stroke(3.dp.toPx()))
+            val gain = if(reduced) 1f else (progress.value * 5f).coerceIn(0f, 1f)
+            val radius = (23f + 2f * gain).dp.toPx()
+            drawCircle(accent.copy(alpha = .14f * gain), radius, point, style = Stroke(2.dp.toPx()))
             if (reduced) {
                 drawCircle(accent, 5.dp.toPx(), point)
             } else {
-                drawArc(accent, -90f, 360f * progress.value, false,
+                drawArc(accent.copy(alpha = .85f * gain), -90f, 360f * progress.value, false,
                     point - Offset(radius, radius), Size(radius * 2, radius * 2),
-                    style = Stroke(3.dp.toPx()))
+                    style = Stroke(2.dp.toPx()))
             }
         }
     }

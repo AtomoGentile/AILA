@@ -15,25 +15,34 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
-/** Visible immediately on contextual invocation and throughout processing; never for ordinary chat. */
+/** A soft contextual perimeter; ordinary chat never activates it. */
 @Composable fun AilaAcaIndicator(active: Boolean) {
-    val opacity by animateFloatAsState(if(active) 1f else 0f, tween(if(active || AppTheme.reduceMotion) 0 else 120), label = "aca perimeter")
-    if(opacity == 0f) return
-    val colors = listOf(Color(0xFF9666FF), Color(0xFF568BFF), Color(0xFF40DAD0), Color(0xFFF7DD8A), Color(0xFFFFAA76), Color(0xFFF77EB5))
-    val transition = rememberInfiniteTransition(label = "aca light")
-    val travel by transition.animateFloat(0f, 1f, infiniteRepeatable(tween(4800, easing = LinearEasing)), label = "aca travel")
-    val position = if(AppTheme.reduceMotion) 0f else travel
+    val reduced = AppTheme.reduceMotion
+    val opacity = animateFloatAsState(
+        if(active) 1f else 0f,
+        tween(if(reduced) 80 else if(active) 280 else 120, easing = LinearOutSlowInEasing),
+        label = "aca perimeter"
+    )
+    if(!active && opacity.value == 0f) return
+    val colors = listOf(Color(0xFF865BE0), Color(0xFF4D77E8), Color(0xFF36B6B4), Color(0xFFD1B16D), Color(0xFFDA9476), Color(0xFFD26C9E))
+    val travel = if(reduced) null else rememberInfiniteTransition(label = "aca light").animateFloat(
+        0f, 1f, infiniteRepeatable(tween(6800, easing = LinearEasing)), label = "aca travel"
+    )
+    val radius = maxOf(circolareplus.platform.displayCornerRadius(), 28.dp)
     Canvas(Modifier.fillMaxSize().semantics { contentDescription = "ACA attiva · bordo luminoso" }) {
+        // Read animated state in the draw phase, keeping the popup out of frame-by-frame recomposition.
+        val position = travel?.value ?: 0f
         val shifted = List(13) { i ->
             val sample = (i / 12f + position) * colors.size
             val base = kotlin.math.floor(sample).toInt()
             androidx.compose.ui.graphics.lerp(colors[base % colors.size], colors[(base + 1) % colors.size], sample - base)
         }
-        val inset = 3.dp.toPx()
+        val inset = 2.dp.toPx()
         val brush = Brush.sweepGradient(shifted, Offset(size.width / 2, size.height / 2))
-        for(width in if(AppTheme.liteEffects) listOf(4f) else listOf(32f, 20f, 10f, 3f)) {
-            drawRoundRect(brush, Offset(inset, inset), Size(size.width - 2 * inset, size.height - 2 * inset), CornerRadius(30.dp.toPx()),
-                alpha = opacity * when(width) { 3f, 4f -> .95f; 10f -> .24f; 20f -> .12f; else -> .06f }, style = Stroke(width.dp.toPx()))
+        val glow = opacity.value
+        for(width in if(AppTheme.liteEffects) listOf(2.2f) else listOf(28f, 16f, 8f, 2.2f)) {
+            drawRoundRect(brush, Offset(inset, inset), Size(size.width - 2 * inset, size.height - 2 * inset), CornerRadius(radius.toPx()),
+                alpha = glow * when(width) { 2.2f -> .82f; 8f -> .18f; 16f -> .09f; else -> .045f }, style = Stroke(width.dp.toPx()))
         }
     }
 }
