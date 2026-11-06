@@ -338,7 +338,7 @@ private fun PollProgressHeader(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal=AppTheme.Space16, vertical=AppTheme.Space8)
-            .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(AppTheme.CardSurface,androidx.compose.material3.MaterialTheme.colorScheme.secondaryContainer)), RoundedCornerShape(28.dp))
+            .communitySurface(RoundedCornerShape(28.dp),MaterialTheme.colorScheme.secondary)
             .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12)
     ) {
         Row(

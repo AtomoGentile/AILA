@@ -23,8 +23,7 @@ import circolareplus.design.*
 internal fun ForumIntroduction(busy: Boolean, onCreate: () -> Unit, onRules: () -> Unit,
     title: String = "Educazione tra pere", description: String = "Un posto per chiedere, capire e dare una mano ai compagni.",
     createLabel: String = "Nuova domanda") {
-    Column(Modifier.fillMaxWidth().background(Brush.linearGradient(listOf(AppTheme.CardSurface, MaterialTheme.colorScheme.tertiary.copy(alpha = .22f))), RoundedCornerShape(28.dp))
-        .border(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = .26f), RoundedCornerShape(28.dp)).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(Modifier.fillMaxWidth().communitySurface(RoundedCornerShape(28.dp),MaterialTheme.colorScheme.tertiary).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.tertiary.copy(alpha = .18f), RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) { AppIcons.ChatBubble(Modifier.size(24.dp), MaterialTheme.colorScheme.tertiary) }
             Spacer(Modifier.width(12.dp))
@@ -44,9 +43,9 @@ internal fun ForumIntroduction(busy: Boolean, onCreate: () -> Unit, onRules: () 
 internal fun ForumEmptyState(title: String = "La prima domanda può essere la tua",
     description: String = "Un dubbio sui compiti o un passaggio da spiegare? Inizia una conversazione: le risposte resteranno qui per tutta la classe.",
     privacyLabel: String = "Puoi partecipare con uno pseudonimo.") {
-    Column(Modifier.fillMaxWidth().background(AppTheme.CardSurface, RoundedCornerShape(26.dp)).padding(horizontal = 24.dp, vertical = 28.dp),
+    Column(Modifier.fillMaxWidth().communitySurface(RoundedCornerShape(26.dp)).padding(horizontal = 24.dp, vertical = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        AppIcons.People(Modifier.size(38.dp), AppTheme.TintGreenInk)
+        AppIcons.People(Modifier.size(38.dp), MaterialTheme.colorScheme.secondary)
         Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
             color = AppTheme.TextDark, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         Text(description,

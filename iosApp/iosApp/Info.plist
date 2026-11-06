@@ -57,6 +57,8 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Trascrive i vocali sul dispositivo quando il motore locale è disponibile.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Registra un vocale solo quando lo richiedi. Puoi ascoltarlo e scegliere se condividerlo o trascriverlo.</string>
 	<key>LSSupportsOpeningDocumentsInPlace</key>

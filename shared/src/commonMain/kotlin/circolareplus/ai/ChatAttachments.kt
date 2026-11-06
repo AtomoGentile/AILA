@@ -10,6 +10,7 @@ import io.ktor.http.*
 import kotlinx.serialization.json.*
 
 suspend fun prepareChatAttachment(file:IncomingContent,question:String?=null,onSaved:(AssistantAttachedFile)->Unit={}):AssistantAttachedFile {
+ var processingLabel:String?=null
  var p=AppContainer.settings.cachedAiPreferences
  val audio=file.mime.startsWith("audio/");val image=file.mime.startsWith("image/")
  val service=if(audio)"AUDIO"else if(image)"IMAGES"else"DOCUMENTS"
@@ -18,6 +19,18 @@ suspend fun prepareChatAttachment(file:IncomingContent,question:String?=null,onS
  onSaved(AssistantAttachedFile(saved.id,file.fileName,service,audio||image))
  check(p.allows(service)){"Attiva il servizio $service nelle impostazioni AI per leggere questo allegato."}
  var text=file.extractedText?:when(file.mime){"text/plain"->file.bytes.decodeToString();"application/pdf"->AppContainer.pdfTextExtractor.extractText(file.bytes);else->""}
+ if(text.isBlank() && audio) {
+  val result=transcribeVoice(
+   preferLocal=AppContainer.settings.preferLocalTranscription,
+   localOnly=AppContainer.settings.localTranscriptionOnly||AiProvider.fromId(AppContainer.settings.aiProvider)==AiProvider.ON_DEVICE,
+   audioAllowed={AppContainer.settings.cachedAiPreferences.let{it.allows("AUDIO")&&it.audioConsent}},
+   cloudAllowed={AppContainer.settings.cachedAiPreferences.let{it.cloudConsent&&it.attachmentConsent&&it.audioConsent&&
+     (AiProvider.fromId(AppContainer.settings.aiProvider)==AiProvider.AILA_CLOUD||it.externalConsent)}&&AiProvider.fromId(AppContainer.settings.aiProvider)!=AiProvider.ON_DEVICE},
+   local={circolareplus.platform.transcribeAudioLocally(file)},
+   cloud={transcribeWithCloudProvider(file,saved.id)}
+  )
+  text=result.text;processingLabel=result.label
+ }
  if(text.isBlank()){
   p=AppContainer.settings.cachedAiPreferences
   check(p.allows(service)){"Questo servizio AI è stato disattivato."}
@@ -26,17 +39,7 @@ suspend fun prepareChatAttachment(file:IncomingContent,question:String?=null,onS
   val settings=AppContainer.settings
   val personal=AiProvider.fromId(settings.aiProvider)!=AiProvider.AILA_CLOUD
   val openAiPersonal=AiProvider.fromId(settings.aiProvider)==AiProvider.COMPATIBLE_API&&CompatibleAiFormat.fromId(settings.compatibleAiFormat)==CompatibleAiFormat.OPENAI
-  if(audio&&openAiPersonal){
-   check(p.externalConsent){"Consenti il provider esterno nelle impostazioni AI."}
-   val base=settings.compatibleAiBaseUrl.trim().trimEnd('/').removeSuffix("/chat/completions")
-   val endpoint=if(base.endsWith("/v1"))"$base/audio/transcriptions"else"$base/v1/audio/transcriptions"
-   val response=GeminiHttp.client.submitFormWithBinaryData(endpoint,formData{
-    append("model","whisper-1")
-    append("file",file.bytes,Headers.build{append(HttpHeaders.ContentType,file.mime);append(HttpHeaders.ContentDisposition,"filename=\"vocale.${if(file.mime=="audio/mp4")"m4a"else"wav"}\"")})
-   }){header(HttpHeaders.Authorization,"Bearer ${settings.compatibleAiApiKey.trim()}")}
-   check(response.status.isSuccess()){ "Il provider non ha trascritto il vocale (HTTP ${response.status.value})." }
-   text=Json.parseToJsonElement(response.bodyAsText()).jsonObject["text"]?.jsonPrimitive?.content.orEmpty()
-  }else if(image&&openAiPersonal){
+  if(image&&openAiPersonal){
    check(p.externalConsent){"Consenti il provider esterno nelle impostazioni AI."}
    val base=settings.compatibleAiBaseUrl.trim().trimEnd('/').removeSuffix("/chat/completions")
    val endpoint=if(base.endsWith("/v1"))"$base/chat/completions"else"$base/v1/chat/completions"
@@ -53,9 +56,32 @@ suspend fun prepareChatAttachment(file:IncomingContent,question:String?=null,onS
    val remote=AppContainer.acaRepository.upload(file.copy(localId=saved.id))
    check(AppContainer.settings.cachedAiPreferences.allows(service)&&AppContainer.settings.cachedAiPreferences.attachmentConsent){"L’analisi degli allegati è stata disattivata."}
    text=if(audio||image)AppContainer.acaRepository.analyze(remote.id,if(audio)"TRANSCRIBE"else"EXPLAIN").text else AppContainer.acaRepository.text(remote.id).text
+   if(audio)processingLabel="Trascritto con Whisper · AILA"
   }
  }
  check(text.isNotBlank()){ "Non ho trovato testo leggibile nell’allegato. Puoi aprire l’originale dalla chat." }
+ check(AppContainer.settings.cachedAiPreferences.allows(service)){"Questo servizio AI è stato disattivato."}
+ if(audio)check(AppContainer.settings.cachedAiPreferences.audioConsent){"Consenti la trascrizione dei vocali in Impostazioni → AI."}
  archive.save(file.copy(localId=saved.id,extractedText=text,isTranscript=audio))
- return AssistantAttachedFile(saved.id,file.fileName,service,audio||image)
+ return AssistantAttachedFile(saved.id,file.fileName,service,audio||image,processingLabel)
+}
+
+private suspend fun transcribeWithCloudProvider(file:IncomingContent,savedId:String):AudioTranscription {
+ val settings=AppContainer.settings
+ val selected=AiProvider.fromId(settings.aiProvider)
+ if(selected==AiProvider.COMPATIBLE_API&&CompatibleAiFormat.fromId(settings.compatibleAiFormat)==CompatibleAiFormat.OPENAI){
+  val base=settings.compatibleAiBaseUrl.trim().trimEnd('/').removeSuffix("/chat/completions")
+  val endpoint=if(base.endsWith("/v1"))"$base/audio/transcriptions"else"$base/v1/audio/transcriptions"
+  val response=GeminiHttp.client.submitFormWithBinaryData(endpoint,formData{
+   append("model","whisper-1")
+   append("file",file.bytes,Headers.build{append(HttpHeaders.ContentType,file.mime);append(HttpHeaders.ContentDisposition,"filename=\"vocale.${if(file.mime=="audio/mp4")"m4a"else"wav"}\"")})
+  }){header(HttpHeaders.Authorization,"Bearer ${settings.compatibleAiApiKey.trim()}")}
+  check(response.status.isSuccess()){"Il provider non ha trascritto il vocale (HTTP ${response.status.value})."}
+  val text=Json.parseToJsonElement(response.bodyAsText()).jsonObject["text"]?.jsonPrimitive?.content.orEmpty()
+  return AudioTranscription(text,"Trascritto con Whisper · API personale")
+ }
+ check(selected==AiProvider.AILA_CLOUD){"La trascrizione cloud non è supportata dal provider selezionato."}
+ val remote=AppContainer.acaRepository.upload(file.copy(localId=savedId))
+ check(settings.cachedAiPreferences.let{it.allows("AUDIO")&&it.cloudConsent&&it.attachmentConsent&&it.audioConsent}){"L’elaborazione audio è stata disattivata."}
+ return AudioTranscription(AppContainer.acaRepository.analyze(remote.id,"TRANSCRIBE").text,"Trascritto con Whisper · AILA")
 }

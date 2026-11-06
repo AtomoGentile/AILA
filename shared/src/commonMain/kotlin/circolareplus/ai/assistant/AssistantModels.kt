@@ -26,7 +26,7 @@ enum class AssistantActionStatus { AWAITING_CONFIRMATION, RUNNING, COMPLETED, PA
 enum class AssistantAgentPhase { READING, PLANNING, EXECUTING, WRITING, TRANSCRIBING }
 
 @Serializable
-data class AssistantAttachedFile(val localId:String,val name:String,val service:String="DOCUMENTS",val generated:Boolean=false)
+data class AssistantAttachedFile(val localId:String,val name:String,val service:String="DOCUMENTS",val generated:Boolean=false,val processingLabel:String?=null)
 
 data class AssistantAttachedSource(val file:AssistantAttachedFile,val text:String)
 

@@ -62,7 +62,7 @@ fun SeatMapDeskCard(
         targetValue = when {
             glass -> AppTheme.SmallElementRadius + 2.dp
             isFocusedDesk -> 26.dp
-            else -> 22.dp
+            else -> 16.dp
         },
         animationSpec = circolareplus.design.ailaBouncySpring(),
         label = "deskCorner"
@@ -77,7 +77,7 @@ fun SeatMapDeskCard(
         when {
             glass -> if (isFocusedDesk) AppTheme.TintAmber else AppTheme.SurfaceWhite
             isFocusedDesk -> AppTheme.DeskFocused
-            else -> MaterialTheme.colorScheme.secondaryContainer
+            else -> AppTheme.DeskFloor
         },
         circolareplus.design.ailaColorSpec(), label = "deskBg"
     )

@@ -102,6 +102,21 @@ fun ContentAssistanceScreen(
       is AiTextResult.Failure->if(localOnly){error=answer.reason;return@launch}
      }
     }
+    if(request.action=="TRANSCRIBE" && (localOnly || AppContainer.settings.localTranscriptionOnly || AppContainer.settings.preferLocalTranscription)) {
+     if(!policy.audioConsent){error="Consenti la trascrizione dei vocali in Impostazioni → AI.";return@launch}
+     val file=activeFile?.copy(localId=savedCopy?.id)
+     val localText=file?.let{circolareplus.platform.transcribeAudioLocally(it)}
+     if(!localText.isNullOrBlank() && file!=null){
+      check(AcaPolicyState.preferences.allows("AUDIO")&&AcaPolicyState.preferences.audioConsent){"La trascrizione audio è stata disattivata."}
+      val generatedAt=kotlin.time.Clock.System.now().toString()
+      source=localText;transcript=true
+      activeFile=file.copy(extractedText=localText,isTranscript=true,generatedAt=generatedAt)
+      savedCopy=AppContainer.localContents.save(activeFile!!,remote)
+      result=AcaAiResultDto(localText,"Sul dispositivo · motore vocale",generatedAt,"TRANSCRIBE");resultAction=request.action
+      return@launch
+     }
+     if(localOnly || AppContainer.settings.localTranscriptionOnly){error="Il motore locale o la lingua italiana non sono disponibili per questo vocale. Conserva il file sul dispositivo e controlla i pacchetti vocali nelle impostazioni del telefono.";return@launch}
+    }
     if(localOnly){error="Questa operazione non è disponibile solo sul dispositivo. Puoi scegliere un passaggio di testo o autorizzare il cloud.";return@launch}
     if(!preferences.cloudConsent||!preferences.attachmentConsent||request.action=="TRANSCRIBE"&&!preferences.audioConsent){consent=request;return@launch}
     val response=if(!image&&request.action!="TRANSCRIBE"&&text.isNotBlank()){
@@ -167,7 +182,9 @@ fun ContentAssistanceScreen(
     }
    }
    Row(verticalAlignment=Alignment.CenterVertically){Text("Solo sul dispositivo",Modifier.weight(1f),color=AppTheme.TextDark);Switch(localOnly,{localOnly=it},enabled=!busy&&!loading)}
-   if(localOnly&&!caps.localText)Text(caps.reason.orEmpty(),style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
+   if(audio&&AppContainer.settings.localTranscriptionOnly)Text("Trascrizione: solo sul dispositivo, come scelto in Impostazioni → AI.",style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
+   if(localOnly&&audio)Text(if(caps.localTranscription) "Usa il motore vocale locale; è richiesta la lingua italiana installata." else "Questo sistema non espone un motore locale per trascrivere i file audio.",style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
+   else if(localOnly&&!caps.localText)Text(caps.reason.orEmpty(),style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
    if(audio&&source.isBlank())Button(onClick={action("TRANSCRIBE")},enabled=!busy&&!loading&&!unavailable,modifier=Modifier.fillMaxWidth()){Text("Trascrivi il vocale")}
    if(!audio||source.isNotBlank()){
     Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){OutlinedButton(onClick={action("SUMMARIZE")},enabled=!busy&&!loading){Text("Riassumi")};OutlinedButton(onClick={action("KEY_POINTS")},enabled=!busy&&!loading){Text("Punti chiave")}}

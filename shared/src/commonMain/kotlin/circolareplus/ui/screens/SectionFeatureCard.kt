@@ -13,14 +13,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import circolareplus.design.AppTheme
+import circolareplus.design.ailaGlassSurface
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 
 /** Shared section language: an introduction, one clear action and the page's own controls. */
 @Composable
 internal fun SectionFeatureCard(title:String, description:String, modifier:Modifier=Modifier, badge:String?=null,
     icon:@Composable ()->Unit, actions:(@Composable RowScope.()->Unit)?=null) {
     val tint=MaterialTheme.colorScheme.tertiary
-    Column(modifier.fillMaxWidth().background(Brush.linearGradient(listOf(AppTheme.CardSurface,tint.copy(alpha=.18f))),RoundedCornerShape(28.dp))
-        .border(1.dp,tint.copy(alpha=.20f),RoundedCornerShape(28.dp)).padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+    Column(modifier.fillMaxWidth().communitySurface(RoundedCornerShape(28.dp),tint).padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
             Box(Modifier.size(44.dp).background(tint.copy(alpha=.16f),RoundedCornerShape(16.dp)),contentAlignment=Alignment.Center){icon()}
             Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)) {
@@ -35,9 +37,15 @@ internal fun SectionFeatureCard(title:String, description:String, modifier:Modif
 
 @Composable
 internal fun SectionEmptyCard(title:String, description:String, modifier:Modifier=Modifier, icon:@Composable ()->Unit) {
-    Column(modifier.fillMaxWidth().background(AppTheme.CardSurface,RoundedCornerShape(28.dp)).padding(24.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(12.dp)) {
+    Column(modifier.fillMaxWidth().communitySurface(RoundedCornerShape(28.dp)).padding(24.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(12.dp)) {
         Box(Modifier.size(60.dp).background(MaterialTheme.colorScheme.secondaryContainer,RoundedCornerShape(22.dp)),contentAlignment=Alignment.Center){icon()}
         Text(title,style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold,color=AppTheme.TextDark,textAlign=TextAlign.Center)
         Text(description,style=MaterialTheme.typography.bodyMedium,color=AppTheme.TextMuted,textAlign=TextAlign.Center)
     }
 }
+
+/** Liquid Glass keeps its optical surface; tonal gradients belong to Material. */
+internal fun Modifier.communitySurface(shape:Shape,tint:Color?=null):Modifier =
+    if(AppTheme.isGlass) ailaGlassSurface(shape,tint=tint?.copy(alpha=.06f))
+    else if(tint!=null) background(Brush.linearGradient(listOf(AppTheme.CardSurface,tint.copy(alpha=.18f))),shape).border(1.dp,tint.copy(alpha=.20f),shape)
+    else background(AppTheme.CardSurface,shape)

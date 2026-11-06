@@ -9,7 +9,7 @@ fun acaDeviceCapabilities():AcaDeviceCapabilities {
  if(isWeb())return AcaDeviceCapabilities(false,false,false,"Nella versione web l’elaborazione avviene tramite i servizi che autorizzi.")
  val model=AppContainer.selectedLocalModel()
  val text=isOnDeviceAiAvailable()&&AppContainer.localModelStore.isInstalled(model)
- return AcaDeviceCapabilities(text,false,false,if(text)null else onDeviceAiUnavailableReason()?:"Installa o attiva un modello locale nelle impostazioni AI.")
+ return AcaDeviceCapabilities(text,circolareplus.platform.isLocalAudioTranscriptionAvailable(),false,if(text)null else onDeviceAiUnavailableReason()?:"Installa o attiva un modello locale nelle impostazioni AI.")
 }
 
 /** A local attempt has no network fallback. The calling surface checks cloud consent separately. */

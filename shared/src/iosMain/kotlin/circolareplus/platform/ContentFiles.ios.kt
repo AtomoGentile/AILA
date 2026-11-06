@@ -12,6 +12,9 @@ interface ContentFileBridge {
  fun openFile(path:String):String?
  fun startRecording(onStarted:()->Unit,onResult:(String?)->Unit,onError:(String)->Unit)
  fun stopRecording()
+ fun isLocalSpeechAvailable():Boolean
+ fun transcribeLocalAudio(path:String,onResult:(String?)->Unit)
+ fun cancelLocalAudio(path:String)
  fun cancelRecording()
 }
 object ContentFileBridgeHolder{var bridge:ContentFileBridge?=null}

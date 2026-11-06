@@ -259,7 +259,7 @@ fun AssistantChatScreen(
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
                             Text(file.name, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
-                            Text(if(file.generated) "Testo elaborato da AILA" else "Apri l’originale", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
+                            Text(if(file.generated) file.processingLabel ?: "Testo elaborato da AILA" else "Apri l’originale", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
                         }
                         AppIcons.ChevronRight(Modifier.size(17.dp), AppTheme.TextMuted)
                     }

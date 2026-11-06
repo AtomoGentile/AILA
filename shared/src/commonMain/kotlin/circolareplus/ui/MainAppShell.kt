@@ -2935,7 +2935,7 @@ fun MainAppShell(
             assistantAgentPhases[target]=if(file.mime.startsWith("audio/"))AssistantAgentPhase.TRANSCRIBING else AssistantAgentPhase.READING
             try{
                 val attached=circolareplus.ai.prepareChatAttachment(file){original->assistantAttachments[target]=(assistantAttachments[target].orEmpty()+original).distinctBy{it.localId}.takeLast(5)}
-                assistantAttachments[target]=(assistantAttachments[target].orEmpty()+attached).distinctBy{it.localId}.takeLast(5)
+                assistantAttachments[target]=(assistantAttachments[target].orEmpty().filterNot{it.localId==attached.localId}+attached).takeLast(5)
                 if(voice)AppContainer.localContents.entry(attached.localId)?.let{spoken=AppContainer.localContents.text(it)}
             }catch(e:CancellationException){throw e}catch(e:Exception){
                 appendAssistantMessage(target,AssistantMessage("attachment-${currentTimeMillis()}",AssistantAuthor.ASSISTANT,e.message?:"Allegato non disponibile",isError=true))

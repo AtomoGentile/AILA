@@ -49,3 +49,7 @@ Dal Profilo puoi eliminare l’account: vengono rimossi profilo, preferenze e id
 Puoi chiedere accesso, correzione, cancellazione, limitazione e portabilità e opporti al trattamento (artt. 15–22 GDPR). Puoi rivolgerti al Garante per la protezione dei dati personali: https://www.garanteprivacy.it. AILA è rivolta agli studenti delle superiori e non è destinata ai minori di 14 anni.
 
 Il testo sintetico nell’app è mantenuto in `shared/src/commonMain/kotlin/circolareplus/PrivacyPolicy.kt`.
+
+## Trascrizione vocale sul dispositivo
+
+L’app preferisce il riconoscimento vocale locale quando il sistema e la lingua italiana installata lo consentono. I file audio restano originali e la trascrizione è un testo generato distinto. Questa scelta si può modificare in Impostazioni → AI. Il motore locale viene chiamato senza inviare l’audio a un servizio di riconoscimento remoto. Se il formato o il motore non sono disponibili, l’elaborazione cloud richiede i consensi previsti e usa il provider scelto. La modalità «Solo sul dispositivo» e l’opzione «Solo locale per i vocali» impediscono il ripiego sul cloud per la trascrizione. Se si usa la chat con un provider cloud, il testo trascritto può essere inviato a quel provider per rispondere alla richiesta. La condivisione volontaria del vocale nel forum resta un caricamento sul server e una condivisione alla classe.

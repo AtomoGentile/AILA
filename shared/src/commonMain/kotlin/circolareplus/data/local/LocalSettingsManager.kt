@@ -365,6 +365,14 @@ class LocalSettingsManager(
         get() = settings.getString(KEY_ACCENT, "blue")
         set(value) = settings.putString(KEY_ACCENT, value)
 
+    var localTranscriptionOnly: Boolean
+        get() = settings.getBoolean("local_transcription_only", false)
+        set(value) = settings.putBoolean("local_transcription_only", value)
+
+    var preferLocalTranscription: Boolean
+        get() = settings.getBoolean("prefer_local_transcription", true)
+        set(value) = settings.putBoolean("prefer_local_transcription", value)
+
     var secondaryAccentKey: String
         get() = settings.getString("secondary_accent_color", "violet")
         set(value) = settings.putString("secondary_accent_color", value)

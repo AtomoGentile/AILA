@@ -20,6 +20,8 @@ import kotlinx.coroutines.sync.withLock
 
 /** All AI and ACA switches are explicit, per-account, and disabled by default. */
 @Composable fun AiPreferencesControls(){
+ var localTranscriptionOnly by remember { mutableStateOf(AppContainer.settings.localTranscriptionOnly) }
+ var localTranscription by remember { mutableStateOf(AppContainer.settings.preferLocalTranscription) }
  val scope=rememberCoroutineScope();val live=AcaPolicyState.preferences
  var draft by remember{mutableStateOf<AcaPreferencesDto?>(null)};val p=draft?:live
  val saveLock=remember{Mutex()}
@@ -53,6 +55,12 @@ import kotlinx.coroutines.sync.withLock
    AiControlRow("Consenti il cloud","Permetti l’elaborazione dei contenuti che scegli da parte del servizio AILA. Il dispositivo resta disponibile quando supportato.",p.cloudConsent,p.aiEnabled){save(p.copy(cloudConsent=it))}
    AiControlRow("Consenti analisi degli allegati","Solo i file o i passaggi scelti. Prima di ogni richiesta il contenuto di riferimento è visibile.",p.attachmentConsent,p.aiEnabled){save(p.copy(attachmentConsent=it))}
    AiControlRow("Consenti trascrizione audio","Le trascrizioni generate sono separate dai vocali originali e possono contenere errori.",p.audioConsent,p.aiEnabled){save(p.copy(audioConsent=it))}
+   AiControlRow("Preferisci trascrizione sul dispositivo","Usa il motore vocale del telefono e la lingua italiana installata, quando disponibili. Altrimenti il provider cloud richiede i consensi già previsti.",localTranscription,p.aiEnabled){localTranscription=it;AppContainer.settings.preferLocalTranscription=it;if(!it){localTranscriptionOnly=false;AppContainer.settings.localTranscriptionOnly=false}}
+   AiControlRow("Solo locale per i vocali","Blocca il cloud per la trascrizione. Il testo ottenuto può essere inviato al provider scelto per la chat.",localTranscriptionOnly,p.aiEnabled){localTranscriptionOnly=it;AppContainer.settings.localTranscriptionOnly=it;if(it){localTranscription=true;AppContainer.settings.preferLocalTranscription=true}}
+   if(localTranscription) Text(if(circolareplus.platform.isLocalAudioTranscriptionAvailable()) "Motore vocale locale rilevato: è richiesta la lingua italiana installata nelle impostazioni del telefono." else "Questo sistema non espone un motore locale utilizzabile per i file audio. Con Solo locale attivo non verrà usato il cloud.",style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
+
+
+
    AiControlRow("Consenti provider esterni","Vale per le API personali e per un eventuale servizio avanzato. Le credenziali non vengono condivise con la classe.",p.externalConsent,p.aiEnabled){save(p.copy(externalConsent=it))}
   }}
   AilaCard{Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){

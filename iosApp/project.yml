@@ -48,6 +48,7 @@ targets:
       path: iosApp/Info.plist
       properties:
         CFBundleDisplayName: AILA
+        NSSpeechRecognitionUsageDescription: Trascrive i vocali sul dispositivo quando il motore locale è disponibile.
         NSMicrophoneUsageDescription: Registra un vocale da condividere o trascrivere con AILA solo quando lo scegli.
         LSSupportsOpeningDocumentsInPlace: true
         CFBundleDocumentTypes:

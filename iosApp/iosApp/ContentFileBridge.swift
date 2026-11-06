@@ -1,5 +1,6 @@
 import UIKit
 import AVFoundation
+import Speech
 import UniformTypeIdentifiers
 import shared
 
@@ -64,6 +65,49 @@ final class ContentFileBridgeImpl: NSObject, ContentFileBridge, UIDocumentPicker
         self.recorder = nil; recordCallback = nil; recordError = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         if flag { callback?(recorder.url.path) } else { try? FileManager.default.removeItem(at: recorder.url); failure?("Registrazione interrotta.") }
+    }
+    private var localSpeechRecognizers: [String: SFSpeechRecognizer] = [:]
+    private var localSpeechTasks: [String: SFSpeechRecognitionTask] = [:]
+    private var localSpeechRequests = Set<String>()
+    private lazy var localSpeechProbe = SFSpeechRecognizer(locale: Locale(identifier: "it-IT"))
+    func isLocalSpeechAvailable() -> Bool {
+        if !Thread.isMainThread { return DispatchQueue.main.sync { self.isLocalSpeechAvailable() } }
+        guard let recognizer = localSpeechProbe else { return false }
+        return recognizer.supportsOnDeviceRecognition
+    }
+    func transcribeLocalAudio(path: String, onResult: @escaping (String?) -> Void) {
+        guard isLocalSpeechAvailable() else { onResult(nil); return }
+        localSpeechRequests.insert(path)
+        SFSpeechRecognizer.requestAuthorization { [weak self] status in
+            DispatchQueue.main.async {
+                guard let self, self.localSpeechRequests.contains(path) else { return }
+                guard status == .authorized, let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "it-IT")), recognizer.supportsOnDeviceRecognition else {
+                    self.localSpeechRequests.remove(path); onResult(nil); return
+                }
+                self.localSpeechRecognizers[path] = recognizer
+                let request = SFSpeechURLRecognitionRequest(url: URL(fileURLWithPath: path))
+                request.requiresOnDeviceRecognition = true
+                request.shouldReportPartialResults = false
+                request.taskHint = .dictation
+                self.localSpeechTasks[path] = recognizer.recognitionTask(with: request) { [weak self] result, error in
+                    DispatchQueue.main.async {
+                        guard let self, self.localSpeechRequests.contains(path) else { return }
+                        if let result, result.isFinal {
+                            self.localSpeechRequests.remove(path); self.localSpeechTasks.removeValue(forKey: path); self.localSpeechRecognizers.removeValue(forKey: path)
+                            onResult(result.bestTranscription.formattedString)
+                        } else if error != nil {
+                            self.localSpeechRequests.remove(path); self.localSpeechTasks.removeValue(forKey: path); self.localSpeechRecognizers.removeValue(forKey: path)
+                            onResult(nil)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    func cancelLocalAudio(path: String) {
+        localSpeechRequests.remove(path)
+        localSpeechTasks.removeValue(forKey: path)?.cancel()
+        localSpeechRecognizers.removeValue(forKey: path)
     }
     static func receiveIncomingURL(_ url: URL) {
         guard url.isFileURL, let local = localCopy(url) else { return }

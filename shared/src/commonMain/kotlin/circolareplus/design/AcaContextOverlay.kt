@@ -51,13 +51,15 @@ fun AcaContextOverlay(
     var recording by remember { mutableStateOf(false) }
     var transcribing by remember { mutableStateOf(false) }
     var voiceError by remember { mutableStateOf<String?>(null) }
+    var voiceOrigin by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val recorder = rememberVoiceRecorder({ recording = it }, { voiceError = it }) { audio ->
         scope.launch {
             transcribing = true; voiceError = null
             try {
                 val prepared = prepareChatAttachment(audio)
-                val entry = AppContainer.localContents.list().firstOrNull { it.id == prepared.localId }
+                voiceOrigin = prepared.processingLabel
+                val entry = AppContainer.localContents.entry(prepared.localId)
                 val transcript = entry?.let { AppContainer.localContents.text(it) }.orEmpty()
                 check(transcript.isNotBlank()) { "Non sono riuscito a trascrivere il vocale." }
                 question = listOf(question.trim(), transcript).filter { it.isNotBlank() }.joinToString("\n")
@@ -94,14 +96,14 @@ fun AcaContextOverlay(
     val submit = {
         if(canSend && isInteractive) {
             val text = question; question = ""; keyboard?.hide(); onSend(text, attachedScreen)
-            attachedScreen = false
+            attachedScreen = false;voiceOrigin=null
         }
     }
     BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)).imePadding()) {
         Column(Modifier.align(Alignment.TopCenter).padding(horizontal = 16.dp, vertical = 8.dp)
             .widthIn(max = 600.dp).fillMaxWidth().heightIn(max = maxHeight * .86f)
-            .shadow(18.dp, shape).clip(shape).background(Brush.linearGradient(surface))
-            .border(1.dp, edge, shape)
+            .shadow(18.dp, shape).clip(shape)
+            .then(if(AppTheme.isGlass) Modifier.ailaGlassSurface(shape,tint=(if(dark) Color(0xFF090C13) else Color.White).copy(alpha=.76f)) else Modifier.background(Brush.linearGradient(surface)).border(1.dp,edge,shape))
             .verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Box(Modifier.fillMaxWidth().height(12.dp)) {
                 Box(Modifier.align(Alignment.TopCenter).width(34.dp).height(4.dp).background(muted.copy(alpha=.35f),RoundedCornerShape(2.dp)))
@@ -118,8 +120,8 @@ fun AcaContextOverlay(
                 Text("Schermata allegata",Modifier.weight(1f),style=MaterialTheme.typography.labelMedium,color=AppTheme.TextDark)
                 IconButton(onClick={attachedScreen=false},modifier=Modifier.size(32.dp).semantics{contentDescription="Rimuovi schermata"}){AppIcons.Close(Modifier.size(15.dp),muted)}
             }
-            if(recording || transcribing || voiceError != null) Row(Modifier.fillMaxWidth().background(insetFill,RoundedCornerShape(16.dp)).padding(horizontal=12.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
-                Text(voiceError ?: if(recording) "Registrazione vocale in corso…" else "Trascrivo il vocale…",Modifier.weight(1f),style=MaterialTheme.typography.labelMedium,color=if(voiceError!=null) AppTheme.TintRedInk else muted)
+            if(recording || transcribing || voiceError != null || voiceOrigin != null) Row(Modifier.fillMaxWidth().background(insetFill,RoundedCornerShape(16.dp)).padding(horizontal=12.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
+                Text(voiceError ?: if(recording) "Registrazione vocale in corso…" else if(transcribing) "Trascrivo il vocale…" else voiceOrigin.orEmpty(),Modifier.weight(1f),style=MaterialTheme.typography.labelMedium,color=if(voiceError!=null) AppTheme.TintRedInk else muted)
                 if(recording) TextButton(onClick={recorder.cancel()}) { Text("Annulla") }
             }
             Layout(modifier=Modifier.fillMaxWidth(),content={
@@ -127,7 +129,7 @@ fun AcaContextOverlay(
                 colors=TextFieldDefaults.colors(focusedContainerColor=Color.Transparent,unfocusedContainerColor=Color.Transparent,focusedTextColor=AppTheme.TextDark,unfocusedTextColor=AppTheme.TextDark,focusedIndicatorColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent,focusedPlaceholderColor=muted,unfocusedPlaceholderColor=muted))
 
                 IconButton(onClick={keyboard?.hide();attachmentMenu=true},enabled=isInteractive&&!recording&&!transcribing,modifier=Modifier.size(48.dp).semantics{contentDescription="Aggiungi allegato"}) { AppIcons.Plus(Modifier.size(28.dp),AppTheme.TextDark) }
-                IconButton(onClick={if(recording)recorder.stop()else{keyboard?.hide();recorder.start()}},enabled=isInteractive&&!transcribing&&!thinking,modifier=Modifier.size(48.dp).semantics{contentDescription=if(recording)"Termina vocale ACA"else"Registra un vocale per ACA"}) { if(recording)AppIcons.Close(Modifier.size(22.dp),AppTheme.TintRedInk)else AcaMic() }
+                IconButton(onClick={if(recording)recorder.stop()else{voiceError=null;voiceOrigin=null;keyboard?.hide();recorder.start()}},enabled=isInteractive&&!transcribing&&!thinking,modifier=Modifier.size(48.dp).semantics{contentDescription=if(recording)"Termina vocale ACA"else"Registra un vocale per ACA"}) { if(recording)AppIcons.Close(Modifier.size(22.dp),AppTheme.TintRedInk)else AcaMic() }
                 IconButton(onClick=submit,enabled=canSend&&isInteractive&&!recording&&!transcribing,modifier=Modifier.size(48.dp).background(sendFill,RoundedCornerShape(24.dp)).semantics{contentDescription="Invia ad ACA"}) {
                     if(thinking||transcribing)CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp,color=muted)else AppIcons.ArrowUp(Modifier.size(25.dp),if(canSend)Color.White else muted)
                 }
@@ -172,4 +174,4 @@ fun AcaContextOverlay(
     }
 }
 
-@Composable private fun AcaMic() { androidx.compose.foundation.Canvas(Modifier.size(23.dp)) { val c=Color.White;drawRoundRect(c,androidx.compose.ui.geometry.Offset(size.width*.36f,size.height*.08f),androidx.compose.ui.geometry.Size(size.width*.28f,size.height*.52f),androidx.compose.ui.geometry.CornerRadius(size.width*.14f));drawArc(c,0f,180f,false,androidx.compose.ui.geometry.Offset(size.width*.22f,size.height*.2f),androidx.compose.ui.geometry.Size(size.width*.56f,size.height*.58f),style=androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()));drawLine(c,androidx.compose.ui.geometry.Offset(size.width*.5f,size.height*.78f),androidx.compose.ui.geometry.Offset(size.width*.5f,size.height*.94f),2.dp.toPx()) } }
+@Composable private fun AcaMic() { androidx.compose.foundation.Canvas(Modifier.size(23.dp)) { val c=AppTheme.TextDark;drawRoundRect(c,androidx.compose.ui.geometry.Offset(size.width*.36f,size.height*.08f),androidx.compose.ui.geometry.Size(size.width*.28f,size.height*.52f),androidx.compose.ui.geometry.CornerRadius(size.width*.14f));drawArc(c,0f,180f,false,androidx.compose.ui.geometry.Offset(size.width*.22f,size.height*.2f),androidx.compose.ui.geometry.Size(size.width*.56f,size.height*.58f),style=androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()));drawLine(c,androidx.compose.ui.geometry.Offset(size.width*.5f,size.height*.78f),androidx.compose.ui.geometry.Offset(size.width*.5f,size.height*.94f),2.dp.toPx()) } }

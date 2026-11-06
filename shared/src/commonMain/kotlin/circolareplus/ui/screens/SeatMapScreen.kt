@@ -206,7 +206,7 @@ fun SeatMapScreen(
                 })
             }
         }
-        Column(modifier = Modifier.fillMaxWidth().background(AppTheme.CardSurface,RoundedCornerShape(24.dp)).padding(12.dp).ailaAppear(0)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = {
@@ -310,7 +310,6 @@ fun SeatMapScreen(
         }
         }
         val adminPanel: @Composable () -> Unit = {
-            AilaCard(containerColor = AppTheme.TintSlate, modifier = Modifier.ailaAppear(1)) {
                 // animateContentSize: quando arriva il conteggio dei voti il pannello cresce
                 // morbido invece di spingere giu' la mappa di scatto.
                 Column(modifier = Modifier.animateContentSize().padding(AppTheme.Space12)) {
@@ -494,6 +493,16 @@ fun SeatMapScreen(
                     }
                     }
                 }
+        }
+        val controlsPanel: @Composable () -> Unit = {
+            AilaCard(modifier=Modifier.ailaAppear(0)) {
+                Column(Modifier.fillMaxWidth()) {
+                    searchBlock()
+                    if(isRepresentative) {
+                        HorizontalDivider(Modifier.padding(horizontal=12.dp),color=AppTheme.FieldOutline.copy(alpha=.4f))
+                        adminPanel()
+                    }
+                }
             }
         }
         // Tablet e iPad larghi: ricerca e pannello del Rappresentante in una colonna a sinistra,
@@ -513,8 +522,7 @@ fun SeatMapScreen(
                     ),
                 verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)
             ) {
-                searchBlock()
-                if (isRepresentative) adminPanel()
+                controlsPanel()
             }
         }
         LazyVerticalGrid(
@@ -539,8 +547,7 @@ fun SeatMapScreen(
             )
         }
         if (!wide) {
-            fullRow { searchBlock() }
-            if (isRepresentative) fullRow { adminPanel() }
+            fullRow { controlsPanel() }
         }
 
         // Cattedra & Lavagna
@@ -550,14 +557,14 @@ fun SeatMapScreen(
                     .ailaAppear(2)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                    .background(MaterialTheme.colorScheme.secondaryContainer)
+                    .communitySurface(RoundedCornerShape(AppTheme.SmallElementRadius),MaterialTheme.colorScheme.secondary)
                     .padding(vertical = AppTheme.Space16),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = "Lavagna e cattedra",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                    color = AppTheme.TextDark
                 )
             }
         }

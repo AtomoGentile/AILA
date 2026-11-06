@@ -25,6 +25,10 @@
     <!-- allowBackup false: nelle preferenze ci sono il token di accesso e la chiave Gemini
          personale, che non devono finire nei backup di Google Drive ne' essere estratti con adb.
          dataExtractionRules copre anche il trasferimento fra telefoni (Android 12+). -->
+    <queries>
+        <intent><action android:name="android.speech.RecognitionService" /></intent>
+    </queries>
+
     <application
         android:name=".CircolarePlusApplication"
         android:allowBackup="false"
