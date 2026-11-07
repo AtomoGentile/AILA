@@ -372,9 +372,11 @@ private fun HomeHeroPanel(
     onNavigateToBoard: () -> Unit,
     onNavigateToSeatMap: () -> Unit
 ) {
+    val desktop = circolareplus.design.isDesktopWorkspace()
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .then(if (desktop) Modifier.padding(horizontal = 16.dp, vertical = 16.dp).clip(RoundedCornerShape(20.dp)) else Modifier)
             // Liquid Glass: pannello di vetro vero (lo stesso delle card: velo chiaro, bagliore in
             // alto, bordo speculare), che lascia vedere lo sfondo a macchie invece di coprirlo con
             // un colore suo. Il gradiente colorato di prima sembrava un giocattolo.
@@ -395,7 +397,7 @@ private fun HomeHeroPanel(
             // striscia del colore di fondo, staccata dal pannello.
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
             .padding(horizontal = AppTheme.Space20)
-            .padding(top = AppTheme.Space24, bottom = AppTheme.Space24)
+            .padding(top = if (desktop) 20.dp else AppTheme.Space24, bottom = if (desktop) 16.dp else AppTheme.Space24)
     ) {
         // Saluto a sinistra, azioni a destra (ricerca, notifiche, avatar). Il logo qui non
         // c'e': sul pannello della Home era di troppo (richiesta di Simone).
@@ -430,7 +432,7 @@ private fun HomeHeroPanel(
             }
         }
 
-        Spacer(modifier = Modifier.height(AppTheme.Space24))
+        Spacer(modifier = Modifier.height(if (desktop) 16.dp else AppTheme.Space24))
 
         // Su tablet le scorciatoie restano grandi come sul telefono e stanno a sinistra: quattro
         // tasti larghi un quarto di schermo sarebbero strisce con un'icona minuscola in mezzo.
@@ -439,7 +441,7 @@ private fun HomeHeroPanel(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(if (tablet) AppTheme.Space16 else AppTheme.Space12)
         ) {
-            val tileModifier = if (tablet) Modifier.width(96.dp) else Modifier.weight(1f)
+            val tileModifier = if (desktop) Modifier.weight(1f) else if (tablet) Modifier.width(96.dp) else Modifier.weight(1f)
             HomeQuickIcon(label = "Circolari", modifier = tileModifier, onClick = onNavigateToCirculars) {
                 AppIcons.Document(modifier = Modifier.size(22.dp), color = AppTheme.OnHeroPrimary)
             }
@@ -587,6 +589,18 @@ private fun HomeQuickIcon(
     onClick: () -> Unit,
     icon: @Composable () -> Unit
 ) {
+    if (circolareplus.design.isDesktopWorkspace()) {
+        Row(modifier.clip(RoundedCornerShape(12.dp))
+            .background(if (AppTheme.isGlass) AppTheme.SurfaceWhite.copy(alpha = 0.5f) else heroTonalFill)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            icon()
+            Text(label, style = MaterialTheme.typography.labelLarge, color = AppTheme.OnHeroPrimary,
+                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        }
+        return
+    }
     val interactionSource = remember { MutableInteractionSource() }
     val glass = AppTheme.isGlass
     // Material: riquadro tonale pieno che alla pressione stringe gli angoli (forma che si

@@ -2992,7 +2992,11 @@ fun MainAppShell(
     // Tablet e iPad: barra delle tab a sinistra invece che in basso e, sugli schermi piu' larghi,
     // circolari aperte accanto alla lista e bacheca su due colonne (vedi PlatformInsets.kt).
     val useRail = maxWidth >= circolareplus.design.RailMinWidth && maxHeight >= circolareplus.design.RailMinHeight
+    val desktopWorkspace = circolareplus.design.isDesktopWorkspace()
+    val railInset = if (desktopWorkspace) circolareplus.design.DesktopSidebarWidth else RailInset
     val twoPane = useRail && maxWidth >= circolareplus.design.TwoPaneMinWidth
+    val workspaceContentWidth = if (desktopWorkspace) circolareplus.design.DesktopContentWidth else circolareplus.design.MaxWideContentWidth
+    val circularsListWidth = if (desktopWorkspace) ((maxWidth - railInset) * 0.36f).coerceIn(360.dp, 460.dp) else CircularsListPaneWidth
     // Circolari e dettaglio affiancati: solo nella sezione Circolari della tab Classe.
     val circularsPane = twoPane && classSection == ClassSection.CIRCULARS && !isClassSearchOpen
     // A section visit acknowledges every circular already available, across devices.
@@ -3355,11 +3359,11 @@ fun MainAppShell(
                         // le altre, che su schermi larghi vanno su due colonne, arrivano fino a
                         // MaxWideContentWidth.
                         if (!useRail) Modifier
-                        else Modifier.padding(start = RailInset).then(
+                        else Modifier.padding(start = railInset).then(
                             when {
-                                tab == MainTab.CLASS && circularsPane -> Modifier
+                                tab == MainTab.CLASS && circularsPane -> if (desktopWorkspace) Modifier.appContentWidth(workspaceContentWidth) else Modifier
                                 twoPane ->
-                                    Modifier.appContentWidth(circolareplus.design.MaxWideContentWidth)
+                                    Modifier.appContentWidth(workspaceContentWidth)
                                 else -> Modifier.appContentWidth()
                             }
                         )
@@ -3785,7 +3789,7 @@ fun MainAppShell(
                             // destra (come Mail su iPad).
                             Row(modifier = Modifier.fillMaxSize()) {
                             Column(
-                                modifier = if (circularsPane) Modifier.fillMaxHeight().width(CircularsListPaneWidth)
+                                modifier = if (circularsPane) Modifier.fillMaxHeight().width(circularsListWidth)
                                 else Modifier.fillMaxSize()
                             ) {
                                 // Intestazione della tab: prima Circolari e Bacheca erano due chip
@@ -4335,7 +4339,27 @@ fun MainAppShell(
                 // shellRoute). Si nasconde quando c'e' la tastiera, per non galleggiarci sopra.
                 // Tablet e iPad: barra laterale a sinistra, sempre visibile (la tastiera non la
                 // copre).
-                if (useRail) {
+                if (desktopWorkspace) {
+                    DesktopSidebar(
+                        selectedTab = selectedTab,
+                        onSelect = { selectedTab = it },
+                        onSearch = { isInSearchScreen = true },
+                        onAca = {
+                            if (aiPolicy.aiEnabled && aiPolicy.acaEnabled) {
+                                assistantMode = AssistantMode.GENERAL
+                                acaOverlayStart = assistantMessages.size
+                                acaOverlay = true
+                            } else {
+                                isInSettingsScreen = true
+                                isInAiSettings = true
+                            }
+                        },
+                        onProfile = { isInProfileScreen = true },
+                        onSettings = { isInSettingsScreen = true },
+                        userName = "${user.firstName} ${user.lastName}",
+                        modifier = Modifier.align(Alignment.CenterStart)
+                    )
+                } else if (useRail) {
                     FloatingTabRail(
                         selectedTab = selectedTab,
                         onSelect = { selectedTab = it },
@@ -4601,7 +4625,7 @@ fun MainAppShell(
             // Notifiche, Ricerca) arrivano a MaxWideContentWidth; l'Assistente resta una chat
             // a colonna singola.
             Box(modifier = Modifier.fillMaxHeight().then(
-                if (twoPane && route != ShellRoute.ASSISTANT) Modifier.appContentWidth(circolareplus.design.MaxWideContentWidth)
+                if (twoPane && route != ShellRoute.ASSISTANT) Modifier.appContentWidth(workspaceContentWidth)
                 else Modifier.appContentWidth()
             )) {
             // Le schermate a pieno schermo (Profilo, Impostazioni, Notifiche, Ricerca, Scheda classe)
@@ -7992,6 +8016,83 @@ private fun Modifier.tabBarSurface(
             .background(AppTheme.DeskFloor)
     }
 )
+
+/** Persistent desktop navigation; the same destinations and state as the mobile tabs. */
+@Composable
+private fun DesktopSidebar(
+    selectedTab: MainTab,
+    onSelect: (MainTab) -> Unit,
+    onSearch: () -> Unit,
+    onAca: () -> Unit,
+    onProfile: () -> Unit,
+    onSettings: () -> Unit,
+    userName: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier.width(circolareplus.design.DesktopSidebarWidth).fillMaxHeight()
+            .background(AppTheme.SurfaceWhite)
+            .border(1.dp, AppTheme.Hairline)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(Modifier.padding(vertical = 16.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            circolareplus.design.AilaBrandMark(size = 36.dp)
+            Column {
+                Text("AILA", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = AppTheme.TextDark)
+                Text("Il tuo spazio di classe", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
+            }
+        }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            OutlinedButton(onClick = onSearch, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                AppIcons.Search(Modifier.size(18.dp), color = AppTheme.TextMuted)
+                Spacer(Modifier.width(8.dp))
+                Text("Cerca in AILA", color = AppTheme.TextMuted)
+            }
+            Spacer(Modifier.height(16.dp))
+            Text("LA TUA CLASSE", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextFaint,
+                modifier = Modifier.padding(start = 12.dp, bottom = 4.dp))
+            listOf(MainTab.HOME, MainTab.CALENDAR, MainTab.CLASS, MainTab.POLLS, MainTab.SEATMAP).forEach { tab ->
+                val active = selectedTab == tab
+                val ink = if (active) AppTheme.OnSelection else AppTheme.TextMuted
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                        .background(if (active) AppTheme.SelectionContainer else Color.Transparent)
+                        .semantics { role = Role.Tab; selected = active }
+                        .clickable { onSelect(tab) }.padding(horizontal = 12.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    when (tab) {
+                        MainTab.HOME -> AppIcons.Home(Modifier.size(21.dp), ink)
+                        MainTab.CALENDAR -> AppIcons.Calendar(Modifier.size(21.dp), ink)
+                        MainTab.CLASS -> AppIcons.Document(Modifier.size(21.dp), ink)
+                        MainTab.POLLS -> AppIcons.Poll(Modifier.size(21.dp), ink)
+                        MainTab.SEATMAP -> AppIcons.Chair(Modifier.size(21.dp), ink)
+                    }
+                    Text(if (tab == MainTab.SEATMAP) "Mappa posti" else tab.title,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium, color = ink)
+                }
+            }
+        }
+        FilledTonalButton(onClick = onAca, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+            circolareplus.design.AilaAssistantMark(modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(10.dp))
+            Text("Apri ACA")
+        }
+        HorizontalDivider(color = AppTheme.Hairline)
+        TextButton(onClick = onSettings, modifier = Modifier.fillMaxWidth()) { Text("Impostazioni", color = AppTheme.TextMuted) }
+        Surface(onClick = onProfile, shape = RoundedCornerShape(12.dp), color = AppTheme.CardSurface) {
+            Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                Text(userName, style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark,
+                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text("Profilo e account", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
+            }
+        }
+    }
+}
 
 /** Spazio a sinistra occupato dalla barra laterale (margine + barra + distacco dal contenuto). */
 private val RailInset = 104.dp

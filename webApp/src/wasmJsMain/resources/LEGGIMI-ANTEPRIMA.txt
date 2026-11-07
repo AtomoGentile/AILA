@@ -1,0 +1,18 @@
+AILA - prova locale su Windows
+
+1. Estrai tutto lo ZIP aila-pwa scaricato dagli artifact della build GitHub della PR.
+2. Avvia AVVIA-ANTEPRIMA.cmd. Serve Python 3.
+3. Lascia aperta la finestra e visita http://localhost:8765 in Chrome o Edge aggiornato.
+4. Accedi con il tuo account AILA. La sessione locale e' separata dalla PWA stabile.
+5. Per ACA e Brief, attiva AI e ACA dalle Impostazioni AI. Per Brief attiva anche
+   il riepilogo/proposte opzionali (NOW_NUDGE): le preferenze non vengono attivate dalla beta.
+6. Usa "Apri ACA" nella sidebar. Apri o nascondi le schede Brief e prova a
+   ridimensionare la finestra; prova anche Material/Glass e il tema scuro.
+
+Questa e' una build di prova dell'interfaccia, non un ambiente dati separato:
+le operazioni eseguite con il tuo account usano il backend reale della classe.
+Non aprire index.html direttamente: l'app va servita tramite HTTP.
+
+Per fermare il server premi Ctrl+C nella sua finestra.
+Su macOS/Linux: dalla cartella estratta esegui
+python3 -m http.server 8765 --bind 127.0.0.1

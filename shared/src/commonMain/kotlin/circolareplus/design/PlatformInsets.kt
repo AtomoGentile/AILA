@@ -115,3 +115,16 @@ fun tabBarSystemInset(): Dp {
         .asPaddingValues().calculateBottomPadding()
     return if (circolareplus.platform.isIos()) (inset - 30.dp).coerceAtLeast(0.dp) else inset
 }
+
+/** Desktop browser only: native apps and mobile/tablet PWAs retain their own layouts. */
+@androidx.compose.runtime.Composable
+fun isDesktopWorkspace(): Boolean {
+    if (!circolareplus.platform.isWeb() || circolareplus.platform.isIos() || circolareplus.platform.isAndroid()) return false
+    val size = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize
+    return with(androidx.compose.ui.platform.LocalDensity.current) {
+        size.width.toDp() >= 1100.dp && size.height.toDp() >= 600.dp
+    }
+}
+
+val DesktopSidebarWidth = 224.dp
+val DesktopContentWidth = 1440.dp

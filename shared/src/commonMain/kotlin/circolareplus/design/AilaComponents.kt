@@ -424,7 +424,8 @@ fun AilaCard(
     // macchie di colore; le card colorate diventano vetro tinto. Expressive: superficie tonale
     // piena, senza bordo ne' ombra (vedi AppTheme.CardSurface).
     val glass = AppTheme.isGlass
-    val shape = RoundedCornerShape(AppTheme.CardCornerRadius)
+    val desktop = isDesktopWorkspace()
+    val shape = RoundedCornerShape(if (desktop) 16.dp else AppTheme.CardCornerRadius)
     val glassTint = if (!glass) null else if (containerColor != AppTheme.CardSurface) {
         containerColor.copy(alpha = minOf(containerColor.alpha, 0.10f))
     } else if (AppTheme.isDarkMode) {
@@ -438,12 +439,13 @@ fun AilaCard(
         elevation = CardDefaults.cardElevation(defaultElevation = AppTheme.CardElevation),
         modifier = modifier
             .fillMaxWidth()
+            .then(if (desktop && !glass) Modifier.border(1.dp, AppTheme.Hairline, shape) else Modifier)
             // Scala più contenuta delle righe: su una superficie grande il 3% si nota già.
             .then(
                 if (onClick != null) {
                     // Origine del container transform: toccata, la card si allarga nella pagina.
                     Modifier
-                        .ailaTransformOrigin(AppTheme.CardCornerRadius, liveKey = transformKey)
+                        .ailaTransformOrigin(if (desktop) 16.dp else AppTheme.CardCornerRadius, liveKey = transformKey)
                         .ailaPressable(pressedScale = 0.985f) { onClick() }
                 } else Modifier
             )

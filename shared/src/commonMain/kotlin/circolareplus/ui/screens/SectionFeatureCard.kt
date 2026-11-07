@@ -22,6 +22,19 @@ import androidx.compose.ui.graphics.Shape
 internal fun SectionFeatureCard(title:String, description:String, modifier:Modifier=Modifier, badge:String?=null,
     icon:@Composable ()->Unit, actions:(@Composable RowScope.()->Unit)?=null) {
     val tint=MaterialTheme.colorScheme.tertiary
+    if (circolareplus.design.isDesktopWorkspace()) {
+        Row(modifier.fillMaxWidth().communitySurface(RoundedCornerShape(16.dp), tint).padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Box(Modifier.size(40.dp).background(tint.copy(alpha=.12f), RoundedCornerShape(12.dp)), contentAlignment=Alignment.Center) { icon() }
+            Column(Modifier.weight(1f), verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                Text(title, style=MaterialTheme.typography.titleMedium, fontWeight=FontWeight.SemiBold, color=AppTheme.TextDark)
+                Text(description, style=MaterialTheme.typography.bodySmall, color=AppTheme.TextMuted)
+                badge?.let { Text(it, style=MaterialTheme.typography.labelSmall, color=MaterialTheme.colorScheme.secondary) }
+            }
+            actions?.let { Row(horizontalArrangement=Arrangement.spacedBy(8.dp), verticalAlignment=Alignment.CenterVertically, content=it) }
+        }
+        return
+    }
     Column(modifier.fillMaxWidth().communitySurface(RoundedCornerShape(28.dp),tint).padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
             Box(Modifier.size(44.dp).background(tint.copy(alpha=.16f),RoundedCornerShape(16.dp)),contentAlignment=Alignment.Center){icon()}

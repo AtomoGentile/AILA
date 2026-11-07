@@ -57,3 +57,27 @@ funziona anche se WebAssembly non si avvia, purche' il browser esegua ancora Jav
 Verifiche senza dipendenze: `node --test webApp/tests/*.test.cjs`. Su un dispositivo interessato
 dal blocco, verificare anche versione iOS, primo avvio online, avvio offline e riapertura dopo un
 aggiornamento. Il fallback non identifica da solo la causa di un errore del runtime.
+
+## Provare la beta desktop su Windows senza distribuire la PWA
+
+Apri la PR desktop su GitHub, scegli il controllo **PWA deploy** relativo all'ultimo
+commit e scarica l'artifact **aila-pwa** dalla pagina della build riuscita (serve l'accesso
+a GitHub per il download). Il nome del workflow comprende “deploy”, ma sulle PR compila
+soltanto e non pubblica la PWA.
+
+Estrai **tutto** lo ZIP, avvia `AVVIA-ANTEPRIMA.cmd` e lascia la finestra aperta.
+Serve Python 3. Apri **http://localhost:8765** in Chrome o Edge aggiornato e accedi
+con il tuo account. In alternativa, dalla cartella estratta:
+
+```powershell
+py -3 -m http.server 8765 --bind 127.0.0.1
+```
+
+Non aprire direttamente `index.html`. La sessione su localhost è separata dalla PWA
+stabile, ma il backend e i dati della classe sono quelli reali. Per fermare il server
+premi Ctrl+C. Le istruzioni sono incluse anche in `LEGGIMI-ANTEPRIMA.txt` nello ZIP.
+
+Per provare ACA e Brief, abilita AI e ACA nelle impostazioni AI e il servizio opzionale
+Brief (`NOW_NUDGE`). Il pulsante **Apri ACA** della sidebar apre l'assistente contestuale;
+se ACA è disattivata porta alle sue impostazioni, senza cambiare i consensi. Il Brief
+mantiene gli stessi criteri di visibilità e le stesse azioni della versione mobile.
