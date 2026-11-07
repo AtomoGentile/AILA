@@ -22,13 +22,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -113,8 +112,8 @@ fun AcaContextOverlay(
         tween(if (AppTheme.reduceMotion) 80 else if (answer == null || thinking) 260 else 620),
         label = "aca contextual rainbow"
     )
-    val rainbowSpin = if (AppTheme.reduceMotion) null else rememberInfiniteTransition(label = "aca contextual rainbow spin")
-        .animateFloat(0f, 360f, infiniteRepeatable(tween(9000, easing = LinearEasing)), label = "aca contextual rainbow angle")
+    val rainbowTravel = if (AppTheme.reduceMotion) null else rememberInfiniteTransition(label = "aca contextual rainbow travel")
+        .animateFloat(0f, 1f, infiniteRepeatable(tween(3600, easing = LinearEasing)), label = "aca contextual perimeter position")
     val sendFill by animateColorAsState(
         if(canSend || recording) AppTheme.PrimaryBlue else if(dark) Color(0xFF272F40) else Color(0xFFD0D9EA),
         tween(if(AppTheme.reduceMotion) 80 else 160), label = "aca send color"
@@ -190,10 +189,14 @@ fun AcaContextOverlay(
                             AilaAssistantTeal.copy(alpha = (.68f + dragProgress * .27f) * rainbowAlpha),
                             AppTheme.PrimaryBlue.copy(alpha = (.72f + dragProgress * .28f) * rainbowAlpha)
                         )
-                        rotate(rainbowSpin?.value ?: 0f, Offset(size.width / 2f, size.height / 2f)) {
-                            drawRoundRect(brush = Brush.sweepGradient(colors),
-                                cornerRadius = CornerRadius(composerRadius.toPx()), style = Stroke(stroke))
-                        }
+                        val radius = composerRadius.toPx()
+                        val perimeter = (2f * (size.width + size.height - 4f * radius) + 2f * kotlin.math.PI.toFloat() * radius).coerceAtLeast(1f)
+                        val segment = perimeter * .17f
+                        drawRoundRect(brush = Brush.sweepGradient(colors.map { it.copy(alpha = it.alpha * .18f) }),
+                            cornerRadius = CornerRadius(radius), style = Stroke(stroke))
+                        drawRoundRect(brush = Brush.sweepGradient(colors), cornerRadius = CornerRadius(radius),
+                            style = Stroke(stroke * 1.6f, pathEffect = PathEffect.dashPathEffect(
+                                floatArrayOf(segment, perimeter - segment), (rainbowTravel?.value ?: 0f) * perimeter)))
                     }
                 }
                 .semantics {
@@ -228,18 +231,26 @@ fun AcaContextOverlay(
                 colors=TextFieldDefaults.colors(focusedContainerColor=Color.Transparent,unfocusedContainerColor=Color.Transparent,focusedTextColor=AppTheme.TextDark,unfocusedTextColor=AppTheme.TextDark,focusedIndicatorColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent,focusedPlaceholderColor=muted,unfocusedPlaceholderColor=muted))
 
                 IconButton(onClick={keyboard?.hide();attachmentMenu=true},enabled=isInteractive&&!thinking&&!recording&&!transcribing,modifier=Modifier.size(48.dp).background(if(dark) Color(0xFF252A35) else Color(0xFFE3E9F5),CircleShape).semantics{contentDescription="Aggiungi allegato"}) { AppIcons.Plus(Modifier.size(28.dp),AppTheme.TextDark) }
-                IconButton(onClick={if(recording){recorder.cancel();voiceError=null;focus.requestFocus();keyboard?.show()}else{keyboard?.hide();voiceError=null;recorder.start()}},enabled=isInteractive&&!transcribing&&!thinking,modifier=Modifier.size(48.dp).background(if(recording) AppTheme.TintRed else if(!expanded && !thinking && !transcribing) AppTheme.PrimaryBlue else Color.Transparent,RoundedCornerShape(24.dp)).semantics{contentDescription=if(recording)"Elimina vocale"else"Registra un vocale per ACA"}) { if(recording)AppIcons.Close(Modifier.size(22.dp),AppTheme.TintRedInk)else AcaMic(if(!expanded && !thinking && !transcribing) Color.White else AppTheme.TextDark) }
-                IconButton(onClick={if(recording)recorder.stop()else submit()},enabled=isInteractive && !thinking && !transcribing && (recording || canSend),modifier=Modifier.size(48.dp).background(sendFill,RoundedCornerShape(24.dp)).semantics{contentDescription=if(recording)"Ferma e trascrivi vocale"else"Invia ad AILA"}) {
-                    if(thinking||transcribing)CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp,color=muted)else androidx.compose.animation.Crossfade(targetState=recording,animationSpec=tween(if(AppTheme.reduceMotion) 0 else 180),label="Vocale stop") { stopping ->
-                        if(stopping) Box(Modifier.size(25.dp),contentAlignment=Alignment.Center) { Box(Modifier.size(18.dp).background(Color.White,RoundedCornerShape(4.dp))) }
-                        else AppIcons.ArrowUp(Modifier.size(25.dp),if(canSend)Color.White else muted)
+                IconButton(onClick={
+                    when {
+                        recording -> recorder.stop()
+                        canSend -> submit()
+                        else -> { keyboard?.hide();voiceError=null;recorder.start() }
                     }
+                },enabled=isInteractive&&!transcribing&&!thinking,modifier=Modifier.size(48.dp).background(
+                    if(recording) AppTheme.TintRed else if(canSend || (!expanded && !thinking && !transcribing)) AppTheme.PrimaryBlue else sendFill,
+                    RoundedCornerShape(24.dp)
+                ).semantics{contentDescription=when { recording -> "Ferma e trascrivi vocale"; canSend -> "Invia ad AILA"; else -> "Registra un vocale per ACA" }}) {
+                    if(thinking||transcribing)CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp,color=muted)
+                    else if(recording) Box(Modifier.size(18.dp).background(Color.White,RoundedCornerShape(4.dp)))
+                    else if(canSend) AppIcons.ArrowUp(Modifier.size(25.dp),Color.White)
+                    else AcaMic(if(!expanded) Color.White else AppTheme.TextDark)
                 }
             }) { measurables, constraints ->
                 val w=constraints.maxWidth
                 val button=48.dp.roundToPx()
                 val gap=4.dp.roundToPx()
-                val controlsWidth=button*3+gap*2
+                val controlsWidth=button*2+gap
                 val fieldLeft=0
                 val fieldWidth=(w-controlsWidth-gap).coerceAtLeast(1)
                 val field=measurables[0].measure(constraints.copy(minWidth=fieldWidth,maxWidth=fieldWidth,minHeight=0))
@@ -249,8 +260,7 @@ fun AcaContextOverlay(
                 layout(w,h) {
                     field.placeRelative(fieldLeft,0)
                     controls[0].placeRelative(w-controlsWidth,controlY)
-                    controls[1].placeRelative(w-button*2-gap,controlY)
-                    controls[2].placeRelative(w-button,controlY)
+                    controls[1].placeRelative(w-button,controlY)
                 }
             }
             if(dragProgress>0f) Box(

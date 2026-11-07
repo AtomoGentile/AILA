@@ -48,7 +48,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
@@ -61,7 +60,6 @@ import androidx.compose.ui.unit.dp
 import circolareplus.data.remote.ApiException
 import circolareplus.data.repository.GitaRepository
 import circolareplus.design.AilaAssistantMark
-import circolareplus.design.AcaNeuralMark
 import circolareplus.design.AilaBackBar
 import circolareplus.design.AilaCard
 import circolareplus.design.AilaDuration
@@ -683,16 +681,6 @@ private fun GitaSection(
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = AppTheme.Space4)) {
-            Box(
-                modifier = Modifier.size(30.dp).clip(RoundedCornerShape(11.dp))
-                    .background(Brush.linearGradient(listOf(
-                        AppTheme.PrimaryBlue.copy(alpha = .13f),
-                        circolareplus.design.AilaAssistantViolet.copy(alpha = .14f),
-                        circolareplus.design.AilaAssistantTeal.copy(alpha = .13f)
-                    ))),
-                contentAlignment = Alignment.Center
-            ) { AcaNeuralMark(thinking = false, modifier = Modifier.size(28.dp)) }
-            Spacer(Modifier.width(AppTheme.Space8))
             AilaSectionTitle(text = title, modifier = Modifier.weight(1f))
             AnimatedContent(
                 targetState = if (countLabel != null) "$count $countLabel" else "$count",
@@ -704,10 +692,7 @@ private fun GitaSection(
                 },
                 label = "gitaCount"
             ) { label ->
-                Text(label, style = MaterialTheme.typography.labelLarge, color = AppTheme.TextMuted,
-                    modifier = Modifier.clip(RoundedCornerShape(100.dp))
-                        .background(AppTheme.PrimaryBlue.copy(alpha = .08f))
-                        .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space4))
+                Text(label, style = MaterialTheme.typography.labelLarge, color = AppTheme.TextMuted)
             }
         }
         AilaCard(modifier = Modifier.fillMaxWidth(), content = content)

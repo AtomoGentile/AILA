@@ -83,9 +83,8 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.lerp
 import kotlinx.coroutines.delay
 
@@ -179,10 +178,10 @@ fun AssistantChatScreen(
         androidx.compose.animation.core.tween(if (AppTheme.reduceMotion) 80 else 560),
         label = "assistant waiting rainbow alpha"
     )
-    val rainbowRotation = if (AppTheme.reduceMotion) null else androidx.compose.animation.core.rememberInfiniteTransition(label = "assistant waiting rainbow")
-        .animateFloat(0f, 360f, androidx.compose.animation.core.infiniteRepeatable(
-            androidx.compose.animation.core.tween(9000, easing = androidx.compose.animation.core.LinearEasing)
-        ), label = "assistant waiting rainbow rotation")
+    val rainbowTravel = if (AppTheme.reduceMotion) null else androidx.compose.animation.core.rememberInfiniteTransition(label = "assistant waiting rainbow")
+        .animateFloat(0f, 1f, androidx.compose.animation.core.infiniteRepeatable(
+            androidx.compose.animation.core.tween(3600, easing = androidx.compose.animation.core.LinearEasing)
+        ), label = "assistant waiting perimeter position")
     // Mentre la conversazione svanisce (indietro alla schermata iniziale) i messaggi sono gia'
     // stati svuotati: la lista che esce deve poter mostrare ancora gli ultimi che c'erano.
     val lastShown = remember { arrayOf(emptyList<AssistantMessage>()) }
@@ -393,10 +392,14 @@ fun AssistantChatScreen(
                             AilaAssistantTeal.copy(alpha = .82f * rainbowAlpha),
                             AppTheme.PrimaryBlue.copy(alpha = .92f * rainbowAlpha)
                         )
-                        rotate(rainbowRotation?.value ?: 0f, Offset(size.width / 2f, size.height / 2f)) {
-                            drawRoundRect(brush = Brush.sweepGradient(colors),
-                                cornerRadius = CornerRadius(28.dp.toPx()), style = Stroke(2.dp.toPx()))
-                        }
+                        val radius = 28.dp.toPx()
+                        val perimeter = (2f * (size.width + size.height - 4f * radius) + 2f * kotlin.math.PI.toFloat() * radius).coerceAtLeast(1f)
+                        val segment = perimeter * .17f
+                        drawRoundRect(brush = Brush.sweepGradient(colors.map { it.copy(alpha = it.alpha * .16f) }),
+                            cornerRadius = CornerRadius(radius), style = Stroke(1.5.dp.toPx()))
+                        drawRoundRect(brush = Brush.sweepGradient(colors), cornerRadius = CornerRadius(radius),
+                            style = Stroke(2.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(
+                                floatArrayOf(segment, perimeter - segment), (rainbowTravel?.value ?: 0f) * perimeter)))
                     }
                 }
                 .padding(horizontal = 12.dp, vertical = 6.dp),verticalAlignment = Alignment.CenterVertically) {
