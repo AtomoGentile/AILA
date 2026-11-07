@@ -37,9 +37,11 @@ Per provare senza toccare dati reali si può far girare il Worker in locale (`np
 
 ## Deploy
 
-Workflow `.github/workflows/web-deploy.yml`: su ogni push a `main` che tocca `shared/` o `webApp/` compila
-e pubblica su Cloudflare Pages; sulle pull request compila soltanto. Controlla che nessun file superi i
-25 MiB del limite di Pages.
+Workflow `.github/workflows/web-deploy.yml`: compila le pull request, i tag beta e le release; pubblica
+su Cloudflare Pages solo i tag stabili `vX.Y.Z`. I push a `main` e i tag `vX.Y.Z-beta.N` non cambiano
+il sito/PWA, così le beta restano fuori dalla distribuzione web. Il deploy manuale richiede il tag
+da compilare e pubblica soltanto se è stabile. Il workflow controlla anche che nessun file superi i 25 MiB del limite
+di Pages.
 
 ## Avvio e schermo blu
 
