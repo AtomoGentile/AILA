@@ -3810,19 +3810,25 @@ fun MainAppShell(
                                             circolareplus.design.AilaProfileButton(entry)
                                         }
                                     }
-                                    if(!isClassSearchOpen) circolareplus.design.AilaSegmentedTabs(
-                                        labels = ClassSection.entries.map { it.title },
-                                        selectedIndex = classSection.ordinal,
-                                        onSelect = { classSection = ClassSection.entries[it] },
-                                        modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16).padding(bottom = AppTheme.Space12)
-                                    )
+                                    androidx.compose.animation.AnimatedVisibility(
+                                        visible=!isClassSearchOpen,
+                                        enter=androidx.compose.animation.expandVertically(circolareplus.design.ailaSpatialSpring()) + androidx.compose.animation.fadeIn(circolareplus.design.ailaFadeSpec(180)) + androidx.compose.animation.slideInVertically(initialOffsetY={-it/8}),
+                                        exit=androidx.compose.animation.fadeOut(circolareplus.design.ailaFadeSpec(100)) + androidx.compose.animation.shrinkVertically(circolareplus.design.ailaSpatialSpring()) + androidx.compose.animation.slideOutVertically(targetOffsetY={-it/8})
+                                    ) {
+                                        circolareplus.design.AilaSegmentedTabs(
+                                            labels = ClassSection.entries.map { it.title },
+                                            selectedIndex = classSection.ordinal,
+                                            onSelect = { classSection = ClassSection.entries[it] },
+                                            modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16).padding(bottom = AppTheme.Space12)
+                                        )
+                                    }
                                 }
                                 circolareplus.platform.PlatformBackHandler(enabled=isClassSearchOpen && selectedTab==MainTab.CLASS && shellRoute==ShellRoute.TABS) {isClassSearchOpen=false}
                                 androidx.compose.animation.AnimatedVisibility(
                                     visible=isClassSearchOpen,
                                     modifier=Modifier.fillMaxWidth().weight(1f),
-                                    enter=androidx.compose.animation.expandVertically(circolareplus.design.ailaSpatialSpring()) + androidx.compose.animation.fadeIn(circolareplus.design.ailaFadeSpec(180)),
-                                    exit=androidx.compose.animation.fadeOut(circolareplus.design.ailaFadeSpec(100)) + androidx.compose.animation.shrinkVertically(circolareplus.design.ailaSpatialSpring())
+                                    enter=androidx.compose.animation.expandVertically(circolareplus.design.ailaSpatialSpring()) + androidx.compose.animation.fadeIn(circolareplus.design.ailaFadeSpec(180)) + androidx.compose.animation.slideInVertically(initialOffsetY={it/8}),
+                                    exit=androidx.compose.animation.fadeOut(circolareplus.design.ailaFadeSpec(100)) + androidx.compose.animation.shrinkVertically(circolareplus.design.ailaSpatialSpring()) + androidx.compose.animation.slideOutVertically(targetOffsetY={it/8})
                                 ) {
                                     ClassSearchPanel(onOpen={hit->
                                         isClassSearchOpen=false

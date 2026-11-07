@@ -51,6 +51,7 @@ fun ForumScreen(
  var rulesAccepted by rememberSaveable{mutableStateOf(false)};var showRules by remember{mutableStateOf(false)}
  var creating by remember{mutableStateOf(false)};var createTitle by remember{mutableStateOf("")};var createBody by remember{mutableStateOf("")}
  var error by remember{mutableStateOf<String?>(null)};var busy by remember{mutableStateOf(false)}
+ var listLoading by remember{mutableStateOf(true)}
  var notificationDialog by remember{mutableStateOf(false)};var mentionsDialog by remember{mutableStateOf(false)}
  var menuPost by remember{mutableStateOf<ForumPostDto?>(null)};var reportPost by remember{mutableStateOf<ForumPostDto?>(null)}
  var reportReason by remember{mutableStateOf("")};var reports by remember{mutableStateOf<List<ForumReportDto>?>(null)}
@@ -72,8 +73,8 @@ fun ForumScreen(
  }
  fun launchWork(block:suspend()->Unit){if(busy)return;busy=true;error=null;scope.launch{try{block()}
   catch(e:CancellationException){throw e}catch(e:Exception){error=e.message?:"Operazione non completata"}finally{busy=false;activity(null)}}}
- LaunchedEffect(threadId,threadFilter){calendarProposals=emptyList();proposalError=null;confirmingProposal=null;snapshot=null;focusPostId=null;replyTo=null;body="";pendingAttachments=emptyList();error=null;busy=true
-  try{refresh()}catch(e:CancellationException){throw e}catch(e:Exception){error=e.message}finally{busy=false}
+ LaunchedEffect(threadId,threadFilter){calendarProposals=emptyList();proposalError=null;confirmingProposal=null;snapshot=null;focusPostId=null;replyTo=null;body="";pendingAttachments=emptyList();error=null;listLoading=true
+  try{refresh()}catch(e:CancellationException){throw e}catch(e:Exception){error=e.message}finally{listLoading=false}
   while(isActive){delay(15_000);if(AppForeground.isForeground)try{refresh()}catch(e:CancellationException){throw e}catch(_:Exception){}}
  }
  DisposableEffect(Unit){onDispose{onActivity(null)}}
@@ -128,7 +129,7 @@ fun ForumScreen(
  Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight).then(if(inline)Modifier.padding(bottom=LocalBottomBarPadding.current) else Modifier.windowInsetsPadding(WindowInsets.safeDrawing)).imePadding()){
   if(!inline || threadId!=null)AilaBackBar(title=when{focusPostId!=null->"Conversazione";threadId!=null->"Educazione tra pere";else->"Educazione tra pere"},onBackClick=goBack,
    action={if(threadId!=null)AilaIconButton("Preferenze della discussione",{notificationDialog=true}){tint->AppIcons.Bell(color=tint)}})
-  if(busy)LinearProgressIndicator(Modifier.fillMaxWidth())
+  if(busy||listLoading)LinearProgressIndicator(Modifier.fillMaxWidth())
   error?.let{Text(it,Modifier.padding(16.dp),color=AppTheme.TintRedInk)}
   if(threadId==null){
    LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
@@ -136,9 +137,9 @@ fun ForumScreen(
     item {
      val filters=listOf("ALL","OPEN","RESOLVED","MINE")
      AilaFilterBar(labels=listOf("Tutte","Aperte","Risolte","Le mie"),selectedIndex=filters.indexOf(threadFilter),
-      onSelect={if(!busy && threadFilter!=filters[it]) {busy=true;threadFilter=filters[it];threads=emptyList();moreThreads=false}})
+      onSelect={if(threadFilter!=filters[it]) {threadFilter=filters[it];threads=emptyList();moreThreads=false}})
     }
-    if(threads.isEmpty()&&!busy) item {
+    if(threads.isEmpty()&&!busy&&!listLoading) item {
      if(threadFilter=="ALL") ForumEmptyState()
      else ForumEmptyState(title="Nessuna discussione qui",description="Non ci sono discussioni con questo filtro. Prova un’altra categoria.")
     }

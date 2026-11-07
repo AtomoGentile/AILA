@@ -227,12 +227,13 @@ fun AcaContextOverlay(
                 val controls=measurables.drop(1).map { it.measure(androidx.compose.ui.unit.Constraints.fixed(button,button)) }
                 val compactH=maxOf(field.height,button)
                 val rowY=((field.height+gap)*expansion).toInt()
+                val controlY=(rowY+((compactH-button)/2*(1f-expansion))).toInt()
                 val h=(compactH+(field.height+gap+button-compactH)*expansion).toInt()
                 layout(w,h) {
                     field.placeRelative(((button+gap)*(1f-expansion)).toInt(),((compactH-field.height)/2*(1f-expansion)).toInt())
-                    controls[0].placeRelative(0,rowY)
-                    controls[1].placeRelative(w-button*2-gap,rowY)
-                    controls[2].placeRelative(w-button,rowY)
+                    controls[0].placeRelative(0,controlY)
+                    controls[1].placeRelative(w-button*2-gap,controlY)
+                    controls[2].placeRelative(w-button,controlY)
                 }
             }
             }
