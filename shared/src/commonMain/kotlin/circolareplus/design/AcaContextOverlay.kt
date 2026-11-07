@@ -271,7 +271,7 @@ fun AcaContextOverlay(
                 val h=maxOf(field.height,controlY+button)
                 layout(w,h) {
                     field.placeRelative(0,0)
-                    controls[0].placeRelative((w-controlsWidth)*(1f-wideProgress),controlY)
+                    controls[0].placeRelative(((w-controlsWidth)*(1f-wideProgress)).toInt(),controlY)
                     controls[1].placeRelative(w-button,controlY)
                 }
             }
