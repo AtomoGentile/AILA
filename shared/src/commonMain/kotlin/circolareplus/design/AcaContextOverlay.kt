@@ -199,8 +199,7 @@ fun AcaContextOverlay(
             }
             }
             Layout(modifier=Modifier.fillMaxWidth(),content={
-            TextField(question,{question=it},placeholder={Text("Chiedi ad AILA…",style=MaterialTheme.typography.titleMedium,maxLines=1)},modifier=Modifier.focusRequester(focus),readOnly=!isInteractive||recording||transcribing,minLines=1,maxLines=4,
-                contentPadding=PaddingValues(horizontal=0.dp, vertical=8.dp),
+            TextField(question,{question=it},placeholder={Text("Chiedi ad AILA…",style=MaterialTheme.typography.titleMedium,maxLines=1)},modifier=Modifier.focusRequester(focus).offset(x=(-16).dp),readOnly=!isInteractive||recording||transcribing,minLines=1,maxLines=4,
                 textStyle=MaterialTheme.typography.titleMedium,
                 colors=TextFieldDefaults.colors(focusedContainerColor=Color.Transparent,unfocusedContainerColor=Color.Transparent,focusedTextColor=AppTheme.TextDark,unfocusedTextColor=AppTheme.TextDark,focusedIndicatorColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent,focusedPlaceholderColor=muted,unfocusedPlaceholderColor=muted))
 
