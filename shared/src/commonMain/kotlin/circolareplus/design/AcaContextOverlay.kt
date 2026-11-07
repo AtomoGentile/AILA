@@ -63,6 +63,8 @@ fun AcaContextOverlay(
     var transcribing by remember { mutableStateOf(false) }
     var voiceError by remember { mutableStateOf<String?>(null) }
     var dragProgress by remember { mutableStateOf(0f) }
+    var dragDistancePx by remember { mutableStateOf(0f) }
+    var dragging by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val picker = circolareplus.platform.rememberContentPicker({ voiceError = it }) {
         attachmentMenu = false
@@ -134,8 +136,11 @@ fun AcaContextOverlay(
         val panelSurface = if(AppTheme.isGlass) Modifier.ailaGlassSurface(shape,
             tint=(if(dark) Color(0xFF090C13) else Color.White).copy(alpha=if(dark) .98f else .94f))
             else Modifier.background(Brush.linearGradient(surface)).border(1.dp,edge,shape)
+        val dragDistance = with(androidx.compose.ui.platform.LocalDensity.current) { dragDistancePx.toDp() }
         Column(Modifier.align(Alignment.TopCenter).padding(horizontal = 16.dp, vertical = 8.dp)
-            .widthIn(max = 600.dp).fillMaxWidth().heightIn(max = availableHeight * .86f),
+            .widthIn(max = 600.dp).fillMaxWidth()
+            .then(if (dragging) Modifier.heightIn(min = minOf(availableHeight * .86f, 80.dp + dragDistance)) else Modifier)
+            .heightIn(max = availableHeight * .86f),
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             // The response owns its scroll area; the composer stays available below it.
             if(action?.actionPlan != null || answer != null) {
@@ -162,17 +167,19 @@ fun AcaContextOverlay(
                 .pointerInput(isInteractive,recording,transcribing) {
                     var distance=0f
                     val threshold=280.dp.toPx()
-                    detectVerticalDragGestures(onDragStart={distance=0f;dragProgress=0f},
+                    detectVerticalDragGestures(onDragStart={distance=0f;dragProgress=0f;dragDistancePx=0f;dragging=true},
                         onVerticalDrag={change,amount->
                             change.consume()
-                            distance+=amount
+                            distance=(distance+amount).coerceAtLeast(0f)
                             dragProgress=(distance/threshold).coerceIn(0f,1f)
+                            dragDistancePx=distance
                         },
                         onDragEnd={
                             val shouldOpen=distance>threshold
-                            if(shouldOpen)openChat() else dragProgress=0f
+                            dragging=false
+                            if(shouldOpen)openChat() else { dragProgress=0f;dragDistancePx=0f }
                         },
-                        onDragCancel={distance=0f;dragProgress=0f})
+                        onDragCancel={distance=0f;dragging=false;dragProgress=0f;dragDistancePx=0f})
                 }
                 .drawBehind {
                     if (rainbowAlpha > 0f) {
@@ -232,23 +239,22 @@ fun AcaContextOverlay(
                 val w=constraints.maxWidth
                 val button=48.dp.roundToPx()
                 val gap=4.dp.roundToPx()
-                val fieldLeft=button+gap
-                val fieldWidth=(w-fieldLeft-(1f-composerExpansion)*(button*2+gap)).toInt().coerceAtLeast(1)
+                val controlsWidth=button*3+gap*2
+                val fieldLeft=0
+                val fieldWidth=(w-controlsWidth-gap).coerceAtLeast(1)
                 val field=measurables[0].measure(constraints.copy(minWidth=fieldWidth,maxWidth=fieldWidth,minHeight=0))
                 val controls=measurables.drop(1).map { it.measure(androidx.compose.ui.unit.Constraints.fixed(button,button)) }
-                val compactH=maxOf(field.height,button)
-                val rowY=((field.height+gap)*composerExpansion).toInt()
-                val controlY=(rowY+((compactH-button)/2*(1f-composerExpansion))).toInt()
-                val h=(compactH+(field.height+gap+button-compactH)*composerExpansion).toInt()
+                val controlY=((field.height-button)/2).coerceAtLeast(0)
+                val h=maxOf(field.height,button)
                 layout(w,h) {
-                    field.placeRelative(fieldLeft,((compactH-field.height)/2*(1f-composerExpansion)).toInt())
-                    controls[0].placeRelative(0,controlY)
+                    field.placeRelative(fieldLeft,0)
+                    controls[0].placeRelative(w-controlsWidth,controlY)
                     controls[1].placeRelative(w-button*2-gap,controlY)
                     controls[2].placeRelative(w-button,controlY)
                 }
             }
             if(dragProgress>0f) Box(
-                Modifier.fillMaxWidth().height(availableHeight*.42f*dragProgress),
+                Modifier.fillMaxWidth().height(dragDistance),
                 contentAlignment=Alignment.Center
             ) {
                 if(dragProgress>.6f) Text(

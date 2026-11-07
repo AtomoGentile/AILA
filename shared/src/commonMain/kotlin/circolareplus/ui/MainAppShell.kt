@@ -3821,7 +3821,7 @@ fun MainAppShell(
                                     androidx.compose.animation.AnimatedVisibility(
                                         visible=!isClassSearchOpen,
                                         enter=androidx.compose.animation.expandVertically(circolareplus.design.ailaSpatialSpring()) + androidx.compose.animation.fadeIn(circolareplus.design.ailaFadeSpec(180)) + androidx.compose.animation.slideInVertically(initialOffsetY={-it/8}),
-                                        exit=androidx.compose.animation.fadeOut(circolareplus.design.ailaFadeSpec(100)) + androidx.compose.animation.shrinkVertically(circolareplus.design.ailaSpatialSpring()) + androidx.compose.animation.slideOutVertically(targetOffsetY={-it/8})
+                                        exit=androidx.compose.animation.fadeOut(circolareplus.design.ailaFadeSpec(100)) + androidx.compose.animation.shrinkVertically(circolareplus.design.ailaSpatialSpring()) + androidx.compose.animation.slideOutVertically(targetOffsetY={-it})
                                     ) {
                                         circolareplus.design.AilaSegmentedTabs(
                                             labels = ClassSection.entries.map { it.title },
@@ -3836,7 +3836,7 @@ fun MainAppShell(
                                     visible=isClassSearchOpen,
                                     modifier=Modifier.fillMaxWidth().weight(1f),
                                     enter=androidx.compose.animation.expandVertically(circolareplus.design.ailaSpatialSpring()) + androidx.compose.animation.fadeIn(circolareplus.design.ailaFadeSpec(180)) + androidx.compose.animation.slideInVertically(initialOffsetY={-it/8}),
-                                    exit=androidx.compose.animation.fadeOut(circolareplus.design.ailaFadeSpec(100)) + androidx.compose.animation.shrinkVertically(circolareplus.design.ailaSpatialSpring()) + androidx.compose.animation.slideOutVertically(targetOffsetY={-it/8})
+                                    exit=androidx.compose.animation.fadeOut(circolareplus.design.ailaFadeSpec(100)) + androidx.compose.animation.shrinkVertically(circolareplus.design.ailaSpatialSpring()) + androidx.compose.animation.slideOutVertically(targetOffsetY={-it})
                                 ) {
                                     ClassSearchPanel(onOpen={hit->
                                         isClassSearchOpen=false

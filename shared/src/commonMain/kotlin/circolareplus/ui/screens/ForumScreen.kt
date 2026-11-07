@@ -51,7 +51,6 @@ fun ForumScreen(
  var rulesAccepted by rememberSaveable{mutableStateOf(false)};var showRules by remember{mutableStateOf(false)}
  var creating by remember{mutableStateOf(false)};var createTitle by remember{mutableStateOf("")};var createBody by remember{mutableStateOf("")}
  var error by remember{mutableStateOf<String?>(null)};var busy by remember{mutableStateOf(false)}
- var listLoading by remember{mutableStateOf(true)}
  var notificationDialog by remember{mutableStateOf(false)};var mentionsDialog by remember{mutableStateOf(false)}
  var menuPost by remember{mutableStateOf<ForumPostDto?>(null)};var reportPost by remember{mutableStateOf<ForumPostDto?>(null)}
  var reportReason by remember{mutableStateOf("")};var reports by remember{mutableStateOf<List<ForumReportDto>?>(null)}
@@ -74,8 +73,8 @@ fun ForumScreen(
  }
  fun launchWork(block:suspend()->Unit){if(busy)return;busy=true;error=null;scope.launch{try{block()}
   catch(e:CancellationException){throw e}catch(e:Exception){error=e.message?:"Operazione non completata"}finally{busy=false;activity(null)}}}
- LaunchedEffect(threadId,threadFilter){calendarProposals=emptyList();proposalError=null;confirmingProposal=null;snapshot=null;focusPostId=null;replyTo=null;body="";pendingAttachments=emptyList();error=null;listLoading=true
-  try{refresh()}catch(e:CancellationException){throw e}catch(e:Exception){error=e.message}finally{listLoading=false}
+ LaunchedEffect(threadId,threadFilter){calendarProposals=emptyList();proposalError=null;confirmingProposal=null;snapshot=null;focusPostId=null;replyTo=null;body="";pendingAttachments=emptyList();error=null
+  try{refresh()}catch(e:CancellationException){throw e}catch(e:Exception){error=e.message}
   while(isActive){delay(15_000);if(AppForeground.isForeground)try{refresh()}catch(e:CancellationException){throw e}catch(_:Exception){}}
  }
  DisposableEffect(Unit){onDispose{onActivity(null)}}
@@ -132,26 +131,32 @@ fun ForumScreen(
    action={if(threadId!=null)AilaIconButton("Preferenze della discussione",{notificationDialog=true}){tint->AppIcons.Bell(color=tint)}})
   error?.let{Text(it,Modifier.padding(16.dp),color=AppTheme.TintRedInk)}
   if(threadId==null){
-   LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(start=16.dp,end=16.dp,top=16.dp,bottom=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
-    item { ForumIntroduction(busy, onCreate = { creating = true }, onRules = { showRules = true }) }
-    item {
-     val filters=listOf("ALL","OPEN","RESOLVED","MINE")
-     AilaFilterBar(labels=listOf("Tutte","Aperte","Risolte","Le mie"),selectedIndex=filters.indexOf(threadFilter),
-      onSelect={if(threadFilter!=filters[it]) {threadFilter=filters[it];threads=emptyList();moreThreads=false}})
-    }
-    item { Spacer(Modifier.height(4.dp)) }
-    if(threads.isEmpty()&&!busy&&!listLoading) item {
+   Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal=16.dp).padding(top=16.dp)) {
+    ForumIntroduction(busy, onCreate = { creating = true }, onRules = { showRules = true })
+    Spacer(Modifier.height(12.dp))
+    val filters=listOf("ALL","OPEN","RESOLVED","MINE")
+    AilaFilterBar(labels=listOf("Tutte","Aperte","Risolte","Le mie"),selectedIndex=filters.indexOf(threadFilter),
+     onSelect={if(threadFilter!=filters[it]) {threadFilter=filters[it];threads=emptyList();moreThreads=false}})
+    Spacer(Modifier.height(16.dp))
+    if(threads.isEmpty()&&!busy) {
+     // La card pronta mantiene il ritmo della Bacheca anche mentre arriva la prima risposta
+     // del server, evitando che compaia in ritardo rispetto alle altre superfici della pagina.
      if(threadFilter=="ALL") ForumEmptyState()
      else ForumEmptyState(title="Nessuna discussione qui",description="Non ci sono discussioni con questo filtro. Prova un’altra categoria.")
+    } else LazyColumn(
+     modifier=Modifier.weight(1f).fillMaxWidth(),
+     contentPadding=PaddingValues(bottom=16.dp),
+     verticalArrangement=Arrangement.spacedBy(AppTheme.Space12)
+    ) {
+     items(threads,key={it.id}){t->AilaCard(onClick={threadId=t.id}){
+      Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){
+       Text(t.title,style=MaterialTheme.typography.titleMedium,color=AppTheme.TextDark)
+       Text("${t.replies} risposte · ${if(t.resolved)"Risolta"else"Aperta"}"+(if(t.featuredPostId!=null)" · Risposta in evidenza"else""),color=AppTheme.TextMuted,style=MaterialTheme.typography.bodySmall)
+       if(t.needsResolution)Text("Sei ancora qui? Puoi indicare se la domanda è risolta.",color=AppTheme.PrimaryBlue,style=MaterialTheme.typography.bodySmall)
+      }
+     }}
+     if(moreThreads)item{TextButton(onClick={launchWork{val next=repo.list(threads.size,filter=threadFilter);threads=(threads+next.threads).distinctBy{it.id};moreThreads=next.hasMore}}){Text("Altre discussioni")}}
     }
-    items(threads,key={it.id}){t->AilaCard(onClick={threadId=t.id}){
-     Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){
-      Text(t.title,style=MaterialTheme.typography.titleMedium,color=AppTheme.TextDark)
-      Text("${t.replies} risposte · ${if(t.resolved)"Risolta"else"Aperta"}"+(if(t.featuredPostId!=null)" · Risposta in evidenza"else""),color=AppTheme.TextMuted,style=MaterialTheme.typography.bodySmall)
-      if(t.needsResolution)Text("Sei ancora qui? Puoi indicare se la domanda è risolta.",color=AppTheme.PrimaryBlue,style=MaterialTheme.typography.bodySmall)
-     }
-    }}
-    if(moreThreads)item{TextButton(onClick={launchWork{val next=repo.list(threads.size,filter=threadFilter);threads=(threads+next.threads).distinctBy{it.id};moreThreads=next.hasMore}}){Text("Altre discussioni")}}
    }
   }else{
    val snap=snapshot
