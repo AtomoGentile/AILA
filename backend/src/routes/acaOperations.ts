@@ -20,11 +20,11 @@ export function validAction(raw:unknown):raw is Action {
  if(!['calendar.create','calendar.update','calendar.delete'].includes(a.tool)||typeof a.title!=='string'||!a.title.trim()||a.title.length>200)return false;
  if(!categories.includes(a.category)||!['CLASS','SELF','SPECIFIC'].includes(a.visibility)||typeof a.date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(a.date))return false;
  const date=new Date(a.date+'T00:00:00Z');if(!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==a.date||a.date.startsWith('0000'))return false;
- if(a.time!=null){if(typeof a.time!=='string')return false;
+ if(a.time!=null&&(a.tool==='calendar.create'||a.tool==='calendar.update'&&Array.isArray(a.fields)&&a.fields.includes('time'))){if(typeof a.time!=='string')return false;
   const range=/^Dalla ([1-6])ª alla ([1-6])ª ora$/.exec(a.time);
   if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(a.time)&&!/^[1-6]ª ora$/.test(a.time)&&!(range&&range[1]<=range[2]))return false;
  }
- if(a.notes!=null&&(typeof a.notes!=='string'||a.notes.length>2000))return false;
+ if(a.notes!=null&&(a.tool==='calendar.create'||a.tool==='calendar.update'&&Array.isArray(a.fields)&&a.fields.includes('notes'))&&(typeof a.notes!=='string'||a.notes.length>2000))return false;
  if(a.tool==='calendar.update'&&(!Array.isArray(a.fields)||!a.fields.length||!a.fields.every(f=>['title','date','time','category','notes','visibility'].includes(f))))return false;
  if(a.visibility==='SPECIFIC'){
   if(!Array.isArray(a.visibleToUserIds)||!a.visibleToUserIds.length||a.visibleToUserIds.length>100||a.visibleToUserIds.some(id=>typeof id!=='string'||!id.trim()))return false;

@@ -90,6 +90,9 @@ class AilaAssistant(
         // Plan mutations before informational shortcuts. Planning never writes; only the
         // separate confirmation handler can pass the displayed plan to the executor.
         if (actionsEnabled && mode == AssistantMode.GENERAL && AssistantActionIntent.matches(question, history)) {
+            AssistantAudienceEdit.plan(question, history, knowledge)?.let { plan ->
+                if (AssistantActionPrompt.validate(plan, knowledge)) return actionReply(plan)
+            }
             onAgentPhase(AssistantAgentPhase.READING)
             val searchQuery = AssistantContext.searchQuery(question, history)
             val texts = fetchCircularTexts(
@@ -97,23 +100,28 @@ class AilaAssistant(
                 knowledge.circulars, budgetMs = PREFETCH_BUDGET_MS
             )
             onAgentPhase(AssistantAgentPhase.PLANNING)
-            return when (val result = classifierFactory().generateAnswer(
-                AssistantActionPrompt.builderFor(knowledge, history, question, texts, searchQuery).withAttachmentServices(knowledge.attachedSources.map{it.file.service}.toSet())
-            )) {
-                is AiTextResult.Failure -> AssistantReply(result.reason, isError = true)
+            val classifier = classifierFactory()
+            suspend fun generate(repair: Boolean) = classifier.generateAnswer(
+                AssistantActionPrompt.builderFor(knowledge, history, question, texts, searchQuery, repair)
+                    .withAttachmentServices(knowledge.attachedSources.map{it.file.service}.toSet())
+            )
+            var result = generate(false)
+            var plan = (result as? AiTextResult.Success)?.let { AssistantActionPrompt.parse(it.text, knowledge) }
+            if (result is AiTextResult.Success && (plan == null || !AssistantActionPrompt.validate(plan, knowledge))) {
+                // Malformed model output is not missing user information. Retry once with
+                // the compact schema rather than repeatedly asking for the same event title.
+                result = generate(true)
+                plan = (result as? AiTextResult.Success)?.let { AssistantActionPrompt.parse(it.text, knowledge) }
+            }
+            return when (val answer = result) {
+                is AiTextResult.Failure -> AssistantReply(answer.reason, isError = true)
                 is AiTextResult.Success -> {
-                    val plan = AssistantActionPrompt.parse(result.text)?.copy(requestedByUserId = knowledge.user?.id)
-                    if (plan == null || !AssistantActionPrompt.validate(plan, knowledge)) {
-                        AssistantReply("Non ho ottenuto un piano valido. Specifica quali eventi vuoi creare o modificare e quali dettagli devono cambiare.",
-                            modelLabel = "AILA ACA", awaitingActionInput = true)
-                    } else if (plan.actions.isEmpty()) {
-                        AssistantReply(plan.clarification.ifBlank { "Quali eventi vuoi creare o modificare e con quali dettagli?" },
-                            modelLabel = "AILA ACA", awaitingActionInput = true)
+                    val verified = plan?.copy(requestedByUserId = knowledge.user?.id)
+                    if (verified == null || !AssistantActionPrompt.validate(verified, knowledge)) {
+                        AssistantReply("Il modello non è riuscito a preparare la modifica. Nessun evento è stato modificato. Riprova oppure scegli un altro modello nelle impostazioni AI.",
+                            modelLabel = "AILA ACA", isError = true)
                     } else {
-                        AssistantReply("Ho preparato queste azioni. Controlla eventi, date, orari e destinatari, poi conferma." +
-                            plan.clarification.takeIf { it.isNotBlank() }?.let { "\n$it" }.orEmpty(),
-                            modelLabel = "AILA ACA", actionPlan = plan,
-                            awaitingActionInput = plan.clarification.isNotBlank())
+                        actionReply(verified)
                     }
                 }
             }
@@ -214,6 +222,16 @@ class AilaAssistant(
             ),
             modelLabel = secondResult.modelLabel
         )
+    }
+
+    private fun actionReply(plan: AssistantActionPlan): AssistantReply = if (plan.actions.isEmpty()) {
+        AssistantReply(plan.clarification.ifBlank { "Quali eventi vuoi creare o modificare e con quali dettagli?" },
+            modelLabel = "AILA ACA", awaitingActionInput = true)
+    } else {
+        AssistantReply("Ho preparato queste azioni. Controlla eventi, date, orari e destinatari, poi conferma." +
+            plan.clarification.takeIf { it.isNotBlank() }?.let { "\n$it" }.orEmpty(),
+            modelLabel = "AILA ACA", actionPlan = plan,
+            awaitingActionInput = plan.clarification.isNotBlank())
     }
 
     /**

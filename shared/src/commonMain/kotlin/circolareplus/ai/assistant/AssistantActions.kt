@@ -11,6 +11,11 @@ import circolareplus.util.parseIsoDate
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 /** Intent is checked on the user's turn only, never on retrieved documents. */
 internal object AssistantActionIntent {
@@ -93,6 +98,7 @@ Strumenti: calendar.create, calendar.update, calendar.delete. Ogni azione ha que
 {"tool":"calendar.create","title":"Esame scritto","date":"2027-03-20","category":"VERIFICA","time":null,"notes":null,"visibility":"CLASS","circularNumber":null}.
 Per calendar.update e calendar.delete aggiungi eventId, copiato ESATTAMENTE dagli EVENTI MODIFICABILI. Non inventare identificatori.
 Per calendar.update aggiungi fields, l'elenco dei SOLI campi che l'utente ha chiesto di cambiare: title, date, time, category, notes, visibility.
+Per modificare destinatari usa la forma COMPATTA: {"tool":"calendar.update","eventId":"ID ESATTO","fields":["visibility"],"visibility":"SPECIFIC","visibleToUserIds":["ID UTENTE"]}. NON ricopiare titolo, data, ora o categoria: li recupera l'app dall'evento. Per ogni modifica includi solo eventId, tool, fields e i campi richiesti.
 Gli altri valori restano quelli dell'evento originale. Se l'utente chiede tutte le date di un corso, modifica TUTTI gli eventi corrispondenti già in calendario, senza crearne copie. Se il riferimento è ambiguo, chiedi chiarimento senza azioni.
 Cambia destinatari SOLO se richiesto: aggiungi visibility a fields e usa visibleToUserIds per i destinatari specifici. Per aggiungere una nota, mantieni le note esistenti e integra il testo richiesto. Per calendar.delete copia titolo e data dell'evento da eliminare; serve comunque conferma.
 Categorie: VERIFICA, INTERROGAZIONE, PAGAMENTO, USCITA_DIDATTICA, ENTRATA, AVVISO, ALTRO.
@@ -113,7 +119,8 @@ circularNumber solo se il numero esiste nei dati e l'evento viene da quella circ
         history: List<AssistantMessage>,
         question: String,
         deepTexts: Map<Int, String>,
-        searchQuery: String
+        searchQuery: String,
+        repair: Boolean = false
     ) = aiPromptBuilder(AiFeature.AGENT) { maxChars ->
         // Reserve the current turn and recent history before adding app context. A truncated
         // request must never become a partial write; reject it rather than silently clipping.
@@ -134,7 +141,7 @@ circularNumber solo se il numero esiste nei dati e l'evento viene da quella circ
             .joinToString("\n") { "id=${it.id}; nome=${it.firstName} ${it.lastName}" }
         val omitted = if (shown.size < editable.size) "\nElenco parziale: ${editable.size} eventi modificabili, ${shown.size} mostrati. Se la richiesta riguarda tutte le date e non puoi verificarne la completezza, chiedi di restringere il corso o il periodo, senza azioni." else ""
         val request = "OGGI: ${knowledge.todayIso}\nDESTINATARI DISPONIBILI:\n$recipients\nEVENTI MODIFICABILI:\n$events$omitted\nCONVERSAZIONE:\n$turns\nRICHIESTA UTENTE:\n$question"
-        val systemPrompt = system(knowledge)
+        val systemPrompt = system(knowledge) + if (repair) "\nLa risposta precedente non era un piano valido. Restituisci SOLO JSON. Per gli aggiornamenti usa la forma compatta con eventId e i soli campi da cambiare; se non puoi identificare eventi e destinatari con certezza, restituisci actions vuoto e una domanda precisa in clarification. Non ripetere una risposta informativa." else ""
         val room = maxChars - systemPrompt.length - request.length - 40
         require(room >= 0) { "La richiesta è troppo lunga per questo modello. Dividi gli eventi in più messaggi." }
         require(knowledge.attachedSources.sumOf{it.text.length+it.file.name.length+200} <= (room*.6f).toInt()) {
@@ -153,11 +160,41 @@ circularNumber solo se il numero esiste nei dati e l'evento viene da quella circ
         AiPrompt(systemPrompt, "DATI DELL'APP:\n$context\n$request")
     }
 
-    fun parse(raw: String): AssistantActionPlan? = try {
-        ModelJsonExtractor.extractJsonObject(raw)?.let { json.decodeFromString<AssistantActionPlan>(it) }
-            ?.takeIf { it.actions.size <= MAX_ACTIONS }
-    } catch (_: Exception) {
-        null
+    fun parse(raw: String, knowledge: AssistantKnowledge? = null): AssistantActionPlan? {
+        return try {
+            ModelJsonExtractor.extractJsonObject(raw)?.let { extracted ->
+                val root = json.parseToJsonElement(extracted).jsonObject
+                val actions = root["actions"]?.jsonArray ?: return null
+                val expanded = actions.map { element ->
+                    val patch = element.jsonObject
+                    val tool = patch["tool"]?.jsonPrimitive?.content ?: return null
+                    if (knowledge == null || tool !in setOf("calendar.update", "calendar.delete")) element else {
+                        val event = knowledge.calendarEvents.firstOrNull {
+                            it.id == patch["eventId"]?.jsonPrimitive?.content
+                        } ?: return null
+                        val fields = patch["fields"]?.jsonArray?.map { it.jsonPrimitive.content }.orEmpty()
+                        if (tool == "calendar.update" && fields.any { it !in patch }) return null
+                        // The model chooses the target and changed fields. Existing values come
+                        // from app data, including times written in older calendar formats.
+                        val original = AssistantCalendarAction(
+                            tool = tool, eventId = event.id, fields = fields, title = event.title,
+                            date = event.date, time = event.time, category = event.category, notes = event.notes,
+                            visibility = if (event.isForAll) "CLASS" else "SPECIFIC",
+                            visibleToUserIds = if (event.isForAll) null else event.visibleToUserIds
+                        )
+                        val base = json.encodeToJsonElement(AssistantCalendarAction.serializer(), original).jsonObject
+                        val selected = if (tool == "calendar.delete") emptyMap() else patch.filterKeys {
+                            it in fields || it == "visibleToUserIds" && "visibility" in fields
+                        }
+                        JsonObject(base + selected)
+                    }
+                }
+                json.decodeFromString<AssistantActionPlan>(JsonObject(root + ("actions" to JsonArray(expanded))).toString())
+            }
+                ?.takeIf { it.actions.size <= MAX_ACTIONS }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     fun validate(plan: AssistantActionPlan, knowledge: AssistantKnowledge): Boolean =
@@ -169,9 +206,13 @@ circularNumber solo se il numero esiste nei dati e l'evento viene da quella circ
             action.title.isNotBlank() && action.title.length <= 200 &&
             action.date.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) && date != null &&
             date.year in 1..9999 && date.month in 1..12 && date.day in 1..daysInMonth(date.year, date.month) &&
-            validTime(action.time) && (action.notes?.length ?: 0) <= 2000 &&
+            (validTime(action.time) || action.tool != "calendar.create" && "time" !in action.fields &&
+                knowledge.calendarEvents.any { it.id == action.eventId && it.time == action.time }) &&
+            ((action.notes?.length ?: 0) <= 2000 || action.tool != "calendar.create" && "notes" !in action.fields &&
+                knowledge.calendarEvents.any { it.id == action.eventId && it.notes == action.notes }) &&
             action.visibility in setOf("CLASS", "SELF", "SPECIFIC") &&
-            (if (action.visibility == "SPECIFIC") !action.visibleToUserIds.isNullOrEmpty() &&
+            (action.tool != "calendar.create" && "visibility" !in action.fields ||
+             if (action.visibility == "SPECIFIC") !action.visibleToUserIds.isNullOrEmpty() &&
                 action.visibleToUserIds.all { id -> id == knowledge.user?.id || knowledge.classmates.any { it.id == id } }
              else action.visibleToUserIds.isNullOrEmpty()) &&
             (action.circularNumber == null || knowledge.circulars.any { it.number == action.circularNumber })

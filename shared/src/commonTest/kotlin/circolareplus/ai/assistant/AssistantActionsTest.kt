@@ -10,6 +10,36 @@ import kotlinx.serialization.encodeToString
 import kotlin.test.*
 
 class AssistantActionsTest {
+    @Test fun compactUpdateLoadsUnchangedFieldsFromTheActualEvent() {
+        val existing = event(action).copy(createdByUserId = user.id, time = "8ª ora", notes = "Note originali")
+        val context = knowledge.copy(calendarEvents = listOf(existing))
+        val plan = assertNotNull(AssistantActionPrompt.parse("""{"actions":[{"tool":"calendar.update","eventId":"e1","fields":["visibility"],"visibility":"SPECIFIC","visibleToUserIds":["u1"]}]}""", context))
+        val update = plan.actions.single()
+        assertEquals(existing.title, update.title)
+        assertEquals(existing.date, update.date)
+        assertEquals(existing.time, update.time)
+        assertEquals(existing.notes, update.notes)
+        assertTrue(AssistantActionPrompt.validate(plan, context))
+        assertFalse(AssistantActionPrompt.validate(plan.copy(actions = listOf(update.copy(fields = listOf("time")))), context))
+    }
+
+    @Test fun compactUpdateNeverGuessesAnIdOrSuppliesAMissingChange() {
+        val context = knowledge.copy(calendarEvents = listOf(event(action).copy(createdByUserId = user.id)))
+        assertNull(AssistantActionPrompt.parse("""{"actions":[{"tool":"calendar.update","eventId":"unknown","fields":["notes"],"notes":"Autorizzazione"}]}""", context))
+        assertNull(AssistantActionPrompt.parse("""{"actions":[{"tool":"calendar.update","eventId":"e1","fields":["notes"]}]}""", context))
+        assertNull(AssistantActionPrompt.parse("""{"actions":[{"tool":"calendar.create","title":"FCE"}]}""", context))
+    }
+
+    @Test fun unselectedModelCopiesCannotChangeAnExistingEvent() {
+        val existing = event(action).copy(createdByUserId = user.id)
+        val context = knowledge.copy(calendarEvents = listOf(existing))
+        val plan = assertNotNull(AssistantActionPrompt.parse("""{"actions":[{"tool":"calendar.update","eventId":"e1","fields":["notes"],"notes":"Autorizzazione","date":"2030-01-01","title":"Inventato","time":"inventato"}]}""", context))
+        assertEquals(existing.date, plan.actions.single().date)
+        assertEquals(existing.title, plan.actions.single().title)
+        assertEquals(existing.time, plan.actions.single().time)
+        assertEquals("Autorizzazione", plan.actions.single().notes)
+    }
+
     @Test fun screenshotCalendarEditsAreActionsRatherThanCircularLookups() {
         listOf(
             "Prendi tutte le date del First FCE e rendile visibili solo a Simone, Manuel e Domenico. Inoltre, aggiungi alle note di portare l'autorizzazione.",
