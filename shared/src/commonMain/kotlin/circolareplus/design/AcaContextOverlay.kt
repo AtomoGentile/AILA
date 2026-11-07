@@ -135,18 +135,19 @@ fun AcaContextOverlay(
             .semantics { contentDescription="Chiudi ACA" })
     BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)).imePadding()) {
         val availableHeight = maxHeight
+        val desktop = isDesktopWorkspace()
         val panelSurface = if(AppTheme.isGlass) Modifier.ailaGlassSurface(shape,
             tint=(if(dark) Color(0xFF090C13) else Color.White).copy(alpha=if(dark) .98f else .94f))
             else Modifier.background(Brush.linearGradient(surface)).border(1.dp,edge,shape)
         val dragDistance = with(androidx.compose.ui.platform.LocalDensity.current) { dragDistancePx.toDp() }
-        Column(Modifier.align(Alignment.TopCenter).padding(horizontal = 16.dp, vertical = 8.dp)
-            .widthIn(max = 600.dp).fillMaxWidth()
+        Column(Modifier.align(Alignment.TopCenter).padding(horizontal = if (desktop) 24.dp else 16.dp, vertical = if (desktop) 24.dp else 8.dp)
+            .widthIn(max = if (desktop) 760.dp else 600.dp).fillMaxWidth()
             .then(if (dragging) Modifier.heightIn(min = minOf(availableHeight * .86f, 80.dp + dragDistance)) else Modifier)
             .heightIn(max = availableHeight * .86f),
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             // The response owns its scroll area; the composer stays available below it.
             if(action?.actionPlan != null || answer != null) {
-                Column(Modifier.weight(1f, fill=false).heightIn(max=320.dp).fillMaxWidth()
+                Column(Modifier.weight(1f, fill=false).heightIn(max=if (desktop) availableHeight * .5f else 320.dp).fillMaxWidth()
                     .shadow(12.dp,shape).clip(shape).then(panelSurface)
                     .pointerInput(Unit) { detectTapGestures { } }.padding(16.dp),
                     verticalArrangement=Arrangement.spacedBy(8.dp)) {

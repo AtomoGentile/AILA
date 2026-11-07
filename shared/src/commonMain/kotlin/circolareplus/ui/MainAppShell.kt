@@ -4344,6 +4344,16 @@ fun MainAppShell(
                         selectedTab = selectedTab,
                         onSelect = { selectedTab = it },
                         onSearch = { isInSearchScreen = true },
+                        onAca = {
+                            if (aiPolicy.aiEnabled && aiPolicy.acaEnabled) {
+                                assistantMode = AssistantMode.GENERAL
+                                acaOverlayStart = assistantMessages.size
+                                acaOverlay = true
+                            } else {
+                                isInSettingsScreen = true
+                                isInAiSettings = true
+                            }
+                        },
                         onProfile = { isInProfileScreen = true },
                         onSettings = { isInSettingsScreen = true },
                         userName = "${user.firstName} ${user.lastName}",
@@ -8013,6 +8023,7 @@ private fun DesktopSidebar(
     selectedTab: MainTab,
     onSelect: (MainTab) -> Unit,
     onSearch: () -> Unit,
+    onAca: () -> Unit,
     onProfile: () -> Unit,
     onSettings: () -> Unit,
     userName: String,
@@ -8065,6 +8076,11 @@ private fun DesktopSidebar(
                         fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium, color = ink)
                 }
             }
+        }
+        FilledTonalButton(onClick = onAca, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+            circolareplus.design.AilaAssistantMark(modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(10.dp))
+            Text("Apri ACA")
         }
         HorizontalDivider(color = AppTheme.Hairline)
         TextButton(onClick = onSettings, modifier = Modifier.fillMaxWidth()) { Text("Impostazioni", color = AppTheme.TextMuted) }

@@ -49,3 +49,18 @@ Non pubblicare release o distribuire la PWA senza approvazione del proprietario.
 Le prove con risposte simulate verificano il layout e la navigazione; non sostituiscono
 la verifica dei dati e delle operazioni con un account reale né il controllo su dispositivi
 fisici iOS/Android. Nessuna richiesta di prova è stata inviata al backend reale.
+
+## ACA e Brief sul desktop
+
+La sidebar include **Apri ACA**, indipendente dal gesto di pressione prolungata.
+Se AI o ACA sono disattivate apre le impostazioni AI: non attiva automaticamente servizi
+né consensi. Il pannello contestuale arriva a 760 dp, con più spazio verticale per le
+risposte e il compositore ancora accessibile. La chat completa resta quella esistente.
+
+Il Brief usa tre schede affiancate sul desktop, con intestazioni e testo limitato per
+lasciare visibili circolari ed eventi. Le azioni aprono le fonti esistenti; “Non ora” resta
+escluso dalle circolari, che vengono riconosciute come lette tramite la lettura. I layout
+mobili restano verticali e i criteri di visibilità del Brief non cambiano.
+
+L'artifact `aila-pwa` include `AVVIA-ANTEPRIMA.cmd` e `LEGGIMI-ANTEPRIMA.txt` per la prova
+locale Windows con Python 3. Non richiede release o deploy della PWA stabile.

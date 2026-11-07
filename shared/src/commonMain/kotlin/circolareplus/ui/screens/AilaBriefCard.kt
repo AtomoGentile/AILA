@@ -34,11 +34,12 @@ internal fun AilaBriefCard(
 ) {
     val relevant = items
     val visible = relevant.take(3)
+    val desktop = isDesktopWorkspace()
     val dark = AppTheme.isDarkMode
     val glass = AppTheme.isGlass
     val primaryText = AppTheme.TextDark
     val soft = AppTheme.TextMuted
-    val panelShape = RoundedCornerShape(32.dp)
+    val panelShape = RoundedCornerShape(if (desktop) 20.dp else 32.dp)
     val panelColors = if(dark) listOf(Color(0xFF10172C), AppTheme.AccentDeep, Color(0xFF17203B))
         else listOf(Color(0xFFF9FAFF), Color(0xFFE8EDF7), Color(0xFFF3F5FC))
     val panelSurface = if(glass) Modifier.ailaGlassSurface(
@@ -73,7 +74,7 @@ internal fun AilaBriefCard(
             if(relevant.isEmpty() && !loading && error == null) {
                 Text("Sei in pari. Qui troverai novità, risposte e cose da fare per te.", color = soft, style = MaterialTheme.typography.bodyMedium)
             }
-            visible.forEach { item ->
+            val renderItem: @Composable (AilaBriefItemDto) -> Unit = { item ->
                 val tint = when(item.kind) {
                     AilaBriefKind.EVENT -> if(dark) Color(0xFF9EDFD8) else Color(0xFF0F766E)
                     AilaBriefKind.CIRCULAR -> if(dark) Color(0xFFF2D398) else Color(0xFF9A5B00)
@@ -90,7 +91,27 @@ internal fun AilaBriefCard(
                     AilaBriefKind.PROPOSAL -> "BACHECA"
                     AilaBriefKind.SEATMAP -> "POSTI"
                 }
-                if(item.kind == AilaBriefKind.CIRCULAR) {
+                if (desktop) {
+                    Column(Modifier.fillMaxWidth().heightIn(min = 142.dp)
+                        .clip(RoundedCornerShape(14.dp)).background(itemFill)
+                        .border(1.dp, itemBorder, RoundedCornerShape(14.dp))
+                        .clickable(role = Role.Button) { onOpen(item) }.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(label, Modifier.weight(1f), color = tint, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            // Circulars are acknowledged by reading, preserving the existing policy.
+                            if (item.kind != AilaBriefKind.CIRCULAR) IconButton(
+                                onClick = { onDismiss(item) }, modifier = Modifier.size(28.dp)
+                                    .semantics { contentDescription = "Non ora: ${item.title}" }) {
+                                AppIcons.Close(Modifier.size(16.dp), soft)
+                            }
+                        }
+                        Text(item.title, color = primaryText, style = MaterialTheme.typography.titleSmall,
+                            maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        if (item.kind != AilaBriefKind.EVENT && item.kind != AilaBriefKind.CIRCULAR)
+                            Text(item.message, color = soft, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                } else if(item.kind == AilaBriefKind.CIRCULAR) {
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
                         .background(itemFill).border(1.dp,itemBorder,RoundedCornerShape(24.dp))
                         .clickable(role=Role.Button) { onOpen(item) }.padding(16.dp),
@@ -127,6 +148,12 @@ internal fun AilaBriefCard(
                     }
                 }
             }
+            if (desktop && visible.isNotEmpty()) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    visible.forEach { item -> Box(Modifier.weight(1f)) { renderItem(item) } }
+                    repeat(3 - visible.size) { Spacer(Modifier.weight(1f)) }
+                }
+            } else visible.forEach { renderItem(it) }
         }
     }
 }
