@@ -14,7 +14,8 @@ zoom del browser e densità del dispositivo continuano a essere rispettati.
 - Contenuti centrati fino a 1440 dp; la lista circolari usa il 36% dello spazio disponibile,
   tra 360 e 460 dp, lasciando il resto al documento. Scorrimenti dei pannelli indipendenti.
 - Home con intestazione distanziata dai bordi e accessi rapidi orizzontali.
-- Calendario da 420 dp, eventi nella colonna restante; controlli dei posti da 300 dp.
+- Calendario da 420 dp, eventi nella colonna restante e stato vuoto ridotto a una riga;
+  controlli dei posti da 300 dp.
 - Card da 16 dp di raggio con bordo tenue in Material e introduzioni di sezione orizzontali.
   Palette, tema scuro, scelta Glass/Material e preferenze sul movimento restano rispettati.
 
@@ -34,3 +35,17 @@ Prima della distribuzione, controllare con un account studente e rappresentante:
 - Android/iOS nativi e PWA mobile/tablet: layout precedente, senza sidebar desktop.
 
 Non pubblicare release o distribuire la PWA senza approvazione del proprietario.
+
+## Verifiche eseguite durante lo sviluppo
+
+- `node --test webApp/tests/*.test.cjs`: 14 test superati.
+- `:webApp:wasmJsBrowserDevelopmentExecutableDistribution`: build locale completata.
+- Chromium/Playwright con API intercettate e dati fittizi: Home, Calendario, Classe,
+  Sondaggi, Posti e apertura della ricerca; nessun errore JavaScript rilevato.
+- Anteprime a 1440×900, 1100×600 e ridimensionamento a 1099×600; Home in Material
+  chiaro/scuro, Glass e browser con user agent Android a 390×844 e iPad a 1440×900
+  (esclusione del workspace desktop).
+
+Le prove con risposte simulate verificano il layout e la navigazione; non sostituiscono
+la verifica dei dati e delle operazioni con un account reale né il controllo su dispositivi
+fisici iOS/Android. Nessuna richiesta di prova è stata inviata al backend reale.

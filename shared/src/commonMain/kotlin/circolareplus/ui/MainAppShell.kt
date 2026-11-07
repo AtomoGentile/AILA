@@ -8033,7 +8033,7 @@ private fun DesktopSidebar(
                 Text("Il tuo spazio di classe", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
             }
         }
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             OutlinedButton(onClick = onSearch, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
                 AppIcons.Search(Modifier.size(18.dp), color = AppTheme.TextMuted)
                 Spacer(Modifier.width(8.dp))

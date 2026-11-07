@@ -590,7 +590,9 @@ private fun HomeQuickIcon(
     icon: @Composable () -> Unit
 ) {
     if (circolareplus.design.isDesktopWorkspace()) {
-        Row(modifier.clip(RoundedCornerShape(12.dp)).background(heroTonalFill).clickable(onClick = onClick)
+        Row(modifier.clip(RoundedCornerShape(12.dp))
+            .background(if (AppTheme.isGlass) AppTheme.SurfaceWhite.copy(alpha = 0.5f) else heroTonalFill)
+            .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             icon()

@@ -278,7 +278,17 @@ fun CalendarScreen(
             ) {
                 if (selectedEvents.isEmpty()) {
                     AilaCard(modifier = Modifier.ailaAppear(3)) {
-                        AilaEmptyState(
+                        if (circolareplus.design.isDesktopWorkspace()) {
+                            circolareplus.design.AilaListRow(
+                                title = "Nessun evento",
+                                subtitle = "Niente in programma per questo giorno.",
+                                icon = { AppIcons.Calendar(Modifier.size(22.dp), color = AppTheme.PrimaryBlue) },
+                                trailing = if (isPastDay) null else ({
+                                    circolareplus.design.AilaPrimaryButton(text = "Aggiungi", compact = true,
+                                        onClick = { onAddEventForDayClick(selectedDateIso) })
+                                })
+                            )
+                        } else AilaEmptyState(
                             title = "Nessun evento",
                             message = "Niente in programma per questo giorno.",
                             actionLabel = if (isPastDay) null else "Aggiungi evento",
