@@ -1603,8 +1603,10 @@ fun MainAppShell(
                 }
 
                 if (currentUser?.id != userAtRequest?.id) return@launch
-                if (circolareplus.ai.assistant.AssistantActionIntent.matches(trimmed, history)) {
+                val calendarActionRequest = circolareplus.ai.assistant.AssistantActionIntent.matches(trimmed, history)
+                if (calendarActionRequest) {
                     calendarEvents = AppContainer.calendarRepository.listEvents()
+                    if (classmates.isEmpty()) classmates = AppContainer.usersRepository.listStudents()
                 }
                 val reply = AppContainer.newAssistant().ask(
                     question = trimmed,
@@ -1619,7 +1621,7 @@ fun MainAppShell(
                         classmates = classmates,
                         circulars = circulars,
                         classifications = classifications.toMap(),
-                        calendarEvents = calendarEvents.filter{it.isStudyRelevantFor(userAtRequest)},
+                        calendarEvents = if (calendarActionRequest) calendarEvents else calendarEvents.filter{it.isStudyRelevantFor(userAtRequest)},
                         proposals = boardProposals,
                         dynamic = boardUnavailable?.let { dynamic.copy(unavailable = dynamic.unavailable + it) } ?: dynamic,
                         gita = gita,
@@ -2973,7 +2975,8 @@ fun MainAppShell(
             .fillMaxSize()
             .acaHoldToOpen(
                 enabled = aiPolicy.aiEnabled && aiPolicy.acaEnabled && aiPolicy.holdToOpen &&
-                    !acaOverlay && circolareplus.design.AilaSheetBackdrop.openSheets == 0,
+                    !acaOverlay && circolareplus.design.AilaSheetBackdrop.openSheets == 0 &&
+                    circolareplus.design.AilaSheetBackdrop.openDialogs == 0,
                 surfaceKey = listOf(shellRoute, selectedTab, selectedCircularForDetail?.number, eventDetailToShow)
             ) {
                 assistantMode=AssistantMode.GENERAL
@@ -2983,7 +2986,13 @@ fun MainAppShell(
             .then(if (AppTheme.isGlass) Modifier else Modifier.background(AppTheme.BackgroundLight))
             .graphicsLayer {
                 // Sul web la sfocatura a tutto schermo e' troppo pesante: resta il velo del foglio.
-                val radius = if (AppTheme.isGlass && !AppTheme.liteEffects && circolareplus.design.AilaSheetBackdrop.openSheets > 0) 20.dp.toPx() else 0f
+                val radius = if (AppTheme.isGlass && !AppTheme.liteEffects) {
+                    when {
+                        circolareplus.design.AilaSheetBackdrop.openDialogs > 0 -> 32.dp.toPx()
+                        circolareplus.design.AilaSheetBackdrop.openSheets > 0 -> 20.dp.toPx()
+                        else -> 0f
+                    }
+                } else 0f
                 renderEffect = if (radius > 0.5f) {
                     androidx.compose.ui.graphics.BlurEffect(radius, radius, androidx.compose.ui.graphics.TileMode.Clamp)
                 } else null

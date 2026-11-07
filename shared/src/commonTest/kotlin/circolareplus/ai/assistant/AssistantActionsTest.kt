@@ -10,6 +10,40 @@ import kotlinx.serialization.encodeToString
 import kotlin.test.*
 
 class AssistantActionsTest {
+    @Test fun screenshotCalendarEditsAreActionsRatherThanCircularLookups() {
+        listOf(
+            "Prendi tutte le date del First FCE e rendile visibili solo a Simone, Manuel e Domenico. Inoltre, aggiungi alle note di portare l'autorizzazione.",
+            "Trova nel calendario tutte le date del First FCE e imposta come destinatari Simone, Manuel e Domenico.",
+            "Trova le date del FCE a calendario e modificale!"
+        ).forEach {
+            assertTrue(AssistantActionIntent.matches(it, emptyList()), it)
+            assertTrue(AssistantActionIntent.needsExisting(it), it)
+        }
+        val history = listOf(AssistantMessage("q", AssistantAuthor.USER, "Trova le date FCE nel calendario"))
+        assertTrue(AssistantActionIntent.matches("Rendile visibili solo a Simone", history))
+        listOf("Non modificale nel calendario", "Non impostare destinatari per gli eventi", "Quali sono le date del FCE?",
+            "Come cambio i destinatari del calendario?").forEach {
+            assertFalse(AssistantActionIntent.matches(it, history), it)
+        }
+    }
+
+    @Test fun recipientEditsUseKnownPeopleAndExistingCalendarIds() {
+        val peer = user.copy(id = "peer", firstName = "Manuel")
+        val existing = event(action).copy(createdByUserId = user.id)
+        val context = knowledge.copy(classmates = listOf(peer), calendarEvents = listOf(existing))
+        val update = action.copy(tool = "calendar.update", eventId = existing.id,
+            fields = listOf("visibility", "notes"), visibility = "SPECIFIC", visibleToUserIds = listOf(user.id, peer.id),
+            notes = "Portare l'autorizzazione")
+        assertTrue(AssistantActionPrompt.validate(plan(update), context))
+        assertFalse(AssistantActionPrompt.validate(plan(update.copy(visibleToUserIds = listOf("invented"))), context))
+        assertFalse(AssistantActionPrompt.validate(plan(update.copy(visibleToUserIds = emptyList())), context))
+        val prompt = AssistantActionPrompt.builderFor(context, emptyList(),
+            "Trova nel calendario tutte le date FCE e imposta i destinatari", emptyMap(), "FCE").build(16000)
+        assertTrue(prompt.userPrompt.contains("eventId=${existing.id}"))
+        assertTrue(prompt.userPrompt.contains("id=peer; nome=Manuel"))
+        assertTrue(prompt.systemPrompt.contains("SPECIFIC"))
+    }
+
     @Test fun calendarPlanningKeepsEveryExplicitDateInTheBatch(){
         val first=Json.encodeToString(action)
         val second=Json.encodeToString(action.copy(title="Prova orale",date="2027-03-22"))
@@ -135,7 +169,7 @@ class AssistantActionsTest {
         assertTrue(AssistantActionPrompt.validate(plan(update), context))
         assertFalse(AssistantActionPrompt.validate(plan(update.copy(fields = emptyList())), context))
         assertFalse(AssistantActionPrompt.validate(plan(update.copy(eventId = "guessed-private-id")), context))
-        assertFalse(AssistantActionPrompt.validate(plan(update.copy(fields = listOf("visibility"))), context))
+        assertFalse(AssistantActionPrompt.validate(plan(update.copy(fields = listOf("unknown-field"))), context))
     }
 
     @Test fun malformedOrOversizedOutputDoesNotBecomeAnExecutablePlan() {

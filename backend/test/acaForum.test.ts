@@ -76,6 +76,54 @@ describe('ACA confirmations and atomic calendar tools',()=>{
   expect((await preview([action({time:'25:00'})])).status).toBe(400);
   expect(db.prepare('SELECT * FROM aca_operations').all()).toHaveLength(0);
  });
+ it('previews and confirms recipients and appended notes for all matching existing dates',async()=>{
+  await confirm((await preview([action({title:'First FCE',notes:'Aula 2'}),action({title:'First FCE',date:'2027-03-22',notes:'Aula 2'})])).json);
+  const events=db.prepare('SELECT * FROM calendar_events ORDER BY event_date').all() as any[];
+  const edit=await preview(events.map(e=>action({tool:'calendar.update',eventId:e.id,fields:['visibility','notes'],visibility:'SPECIFIC',visibleToUserIds:['peer','op'],notes:"Aula 2. Portare l'autorizzazione"})));
+  expect(edit.status).toBe(201);
+  expect(edit.json.plan.actions.every((a:any)=>a.audienceLabel==='Nome op, Nome peer')).toBe(true);
+  expect((db.prepare('SELECT * FROM calendar_events').all() as any[]).every(e=>e.is_for_all===1&&e.notes==='Aula 2')).toBe(true);
+  const result=await confirm(edit.json);expect(result.json.results.every((r:any)=>r.status==='DONE')).toBe(true);
+  const updated=db.prepare('SELECT * FROM calendar_events ORDER BY event_date').all() as any[];
+  expect(updated).toHaveLength(2);expect(updated.map(e=>e.event_date)).toEqual(['2027-03-20','2027-03-22']);
+  expect(updated.every(e=>e.title==='First FCE'&&e.is_for_all===0&&e.visible_to_user_ids_json==='["op","peer"]'&&e.notes==="Aula 2. Portare l'autorizzazione")).toBe(true);
+ });
+ it('rejects unknown, cross-class and empty recipient sets',async()=>{
+  for(const ids of [[],['missing'],['other']])expect((await preview([action({visibility:'SPECIFIC',visibleToUserIds:ids})])).status).toBe(400);
+  expect(db.prepare('SELECT * FROM aca_operations').all()).toHaveLength(0);
+ });
+ it('preserves a specific audience when only changing notes',async()=>{
+  await confirm((await preview([action({visibility:'SPECIFIC',visibleToUserIds:['peer']})])).json);
+  const e=db.prepare('SELECT * FROM calendar_events').get() as any;
+  const edit=await preview([action({tool:'calendar.update',eventId:e.id,fields:['notes'],notes:'Portare autorizzazione'})]);
+  expect(edit.status).toBe(201);expect(edit.json.plan.actions[0].audienceLabel).toBe('Nome peer');
+  await confirm(edit.json);
+  expect(db.prepare('SELECT is_for_all,visible_to_user_ids_json,notes FROM calendar_events').get()).toMatchObject({is_for_all:0,visible_to_user_ids_json:'["peer"]',notes:'Portare autorizzazione'});
+ });
+ it('can edit notes without changing a legacy audience whose member left the class',async()=>{
+  await confirm((await preview()).json);const e=db.prepare('SELECT * FROM calendar_events').get() as any;
+  db.prepare('UPDATE calendar_events SET is_for_all=0,visible_to_user_ids_json=? WHERE id=?').run('["departed"]',e.id);
+  const edit=await preview([action({tool:'calendar.update',eventId:e.id,fields:['notes'],notes:'Autorizzazione'})]);
+  expect(edit.status).toBe(201);await confirm(edit.json);
+  expect(db.prepare('SELECT notes,visible_to_user_ids_json FROM calendar_events').get()).toMatchObject({notes:'Autorizzazione',visible_to_user_ids_json:'["departed"]'});
+ });
+ it('changes recipients to self or class only when explicitly requested',async()=>{
+  await confirm((await preview([action({visibility:'SPECIFIC',visibleToUserIds:['peer']})])).json);
+  const e=db.prepare('SELECT * FROM calendar_events').get() as any;
+  for(const visibility of ['SELF','CLASS']){
+   const p=await preview([action({tool:'calendar.update',eventId:e.id,fields:['visibility'],visibility})]);
+   expect(p.status).toBe(201);expect((await confirm(p.json)).json.results[0].status).toBe('DONE');
+   expect(db.prepare('SELECT is_for_all,visible_to_user_ids_json FROM calendar_events').get()).toMatchObject(
+    visibility==='SELF'?{is_for_all:0,visible_to_user_ids_json:'["op"]'}:{is_for_all:1,visible_to_user_ids_json:null});
+  }
+ });
+ it('rejects a recipient change when the audience changed after preview',async()=>{
+  await confirm((await preview()).json);const e=db.prepare('SELECT * FROM calendar_events').get() as any;
+  const edit=(await preview([action({tool:'calendar.update',eventId:e.id,fields:['visibility'],visibility:'SPECIFIC',visibleToUserIds:['peer']})])).json;
+  db.prepare('UPDATE calendar_events SET is_for_all=0,visible_to_user_ids_json=? WHERE id=?').run('["op"]',e.id);
+  expect((await confirm(edit)).json.results[0].status).toBe('CONFLICT');
+  expect((db.prepare('SELECT visible_to_user_ids_json FROM calendar_events').get() as any).visible_to_user_ids_json).toBe('["op"]');
+ });
  it('updates and deletes only the content shown in the approved preview',async()=>{
   await confirm((await preview()).json);const event=db.prepare('SELECT * FROM calendar_events').get() as any;
   const edit=(await preview([action({tool:'calendar.update',eventId:event.id,date:'2027-03-21'})])).json;

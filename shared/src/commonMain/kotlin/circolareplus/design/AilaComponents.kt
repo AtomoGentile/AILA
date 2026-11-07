@@ -797,6 +797,14 @@ fun AilaConfirmDialog(
     dismissLabel: String = "Annulla",
     isDestructive: Boolean = true
 ) {
+    if (AppTheme.isGlass) {
+        // A dialog owns a separate window. Blur the app AND any sheet beneath it;
+        // blurring only the shell leaves a sheet's text visible through the glass.
+        androidx.compose.runtime.DisposableEffect(Unit) {
+            AilaSheetBackdrop.openDialogs++
+            onDispose { AilaSheetBackdrop.openDialogs-- }
+        }
+    }
     val closer = rememberAilaDialogCloser()
     val dismiss = { closer.close(onDismiss) }
     val dialogShape = RoundedCornerShape(AppTheme.CardCornerRadius)
@@ -813,8 +821,8 @@ fun AilaConfirmDialog(
             .then(
                 if (AppTheme.isGlass) Modifier.ailaGlassSurface(
                     dialogShape,
-                    tint = if (AppTheme.isDarkMode) Color(0xFF202833).copy(alpha = .70f)
-                    else Color(0xFFF8FAFF).copy(alpha = .72f)
+                    tint = if (AppTheme.isDarkMode) Color(0xFF202833).copy(alpha = if (AppTheme.liteEffects) .96f else .88f)
+                    else Color(0xFFF8FAFF).copy(alpha = if (AppTheme.liteEffects) .97f else .90f)
                 ) else Modifier
             ),
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
@@ -824,7 +832,11 @@ fun AilaConfirmDialog(
             Text(text = title, style = MaterialTheme.typography.titleLarge, color = AppTheme.TextDark)
         },
         text = {
-            Text(text = message, style = MaterialTheme.typography.bodyLarge, color = AppTheme.TextMuted)
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (AppTheme.isGlass) AppTheme.TextDark else AppTheme.TextMuted
+            )
         },
         confirmButton = {
             if (isDestructive) {

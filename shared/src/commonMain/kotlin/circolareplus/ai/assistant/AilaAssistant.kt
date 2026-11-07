@@ -104,10 +104,10 @@ class AilaAssistant(
                 is AiTextResult.Success -> {
                     val plan = AssistantActionPrompt.parse(result.text)?.copy(requestedByUserId = knowledge.user?.id)
                     if (plan == null || !AssistantActionPrompt.validate(plan, knowledge)) {
-                        AssistantReply("Non ho ottenuto un piano valido. Specifica titolo e data degli eventi da inserire.",
+                        AssistantReply("Non ho ottenuto un piano valido. Specifica quali eventi vuoi creare o modificare e quali dettagli devono cambiare.",
                             modelLabel = "AILA ACA", awaitingActionInput = true)
                     } else if (plan.actions.isEmpty()) {
-                        AssistantReply(plan.clarification.ifBlank { "Quali eventi vuoi inserire e in quali date?" },
+                        AssistantReply(plan.clarification.ifBlank { "Quali eventi vuoi creare o modificare e con quali dettagli?" },
                             modelLabel = "AILA ACA", awaitingActionInput = true)
                     } else {
                         AssistantReply("Ho preparato queste azioni. Controlla eventi, date, orari e destinatari, poi conferma." +

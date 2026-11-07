@@ -8,7 +8,7 @@ import { requireAiService } from '../services/aiRouter';
 import { loadForumCalendarProposal,forumCalendarProposalJson,forumCalendarDigest,FORUM_CALENDAR_SOURCE_SQL } from '../services/forumCalendar';
 
 interface Action {tool:'calendar.create'|'calendar.update'|'calendar.delete';title:string;date:string;category:string;
- time:string|null;notes:string|null;visibility:'CLASS'|'SELF';circularNumber:number|null;eventId?:string|null;fields?:string[];audienceLabel?:string;previousTitle?:string;previousDate?:string;previousTime?:string|null;}
+ time:string|null;notes:string|null;visibility:'CLASS'|'SELF'|'SPECIFIC';visibleToUserIds?:string[]|null;circularNumber:number|null;eventId?:string|null;fields?:string[];audienceLabel?:string;previousTitle?:string;previousDate?:string;previousTime?:string|null;}
 interface StoredStep {action:Action;eventId:string;before:EventRow|null;claimKey:string|null;}
 interface StoredPlan {actions:Action[];clarification:string;requestedByUserId:string;steps:StoredStep[];}
 interface Operation {id:string;user_id:string;class_id:string;plan_json:string;status:string;result_json:string|null;expires_at:string;execution_token:string|null;shared_proposal_id:string|null;}
@@ -18,14 +18,17 @@ const categories=['VERIFICA','INTERROGAZIONE','PAGAMENTO','USCITA_DIDATTICA','EN
 export function validAction(raw:unknown):raw is Action {
  if(!raw||typeof raw!=='object')return false;const a=raw as Action;
  if(!['calendar.create','calendar.update','calendar.delete'].includes(a.tool)||typeof a.title!=='string'||!a.title.trim()||a.title.length>200)return false;
- if(!categories.includes(a.category)||!['CLASS','SELF'].includes(a.visibility)||typeof a.date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(a.date))return false;
+ if(!categories.includes(a.category)||!['CLASS','SELF','SPECIFIC'].includes(a.visibility)||typeof a.date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(a.date))return false;
  const date=new Date(a.date+'T00:00:00Z');if(!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==a.date||a.date.startsWith('0000'))return false;
  if(a.time!=null){if(typeof a.time!=='string')return false;
   const range=/^Dalla ([1-6])ª alla ([1-6])ª ora$/.exec(a.time);
   if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(a.time)&&!/^[1-6]ª ora$/.test(a.time)&&!(range&&range[1]<=range[2]))return false;
  }
  if(a.notes!=null&&(typeof a.notes!=='string'||a.notes.length>2000))return false;
- if(a.tool==='calendar.update'&&(!Array.isArray(a.fields)||!a.fields.length||!a.fields.every(f=>['title','date','time','category','notes'].includes(f))))return false;
+ if(a.tool==='calendar.update'&&(!Array.isArray(a.fields)||!a.fields.length||!a.fields.every(f=>['title','date','time','category','notes','visibility'].includes(f))))return false;
+ if(a.visibility==='SPECIFIC'){
+  if(!Array.isArray(a.visibleToUserIds)||!a.visibleToUserIds.length||a.visibleToUserIds.length>100||a.visibleToUserIds.some(id=>typeof id!=='string'||!id.trim()))return false;
+ }else if(a.visibleToUserIds!=null&&(!Array.isArray(a.visibleToUserIds)||a.visibleToUserIds.length))return false;
  return a.tool==='calendar.create'||typeof a.eventId==='string'&&a.eventId.length>0&&a.eventId.length<=100;
 }
 const digest=async(text:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))).map(x=>x.toString(16).padStart(2,'0')).join('');
@@ -73,9 +76,11 @@ operations.post('/',async c=>{
    if(targeted.has(action.eventId!))return c.json({error:'Un evento può essere modificato una sola volta nello stesso piano'},400);targeted.add(action.eventId!);
    before=await c.env.DB.prepare('SELECT * FROM calendar_events WHERE id=? AND class_id=?').bind(action.eventId,classId).first<EventRow>();
    if(!before||!canEdit(before,user))return c.json({error:'Evento non disponibile o non modificabile'},403);
-   // Visibility is taken from the real event; edits cannot silently expand its audience.
-   action.visibility=before.is_for_all?'CLASS':'SELF';
-   action.audienceLabel=before.is_for_all?'Tutta la classe':'Destinatari attuali dell’evento';
+   // Preserve the existing audience unless the preview explicitly changes it.
+   if(action.tool!=='calendar.update'||!action.fields?.includes('visibility')){
+    action.visibility=before.is_for_all?'CLASS':'SPECIFIC';
+    action.visibleToUserIds=before.is_for_all?null:JSON.parse(before.visible_to_user_ids_json??'[]');
+   }
    action.previousTitle=before.title;action.previousDate=before.event_date;action.previousTime=before.start_time;
    if(action.tool==='calendar.update'){
     const fields=new Set(action.fields);
@@ -87,10 +92,19 @@ operations.post('/',async c=>{
    }
    if(action.tool==='calendar.delete')Object.assign(action,{title:before.title,date:before.event_date,time:before.start_time,category:before.category,notes:before.notes});
   }
-  if(action.tool==='calendar.create')action.audienceLabel=action.visibility==='CLASS'?'Tutta la classe':'Solo tu';
+  if(action.visibility==='SPECIFIC'){
+   action.visibleToUserIds=[...new Set(action.visibleToUserIds)].sort();
+   const members=await c.env.DB.prepare('SELECT id,first_name,last_name FROM users WHERE class_id=?').bind(classId).all<{id:string;first_name:string;last_name:string}>();
+   const changingAudience=action.tool==='calendar.create'||action.tool==='calendar.update'&&action.fields?.includes('visibility');
+   if(changingAudience&&(!action.visibleToUserIds.length||action.visibleToUserIds.some(id=>!members.results.some(m=>m.id===id))))return c.json({error:'Destinatari non validi per questa classe'},400);
+   action.audienceLabel=action.visibleToUserIds.map(id=>{const m=members.results.find(m=>m.id===id);return m?`${m.first_name} ${m.last_name}`:'Destinatario precedente';}).join(', ')||'Destinatari attuali dell’evento';
+  }else{
+   action.visibleToUserIds=null;
+   action.audienceLabel=action.visibility==='CLASS'?'Tutta la classe':'Solo tu';
+  }
   if(action.circularNumber!=null&&!await c.env.DB.prepare('SELECT number FROM circulars WHERE number=?').bind(action.circularNumber).first())return c.json({error:'Circolare non valida'},400);
   const eventId=action.tool==='calendar.create'?newUUID():action.eventId!;
-  const visibilityKey=action.visibility==='CLASS'?'CLASS':user.sub;
+  const visibilityKey=action.visibility==='CLASS'?'CLASS':action.visibility==='SELF'?user.sub:JSON.stringify(action.visibleToUserIds);
   const claimKey=action.tool==='calendar.create'?await digest(JSON.stringify([classId,action.date,action.category,normalizeTitle(action.title),visibilityKey])):null;
   actions.push(action);steps.push({action,eventId,before,claimKey});
  }
@@ -136,7 +150,7 @@ operations.post('/:id/confirm',async c=>{
   sql.push(c.env.DB.prepare(`INSERT OR IGNORE INTO aca_steps(operation_id,step,tool,event_id,status) SELECT ?,?,?,?,'PENDING' WHERE ${guard}`)
    .bind(op.id,i,a.tool,step.eventId,op.id,token));
   if(a.tool==='calendar.create'){
-   const visible=a.visibility==='SELF'?JSON.stringify([user.sub]):null;
+   const visible=a.visibility==='CLASS'?null:JSON.stringify(a.visibleToUserIds??[user.sub]);
    sql.push(c.env.DB.prepare(`DELETE FROM aca_calendar_claims WHERE key=? AND NOT EXISTS
     (SELECT 1 FROM calendar_events WHERE id=aca_calendar_claims.event_id AND event_date=aca_calendar_claims.event_date AND category=aca_calendar_claims.category)
     AND ${guard}`).bind(step.claimKey,op.id,token));
@@ -156,8 +170,8 @@ operations.post('/:id/confirm',async c=>{
    const where=`id=? AND class_id=? AND title=? AND event_date=? AND start_time IS ? AND category=? AND notes IS ?
     AND visible_to_user_ids_json IS ? AND is_for_all=? AND (created_by=? OR is_ai_generated=1 OR ?='REPRESENTATIVE') AND ${guard}`;
    const bindings=[step.eventId,classId,before.title,before.event_date,before.start_time,before.category,before.notes,before.visible_to_user_ids_json,before.is_for_all,user.sub,user.role,op.id,token];
-   if(a.tool==='calendar.update')sql.push(c.env.DB.prepare(`UPDATE calendar_events SET title=?,event_date=?,start_time=?,category=?,notes=? WHERE ${where}`)
-    .bind(a.title,a.date,a.time,a.category,a.notes,...bindings));
+   if(a.tool==='calendar.update')sql.push(c.env.DB.prepare(`UPDATE calendar_events SET title=?,event_date=?,start_time=?,category=?,notes=?,is_for_all=?,visible_to_user_ids_json=? WHERE ${where}`)
+    .bind(a.title,a.date,a.time,a.category,a.notes,a.fields?.includes('visibility')?+(a.visibility==='CLASS'):before.is_for_all,a.fields?.includes('visibility')?(a.visibility==='CLASS'?null:JSON.stringify(a.visibleToUserIds??[user.sub])):before.visible_to_user_ids_json,...bindings));
    else sql.push(c.env.DB.prepare(`DELETE FROM calendar_events WHERE ${where}`).bind(...bindings));
    // changes() belongs to the preceding mutation in the same database transaction.
    sql.push(c.env.DB.prepare(`UPDATE aca_steps SET status=CASE WHEN changes()=1 THEN 'DONE' ELSE 'CONFLICT' END WHERE operation_id=? AND step=? AND ${guard}`)

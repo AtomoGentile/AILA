@@ -14,10 +14,16 @@ import kotlinx.serialization.json.Json
 
 /** Intent is checked on the user's turn only, never on retrieved documents. */
 internal object AssistantActionIntent {
+    private val mutationVerb = Regex("(?:sposta|modifica|cambia|correggi|rimanda|posticipa|anticipa|elimina|cancella|rimuovi|annulla|imposta|rendi)(?:lo|la|li|le)?")
+
+    fun needsExisting(question: String): Boolean = AssistantContext.normalize(question).split(' ').any {
+        mutationVerb.matches(it) || it in setOf("destinatari", "visibili", "visibile", "note")
+    }
+
     fun matches(question: String, history: List<AssistantMessage>): Boolean {
         val words = AssistantContext.normalize(question).split(' ').filter(String::isNotBlank)
         val normalized = words.joinToString(" ")
-        if (Regex("\\b(?:non|senza) (?:mi |lo |li |le )?(?:crea\\w*|aggiung\\w*|inser\\w*|met\\w*|segn\\w*|programma\\w*|sposta\\w*|modifica\\w*|elimina\\w*|cancella\\w*|rimuov\\w*)").containsMatchIn(normalized)) return false
+        if (Regex("\\b(?:non|senza) (?:mi |lo |li |le )?(?:imposta\\w*|rendi\\w*|crea\\w*|aggiung\\w*|inser\\w*|met\\w*|segn\\w*|programma\\w*|sposta\\w*|modifica\\w*|elimina\\w*|cancella\\w*|rimuov\\w*)").containsMatchIn(normalized)) return false
         if (words.firstOrNull() in setOf("lascia", "stop") || normalized in setOf("annulla", "annulla tutto")) return false
         if (words.firstOrNull() in setOf("come", "dove") || words.take(3).contains("posso")) return false
         if (AssistantGreeting.answer(question) != null) return false
@@ -25,7 +31,7 @@ internal object AssistantActionIntent {
             words.none { it in setOf("cosa", "chi", "quali", "quanti", "spiegami", "riassumi", "cerca") }) return true
         if (history.lastOrNull()?.actionStatus == AssistantActionStatus.AWAITING_CONFIRMATION &&
             words.any { it in setOf("invece", "sposta", "cambia", "correggi", "personale") }) return true
-        val create = words.any { it in setOf(
+        val create = words.any { mutationVerb.matches(it) || it in setOf(
             "prepara", "crea", "creami", "creare", "aggiungi", "aggiungimi", "aggiungere", "inserisci",
             "inserire", "segna", "segnami", "segnare", "metti", "mettimi", "mettere", "programma",
             "aggiungerlo", "aggiungerli", "aggiungilo", "aggiungili", "inseriscilo", "inseriscili",
@@ -35,9 +41,14 @@ internal object AssistantActionIntent {
         }
         val target = words.any { it in setOf(
             "calendario", "evento", "eventi", "promemoria", "agenda", "verifica", "verifiche",
-            "interrogazione", "interrogazioni", "scadenza", "scadenze"
+            "interrogazione", "interrogazioni", "scadenza", "scadenze", "date", "appuntamento", "appuntamenti"
         ) }
-        return create && target
+        val previousCalendarRequest = history.takeLast(8).any {
+            it.author == AssistantAuthor.USER && AssistantContext.normalize(it.text).split(' ').any { word ->
+                word in setOf("calendario", "agenda", "evento", "eventi", "date")
+            }
+        }
+        return create && (target || previousCalendarRequest && needsExisting(question))
     }
 }
 
@@ -67,7 +78,8 @@ data class AssistantCalendarAction(
     val audienceLabel: String? = null,
     val previousTitle: String? = null,
     val previousDate: String? = null,
-    val previousTime: String? = null
+    val previousTime: String? = null,
+    val visibleToUserIds: List<String>? = null
 )
 
 internal object AssistantActionPrompt {
@@ -80,11 +92,11 @@ Rispondi SOLO con un oggetto JSON: {"actions":[],"clarification":""}.
 Strumenti: calendar.create, calendar.update, calendar.delete. Ogni azione ha questa forma:
 {"tool":"calendar.create","title":"Esame scritto","date":"2027-03-20","category":"VERIFICA","time":null,"notes":null,"visibility":"CLASS","circularNumber":null}.
 Per calendar.update e calendar.delete aggiungi eventId, copiato ESATTAMENTE dagli EVENTI MODIFICABILI. Non inventare identificatori.
-Per calendar.update aggiungi fields, l'elenco dei SOLI campi che l'utente ha chiesto di cambiare: title, date, time, category, notes.
-Gli altri valori restano quelli dell'evento originale. Se più eventi corrispondono e non è chiaro quale, chiedi chiarimento senza azioni.
-Non cambiare destinatari con una modifica. Per calendar.delete copia titolo e data dell'evento da eliminare; serve comunque conferma.
+Per calendar.update aggiungi fields, l'elenco dei SOLI campi che l'utente ha chiesto di cambiare: title, date, time, category, notes, visibility.
+Gli altri valori restano quelli dell'evento originale. Se l'utente chiede tutte le date di un corso, modifica TUTTI gli eventi corrispondenti già in calendario, senza crearne copie. Se il riferimento è ambiguo, chiedi chiarimento senza azioni.
+Cambia destinatari SOLO se richiesto: aggiungi visibility a fields e usa visibleToUserIds per i destinatari specifici. Per aggiungere una nota, mantieni le note esistenti e integra il testo richiesto. Per calendar.delete copia titolo e data dell'evento da eliminare; serve comunque conferma.
 Categorie: VERIFICA, INTERROGAZIONE, PAGAMENTO, USCITA_DIDATTICA, ENTRATA, AVVISO, ALTRO.
-visibility: CLASS per il calendario condiviso, SELF solo se l'utente chiede un evento personale. Per destinatari specifici chiedi chiarimento, senza azioni.
+visibility: CLASS per il calendario condiviso, SELF solo se l'utente chiede un evento personale. SPECIFIC per destinatari specifici: visibleToUserIds è una lista non vuota di ID copiati dai DESTINATARI DISPONIBILI. Non inventare ID; per nomi ambigui o assenti chiedi chiarimento senza azioni. CLASS e SELF non usano visibleToUserIds.
 Massimo 12 azioni. Una per ciascuna data certa, senza duplicati. Non troncare elenchi più lunghi: chiedi di dividerli, senza azioni.
 Non inventare date, titoli, orari o dettagli. Una data mancante NON significa oggi. Non spostare anni o date esplicite, anche passate.
 time: null se non specificato; altrimenti HH:MM, "3ª ora" o "Dalla 2ª alla 4ª ora". Non trasformare ore di lezione in orari.
@@ -110,13 +122,18 @@ circularNumber solo se il numero esiste nei dati e l'evento viene da quella circ
                 "\nANTEPRIMA: ${json.encodeToString(plan.copy(requestedByUserId = null, operationId = null, digest = null, expiresAt = null))}"
             }.orEmpty()
         }
-        val eventWords = AssistantContext.normalize(searchQuery).split(' ').filter { it.length >= 4 }
-        val needsExisting = eventWords.any { it in setOf("sposta","modifica","cambia","correggi","rimanda","posticipa","anticipa","elimina","cancella","rimuovi","annulla") } ||
+        val eventWords = AssistantContext.normalize(searchQuery).split(' ').filter { it.length >= 3 }
+        val needsExisting = AssistantActionIntent.needsExisting(question) ||
+            history.takeLast(8).any { it.author == AssistantAuthor.USER && AssistantActionIntent.needsExisting(it.text) } ||
             history.lastOrNull()?.actionPlan?.actions?.any { it.tool != "calendar.create" } == true
         val editable = if (!needsExisting) emptyList() else knowledge.calendarEvents.filter { it.isAiGenerated || it.createdByUserId == knowledge.user?.id || knowledge.role == circolareplus.domain.model.UserRole.REPRESENTATIVE }
-            .sortedByDescending { event -> eventWords.count { AssistantContext.normalize(event.title).contains(it) } }.take(if(maxChars<14_000)4 else 40)
-        val events = editable.joinToString("\n") { e -> "eventId=${e.id}; title=${e.title}; date=${e.date}; time=${e.time}; category=${e.category}; notes=${e.notes.orEmpty()}; visibility=${if(e.isForAll) "CLASS" else "SELF"}" }
-        val request = "OGGI: ${knowledge.todayIso}\nEVENTI MODIFICABILI:\n$events\nCONVERSAZIONE:\n$turns\nRICHIESTA UTENTE:\n$question"
+            .sortedByDescending { event -> eventWords.count { AssistantContext.normalize(event.title).contains(it) } }
+        val shown = editable.take(if (maxChars < 14_000) 4 else 40)
+        val events = shown.joinToString("\n") { e -> "eventId=${e.id}; title=${e.title}; date=${e.date}; time=${e.time}; category=${e.category}; notes=${e.notes.orEmpty()}; visibility=${if(e.isForAll) "CLASS" else "SPECIFIC"}; visibleToUserIds=${e.visibleToUserIds.orEmpty()}" }
+        val recipients = (knowledge.classmates + listOfNotNull(knowledge.user)).distinctBy { it.id }
+            .joinToString("\n") { "id=${it.id}; nome=${it.firstName} ${it.lastName}" }
+        val omitted = if (shown.size < editable.size) "\nElenco parziale: ${editable.size} eventi modificabili, ${shown.size} mostrati. Se la richiesta riguarda tutte le date e non puoi verificarne la completezza, chiedi di restringere il corso o il periodo, senza azioni." else ""
+        val request = "OGGI: ${knowledge.todayIso}\nDESTINATARI DISPONIBILI:\n$recipients\nEVENTI MODIFICABILI:\n$events$omitted\nCONVERSAZIONE:\n$turns\nRICHIESTA UTENTE:\n$question"
         val systemPrompt = system(knowledge)
         val room = maxChars - systemPrompt.length - request.length - 40
         require(room >= 0) { "La richiesta è troppo lunga per questo modello. Dividi gli eventi in più messaggi." }
@@ -148,12 +165,15 @@ circularNumber solo se il numero esiste nei dati e l'evento viene da quella circ
         val date = parseIsoDate(action.date)
         action.tool in setOf("calendar.create","calendar.update","calendar.delete") &&
             (action.tool == "calendar.create" || knowledge.calendarEvents.any { it.id == action.eventId && (it.isAiGenerated || it.createdByUserId == knowledge.user?.id || knowledge.role == circolareplus.domain.model.UserRole.REPRESENTATIVE) }) &&
-            (action.tool != "calendar.update" || action.fields.isNotEmpty() && action.fields.all { it in setOf("title","date","time","category","notes") }) &&
+            (action.tool != "calendar.update" || action.fields.isNotEmpty() && action.fields.all { it in setOf("title","date","time","category","notes","visibility") }) &&
             action.title.isNotBlank() && action.title.length <= 200 &&
             action.date.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) && date != null &&
             date.year in 1..9999 && date.month in 1..12 && date.day in 1..daysInMonth(date.year, date.month) &&
             validTime(action.time) && (action.notes?.length ?: 0) <= 2000 &&
-            action.visibility in setOf("CLASS", "SELF") &&
+            action.visibility in setOf("CLASS", "SELF", "SPECIFIC") &&
+            (if (action.visibility == "SPECIFIC") !action.visibleToUserIds.isNullOrEmpty() &&
+                action.visibleToUserIds.all { id -> id == knowledge.user?.id || knowledge.classmates.any { it.id == id } }
+             else action.visibleToUserIds.isNullOrEmpty()) &&
             (action.circularNumber == null || knowledge.circulars.any { it.number == action.circularNumber })
     }
 

@@ -112,7 +112,15 @@ fun AilaBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .graphicsLayer { alpha = fadeAlpha }
+                .graphicsLayer {
+                    alpha = fadeAlpha
+                    // A confirmation is above this window: frost the entire sheet,
+                    // including its labels and controls, without blurring the dialog.
+                    val radius = if (!AppTheme.liteEffects && AilaSheetBackdrop.openDialogs > 0) 32.dp.toPx() else 0f
+                    renderEffect = if (radius > 0f) androidx.compose.ui.graphics.BlurEffect(
+                        radius, radius, androidx.compose.ui.graphics.TileMode.Clamp
+                    ) else null
+                }
                 .padding(start = inset, end = inset, bottom = inset)
                 // Stessa trasparenza del resto del vetro (richiesta di Simone).
                 .ailaGlassSurface(shape),
@@ -134,10 +142,12 @@ fun AilaBottomSheet(
 /**
  * Quanti menu dal basso sono aperti in questo momento. La shell (MainAppShell) sfoca l'app dietro
  * finche' ce n'e' almeno uno, come iOS dietro ai fogli: il foglio e' in una finestra sua, quindi
- * la sfocatura non puo' farla lui.
+ * la sfocatura non puo' farla lui. Le conferme hanno una finestra ulteriore: mentre sono
+ * aperte si sfocano anche i fogli sottostanti, non soltanto la shell.
  */
 object AilaSheetBackdrop {
     var openSheets by androidx.compose.runtime.mutableIntStateOf(0)
+    var openDialogs by androidx.compose.runtime.mutableIntStateOf(0)
 }
 
 /**
