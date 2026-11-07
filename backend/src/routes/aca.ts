@@ -103,6 +103,6 @@ aca.post('/brief/:id/dismiss',async c=>{
 });
 aca.get('/experience',c=>{
  const safe=(s:string|undefined)=>{try{const u=new URL(s??'');return u.protocol==='https:'&&!u.username&&!u.password?u.href:null;}catch{return null;}};
- return c.json({id:'aca-pere-2026',title:'La tua classe. Un passo avanti.',subtitle:'AILA ACA ed Educazione tra pere',videoUrl:safe(c.env.HOME_VIDEO_URL),posterUrl:safe(c.env.HOME_VIDEO_POSTER_URL)});
+ return c.json({id:'aca-pere-2026',title:'La tua classe. Un passo avanti.',subtitle:'AILA ACA e Revisione tra pere',videoUrl:safe(c.env.HOME_VIDEO_URL),posterUrl:safe(c.env.HOME_VIDEO_POSTER_URL)});
 });
 export default aca;

@@ -2,6 +2,7 @@ package circolareplus.design
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
@@ -46,6 +47,7 @@ fun AilaFilterBar(
                             modifier=Modifier.weight(1f).fillMaxHeight()
                                 .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
                                 .background(if(selectedIndex==index) AppTheme.SelectionFill else SolidColor(AppTheme.TrackFill))
+                                .then(if(AppTheme.isGlass) Modifier.border(1.dp, AppTheme.GlassEdge, RoundedCornerShape(AppTheme.SmallElementRadius)) else Modifier)
                                 .semantics {selected=selectedIndex==index},
                             drawSelectionBackground=false,icon=glyph
                         )

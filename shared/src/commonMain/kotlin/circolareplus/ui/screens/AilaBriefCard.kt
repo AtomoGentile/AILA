@@ -33,7 +33,7 @@ internal fun AilaBriefCard(
     loading: Boolean = false, error: String? = null, onRefresh: () -> Unit = {}, modifier: Modifier = Modifier
 ) {
     val relevant = items
-    val visible = relevant
+    val visible = relevant.take(3)
     val dark = AppTheme.isDarkMode
     val glass = AppTheme.isGlass
     val primaryText = AppTheme.TextDark
@@ -86,7 +86,7 @@ internal fun AilaBriefCard(
                     AilaBriefKind.EVENT -> if(item.date == today().toIso()) "OGGI" else item.date?.let(::briefDate) ?: "CALENDARIO"
                     AilaBriefKind.CIRCULAR -> "CIRCOLARE N. ${item.sourceId}"
                     AilaBriefKind.POLL, AilaBriefKind.RANKING_POLL -> if(item.isResult) "RISULTATI" else "SONDAGGIO APERTO"
-                    AilaBriefKind.FORUM -> "EDUCAZIONE TRA PERE"
+                    AilaBriefKind.FORUM -> "REVISIONE TRA PERE"
                     AilaBriefKind.PROPOSAL -> "BACHECA"
                     AilaBriefKind.SEATMAP -> "POSTI"
                 }
@@ -98,10 +98,12 @@ internal fun AilaBriefCard(
                         Text("Circolare n. ${item.sourceId}",color=tint,style=MaterialTheme.typography.labelMedium,fontWeight=FontWeight.Bold)
                         Text(item.title,color=primaryText,style=MaterialTheme.typography.titleMedium)
                     }
-                } else Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
+                } else Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
                     .background(itemFill).border(1.dp, itemBorder, RoundedCornerShape(24.dp))
-                    .clickable(role=Role.Button) { onOpen(item) }.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(verticalAlignment = Alignment.Top) {
+                    .clickable(role=Role.Button) { onOpen(item) }.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(36.dp).background(tint.copy(alpha = if(dark) .14f else .10f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
                             when(item.kind) {
                                 AilaBriefKind.SEATMAP -> AppIcons.Chair(Modifier.size(20.dp), tint)
@@ -116,12 +118,13 @@ internal fun AilaBriefCard(
                             Text(label, color = tint, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                             Text(item.title, color = primaryText, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
-                        AppIcons.ChevronRight(Modifier.size(18.dp),soft)
-                        IconButton(onClick = { onDismiss(item) }, modifier = Modifier.size(32.dp).semantics { contentDescription = "Non ora: ${item.title}" }) {
-                            AppIcons.Close(Modifier.size(17.dp), soft)
-                        }
                     }
                     if(item.kind != AilaBriefKind.EVENT) Text(item.message, color = soft, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    IconButton(onClick = { onDismiss(item) }, modifier = Modifier.size(32.dp).semantics { contentDescription = "Non ora: ${item.title}" }) {
+                        AppIcons.Close(Modifier.size(17.dp), soft)
+                    }
                 }
             }
         }

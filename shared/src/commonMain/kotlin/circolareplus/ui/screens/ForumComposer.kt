@@ -21,7 +21,7 @@ import circolareplus.design.*
 
 @Composable
 internal fun ForumIntroduction(busy: Boolean, onCreate: () -> Unit, onRules: () -> Unit,
-    title: String = "Educazione tra pere", description: String = "Un posto per chiedere, capire e dare una mano ai compagni.",
+    title: String = "Revisione tra pere", description: String = "Un posto per chiedere, capire e dare una mano ai compagni.",
     createLabel: String = "Nuova domanda") {
     Column(Modifier.fillMaxWidth().communitySurface(RoundedCornerShape(28.dp),MaterialTheme.colorScheme.tertiary).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -63,7 +63,7 @@ internal fun ForumNewQuestionSheet(title: String, question: String, anonymous: B
     onTitle: (String) -> Unit, onQuestion: (String) -> Unit, onAnonymous: (Boolean) -> Unit, onAccepted: (Boolean) -> Unit,
     onRules: () -> Unit, onClose: () -> Unit, onPublish: () -> Unit) {
     AilaBottomSheet(onDismissRequest = { if(!busy) onClose() }) {
-        Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Nuova domanda", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, color = AppTheme.TextDark)

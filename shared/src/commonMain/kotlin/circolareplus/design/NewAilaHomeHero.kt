@@ -36,7 +36,7 @@ import circolareplus.data.remote.dto.AcaExperienceDto
    Text("Un assistente che conosce il contesto. Una classe che si aiuta.",style=MaterialTheme.typography.bodyLarge,color=Color(0xFFD3DDF7))
    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
     Button(onClick=onOpenAca,colors=ButtonDefaults.buttonColors(containerColor=Color.White,contentColor=Color(0xFF17203B))){Text("Scopri ACA")}
-    TextButton(onClick=onOpenForum,colors=ButtonDefaults.textButtonColors(contentColor=Color.White)){Text("Educazione tra pere")}
+    TextButton(onClick=onOpenForum,colors=ButtonDefaults.textButtonColors(contentColor=Color.White)){Text("Revisione tra pere")}
    }
    val policy = circolareplus.ai.AcaPolicyState.preferences
    if(policy.aiEnabled && policy.acaEnabled && policy.holdToOpen)

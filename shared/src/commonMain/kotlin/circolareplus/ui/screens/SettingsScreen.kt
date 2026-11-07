@@ -51,7 +51,7 @@ enum class NotificationKind(val key: String, val label: String, val description:
     CALENDAR("calendar", "Calendario", "Nuove verifiche, scadenze e pagamenti"),
     BOARD("board", "Bacheca", "Nuove proposte della classe"),
     SEATMAP("seatmap", "Mappa posti", "Nuova disposizione o votazione aperta"),
-    FORUM("forum", "Educazione tra pere", "Risposte e promemoria delle discussioni seguite"),
+    FORUM("forum", "Revisione tra pere", "Risposte e promemoria delle discussioni seguite"),
     POLLS("polls", "Sondaggi", "Nuovi sondaggi, interrogazioni e a ordinamento")
 }
 

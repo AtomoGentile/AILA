@@ -149,7 +149,7 @@ fun AcaContextOverlay(
                 .pointerInput(Unit) { detectTapGestures { } }
                 .pointerInput(isInteractive,recording,transcribing) {
                     var distance=0f
-                    val threshold=48.dp.toPx()
+                    val threshold=180.dp.toPx()
                     detectVerticalDragGestures(onDragStart={distance=0f;dragProgress=0f},
                         onVerticalDrag={change,amount->
                             change.consume()
@@ -200,6 +200,7 @@ fun AcaContextOverlay(
             }
             Layout(modifier=Modifier.fillMaxWidth(),content={
             TextField(question,{question=it},placeholder={Text("Chiedi ad AILA…",style=MaterialTheme.typography.titleMedium,maxLines=1)},modifier=Modifier.focusRequester(focus),readOnly=!isInteractive||recording||transcribing,minLines=1,maxLines=4,
+                contentPadding=PaddingValues(horizontal=0.dp, vertical=8.dp),
                 textStyle=MaterialTheme.typography.titleMedium,
                 colors=TextFieldDefaults.colors(focusedContainerColor=Color.Transparent,unfocusedContainerColor=Color.Transparent,focusedTextColor=AppTheme.TextDark,unfocusedTextColor=AppTheme.TextDark,focusedIndicatorColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent,focusedPlaceholderColor=muted,unfocusedPlaceholderColor=muted))
 

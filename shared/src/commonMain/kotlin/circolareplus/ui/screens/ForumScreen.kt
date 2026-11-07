@@ -59,17 +59,18 @@ fun ForumScreen(
  var pendingAttachments by remember{mutableStateOf<List<ContentAttachmentDto>>(emptyList())};var recording by remember{mutableStateOf(false)}
  suspend fun refresh(older:Boolean=false){
   val id=threadId
-  if(id==null){val result=repo.list(filter=threadFilter);threads=result.threads;moreThreads=result.hasMore;return}
+  if(id==null){val result=repo.list(filter=threadFilter);if(result.threads!=threads)threads=result.threads;moreThreads=result.hasMore;return}
   val next=repo.thread(id,if(older)snapshot?.nextBefore else null)
-  try{val proposals=repo.calendarProposals(id);if(threadId==id)calendarProposals=proposals}
+  try{val proposals=repo.calendarProposals(id);if(threadId==id&&calendarProposals!=proposals)calendarProposals=proposals}
   catch(e:CancellationException){throw e}catch(_:Exception){}
 
   if(threadId!=id)return
   val previous=snapshot?.takeIf{it.thread.id==id}
-  snapshot=if(previous==null)next else next.copy(posts=(previous.posts+next.posts).associateBy{it.id}.values
+  val refreshed=if(previous==null)next else next.copy(posts=(previous.posts+next.posts).associateBy{it.id}.values
    .sortedWith(compareBy<ForumPostDto>{it.id!=id}.thenBy{it.createdAt}.thenBy{it.id}),
    hasMore=if(older)next.hasMore else previous.hasMore||next.hasMore,
    nextBefore=if(older)next.nextBefore else previous.nextBefore?:next.nextBefore)
+  if(snapshot!=refreshed)snapshot=refreshed
  }
  fun launchWork(block:suspend()->Unit){if(busy)return;busy=true;error=null;scope.launch{try{block()}
   catch(e:CancellationException){throw e}catch(e:Exception){error=e.message?:"Operazione non completata"}finally{busy=false;activity(null)}}}
@@ -90,7 +91,7 @@ fun ForumScreen(
   }
  }
  val addFile:(IncomingContent)->Unit={file->if(threadId!=null&&pendingAttachments.size<5)launchWork{
-  activity(AssistantAgentPhase.READING);pendingAttachments=pendingAttachments+AppContainer.acaRepository.upload(file,threadId)
+  activity(AssistantAgentPhase.READING);pendingAttachments=pendingAttachments+AppContainer.acaRepository.upload(file,threadId,persistLocal=false)
  }else error="Apri una discussione e allega al massimo 5 file per risposta."}
  val pickFile=rememberContentPicker({error=it},addFile)
  val recorder=rememberVoiceRecorder({recording=it},{error=it},addFile)
@@ -126,8 +127,8 @@ fun ForumScreen(
  DisposableEffect(Unit){onDispose{onContextChange("")}}
  val goBack:()->Unit={when{focusPostId!=null->focusPostId=null;threadId!=null->{threadId=null;snapshot=null};else->onBack()}}
  PlatformBackHandler(enabled=isActive&&(!inline||threadId!=null||focusPostId!=null)){goBack()}
- Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight).then(if(inline)Modifier.padding(bottom=LocalBottomBarPadding.current) else Modifier.windowInsetsPadding(WindowInsets.safeDrawing)).imePadding()){
-  if(!inline || threadId!=null)AilaBackBar(title=when{focusPostId!=null->"Conversazione";threadId!=null->"Educazione tra pere";else->"Educazione tra pere"},onBackClick=goBack,
+  Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight).then(if(inline)Modifier.padding(bottom=LocalBottomBarPadding.current) else Modifier.windowInsetsPadding(WindowInsets.safeDrawing)).imePadding()){
+  if(!inline || threadId!=null)AilaBackBar(title=when{focusPostId!=null->"Conversazione";threadId!=null->"Revisione tra pere";else->"Revisione tra pere"},onBackClick=goBack,
    action={if(threadId!=null)AilaIconButton("Preferenze della discussione",{notificationDialog=true}){tint->AppIcons.Bell(color=tint)}})
   if(busy||listLoading)LinearProgressIndicator(
    modifier=Modifier.fillMaxWidth().height(2.dp),
@@ -136,7 +137,7 @@ fun ForumScreen(
   )
   error?.let{Text(it,Modifier.padding(16.dp),color=AppTheme.TintRedInk)}
   if(threadId==null){
-   LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+   LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(horizontal=16.dp,vertical=20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)){
     item { ForumIntroduction(busy, onCreate = { creating = true }, onRules = { showRules = true }) }
     item {
      val filters=listOf("ALL","OPEN","RESOLVED","MINE")
@@ -249,7 +250,7 @@ fun ForumScreen(
   onRules={showRules=true},onClose={if(!busy)creating=false},onPublish={launchWork{
    val created=repo.create(createTitle,createBody,anonymous);creating=false;createTitle="";createBody="";threadId=created.thread.id
   }})
- if(showRules)AlertDialog(onDismissRequest={showRules=false},title={Text("Educazione tra pere")},text={Column(Modifier.verticalScroll(rememberScrollState())){
+ if(showRules)AlertDialog(onDismissRequest={showRules=false},title={Text("Revisione tra pere")},text={Column(Modifier.verticalScroll(rememberScrollState())){
   Text("Le discussioni sono visibili alla tua classe e restano disponibili nel tempo. Scegli nome reale o pseudonimo al primo intervento: l’identità resta fissa in quella discussione. Non pubblicare dati personali o contenuti offensivi. Puoi segnalare gli abusi; i moderatori possono rimuovere i contenuti.")
   Spacer(Modifier.height(12.dp));Text("Puoi richiamare @perabot o chiedere un riassunto esplicitamente. I messaggi condivisi possono essere analizzati anche da altri lettori autorizzati che attivano le proposte automatiche: le proposte sono visibili alla classe e nessun evento viene aggiunto senza conferma. Disattivare la tua AI non impedisce l’analisi dei messaggi già condivisi da parte degli altri lettori. Le risposte AI sono assistenza e possono contenere errori. L’elaborazione cloud richiede il consenso in Impostazioni → AI. Sul server: 90 giorni fino a 3 MB; oltre: 7 giorni. Le copie sul dispositivo restano fino alla cancellazione manuale. Gli audio durano al massimo 10 minuti. La scadenza degli allegati non elimina i messaggi.")
  }},confirmButton={TextButton(onClick={rulesAccepted=true;showRules=false}){Text("Ho letto e accetto")}})

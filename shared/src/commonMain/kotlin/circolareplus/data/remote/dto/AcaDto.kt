@@ -12,7 +12,7 @@ import kotlinx.serialization.Serializable
  val transcription:Boolean=false,val imageAnalysis:Boolean=false,val localModels:String="")
 @Serializable data class AcaPreferencesResponseDto(val preferences:AcaPreferencesDto=AcaPreferencesDto(),val capabilities:AcaCapabilitiesDto=AcaCapabilitiesDto())
 @Serializable data class AcaExperienceDto(val id:String="aca-pere-2026",val title:String="La tua classe. Un passo avanti.",
- val subtitle:String="AILA ACA ed Educazione tra pere",val videoUrl:String?=null,val posterUrl:String?=null)
+ val subtitle:String="AILA ACA e Revisione tra pere",val videoUrl:String?=null,val posterUrl:String?=null)
 @Serializable data class AcaNudgeDto(val id:String,val eventId:String,val eventDate:String,val title:String,val message:String,val suggestion:String,val canPlanStudy:Boolean=false)
 @Serializable data class AcaNudgesResponseDto(val nudges:List<AcaNudgeDto> = emptyList())
 @Serializable enum class AilaBriefKind { EVENT, CIRCULAR, POLL, RANKING_POLL, FORUM, PROPOSAL, SEATMAP }

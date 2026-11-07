@@ -150,7 +150,7 @@ enum class MainTab(val title: String) {
 enum class ClassSection(val title: String) {
     CIRCULARS("Circolari"),
     BOARD("Bacheca"),
-    PERE("Pere")
+    PERE("Revisione tra pere")
 }
 
 /**
@@ -713,7 +713,7 @@ fun MainAppShell(
                 if (!AppContainer.isUsingLocalAiFirst()) {
                     withTimeoutOrNull(1500L) {
                         try {
-                            val fetched = AppContainer.circularsRepository.listCirculars()
+                            val fetched = AppContainer.circularsRepository.listAllCirculars()
                             circulars = fetched
                             noteNovelties(freshCirculars = fetched)
                             // Le più recenti prima: sono quelle che l'utente vede subito in Home
@@ -731,7 +731,7 @@ fun MainAppShell(
                 } else {
                     // Carica la lista senza classificare subito
                     try {
-                        val fetched = AppContainer.circularsRepository.listCirculars()
+                        val fetched = AppContainer.circularsRepository.listAllCirculars()
                         circulars = fetched
                         noteNovelties(freshCirculars = fetched)
                     } catch (e: Exception) {
@@ -1785,7 +1785,7 @@ fun MainAppShell(
             isCircularsLoading = true
             circularsError = null
             try {
-                circulars = AppContainer.circularsRepository.listCirculars()
+                circulars = AppContainer.circularsRepository.listAllCirculars()
                 circularsLoadedOnce = true
                 noteNovelties(freshCirculars = circulars)
                 // Nota: la classificazione AI (client-side, con la chiave personale dello
@@ -2120,7 +2120,7 @@ fun MainAppShell(
     suspend fun refreshCirculars() {
         if (isCircularsLoading) return
         try {
-            val fresh = AppContainer.circularsRepository.listCirculars()
+            val fresh = AppContainer.circularsRepository.listAllCirculars()
             if (fresh != circulars) circulars = fresh
             noteNovelties(freshCirculars = fresh)
         } catch (e: CancellationException) {
@@ -4563,7 +4563,8 @@ fun MainAppShell(
                                 val travel = if (v < 0f) circolareplus.design.ailaUnderlayShift else 1f
                                 alpha = (1f - kotlin.math.abs(v) / travel).coerceIn(0f, 1f)
                             } else {
-                                translationX = v * size.width
+                                if (route == ShellRoute.SEARCH && !forwardNow) translationY = -v * size.height
+                                else translationX = v * size.width
                             }
                         } else Modifier
                     )

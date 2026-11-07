@@ -32,7 +32,7 @@ fun AcaHubScreen(onBack:()->Unit,onOpenAssistant:()->Unit,onOpenForum:()->Unit,o
      Text("Chiedi, approfondisci e prepara le azioni da confermare.",color=AppTheme.TextMuted)}
    }
    Button(onClick=onOpenAssistant,modifier=Modifier.fillMaxWidth()){Text("Parla con AILA")}
-   OutlinedButton(onClick=onOpenForum,modifier=Modifier.fillMaxWidth()){Text("Educazione tra pere")}
+   OutlinedButton(onClick=onOpenForum,modifier=Modifier.fillMaxWidth()){Text("Revisione tra pere")}
    OutlinedButton(onClick=onOpenLocalFiles,modifier=Modifier.fillMaxWidth()){Text("File sul dispositivo")}
    OutlinedButton(onClick=picker,modifier=Modifier.fillMaxWidth()){Text("Chiedi su un documento, un’immagine o un audio")}
    OutlinedButton(onClick={if(recording)recorder.stop()else recorder.start()},modifier=Modifier.fillMaxWidth()){

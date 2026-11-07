@@ -74,7 +74,7 @@ internal object AssistantAbout {
         • "Dove sono seduto in aula?"
         • "Metti questi impegni a calendario": con ACA attiva preparo gli eventi e li inserisco dopo la tua conferma.
         • "Sposta la verifica a venerdì" o "Elimina questo evento": mostro prima il riepilogo esatto.
-        • Da Educazione tra pere puoi chiedere riassunti e richiamare @perabot.
+        • Da Revisione tra pere puoi chiedere riassunti e richiamare @perabot.
         • Puoi aprire un documento o un vocale in ACA per scegliere cosa analizzare.
         Per lo studio e le domande generali rispondo con le mie conoscenze. Per creare sondaggi ti indico dove farlo nell'app.
     """.trimIndent()

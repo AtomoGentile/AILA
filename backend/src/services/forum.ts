@@ -63,7 +63,7 @@ export async function notifyForumReply(env:Env,thread:ForumThreadRow,post:ForumP
  const direct=new Set(mentioned.results.filter(p=>mentions.includes(p.public_key)).map(p=>p.user_id));
  if(parent?.author_id)direct.add(parent.author_id);
  const ids=subs.results.filter(s=>s.mode==='ALL'||s.mode==='REPLIES'&&direct.has(s.user_id)).map(s=>s.user_id);
- await notifyUsers(env,ids,'Educazione tra pere',`Nuova risposta: ${thread.title}`,{action:'forum_reply',thread_id:thread.id,post_id:post.id});
+ await notifyUsers(env,ids,'Revisione tra pere',`Nuova risposta: ${thread.title}`,{action:'forum_reply',thread_id:thread.id,post_id:post.id});
 }
 export async function forumResolutionNudges(env:Env){
  const rows=await env.DB.prepare(`SELECT * FROM forum_threads WHERE resolved=0 AND hidden=0 AND author_id IS NOT NULL

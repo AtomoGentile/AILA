@@ -32,6 +32,19 @@ class CircularsRepository(private val api: ApiClient) {
         return response.circulars.map { it.toDomain(api.baseUrl) }
     }
 
+    /** Carica tutte le pagine per gli elenchi dell'app; l'endpoint limita ogni pagina a 100. */
+    suspend fun listAllCirculars(): List<Circular> {
+        val pageSize = 100
+        val all = mutableListOf<Circular>()
+        var offset = 0
+        while (true) {
+            val page = listCirculars(limit = pageSize, offset = offset)
+            all += page
+            if (page.size < pageSize) return all
+            offset += page.size
+        }
+    }
+
     /** Circolari con numero > [after], in ordine crescente (max 50). Solo numero, titolo, data. */
     suspend fun listNewerThan(after: Int): List<NewerCircularDto> {
         val response: NewerCircularsResponseDto = api.get("/api/circulars/newer?after=$after", offlineCopy = false)
