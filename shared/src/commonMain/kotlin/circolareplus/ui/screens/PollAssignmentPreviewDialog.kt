@@ -91,7 +91,7 @@ internal fun PollAssignmentPreviewDialog(
                     horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
                     AilaIconButton(contentDescription = "Chiudi anteprima", enabled = !busy, onClick = onDismiss) { tint -> AppIcons.ChevronLeft(color = tint) }
                     Column(Modifier.weight(1f)) {
-                        Text("Anteprima nuovo algoritmo", style = MaterialTheme.typography.titleMedium, color = AppTheme.TextDark)
+                        Text("Anteprima calendario", style = MaterialTheme.typography.titleMedium, color = AppTheme.TextDark)
                         Text(subject, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
                     }
                     AilaIconButton(contentDescription = "Aggiorna confronto", enabled = !loading && !busy, onClick = { actionError = null; refresh++ }) { tint -> AppIcons.Refresh(color = tint) }

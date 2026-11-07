@@ -6,7 +6,7 @@ import { aiPreferences } from '../services/aiRouter';
 import { Hono } from 'hono';
 import type { CircularAttachment, Env, JWTPayload } from '../types';
 import { authMiddleware, resolveClassId } from '../auth';
-import { parsePerClass, resolveForClass } from '../services/classAnalysis';
+import { parsePerClass, resolveForClass, circularBadgeForClass, isRelevantCircular } from '../services/classAnalysis';
 import {
   BACKFILL_WINDOW,
   MAX_ATTEMPTS,
@@ -51,10 +51,11 @@ circulars.get('/', authMiddleware(), async (c) => {
   const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '50', 10) || 50, 1), 100);
   const offset = Math.max(parseInt(c.req.query('offset') ?? '0', 10) || 0, 0);
 
+  const classId = await resolveClassId(c);
   const rows = await c.env.DB.prepare(
-    `SELECT c.number, c.title, c.publish_date, c.r2_pdf_key, c.original_url, c.attachments_json, c.created_at,
+    `SELECT c.number, c.title, c.publish_date, c.r2_pdf_key, c.original_url, c.attachments_json, c.created_at, a.badge,a.per_class_json,
        EXISTS(SELECT 1 FROM circular_ai_analysis a WHERE a.circular_number = c.number AND a.tier >= 1 AND a.is_fallback = 0 AND LENGTH(TRIM(a.summary)) > 0) AND c.notification_pending = 0 AS summary_ready
-     FROM circulars c ORDER BY c.number DESC LIMIT ? OFFSET ?`
+     FROM circulars c LEFT JOIN circular_ai_analysis a ON a.circular_number=c.number ORDER BY c.number DESC LIMIT ? OFFSET ?`
   ).bind(limit, offset).all<{
     number: number;
     title: string;
@@ -64,6 +65,8 @@ circulars.get('/', authMiddleware(), async (c) => {
     attachments_json: string;
     created_at: string;
     summary_ready: number;
+    badge: string|null;
+    per_class_json: string|null;
   }>();
 
   const total = await c.env.DB.prepare('SELECT COUNT(*) as count FROM circulars')
@@ -79,6 +82,7 @@ circulars.get('/', authMiddleware(), async (c) => {
       attachments: parseAttachments(row.attachments_json),
       createdAt: row.created_at,
       summaryReady: row.summary_ready === 1,
+      notificationEligible: row.badge!==null && isRelevantCircular(circularBadgeForClass(row.badge,row.per_class_json,classId)),
     })),
     total: total?.count ?? 0,
     limit,
@@ -143,12 +147,13 @@ circulars.get('/newer', authMiddleware(), async (c) => {
   const after = parseInt(c.req.query('after') ?? '0', 10);
   if (isNaN(after) || after < 0) return c.json({ error: 'Parametro after non valido' }, 400);
 
+  const classId=await resolveClassId(c);
   const rows = await c.env.DB.prepare(
-    `SELECT c.number, c.title, c.publish_date FROM circulars c WHERE c.number > ? AND EXISTS (SELECT 1 FROM circular_ai_analysis a WHERE a.circular_number = c.number AND a.tier >= 2) ORDER BY c.number ASC LIMIT 50`
-  ).bind(after).all<{ number: number; title: string; publish_date: string }>();
+    `SELECT c.number,c.title,c.publish_date,a.badge,a.per_class_json FROM circulars c JOIN circular_ai_analysis a ON a.circular_number=c.number WHERE c.number>? AND a.tier>=2 AND a.is_fallback=0 AND LENGTH(TRIM(a.summary))>0 ORDER BY c.number ASC`
+  ).bind(after).all<{ number: number; title: string; publish_date: string;badge:string;per_class_json:string|null }>();
 
   return c.json({
-    circulars: rows.results.map((row) => ({
+    circulars: rows.results.filter(row=>isRelevantCircular(circularBadgeForClass(row.badge,row.per_class_json,classId))).slice(0,50).map((row) => ({
       number: row.number,
       title: row.title,
       publishDate: row.publish_date,

@@ -12,7 +12,8 @@ data class CircularDto(
     val originalUrl: String? = null,
     val attachments: List<CircularAttachmentDto> = emptyList(),
     val createdAt: String? = null,
-    val summaryReady: Boolean = false
+    val summaryReady: Boolean = false,
+    val notificationEligible: Boolean = false
 )
 
 /**

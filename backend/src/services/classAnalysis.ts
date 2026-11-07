@@ -105,3 +105,11 @@ export function resolveForClass(
     deadlines,
   };
 }
+
+/** Only these classifications may produce a circular notification or Brief entry. */
+export function isRelevantCircular(badge:string):boolean {
+  return badge === 'RELEVANT' || badge === 'POTENTIAL';
+}
+export function circularBadgeForClass(badge:string,perClassJson:string|null,classId:string):string {
+  return resolveForClass({badge,summary:'',deadlines:[],perClass:parsePerClass(perClassJson)},classId).badge;
+}

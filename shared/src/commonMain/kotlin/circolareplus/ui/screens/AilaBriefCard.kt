@@ -1,5 +1,7 @@
 package circolareplus.ui.screens
 
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -30,12 +32,8 @@ internal fun AilaBriefCard(
     onOpen: (AilaBriefItemDto) -> Unit, onStudy: (String) -> Unit,
     loading: Boolean = false, error: String? = null, onRefresh: () -> Unit = {}, modifier: Modifier = Modifier
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    val relevant = items.filterNot { it.kind == AilaBriefKind.CIRCULAR }
-    val visible = if(expanded) relevant else {
-        val first = relevant.firstOrNull()
-        listOfNotNull(first, relevant.drop(1).firstOrNull { it.kind != first?.kind } ?: relevant.getOrNull(1))
-    }
+    val relevant = items
+    val visible = relevant
     val white = Color.White
     val soft = Color(0xFFCFD9F4)
     Box(modifier.fillMaxWidth().clip(RoundedCornerShape(32.dp))
@@ -50,7 +48,7 @@ internal fun AilaBriefCard(
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("AILA brief", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, color = white)
+                    Text("AILA Brief", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, color = white)
                     Text("Quello che conta per te, adesso.",
                         style = MaterialTheme.typography.bodyMedium, color = soft)
                 }
@@ -71,20 +69,31 @@ internal fun AilaBriefCard(
                     AilaBriefKind.POLL, AilaBriefKind.RANKING_POLL -> Color(0xFFC9B9FF)
                     AilaBriefKind.FORUM -> Color(0xFFA0D5FF)
                     AilaBriefKind.PROPOSAL -> Color(0xFFFFBDD5)
+                    AilaBriefKind.SEATMAP -> Color(0xFFA8D8B9)
                 }
                 val label = when(item.kind) {
                     AilaBriefKind.EVENT -> if(item.date == today().toIso()) "OGGI" else item.date?.let(::briefDate) ?: "CALENDARIO"
                     AilaBriefKind.CIRCULAR -> "CIRCOLARE N. ${item.sourceId}"
-                    AilaBriefKind.POLL, AilaBriefKind.RANKING_POLL -> "DA COMPILARE"
+                    AilaBriefKind.POLL, AilaBriefKind.RANKING_POLL -> if(item.isResult) "RISULTATI" else "SONDAGGIO APERTO"
                     AilaBriefKind.FORUM -> "EDUCAZIONE TRA PERE"
                     AilaBriefKind.PROPOSAL -> "BACHECA"
+                    AilaBriefKind.SEATMAP -> "POSTI"
                 }
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
+                if(item.kind == AilaBriefKind.CIRCULAR) {
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
+                        .background(white.copy(alpha=.065f))
+                        .clickable(role=Role.Button) { onOpen(item) }.padding(16.dp),
+                        verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                        Text("Circolare n. ${item.sourceId}",color=tint,style=MaterialTheme.typography.labelMedium,fontWeight=FontWeight.Bold)
+                        Text(item.title,color=white,style=MaterialTheme.typography.titleMedium)
+                    }
+                } else Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
                     .background(white.copy(alpha = .065f)).border(1.dp, white.copy(alpha = .09f), RoundedCornerShape(24.dp))
                     .padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.Top) {
                         Box(Modifier.size(36.dp).background(tint.copy(alpha = .14f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
                             when(item.kind) {
+                                AilaBriefKind.SEATMAP -> AppIcons.Chair(Modifier.size(20.dp), tint)
                                 AilaBriefKind.EVENT -> AppIcons.Calendar(Modifier.size(20.dp), tint)
                                 AilaBriefKind.CIRCULAR -> AppIcons.Document(Modifier.size(20.dp), tint)
                                 AilaBriefKind.POLL, AilaBriefKind.RANKING_POLL -> AppIcons.Poll(Modifier.size(20.dp), tint)
@@ -116,9 +125,6 @@ internal fun AilaBriefCard(
 
                     }
                 }
-            }
-            if(relevant.size > 2) TextButton(onClick={expanded=!expanded},colors=ButtonDefaults.textButtonColors(contentColor=soft),modifier=Modifier.fillMaxWidth()) {
-                Text(if(expanded) "Mostra meno" else "Altre ${relevant.size-2} novità")
             }
         }
     }

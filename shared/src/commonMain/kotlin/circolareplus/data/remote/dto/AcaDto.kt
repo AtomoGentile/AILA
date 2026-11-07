@@ -15,10 +15,10 @@ import kotlinx.serialization.Serializable
  val subtitle:String="AILA ACA ed Educazione tra pere",val videoUrl:String?=null,val posterUrl:String?=null)
 @Serializable data class AcaNudgeDto(val id:String,val eventId:String,val eventDate:String,val title:String,val message:String,val suggestion:String,val canPlanStudy:Boolean=false)
 @Serializable data class AcaNudgesResponseDto(val nudges:List<AcaNudgeDto> = emptyList())
-@Serializable enum class AilaBriefKind { EVENT, CIRCULAR, POLL, RANKING_POLL, FORUM, PROPOSAL }
+@Serializable enum class AilaBriefKind { EVENT, CIRCULAR, POLL, RANKING_POLL, FORUM, PROPOSAL, SEATMAP }
 @Serializable data class AilaBriefItemDto(
  val id:String,val revision:String,val kind:AilaBriefKind,val sourceId:String,val title:String,
- val message:String,val actionLabel:String,val date:String?=null,val canPlanStudy:Boolean=false
+ val message:String,val actionLabel:String,val date:String?=null,val canPlanStudy:Boolean=false,val isResult:Boolean=false
 )
 @Serializable data class AilaBriefResponseDto(val items:List<AilaBriefItemDto> = emptyList())
 @Serializable data class AilaBriefDismissDto(val revision:String)
@@ -61,3 +61,6 @@ import kotlinx.serialization.Serializable
  val digest:String,val sourcePostIds:List<String> = emptyList(),val provider:String="",val createdAt:String="",val expiresAt:String="",val acceptedAt:String?=null)
 @Serializable data class ForumCalendarProposalsDto(val proposals:List<ForumCalendarProposalDto> = emptyList())
 @Serializable data class SharedCalendarPreviewRequestDto(val sharedProposalId:String,val digest:String)
+
+@Serializable data class ClassSearchHitDto(val kind:String,val id:String,val title:String,val text:String)
+@Serializable data class ClassSearchResponseDto(val hits:List<ClassSearchHitDto> = emptyList())

@@ -50,7 +50,6 @@ fun CircularsScreen(
     aiEnabled: Boolean = circolareplus.ai.AcaPolicyState.preferences.let { it.aiEnabled && "CIRCULARS" in it.services }
 ) {
     var selectedFilter by remember { mutableStateOf<CircularRelevanceBadge?>(null) }
-    var searchQuery by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier
@@ -62,79 +61,27 @@ fun CircularsScreen(
         // Niente titolo ne' riga "Aggiornato da Spaggiari": l'intestazione la da' gia' il selettore
         // Circolari/Bacheca in cima, e lo spazio serve per leggere.
 
-        // Ricerca per numero o titolo: mancava del tutto, prevista nel design di riferimento.
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Cerca per numero o titolo\u2026", style = MaterialTheme.typography.bodyLarge) },
-            leadingIcon = {
-                AppIcons.Search(modifier = Modifier.size(18.dp), color = AppTheme.TextFaint)
-            },
-            singleLine = true,
-            shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
-            colors = ailaFieldColors()
-        )
-
-        Spacer(modifier = Modifier.height(AppTheme.Space12))
-
-        // Filtri per Badge: pill scorrevole condiviso (AilaSlidingChipRow) invece del cross-fade di
-        // colore su ogni singola chip.
         val relevanceFilterOptions = remember { listOf<CircularRelevanceBadge?>(null, CircularRelevanceBadge.RELEVANT, CircularRelevanceBadge.POTENTIAL, CircularRelevanceBadge.NOT_RELEVANT) }
-        if (aiEnabled) circolareplus.design.AilaSlidingChipRow(
-            selectedIndex = relevanceFilterOptions.indexOf(selectedFilter),
-            itemCount = relevanceFilterOptions.size,
-            modifier = Modifier.fillMaxWidth()
-        ) { chipModifier ->
-            circolareplus.design.AnimatedFilterChip(
-                label = "Tutte",
-                isSelected = selectedFilter == null,
-                onClick = { selectedFilter = null },
-                drawSelectionBackground = false,
-                modifier = chipModifier(0)
-            )
-            circolareplus.design.AnimatedFilterChip(
-                label = "Per te",
-                isSelected = selectedFilter == CircularRelevanceBadge.RELEVANT,
-                onClick = { selectedFilter = CircularRelevanceBadge.RELEVANT },
-                icon = { AilaDot(color = AppTheme.BadgeRelevantGreen, size = 8.dp) },
-                drawSelectionBackground = false,
-                modifier = chipModifier(1)
-            )
-            circolareplus.design.AnimatedFilterChip(
-                label = "Possibili",
-                isSelected = selectedFilter == CircularRelevanceBadge.POTENTIAL,
-                onClick = { selectedFilter = CircularRelevanceBadge.POTENTIAL },
-                icon = { AilaDot(color = AppTheme.BadgePotentialYellow, size = 8.dp) },
-                drawSelectionBackground = false,
-                modifier = chipModifier(2)
-            )
-            circolareplus.design.AnimatedFilterChip(
-                label = "Altre",
-                isSelected = selectedFilter == CircularRelevanceBadge.NOT_RELEVANT,
-                onClick = { selectedFilter = CircularRelevanceBadge.NOT_RELEVANT },
-                icon = { AilaDot(color = AppTheme.BadgeNotRelevantGray, size = 8.dp) },
-                drawSelectionBackground = false,
-                modifier = chipModifier(3)
-            )
-        }
+        if(aiEnabled) circolareplus.design.AilaFilterBar(
+            labels=listOf("Tutte","Per te","Possibili","Altre"),
+            selectedIndex=relevanceFilterOptions.indexOf(selectedFilter),
+            onSelect={selectedFilter=relevanceFilterOptions[it]},
+            dots=listOf(null,AppTheme.BadgeRelevantGreen,AppTheme.BadgePotentialYellow,AppTheme.BadgeNotRelevantGray)
+        )
 
         Spacer(modifier = Modifier.height(AppTheme.Space16))
 
         val filteredCirculars = circulars.filter { circ ->
             val matchesFilter = if (selectedFilter == null) true
                 else classifications[circ.number]?.badge == selectedFilter
-            val matchesSearch = searchQuery.isBlank() ||
-                circ.title.contains(searchQuery, ignoreCase = true) ||
-                circ.number.toString().contains(searchQuery.trim())
-            (!aiEnabled || matchesFilter) && matchesSearch
+            !aiEnabled || matchesFilter
         }
 
-        // Cambiando filtro o ricerca si torna in cima: la lista tiene la posizione per chiave,
+        // Cambiando filtro si torna in cima: la lista tiene la posizione per chiave,
         // quindi tornando a "Tutte" restava in alto la prima circolare del filtro precedente
         // invece dell'ultima uscita.
         val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-        LaunchedEffect(selectedFilter, searchQuery) { listState.scrollToItem(0) }
+        LaunchedEffect(selectedFilter) { listState.scrollToItem(0) }
 
         LazyColumn(
             state = listState,
@@ -155,8 +102,6 @@ fun CircularsScreen(
                         message = when {
                             circulars.isEmpty() ->
                                 "Non è ancora arrivata nessuna circolare dalla scuola."
-                            searchQuery.isNotBlank() ->
-                                "Nessuna circolare corrisponde a \"$searchQuery\"."
                             else ->
                                 "Nessuna circolare in questa categoria. Prova a togliere il filtro."
                         },

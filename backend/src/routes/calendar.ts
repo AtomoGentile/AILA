@@ -285,6 +285,8 @@ calendar.put('/:id', async (c) => {
     startTime?: string | null;
     category?: EventCategory;
     notes?: string | null;
+    isForAll?: boolean | null;
+    visibleToUserIds?: string[] | null;
   }>();
 
   if (body.title !== undefined && (typeof body.title !== 'string' || !body.title.trim() || body.title.length > MAX_TITLE_LENGTH)) {
@@ -303,6 +305,27 @@ calendar.put('/:id', async (c) => {
     return c.json({ error: 'Note non valide' }, 400);
   }
 
+  const updateAudience = body.isForAll != null;
+  if (updateAudience && typeof body.isForAll !== 'boolean') {
+    return c.json({ error: 'Destinatari non validi' }, 400);
+  }
+  if (body.visibleToUserIds != null && (!Array.isArray(body.visibleToUserIds) ||
+      body.visibleToUserIds.some(id => typeof id !== 'string' || !id.trim()))) {
+    return c.json({ error: 'Destinatari non validi' }, 400);
+  }
+  if (!updateAudience && body.visibleToUserIds != null) {
+    return c.json({ error: 'Specifica isForAll per modificare i destinatari' }, 400);
+  }
+  const recipients = [...new Set(body.visibleToUserIds ?? [])];
+  if (updateAudience && !body.isForAll && recipients.length === 0) {
+    return c.json({ error: 'Seleziona almeno un destinatario' }, 400);
+  }
+  if (updateAudience && recipients.length > 0) {
+    const members = await c.env.DB.prepare('SELECT id FROM users WHERE class_id = ?').bind(classId).all<{id:string}>();
+    const ids = new Set(members.results.map(member => member.id));
+    if (recipients.some(id => !ids.has(id))) return c.json({ error: 'Alcuni destinatari non fanno parte della classe' }, 400);
+  }
+
   // `startTime: null` e `notes: null` cancellano il valore; un campo assente resta com'e'.
   await c.env.DB.prepare(
     `UPDATE calendar_events SET
@@ -310,7 +333,9 @@ calendar.put('/:id', async (c) => {
        event_date = COALESCE(?, event_date),
        start_time = CASE WHEN ? THEN ? ELSE start_time END,
        category = COALESCE(?, category),
-       notes = CASE WHEN ? THEN ? ELSE notes END
+       notes = CASE WHEN ? THEN ? ELSE notes END,
+       is_for_all = CASE WHEN ? THEN ? ELSE is_for_all END,
+       visible_to_user_ids_json = CASE WHEN ? THEN ? ELSE visible_to_user_ids_json END
      WHERE id = ?`
   ).bind(
     body.title?.trim() ?? null,
@@ -320,6 +345,10 @@ calendar.put('/:id', async (c) => {
     body.category ?? null,
     'notes' in body ? 1 : 0,
     body.notes ?? null,
+    updateAudience ? 1 : 0,
+    body.isForAll ? 1 : 0,
+    updateAudience ? 1 : 0,
+    body.isForAll ? null : JSON.stringify(recipients),
     id
   ).run();
 

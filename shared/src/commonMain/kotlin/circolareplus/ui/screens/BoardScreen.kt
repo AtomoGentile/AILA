@@ -64,6 +64,13 @@ fun BoardScreen(
     onRejectUnlock: (String) -> Unit = {}
 ) {
     var selectedStatusFilter by remember(focusProposalId) { mutableStateOf<ProposalStatus?>(null) }
+    var focusedFilterApplied by remember(focusProposalId) { mutableStateOf(false) }
+    LaunchedEffect(focusProposalId,proposals) {
+        if(!focusedFilterApplied && focusProposalId!=null) proposals.firstOrNull {it.id==focusProposalId}?.let {
+            selectedStatusFilter=if(it.status==ProposalStatus.CHIUSA) ProposalStatus.CHIUSA else null
+            focusedFilterApplied=true
+        }
+    }
     var showHelp by remember { mutableStateOf(false) }
     if(showHelp) AlertDialog(onDismissRequest={showHelp=false}, title={Text("La bacheca della classe")},
         text={Text("Proponi un’idea per la classe: i compagni possono votarla e commentarla. Segui lo stato della proposta, da nuova a chiusa, e il suo esito. Puoi scegliere se pubblicare con il tuo nome o in forma anonima.")},
@@ -81,23 +88,11 @@ fun BoardScreen(
         Spacer(Modifier.height(12.dp))
         val statusFilterOptions = remember { listOf<ProposalStatus?>(null, ProposalStatus.NUOVA, ProposalStatus.IN_ANALISI, ProposalStatus.CHIUSA) }
         val statusFilterLabels = remember { listOf("Tutte", "Nuove", "In analisi", "Chiuse") }
-        circolareplus.design.AilaSlidingChipRow(
-            selectedIndex = statusFilterOptions.indexOf(selectedStatusFilter),
-            itemCount = statusFilterOptions.size,
-            // Scorrevole: sugli iPhone piccoli quattro chip non ci stanno e "Chiuse" veniva tagliato.
-            scrollable = true,
-            modifier = Modifier.fillMaxWidth()
-        ) { chipModifier ->
-            statusFilterOptions.forEachIndexed { index, status ->
-                circolareplus.design.AnimatedFilterChip(
-                    label = statusFilterLabels[index],
-                    isSelected = selectedStatusFilter == status,
-                    onClick = { selectedStatusFilter = status },
-                    drawSelectionBackground = false,
-                    modifier = chipModifier(index)
-                )
-            }
-        }
+        circolareplus.design.AilaFilterBar(
+            labels=statusFilterLabels,
+            selectedIndex=statusFilterOptions.indexOf(selectedStatusFilter),
+            onSelect={selectedStatusFilter=statusFilterOptions[it]}
+        )
 
         Spacer(modifier = Modifier.height(AppTheme.Space16))
 

@@ -52,10 +52,10 @@ class CalendarRepository(private val api: ApiClient) {
         api.delete<SuccessDto>("/api/calendar/$id")
     }
 
-    suspend fun updateEvent(id: String, title: String, eventDate: String, startTime: String?, category: CalendarEventCategory, notes: String?) {
+    suspend fun updateEvent(id: String, title: String, eventDate: String, startTime: String?, category: CalendarEventCategory, notes: String?, isForAll: Boolean? = null, visibleToUserIds: List<String>? = null) {
         api.put<UpdateCalendarEventRequestDto, SuccessDto>(
             "/api/calendar/$id",
-            UpdateCalendarEventRequestDto(title, eventDate, startTime, category.name, notes)
+            UpdateCalendarEventRequestDto(title, eventDate, startTime, category.name, notes, isForAll, visibleToUserIds)
         )
     }
 }

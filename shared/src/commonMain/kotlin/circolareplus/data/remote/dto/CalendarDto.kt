@@ -58,5 +58,7 @@ data class UpdateCalendarEventRequestDto(
     val eventDate: String,
     val startTime: String? = null,
     val category: String,
-    val notes: String? = null
+    val notes: String? = null,
+    val isForAll: Boolean? = null,
+    val visibleToUserIds: List<String>? = null
 )

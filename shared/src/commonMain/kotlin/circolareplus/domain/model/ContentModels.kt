@@ -17,7 +17,8 @@ data class Circular(
     val r2PdfKey: String,
     val downloadUrl: String? = null,
     val attachments: List<CircularAttachment> = emptyList(),
-    val summaryReady: Boolean = false
+    val summaryReady: Boolean = false,
+    val notificationEligible: Boolean = false
 )
 
 /**

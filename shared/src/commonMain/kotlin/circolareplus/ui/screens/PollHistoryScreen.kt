@@ -164,10 +164,6 @@ fun PollHistoryScreen(
                             Spacer(Modifier.height(AppTheme.Space8))
                             Text("Calendario calcolato prima dell’aggiornamento. Confronta per vedere cosa cambierebbe.",
                                 color = AppTheme.TextMuted, style = MaterialTheme.typography.bodySmall)
-                        } else if (poll.calculationAlgorithm == "global-score-v1") {
-                            Spacer(Modifier.height(AppTheme.Space8))
-                            Text("Calcolato con il nuovo algoritmo", color = AppTheme.TintGreenInk,
-                                style = MaterialTheme.typography.labelMedium)
                         }
                         Spacer(modifier = Modifier.height(AppTheme.Space12))
                         TextButton(
@@ -184,7 +180,7 @@ fun PollHistoryScreen(
 
                         if (canManage && loadAssignmentPreview != null) {
                             circolareplus.design.AilaSecondaryButton(
-                                text = "Confronta con il nuovo algoritmo",
+                                text = "Confronta calendario",
                                 modifier = Modifier.fillMaxWidth(),
                                 onClick = { previewPoll = poll }
                             )

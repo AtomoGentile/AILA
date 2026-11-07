@@ -17,8 +17,11 @@ async function reserveForumWrite(env:Env,userId:string,feature:string,max:number
 const clean=(v:unknown,max:number)=>typeof v==='string'&&v.trim().length>0&&v.trim().length<=max?v.trim():null;
 forum.get('/',async c=>{
  const offset=Math.min(Math.max(Number(c.req.query('offset'))||0,0),10000);const classId=await resolveClassId(c);
+ const filter=c.req.query('filter')??'ALL';
+ if(!['ALL','OPEN','RESOLVED','MINE'].includes(filter))return c.json({error:'Filtro non valido'},400);
+ const condition=filter==='OPEN'?' AND t.resolved=0':filter==='RESOLVED'?' AND t.resolved=1':filter==='MINE'?' AND t.author_id=?':'';
  const rows=await c.env.DB.prepare(`SELECT t.*,(SELECT COUNT(*)-1 FROM forum_posts p WHERE p.thread_id=t.id AND p.hidden=0) replies
- FROM forum_threads t WHERE class_id=? AND hidden=0 ORDER BY last_message_at DESC,id DESC LIMIT 51 OFFSET ?`).bind(classId,offset).all<ForumThreadRow&{replies:number}>();
+ FROM forum_threads t WHERE class_id=? AND hidden=0${condition} ORDER BY last_message_at DESC,id DESC LIMIT 51 OFFSET ?`).bind(classId,...(filter==='MINE'?[c.get('jwtPayload').sub]:[]),offset).all<ForumThreadRow&{replies:number}>();
  return c.json({threads:rows.results.slice(0,50).map(t=>({id:t.id,title:t.title,resolved:!!t.resolved,featuredPostId:t.featured_post_id,replies:Math.max(t.replies,0),
  createdAt:t.created_at,lastMessageAt:t.last_message_at,isAuthor:t.author_id===c.get('jwtPayload').sub,
  needsResolution:t.author_id===c.get('jwtPayload').sub&&!t.resolved&&Date.parse(t.last_message_at.replace(' ','T')+'Z')<Date.now()-3*86400000})),hasMore:rows.results.length>50});

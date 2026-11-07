@@ -41,6 +41,7 @@ fun ForumScreen(
  var confirmingProposal by remember{mutableStateOf<ForumCalendarProposalDto?>(null)}
  var proposalError by remember{mutableStateOf<String?>(null)}
 
+ var threadFilter by rememberSaveable { mutableStateOf("ALL") }
  var threads by remember{mutableStateOf<List<ForumThreadDto>>(emptyList())};var moreThreads by remember{mutableStateOf(false)}
  var threadId by rememberSaveable(initialThreadId){mutableStateOf(initialThreadId)}
  var snapshot by remember{mutableStateOf<ForumSnapshotDto?>(null)}
@@ -57,7 +58,7 @@ fun ForumScreen(
  var pendingAttachments by remember{mutableStateOf<List<ContentAttachmentDto>>(emptyList())};var recording by remember{mutableStateOf(false)}
  suspend fun refresh(older:Boolean=false){
   val id=threadId
-  if(id==null){val result=repo.list();threads=result.threads;moreThreads=result.hasMore;return}
+  if(id==null){val result=repo.list(filter=threadFilter);threads=result.threads;moreThreads=result.hasMore;return}
   val next=repo.thread(id,if(older)snapshot?.nextBefore else null)
   try{val proposals=repo.calendarProposals(id);if(threadId==id)calendarProposals=proposals}
   catch(e:CancellationException){throw e}catch(_:Exception){}
@@ -71,8 +72,8 @@ fun ForumScreen(
  }
  fun launchWork(block:suspend()->Unit){if(busy)return;busy=true;error=null;scope.launch{try{block()}
   catch(e:CancellationException){throw e}catch(e:Exception){error=e.message?:"Operazione non completata"}finally{busy=false;activity(null)}}}
- LaunchedEffect(threadId){calendarProposals=emptyList();proposalError=null;confirmingProposal=null;snapshot=null;focusPostId=null;replyTo=null;body="";pendingAttachments=emptyList();error=null
-  try{refresh()}catch(e:CancellationException){throw e}catch(e:Exception){error=e.message}
+ LaunchedEffect(threadId,threadFilter){calendarProposals=emptyList();proposalError=null;confirmingProposal=null;snapshot=null;focusPostId=null;replyTo=null;body="";pendingAttachments=emptyList();error=null;busy=true
+  try{refresh()}catch(e:CancellationException){throw e}catch(e:Exception){error=e.message}finally{busy=false}
   while(isActive){delay(15_000);if(AppForeground.isForeground)try{refresh()}catch(e:CancellationException){throw e}catch(_:Exception){}}
  }
  DisposableEffect(Unit){onDispose{onActivity(null)}}
@@ -132,7 +133,15 @@ fun ForumScreen(
   if(threadId==null){
    LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
     item { ForumIntroduction(busy, onCreate = { creating = true }, onRules = { showRules = true }) }
-    if(threads.isEmpty()&&!busy) item { ForumEmptyState() }
+    item {
+     val filters=listOf("ALL","OPEN","RESOLVED","MINE")
+     AilaFilterBar(labels=listOf("Tutte","Aperte","Risolte","Le mie"),selectedIndex=filters.indexOf(threadFilter),
+      onSelect={if(!busy && threadFilter!=filters[it]) {busy=true;threadFilter=filters[it];threads=emptyList();moreThreads=false}})
+    }
+    if(threads.isEmpty()&&!busy) item {
+     if(threadFilter=="ALL") ForumEmptyState()
+     else ForumEmptyState(title="Nessuna discussione qui",description="Non ci sono discussioni con questo filtro. Prova un’altra categoria.")
+    }
     items(threads,key={it.id}){t->AilaCard(onClick={threadId=t.id}){
      Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){
       Text(t.title,style=MaterialTheme.typography.titleMedium,color=AppTheme.TextDark)
@@ -140,7 +149,7 @@ fun ForumScreen(
       if(t.needsResolution)Text("Sei ancora qui? Puoi indicare se la domanda è risolta.",color=AppTheme.PrimaryBlue,style=MaterialTheme.typography.bodySmall)
      }
     }}
-    if(moreThreads)item{TextButton(onClick={launchWork{val next=repo.list(threads.size);threads=(threads+next.threads).distinctBy{it.id};moreThreads=next.hasMore}}){Text("Altre discussioni")}}
+    if(moreThreads)item{TextButton(onClick={launchWork{val next=repo.list(threads.size,filter=threadFilter);threads=(threads+next.threads).distinctBy{it.id};moreThreads=next.hasMore}}){Text("Altre discussioni")}}
    }
   }else{
    val snap=snapshot

@@ -5,6 +5,7 @@ import {authMiddleware,resolveClassId} from '../auth';
 import type {Env,JWTPayload} from '../types';
 import {AI_FEATURES,AI_SERVICES,aiPreferences,saveAiPreferences,runAiTask,type AiFeature,type AiPreferences} from '../services/aiRouter';
 import {searchAuthorized} from '../services/acaSearch';
+import {searchClass} from '../services/classSearch';
 import {briefCandidates,loadBrief} from '../services/brief';
 const aca=new Hono<{Bindings:Env;Variables:{jwtPayload:JWTPayload}}>();aca.use('*',authMiddleware());aca.use('*',bodyLimit({maxSize:256*1024}));
 aca.get('/preferences',async c=>c.json({preferences:await aiPreferences(c.env,c.get('jwtPayload').sub),
@@ -22,6 +23,11 @@ aca.put('/preferences',async c=>{
 aca.get('/usage',async c=>{
  const usage=await c.env.DB.prepare('SELECT feature,requests,reserved_tokens AS reservedTokens FROM ai_usage WHERE user_id=? AND day=?').bind(c.get('jwtPayload').sub,new Date().toISOString().slice(0,10)).all();
  return c.json({usage:usage.results,limits:{requestsPerFeature:Number(c.env.AI_FEATURE_DAILY_REQUESTS)||30,tokensPerFeature:Number(c.env.AI_USER_DAILY_TOKEN_BUDGET)||40000},resetsAt:'00:00 UTC'});
+});
+aca.get('/class-search',async c=>{
+ const q=c.req.query('q')?.trim()??'';
+ if(q.length>120 || (q.length<2 && !/^\d$/.test(q)))return c.json({error:'Scrivi almeno due caratteri o un numero di circolare, fino a 120 caratteri'},400);
+ return c.json({hits:await searchClass(c.env,await resolveClassId(c),q)});
 });
 aca.get('/search',async c=>{
  const q=c.req.query('q')?.trim()??'';if(q.length<3||q.length>500)return c.json({error:'Scrivi una ricerca da 3 a 500 caratteri'},400);
@@ -64,6 +70,13 @@ aca.get('/brief',async c=>{
  const user=c.get('jwtPayload');const p=await aiPreferences(c.env,user.sub);
  if(!p.aiEnabled||!p.acaEnabled||!p.nudgesEnabled||!p.services.includes('NOW_NUDGE'))return c.json({items:[]});
  return c.json({items:await loadBrief(c.env,await resolveClassId(c),user.sub)});
+});
+aca.post('/brief/circulars/seen',async c=>{
+ const user=c.get('jwtPayload');const classId=await resolveClassId(c);
+ await c.env.DB.prepare(`INSERT OR IGNORE INTO aca_brief_circular_reads(user_id,class_id,circular_number)
+  SELECT ?,?,c.number FROM circulars c JOIN circular_ai_analysis a ON a.circular_number=c.number
+  WHERE a.is_fallback=0 AND a.tier>0`).bind(user.sub,classId).run();
+ return c.json({success:true});
 });
 aca.post('/brief/:id/dismiss',async c=>{
  const user=c.get('jwtPayload');const p=await aiPreferences(c.env,user.sub);

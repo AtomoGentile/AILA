@@ -1594,6 +1594,26 @@ describe('modifica manuale degli eventi del calendario', () => {
     expect(list.json.events.find((e: any) => e.id === created.json.id)).toMatchObject({ title: 'Evento corretto', eventDate: '2026-12-04', startTime: null, category: 'VERIFICA', notes: null });
   });
 
+  it('updates recipients, validates class membership and preserves them for older clients', async () => {
+    const rep = await register('editreciprep', { representativeCode: await repCode() });
+    const student = await register('editrecipstud', { classCode: await classCodeOf(rep.json.token) });
+    const other = await register('editrecipother', { classLabel: '5 H', representativeCode: await repCode('5 H') });
+    const created = await call('POST', '/api/calendar', { title: 'Evento', eventDate: '2026-12-03', category: 'ALTRO', isForAll: true }, rep.json.token);
+    const path = `/api/calendar/${created.json.id}`;
+    const specific = {isForAll:false,visibleToUserIds:[student.json.user.id]};
+    expect((await call('PUT',path,specific,student.json.token)).status).toBe(403);
+    for(const body of [{isForAll:false,visibleToUserIds:[]},{isForAll:false,visibleToUserIds:[other.json.user.id]},{isForAll:false,visibleToUserIds:'bad'},{isForAll:'bad'},{visibleToUserIds:[student.json.user.id]}]){
+      expect((await call('PUT',path,body,rep.json.token)).status).toBe(400);
+    }
+    expect((await call('PUT',path,specific,rep.json.token)).status).toBe(200);
+    expect((await call('PUT',path,{title:'Corretto',isForAll:null,visibleToUserIds:null},rep.json.token)).status).toBe(200);
+    let list = await call('GET','/api/calendar',undefined,rep.json.token);
+    expect(list.json.events.find((e:any)=>e.id===created.json.id)).toMatchObject({...specific,title:'Corretto'});
+    expect((await call('PUT',path,{isForAll:true,visibleToUserIds:null},rep.json.token)).status).toBe(200);
+    list = await call('GET','/api/calendar',undefined,student.json.token);
+    expect(list.json.events.find((e:any)=>e.id===created.json.id)).toMatchObject({isForAll:true,visibleToUserIds:null});
+  });
+
   it('rifiuta date inesistenti o di tipo errato senza alterare l’evento', async () => {
     const rep = await register('editcaldate', { representativeCode: await repCode() });
     const created = await call('POST', '/api/calendar', { title: 'Data da modificare', eventDate: '2026-12-03', category: 'ALTRO', isForAll: true }, rep.json.token);

@@ -583,7 +583,7 @@ fun MainAppShell(
                     val alreadyLogged = settings.listNotifications()
                         .filter { it.category == NotificationKind.CIRCULARS.key }
                     readyCirculars
-                        .filter { it.number > lastSeen }
+                        .filter { it.number > lastSeen && it.notificationEligible }
                         .sortedBy { it.number }
                         .forEach { circular ->
                             val duplicate = alreadyLogged.any {
@@ -1087,6 +1087,7 @@ fun MainAppShell(
 
     // --- Stato tab "Classe" (Circolari + Bacheca unite in un'unica tab, con selettore interno) --
     var classSection by rememberSaveable { mutableStateOf(ClassSection.CIRCULARS) }
+    var isClassSearchOpen by rememberSaveable(user.id) { mutableStateOf(false) }
 
     // --- Stato Ricerca globale --------------------------------------------------------------
     var isInSearchScreen by rememberSaveable { mutableStateOf(false) }
@@ -1174,6 +1175,7 @@ fun MainAppShell(
     var preferencesProgress by remember {
         mutableStateOf<circolareplus.data.remote.dto.PreferencesProgressDto?>(null)
     }
+    var openSeatPreferencesFromBrief by remember { mutableStateOf(false) }
     var seatMapMode by rememberSaveable { mutableStateOf("MAP") } // "MAP" | "VOTE_PREFERENCES"
     val socialVotes = remember { mutableStateMapOf<String, SocialPreferenceScore>() }
     var proposalOptions by remember { mutableStateOf<List<SeatMapProposal>>(emptyList()) }
@@ -1659,7 +1661,7 @@ fun MainAppShell(
         }
     }
 
-    fun reloadCalendar() { calendarRefreshTrigger++ }
+    fun reloadCalendar() { calendarRefreshTrigger++; briefRefreshTrigger++ }
     fun reloadProposals() { proposalsRefreshTrigger++ }
 
     // Destinazione comune per una notifica (categoria di NotificationKind, o
@@ -1895,7 +1897,7 @@ fun MainAppShell(
     // propria della bottom bar, quindi si aggancia direttamente al cambio di selectedTab.
     LaunchedEffect(selectedTab, seatMapRefreshTrigger) {
         if (selectedTab == MainTab.SEATMAP) {
-            seatMapMode = "MAP"
+            seatMapMode = if(openSeatPreferencesFromBrief) "VOTE_PREFERENCES" else "MAP"
             seatMapError = null
             // Lo spinner a piena schermata solo la prima volta in assoluto: dopo, la mappa gia'
             // in memoria resta a schermo e si aggiorna sotto. Prima valeva "mappa vuota", quindi
@@ -1904,6 +1906,8 @@ fun MainAppShell(
             if (showSpinner) isSeatMapLoading = true
             try {
                 loadSeatMapData()
+                if(!isPreferencesOpen) seatMapMode = "MAP"
+                openSeatPreferencesFromBrief = false
             } finally {
                 if (showSpinner) isSeatMapLoading = false
             }
@@ -2538,15 +2542,15 @@ fun MainAppShell(
             isSaving = isSavingCalendarEvent,
             error = calendarEditError,
             onDismiss = { if (!isSavingCalendarEvent) eventToEdit = null },
-            onSave = saveEvent@{ title, date, time, category, notes ->
+            onSave = saveEvent@{ title, date, time, category, notes, isForAll, recipients ->
                 if (isSavingCalendarEvent) return@saveEvent
                 isSavingCalendarEvent = true
                 calendarEditError = null
                 coroutineScope.launch {
                     try {
-                        AppContainer.calendarRepository.updateEvent(event.id, title, date, time, category, notes)
+                        AppContainer.calendarRepository.updateEvent(event.id, title, date, time, category, notes, isForAll, recipients)
                         calendarEvents = calendarEvents.map { current ->
-                            if (current.id == event.id) current.copy(title = title, date = date, time = time, category = category, notes = notes) else current
+                            if (current.id == event.id) current.copy(title = title, date = date, time = time, category = category, notes = notes, isForAll = isForAll, visibleToUserIds = recipients) else current
                         }
                         eventToEdit = null
                         reloadCalendar()
@@ -2977,7 +2981,25 @@ fun MainAppShell(
     val useRail = maxWidth >= circolareplus.design.RailMinWidth && maxHeight >= circolareplus.design.RailMinHeight
     val twoPane = useRail && maxWidth >= circolareplus.design.TwoPaneMinWidth
     // Circolari e dettaglio affiancati: solo nella sezione Circolari della tab Classe.
-    val circularsPane = twoPane && classSection == ClassSection.CIRCULARS
+    val circularsPane = twoPane && classSection == ClassSection.CIRCULARS && !isClassSearchOpen
+    // A section visit acknowledges every circular already available, across devices.
+    LaunchedEffect(selectedTab,classSection,shellRoute,user.id,isClassSearchOpen,
+        circolareplus.platform.AppForeground.isForeground,circulars.filter { it.summaryReady }.map { it.number }) {
+        if(selectedTab == MainTab.CLASS && classSection == ClassSection.CIRCULARS &&
+            shellRoute == ShellRoute.TABS && !isClassSearchOpen && circolareplus.platform.AppForeground.isForeground) {
+            val owner=user.id
+            coroutineScope.launch {
+                try {
+                    AppContainer.acaRepository.markBriefCircularsSeen()
+                    if(currentUser?.id == owner) {
+                        briefItems=briefItems.filterNot { it.kind == circolareplus.data.remote.dto.AilaBriefKind.CIRCULAR }
+                        briefRefreshTrigger++
+                    }
+                } catch(e: CancellationException) { throw e }
+                catch(_: Exception) { /* Retry on the next section visit or list refresh. */ }
+            }
+        }
+    }
     // Ruotando l'iPad (o ridimensionando la finestra) la circolare aperta resta aperta: passa dal
     // pannello accanto alla lista alla schermata sopra le tab, e viceversa.
     LaunchedEffect(twoPane) {
@@ -3316,10 +3338,7 @@ fun MainAppShell(
                                 aiEnabled = aiPolicy.aiEnabled && "CIRCULARS" in aiPolicy.services,
                                 onOpenAca = { assistantMode=AssistantMode.GENERAL;isInAssistantScreen=true },
                                 onOpenForum = { isInAcaHub = false; classSection = ClassSection.PERE; selectedTab = MainTab.CLASS },
-                                briefItems = briefItems.filterNot { item ->
-                                    item.kind == circolareplus.data.remote.dto.AilaBriefKind.CIRCULAR &&
-                                        item.sourceId.toIntOrNull()?.let { classifications[it]?.badge == circolareplus.domain.model.CircularRelevanceBadge.NOT_RELEVANT } == true
-                                },
+                                briefItems = briefItems,
                                 briefLoading = briefLoading,
                                 briefError = briefError,
                                 onRefreshBrief = { briefRefreshTrigger++ },
@@ -3338,6 +3357,7 @@ fun MainAppShell(
                                 },
                                 onOpenBrief = { item ->
                                     when (item.kind) {
+                                        circolareplus.data.remote.dto.AilaBriefKind.SEATMAP -> { openSeatPreferencesFromBrief = item.sourceId.startsWith("preferences:"); selectedTab = MainTab.SEATMAP }
                                         circolareplus.data.remote.dto.AilaBriefKind.EVENT -> { calendarFocusDateIso = item.date; selectedTab = MainTab.CALENDAR }
                                         circolareplus.data.remote.dto.AilaBriefKind.CIRCULAR -> {
                                             classSection = ClassSection.CIRCULARS; selectedTab = MainTab.CLASS
@@ -3351,8 +3371,8 @@ fun MainAppShell(
                                         }
                                         circolareplus.data.remote.dto.AilaBriefKind.FORUM -> { initialForumThread = item.sourceId; classSection = ClassSection.PERE; selectedTab = MainTab.CLASS }
                                         circolareplus.data.remote.dto.AilaBriefKind.PROPOSAL -> { briefProposalId = item.sourceId; classSection = ClassSection.BOARD; selectedTab = MainTab.CLASS }
-                                        circolareplus.data.remote.dto.AilaBriefKind.POLL -> { briefPollId = item.sourceId; showPollHistory = false; pollsSection = 0; selectedTab = MainTab.POLLS }
-                                        circolareplus.data.remote.dto.AilaBriefKind.RANKING_POLL -> { briefRankingId = item.sourceId; showPollHistory = false; pollsSection = 1; selectedTab = MainTab.POLLS }
+                                        circolareplus.data.remote.dto.AilaBriefKind.POLL -> { briefPollId = item.sourceId; showPollHistory = item.isResult; expandedResultsPollId = if(item.isResult) item.sourceId else null; pollsSection = 0; selectedTab = MainTab.POLLS }
+                                        circolareplus.data.remote.dto.AilaBriefKind.RANKING_POLL -> { briefRankingId = item.sourceId; showPollHistory = item.isResult; pollsSection = 1; selectedTab = MainTab.POLLS }
                                     }
                                 },
                                 onPlanStudy = { prompt -> assistantMode=AssistantMode.GENERAL;acaOverlayStart=assistantMessages.size;acaOverlay=true;askAssistant(prompt) },
@@ -3726,7 +3746,15 @@ fun MainAppShell(
                                     Row(Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16).padding(top = AppTheme.Space16, bottom = AppTheme.Space12), verticalAlignment = Alignment.CenterVertically) {
                                         circolareplus.design.AilaBrandMark(size = 40.dp)
                                         Spacer(Modifier.width(12.dp))
-                                        Text("Classe", Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall, color = AppTheme.TextDark)
+                                        Text("Classe", Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall, color = AppTheme.TextDark, maxLines=1, overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                        Spacer(Modifier.width(AppTheme.Space8))
+                                        circolareplus.design.AilaIconButton(
+                                            contentDescription=if(isClassSearchOpen) "Chiudi ricerca della classe" else "Cerca nella classe",
+                                            onClick={isClassSearchOpen=!isClassSearchOpen}
+                                        ) { tint ->
+                                            if(isClassSearchOpen) AppIcons.Close(Modifier.size(20.dp),tint)
+                                            else AppIcons.Search(Modifier.size(20.dp),tint)
+                                        }
                                         if (isRepresentative) {
                                             Spacer(modifier = Modifier.width(AppTheme.Space8))
                                             circolareplus.design.AilaIconButton(
@@ -3740,16 +3768,39 @@ fun MainAppShell(
                                             circolareplus.design.AilaProfileButton(entry)
                                         }
                                     }
-                                    circolareplus.design.AilaSegmentedTabs(
+                                    if(!isClassSearchOpen) circolareplus.design.AilaSegmentedTabs(
                                         labels = ClassSection.entries.map { it.title },
                                         selectedIndex = classSection.ordinal,
                                         onSelect = { classSection = ClassSection.entries[it] },
                                         modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16).padding(bottom = AppTheme.Space12)
                                     )
                                 }
+                                circolareplus.platform.PlatformBackHandler(enabled=isClassSearchOpen && selectedTab==MainTab.CLASS && shellRoute==ShellRoute.TABS) {isClassSearchOpen=false}
+                                androidx.compose.animation.AnimatedVisibility(
+                                    visible=isClassSearchOpen,
+                                    modifier=Modifier.fillMaxWidth().weight(1f),
+                                    enter=androidx.compose.animation.expandVertically(circolareplus.design.ailaSpatialSpring()) + androidx.compose.animation.fadeIn(circolareplus.design.ailaFadeSpec(180)),
+                                    exit=androidx.compose.animation.fadeOut(circolareplus.design.ailaFadeSpec(100)) + androidx.compose.animation.shrinkVertically(circolareplus.design.ailaSpatialSpring())
+                                ) {
+                                    ClassSearchPanel(onOpen={hit->
+                                        isClassSearchOpen=false
+                                        when(hit.kind) {
+                                            "CIRCULAR" -> {
+                                                classSection=ClassSection.CIRCULARS
+                                                hit.id.toIntOrNull()?.let { number -> coroutineScope.launch {
+                                                    try {openCircularInClass(circulars.firstOrNull {it.number==number} ?: AppContainer.circularsRepository.getCircular(number))}
+                                                    catch(e: CancellationException) {throw e}
+                                                    catch(_: Exception) {circularsError="Circolare non disponibile. Riprova."}
+                                                } }
+                                            }
+                                            "BOARD" -> {briefProposalId=hit.id;classSection=ClassSection.BOARD;reloadProposals()}
+                                            "FORUM" -> {initialForumThread=hit.id;classSection=ClassSection.PERE}
+                                        }
+                                    })
+                                }
                                 // Dissolvenza tra le due sezioni: prima il contenuto veniva
                                 // sostituito di colpo, e con liste lunghe sembrava un salto.
-                                androidx.compose.animation.Crossfade(
+                                if(!isClassSearchOpen) androidx.compose.animation.Crossfade(
                                     targetState = classSection,
                                     label = "classSection"
                                 ) { section ->
@@ -3951,11 +4002,6 @@ fun MainAppShell(
                                         modifier = Modifier.weight(1f),
                                         key = pollsSection
                                     )
-                                }
-                                if (pollsSection == 0 && allPolls.any { it.assignmentAlgorithmVersion == "global-score-v1" }) {
-                                    Text("Nuovo algoritmo attivo per i nuovi calcoli · confronta i calendari già pubblicati nello Storico",
-                                        modifier = Modifier.padding(horizontal = AppTheme.Space16).padding(bottom = AppTheme.Space8),
-                                        style = MaterialTheme.typography.bodySmall, color = AppTheme.TintBlueInk)
                                 }
                                 if (pollsSection == 1) {
                                     LoadableContent(
@@ -6960,7 +7006,7 @@ private fun EditCalendarEventDialog(
     isSaving: Boolean,
     error: String?,
     onDismiss: () -> Unit,
-    onSave: (String, String, String?, CalendarEventCategory, String?) -> Unit
+    onSave: (String, String, String?, CalendarEventCategory, String?, Boolean, List<String>?) -> Unit
 ) {
     var title by remember(event.id) { mutableStateOf(event.title) }
     var date by remember(event.id) { mutableStateOf(event.date) }
@@ -6968,6 +7014,17 @@ private fun EditCalendarEventDialog(
     var notes by remember(event.id) { mutableStateOf(event.notes.orEmpty()) }
     var category by remember(event.id) { mutableStateOf(event.category) }
     var categoryMenu by remember { mutableStateOf(false) }
+    var forAll by remember(event.id) { mutableStateOf(event.isForAll && event.visibleToUserIds.isNullOrEmpty()) }
+    var recipients by remember(event.id) { mutableStateOf(event.visibleToUserIds.orEmpty()) }
+    var people by remember(event.id) { mutableStateOf<List<User>>(emptyList()) }
+    var rosterError by remember(event.id) { mutableStateOf<String?>(null) }
+    var loadingPeople by remember(event.id) { mutableStateOf(true) }
+    LaunchedEffect(event.id) {
+        try { people = AppContainer.usersRepository.listStudents() }
+        catch(e: CancellationException) { throw e }
+        catch(e: Exception) { rosterError = "Impossibile caricare i destinatari. Riapri la modifica per riprovare." }
+        finally { loadingPeople = false }
+    }
     AlertDialog(
         onDismissRequest = { if (!isSaving) onDismiss() },
         title = { Text("Modifica evento") },
@@ -6985,11 +7042,28 @@ private fun EditCalendarEventDialog(
                     }
                 }
                 OutlinedTextField(notes, { notes = it }, label = { Text("Note") }, minLines = 2, enabled = !isSaving)
+                Text("Destinatari", style = MaterialTheme.typography.labelLarge, color = AppTheme.TextMuted)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = forAll, onClick = { if(!isSaving) forAll = true }, label = { Text("Tutta la classe") }, enabled = !isSaving)
+                    FilterChip(selected = !forAll, onClick = { if(!isSaving) forAll = false }, label = { Text("Persone specifiche") }, enabled = !isSaving)
+                }
+                if(!forAll) {
+                    if(loadingPeople) Text("Carico i destinatari…", color = AppTheme.TextMuted)
+                    rosterError?.let { Text(it, color = AppTheme.TintRedInk) }
+                    people.forEach { person ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = person.id in recipients, enabled = !isSaving,
+                                onCheckedChange = { checked -> recipients = if(checked) recipients + person.id else recipients - person.id })
+                            Text("${person.firstName} ${person.lastName}", color = AppTheme.TextDark)
+                        }
+                    }
+                    if(!loadingPeople && people.isEmpty() && rosterError == null) Text("Nessuno studente disponibile.")
+                }
                 error?.let { Text(it, color = AppTheme.TintRedInk) }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(title.trim(), date.trim(), time.trim().ifBlank { null }, category, notes.trim().ifBlank { null }) }, enabled = !isSaving && title.isNotBlank() && date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) { Text(if (isSaving) "Salvataggio…" else "Salva") }
+            TextButton(onClick = { onSave(title.trim(), date.trim(), time.trim().ifBlank { null }, category, notes.trim().ifBlank { null }, forAll, if(forAll) null else recipients) }, enabled = !isSaving && (forAll || (recipients.isNotEmpty() && !loadingPeople && rosterError == null)) && title.isNotBlank() && date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) { Text(if (isSaving) "Salvataggio…" else "Salva") }
         },
         dismissButton = { TextButton(enabled = !isSaving, onClick = onDismiss) { Text("Annulla") } }
     )

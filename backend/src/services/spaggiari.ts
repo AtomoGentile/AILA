@@ -6,6 +6,7 @@
 import { forgetPdfFailures, markServerSummaryPlanned } from './summarizer';
 import type { CircularAttachment, Env } from '../types';
 import { notifyClass } from './fcm';
+import { circularBadgeForClass, isRelevantCircular } from './classAnalysis';
 
 interface ScrapedAttachment {
   label: string;
@@ -231,27 +232,38 @@ export async function syncSpaggiariCirculars(env: Env): Promise<AddedCircular[]>
   return added.sort((a, b) => b.number - a.number).map(({ number, title }) => ({ number, title }));
 }
 
-/** Invia la notifica solo per circolari con analisi server già salvata. */
+/** Notify each class only about relevant or potentially relevant server analyses. */
 export async function notifySummarizedCirculars(env: Env): Promise<void> {
   const pending = await env.DB.prepare(
-    `SELECT c.number, c.title FROM circulars c
-     JOIN circular_ai_analysis a ON a.circular_number = c.number
-     WHERE c.notification_pending = 1 AND a.tier >= 2 ORDER BY c.number DESC`
-  ).all<AddedCircular>();
-  const circulars = pending.results;
-  if (circulars.length === 0) return;
-  const newest = circulars[0];
-  const title = circulars.length === 1 ? 'Nuova Circolare' : `${circulars.length} nuove circolari`;
-  const body = circulars.length === 1
-    ? `Circolare n. ${newest.number}: ${newest.title}`
-    : circulars.map((c) => `n. ${c.number}: ${c.title}`).join(' · ').slice(0, 500);
+    `SELECT c.number,c.title,a.badge,a.per_class_json FROM circulars c
+     JOIN circular_ai_analysis a ON a.circular_number=c.number
+     WHERE c.notification_pending=1 AND a.tier>=2 AND a.is_fallback=0 AND LENGTH(TRIM(a.summary))>0
+     ORDER BY c.number DESC`
+  ).all<AddedCircular & {badge:string;per_class_json:string|null}>();
+  if (!pending.results.length) return;
+  const [classes,deliveries] = await Promise.all([
+    env.DB.prepare('SELECT id FROM classes').all<{id:string}>(),
+    env.DB.prepare(`SELECT d.circular_number,d.class_id FROM circular_notification_deliveries d
+      JOIN circulars c ON c.number=d.circular_number WHERE c.notification_pending=1`).all<{circular_number:number;class_id:string}>()
+  ]);
+  const delivered = new Set(deliveries.results.map(d=>`${d.class_id}|${d.circular_number}`));
   try {
-    await notifyClass(env, title, body, { action: 'new_circular', circular_number: String(newest.number) });
-    await env.DB.batch(circulars.map((circular) => env.DB.prepare(
-      'UPDATE circulars SET notification_pending = 0 WHERE number = ?'
-    ).bind(circular.number)));
+    for (const cls of classes.results) {
+      const circulars = pending.results.filter(c=>isRelevantCircular(circularBadgeForClass(c.badge,c.per_class_json,cls.id)) && !delivered.has(`${cls.id}|${c.number}`));
+      if (!circulars.length) continue;
+      const newest = circulars[0];
+      const title = circulars.length===1 ? 'Nuova Circolare' : `${circulars.length} nuove circolari`;
+      const body = circulars.length===1 ? `Circolare n. ${newest.number}: ${newest.title}`
+        : circulars.map(c=>`n. ${c.number}: ${c.title}`).join(' · ').slice(0,500);
+      await notifyClass(env,title,body,{action:'new_circular',circular_number:String(newest.number)},cls.id);
+      await env.DB.batch(circulars.map(c=>env.DB.prepare(
+        'INSERT OR IGNORE INTO circular_notification_deliveries(circular_number,class_id) VALUES (?,?)'
+      ).bind(c.number,cls.id)));
+    }
+    // Non-relevant circulars are processed too, so they cannot keep the queue pending forever.
+    await env.DB.batch(pending.results.map(c=>env.DB.prepare('UPDATE circulars SET notification_pending=0 WHERE number=?').bind(c.number)));
   } catch (err) {
-    console.error('[Spaggiari] Push delle circolari riassunte non inviata:', err);
+    console.error('[Spaggiari] Push delle circolari riassunte non inviata:',err);
   }
 }
 

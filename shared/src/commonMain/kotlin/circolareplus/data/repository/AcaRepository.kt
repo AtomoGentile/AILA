@@ -32,7 +32,9 @@ class AcaRepository(private val api:ApiClient,private val pdf:PdfTextExtractor) 
  suspend fun experience():AcaExperienceDto=api.get("/api/aca/experience",offlineCopy=false)
  suspend fun nudges():List<AcaNudgeDto> = api.get<AcaNudgesResponseDto>("/api/aca/nudges",offlineCopy=false).nudges
  suspend fun dismissNudge(id:String){api.post<Map<String,String>,SuccessDto>("/api/aca/nudges/$id/dismiss",emptyMap())}
+ suspend fun searchClass(query:String):List<ClassSearchHitDto> = api.get<ClassSearchResponseDto>("/api/aca/class-search?q=${query.encodeURLParameter()}",offlineCopy=false).hits
  suspend fun brief():List<AilaBriefItemDto> = api.get<AilaBriefResponseDto>("/api/aca/brief",offlineCopy=false).items
+ suspend fun markBriefCircularsSeen(){api.post<Map<String,String>,SuccessDto>("/api/aca/brief/circulars/seen",emptyMap())}
  suspend fun dismissBrief(item:AilaBriefItemDto){api.post<AilaBriefDismissDto,SuccessDto>("/api/aca/brief/${item.id.encodeURLParameter()}/dismiss",AilaBriefDismissDto(item.revision))}
  suspend fun task(feature:String,question:String,context:String="",includeAppContext:Boolean=false):AcaAiResultDto {
   val selected=circolareplus.ai.AiProvider.fromId(api.settings.aiProvider)
@@ -105,7 +107,7 @@ class AcaRepository(private val api:ApiClient,private val pdf:PdfTextExtractor) 
 class ForumRepository(private val api:ApiClient) {
  suspend fun calendarProposals(id:String):List<ForumCalendarProposalDto> = api.get<ForumCalendarProposalsDto>("/api/forum/$id/calendar-proposals",offlineCopy=false).proposals
  suspend fun analyzeCalendarProposals(id:String):List<ForumCalendarProposalDto> = api.post<Map<String,String>,ForumCalendarProposalsDto>("/api/forum/$id/calendar-proposals/analyze",emptyMap()).proposals
- suspend fun list(offset:Int=0):ForumListDto=api.get("/api/forum?offset=$offset",offlineCopy=false)
+ suspend fun list(offset:Int=0,filter:String="ALL"):ForumListDto=api.get("/api/forum?offset=$offset&filter=${filter.encodeURLParameter()}",offlineCopy=false)
  suspend fun thread(id:String,before:String?=null):ForumSnapshotDto=api.get("/api/forum/$id"+(before?.let{"?before=${it.encodeURLParameter()}"}?:""),offlineCopy=false)
  suspend fun create(title:String,body:String,anonymous:Boolean):ForumSnapshotDto=api.post("/api/forum",ForumCreateRequestDto(title,body,anonymous,true))
  suspend fun reply(id:String,body:String,anonymous:Boolean,parentId:String?,mentions:List<String>,attachments:List<String>):ForumWriteDto=

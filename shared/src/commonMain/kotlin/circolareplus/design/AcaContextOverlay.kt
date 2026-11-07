@@ -99,7 +99,7 @@ fun AcaContextOverlay(
     val edge = if(dark) Color.White.copy(alpha = .085f) else Color.White.copy(alpha = .85f)
     val canSend = question.isNotBlank() && !thinking && !recording && !transcribing
     val sendFill by animateColorAsState(
-        if(canSend) AppTheme.PrimaryBlue else if(dark) Color(0xFF272F40) else Color(0xFFD0D9EA),
+        if(canSend || recording) AppTheme.PrimaryBlue else if(dark) Color(0xFF272F40) else Color(0xFFD0D9EA),
         tween(if(AppTheme.reduceMotion) 80 else 160), label = "aca send color"
     )
     val submit = {
@@ -174,7 +174,6 @@ fun AcaContextOverlay(
             }
             if(recording || transcribing || voiceError != null) Row(Modifier.fillMaxWidth().background(insetFill,RoundedCornerShape(16.dp)).padding(horizontal=12.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
                 Text(voiceError ?: if(recording) "Registrazione vocale in corso…" else "Trascrivo il vocale…",Modifier.weight(1f),style=MaterialTheme.typography.labelMedium,color=if(voiceError!=null) AppTheme.TintRedInk else muted)
-                if(recording) TextButton(onClick={recorder.cancel()}) { Text("Annulla") }
             }
             }
             Layout(modifier=Modifier.fillMaxWidth(),content={
@@ -182,9 +181,12 @@ fun AcaContextOverlay(
                 colors=TextFieldDefaults.colors(focusedContainerColor=Color.Transparent,unfocusedContainerColor=Color.Transparent,focusedTextColor=AppTheme.TextDark,unfocusedTextColor=AppTheme.TextDark,focusedIndicatorColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent,focusedPlaceholderColor=muted,unfocusedPlaceholderColor=muted))
 
                 IconButton(onClick={keyboard?.hide();attachmentMenu=true},enabled=isInteractive&&!thinking&&!recording&&!transcribing,modifier=Modifier.size(48.dp).semantics{contentDescription="Aggiungi allegato"}) { AppIcons.Plus(Modifier.size(28.dp),AppTheme.TextDark) }
-                IconButton(onClick={if(recording)recorder.stop()else{keyboard?.hide();recorder.start()}},enabled=isInteractive&&!transcribing&&!thinking,modifier=Modifier.size(48.dp).background(if(!expanded && !thinking && !transcribing) AppTheme.PrimaryBlue else Color.Transparent,RoundedCornerShape(24.dp)).semantics{contentDescription=if(recording)"Termina vocale ACA"else"Registra un vocale per ACA"}) { if(recording)AppIcons.Close(Modifier.size(22.dp),AppTheme.TintRedInk)else AcaMic(if(!expanded && !thinking && !transcribing) Color.White else AppTheme.TextDark) }
-                IconButton(onClick=submit,enabled=canSend&&isInteractive&&!recording&&!transcribing,modifier=Modifier.size(48.dp).background(sendFill,RoundedCornerShape(24.dp)).semantics{contentDescription="Invia ad ACA"}) {
-                    if(thinking||transcribing)CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp,color=muted)else AppIcons.ArrowUp(Modifier.size(25.dp),if(canSend)Color.White else muted)
+                IconButton(onClick={if(recording){recorder.cancel();voiceError=null;focus.requestFocus();keyboard?.show()}else{keyboard?.hide();voiceError=null;recorder.start()}},enabled=isInteractive&&!transcribing&&!thinking,modifier=Modifier.size(48.dp).background(if(recording) AppTheme.TintRed else if(!expanded && !thinking && !transcribing) AppTheme.PrimaryBlue else Color.Transparent,RoundedCornerShape(24.dp)).semantics{contentDescription=if(recording)"Elimina vocale"else"Registra un vocale per ACA"}) { if(recording)AppIcons.Close(Modifier.size(22.dp),AppTheme.TintRedInk)else AcaMic(if(!expanded && !thinking && !transcribing) Color.White else AppTheme.TextDark) }
+                IconButton(onClick={if(recording)recorder.stop()else submit()},enabled=isInteractive && !thinking && !transcribing && (recording || canSend),modifier=Modifier.size(48.dp).background(sendFill,RoundedCornerShape(24.dp)).semantics{contentDescription=if(recording)"Ferma e trascrivi vocale"else"Invia ad AILA"}) {
+                    if(thinking||transcribing)CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp,color=muted)else androidx.compose.animation.Crossfade(targetState=recording,animationSpec=tween(if(AppTheme.reduceMotion) 0 else 180),label="Vocale stop") { stopping ->
+                        if(stopping) Box(Modifier.size(25.dp),contentAlignment=Alignment.Center) { Box(Modifier.size(18.dp).background(Color.White,RoundedCornerShape(4.dp))) }
+                        else AppIcons.ArrowUp(Modifier.size(25.dp),if(canSend)Color.White else muted)
+                    }
                 }
             }) { measurables, constraints ->
                 val w=constraints.maxWidth
@@ -207,23 +209,17 @@ fun AcaContextOverlay(
         }
 
 
-        if(attachmentMenu) ModalBottomSheet(
-            onDismissRequest={attachmentMenu=false},
-            containerColor=Color.Transparent, tonalElevation=0.dp, dragHandle=null,
-            shape=RoundedCornerShape(0.dp)
-        ) {
-            Column(Modifier.padding(horizontal=16.dp).padding(bottom=16.dp).widthIn(max=600.dp).fillMaxWidth()
-                .clip(shape).background(Brush.linearGradient(surface)).border(1.dp,edge,shape)
-                .padding(12.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                Box(Modifier.align(Alignment.CenterHorizontally).width(36.dp).height(4.dp).background(muted.copy(alpha=.5f),RoundedCornerShape(2.dp)))
+        if(attachmentMenu) AilaBottomSheet(onDismissRequest={attachmentMenu=false}) {
+            Column(Modifier.widthIn(max=600.dp).fillMaxWidth().verticalScroll(rememberScrollState())
+                .padding(horizontal=20.dp).padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
                 Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                     Text("Aggiungi alla richiesta",Modifier.weight(1f),style=MaterialTheme.typography.titleLarge,color=AppTheme.TextDark,fontWeight=FontWeight.SemiBold)
-                    IconButton(onClick={attachmentMenu=false},modifier=Modifier.size(32.dp).semantics{contentDescription="Chiudi allegati"}) { AppIcons.Close(Modifier.size(16.dp),muted) }
+                    AilaIconButton(contentDescription="Chiudi allegati",onClick={attachmentMenu=false}) { tint -> AppIcons.Close(Modifier.size(18.dp),tint) }
                 }
-                AcaAttachmentOption("Schermata", "Allega il contenuto aperto", insetFill, muted, isInteractive) {
+                AcaAttachmentOption("Schermata", "Allega il contenuto aperto", AppTheme.TintViolet, AppTheme.TintVioletInk, isInteractive) {
                     attachedScreen=true;attachmentMenu=false
                 }
-                AcaAttachmentOption("File, foto o audio", "Scegli dal dispositivo · fino a 20 MB", insetFill, muted, isInteractive&&!thinking) { picker() }
+                AcaAttachmentOption("File, foto o audio", "Scegli dal dispositivo · fino a 20 MB", AppTheme.TintBlue, AppTheme.TintBlueInk, isInteractive&&!thinking) { picker() }
                 Text("Gli allegati della chat sono temporanei: nessuna copia salvata automaticamente sul dispositivo.",style=MaterialTheme.typography.labelSmall,color=muted)
             }
         }
@@ -233,14 +229,21 @@ fun AcaContextOverlay(
 
 @Composable
 private fun AcaAttachmentOption(title:String,subtitle:String,fill:Color,muted:Color,enabled:Boolean,onClick:()->Unit) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(fill)
-        .clickable(enabled=enabled,onClick=onClick).padding(16.dp),verticalAlignment=Alignment.CenterVertically) {
-        AppIcons.Document(Modifier.size(22.dp),AppTheme.PrimaryBlue)
+    val interaction = remember { MutableInteractionSource() }
+    val optionShape = ailaMorphShape(interaction)
+    Row(Modifier.fillMaxWidth().ailaSheetReveal(if(title=="Schermata") 1 else 2)
+        .ailaPressScale(interaction, .97f).ailaTopicSurface(optionShape,fill,muted)
+        .clickable(interactionSource=interaction,indication=null,enabled=enabled,role=androidx.compose.ui.semantics.Role.Button,onClick=onClick)
+        .padding(20.dp),verticalAlignment=Alignment.CenterVertically) {
+        Box(Modifier.size(48.dp).background(muted.copy(alpha=.12f),RoundedCornerShape(16.dp)),contentAlignment=Alignment.Center) {
+            AppIcons.Document(Modifier.size(24.dp),muted)
+        }
         Spacer(Modifier.width(12.dp))
-        Column(verticalArrangement=Arrangement.spacedBy(4.dp)) {
+        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
             Text(title,style=MaterialTheme.typography.titleSmall,color=AppTheme.TextDark)
             Text(subtitle,style=MaterialTheme.typography.bodySmall,color=muted)
         }
+        AppIcons.ChevronRight(Modifier.size(20.dp),muted)
     }
 }
 

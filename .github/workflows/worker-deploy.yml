@@ -126,6 +126,12 @@ jobs:
         if: inputs.deploy
         run: npx wrangler d1 execute circolare_d1 --remote --command="SELECT item_id,revision FROM aca_brief_dismissals LIMIT 0"
 
+      - name: Verify brief sources schema
+        if: inputs.deploy
+        run: >-
+          npx wrangler d1 execute circolare_d1 --remote
+          --command="SELECT user_id,class_id,circular_number FROM aca_brief_circular_reads LIMIT 0; SELECT circular_number,class_id FROM circular_notification_deliveries LIMIT 0"
+
       - name: Deploy Worker
         if: inputs.deploy
         run: npx wrangler deploy

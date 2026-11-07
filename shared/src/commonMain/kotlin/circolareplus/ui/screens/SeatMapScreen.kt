@@ -206,7 +206,7 @@ fun SeatMapScreen(
                 })
             }
         }
-        Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(AppTheme.Space16)) {
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = {
@@ -312,17 +312,15 @@ fun SeatMapScreen(
         val adminPanel: @Composable () -> Unit = {
                 // animateContentSize: quando arriva il conteggio dei voti il pannello cresce
                 // morbido invece di spingere giu' la mappa di scatto.
-                Column(modifier = Modifier.animateContentSize().padding(AppTheme.Space12)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        AppIcons.Sliders(modifier = Modifier.size(16.dp), color = AppTheme.TextDark)
-                        Spacer(modifier = Modifier.width(AppTheme.Space8))
+                Column(modifier = Modifier.fillMaxWidth().animateContentSize().padding(AppTheme.Space16)) {
+                    Row(Modifier.fillMaxWidth(),verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "Gestione aula",
                             style = MaterialTheme.typography.titleSmall,
                             color = AppTheme.TextDark,
                             modifier = Modifier.weight(1f)
                         )
-                        TextButton(onClick={adminExpanded=!adminExpanded}) { Text(if(adminExpanded) "Chiudi" else "Opzioni") }
+                        TextButton(onClick={adminExpanded=!adminExpanded},modifier=Modifier.widthIn(min=1.dp),contentPadding=PaddingValues(horizontal=0.dp,vertical=8.dp)) { Text(if(adminExpanded) "Chiudi" else "Opzioni") }
                     }
 
                     Spacer(modifier = Modifier.height(AppTheme.Space8))
@@ -455,7 +453,7 @@ fun SeatMapScreen(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(AppTheme.Space8))
+                    Spacer(modifier = Modifier.height(AppTheme.Space16))
 
                     AilaPrimaryButton(
                         text = if (isGeneratingProposals) "Calcolo in corso…" else "Calcola 3 proposte",
@@ -499,7 +497,7 @@ fun SeatMapScreen(
                 Column(Modifier.fillMaxWidth()) {
                     searchBlock()
                     if(isRepresentative) {
-                        HorizontalDivider(Modifier.padding(horizontal=12.dp),color=AppTheme.FieldOutline.copy(alpha=.4f))
+                        HorizontalDivider(Modifier.padding(horizontal=AppTheme.Space16),color=AppTheme.FieldOutline.copy(alpha=.4f))
                         adminPanel()
                     }
                 }
