@@ -425,9 +425,13 @@ fun AilaCard(
     // piena, senza bordo ne' ombra (vedi AppTheme.CardSurface).
     val glass = AppTheme.isGlass
     val shape = RoundedCornerShape(AppTheme.CardCornerRadius)
-    val glassTint = if (glass && containerColor != AppTheme.CardSurface) {
-        containerColor.copy(alpha = minOf(containerColor.alpha, 0.018f))
-    } else null
+    val glassTint = if (!glass) null else if (containerColor != AppTheme.CardSurface) {
+        containerColor.copy(alpha = minOf(containerColor.alpha, 0.10f))
+    } else if (AppTheme.isDarkMode) {
+        Color(0xFFB8C8E8).copy(alpha = 0.075f)
+    } else {
+        Color.White.copy(alpha = 0.13f)
+    }
     Card(
         shape = shape,
         colors = CardDefaults.cardColors(containerColor = if (glass) Color.Transparent else containerColor),
@@ -795,6 +799,7 @@ fun AilaConfirmDialog(
 ) {
     val closer = rememberAilaDialogCloser()
     val dismiss = { closer.close(onDismiss) }
+    val dialogShape = RoundedCornerShape(AppTheme.CardCornerRadius)
     // Larga quasi quanto lo schermo e con testo e pulsanti "da pollice": la versione precedente
     // (280dp, titolo 17sp, pulsanti da 12sp) sembrava un'etichetta e i pulsanti si mancavano.
     androidx.compose.material3.AlertDialog(
@@ -804,10 +809,17 @@ fun AilaConfirmDialog(
             .ailaDialogMotion(closer)
             .widthIn(max = circolareplus.design.MaxDialogWidth)
             .fillMaxWidth()
-            .padding(horizontal = AppTheme.Space20),
+            .padding(horizontal = AppTheme.Space20)
+            .then(
+                if (AppTheme.isGlass) Modifier.ailaGlassSurface(
+                    dialogShape,
+                    tint = if (AppTheme.isDarkMode) Color(0xFF202833).copy(alpha = .70f)
+                    else Color(0xFFF8FAFF).copy(alpha = .72f)
+                ) else Modifier
+            ),
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
-        containerColor = AppTheme.SurfaceWhite,
-        shape = RoundedCornerShape(AppTheme.CardCornerRadius),
+        containerColor = if (AppTheme.isGlass) Color.Transparent else AppTheme.SurfaceWhite,
+        shape = dialogShape,
         title = {
             Text(text = title, style = MaterialTheme.typography.titleLarge, color = AppTheme.TextDark)
         },

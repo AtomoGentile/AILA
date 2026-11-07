@@ -20,10 +20,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -101,6 +106,13 @@ fun AcaContextOverlay(
     val muted = if(dark) Color(0xFFA5AFC2) else AppTheme.TextMuted
     val edge = if(dark) Color.White.copy(alpha = .085f) else Color.White.copy(alpha = .85f)
     val canSend = question.isNotBlank() && !thinking && !recording && !transcribing
+    val rainbowAlpha by animateFloatAsState(
+        if (answer == null || thinking) 1f else 0f,
+        tween(if (AppTheme.reduceMotion) 80 else if (answer == null || thinking) 260 else 620),
+        label = "aca contextual rainbow"
+    )
+    val rainbowSpin = if (AppTheme.reduceMotion) null else rememberInfiniteTransition(label = "aca contextual rainbow spin")
+        .animateFloat(0f, 360f, infiniteRepeatable(tween(9000, easing = LinearEasing)), label = "aca contextual rainbow angle")
     val sendFill by animateColorAsState(
         if(canSend || recording) AppTheme.PrimaryBlue else if(dark) Color(0xFF272F40) else Color(0xFFD0D9EA),
         tween(if(AppTheme.reduceMotion) 80 else 160), label = "aca send color"
@@ -162,16 +174,21 @@ fun AcaContextOverlay(
                         },
                         onDragCancel={distance=0f;dragProgress=0f})
                 }
-                .border(
-                    width=(1.5f+dragProgress*3f).dp,
-                    brush=Brush.sweepGradient(listOf(
-                        AppTheme.PrimaryBlue.copy(alpha=.72f+dragProgress*.28f),
-                        AilaAssistantViolet.copy(alpha=.55f+dragProgress*.4f),
-                        AilaAssistantTeal.copy(alpha=.55f+dragProgress*.4f),
-                        AppTheme.PrimaryBlue.copy(alpha=.72f+dragProgress*.28f)
-                    )),
-                    shape=composerShape
-                )
+                .drawBehind {
+                    if (rainbowAlpha > 0f) {
+                        val stroke = (1.5f + dragProgress * 3f).dp.toPx()
+                        val colors = listOf(
+                            AppTheme.PrimaryBlue.copy(alpha = (.72f + dragProgress * .28f) * rainbowAlpha),
+                            AilaAssistantViolet.copy(alpha = (.68f + dragProgress * .27f) * rainbowAlpha),
+                            AilaAssistantTeal.copy(alpha = (.68f + dragProgress * .27f) * rainbowAlpha),
+                            AppTheme.PrimaryBlue.copy(alpha = (.72f + dragProgress * .28f) * rainbowAlpha)
+                        )
+                        rotate(rainbowSpin?.value ?: 0f, Offset(size.width / 2f, size.height / 2f)) {
+                            drawRoundRect(brush = Brush.sweepGradient(colors),
+                                cornerRadius = CornerRadius(composerRadius.toPx()), style = Stroke(stroke))
+                        }
+                    }
+                }
                 .semantics {
                     if(isInteractive && !recording && !transcribing) customActions=listOf(
                         CustomAccessibilityAction("Apri la chat di ACA") { openChat(); true })

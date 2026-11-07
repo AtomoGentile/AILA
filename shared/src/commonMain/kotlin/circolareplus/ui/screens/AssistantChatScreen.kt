@@ -81,6 +81,10 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.lerp
 import kotlinx.coroutines.delay
 
@@ -160,6 +164,24 @@ fun AssistantChatScreen(
     newMessages.forEach { seenIds.add(it.id) }
 
     val showWelcome = messages.isEmpty() && !isThinking
+    // Keep the moving ACA edge visible until the incoming answer has appeared in the list.
+    var rainbowVisible by remember { mutableStateOf(isThinking) }
+    LaunchedEffect(isThinking) {
+        if (isThinking) rainbowVisible = true
+        else {
+            delay(if (AppTheme.reduceMotion) 0 else 700)
+            rainbowVisible = false
+        }
+    }
+    val rainbowAlpha by androidx.compose.animation.core.animateFloatAsState(
+        if (rainbowVisible) 1f else 0f,
+        androidx.compose.animation.core.tween(if (AppTheme.reduceMotion) 80 else 560),
+        label = "assistant waiting rainbow alpha"
+    )
+    val rainbowRotation = if (AppTheme.reduceMotion) null else androidx.compose.animation.core.rememberInfiniteTransition(label = "assistant waiting rainbow")
+        .animateFloat(0f, 360f, androidx.compose.animation.core.infiniteRepeatable(
+            androidx.compose.animation.core.tween(9000, easing = androidx.compose.animation.core.LinearEasing)
+        ), label = "assistant waiting rainbow rotation")
     // Mentre la conversazione svanisce (indietro alla schermata iniziale) i messaggi sono gia'
     // stati svuotati: la lista che esce deve poter mostrare ancora gli ultimi che c'erano.
     val lastShown = remember { arrayOf(emptyList<AssistantMessage>()) }
@@ -360,7 +382,23 @@ fun AssistantChatScreen(
             }
             attachmentError?.let{Text(it,color=AppTheme.TintRedInk,style=MaterialTheme.typography.bodySmall)}
             if(recording) VoiceRecordingPanel(onStop={recorder?.stop()},onCancel={recorder?.cancel()})
-            else Row(Modifier.fillMaxWidth().background(AppTheme.CardSurface,RoundedCornerShape(28.dp)).border(1.dp, AppTheme.PrimaryBlue.copy(alpha = .12f), RoundedCornerShape(28.dp)).padding(horizontal = 12.dp, vertical = 6.dp),verticalAlignment = Alignment.CenterVertically) {
+            else Row(Modifier.fillMaxWidth().background(AppTheme.CardSurface,RoundedCornerShape(28.dp))
+                .border(1.dp, AppTheme.PrimaryBlue.copy(alpha = .12f), RoundedCornerShape(28.dp))
+                .drawBehind {
+                    if (rainbowAlpha > 0f) {
+                        val colors = listOf(
+                            AppTheme.PrimaryBlue.copy(alpha = .92f * rainbowAlpha),
+                            AilaAssistantViolet.copy(alpha = .82f * rainbowAlpha),
+                            AilaAssistantTeal.copy(alpha = .82f * rainbowAlpha),
+                            AppTheme.PrimaryBlue.copy(alpha = .92f * rainbowAlpha)
+                        )
+                        rotate(rainbowRotation?.value ?: 0f, Offset(size.width / 2f, size.height / 2f)) {
+                            drawRoundRect(brush = Brush.sweepGradient(colors),
+                                cornerRadius = CornerRadius(28.dp.toPx()), style = Stroke(2.dp.toPx()))
+                        }
+                    }
+                }
+                .padding(horizontal = 12.dp, vertical = 6.dp),verticalAlignment = Alignment.CenterVertically) {
                 if(onAttachContent!=null){
                     AilaIconButton(contentDescription="Menu allegati",onClick={attachmentsMenu=true}){tint->AppIcons.Plus(Modifier.size(24.dp),tint)}
                     Spacer(Modifier.width(4.dp))

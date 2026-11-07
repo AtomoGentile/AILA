@@ -5026,6 +5026,7 @@ fun MainAppShell(
                         }
                     }
                     circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { assistantBack() }
+                    androidx.compose.runtime.key(assistantConversationId) {
                     AssistantChatScreen(
                         messages = assistantMessages,
                         isThinking = isAssistantThinking,
@@ -5106,6 +5107,7 @@ fun MainAppShell(
                             }
                         }
                     )
+                    }
                 }
                 ShellRoute.SEARCH -> {
                     circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { isInSearchScreen = false }
