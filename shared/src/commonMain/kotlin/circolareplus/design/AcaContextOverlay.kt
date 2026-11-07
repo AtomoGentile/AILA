@@ -1,9 +1,10 @@
 package circolareplus.design
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.background
@@ -25,6 +26,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import circolareplus.platform.rememberVoiceRecorder
@@ -105,6 +108,12 @@ fun AcaContextOverlay(
             attachedScreen = false
         }
     }
+    Box(Modifier.fillMaxSize()) {
+        // Own the outside tap so closing ACA never activates the screen underneath.
+        Box(Modifier.matchParentSize().clickable(
+            interactionSource=remember { MutableInteractionSource() }, indication=null
+        ) { if(isInteractive) { keyboard?.hide(); onClose() } }
+            .semantics { contentDescription="Chiudi ACA" })
     BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)).imePadding()) {
         val availableHeight = maxHeight
         val panelSurface = if(AppTheme.isGlass) Modifier.ailaGlassSurface(shape,
@@ -116,14 +125,10 @@ fun AcaContextOverlay(
             // The response owns its scroll area; the composer stays available below it.
             if(action?.actionPlan != null || answer != null) {
                 Column(Modifier.weight(1f, fill=false).heightIn(max=320.dp).fillMaxWidth()
-                    .shadow(12.dp,shape).clip(shape).then(panelSurface).padding(16.dp),
+                    .shadow(12.dp,shape).clip(shape).then(panelSurface)
+                    .pointerInput(Unit) { detectTapGestures { } }.padding(16.dp),
                     verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                        Text("AILA",Modifier.weight(1f),style=MaterialTheme.typography.labelLarge,color=muted)
-                        TextButton(onClick=openChat,enabled=isInteractive&&!recording&&!transcribing) { Text("Apri chat") }
-                        IconButton(onClick={keyboard?.hide();onClose()},modifier=Modifier.size(40.dp)
-                            .semantics{contentDescription="Chiudi ACA"}) { AppIcons.Close(Modifier.size(18.dp),muted) }
-                    }
+                    Text("AILA",style=MaterialTheme.typography.labelLarge,color=muted)
                     Column(Modifier.weight(1f,fill=false).verticalScroll(rememberScrollState())) {
                         if(action?.actionPlan != null) {
                             circolareplus.ui.screens.AssistantActionPreview(message = action, isBusy = thinking,
@@ -138,25 +143,19 @@ fun AcaContextOverlay(
                 tint=(if(dark) Color(0xFF090C13) else Color.White).copy(alpha=.88f))
                 else Modifier.background(Brush.linearGradient(surface)).border(1.dp,edge,composerShape)
             Column(Modifier.fillMaxWidth().shadow(12.dp,composerShape).clip(composerShape).then(composerSurface)
-                .padding(horizontal=12.dp,vertical=8.dp),
-                verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                Box(Modifier.fillMaxWidth().height(20.dp),contentAlignment=Alignment.Center) {
-                    Box(Modifier.width(64.dp).fillMaxHeight()
-                        .semantics { contentDescription="Apri la chat di ACA" }
-                        .clickable(enabled=isInteractive&&!recording&&!transcribing,onClick=openChat)
-                        .pointerInput(isInteractive,recording,transcribing) {
-                            var distance=0f
-                            detectVerticalDragGestures(onDragStart={distance=0f},
-                                onVerticalDrag={change,amount->change.consume();distance+=amount},
-                                onDragEnd={if(distance>48.dp.toPx())openChat()},onDragCancel={distance=0f})
-                        },contentAlignment=Alignment.Center) {
-                        Box(Modifier.width(32.dp).height(3.dp).background(muted.copy(alpha=.4f),RoundedCornerShape(2.dp)))
-                    }
-                    if(answer==null && action?.actionPlan==null) IconButton(onClick={keyboard?.hide();onClose()},
-                        modifier=Modifier.align(Alignment.CenterEnd).size(32.dp).semantics{contentDescription="Chiudi ACA"}) {
-                        AppIcons.Close(Modifier.size(15.dp),muted)
-                    }
+                .pointerInput(Unit) { detectTapGestures { } }
+                .pointerInput(isInteractive,recording,transcribing) {
+                    var distance=0f
+                    detectVerticalDragGestures(onDragStart={distance=0f},
+                        onVerticalDrag={change,amount->change.consume();distance+=amount},
+                        onDragEnd={if(distance>48.dp.toPx())openChat()},onDragCancel={distance=0f})
                 }
+                .semantics {
+                    if(isInteractive && !recording && !transcribing) customActions=listOf(
+                        CustomAccessibilityAction("Apri la chat di ACA") { openChat(); true })
+                }
+                .padding(horizontal=12.dp,vertical=12.dp),
+                verticalArrangement=Arrangement.spacedBy(4.dp)) {
                 Column(Modifier.heightIn(max=availableHeight*.25f).verticalScroll(rememberScrollState()),
                     verticalArrangement=Arrangement.spacedBy(4.dp)) {
             if(attachedScreen) Row(Modifier.fillMaxWidth().background(insetFill,RoundedCornerShape(14.dp)).padding(start=12.dp,end=4.dp,top=4.dp,bottom=4.dp),verticalAlignment=Alignment.CenterVertically) {
@@ -228,6 +227,7 @@ fun AcaContextOverlay(
                 Text("Gli allegati della chat sono temporanei: nessuna copia salvata automaticamente sul dispositivo.",style=MaterialTheme.typography.labelSmall,color=muted)
             }
         }
+    }
     }
 }
 
