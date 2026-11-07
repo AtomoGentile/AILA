@@ -510,7 +510,7 @@ fun SeatMapScreen(
         if (wide) {
             Column(
                 modifier = Modifier
-                    .width(360.dp)
+                    .width(if (circolareplus.design.isDesktopWorkspace()) 300.dp else 360.dp)
                     .fillMaxHeight()
                     .verticalScroll(rememberScrollState())
                     .padding(

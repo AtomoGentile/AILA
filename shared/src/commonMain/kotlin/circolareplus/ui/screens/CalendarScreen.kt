@@ -383,8 +383,7 @@ fun CalendarScreen(
                 horizontalArrangement = Arrangement.spacedBy(AppTheme.Space4)
             ) {
                 Column(
-                    modifier = Modifier
-                        .weight(1f)
+                    modifier = (if (circolareplus.design.isDesktopWorkspace()) Modifier.width(420.dp) else Modifier.weight(1f))
                         .fillMaxHeight()
                         .verticalScroll(rememberScrollState())
                         .then(listPadding)

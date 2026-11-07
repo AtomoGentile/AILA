@@ -123,7 +123,7 @@ fun CircularsScreen(
                         if (circ.number == selectedNumber) Modifier.border(
                             2.dp,
                             AppTheme.PrimaryBlue,
-                            androidx.compose.foundation.shape.RoundedCornerShape(AppTheme.CardCornerRadius)
+                            androidx.compose.foundation.shape.RoundedCornerShape(if (circolareplus.design.isDesktopWorkspace()) 16.dp else AppTheme.CardCornerRadius)
                         ) else Modifier
                     )
                 )
