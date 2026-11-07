@@ -51,7 +51,8 @@ fun AcaContextOverlay(
     onConfirm: () -> Unit = {}, onCancel: () -> Unit = {}, isInteractive: Boolean = true,
     attachedFiles: List<circolareplus.ai.assistant.AssistantAttachedFile> = emptyList(),
     onAttachContent: (circolareplus.platform.IncomingContent) -> Unit = {},
-    onRemoveAttachedFile: (String) -> Unit = {}
+    onRemoveAttachedFile: (String) -> Unit = {},
+    onAnswerPresented: () -> Unit = {}
 ) {
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -107,9 +108,11 @@ fun AcaContextOverlay(
     val muted = if(dark) Color(0xFFA5AFC2) else AppTheme.TextMuted
     val edge = if(dark) Color.White.copy(alpha = .085f) else Color.White.copy(alpha = .85f)
     val canSend = question.isNotBlank() && !thinking && !recording && !transcribing
+    var answerPresented by remember(answer) { mutableStateOf(false) }
+    val rainbowActive = answer == null || thinking || !answerPresented
     val rainbowAlpha by animateFloatAsState(
-        if (answer == null || thinking) 1f else 0f,
-        tween(if (AppTheme.reduceMotion) 80 else if (answer == null || thinking) 260 else 620),
+        if (rainbowActive) 1f else 0f,
+        tween(if (AppTheme.reduceMotion) 80 else if (rainbowActive) 260 else 1400, easing = LinearOutSlowInEasing),
         label = "aca contextual rainbow"
     )
     val rainbowTravel = if (AppTheme.reduceMotion) null else rememberInfiniteTransition(label = "aca contextual rainbow travel")
@@ -153,7 +156,11 @@ fun AcaContextOverlay(
                             circolareplus.ui.screens.AssistantActionPreview(message = action, isBusy = thinking,
                                 onConfirm = { if(isInteractive) onConfirm() }, onCancel = { if(isInteractive) onCancel() }, onRecover = {})
                         } else answer?.let {
-                            AilaResponseText(text=androidx.compose.ui.text.AnnotatedString(it),responseId=action?.id ?: it)
+                            AilaResponseText(
+                                text=androidx.compose.ui.text.AnnotatedString(it),
+                                responseId=action?.id ?: it,
+                                onComplete={ answerPresented=true; onAnswerPresented() }
+                            )
                         }
                     }
                 }
@@ -251,15 +258,20 @@ fun AcaContextOverlay(
                 val button=48.dp.roundToPx()
                 val gap=4.dp.roundToPx()
                 val controlsWidth=button*2+gap
-                val fieldLeft=0
-                val fieldWidth=(w-controlsWidth-gap).coerceAtLeast(1)
+                val compactFieldWidth=(w-controlsWidth-gap).coerceAtLeast(1)
+                val layoutProgress=expansion
+                val rowProgress=(layoutProgress/.55f).coerceIn(0f,1f)
+                val wideProgress=((layoutProgress-.55f)/.45f).coerceIn(0f,1f)
+                val fieldWidth=(compactFieldWidth+(w-compactFieldWidth)*wideProgress).toInt().coerceAtLeast(1)
                 val field=measurables[0].measure(constraints.copy(minWidth=fieldWidth,maxWidth=fieldWidth,minHeight=0))
                 val controls=measurables.drop(1).map { it.measure(androidx.compose.ui.unit.Constraints.fixed(button,button)) }
-                val controlY=((field.height-button)/2).coerceAtLeast(0)
-                val h=maxOf(field.height,button)
+                val inlineY=((field.height-button)/2).coerceAtLeast(0)
+                val belowY=field.height+gap
+                val controlY=(inlineY+(belowY-inlineY)*rowProgress).toInt()
+                val h=maxOf(field.height,controlY+button)
                 layout(w,h) {
-                    field.placeRelative(fieldLeft,0)
-                    controls[0].placeRelative(w-controlsWidth,controlY)
+                    field.placeRelative(0,0)
+                    controls[0].placeRelative((w-controlsWidth)*(1f-wideProgress),controlY)
                     controls[1].placeRelative(w-button,controlY)
                 }
             }

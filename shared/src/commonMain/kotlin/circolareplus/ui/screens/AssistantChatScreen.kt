@@ -164,18 +164,15 @@ fun AssistantChatScreen(
     newMessages.forEach { seenIds.add(it.id) }
 
     val showWelcome = messages.isEmpty() && !isThinking
-    // Keep the moving ACA edge visible until the incoming answer has appeared in the list.
+    // Keep the moving ACA edge visible until the answer has finished its letter-by-letter reveal.
     var rainbowVisible by remember { mutableStateOf(isThinking) }
     LaunchedEffect(isThinking) {
         if (isThinking) rainbowVisible = true
-        else {
-            delay(if (AppTheme.reduceMotion) 0 else 700)
-            rainbowVisible = false
-        }
+        else if (arrivalHolder[0] == null) rainbowVisible = false
     }
     val rainbowAlpha by androidx.compose.animation.core.animateFloatAsState(
         if (rainbowVisible) 1f else 0f,
-        androidx.compose.animation.core.tween(if (AppTheme.reduceMotion) 80 else 560),
+        androidx.compose.animation.core.tween(if (AppTheme.reduceMotion) 80 else 1400, easing = androidx.compose.animation.core.LinearOutSlowInEasing),
         label = "assistant waiting rainbow alpha"
     )
     val rainbowTravel = if (AppTheme.reduceMotion) null else androidx.compose.animation.core.rememberInfiniteTransition(label = "assistant waiting rainbow")
@@ -273,7 +270,12 @@ fun AssistantChatScreen(
                         // La risposta appena arrivata "nasce" dall'indicatore di attesa: l'onda
                         // si calma nell'icona di AILA Assistant e il messaggio compare.
                         animateArrival = message.id == arrivalHolder[0],
-                        onArrived = { if (arrivalHolder[0] == message.id) arrivalHolder[0] = null }
+                        onArrived = {
+                            if (arrivalHolder[0] == message.id) {
+                                arrivalHolder[0] = null
+                                rainbowVisible = false
+                            }
+                        }
                     )
                 }
                 message.attachedFiles.forEach { file ->

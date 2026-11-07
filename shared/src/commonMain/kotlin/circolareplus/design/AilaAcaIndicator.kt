@@ -25,7 +25,7 @@ import kotlin.math.sin
     val reduced = AppTheme.reduceMotion
     val opacity = animateFloatAsState(
         if(active) 1f else 0f,
-        tween(if(reduced) 80 else if(active) 360 else 120, easing = LinearOutSlowInEasing),
+        tween(if(reduced) 80 else if(active) 360 else 1400, easing = LinearOutSlowInEasing),
         label = "aca ambient light"
     )
     if(!active && opacity.value == 0f) return

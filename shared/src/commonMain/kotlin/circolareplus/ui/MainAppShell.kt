@@ -1100,6 +1100,10 @@ fun MainAppShell(
     var acaOverlay by remember { mutableStateOf(false) }
     var acaOverlayStart by remember { mutableStateOf(0) }
     var acaChatOpening by remember { mutableStateOf(false) }
+    var acaResponsePresented by remember { mutableStateOf(false) }
+    LaunchedEffect(acaOverlay, acaOverlayStart) {
+        if (acaOverlay) acaResponsePresented = false
+    }
     LaunchedEffect(acaChatOpening) {
         if (acaChatOpening) {
             delay(700L)
@@ -3836,7 +3840,15 @@ fun MainAppShell(
                                     visible=isClassSearchOpen,
                                     modifier=Modifier.fillMaxWidth().weight(1f),
                                     enter=androidx.compose.animation.expandVertically(circolareplus.design.ailaSpatialSpring()) + androidx.compose.animation.fadeIn(circolareplus.design.ailaFadeSpec(180)) + androidx.compose.animation.slideInVertically(initialOffsetY={-it/8}),
-                                    exit=androidx.compose.animation.fadeOut(circolareplus.design.ailaFadeSpec(100)) + androidx.compose.animation.shrinkVertically(circolareplus.design.ailaSpatialSpring()) + androidx.compose.animation.slideOutVertically(targetOffsetY={-it})
+                                    exit=androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(if(AppTheme.reduceMotion) 0 else 180)) +
+                                        androidx.compose.animation.shrinkVertically(
+                                            animationSpec=androidx.compose.animation.core.tween(if(AppTheme.reduceMotion) 0 else 260, easing=androidx.compose.animation.core.LinearOutSlowInEasing),
+                                            shrinkTowards=androidx.compose.ui.Alignment.Bottom
+                                        ) +
+                                        androidx.compose.animation.slideOutVertically(
+                                            animationSpec=androidx.compose.animation.core.tween(if(AppTheme.reduceMotion) 0 else 260, easing=androidx.compose.animation.core.LinearOutSlowInEasing),
+                                            targetOffsetY={-it}
+                                        )
                                 ) {
                                     ClassSearchPanel(onOpen={hit->
                                         isClassSearchOpen=false
@@ -5523,6 +5535,7 @@ fun MainAppShell(
             attachedFiles=assistantAttachments[assistantConversationId].orEmpty(),
             onAttachContent={receiveAssistantAttachment(it,false)},
             onRemoveAttachedFile={id->assistantAttachments[assistantConversationId]=assistantAttachments[assistantConversationId].orEmpty().filterNot{it.localId==id}},
+            onAnswerPresented={acaResponsePresented=true},
             onOpenChat={draft,includeContext->
                 acaChatOpening=true
                 acaChatDraft=draft
@@ -5534,6 +5547,7 @@ fun MainAppShell(
             },
             onSend={question,includeContext->
                 acaOverlayStart=assistantMessages.size
+                acaResponsePresented=false
                 val useContext=includeContext || acaHasDocument
                 if(!useContext || acaContextPermitted)askAssistant(question,if(useContext)acaPageContext else "")
                 else appendAssistantMessage(assistantConversationId,AssistantMessage("context-${currentTimeMillis()}",AssistantAuthor.ASSISTANT,"Attiva il servizio e i consensi per questo contesto nelle impostazioni AI.",isError=true))
@@ -5542,9 +5556,7 @@ fun MainAppShell(
         }
         // Only the explicitly invoked contextual surface owns the perimeter.
         circolareplus.design.AilaAcaIndicator(
-            active = acaOverlay && aiPolicy.aiEnabled && aiPolicy.acaEnabled &&
-                (assistantAgentPhases[assistantConversationId] != null ||
-                    (!isAssistantThinking && assistantMessages.drop(acaOverlayStart).none { it.author == AssistantAuthor.ASSISTANT }))
+            active = acaOverlay && aiPolicy.aiEnabled && aiPolicy.acaEnabled && !acaResponsePresented
         )
     }
 }
