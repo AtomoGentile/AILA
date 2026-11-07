@@ -129,7 +129,11 @@ fun ForumScreen(
  Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight).then(if(inline)Modifier.padding(bottom=LocalBottomBarPadding.current) else Modifier.windowInsetsPadding(WindowInsets.safeDrawing)).imePadding()){
   if(!inline || threadId!=null)AilaBackBar(title=when{focusPostId!=null->"Conversazione";threadId!=null->"Educazione tra pere";else->"Educazione tra pere"},onBackClick=goBack,
    action={if(threadId!=null)AilaIconButton("Preferenze della discussione",{notificationDialog=true}){tint->AppIcons.Bell(color=tint)}})
-  if(busy||listLoading)LinearProgressIndicator(Modifier.fillMaxWidth())
+  if(busy||listLoading)LinearProgressIndicator(
+   modifier=Modifier.fillMaxWidth().height(2.dp),
+   color=AppTheme.PrimaryBlue,
+   trackColor=AppTheme.FieldOutline
+  )
   error?.let{Text(it,Modifier.padding(16.dp),color=AppTheme.TintRedInk)}
   if(threadId==null){
    LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){

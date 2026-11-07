@@ -3827,8 +3827,8 @@ fun MainAppShell(
                                 androidx.compose.animation.AnimatedVisibility(
                                     visible=isClassSearchOpen,
                                     modifier=Modifier.fillMaxWidth().weight(1f),
-                                    enter=androidx.compose.animation.expandVertically(circolareplus.design.ailaSpatialSpring()) + androidx.compose.animation.fadeIn(circolareplus.design.ailaFadeSpec(180)) + androidx.compose.animation.slideInVertically(initialOffsetY={it/8}),
-                                    exit=androidx.compose.animation.fadeOut(circolareplus.design.ailaFadeSpec(100)) + androidx.compose.animation.shrinkVertically(circolareplus.design.ailaSpatialSpring()) + androidx.compose.animation.slideOutVertically(targetOffsetY={it/8})
+                                    enter=androidx.compose.animation.expandVertically(circolareplus.design.ailaSpatialSpring()) + androidx.compose.animation.fadeIn(circolareplus.design.ailaFadeSpec(180)) + androidx.compose.animation.slideInVertically(initialOffsetY={-it/8}),
+                                    exit=androidx.compose.animation.fadeOut(circolareplus.design.ailaFadeSpec(100)) + androidx.compose.animation.shrinkVertically(circolareplus.design.ailaSpatialSpring()) + androidx.compose.animation.slideOutVertically(targetOffsetY={-it/8})
                                 ) {
                                     ClassSearchPanel(onOpen={hit->
                                         isClassSearchOpen=false
@@ -3850,6 +3850,9 @@ fun MainAppShell(
                                 // sostituito di colpo, e con liste lunghe sembrava un salto.
                                 if(!isClassSearchOpen) androidx.compose.animation.Crossfade(
                                     targetState = classSection,
+                                    animationSpec = androidx.compose.animation.core.tween(
+                                        durationMillis=if(AppTheme.reduceMotion) 0 else if(AppTheme.isGlass) 140 else 200
+                                    ),
                                     label = "classSection"
                                 ) { section ->
                                 when (section) {

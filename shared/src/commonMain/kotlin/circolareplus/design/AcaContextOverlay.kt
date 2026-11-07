@@ -19,7 +19,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -90,9 +89,10 @@ fun AcaContextOverlay(
     }
     val expanded = question.isNotBlank() || attachedScreen || attachedFiles.isNotEmpty() || recording || transcribing || voiceError != null
     val expansion by animateFloatAsState(if(expanded) 1f else 0f, tween(if(AppTheme.reduceMotion) 0 else 280, easing=FastOutSlowInEasing),label="ACA composer expansion")
+    val composerExpansion=maxOf(expansion,dragProgress)
     val dark = AppTheme.isDarkMode
     val shape = RoundedCornerShape(28.dp)
-    val composerRadius by animateDpAsState(if(expanded) 28.dp else 48.dp, tween(if(AppTheme.reduceMotion) 0 else 280),label="ACA composer corners")
+    val composerRadius=48.dp-20.dp*composerExpansion
     val composerShape = RoundedCornerShape(composerRadius)
     // Opaque ink surfaces keep text from the page underneath out of the controls.
     val surface = if(dark) listOf(Color(0xFF08090E), Color(0xFF0B0C13), Color(0xFF161827))
@@ -120,7 +120,7 @@ fun AcaContextOverlay(
     BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)).imePadding()) {
         val availableHeight = maxHeight
         val panelSurface = if(AppTheme.isGlass) Modifier.ailaGlassSurface(shape,
-            tint=(if(dark) Color(0xFF090C13) else Color.White).copy(alpha=.88f))
+            tint=(if(dark) Color(0xFF090C13) else Color.White).copy(alpha=if(dark) .98f else .94f))
             else Modifier.background(Brush.linearGradient(surface)).border(1.dp,edge,shape)
         Column(Modifier.align(Alignment.TopCenter).padding(horizontal = 16.dp, vertical = 8.dp)
             .widthIn(max = 600.dp).fillMaxWidth().heightIn(max = availableHeight * .86f),
@@ -143,7 +143,7 @@ fun AcaContextOverlay(
                 }
             }
             val composerSurface = if(AppTheme.isGlass) Modifier.ailaGlassSurface(composerShape,
-                tint=(if(dark) Color(0xFF090C13) else Color.White).copy(alpha=.88f))
+                tint=(if(dark) Color(0xFF090C13) else Color.White).copy(alpha=if(dark) .98f else .94f))
                 else Modifier.background(Brush.linearGradient(surface)).border(1.dp,edge,composerShape)
             Column(Modifier.fillMaxWidth().shadow(12.dp,composerShape).clip(composerShape).then(composerSurface)
                 .pointerInput(Unit) { detectTapGestures { } }
@@ -158,16 +158,9 @@ fun AcaContextOverlay(
                         },
                         onDragEnd={
                             val shouldOpen=distance>threshold
-                            dragProgress=0f
-                            if(shouldOpen)openChat()
+                            if(shouldOpen)openChat() else dragProgress=0f
                         },
                         onDragCancel={distance=0f;dragProgress=0f})
-                }
-                .graphicsLayer {
-                    translationY=dragProgress*18.dp.toPx()
-                    val scale=1f+dragProgress*.025f
-                    scaleX=scale
-                    scaleY=scale
                 }
                 .border(
                     width=(1.5f+dragProgress*3f).dp,
@@ -184,7 +177,7 @@ fun AcaContextOverlay(
                         CustomAccessibilityAction("Apri la chat di ACA") { openChat(); true })
                 }
                 .padding(horizontal=12.dp,vertical=12.dp),
-                verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                verticalArrangement=Arrangement.spacedBy(if(attachedScreen || attachedFiles.isNotEmpty() || recording || transcribing || voiceError != null) 4.dp else 0.dp)) {
                 Column(Modifier.heightIn(max=availableHeight*.25f).verticalScroll(rememberScrollState()),
                     verticalArrangement=Arrangement.spacedBy(4.dp)) {
             if(attachedScreen) Row(Modifier.fillMaxWidth().background(insetFill,RoundedCornerShape(14.dp)).padding(start=12.dp,end=4.dp,top=4.dp,bottom=4.dp),verticalAlignment=Alignment.CenterVertically) {
@@ -222,19 +215,29 @@ fun AcaContextOverlay(
                 val w=constraints.maxWidth
                 val button=48.dp.roundToPx()
                 val gap=4.dp.roundToPx()
-                val fieldWidth=(w-(1f-expansion)*(button*3+gap*2)).toInt().coerceAtLeast(1)
+                val fieldWidth=(w-(1f-composerExpansion)*(button*3+gap*2)).toInt().coerceAtLeast(1)
                 val field=measurables[0].measure(constraints.copy(minWidth=fieldWidth,maxWidth=fieldWidth,minHeight=0))
                 val controls=measurables.drop(1).map { it.measure(androidx.compose.ui.unit.Constraints.fixed(button,button)) }
                 val compactH=maxOf(field.height,button)
-                val rowY=((field.height+gap)*expansion).toInt()
-                val controlY=(rowY+((compactH-button)/2*(1f-expansion))).toInt()
-                val h=(compactH+(field.height+gap+button-compactH)*expansion).toInt()
+                val rowY=((field.height+gap)*composerExpansion).toInt()
+                val controlY=(rowY+((compactH-button)/2*(1f-composerExpansion))).toInt()
+                val h=(compactH+(field.height+gap+button-compactH)*composerExpansion).toInt()
                 layout(w,h) {
-                    field.placeRelative(((button+gap)*(1f-expansion)).toInt(),((compactH-field.height)/2*(1f-expansion)).toInt())
+                    field.placeRelative(((button+gap)*(1f-composerExpansion)).toInt(),((compactH-field.height)/2*(1f-composerExpansion)).toInt())
                     controls[0].placeRelative(0,controlY)
                     controls[1].placeRelative(w-button*2-gap,controlY)
                     controls[2].placeRelative(w-button,controlY)
                 }
+            }
+            if(dragProgress>0f) Box(
+                Modifier.fillMaxWidth().height(availableHeight*.42f*dragProgress),
+                contentAlignment=Alignment.Center
+            ) {
+                if(dragProgress>.6f) Text(
+                    "Rilascia per aprire la chat",
+                    color=muted,
+                    style=MaterialTheme.typography.bodyMedium
+                )
             }
             }
         }

@@ -34,11 +34,22 @@ internal fun AilaBriefCard(
 ) {
     val relevant = items
     val visible = relevant
-    val white = Color.White
-    val soft = Color(0xFFCFD9F4)
-    Box(modifier.fillMaxWidth().clip(RoundedCornerShape(32.dp))
-        .background(Brush.linearGradient(listOf(Color(0xFF10172C), AppTheme.AccentDeep, Color(0xFF17203B))))
-        .border(1.dp, white.copy(alpha = .10f), RoundedCornerShape(32.dp))) {
+    val dark = AppTheme.isDarkMode
+    val glass = AppTheme.isGlass
+    val primaryText = AppTheme.TextDark
+    val soft = AppTheme.TextMuted
+    val panelShape = RoundedCornerShape(32.dp)
+    val panelColors = if(dark) listOf(Color(0xFF10172C), AppTheme.AccentDeep, Color(0xFF17203B))
+        else listOf(Color(0xFFF9FAFF), Color(0xFFE8EDF7), Color(0xFFF3F5FC))
+    val panelSurface = if(glass) Modifier.ailaGlassSurface(
+        panelShape,
+        tint=if(dark) Color(0xFF1A2543).copy(alpha=.88f) else Color.White.copy(alpha=.78f)
+    ) else Modifier.clip(panelShape)
+        .background(Brush.linearGradient(panelColors))
+        .border(1.dp, if(dark) Color.White.copy(alpha=.12f) else Color(0xFF27324B).copy(alpha=.12f), panelShape)
+    val itemFill = if(dark) Color.White.copy(alpha=.075f) else Color(0xFF17213A).copy(alpha=.045f)
+    val itemBorder = if(dark) Color.White.copy(alpha=.12f) else Color(0xFF17213A).copy(alpha=.10f)
+    Box(modifier.fillMaxWidth().then(panelSurface)) {
         Canvas(Modifier.matchParentSize()) {
             val center = Offset(size.width * .96f, size.height * .04f)
             listOf(.33f, .57f, .82f).forEachIndexed { i, scale ->
@@ -48,7 +59,7 @@ internal fun AilaBriefCard(
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("AILA Brief", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, color = white)
+                    Text("AILA Brief", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, color = primaryText)
                     Text("Quello che conta per te, adesso.",
                         style = MaterialTheme.typography.bodyMedium, color = soft)
                 }
@@ -57,19 +68,19 @@ internal fun AilaBriefCard(
             if(loading && relevant.isEmpty()) Text("Preparo il tuo riepilogo…", color = soft, style = MaterialTheme.typography.bodyMedium)
             if(error != null) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(error, Modifier.weight(1f), color = soft, style = MaterialTheme.typography.bodySmall)
-                TextButton(onClick = onRefresh, colors = ButtonDefaults.textButtonColors(contentColor = white)) { Text("Riprova") }
+                TextButton(onClick = onRefresh, colors = ButtonDefaults.textButtonColors(contentColor = primaryText)) { Text("Riprova") }
             }
             if(relevant.isEmpty() && !loading && error == null) {
                 Text("Sei in pari. Qui troverai novità, risposte e cose da fare per te.", color = soft, style = MaterialTheme.typography.bodyMedium)
             }
             visible.forEach { item ->
                 val tint = when(item.kind) {
-                    AilaBriefKind.EVENT -> Color(0xFF9EDFD8)
-                    AilaBriefKind.CIRCULAR -> Color(0xFFF2D398)
-                    AilaBriefKind.POLL, AilaBriefKind.RANKING_POLL -> Color(0xFFC9B9FF)
-                    AilaBriefKind.FORUM -> Color(0xFFA0D5FF)
-                    AilaBriefKind.PROPOSAL -> Color(0xFFFFBDD5)
-                    AilaBriefKind.SEATMAP -> Color(0xFFA8D8B9)
+                    AilaBriefKind.EVENT -> if(dark) Color(0xFF9EDFD8) else Color(0xFF0F766E)
+                    AilaBriefKind.CIRCULAR -> if(dark) Color(0xFFF2D398) else Color(0xFF9A5B00)
+                    AilaBriefKind.POLL, AilaBriefKind.RANKING_POLL -> if(dark) Color(0xFFC9B9FF) else Color(0xFF6D28D9)
+                    AilaBriefKind.FORUM -> if(dark) Color(0xFFA0D5FF) else Color(0xFF0369A1)
+                    AilaBriefKind.PROPOSAL -> if(dark) Color(0xFFFFBDD5) else Color(0xFFBE185D)
+                    AilaBriefKind.SEATMAP -> if(dark) Color(0xFFA8D8B9) else Color(0xFF15803D)
                 }
                 val label = when(item.kind) {
                     AilaBriefKind.EVENT -> if(item.date == today().toIso()) "OGGI" else item.date?.let(::briefDate) ?: "CALENDARIO"
@@ -81,17 +92,17 @@ internal fun AilaBriefCard(
                 }
                 if(item.kind == AilaBriefKind.CIRCULAR) {
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
-                        .background(white.copy(alpha=.065f))
+                        .background(itemFill).border(1.dp,itemBorder,RoundedCornerShape(24.dp))
                         .clickable(role=Role.Button) { onOpen(item) }.padding(16.dp),
                         verticalArrangement=Arrangement.spacedBy(4.dp)) {
                         Text("Circolare n. ${item.sourceId}",color=tint,style=MaterialTheme.typography.labelMedium,fontWeight=FontWeight.Bold)
-                        Text(item.title,color=white,style=MaterialTheme.typography.titleMedium)
+                        Text(item.title,color=primaryText,style=MaterialTheme.typography.titleMedium)
                     }
                 } else Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
-                    .background(white.copy(alpha = .065f)).border(1.dp, white.copy(alpha = .09f), RoundedCornerShape(24.dp))
-                    .padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    .background(itemFill).border(1.dp, itemBorder, RoundedCornerShape(24.dp))
+                    .clickable(role=Role.Button) { onOpen(item) }.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.Top) {
-                        Box(Modifier.size(36.dp).background(tint.copy(alpha = .14f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(36.dp).background(tint.copy(alpha = if(dark) .14f else .10f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
                             when(item.kind) {
                                 AilaBriefKind.SEATMAP -> AppIcons.Chair(Modifier.size(20.dp), tint)
                                 AilaBriefKind.EVENT -> AppIcons.Calendar(Modifier.size(20.dp), tint)
@@ -103,27 +114,14 @@ internal fun AilaBriefCard(
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(label, color = tint, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                            Text(item.title, color = white, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(item.title, color = primaryText, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
+                        AppIcons.ChevronRight(Modifier.size(18.dp),soft)
                         IconButton(onClick = { onDismiss(item) }, modifier = Modifier.size(32.dp).semantics { contentDescription = "Non ora: ${item.title}" }) {
                             AppIcons.Close(Modifier.size(17.dp), soft)
                         }
                     }
                     if(item.kind != AilaBriefKind.EVENT) Text(item.message, color = soft, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = {
-                                onOpen(item)
-                            },
-                            modifier = Modifier.weight(1f, fill = false),
-                            colors = ButtonDefaults.buttonColors(containerColor = white.copy(alpha = .13f), contentColor = white),
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp), shape = RoundedCornerShape(16.dp)
-                        ) {
-                            Text(if(item.kind == AilaBriefKind.EVENT) "Apri calendario" else item.actionLabel, style = MaterialTheme.typography.labelLarge)
-                            Spacer(Modifier.width(6.dp)); AppIcons.ChevronRight(Modifier.size(16.dp), white)
-                        }
-
-                    }
                 }
             }
         }
