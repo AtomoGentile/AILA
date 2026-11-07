@@ -149,7 +149,7 @@ fun AcaContextOverlay(
                 .pointerInput(Unit) { detectTapGestures { } }
                 .pointerInput(isInteractive,recording,transcribing) {
                     var distance=0f
-                    val threshold=180.dp.toPx()
+                    val threshold=280.dp.toPx()
                     detectVerticalDragGestures(onDragStart={distance=0f;dragProgress=0f},
                         onVerticalDrag={change,amount->
                             change.consume()
@@ -199,7 +199,7 @@ fun AcaContextOverlay(
             }
             }
             Layout(modifier=Modifier.fillMaxWidth(),content={
-            TextField(question,{question=it},placeholder={Text("Chiedi ad AILA…",style=MaterialTheme.typography.titleMedium,maxLines=1)},modifier=Modifier.focusRequester(focus).offset(x=(-16).dp),readOnly=!isInteractive||recording||transcribing,minLines=1,maxLines=4,
+            TextField(question,{question=it},placeholder={Text("Chiedi ad AILA…",style=MaterialTheme.typography.titleMedium,maxLines=1)},modifier=Modifier.focusRequester(focus),readOnly=!isInteractive||recording||transcribing,minLines=1,maxLines=4,
                 textStyle=MaterialTheme.typography.titleMedium,
                 colors=TextFieldDefaults.colors(focusedContainerColor=Color.Transparent,unfocusedContainerColor=Color.Transparent,focusedTextColor=AppTheme.TextDark,unfocusedTextColor=AppTheme.TextDark,focusedIndicatorColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent,focusedPlaceholderColor=muted,unfocusedPlaceholderColor=muted))
 
@@ -215,7 +215,8 @@ fun AcaContextOverlay(
                 val w=constraints.maxWidth
                 val button=48.dp.roundToPx()
                 val gap=4.dp.roundToPx()
-                val fieldWidth=(w-(1f-composerExpansion)*(button*3+gap*2)).toInt().coerceAtLeast(1)
+                val fieldLeft=button+gap
+                val fieldWidth=(w-fieldLeft-(1f-composerExpansion)*(button*2+gap)).toInt().coerceAtLeast(1)
                 val field=measurables[0].measure(constraints.copy(minWidth=fieldWidth,maxWidth=fieldWidth,minHeight=0))
                 val controls=measurables.drop(1).map { it.measure(androidx.compose.ui.unit.Constraints.fixed(button,button)) }
                 val compactH=maxOf(field.height,button)
@@ -223,7 +224,7 @@ fun AcaContextOverlay(
                 val controlY=(rowY+((compactH-button)/2*(1f-composerExpansion))).toInt()
                 val h=(compactH+(field.height+gap+button-compactH)*composerExpansion).toInt()
                 layout(w,h) {
-                    field.placeRelative(((button+gap)*(1f-composerExpansion)).toInt(),((compactH-field.height)/2*(1f-composerExpansion)).toInt())
+                    field.placeRelative(fieldLeft,((compactH-field.height)/2*(1f-composerExpansion)).toInt())
                     controls[0].placeRelative(0,controlY)
                     controls[1].placeRelative(w-button*2-gap,controlY)
                     controls[2].placeRelative(w-button,controlY)
@@ -265,8 +266,7 @@ fun AcaContextOverlay(
 private fun AcaAttachmentOption(title:String,subtitle:String,fill:Color,muted:Color,enabled:Boolean,onClick:()->Unit) {
     val interaction = remember { MutableInteractionSource() }
     val optionShape = ailaMorphShape(interaction)
-    Row(Modifier.fillMaxWidth().ailaSheetReveal(if(title=="Schermata") 1 else 2)
-        .ailaPressScale(interaction, .97f).ailaTopicSurface(optionShape,fill,muted)
+    Row(Modifier.fillMaxWidth().ailaPressScale(interaction, .97f).ailaTopicSurface(optionShape,fill,muted)
         .clickable(interactionSource=interaction,indication=null,enabled=enabled,role=androidx.compose.ui.semantics.Role.Button,onClick=onClick)
         .padding(20.dp),verticalAlignment=Alignment.CenterVertically) {
         Box(Modifier.size(48.dp).background(muted.copy(alpha=.12f),RoundedCornerShape(16.dp)),contentAlignment=Alignment.Center) {

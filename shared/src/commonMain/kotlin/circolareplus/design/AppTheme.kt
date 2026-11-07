@@ -197,7 +197,7 @@ object AppTheme {
      */
     val SelectionFill: Brush
         get() = SolidColor(if (!isGlass && accent != AilaAccent.BLUE) AccentContainer
-            else style(Color(0xF2FFFFFF), Color(0x47FFFFFF), Color(0xFFD9E2FF), Color(0xFF34457A)))
+            else style(Color(0xBFFFFFFF), Color(0x47FFFFFF), Color(0xFFD9E2FF), Color(0xFF34457A)))
     val OnSelection get() = if (!isGlass && accent != AilaAccent.BLUE) OnAccentContainer
         else style(Color(0xFF0B0D12), Color(0xFFFFFFFF), Color(0xFF0B1B45), Color(0xFFDCE3FF))
     /** Fondo del binario su cui scorre la selezione. */

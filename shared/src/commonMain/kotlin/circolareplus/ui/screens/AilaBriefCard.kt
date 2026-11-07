@@ -43,7 +43,7 @@ internal fun AilaBriefCard(
         else listOf(Color(0xFFF9FAFF), Color(0xFFE8EDF7), Color(0xFFF3F5FC))
     val panelSurface = if(glass) Modifier.ailaGlassSurface(
         panelShape,
-        tint=if(dark) Color(0xFF1A2543).copy(alpha=.88f) else Color.White.copy(alpha=.78f)
+        tint=if(dark) Color(0xFF1A2543).copy(alpha=.88f) else Color.White.copy(alpha=.54f)
     ) else Modifier.clip(panelShape)
         .background(Brush.linearGradient(panelColors))
         .border(1.dp, if(dark) Color.White.copy(alpha=.12f) else Color(0xFF27324B).copy(alpha=.12f), panelShape)

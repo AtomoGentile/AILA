@@ -130,20 +130,16 @@ fun ForumScreen(
   Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight).then(if(inline)Modifier.padding(bottom=LocalBottomBarPadding.current) else Modifier.windowInsetsPadding(WindowInsets.safeDrawing)).imePadding()){
   if(!inline || threadId!=null)AilaBackBar(title=when{focusPostId!=null->"Conversazione";threadId!=null->"Revisione tra pere";else->"Revisione tra pere"},onBackClick=goBack,
    action={if(threadId!=null)AilaIconButton("Preferenze della discussione",{notificationDialog=true}){tint->AppIcons.Bell(color=tint)}})
-  if(busy||listLoading)LinearProgressIndicator(
-   modifier=Modifier.fillMaxWidth().height(2.dp),
-   color=AppTheme.PrimaryBlue,
-   trackColor=AppTheme.FieldOutline
-  )
   error?.let{Text(it,Modifier.padding(16.dp),color=AppTheme.TintRedInk)}
   if(threadId==null){
-   LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(horizontal=16.dp,vertical=20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)){
+   LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(start=16.dp,end=16.dp,top=16.dp,bottom=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
     item { ForumIntroduction(busy, onCreate = { creating = true }, onRules = { showRules = true }) }
     item {
      val filters=listOf("ALL","OPEN","RESOLVED","MINE")
      AilaFilterBar(labels=listOf("Tutte","Aperte","Risolte","Le mie"),selectedIndex=filters.indexOf(threadFilter),
       onSelect={if(threadFilter!=filters[it]) {threadFilter=filters[it];threads=emptyList();moreThreads=false}})
     }
+    item { Spacer(Modifier.height(4.dp)) }
     if(threads.isEmpty()&&!busy&&!listLoading) item {
      if(threadFilter=="ALL") ForumEmptyState()
      else ForumEmptyState(title="Nessuna discussione qui",description="Non ci sono discussioni con questo filtro. Prova un’altra categoria.")
@@ -241,7 +237,7 @@ fun ForumScreen(
      else Text("Identità in questa discussione: ${snap.myIdentity.label}. Rimarrà la stessa.",style=MaterialTheme.typography.labelSmall,color=AppTheme.TextMuted)
      if(!rulesAccepted)Row(verticalAlignment=Alignment.CenterVertically){Checkbox(rulesAccepted,{rulesAccepted=it});TextButton(onClick={showRules=true}){Text("Accetto le regole del forum e l’informativa")}}
     }
-   }else if(error==null)Box(Modifier.weight(1f).fillMaxWidth(),contentAlignment=Alignment.Center){CircularProgressIndicator()}
+   }
   }
  }
  if(creating) ForumNewQuestionSheet(

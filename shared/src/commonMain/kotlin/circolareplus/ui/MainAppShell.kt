@@ -150,7 +150,7 @@ enum class MainTab(val title: String) {
 enum class ClassSection(val title: String) {
     CIRCULARS("Circolari"),
     BOARD("Bacheca"),
-    PERE("Revisione tra pere")
+    PERE("Pere")
 }
 
 /**
@@ -1099,6 +1099,13 @@ fun MainAppShell(
     var isInAssistantScreen by rememberSaveable { mutableStateOf(false) }
     var acaOverlay by remember { mutableStateOf(false) }
     var acaOverlayStart by remember { mutableStateOf(0) }
+    var acaChatOpening by remember { mutableStateOf(false) }
+    LaunchedEffect(acaChatOpening) {
+        if (acaChatOpening) {
+            delay(700L)
+            acaChatOpening = false
+        }
+    }
     var acaForumContext by remember{mutableStateOf("")}
     var acaDocumentContext by remember{mutableStateOf("")}
     var acaChatDraft by remember { mutableStateOf("") }
@@ -2785,6 +2792,7 @@ fun MainAppShell(
         // In container transform la stessa curva della forma (molla aprendo, durata fissa
         // chiudendo): le tab spariscono sotto solo quando la pagina le copre del tutto.
         animationSpec = when {
+            acaChatOpening -> androidx.compose.animation.core.tween(620, easing = MaterialEmphasizedDecelerate)
             !shellContainer[0] -> circolareplus.design.ailaNavigationSpring()
             navForward[0] -> circolareplus.design.ailaContainerFloatSpring()
             else -> circolareplus.design.ailaContainerCloseSpec()
@@ -4463,8 +4471,9 @@ fun MainAppShell(
                 androidx.compose.runtime.withFrameNanos { }
                 when {
                     isTopPage -> coroutineScope {
-                        launch { pagePresence.animateTo(1f, tween(MATERIAL_PAGE_ENTER_MS, easing = MaterialEmphasizedDecelerate)) }
-                        launch { pageBehind.animateTo(0f, tween(MATERIAL_PAGE_ENTER_MS, easing = MaterialEmphasizedDecelerate)) }
+                        val enterDuration = if (acaChatOpening && route == ShellRoute.ASSISTANT) 620 else MATERIAL_PAGE_ENTER_MS
+                        launch { pagePresence.animateTo(1f, tween(enterDuration, easing = MaterialEmphasizedDecelerate)) }
+                        launch { pageBehind.animateTo(0f, tween(enterDuration, easing = MaterialEmphasizedDecelerate)) }
                     }
                     // Se n'e' aperta un'altra sopra: questa si allontana appena, dietro di lei.
                     navForward[0] -> pageBehind.animateTo(1f, tween(MATERIAL_PAGE_ENTER_MS, easing = MaterialEmphasizedDecelerate))
@@ -4488,7 +4497,11 @@ fun MainAppShell(
             // insieme alla pagina e per un attimo si vedeva lo sfondo "cambiare".
             val forwardNow = navForward[0]
             val glassSlide = if (AppTheme.isGlass && route != ShellRoute.TABS) transition.animateFloat(
-                transitionSpec = { circolareplus.design.ailaNavigationSpring() },
+                transitionSpec = {
+                    if (acaChatOpening && targetState == androidx.compose.animation.EnterExitState.Visible && route == ShellRoute.ASSISTANT)
+                        tween(620, easing = MaterialEmphasizedDecelerate)
+                    else circolareplus.design.ailaNavigationSpring()
+                },
                 label = "glassPush"
             ) { state ->
                 when (state) {
@@ -5491,9 +5504,9 @@ fun MainAppShell(
             enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(if(AppTheme.reduceMotion) 90 else 380)) +
                 if(AppTheme.reduceMotion) androidx.compose.animation.EnterTransition.None else androidx.compose.animation.slideInVertically(
                     animationSpec = androidx.compose.animation.core.tween(420, easing = androidx.compose.animation.core.LinearOutSlowInEasing), initialOffsetY = { -it / 28 }),
-            exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(if(AppTheme.reduceMotion) 80 else 160)) +
+            exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(if(AppTheme.reduceMotion) 80 else if(acaChatOpening) 520 else 160)) +
                 if(AppTheme.reduceMotion) androidx.compose.animation.ExitTransition.None else androidx.compose.animation.slideOutVertically(
-                    animationSpec = androidx.compose.animation.core.tween(160), targetOffsetY = { -it / 80 })
+                    animationSpec = androidx.compose.animation.core.tween(if(acaChatOpening) 520 else 160), targetOffsetY = { -it / 80 })
         ) {
         circolareplus.design.AcaContextOverlay(
             isInteractive=acaOverlay,
@@ -5509,6 +5522,7 @@ fun MainAppShell(
             onAttachContent={receiveAssistantAttachment(it,false)},
             onRemoveAttachedFile={id->assistantAttachments[assistantConversationId]=assistantAttachments[assistantConversationId].orEmpty().filterNot{it.localId==id}},
             onOpenChat={draft,includeContext->
+                acaChatOpening=true
                 acaChatDraft=draft
                 acaChatContext=if((includeContext || acaHasDocument) && acaContextPermitted)acaPageContext else ""
                 acaOverlay=false;selectedCircularForDetail=null;paneCircular=null;eventDetailToShow=null
