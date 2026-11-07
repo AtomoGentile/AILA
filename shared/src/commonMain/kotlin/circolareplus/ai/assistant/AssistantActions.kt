@@ -117,7 +117,8 @@ circularNumber solo se il numero esiste nei dati e l'evento viene da quella circ
             .sortedByDescending { event -> eventWords.count { AssistantContext.normalize(event.title).contains(it) } }.take(if(maxChars<14_000)4 else 40)
         val events = editable.joinToString("\n") { e -> "eventId=${e.id}; title=${e.title}; date=${e.date}; time=${e.time}; category=${e.category}; notes=${e.notes.orEmpty()}; visibility=${if(e.isForAll) "CLASS" else "SELF"}" }
         val request = "OGGI: ${knowledge.todayIso}\nEVENTI MODIFICABILI:\n$events\nCONVERSAZIONE:\n$turns\nRICHIESTA UTENTE:\n$question"
-        val room = maxChars - system.length - request.length - 40
+        val systemPrompt = system(knowledge)
+        val room = maxChars - systemPrompt.length - request.length - 40
         require(room >= 0) { "La richiesta è troppo lunga per questo modello. Dividi gli eventi in più messaggi." }
         require(knowledge.attachedSources.sumOf{it.text.length+it.file.name.length+200} <= (room*.6f).toInt()) {
             "Gli allegati sono troppo lunghi per pianificare tutti gli eventi con questo modello. Seleziona un passaggio o dividi il documento."
@@ -132,7 +133,7 @@ circularNumber solo se il numero esiste nei dati e l'evento viene da quella circ
         val context = if (room < 500) "" else AssistantContext.render(
             calendarKnowledge, question, deepTexts, maxChars = room, searchQuery = searchQuery
         ).take(room)
-        AiPrompt(system(knowledge), "DATI DELL'APP:\n$context\n$request")
+        AiPrompt(systemPrompt, "DATI DELL'APP:\n$context\n$request")
     }
 
     fun parse(raw: String): AssistantActionPlan? = try {
