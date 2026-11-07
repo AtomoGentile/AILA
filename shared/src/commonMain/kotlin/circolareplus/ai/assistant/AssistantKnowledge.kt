@@ -48,7 +48,9 @@ data class AssistantKnowledge(
     /** Riscontri nel testo integrale delle circolari sul telefono: vedi [CircularTextStore]. */
     val textHits: AssistantTextHits = AssistantTextHits(),
     val attachedSources: List<AssistantAttachedSource> = emptyList(),
-    val screenContext:String=""
+    val screenContext:String="",
+    /** Le ore di lezione della classe (5 o 6), usate per interpretare "ultima ora". */
+    val classLessonHours: Int = 6
 ) {
     val role: UserRole get() = user?.role ?: UserRole.STUDENT
 

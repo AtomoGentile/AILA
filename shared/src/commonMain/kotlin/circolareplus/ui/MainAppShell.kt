@@ -1604,6 +1604,7 @@ fun MainAppShell(
                         todayIso = circolareplus.util.today().toIso(),
                         user = userAtRequest,
                         profile = currentProfile,
+                        classLessonHours = circolareplus.data.ClassSchedule.lessonHours,
                         classmates = classmates,
                         circulars = circulars,
                         classifications = classifications.toMap(),

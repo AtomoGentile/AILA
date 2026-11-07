@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -18,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -56,6 +58,7 @@ fun AcaContextOverlay(
     var recording by remember { mutableStateOf(false) }
     var transcribing by remember { mutableStateOf(false) }
     var voiceError by remember { mutableStateOf<String?>(null) }
+    var dragProgress by remember { mutableStateOf(0f) }
     val scope = rememberCoroutineScope()
     val picker = circolareplus.platform.rememberContentPicker({ voiceError = it }) {
         attachmentMenu = false
@@ -146,10 +149,36 @@ fun AcaContextOverlay(
                 .pointerInput(Unit) { detectTapGestures { } }
                 .pointerInput(isInteractive,recording,transcribing) {
                     var distance=0f
-                    detectVerticalDragGestures(onDragStart={distance=0f},
-                        onVerticalDrag={change,amount->change.consume();distance+=amount},
-                        onDragEnd={if(distance>48.dp.toPx())openChat()},onDragCancel={distance=0f})
+                    val threshold=48.dp.toPx()
+                    detectVerticalDragGestures(onDragStart={distance=0f;dragProgress=0f},
+                        onVerticalDrag={change,amount->
+                            change.consume()
+                            distance+=amount
+                            dragProgress=(distance/threshold).coerceIn(0f,1f)
+                        },
+                        onDragEnd={
+                            val shouldOpen=distance>threshold
+                            dragProgress=0f
+                            if(shouldOpen)openChat()
+                        },
+                        onDragCancel={distance=0f;dragProgress=0f})
                 }
+                .graphicsLayer {
+                    translationY=dragProgress*18.dp.toPx()
+                    val scale=1f+dragProgress*.025f
+                    scaleX=scale
+                    scaleY=scale
+                }
+                .border(
+                    width=(1.5f+dragProgress*3f).dp,
+                    brush=Brush.sweepGradient(listOf(
+                        AppTheme.PrimaryBlue.copy(alpha=.72f+dragProgress*.28f),
+                        AilaAssistantViolet.copy(alpha=.55f+dragProgress*.4f),
+                        AilaAssistantTeal.copy(alpha=.55f+dragProgress*.4f),
+                        AppTheme.PrimaryBlue.copy(alpha=.72f+dragProgress*.28f)
+                    )),
+                    shape=composerShape
+                )
                 .semantics {
                     if(isInteractive && !recording && !transcribing) customActions=listOf(
                         CustomAccessibilityAction("Apri la chat di ACA") { openChat(); true })
@@ -173,14 +202,15 @@ fun AcaContextOverlay(
                 }
             }
             if(recording || transcribing || voiceError != null) Row(Modifier.fillMaxWidth().background(insetFill,RoundedCornerShape(16.dp)).padding(horizontal=12.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
-                Text(voiceError ?: if(recording) "Registrazione vocale in corso…" else "Trascrivo il vocale…",Modifier.weight(1f),style=MaterialTheme.typography.labelMedium,color=if(voiceError!=null) AppTheme.TintRedInk else muted)
+                Text(voiceError ?: if(recording) "Registrazione vocale in corso…" else "Trascrivo il vocale…",Modifier.weight(1f),style=MaterialTheme.typography.bodyMedium,color=if(voiceError!=null) AppTheme.TintRedInk else muted)
             }
             }
             Layout(modifier=Modifier.fillMaxWidth(),content={
-            TextField(question,{question=it},placeholder={Text("Chiedi ad AILA…",style=MaterialTheme.typography.bodyLarge,maxLines=1)},modifier=Modifier.focusRequester(focus),readOnly=!isInteractive||recording||transcribing,minLines=1,maxLines=4,
+            TextField(question,{question=it},placeholder={Text("Chiedi ad AILA…",style=MaterialTheme.typography.titleMedium,maxLines=1)},modifier=Modifier.focusRequester(focus),readOnly=!isInteractive||recording||transcribing,minLines=1,maxLines=4,
+                textStyle=MaterialTheme.typography.titleMedium,
                 colors=TextFieldDefaults.colors(focusedContainerColor=Color.Transparent,unfocusedContainerColor=Color.Transparent,focusedTextColor=AppTheme.TextDark,unfocusedTextColor=AppTheme.TextDark,focusedIndicatorColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent,focusedPlaceholderColor=muted,unfocusedPlaceholderColor=muted))
 
-                IconButton(onClick={keyboard?.hide();attachmentMenu=true},enabled=isInteractive&&!thinking&&!recording&&!transcribing,modifier=Modifier.size(48.dp).semantics{contentDescription="Aggiungi allegato"}) { AppIcons.Plus(Modifier.size(28.dp),AppTheme.TextDark) }
+                IconButton(onClick={keyboard?.hide();attachmentMenu=true},enabled=isInteractive&&!thinking&&!recording&&!transcribing,modifier=Modifier.size(48.dp).background(if(dark) Color(0xFF252A35) else Color(0xFFE3E9F5),CircleShape).semantics{contentDescription="Aggiungi allegato"}) { AppIcons.Plus(Modifier.size(28.dp),AppTheme.TextDark) }
                 IconButton(onClick={if(recording){recorder.cancel();voiceError=null;focus.requestFocus();keyboard?.show()}else{keyboard?.hide();voiceError=null;recorder.start()}},enabled=isInteractive&&!transcribing&&!thinking,modifier=Modifier.size(48.dp).background(if(recording) AppTheme.TintRed else if(!expanded && !thinking && !transcribing) AppTheme.PrimaryBlue else Color.Transparent,RoundedCornerShape(24.dp)).semantics{contentDescription=if(recording)"Elimina vocale"else"Registra un vocale per ACA"}) { if(recording)AppIcons.Close(Modifier.size(22.dp),AppTheme.TintRedInk)else AcaMic(if(!expanded && !thinking && !transcribing) Color.White else AppTheme.TextDark) }
                 IconButton(onClick={if(recording)recorder.stop()else submit()},enabled=isInteractive && !thinking && !transcribing && (recording || canSend),modifier=Modifier.size(48.dp).background(sendFill,RoundedCornerShape(24.dp)).semantics{contentDescription=if(recording)"Ferma e trascrivi vocale"else"Invia ad AILA"}) {
                     if(thinking||transcribing)CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp,color=muted)else androidx.compose.animation.Crossfade(targetState=recording,animationSpec=tween(if(AppTheme.reduceMotion) 0 else 180),label="Vocale stop") { stopping ->
@@ -213,14 +243,14 @@ fun AcaContextOverlay(
             Column(Modifier.widthIn(max=600.dp).fillMaxWidth().verticalScroll(rememberScrollState())
                 .padding(horizontal=20.dp).padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
                 Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                    Text("Aggiungi alla richiesta",Modifier.weight(1f),style=MaterialTheme.typography.titleLarge,color=AppTheme.TextDark,fontWeight=FontWeight.SemiBold)
+                    Text("Aggiungi alla richiesta",Modifier.weight(1f),style=MaterialTheme.typography.headlineSmall,color=AppTheme.TextDark,fontWeight=FontWeight.SemiBold)
                     AilaIconButton(contentDescription="Chiudi allegati",onClick={attachmentMenu=false}) { tint -> AppIcons.Close(Modifier.size(18.dp),tint) }
                 }
                 AcaAttachmentOption("Schermata", "Allega il contenuto aperto", AppTheme.TintViolet, AppTheme.TintVioletInk, isInteractive) {
                     attachedScreen=true;attachmentMenu=false
                 }
                 AcaAttachmentOption("File, foto o audio", "Scegli dal dispositivo · fino a 20 MB", AppTheme.TintBlue, AppTheme.TintBlueInk, isInteractive&&!thinking) { picker() }
-                Text("Gli allegati della chat sono temporanei: nessuna copia salvata automaticamente sul dispositivo.",style=MaterialTheme.typography.labelSmall,color=muted)
+                Text("Gli allegati della chat sono temporanei: nessuna copia salvata automaticamente sul dispositivo.",style=MaterialTheme.typography.bodySmall,color=muted)
             }
         }
     }
@@ -240,8 +270,8 @@ private fun AcaAttachmentOption(title:String,subtitle:String,fill:Color,muted:Co
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-            Text(title,style=MaterialTheme.typography.titleSmall,color=AppTheme.TextDark)
-            Text(subtitle,style=MaterialTheme.typography.bodySmall,color=muted)
+            Text(title,style=MaterialTheme.typography.titleMedium,color=AppTheme.TextDark)
+            Text(subtitle,style=MaterialTheme.typography.bodyMedium,color=muted)
         }
         AppIcons.ChevronRight(Modifier.size(20.dp),muted)
     }
