@@ -8,21 +8,23 @@ export interface BriefItem {
  id:string;revision:string;kind:BriefKind;sourceId:string;title:string;message:string;
  actionLabel:string;date:string|null;canPlanStudy:boolean;isResult:boolean;
 }
-interface Candidate extends BriefItem {priority:number;}
+interface Candidate extends BriefItem {priority:number;sortKey:string;}
 const short=(text:string,max=220)=>text.replace(/\s+/g,' ').trim().slice(0,max);
 async function candidate(kind:BriefKind,sourceId:string,title:string,message:string,actionLabel:string,date:string|null,priority:number,version:string,canPlanStudy=false,isResult=false):Promise<Candidate>{
  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([kind,sourceId,title,message,actionLabel,date,version,canPlanStudy,isResult])));
  const revision=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
- return {id:`${kind}:${sourceId}`,revision,kind,sourceId,title:short(title,240),message:short(message),actionLabel,date,canPlanStudy,isResult,priority};
+ const sortKey=version.match(/\d{4}-\d\d-\d\d(?:T| \d\d:\d\d:\d\d)/)?.[0]??version.match(/\d{1,10}/)?.[0]?.padStart(10,'0')??version;
+ return {id:`${kind}:${sourceId}`,revision,kind,sourceId,title:short(title,240),message:short(message),actionLabel,date,canPlanStudy,isResult,priority,sortKey};
 }
 const group=(kind:BriefKind)=>kind==='RANKING_POLL'?'POLL':kind;
+const order=(a:Candidate,b:Candidate)=>b.priority-a.priority||b.sortKey.localeCompare(a.sortKey)||a.id.localeCompare(b.id);
 /** Keep urgent items first and leave space for more than one source. */
 export function selectBriefItems(items:Candidate[],dismissed:Set<string>,limit=Number.POSITIVE_INFINITY):BriefItem[]{
- const sorted=items.filter(i=>!dismissed.has(`${i.id}|${i.revision}`)).sort((a,b)=>b.priority-a.priority||a.id.localeCompare(b.id));
+ const sorted=items.filter(i=>!dismissed.has(`${i.id}|${i.revision}`)).sort(order);
  const selected:Candidate[]=[];const counts=new Map<string,number>();
  for(const item of sorted){const key=group(item.kind);if((counts.get(key)??0)>=1)continue;selected.push(item);counts.set(key,(counts.get(key)??0)+1);if(selected.length===limit)break;}
  for(const item of sorted){if(selected.length>=limit)break;if(!selected.includes(item))selected.push(item);}
- return selected.sort((a,b)=>b.priority-a.priority||a.id.localeCompare(b.id)).map(({priority,...item})=>item);
+ return selected.sort(order).map(({priority,sortKey,...item})=>item);
 }
 
 /** Reads existing authorized facts only: never runs a model or spends an AI quota. */
@@ -35,7 +37,7 @@ export async function briefCandidates(env:Env,classId:string,userId:string,now=n
  const [events,circulars,polls,rankings,replies,proposals,roster,seatmaps,seatPreferences]=await Promise.all([
   env.DB.prepare(`SELECT e.id,e.title,e.event_date,e.category,e.notes,e.poll_grid_id,e.visible_to_user_ids_json FROM calendar_events e WHERE e.class_id=? AND e.event_date BETWEEN ? AND ?
    AND ${studyAudience('e',false)} AND NOT EXISTS(SELECT 1 FROM aca_nudge_dismissals d WHERE d.user_id=? AND d.event_id=e.id AND d.event_date=e.event_date)
-   ORDER BY e.event_date,e.id`).bind(classId,today,after(3),userId,userId,userId,userId).all<{id:string;title:string;event_date:string;category:string;notes:string|null;poll_grid_id:string|null;visible_to_user_ids_json:string|null}>(),
+   ORDER BY e.event_date,e.id`).bind(classId,today,after(7),userId,userId,userId,userId).all<{id:string;title:string;event_date:string;category:string;notes:string|null;poll_grid_id:string|null;visible_to_user_ids_json:string|null}>(),
   env.DB.prepare(`SELECT c.number,c.title,c.publish_date,a.badge,a.per_class_json FROM circulars c
    JOIN circular_ai_analysis a ON a.circular_number=c.number WHERE a.is_fallback=0 AND a.tier>0
    AND NOT EXISTS(SELECT 1 FROM aca_brief_circular_reads seen WHERE seen.user_id=? AND seen.class_id=? AND seen.circular_number=c.number)
@@ -73,20 +75,20 @@ export async function briefCandidates(env:Env,classId:string,userId:string,now=n
   // Structured recipients and poll assignments take precedence over legacy free-text notes.
   if(!e.poll_grid_id && e.visible_to_user_ids_json===null && !noteAudienceIncludes(e.notes,roster.results,userId))continue;
   const days=Math.round((Date.parse(e.event_date)-Date.parse(today))/86400000);
-  pending.push(candidate('EVENT',e.id,e.title,days===0?'È un tuo impegno di oggi.':days===1?'È un tuo impegno di domani.':`È un tuo impegno tra ${days} giorni.`,'Apri il calendario',e.event_date,100-days*10,e.event_date,['VERIFICA','INTERROGAZIONE'].includes(e.category)));}
+  pending.push(candidate('EVENT',e.id,e.title,days===0?'È un tuo impegno di oggi.':days===1?'È un tuo impegno di domani.':`È un tuo impegno tra ${days} giorni.`,'Apri il calendario',e.event_date,120-days*10,e.event_date,['VERIFICA','INTERROGAZIONE'].includes(e.category)));}
  for(const c of circulars.results){
   if(isRelevantCircular(circularBadgeForClass(c.badge,c.per_class_json,classId)))
-   pending.push(candidate('CIRCULAR',String(c.number),c.title,'','',null,90,String(c.number)));}
+   pending.push(candidate('CIRCULAR',String(c.number),c.title,'','',null,100,String(c.number)));}
  for(const p of polls.results){const result=!!p.has_results;
   pending.push(candidate('POLL',p.id,p.subject,result?'Le date delle interrogazioni sono pronte.':p.submitted?'Hai già inviato le tue preferenze. Il sondaggio è ancora aperto.':'Questo sondaggio è aperto: puoi inviare le tue preferenze.',
-   result?'Vedi i risultati':p.submitted?'Apri il sondaggio':'Compila il sondaggio',result?null:p.closes_at?.slice(0,10)??null,result?84:85,`${p.created_at}|${p.result_version??''}`,false,result));}
+   result?'Vedi i risultati':p.submitted?'Apri il sondaggio':'Compila il sondaggio',result?null:p.closes_at?.slice(0,10)??null,result?97:96,`${p.created_at}|${p.result_version??''}`,false,result));}
  for(const p of rankings.results){const result=!!p.is_closed;
   pending.push(candidate('RANKING_POLL',p.id,p.question,result?'Il sondaggio è concluso: scopri la classifica.':p.answered?'Hai già risposto. Puoi vedere la classifica del sondaggio aperto.':'Questo sondaggio è aperto: puoi inviare la tua classifica.',
-   result?'Vedi i risultati':p.answered?'Apri il sondaggio':'Metti in ordine le opzioni',null,result?81:82,p.created_at,false,result));}
- for(const map of seatmaps.results)pending.push(candidate('SEATMAP',map.id,'La disposizione dei posti','La mappa dei posti della tua classe è disponibile.','Vedi i posti',null,80,map.published_at));
- if(seatPreferences?.preferences_open)pending.push(candidate('SEATMAP',`preferences:${classId}`,'Preferenze per i posti','La raccolta delle preferenze per la disposizione è aperta.','Esprimi le preferenze',null,83,seatmaps.results[0]?.id??classId));
- for(const t of replies.results)pending.push(candidate('FORUM',t.id,t.title,'Una nuova discussione, una risposta o una menzione nella tua classe.','Apri la discussione',null,88,t.version));
- for(const p of proposals.results)pending.push(candidate('PROPOSAL',p.id,p.title,'Una proposta aperta nella bacheca della tua classe.','Valuta la proposta',null,65,`${p.status}|${p.edited_at??p.created_at}`));
+   result?'Vedi i risultati':p.answered?'Apri il sondaggio':'Metti in ordine le opzioni',null,result?95:94,p.created_at,false,result));}
+ for(const map of seatmaps.results)pending.push(candidate('SEATMAP',map.id,'La disposizione dei posti','La mappa dei posti della tua classe è disponibile.','Vedi i posti',null,92,map.published_at));
+ if(seatPreferences?.preferences_open)pending.push(candidate('SEATMAP',`preferences:${classId}`,'Preferenze per i posti','La raccolta delle preferenze per la disposizione è aperta.','Esprimi le preferenze',null,93,seatmaps.results[0]?.id??classId));
+ for(const t of replies.results)pending.push(candidate('FORUM',t.id,t.title,'Una nuova discussione, una risposta o una menzione nella tua classe.','Apri la discussione',null,98,t.version));
+ for(const p of proposals.results)pending.push(candidate('PROPOSAL',p.id,p.title,'Una proposta aperta nella bacheca della tua classe.','Valuta la proposta',null,91,`${p.status}|${p.edited_at??p.created_at}`));
  return Promise.all(pending);
 }
 

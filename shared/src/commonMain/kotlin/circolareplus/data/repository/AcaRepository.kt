@@ -35,7 +35,9 @@ class AcaRepository(private val api:ApiClient,private val pdf:PdfTextExtractor) 
  suspend fun searchClass(query:String):List<ClassSearchHitDto> = api.get<ClassSearchResponseDto>("/api/aca/class-search?q=${query.encodeURLParameter()}",offlineCopy=false).hits
  suspend fun brief():List<AilaBriefItemDto> = api.get<AilaBriefResponseDto>("/api/aca/brief",offlineCopy=false).items
  suspend fun markBriefCircularsSeen(){api.post<Map<String,String>,SuccessDto>("/api/aca/brief/circulars/seen",emptyMap())}
- suspend fun dismissBrief(item:AilaBriefItemDto){api.post<AilaBriefDismissDto,SuccessDto>("/api/aca/brief/${item.id.encodeURLParameter()}/dismiss",AilaBriefDismissDto(item.revision))}
+ suspend fun markBriefPollsSeen(){api.post<Map<String,String>,SuccessDto>("/api/aca/brief/polls/seen",emptyMap())}
+ suspend fun markBriefSeatMapsSeen(){api.post<Map<String,String>,SuccessDto>("/api/aca/brief/seatmaps/seen",emptyMap())}
+ suspend fun dismissBrief(item:AilaBriefItemDto,seen:Boolean=false){api.post<AilaBriefDismissDto,SuccessDto>("/api/aca/brief/${item.id.encodeURLParameter()}/dismiss",AilaBriefDismissDto(item.revision,seen))}
  suspend fun task(feature:String,question:String,context:String="",includeAppContext:Boolean=false):AcaAiResultDto {
   val selected=circolareplus.ai.AiProvider.fromId(api.settings.aiProvider)
   if(selected!=circolareplus.ai.AiProvider.AILA_CLOUD&&!includeAppContext){

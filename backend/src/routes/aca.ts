@@ -1,12 +1,12 @@
 import { studyAudience } from '../services/studyAudience';
-import {Hono} from 'hono';
+import {Hono,type Context} from 'hono';
 import {bodyLimit} from 'hono/body-limit';
 import {authMiddleware,resolveClassId} from '../auth';
 import type {Env,JWTPayload} from '../types';
 import {AI_FEATURES,AI_SERVICES,aiPreferences,saveAiPreferences,runAiTask,type AiFeature,type AiPreferences} from '../services/aiRouter';
 import {searchAuthorized} from '../services/acaSearch';
 import {searchClass} from '../services/classSearch';
-import {briefCandidates,loadBrief} from '../services/brief';
+import {briefCandidates,loadBrief,type BriefKind} from '../services/brief';
 const aca=new Hono<{Bindings:Env;Variables:{jwtPayload:JWTPayload}}>();aca.use('*',authMiddleware());aca.use('*',bodyLimit({maxSize:256*1024}));
 aca.get('/preferences',async c=>c.json({preferences:await aiPreferences(c.env,c.get('jwtPayload').sub),
  capabilities:{cloud:!!c.env.AI,advanced:!!c.env.AI_ADVANCED_API_KEY&&!!c.env.AI_ADVANCED_MODEL&&!!c.env.AI_ADVANCED_PROVIDER,
@@ -78,16 +78,26 @@ aca.post('/brief/circulars/seen',async c=>{
   WHERE a.is_fallback=0 AND a.tier>0`).bind(user.sub,classId).run();
  return c.json({success:true});
 });
+const markBriefKindsSeen=async(c:Context<{Bindings:Env;Variables:{jwtPayload:JWTPayload}}>,kinds:BriefKind[])=>{
+ const user=c.get('jwtPayload');
+ const items=(await briefCandidates(c.env,await resolveClassId(c),user.sub)).filter(item=>kinds.includes(item.kind));
+ if(items.length)await c.env.DB.batch(items.map(item=>c.env.DB.prepare(`INSERT INTO aca_brief_dismissals(user_id,item_id,revision,expires_at) VALUES (?,?,?,?)
+  ON CONFLICT(user_id,item_id,revision) DO UPDATE SET expires_at=excluded.expires_at`).bind(user.sub,item.id,item.revision,'9999-12-31T23:59:59.999Z')));
+ return c.json({success:true});
+};
+aca.post('/brief/polls/seen',c=>markBriefKindsSeen(c,['POLL','RANKING_POLL']));
+aca.post('/brief/seatmaps/seen',c=>markBriefKindsSeen(c,['SEATMAP']));
 aca.post('/brief/:id/dismiss',async c=>{
  const user=c.get('jwtPayload');const p=await aiPreferences(c.env,user.sub);
  if(!p.aiEnabled||!p.acaEnabled||!p.nudgesEnabled||!p.services.includes('NOW_NUDGE'))return c.json({error:'AILA brief è disattivato'},403);
- const body=await c.req.json<{revision?:unknown}>();
+ const body=await c.req.json<{revision?:unknown;seen?:unknown}>();
  if(typeof body.revision!=='string'||!/^[a-f0-9]{64}$/.test(body.revision))return c.json({error:'Revisione non valida'},400);
+ if(body.seen!==undefined&&typeof body.seen!=='boolean')return c.json({error:'Stato di lettura non valido'},400);
  const item=(await briefCandidates(c.env,await resolveClassId(c),user.sub)).find(i=>i.id===c.req.param('id')&&i.revision===body.revision);
  if(!item)return c.json({error:'Contenuto non disponibile o aggiornato'},404);
  const dismiss=c.env.DB.prepare(`INSERT INTO aca_brief_dismissals(user_id,item_id,revision,expires_at) VALUES (?,?,?,?)
  ON CONFLICT(user_id,item_id,revision) DO UPDATE SET expires_at=excluded.expires_at`)
- .bind(user.sub,item.id,item.revision,new Date(Date.now()+30*86400000).toISOString());
+ .bind(user.sub,item.id,item.revision,body.seen===true?'9999-12-31T23:59:59.999Z':new Date(Date.now()+30*86400000).toISOString());
  await c.env.DB.batch([dismiss,...(item.kind==='EVENT'?[c.env.DB.prepare('INSERT OR IGNORE INTO aca_nudge_dismissals(user_id,event_id,event_date) VALUES (?,?,?)').bind(user.sub,item.sourceId,item.date)]:[])]);
  return c.json({success:true});
 });

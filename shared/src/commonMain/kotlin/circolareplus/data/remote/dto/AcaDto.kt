@@ -21,7 +21,7 @@ import kotlinx.serialization.Serializable
  val message:String,val actionLabel:String,val date:String?=null,val canPlanStudy:Boolean=false,val isResult:Boolean=false
 )
 @Serializable data class AilaBriefResponseDto(val items:List<AilaBriefItemDto> = emptyList())
-@Serializable data class AilaBriefDismissDto(val revision:String)
+@Serializable data class AilaBriefDismissDto(val revision:String,val seen:Boolean=false)
 @Serializable data class AcaAiResultDto(val text:String,val provider:String,val generatedAt:String,val feature:String="DOCUMENT",
  val sources:List<ForumAiSourceDto> = emptyList(),val postId:String?=null,val attachment:ContentAttachmentDto?=null)
 @Serializable data class ForumAiSourceDto(val postId:String,val label:String)

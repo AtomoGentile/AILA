@@ -3001,6 +3001,27 @@ fun MainAppShell(
             }
         }
     }
+    // Una visita alla sezione segna come viste le notifiche di sondaggi o posti presenti in quel momento.
+    LaunchedEffect(selectedTab,shellRoute,isClassSearchOpen,user.id,circolareplus.platform.AppForeground.isForeground) {
+        if(shellRoute != ShellRoute.TABS || isClassSearchOpen || !circolareplus.platform.AppForeground.isForeground) return@LaunchedEffect
+        val kind=when(selectedTab) {
+            MainTab.POLLS -> circolareplus.data.remote.dto.AilaBriefKind.POLL
+            MainTab.SEATMAP -> circolareplus.data.remote.dto.AilaBriefKind.SEATMAP
+            else -> null
+        } ?: return@LaunchedEffect
+        val owner=user.id
+        coroutineScope.launch {
+            try {
+                if(kind == circolareplus.data.remote.dto.AilaBriefKind.POLL) AppContainer.acaRepository.markBriefPollsSeen()
+                else AppContainer.acaRepository.markBriefSeatMapsSeen()
+                if(currentUser?.id == owner) {
+                    briefItems=briefItems.filterNot { it.kind == kind || (kind == circolareplus.data.remote.dto.AilaBriefKind.POLL && it.kind == circolareplus.data.remote.dto.AilaBriefKind.RANKING_POLL) }
+                    briefRefreshTrigger++
+                }
+            } catch(e: CancellationException) { throw e }
+            catch(_: Exception) { /* Retry at the next visit to the section. */ }
+        }
+    }
     // Ruotando l'iPad (o ridimensionando la finestra) la circolare aperta resta aperta: passa dal
     // pannello accanto alla lista alla schermata sopra le tab, e viceversa.
     LaunchedEffect(twoPane) {
@@ -3357,6 +3378,26 @@ fun MainAppShell(
                                     }
                                 },
                                 onOpenBrief = { item ->
+                                    val markAsSeen = item.kind in setOf(
+                                        circolareplus.data.remote.dto.AilaBriefKind.POLL,
+                                        circolareplus.data.remote.dto.AilaBriefKind.RANKING_POLL,
+                                        circolareplus.data.remote.dto.AilaBriefKind.SEATMAP
+                                    )
+                                    if (markAsSeen) {
+                                        val owner = currentUser?.id
+                                        briefItems = briefItems.filterNot { it.id == item.id }
+                                        coroutineScope.launch {
+                                            if (owner != currentUser?.id) return@launch
+                                            try {
+                                                AppContainer.acaRepository.dismissBrief(item, seen = true)
+                                                briefRefreshTrigger++
+                                            } catch (e: CancellationException) { throw e }
+                                            catch (_: Exception) {
+                                                briefItems = (briefItems + item).distinctBy { it.id }
+                                                briefError = "Non sono riuscito ad aggiornare il Brief. Riprova."
+                                            }
+                                        }
+                                    }
                                     when (item.kind) {
                                         circolareplus.data.remote.dto.AilaBriefKind.SEATMAP -> { openSeatPreferencesFromBrief = item.sourceId.startsWith("preferences:"); selectedTab = MainTab.SEATMAP }
                                         circolareplus.data.remote.dto.AilaBriefKind.EVENT -> { calendarFocusDateIso = item.date; selectedTab = MainTab.CALENDAR }
