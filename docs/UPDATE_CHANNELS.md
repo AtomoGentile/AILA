@@ -56,9 +56,10 @@ Le correzioni riguardano le prossime build. La beta `v1.6.3-beta.1` già pubblic
 il vecchio controllo aggiornamenti: per ricevere questa correzione occorre installare
 manualmente una nuova build. Nessun allegato già pubblicato è stato sostituito.
 
-La separazione qui descritta riguarda la distribuzione APK/IPA. PWA e Worker continuano
-ad avere l'ambiente condiviso configurato nel progetto: il deploy della PWA da `main`
-non è un ambiente beta separato. Isolare anche quei servizi richiede un ambiente dedicato.
+La PWA viene pubblicata solo dai tag stabili `vX.Y.Z`. I push a `main` e i tag beta
+`vX.Y.Z-beta.N` non aggiornano il sito, quindi le beta non vengono distribuite sul web prima
+della release stabile. La PWA non ha un canale beta con iscrizione: per provarne una serve un
+ambiente dedicato, che non va confuso con il sito pubblico.
 
 ## Verifica
 
