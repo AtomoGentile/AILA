@@ -2996,6 +2996,7 @@ fun MainAppShell(
     val railInset = if (desktopWorkspace) circolareplus.design.DesktopSidebarWidth else RailInset
     val twoPane = useRail && maxWidth >= circolareplus.design.TwoPaneMinWidth
     val workspaceContentWidth = if (desktopWorkspace) circolareplus.design.DesktopContentWidth else circolareplus.design.MaxWideContentWidth
+    val circularsListWidth = if (desktopWorkspace) ((maxWidth - railInset) * 0.36f).coerceIn(360.dp, 460.dp) else CircularsListPaneWidth
     // Circolari e dettaglio affiancati: solo nella sezione Circolari della tab Classe.
     val circularsPane = twoPane && classSection == ClassSection.CIRCULARS && !isClassSearchOpen
     // A section visit acknowledges every circular already available, across devices.
@@ -3788,7 +3789,7 @@ fun MainAppShell(
                             // destra (come Mail su iPad).
                             Row(modifier = Modifier.fillMaxSize()) {
                             Column(
-                                modifier = if (circularsPane) Modifier.fillMaxHeight().width(if (desktopWorkspace) ((maxWidth - railInset) * 0.36f).coerceIn(360.dp, 460.dp) else CircularsListPaneWidth)
+                                modifier = if (circularsPane) Modifier.fillMaxHeight().width(circularsListWidth)
                                 else Modifier.fillMaxSize()
                             ) {
                                 // Intestazione della tab: prima Circolari e Bacheca erano due chip
