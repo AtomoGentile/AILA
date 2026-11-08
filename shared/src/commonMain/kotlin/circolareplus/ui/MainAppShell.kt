@@ -2988,7 +2988,7 @@ fun MainAppShell(
                 // Sul web la sfocatura a tutto schermo e' troppo pesante: resta il velo del foglio.
                 val radius = if (AppTheme.isGlass && !AppTheme.liteEffects) {
                     when {
-                        circolareplus.design.AilaSheetBackdrop.openDialogs > 0 -> 32.dp.toPx()
+                        circolareplus.design.AilaSheetBackdrop.openDialogs > 0 -> circolareplus.design.AilaSheetBackdrop.dialogBlurRadius.toPx()
                         circolareplus.design.AilaSheetBackdrop.openSheets > 0 -> 20.dp.toPx()
                         else -> 0f
                     }

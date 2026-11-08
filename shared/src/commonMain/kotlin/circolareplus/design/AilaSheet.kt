@@ -116,7 +116,7 @@ fun AilaBottomSheet(
                     alpha = fadeAlpha
                     // A confirmation is above this window: frost the entire sheet,
                     // including its labels and controls, without blurring the dialog.
-                    val radius = if (!AppTheme.liteEffects && AilaSheetBackdrop.openDialogs > 0) 32.dp.toPx() else 0f
+                    val radius = if (!AppTheme.liteEffects && AilaSheetBackdrop.openDialogs > 0) AilaSheetBackdrop.dialogBlurRadius.toPx() else 0f
                     renderEffect = if (radius > 0f) androidx.compose.ui.graphics.BlurEffect(
                         radius, radius, androidx.compose.ui.graphics.TileMode.Clamp
                     ) else null
@@ -146,6 +146,8 @@ fun AilaBottomSheet(
  * aperte si sfocano anche i fogli sottostanti, non soltanto la shell.
  */
 object AilaSheetBackdrop {
+    // Shared by the app and sheet windows beneath a confirmation dialog.
+    val dialogBlurRadius = 48.dp
     var openSheets by androidx.compose.runtime.mutableIntStateOf(0)
     var openDialogs by androidx.compose.runtime.mutableIntStateOf(0)
 }
