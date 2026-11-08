@@ -2404,16 +2404,6 @@ fun MainAppShell(
     val addEventDialog: @Composable () -> Unit = {
     if (showAddEventDialog) {
         AddCalendarEventDialog(
-            onPlanAi={prompt->
-                showAddEventDialog=false
-                addEventCloseRequested=false
-                assistantMode=AssistantMode.GENERAL
-                acaOverlay=false
-                isInAssistantScreen=true
-                askAssistant("Prepara gli eventi da inserire nel calendario:\n$prompt",addEventInitialDateIso?.let{"Giorno scelto nel calendario: $it"}.orEmpty())
-                addEventInitialStep=EventCreationStep.MENU
-                addEventInitialDateIso=null
-            },
             onDismiss = {
                 showAddEventDialog = false
                 addEventCloseRequested = false
@@ -5759,7 +5749,7 @@ private val AI_PROMPT_EXAMPLES = listOf(
     "Interrogazione di storia lunedì alla 3ª ora",
     "Verifica di matematica venerdì alle 10",
     "Uscita didattica al museo giovedì",
-    "Verifica di matematica domani e compito di inglese lunedì"
+    "Pagamento della quota della gita entro venerdì"
 )
 
 /**
@@ -5883,8 +5873,7 @@ private fun AddCalendarEventDialog(
     initialStep: EventCreationStep = EventCreationStep.MENU,
     initialDateIso: String? = null,
     /** true quando il chiamante vuole chiudere il foglio (evento creato): scende e poi chiama [onDismiss]. */
-    closeRequested: Boolean = false,
-    onPlanAi:(String)->Unit
+    closeRequested: Boolean = false
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var step by remember { mutableStateOf(initialStep) }
@@ -5919,11 +5908,12 @@ private fun AddCalendarEventDialog(
     // Ore di lezione della classe: 5 (8-13) o 6 (8-14).
     val maxHours = circolareplus.data.ClassSchedule.lessonHours
     // Le ore di lezione scelte, scritte come le vede la classe: "3ª ora" o "Dalla 2ª alla 4ª ora".
-    val time = remember(fromHour, toHour) { lessonHoursLabel(fromHour, toHour) }
+    var aiClockTime by remember { mutableStateOf("") }
+    val time = remember(fromHour, toHour, aiClockTime) { lessonHoursLabel(fromHour, toHour).ifBlank { aiClockTime } }
     var category by remember { mutableStateOf(CalendarEventCategory.VERIFICA) }
     var aiPrompt by remember { mutableStateOf("") }
     var aiFilled by remember { mutableStateOf(false) }
-    var aiFallbackNotice by remember { mutableStateOf(false) }
+    var aiGenerationError by remember { mutableStateOf<String?>(null) }
     var isForAllClass by remember { mutableStateOf(true) }
     var selectedRecipientUserIds by remember { mutableStateOf<List<String>>(emptyList()) }
     // Elenco selezionabile per "Persone specifiche": prima non veniva caricato da nessuna parte,
@@ -5948,6 +5938,7 @@ private fun AddCalendarEventDialog(
         }
     }
     var isGeneratingEvent by remember { mutableStateOf(false) }
+    var eventGenerationJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     // Solo per il messaggio "sto ancora elaborando" sotto al pulsante: sull'AI locale una
     // generazione può durare fino a 90 secondi (vedi GENERATION_TIMEOUT_MILLIS in
     // LocalAiClassifier), e senza un segnale che si muove il pulsante "Generando..." fermo per
@@ -6108,6 +6099,7 @@ private fun AddCalendarEventDialog(
         // Indietro (gesto o tasto) dentro un passo torna al menu con la stessa animazione della
         // freccia; dal menu chiude il foglio. Prima chiudeva sempre tutto.
         circolareplus.platform.PlatformBackHandler(enabled = step != EventCreationStep.MENU) {
+            eventGenerationJob?.cancel()
             step = EventCreationStep.MENU
         }
         Column(
@@ -6134,7 +6126,7 @@ private fun AddCalendarEventDialog(
                         androidx.compose.animation.shrinkHorizontally(circolareplus.design.ailaMoveSpec())
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        EventSheetRoundButton(onClick = { step = EventCreationStep.MENU }) {
+                        EventSheetRoundButton(onClick = { eventGenerationJob?.cancel(); step = EventCreationStep.MENU }) {
                             AppIcons.ChevronLeft(modifier = Modifier.size(16.dp), color = AppTheme.TextDark)
                         }
                         Spacer(modifier = Modifier.width(AppTheme.Space12))
@@ -6215,7 +6207,7 @@ private fun AddCalendarEventDialog(
                     ) {
                         EventCreationOptionCard(
                             title = "AILA Assistant",
-                            subtitle = "Uno o più eventi, con anteprima e conferma",
+                            subtitle = "Descrivi l’evento e controlla i campi compilati",
                             highlighted = true,
                             icon = { color ->
                                 circolareplus.design.AilaAssistantMark(
@@ -6239,7 +6231,7 @@ private fun AddCalendarEventDialog(
 
                 EventCreationStep.ASSISTANT -> {
                     Text(
-                        text = "Descrivi gli eventi e le rispettive date. Prima del salvataggio vedrai l’elenco completo da confermare.",
+                        text = "Descrivi l’evento. Compilerò i dettagli: potrai modificarli prima di aggiungerlo al calendario.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = AppTheme.TextMuted,
                         modifier = Modifier.ailaSheetReveal(0).padding(bottom = AppTheme.Space12)
@@ -6247,6 +6239,7 @@ private fun AddCalendarEventDialog(
                     OutlinedTextField(
                         value = aiPrompt,
                         onValueChange = { aiPrompt = it },
+                        enabled = !isGeneratingEvent,
                         placeholder = { Text("Es. Inserisci la verifica di matematica di venerdì alle 10") },
                         minLines = 3,
                         colors = circolareplus.design.ailaFieldColors(),
@@ -6282,12 +6275,52 @@ private fun AddCalendarEventDialog(
                     }
                     Spacer(modifier = Modifier.height(AppTheme.Space20))
                     circolareplus.design.AilaPrimaryButton(
-                        text = "Prepara gli eventi",
-                        onClick = { onPlanAi(aiPrompt) },
+                        text = "Compila i dettagli",
+                        onClick = {
+                            isGeneratingEvent = true
+                            aiGenerationError = null
+                            eventGenerationJob = scope.launch {
+                                try {
+                                    val preferences = circolareplus.ai.AcaPolicyState.preferences
+                                    if (!preferences.aiEnabled || !preferences.acaEnabled || "CALENDAR" !in preferences.services) {
+                                        aiGenerationError = "Attiva ACA e il servizio Calendario in Impostazioni → AI."
+                                        return@launch
+                                    }
+                                    val prompt = selectedDateMillis?.let {
+                                        "Giorno scelto nel calendario: ${epochMillisToIsoDate(it)}. Usa questo giorno se la richiesta non specifica una data.\n"
+                                    }.orEmpty() + aiPrompt
+                                    val draft = aiEventDraftFromAi(AppContainer.newAiClassifier().parseEventPrompt(prompt))
+                                    if (draft.title.isBlank()) {
+                                        aiGenerationError = "Non riesco a compilare l’evento. Controlla il modello e i consensi in Impostazioni → AI, oppure riprova."
+                                        return@launch
+                                    }
+                                    title = draft.title
+                                    subject = draft.subject
+                                    notes = draft.notes.orEmpty()
+                                    category = draft.category
+                                    selectedDateMillis = draft.dateMillis ?: selectedDateMillis
+                                    fromHour = draft.fromHour?.coerceIn(1, maxHours)
+                                    toHour = draft.toHour?.coerceIn(fromHour ?: 1, maxHours) ?: fromHour
+                                    aiClockTime = if (fromHour == null) draft.time.orEmpty() else ""
+                                    aiFilled = true
+                                    step = EventCreationStep.MANUAL
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    aiGenerationError = "Non riesco a compilare l’evento. Riprova."
+                                } finally {
+                                    isGeneratingEvent = false
+                                }
+                            }
+                        },
                         enabled = aiPrompt.isNotBlank() && !isGeneratingEvent,
                         fillMaxWidth = true,
                         icon = { color -> AppIcons.Sparkle(modifier = Modifier.size(14.dp), color = color) }
                     )
+                    aiGenerationError?.let {
+                        Text(it, color = AppTheme.TintRedInk, style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = AppTheme.Space12))
+                    }
                     if (isGeneratingEvent) {
                         Spacer(modifier = Modifier.height(AppTheme.Space12))
                         // Lo stesso segno dell'attesa nella chat dell'Assistant: l'onda del marchio
@@ -6317,15 +6350,6 @@ private fun AddCalendarEventDialog(
                         circolareplus.design.AilaAssistantBadge(
                             text = "Generato da AILA Assistant",
                             modifier = Modifier.ailaSheetReveal(0).padding(bottom = AppTheme.Space12)
-                        )
-                    }
-                    if (aiFallbackNotice) {
-                        Text(
-                            text = "L'AI non è disponibile ora (controlla la chiave o il modello nelle " +
-                                "Impostazioni): ho compilato i campi leggendo il testo, controllali prima di salvare.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = AppTheme.TextMuted,
-                            modifier = Modifier.padding(bottom = AppTheme.Space12)
                         )
                     }
                     OutlinedTextField(
@@ -6496,6 +6520,12 @@ private fun AddCalendarEventDialog(
                     Spacer(modifier = Modifier.height(AppTheme.Space16))
                     // Orario a ore di lezione (1-6) invece di un'ora libera tipo "8:00".
                     if (repeatFrequency != "CUSTOM") {
+                    if (aiClockTime.isNotBlank() && fromHour == null) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Orario: $aiClockTime", Modifier.weight(1f), color = AppTheme.TextDark)
+                            TextButton(onClick = { aiClockTime = "" }) { Text("Rimuovi orario") }
+                        }
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth().ailaSheetReveal(3),
                         horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
