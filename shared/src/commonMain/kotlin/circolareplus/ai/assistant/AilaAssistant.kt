@@ -178,7 +178,7 @@ class AilaAssistant(
         val firstAnswer = AssistantPrompt.parse(firstRaw.text)
         val firstReply = AssistantReply(
             text = firstAnswer.answer,
-            sources = checkedSources(firstAnswer, searchQuery, prefetched.keys, knowledge),
+            sources = checkedSources(firstAnswer, searchQuery, knowledge),
             modelLabel = firstRaw.modelLabel
         )
         val requested = firstAnswer.needsCircularText.filter { it !in prefetched }
@@ -213,13 +213,7 @@ class AilaAssistant(
         val secondAnswer = AssistantPrompt.parse(secondResult.text)
         return AssistantReply(
             text = secondAnswer.answer,
-            // Le circolari richieste e lette per intero entrano fra le fonti anche se il modello
-            // si dimentica di citarle: sono quelle su cui la risposta si regge davvero.
-            sources = mergeSources(
-                checkedSources(secondAnswer, searchQuery, deepTexts.keys, known),
-                (requested + searched.keys).filter { it in deepTexts }.toSet(),
-                knowledge.circulars
-            ),
+            sources = checkedSources(secondAnswer, searchQuery, known),
             modelLabel = secondResult.modelLabel
         )
     }
@@ -239,19 +233,17 @@ class AilaAssistant(
      *
      * Un modello piccolo copia gli esempi e cita circolari a caso anche per rispondere a un
      * "ciao": una fonte sbagliata e' peggio di nessuna, perche' manda a leggere il documento
-     * sbagliato. Una circolare resta fra le fonti solo se esiste, e se e' stata letta per intero,
-     * e' citata nella domanda o nella risposta, o e' fra le piu' attinenti alla domanda.
+     * sbagliato. Una circolare resta fra le fonti solo se esiste, e se e' citata esplicitamente nella domanda o nella risposta,
+     * oppure e' fra le piu' attinenti alla domanda. La sola lettura non e' una citazione.
      */
     private fun checkedSources(
         parsed: AssistantPrompt.ParsedAnswer,
         question: String,
-        readNumbers: Set<Int>,
         knowledge: AssistantKnowledge
     ): List<AssistantSource> {
         if (AssistantContext.isSmallTalk(knowledge, question)) return emptyList()
         val byNumber = knowledge.circulars.associateBy { it.number }
-        val plausible = readNumbers +
-            AssistantContext.circularNumbersIn(question) +
+        val plausible = AssistantContext.circularNumbersIn(question) +
             AssistantContext.mostRelevantCirculars(knowledge, question, limit = 6)
         return parsed.sources.mapNotNull { source ->
             if (source.kind == AssistantSourceKind.GITA) {
@@ -268,7 +260,7 @@ class AilaAssistant(
             val number = source.circularNumber ?: return@mapNotNull null
             val circular = byNumber[number] ?: return@mapNotNull null
             val cited = number in plausible ||
-                Regex("(?<!\\d)$number(?!\\d)").containsMatchIn(parsed.answer)
+                number in AssistantContext.circularNumbersIn(parsed.answer)
             if (!cited) return@mapNotNull null
             // L'etichetta si ricostruisce dai dati veri: il modello puo' dare solo il numero
             // (meno token da generare sul telefono) e non puo' storpiare o inventare il titolo.
@@ -394,21 +386,4 @@ class AilaAssistant(
         }
     }
 
-    private fun mergeSources(
-        declared: List<AssistantSource>,
-        readNumbers: Set<Int>,
-        circulars: List<Circular>
-    ): List<AssistantSource> {
-        val missing = readNumbers
-            .filter { number -> declared.none { it.circularNumber == number } }
-            .mapNotNull { number ->
-                val circular = circulars.firstOrNull { it.number == number } ?: return@mapNotNull null
-                AssistantSource(
-                    kind = AssistantSourceKind.CIRCULAR,
-                    label = circularLabel(circular),
-                    circularNumber = circular.number
-                )
-            }
-        return (declared + missing).distinctBy { it.kind to (it.circularNumber ?: it.label) }.take(6)
-    }
 }

@@ -821,8 +821,8 @@ fun AilaConfirmDialog(
             .then(
                 if (AppTheme.isGlass) Modifier.ailaGlassSurface(
                     dialogShape,
-                    tint = if (AppTheme.isDarkMode) Color(0xFF202833).copy(alpha = if (AppTheme.liteEffects) .96f else .88f)
-                    else Color(0xFFF8FAFF).copy(alpha = if (AppTheme.liteEffects) .97f else .90f)
+                    tint = if (AppTheme.isDarkMode) Color(0xFF202833).copy(alpha = if (AppTheme.liteEffects) .96f else .32f)
+                    else Color(0xFFF8FAFF).copy(alpha = if (AppTheme.liteEffects) .97f else .42f)
                 ) else Modifier
             ),
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),

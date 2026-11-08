@@ -23,6 +23,17 @@ class TimeScopeTest {
         TimeScopeParser.parse(question, today)?.let { it.from to it.to }
 
     @Test
+    fun dateEspliciteEGiorniDellaSettimana() {
+        assertEquals("2026-11-20" to "2026-11-20", range("venerdì 20 novembre alle 9"))
+        assertEquals("2026-11-20" to "2026-11-20", range("cosa ho il 20/11/2026?"))
+        assertEquals("2026-11-20" to "2026-11-20", range("impegni del 2026-11-20"))
+        assertEquals("2026-09-25" to "2026-09-25", range("cosa facciamo venerdì?"))
+        assertNull(range("cosa ho il 31 febbraio?"))
+        assertEquals("2026-01-02" to "2026-01-02", range("cosa ho il 2026-01-02?"))
+        assertEquals("2026-11-01" to "2026-11-30", range("eventi di novembre"))
+    }
+
+    @Test
     fun plusDaysAttraversaMesiAnniEBisestili() {
         assertEquals(CivilDate(2026, 10, 1), CivilDate(2026, 9, 30).plusDays(1))
         assertEquals(CivilDate(2027, 1, 1), CivilDate(2026, 12, 31).plusDays(1))

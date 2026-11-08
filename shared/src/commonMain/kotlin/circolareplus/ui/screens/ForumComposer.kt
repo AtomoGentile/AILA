@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -78,23 +79,49 @@ internal fun ForumNewQuestionSheet(title: String, question: String, anonymous: B
             Column(Modifier.fillMaxWidth().background(AppTheme.TrackFill, RoundedCornerShape(22.dp)).padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                 Text("Come vuoi apparire?",style=MaterialTheme.typography.titleSmall,color=AppTheme.TextDark)
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected=anonymous,onClick={onAnonymous(true)},enabled=!busy,label={Text("Pseudonimo OP")})
-                    FilterChip(selected=!anonymous,onClick={onAnonymous(false)},enabled=!busy,label={Text("Nome e cognome")})
+                    FilterChip(selected=anonymous,onClick={onAnonymous(true)},enabled=!busy,label={Text("Pseudonimo OP")},colors=forumIdentityChipColors())
+                    FilterChip(selected=!anonymous,onClick={onAnonymous(false)},enabled=!busy,label={Text("Nome e cognome")},colors=forumIdentityChipColors())
                 }
                 Text(if(anonymous) "Alla classe apparirai come OP. L’identità scelta resterà fissa in questa discussione." else "La classe vedrà il tuo nome. L’identità scelta resterà fissa in questa discussione.",style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
             }
-            Column(verticalArrangement=Arrangement.spacedBy(2.dp)) {
-                Row(Modifier.fillMaxWidth().toggleable(value=accepted,enabled=!busy,role=Role.Checkbox,onValueChange=onAccepted),verticalAlignment=Alignment.CenterVertically) {
-                    Checkbox(accepted,onCheckedChange=null);Text("Accetto le regole e l’informativa",Modifier.weight(1f),style=MaterialTheme.typography.bodyMedium,color=AppTheme.TextDark)
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                        .toggleable(value = accepted, enabled = !busy, role = Role.Checkbox, onValueChange = onAccepted),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Checkbox(accepted, onCheckedChange = null, enabled = !busy, modifier = Modifier.size(24.dp),
+                        colors = CheckboxDefaults.colors(checkedColor = AppTheme.PrimaryBlue, uncheckedColor = AppTheme.TextMuted))
+                    Text("Accetto le regole e l’informativa", Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextDark)
                 }
-                TextButton(onClick=onRules,modifier=Modifier.padding(start=36.dp),contentPadding=PaddingValues(horizontal=12.dp,vertical=0.dp)) { Text("Leggi regole e informativa") }
+                TextButton(onClick = onRules, modifier = Modifier.padding(start = 36.dp),
+                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
+                    colors = ButtonDefaults.textButtonColors(contentColor = AppTheme.PrimaryBlue)) {
+                    Text("Leggi regole e informativa")
+                }
             }
             error?.let { Text(it,color=AppTheme.TintRedInk,style=MaterialTheme.typography.bodySmall) }
             Button(onClick=onPublish,enabled=!busy&&accepted&&title.trim().length in 1..180&&question.trim().length in 1..12000,
-                modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(20.dp),contentPadding=PaddingValues(16.dp)) {
+                modifier=Modifier.fillMaxWidth().then(if (AppTheme.isGlass) Modifier.ailaGlassSurface(RoundedCornerShape(20.dp),
+                    tint = if (!busy && accepted && title.trim().length in 1..180 && question.trim().length in 1..12000)
+                        AppTheme.PrimaryBlue.copy(alpha = .18f) else null) else Modifier),
+                colors = if (AppTheme.isGlass) ButtonDefaults.buttonColors(containerColor = Color.Transparent,
+                    contentColor = AppTheme.PrimaryBlue, disabledContainerColor = Color.Transparent,
+                    disabledContentColor = AppTheme.TextFaint) else ButtonDefaults.buttonColors(),
+                shape=RoundedCornerShape(20.dp),contentPadding=PaddingValues(16.dp)) {
                 if(busy) { CircularProgressIndicator(Modifier.size(18.dp),strokeWidth=2.dp);Spacer(Modifier.width(8.dp)) }
                 Text(if(busy) "Pubblicazione…" else "Pubblica nella classe")
             }
         }
     }
 }
+
+@Composable
+private fun forumIdentityChipColors() = if (AppTheme.isGlass) FilterChipDefaults.filterChipColors(
+    containerColor = Color.Transparent,
+    labelColor = AppTheme.TextMuted,
+    selectedContainerColor = AppTheme.GlassSelectionTint,
+    selectedLabelColor = AppTheme.OnSelection
+) else FilterChipDefaults.filterChipColors()

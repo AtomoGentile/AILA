@@ -58,10 +58,45 @@ internal object TimeScopeParser {
             found += TimeScope(from.toIso(), to.toIso(), label)
         }
 
+
+        fun explicitDate(day: Int, month: Int, year: Int) {
+            if (month !in 1..12 || day !in 1..daysInMonth(year, month)) return
+            val date = CivilDate(year, month, day)
+            add(date, date, "il ${date.toIso()}")
+        }
+        Regex("""\b(\d{4})-(\d{1,2})-(\d{1,2})\b""").findAll(question).forEach {
+            explicitDate(it.groupValues[3].toInt(), it.groupValues[2].toInt(), it.groupValues[1].toInt())
+        }
+        Regex("""(?<![\d-])(\d{1,2})[/.\-](\d{1,2})(?:[/.\-](\d{4}))?\b""").findAll(question).forEach {
+            explicitDate(it.groupValues[1].toInt(), it.groupValues[2].toInt(), it.groupValues[3].toIntOrNull() ?: today.year)
+        }
+        val months = listOf("gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno",
+            "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre")
+        Regex("""\b(\d{1,2})\s+(${months.joinToString("|")})(?:\s+(\d{4}))?\b""").findAll(words).forEach {
+            explicitDate(it.groupValues[1].toInt(), months.indexOf(it.groupValues[2]) + 1,
+                it.groupValues[3].toIntOrNull() ?: today.year)
+        }
+        if (found.isEmpty() && !Regex("""\b\d{1,2}\s+(${months.joinToString("|")})\b""").containsMatchIn(words)) months.forEachIndexed { index, month ->
+            if (has(month)) {
+                val year = Regex("""\b\d{4}\b""").find(words)?.value?.toIntOrNull() ?: today.year
+                add(CivilDate(year, index + 1, 1), CivilDate(year, index + 1, daysInMonth(year, index + 1)), month)
+            }
+        }
+        val weekdays = listOf("lunedi", "martedi", "mercoledi", "giovedi", "venerdi", "sabato", "domenica")
+        if (found.isEmpty()) weekdays.forEachIndexed { index, name ->
+            if (has(name)) {
+                var offset = (index - weekdayOf(today) + 7) % 7
+                if (has("scorso") || has("scorsa")) offset -= 7
+                else if (offset == 0 && (has("prossimo") || has("prossima"))) offset = 7
+                today.plusDays(offset).let { add(it, it, name) }
+            }
+        }
+
         val monday = today.plusDays(-weekdayOf(today))
 
         if (has("dopodomani")) today.plusDays(2).let { add(it, it, "dopodomani") }
         if (has("domani")) today.plusDays(1).let { add(it, it, "domani") }
+        if (has("ieri")) today.plusDays(-1).let { add(it, it, "ieri") }
         if (has("oggi")) add(today, today, "oggi")
         if (has("prossimi giorni") || has("prossimi giorno")) add(today, today.plusDays(6), "nei prossimi giorni")
 

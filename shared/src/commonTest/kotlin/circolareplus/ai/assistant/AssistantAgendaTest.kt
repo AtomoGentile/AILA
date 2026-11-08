@@ -55,6 +55,16 @@ class AssistantAgendaTest {
     )
 
     @Test
+    fun duplicatoGiaCompletoNelCalendarioNonAggiungeFontiCircolari() {
+        val complete = knowledge.copy(calendarEvents = knowledge.calendarEvents.map {
+            if (it.id == "e6") it.copy(time = "14:00") else it
+        })
+        val reply = assertNotNull(AssistantAgenda.answer(complete, "Ci sono pagamenti o scadenze in arrivo?"))
+        assertFalse(reply.sources.any { it.circularNumber == 41 })
+        assertTrue(reply.text.contains("Buono libri"))
+    }
+
+    @Test
     fun pagamentiEScadenzeInOrdineSenzaDoppioniNeAvvisi() {
         val reply = assertNotNull(AssistantAgenda.answer(knowledge, "Ci sono pagamenti o scadenze in arrivo?"))
         val lines = reply.text.lines().filter { it.startsWith("• ") }

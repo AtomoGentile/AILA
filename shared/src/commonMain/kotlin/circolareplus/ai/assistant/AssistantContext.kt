@@ -192,8 +192,10 @@ internal object AssistantContext {
         val aboutBoard = terms.any { it.startsWith("propost") || it.startsWith("bacheca") }
         if (aboutBoard) renderBoard(builder, knowledge, terms, budget)
         renderGita(builder, knowledge, question, budget, mode)
+        // Reserve calendar evidence before circular text can exhaust a small model’s budget.
+        if (scope != null) renderCalendar(builder, knowledge, terms, budget, scope)
         renderCirculars(builder, knowledge, searchQuery, terms, explicitNumbers, deepTexts, budget, scope)
-        renderCalendar(builder, knowledge, terms, budget, scope)
+        if (scope == null) renderCalendar(builder, knowledge, terms, budget, scope)
         if (!aboutBoard && !budget.focused) renderBoard(builder, knowledge, terms, budget)
         if (budget.includePolls) renderPolls(builder, knowledge, scope)
         if (!budget.focused) {

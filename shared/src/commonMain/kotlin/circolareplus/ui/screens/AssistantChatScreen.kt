@@ -453,11 +453,11 @@ fun AssistantChatScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     AttachmentMenuTile("File e foto", "Documenti, immagini, audio", AppTheme.TintViolet, AppTheme.TintVioletInk,
                         enabled = !isThinking && !recording, onClick = { fileSources = true }, modifier = Modifier.weight(1f)) {
-                        AppIcons.Document(Modifier.size(24.dp), AppTheme.TintVioletInk)
+                        AppIcons.Document(Modifier.size(24.dp), if (AppTheme.isGlass) AppTheme.PrimaryBlue else AppTheme.TintVioletInk)
                     }
                     AttachmentMenuTile(if(recording) "Termina vocale" else "Vocale", "Registra un messaggio", AppTheme.TintGreen, AppTheme.TintGreenInk,
                         enabled = !isThinking, onClick = { attachmentsMenu = false; if(recording) recorder?.stop() else recorder?.start() }, modifier = Modifier.weight(1f)) {
-                        MicrophoneGlyph(AppTheme.TintGreenInk)
+                        MicrophoneGlyph(if (AppTheme.isGlass) AppTheme.PrimaryBlue else AppTheme.TintGreenInk)
                     }
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -496,12 +496,18 @@ fun AssistantChatScreen(
 @Composable
 private fun AttachmentMenuTile(title: String, subtitle: String, fill: Color, ink: Color,
     enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, icon: @Composable () -> Unit) {
-    Column(modifier.clip(RoundedCornerShape(26.dp)).background(fill).alpha(if(enabled) 1f else .45f)
+    val shape = RoundedCornerShape(26.dp)
+    val textColor = if (AppTheme.isGlass) AppTheme.TextDark else ink
+    val iconColor = if (AppTheme.isGlass) AppTheme.PrimaryBlue else ink
+    Column(modifier.then(
+        if (AppTheme.isGlass) Modifier.ailaGlassSurface(shape)
+        else Modifier.clip(shape).background(fill)
+    ).alpha(if(enabled) 1f else .45f)
         .clickable(enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
         .padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(Modifier.size(42.dp).background(ink.copy(alpha = .10f), RoundedCornerShape(15.dp)), contentAlignment = Alignment.Center) { icon() }
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = ink)
-        Text(subtitle, minLines = 2, style = MaterialTheme.typography.labelMedium, color = ink.copy(alpha = .8f))
+        Box(Modifier.size(42.dp).background(iconColor.copy(alpha = .10f), RoundedCornerShape(15.dp)), contentAlignment = Alignment.Center) { icon() }
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = textColor)
+        Text(subtitle, minLines = 2, style = MaterialTheme.typography.labelMedium, color = if (AppTheme.isGlass) AppTheme.TextMuted else ink.copy(alpha = .8f))
     }
 }
 

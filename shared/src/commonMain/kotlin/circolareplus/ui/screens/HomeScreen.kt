@@ -565,12 +565,10 @@ private fun HeroIconButton(contentDescription: String, onClick: () -> Unit, icon
         return
     }
     val shape = CircleShape
-    val glassFill = if(AppTheme.isDarkMode) Color(0xFF17243B).copy(alpha=.90f)
-        else Color.White.copy(alpha=.50f)
     Box(
         modifier = Modifier
             .size(44.dp)
-            .ailaGlassSurface(shape,tint=glassFill)
+            .ailaGlassSurface(shape)
             .ailaGlassPressable(tint = AppTheme.PrimaryBlue) { onClick() }
             .then(a11y),
         contentAlignment = Alignment.Center
@@ -616,11 +614,7 @@ private fun HomeQuickIcon(
                 .clip(shape)
                 .then(
                     if (glass) Modifier
-                        .ailaGlassSurface(
-                            shape,
-                            tint=if(AppTheme.isDarkMode) Color(0xFF17243B).copy(alpha=.90f)
-                                else Color.White.copy(alpha=.50f)
-                        )
+                        .ailaGlassSurface(shape)
                         .ailaGlassOverlay(interactionSource, tint = AppTheme.PrimaryBlue)
                     else Modifier.background(heroTonalFill)
                 ),

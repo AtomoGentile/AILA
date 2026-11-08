@@ -175,7 +175,11 @@ internal object AssistantAgenda {
                 val existing = merged[index]
                 merged[index] = existing.copy(
                     time = existing.time?.takeIf { it.isNotBlank() } ?: item.time,
-                    circularNumber = existing.circularNumber ?: item.circularNumber,
+                    // A duplicate deadline is a source only when it supplies missing details.
+                    circularNumber = existing.circularNumber ?: item.circularNumber.takeIf {
+                        !existing.fromCalendar || (existing.time.isNullOrBlank() && !item.time.isNullOrBlank()) ||
+                            (existing.category == null && item.category != null)
+                    },
                     category = existing.category ?: item.category
                 )
             }

@@ -4517,6 +4517,8 @@ fun MainAppShell(
             // sfondo a macchie invece resta fermo e allineato a quello sotto: prima scorreva
             // insieme alla pagina e per un attimo si vedeva lo sfondo "cambiare".
             val forwardNow = navForward[0]
+            // Keep the entry origin stable when a back navigation changes the global direction.
+            val enteredForward = remember { forwardNow }
             val glassSlide = if (AppTheme.isGlass && route != ShellRoute.TABS) transition.animateFloat(
                 transitionSpec = {
                     if (acaChatOpening && targetState == androidx.compose.animation.EnterExitState.Visible && route == ShellRoute.ASSISTANT)
@@ -4527,7 +4529,7 @@ fun MainAppShell(
             ) { state ->
                 when (state) {
                     androidx.compose.animation.EnterExitState.Visible -> 0f
-                    androidx.compose.animation.EnterExitState.PreEnter -> if (forwardNow) 1f else -circolareplus.design.ailaUnderlayShift
+                    androidx.compose.animation.EnterExitState.PreEnter -> if (enteredForward) 1f else -circolareplus.design.ailaUnderlayShift
                     androidx.compose.animation.EnterExitState.PostExit -> if (forwardNow) -circolareplus.design.ailaUnderlayShift else 1f
                 }
             } else null
@@ -4597,8 +4599,7 @@ fun MainAppShell(
                                 val travel = if (v < 0f) circolareplus.design.ailaUnderlayShift else 1f
                                 alpha = (1f - kotlin.math.abs(v) / travel).coerceIn(0f, 1f)
                             } else {
-                                if (route == ShellRoute.SEARCH && !forwardNow) translationY = -v * size.height
-                                else translationX = v * size.width
+                                translationX = v * size.width
                             }
                         } else Modifier
                     )
