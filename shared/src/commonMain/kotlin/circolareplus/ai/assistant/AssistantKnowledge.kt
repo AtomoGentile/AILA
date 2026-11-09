@@ -50,7 +50,10 @@ data class AssistantKnowledge(
     val attachedSources: List<AssistantAttachedSource> = emptyList(),
     val screenContext:String="",
     /** Le ore di lezione della classe (5 o 6), usate per interpretare "ultima ora". */
-    val classLessonHours: Int = 6
+    val classLessonHours: Int = 6,
+    val classLabel: String? = null,
+    val calendarWarning: String? = null,
+    val readContext: String = ""
 ) {
     val role: UserRole get() = user?.role ?: UserRole.STUDENT
 

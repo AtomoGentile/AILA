@@ -221,6 +221,7 @@ class CompatibleApiAiClassifier(
         val body = response.bodyAsText()
         if (!response.status.isSuccess()) error("HTTP ${response.status.value}: ${body.take(240)}")
         val root = json.parseToJsonElement(body).jsonObject
+        requireCompletedGeneration(root, format)
         val text = when (format) {
             CompatibleAiFormat.OPENAI -> {
                 val content = root["choices"]?.jsonArray?.getOrNull(0)?.jsonObject

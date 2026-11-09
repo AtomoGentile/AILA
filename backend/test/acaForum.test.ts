@@ -37,6 +37,13 @@ const confirm=(p:any,user='op')=>call('POST',`/api/aca/operations/${p.id}/confir
 async function consent(user='op') {await saveAiPreferences(env,user,{aiEnabled:true,acaEnabled:true,holdToOpen:true,services:AI_SERVICES,cloudConsent:true,externalConsent:false,attachmentConsent:true,audioConsent:true,nudgesEnabled:false,advancedEnabled:false});}
 
 describe('ACA confirmations and atomic calendar tools',()=>{
+ it('supports published afternoon lessons up to the ninth hour through preview and confirmation',async()=>{
+  const p=await preview([action({time:'9ª ora'})]);expect(p.status).toBe(201);
+  expect((await confirm(p.json)).status).toBe(200);
+  expect((db.prepare('SELECT start_time FROM calendar_events').get() as any).start_time).toBe('9ª ora');
+  expect((await preview([action({time:'10ª ora'})])).status).toBe(400);
+ });
+
  it('changes only recipients while preserving legacy lesson times and long existing notes',async()=>{
   await confirm((await preview()).json);const e=db.prepare('SELECT * FROM calendar_events').get() as any;
   const notes='Nota originale '.repeat(180);
@@ -44,7 +51,7 @@ describe('ACA confirmations and atomic calendar tools',()=>{
   const p=await preview([action({tool:'calendar.update',eventId:e.id,fields:['visibility'],visibility:'SPECIFIC',visibleToUserIds:['op','peer'],time:'8ª ora',notes})]);
   expect(p.status).toBe(201);expect((await confirm(p.json)).json.results[0].status).toBe('DONE');
   expect(db.prepare('SELECT start_time,notes,visible_to_user_ids_json FROM calendar_events').get()).toMatchObject({start_time:'8ª ora',notes,visible_to_user_ids_json:'["op","peer"]'});
-  expect((await preview([action({tool:'calendar.update',eventId:e.id,fields:['time'],time:'8ª ora'})])).status).toBe(400);
+  expect((await preview([action({tool:'calendar.update',eventId:e.id,fields:['time'],time:'10ª ora'})])).status).toBe(400);
   expect((await preview([action({tool:'calendar.update',eventId:e.id,fields:['notes'],notes})])).status).toBe(400);
  });
  it('a preview never writes; only the owning account can explicitly confirm',async()=>{

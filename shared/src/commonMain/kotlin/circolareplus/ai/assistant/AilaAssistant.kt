@@ -14,27 +14,23 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * L'assistente globale dell'app: una domanda in italiano, una risposta costruita su tutto
- * quello che AILA sa — circolari, calendario, bacheca, sondaggi, mappa posti e storico.
- *
- * Non e' una ricerca con sopra un riassunto: il modello riceve un contesto gia' selezionato
- * (vedi [AssistantContext]) e, se quello che ha non basta, puo' **chiedere** il testo integrale
- * di una o due circolari, che gli viene scaricato ed estratto dal PDF prima di rifargli la
- * domanda. E' l'unico modo per rispondere a "a che ora parte il pullman?" senza scaricare
- * decine di PDF a ogni domanda: si scarica solo quello che serve, solo quando serve, e a
- * deciderlo e' chi sta leggendo i dati.
- *
- * Perche' il giro e' al massimo uno: ogni giro in piu' e' un'altra chiamata al modello e un
- * altro paio di PDF, cioe' altri dieci secondi di attesa su una domanda che l'utente ha fatto
- * in chat e si aspetta veloce. Con due giri si copre il caso reale (riassunto insufficiente su
- * una circolare specifica); dal terzo in poi il modello di solito sta girando a vuoto.
+ * Assistant con letture iterative limitate: il modello può cercare eventi, confrontare attività
+ * e approfondire circolari prima di rispondere. Gli esiti e le bozze accompagnano i turni successivi.
+ * Le mutazioni passano sempre dal pianificatore validato e da una nuova anteprima confermabile;
+ * questa classe non scrive eventi. Il limite dei giri evita cicli e chiamate senza fine.
  */
-class AilaAssistant(
+class AilaAssistant internal constructor(
     private val classifierFactory: () -> AiClassifier,
-    private val circularsRepository: CircularsRepository,
-    private val pdfTextExtractor: PdfTextExtractor,
+    private val downloadPdf: suspend (String) -> ByteArray,
+    private val extractPdf: suspend (ByteArray) -> String,
     private val actionsEnabled: Boolean = false
 ) {
+    constructor(
+        classifierFactory: () -> AiClassifier,
+        circularsRepository: CircularsRepository,
+        pdfTextExtractor: PdfTextExtractor,
+        actionsEnabled: Boolean = false
+    ) : this(classifierFactory, circularsRepository::downloadPdfBytes, pdfTextExtractor::extractText, actionsEnabled)
 
     companion object {
         /** Domande di esempio mostrate a chat vuota: servono a far capire cosa si puo' chiedere. */
@@ -87,51 +83,14 @@ class AilaAssistant(
     ): AssistantReply {
         if (mode == AssistantMode.GENERAL && !actionsEnabled && AssistantActionIntent.matches(question, history))
             return AssistantReply("Le azioni di ACA sono disattivate. Puoi abilitarle in Impostazioni → AI → ACA e Calendario.", modelLabel = "AILA")
-        // Plan mutations before informational shortcuts. Planning never writes; only the
-        // separate confirmation handler can pass the displayed plan to the executor.
-        if (actionsEnabled && mode == AssistantMode.GENERAL && AssistantActionIntent.matches(question, history)) {
-            AssistantAudienceEdit.plan(question, history, knowledge)?.let { plan ->
-                if (AssistantActionPrompt.validate(plan, knowledge)) return actionReply(plan)
-            }
-            onAgentPhase(AssistantAgentPhase.READING)
-            val searchQuery = AssistantContext.searchQuery(question, history)
-            val texts = fetchCircularTexts(
-                AssistantContext.mostRelevantCirculars(knowledge, searchQuery, PREFETCHED_CIRCULARS),
-                knowledge.circulars, budgetMs = PREFETCH_BUDGET_MS
-            )
-            onAgentPhase(AssistantAgentPhase.PLANNING)
-            val classifier = classifierFactory()
-            suspend fun generate(repair: Boolean) = classifier.generateAnswer(
-                AssistantActionPrompt.builderFor(knowledge, history, question, texts, searchQuery, repair)
-                    .withAttachmentServices(knowledge.attachedSources.map{it.file.service}.toSet())
-            )
-            var result = generate(false)
-            var plan = (result as? AiTextResult.Success)?.let { AssistantActionPrompt.parse(it.text, knowledge) }
-            if (result is AiTextResult.Success && (plan == null || !AssistantActionPrompt.validate(plan, knowledge))) {
-                // Malformed model output is not missing user information. Retry once with
-                // the compact schema rather than repeatedly asking for the same event title.
-                result = generate(true)
-                plan = (result as? AiTextResult.Success)?.let { AssistantActionPrompt.parse(it.text, knowledge) }
-            }
-            return when (val answer = result) {
-                is AiTextResult.Failure -> AssistantReply(answer.reason, isError = true)
-                is AiTextResult.Success -> {
-                    val verified = plan?.copy(requestedByUserId = knowledge.user?.id)
-                    if (verified == null || !AssistantActionPrompt.validate(verified, knowledge)) {
-                        AssistantReply("Il modello non è riuscito a preparare la modifica. Nessun evento è stato modificato. Riprova oppure scegli un altro modello nelle impostazioni AI.",
-                            modelLabel = "AILA ACA", isError = true)
-                    } else {
-                        actionReply(verified)
-                    }
-                }
-            }
-        }
+        // The model can request reads or a validated action plan. Keyword intent is only a
+        // fast disabled-feature notice, never the gate that decides what the model may do.
         // "Ciao", "grazie": niente dati e niente modello, vedi [AssistantGreeting].
         AssistantGreeting.answer(question)?.let { return it }
         // Le risposte pronte del codice rispondono sull'app intera: nella chat della Gita no,
         // li' l'unica fonte e' il materiale della gita e il modello la legge tutta.
         val studyPlan = AssistantContext.normalize(question).let { "piano" in it && ("studio" in it || "ripasso" in it) }
-        if (mode == AssistantMode.GENERAL && !studyPlan && knowledge.attachedSources.isEmpty()) {
+        if (mode == AssistantMode.GENERAL && !studyPlan && knowledge.attachedSources.isEmpty() && history.isEmpty() && !AssistantActionIntent.matches(question, history) && knowledge.calendarWarning == null) {
             // Scadenze, pagamenti, "cosa ho questa settimana": l'elenco lo fa il codice, esatto e
             // subito. Il modello sul telefono lo ricopiava storpiato (vedi [AssistantAgenda]).
             AssistantAgenda.answer(knowledge, question)?.let { return it }
@@ -146,76 +105,104 @@ class AilaAssistant(
         }
 
         val classifier = classifierFactory()
-        // "e dei genitori?": si cerca insieme alla domanda prima, vedi AssistantContext.searchQuery.
         val searchQuery = AssistantContext.searchQuery(question, history)
-        // Riscontri nel testo integrale delle circolari sul telefono: li calcola il codice, prima
-        // del modello, cosi' un "non compare" vale per tutte le circolari che ci sono.
-        val known = knowledge.copy(textHits = textHitsFor(question))
-
-        // Le circolari che c'entrano davvero con la domanda si leggono per intero subito, senza
-        // aspettare che sia il modello a chiederlo: i modelli sul telefono non lo chiedono quasi
-        // mai e rispondevano col solo riassunto, dove dettagli come "scienze il martedi'" non
-        // ci sono. Per saluti e domande generali la lista e' vuota e non si scarica niente.
-        val prefetched = fetchCircularTexts(
+        var known = knowledge.copy(textHits = textHitsFor(question))
+        var texts = fetchCircularTexts(
             AssistantContext.mostRelevantCirculars(known, searchQuery, PREFETCHED_CIRCULARS),
-            known.circulars,
-            budgetMs = PREFETCH_BUDGET_MS
+            known.circulars, budgetMs = PREFETCH_BUDGET_MS
         )
-
-        onAgentPhase(AssistantAgentPhase.WRITING)
-        val firstRaw = when (
+        val observations = mutableListOf<String>()
+        val seenQueries = mutableSetOf<AssistantCalendarQuery>()
+        val seenSearches = mutableSetOf<String>()
+        val seenCirculars = texts.keys.toMutableSet()
+        val studyOnly = studyPlan
+        for (round in 0 until AssistantReadTools.MAX_ROUNDS) {
+            val canRead = round < AssistantReadTools.MAX_ROUNDS - 1
+            onAgentPhase(AssistantAgentPhase.WRITING)
             val result = classifier.generateAnswer(
-                AssistantPrompt.builderFor(known, history, question, prefetched, searchQuery, mode).withAttachmentServices(known.attachedSources.map{it.file.service}.toSet())
+                AssistantPrompt.builderFor(known, history, question, texts, searchQuery, mode, canRead)
+                    .withAttachmentServices(known.attachedSources.map { it.file.service }.toSet())
             )
-        ) {
-            is AiTextResult.Failure -> return AssistantReply(
-                text = result.reason,
-                isError = true
+            if (result is AiTextResult.Failure) return AssistantReply(result.reason, isError = true)
+            result as AiTextResult.Success
+            val parsed = AssistantPrompt.parse(result.text)
+            if (parsed.incomplete) return AssistantReply(
+                "La risposta è incompleta. Riprova: nessuna nuova azione è stata eseguita.", isError = true,
+                modelLabel = result.modelLabel
             )
-            is AiTextResult.Success -> result
+            if (mode == AssistantMode.GENERAL && parsed.actionRequest.isNotBlank() && parsed.calendarQueries.isEmpty() && parsed.needsCircularText.isEmpty() && parsed.searches.isEmpty()) {
+                if (!actionsEnabled) return AssistantReply(
+                    "Le azioni di ACA sono disattivate. Puoi abilitarle in Impostazioni → AI → ACA e Calendario.", modelLabel = "AILA"
+                )
+                return planAction(question, history, known, onAgentPhase, parsed.actionRequest)
+            }
+            val queries = if (mode == AssistantMode.GENERAL) parsed.calendarQueries.filter { seenQueries.add(it) } else emptyList()
+            val requested = parsed.needsCircularText.filter { seenCirculars.add(it) }
+            val searches = parsed.searches.filter { seenSearches.add(it) }
+            val wantsMore = queries.isNotEmpty() || requested.isNotEmpty() || searches.isNotEmpty()
+            val requestedReads = parsed.calendarQueries.isNotEmpty() || parsed.needsCircularText.isNotEmpty() || parsed.searches.isNotEmpty()
+            if (!canRead || !wantsMore) {
+                val limitNotice = if (requestedReads) "\n\nNon ho completato tutte le verifiche richieste: i risultati possono essere parziali." else ""
+                return AssistantReply(
+                    text = parsed.answer.ifBlank { "Non ho trovato informazioni sufficienti per completare la richiesta." } + limitNotice,
+                    sources = checkedSources(parsed, searchQuery, known), modelLabel = result.modelLabel,
+                    readContext = known.readContext
+                )
+            }
+            onAgentPhase(AssistantAgentPhase.READING)
+            queries.forEach { observations += AssistantReadTools.execute(it, known, studyOnly) }
+            val searched = searchedTexts(searches, texts.keys)
+            val fetched = fetchCircularTexts(requested, known.circulars, PREFETCH_BUDGET_MS)
+            if (requested.any { it !in fetched }) observations += "Alcuni testi richiesti non sono stati caricati; non dedurre assenze dal testo mancante."
+            texts = texts + searched + fetched
+            known = known.copy(readContext = AssistantReadTools.boundedEvidence(observations.joinToString("\n\n")))
         }
+        error("Unreachable assistant loop")
+    }
 
-        val firstAnswer = AssistantPrompt.parse(firstRaw.text)
-        val firstReply = AssistantReply(
-            text = firstAnswer.answer,
-            sources = checkedSources(firstAnswer, searchQuery, knowledge),
-            modelLabel = firstRaw.modelLabel
-        )
-        val requested = firstAnswer.needsCircularText.filter { it !in prefetched }
-        // Le parole che il modello vuole cercare nel testo integrale: i passaggi entrano al
-        // secondo giro, come le circolari richieste per intero.
-        val searched = searchedTexts(firstAnswer.searches, prefetched.keys)
-        if (requested.isEmpty() && searched.isEmpty()) return firstReply
-
-        // Il secondo giro ha il suo tempo: ogni chiamata al modello e' limitata dal classificatore
-        // (vedi ChainedAiClassifier), quindi qui basta leggere le circolari richieste.
-        val fetched = if (requested.isEmpty()) emptyMap() else fetchCircularTexts(
-            requested,
-            known.circulars,
-            budgetMs = PREFETCH_BUDGET_MS
-        )
-        val deepTexts = prefetched + searched + fetched
-        if (deepTexts.size == prefetched.size) {
-            // Nessuno dei PDF richiesti si e' lasciato leggere (rete, scansione senza testo):
-            // si tiene la prima risposta, che per contratto contiene gia' quello che il modello
-            // sapeva, invece di far ripartire un giro identico al precedente.
-            return firstReply
+    private suspend fun planAction(
+        question: String,
+        history: List<AssistantMessage>,
+        knowledge: AssistantKnowledge,
+        onAgentPhase: (AssistantAgentPhase) -> Unit,
+        resolvedRequest: String
+    ): AssistantReply {
+        AssistantAudienceEdit.plan(question, history, knowledge)?.let { plan ->
+            if (AssistantActionPrompt.validate(plan, knowledge)) return actionReply(plan)
         }
-
-        val secondPrompt = AssistantPrompt.builderFor(known, history, question, deepTexts, searchQuery, mode).withAttachmentServices(known.attachedSources.map{it.file.service}.toSet())
-        val secondResult = classifier.generateAnswer(secondPrompt)
-        if (secondResult !is AiTextResult.Success) {
-            // Il secondo giro e' un miglioramento, non un requisito: se cade (tipicamente per
-            // quota esaurita dopo la prima chiamata) resta la risposta del primo giro.
-            return firstReply
-        }
-
-        val secondAnswer = AssistantPrompt.parse(secondResult.text)
-        return AssistantReply(
-            text = secondAnswer.answer,
-            sources = checkedSources(secondAnswer, searchQuery, known),
-            modelLabel = secondResult.modelLabel
+        onAgentPhase(AssistantAgentPhase.READING)
+        val searchQuery = AssistantContext.searchQuery(resolvedRequest, history)
+        val planningRequest = "$question\n\nRiferimenti ricostruiti dalla conversazione, da verificare sulla richiesta originale (che prevale):\n$resolvedRequest"
+        val texts = fetchCircularTexts(
+            AssistantContext.mostRelevantCirculars(knowledge, searchQuery, PREFETCHED_CIRCULARS),
+            knowledge.circulars, budgetMs = PREFETCH_BUDGET_MS
         )
+        onAgentPhase(AssistantAgentPhase.PLANNING)
+        val classifier = classifierFactory()
+        suspend fun generate(repair: Boolean) = classifier.generateAnswer(
+            AssistantActionPrompt.builderFor(knowledge, history, planningRequest, texts, searchQuery, repair)
+                .withAttachmentServices(knowledge.attachedSources.map{it.file.service}.toSet())
+        )
+        var result = generate(false)
+        var plan = (result as? AiTextResult.Success)?.let { AssistantActionPrompt.parse(it.text, knowledge) }
+        if (result is AiTextResult.Success && (plan == null || !AssistantActionPrompt.validate(plan, knowledge))) {
+            // Malformed model output is not missing user information. Retry once with
+            // the compact schema rather than repeatedly asking for the same event title.
+            result = generate(true)
+            plan = (result as? AiTextResult.Success)?.let { AssistantActionPrompt.parse(it.text, knowledge) }
+        }
+        return when (val answer = result) {
+            is AiTextResult.Failure -> AssistantReply(answer.reason, isError = true)
+            is AiTextResult.Success -> {
+                val verified = plan?.copy(requestedByUserId = knowledge.user?.id)
+                if (verified == null || !AssistantActionPrompt.validate(verified, knowledge)) {
+                    AssistantReply("Il modello non è riuscito a preparare la modifica. Nessun evento è stato modificato. Riprova oppure scegli un altro modello nelle impostazioni AI.",
+                        modelLabel = "AILA ACA", isError = true)
+                } else {
+                    actionReply(verified)
+                }
+            }
+        }
     }
 
     private fun actionReply(plan: AssistantActionPlan): AssistantReply = if (plan.actions.isEmpty()) {
@@ -359,16 +346,16 @@ class AilaAssistant(
      */
     private suspend fun downloadCircularText(circular: Circular, onText: (String) -> Unit) {
         try {
-            val bytes = circularsRepository.downloadPdfBytes(circular.r2PdfKey)
-            var text = pdfTextExtractor.extractText(bytes)
+            val bytes = downloadPdf(circular.r2PdfKey)
+            var text = extractPdf(bytes)
             if (text.isNotBlank()) onText(text.take(MAX_PDF_CHARS_PER_CIRCULAR))
 
             for (attachment in circular.attachments) {
                 val pdfKey = attachment.pdfKey ?: continue
                 if (text.length >= MAX_PDF_CHARS_PER_CIRCULAR) break
                 try {
-                    val attachmentBytes = circularsRepository.downloadPdfBytes(pdfKey)
-                    val attachmentText = pdfTextExtractor.extractText(attachmentBytes)
+                    val attachmentBytes = downloadPdf(pdfKey)
+                    val attachmentText = extractPdf(attachmentBytes)
                     if (attachmentText.isNotBlank()) {
                         text += "\n\n--- Allegato: ${attachment.label} ---\n\n$attachmentText"
                         onText(text.take(MAX_PDF_CHARS_PER_CIRCULAR))

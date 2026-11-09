@@ -134,6 +134,10 @@ internal object AssistantContext {
             }
         }
 
+        if (mode == AssistantMode.GENERAL) {
+            val timetable = circolareplus.data.SchoolTimetable.describe(knowledge.classLabel)
+            if (timetable.isNotBlank()) builder.appendSection("ORARIO DELLA CLASSE") { appendLine(timetable) }
+        }
         builder.appendSection("OGGI") {
             appendLine(readableDate(knowledge.todayIso, knowledge.todayIso, withYear = true).removeSuffix(" (oggi)"))
             if (scope != null) {
@@ -526,8 +530,9 @@ internal object AssistantContext {
         budget: Budget,
         scope: TimeScope?
     ) {
+        knowledge.calendarWarning?.let { warning -> builder.appendSection("STATO CALENDARIO") { appendLine(warning) } }
         if (knowledge.calendarEvents.isEmpty()) {
-            builder.appendSection("CALENDARIO") { appendLine("Nessun evento in calendario.") }
+            builder.appendSection("CALENDARIO") { appendLine(if (knowledge.calendarWarning == null) "Nessun evento in calendario." else "Nessun evento locale disponibile; calendario non verificato.") }
             return
         }
 
@@ -537,7 +542,9 @@ internal object AssistantContext {
             val inRange = knowledge.calendarEvents.filter { scope.contains(it.date) }.sortedBy { it.date }
             builder.appendSection("CALENDARIO — EVENTI DEL PERIODO CHIESTO") {
                 if (inRange.isEmpty()) appendLine("Nessun evento in calendario in questo periodo.")
-                inRange.take(budget.futureEvents + budget.pastEvents).forEach { appendLine(formatEvent(it, knowledge)) }
+                val shown = inRange.take(budget.futureEvents + budget.pastEvents)
+                shown.forEach { appendLine(formatEvent(it, knowledge)) }
+                if (shown.size < inRange.size) appendLine("ANTEPRIMA PARZIALE: ${inRange.size} eventi nel periodo, ${shown.size} mostrati. Usa calendarQueries per verificare.")
             }
             return
         }
@@ -549,6 +556,7 @@ internal object AssistantContext {
         builder.appendSection("CALENDARIO — EVENTI DA OGGI IN POI") {
             if (future.isEmpty()) appendLine("Nessun evento futuro.")
             future.take(budget.futureEvents).forEach { appendLine(formatEvent(it, knowledge)) }
+            if (future.size > budget.futureEvents) appendLine("ANTEPRIMA PARZIALE: ${future.size} eventi futuri, ${budget.futureEvents} mostrati. Usa calendarQueries per cercare attività e date omesse.")
         }
 
         if (budget.pastEvents == 0) return

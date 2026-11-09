@@ -412,7 +412,10 @@ class ClientSideAiClassifier(
             if (response.status.isSuccess()) {
                 resolvedModel = candidate
                 busyUntil.remove(candidate)
-                val answer = extractGeneratedText(response.bodyAsText())
+                val raw = response.bodyAsText()
+                try { requireCompletedGeneration(json.parseToJsonElement(raw).jsonObject, CompatibleAiFormat.GOOGLE) }
+                catch (e: Exception) { return AiTextResult.Failure(e.message ?: "Google ha interrotto la risposta.") }
+                val answer = extractGeneratedText(raw)
                     ?: return AiTextResult.Failure("Google ha risposto senza contenuto utilizzabile.")
                 return AiTextResult.Success(answer, "Google Gemini ($candidate)")
             }
@@ -431,13 +434,14 @@ class ClientSideAiClassifier(
 
     /** Il testo del primo candidato di una risposta generateContent, o `null` se non c'e'. */
     private fun extractGeneratedText(raw: String): String? = try {
-        json.parseToJsonElement(raw).jsonObject["candidates"]?.jsonArray?.getOrNull(0)
-            ?.jsonObject?.get("content")?.jsonObject
-            ?.get("parts")?.jsonArray?.getOrNull(0)
-            ?.jsonObject?.get("text")?.jsonPrimitive?.content
-    } catch (e: Exception) {
-        null
-    }
+        json.parseToJsonElement(raw).jsonObject["candidates"]?.jsonArray?.firstOrNull()
+            ?.jsonObject?.get("content")?.jsonObject?.get("parts")?.jsonArray
+            ?.mapNotNull { part ->
+                val obj = part.jsonObject
+                if (obj["thought"]?.jsonPrimitive?.contentOrNull == "true") null
+                else obj["text"]?.jsonPrimitive?.contentOrNull
+            }?.joinToString("")?.takeIf { it.isNotBlank() }
+    } catch (_: Exception) { null }
 
     /**
      * Prova la chiave con una chiamata minima e racconta com'è andata, per esteso.
