@@ -286,3 +286,73 @@ describe('gita: circolari per classe', () => {
     expect((await call('POST', '/api/gita/circulars', { number: 9999 }, rep)).status).toBe(404);
   });
 });
+
+describe('gita: più gite e aggiornamenti', () => {
+  it('crea e rinomina gite solo come rappresentante della classe', async () => {
+    const { rep, student, other } = await cast();
+    expect((await call('POST', '/api/gita/trips', { name: 'Museo' }, student)).status).toBe(403);
+    expect((await call('POST', '/api/gita/trips', { name: ' ' }, rep)).status).toBe(400);
+    const trip = await call('POST', '/api/gita/trips', { name: 'Museo' }, rep);
+    expect(trip.status).toBe(201);
+    const id = trip.json.id;
+    expect((await call('PATCH', `/api/gita/trips/${id}`, { name: 'Roma' }, student)).status).toBe(403);
+    expect((await call('GET', `/api/gita?tripId=${id}`, undefined, other)).status).toBe(404);
+    expect((await call('PATCH', `/api/gita/trips/${id}`, { name: 'Roma' }, rep)).status).toBe(200);
+    const feed = await call('GET', `/api/gita?tripId=${id}`, undefined, student);
+    expect(feed.json.trips).toHaveLength(2);
+    expect(feed.json.trips.find((t: any) => t.id === id).name).toBe('Roma');
+    expect(feed.json.selectedTripId).toBe(id);
+  });
+
+  it('isola documenti, link e segnalazioni tra gite', async () => {
+    const { rep, student } = await cast();
+    const legacy = await call('POST', '/api/gita/items', { title: 'Primo link', url: 'https://example.org/1' }, rep);
+    const id = (await call('POST', '/api/gita/trips', { name: 'Seconda gita' }, rep)).json.id;
+    const document = await call('POST', `/api/gita/items?tripId=${id}`, documentForm(pdf()), rep);
+    expect(document.status).toBe(201);
+    await call('POST', `/api/gita/items/${document.json.id}/reports`, { reason: 'Orario da verificare' }, student);
+    const first = await call('GET', '/api/gita', undefined, student);
+    expect(first.json.items.map((i: any) => i.id)).toEqual([legacy.json.id]);
+    expect(first.json.reports).toEqual([]);
+    const second = await call('GET', `/api/gita?tripId=${id}`, undefined, student);
+    expect(second.json.items.map((i: any) => i.id)).toEqual([document.json.id]);
+    expect(second.json.reports).toHaveLength(1);
+    const corpus = await call('GET', `/api/gita/corpus?tripId=${id}`, undefined, student);
+    expect(corpus.json.documents.map((d: any) => d.itemId)).toEqual([document.json.id]);
+  });
+
+  it('pubblica aggiornamenti nella sola gita scelta e li espone come fonti ACA', async () => {
+    const { rep, student, other } = await cast();
+    const id = (await call('POST', '/api/gita/trips', { name: 'Museo' }, rep)).json.id;
+    const path = `/api/gita/updates?tripId=${id}`;
+    const body = { title: 'Partenza anticipata', body: 'Ritrovo alle 7:15 davanti alla scuola.' };
+    expect((await call('POST', path, body, student)).status).toBe(403);
+    expect((await call('POST', path, { title: 'Novità', body: ' ' }, rep)).status).toBe(400);
+    expect((await call('POST', path, { title: 'Novità', body: 'x'.repeat(5001) }, rep)).status).toBe(400);
+    const update = await call('POST', path, body, rep);
+    expect(update.status).toBe(201);
+    const feed = await call('GET', `/api/gita?tripId=${id}`, undefined, student);
+    expect(feed.json.updates[0]).toMatchObject({ ...body, authorName: 'Nome Rep' });
+    expect((await call('GET', '/api/gita', undefined, student)).json.updates).toEqual([]);
+    expect((await call('GET', `/api/gita/corpus?tripId=${id}`, undefined, student)).json.documents[0].text).toContain(body.body);
+    expect((await call('GET', `/api/gita/corpus?tripId=${id}`, undefined, other)).status).toBe(404);
+    expect((await call('DELETE', `/api/gita/updates/${update.json.id}`, undefined, student)).status).toBe(403);
+    const otherRep = await register('repAltra', { representativeCode: await repCode('5 A'), classLabel: '5 A' });
+    expect((await call('DELETE', `/api/gita/updates/${update.json.id}`, undefined, otherRep.json.token)).status).toBe(404);
+    expect((await call('DELETE', `/api/gita/updates/${update.json.id}`, undefined, rep)).status).toBe(200);
+    expect((await call('GET', `/api/gita?tripId=${id}`, undefined, student)).json.updates).toEqual([]);
+  });
+});
+
+it('la stessa circolare può appartenere a due gite e si rimuove solo da quella scelta', async () => {
+  const { rep, student } = await cast();
+  await env.DB.prepare(`INSERT INTO circulars (number, title, publish_date, r2_pdf_key)
+    VALUES (123, 'Visita al museo', '2026-11-09', 'https://example.org/123.pdf')`).run();
+  const id = (await call('POST', '/api/gita/trips', { name: 'Museo' }, rep)).json.id;
+  expect((await call('POST', '/api/gita/circulars', { number: 123 }, rep)).status).toBe(201);
+  expect((await call('POST', `/api/gita/circulars?tripId=${id}`, { number: 123 }, rep)).status).toBe(201);
+  expect((await call('GET', `/api/gita?tripId=${id}`, undefined, student)).json.circulars).toHaveLength(1);
+  await call('DELETE', `/api/gita/circulars/123?tripId=${id}`, undefined, rep);
+  expect((await call('GET', `/api/gita?tripId=${id}`, undefined, student)).json.circulars).toEqual([]);
+  expect((await call('GET', '/api/gita', undefined, student)).json.circulars).toHaveLength(1);
+});

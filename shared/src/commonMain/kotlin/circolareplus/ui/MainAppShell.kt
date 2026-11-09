@@ -1141,6 +1141,8 @@ fun MainAppShell(
     // durante una chat.
     var assistantDynamic by remember { mutableStateOf<AssistantDynamicKnowledge?>(null) }
     // Materiale della Gita per l'assistente: letto una volta per sessione, poi riletto dopo ogni modifica.
+    var assistantGitaTripId by remember { mutableStateOf<String?>(null) }
+    var assistantGitaCacheTripId by remember { mutableStateOf<String?>(null) }
     var assistantGita by remember { mutableStateOf<List<circolareplus.domain.model.GitaSourceDoc>?>(null) }
     // Ultimo elenco della Gita: la schermata lo mostra subito all'apertura e al ritorno (dall'Assistant
     // o da un'altra schermata) e si aggiorna in silenzio, senza passare dal caricamento. Letto in
@@ -1594,8 +1596,12 @@ fun MainAppShell(
 
                 // Il materiale della gita: una lettura per sessione. Se fallisce (rete) la chat
                 // risponde senza, e lo dice la sezione "non caricata" del contesto.
-                val gita = assistantGita ?: try {
-                    AppContainer.gitaRepository.sourceDocuments().also { assistantGita = it }
+                val gitaTripId = if (assistantMode == AssistantMode.GITA_ONLY) assistantGitaTripId else null
+                val gita = assistantGita?.takeIf { assistantGitaCacheTripId == gitaTripId } ?: try {
+                    AppContainer.gitaRepository.forTrip(gitaTripId).sourceDocuments().also {
+                        assistantGita = it
+                        assistantGitaCacheTripId = gitaTripId
+                    }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -3260,16 +3266,8 @@ fun MainAppShell(
                         tabPager.scrollToPage(target)
                         tabFade.animateTo(1f, circolareplus.design.ailaFadeSpec(if (AppTheme.isGlass) 110 else 130))
                     }
-                    // Pagine -> barra, in tempo reale: mentre si scorre col dito la barra segue la
-                    // pagina verso cui si sta andando (non solo a scorrimento finito).
-                    LaunchedEffect(tabPager) {
-                        androidx.compose.runtime.snapshotFlow { tabPager.targetPage to tabPager.isScrollInProgress }
-                            .collect { (page, scrolling) ->
-                                if (!scrolling || tabFade.value < 1f) return@collect
-                                val tab = MainTab.entries[page]
-                                if (selectedTab != tab) selectedTab = tab
-                            }
-                    }
+                    // La selezione attiva caricamenti ed effetti della shell: si aggiorna solo
+                    // a pagina ferma. L'indicatore segue comunque il dito tramite tabBarDrag.
                     // Pagine -> barra, continuo: mentre si trascina (e mentre la pagina si posa
                     // dopo il rilascio) la barra non sceglie una voce a meta' strada ma segue la
                     // posizione esatta delle pagine, cosi' fermandosi a meta' non va avanti e
@@ -3284,9 +3282,16 @@ fun MainAppShell(
                         }.collect { tabBarDrag.value = it }
                     }
                     LaunchedEffect(tabPager) {
-                        androidx.compose.runtime.snapshotFlow { tabPager.settledPage }.collect { page ->
-                            val tab = MainTab.entries[page]
-                            if (selectedTab != tab && !tabPager.isScrollInProgress) selectedTab = tab
+                        androidx.compose.runtime.snapshotFlow {
+                            // Osservare anche la fine del fade distingue il salto dalla barra
+                            // da uno swipe e impedisce di ripristinare la vecchia selezione.
+                            if (!tabPager.isScrollInProgress && tabFade.value >= 1f) tabPager.settledPage
+                            else null
+                        }.collect { page ->
+                            if (page != null) {
+                                val tab = MainTab.entries[page]
+                                if (selectedTab != tab) selectedTab = tab
+                            }
                         }
                     }
                     androidx.compose.foundation.pager.HorizontalPager(
@@ -3329,21 +3334,15 @@ fun MainAppShell(
                     // Margine della barra di stato per ogni tab tranne la Home (che ci fa passare
                     // sotto il suo pannello) e salvo quando c'e' gia' la striscia offline in cima.
                     Box(modifier = Modifier.fillMaxSize().then(
-                        // Scorrendo col dito fra le tab, ogni stile ha il suo movimento. Pixel: le
-                        // pagine si comportano come carte, quella che esce si rimpicciolisce e
-                        // sbiadisce, quella che entra si ingrandisce fino a piena misura, con un
-                        // piccolo stacco fra le due. Liquid Glass: piu' sobrio, come iOS, la pagina
-                        // si allontana appena e si vela sopra lo sfondo che resta fermo. Niente
-                        // parallasse: le pagine sono trasparenti e sovrapposte si mescolerebbero.
-                        // Il salto dalla barra in basso resta la dissolvenza qui sopra.
+                        // Il pager trasla gia' le pagine. Manteniamo solo una lieve scala:
+                        // alpha < 1 sull'intera pagina richiede un buffer fuori schermo e
+                        // compositing aggiuntivo per entrambe le pagine a ogni frame.
                         Modifier.graphicsLayer {
                             val offset = (tabPager.currentPage - page) + tabPager.currentPageOffsetFraction
                             val d = kotlin.math.abs(offset).coerceIn(0f, 1f)
-                            val glass = AppTheme.isGlass
-                            val scale = 1f - (if (glass) 0.07f else 0.13f) * d
+                            val scale = if (AppTheme.reduceMotion) 1f else 1f - 0.04f * d
                             scaleX = scale
                             scaleY = scale
-                            alpha = 1f - (if (glass) 0.45f else 0.6f) * d
                         }
                     ).then(
                         if (tab != MainTab.HOME && !offlineBannerShown) Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
@@ -5157,7 +5156,9 @@ fun MainAppShell(
                         cachedFeed = gitaFeedCache,
                         onFeedLoaded = { gitaFeedCache = it },
                         onBackClick = { isInGitaScreen = false },
-                        onOpenAssistant = {
+                        onOpenAssistant = { tripId ->
+                            assistantGitaTripId = tripId
+                            assistantGita = null
                             // La chat aperta dalla Gita risponde solo con il materiale della gita.
                             assistantMode = AssistantMode.GITA_ONLY
                             isInAssistantScreen = true

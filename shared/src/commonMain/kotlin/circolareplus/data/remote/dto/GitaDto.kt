@@ -8,7 +8,10 @@ data class GitaFeedDto(
     val items: List<GitaItemDto> = emptyList(),
     val circulars: List<GitaCircularDto> = emptyList(),
     val reports: List<GitaReportDto> = emptyList(),
-    val canEdit: Boolean = false
+    val canEdit: Boolean = false,
+    val trips: List<circolareplus.domain.model.GitaTrip> = emptyList(),
+    val selectedTripId: String? = null,
+    val updates: List<circolareplus.domain.model.GitaUpdate> = emptyList()
 )
 
 @Serializable

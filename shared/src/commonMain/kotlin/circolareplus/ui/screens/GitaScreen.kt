@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -134,13 +135,18 @@ fun GitaScreen(
     /** Chiamato a ogni lettura riuscita, per tenere la copia di chi sta sopra. */
     onFeedLoaded: (GitaFeed) -> Unit,
     onBackClick: () -> Unit,
-    onOpenAssistant: () -> Unit,
+    onOpenAssistant: (String?) -> Unit,
     /** Chiamato dopo ogni modifica: l'assistente rilegge il materiale alla domanda successiva. */
     onMaterialChanged: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
     var feed by remember { mutableStateOf(cachedFeed) }
+    var selectedTripId by remember { mutableStateOf(cachedFeed?.selectedTripId) }
+    var trips by remember { mutableStateOf(cachedFeed?.trips.orEmpty()) }
+    val tripRepository = remember(repository, selectedTripId) { repository.forTrip(selectedTripId) }
+    var tripDialog by remember { mutableStateOf<String?>(null) }
+    var knownCanEdit by remember { mutableStateOf(cachedFeed?.canEdit == true) }
     var error by remember { mutableStateOf<String?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
     // Foglio "+" e foglio di una voce. Il "closeRequested" li fa scendere con la loro animazione
@@ -224,10 +230,12 @@ fun GitaScreen(
         }
     }
 
-    LaunchedEffect(reloadKey) {
+    LaunchedEffect(reloadKey, selectedTripId) {
         refreshing = true
         try {
-            val loaded = repository.feed()
+            val loaded = tripRepository.feed()
+            trips = loaded.trips
+            knownCanEdit = loaded.canEdit
             feed = loaded
             onFeedLoaded(loaded)
             error = null
@@ -303,6 +311,24 @@ fun GitaScreen(
                     }
                 }
             )
+            GitaTripHeader(
+                trips = trips,
+                selectedId = selectedTripId ?: feed?.selectedTripId,
+                canEdit = knownCanEdit,
+                enabled = !busy && !refreshing && addStep == null && itemStep == null,
+                onSelect = { id ->
+                    if (id != (selectedTripId ?: feed?.selectedTripId)) {
+                        selectedTripId = id
+                        feed = null
+                        error = null
+                        notice = null
+                        onMaterialChanged()
+                    }
+                },
+                onCreate = { tripDialog = "create" },
+                onRename = { tripDialog = "rename" },
+                onUpdate = { tripDialog = "update" }
+            )
             AnimatedContent(
                 targetState = body,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -328,21 +354,22 @@ fun GitaScreen(
                         )
                     }
                     GitaBody.READY -> feed?.let { ready ->
-                        GitaList(
+                        key(ready.selectedTripId) { GitaList(
                             feed = ready,
                             notice = notice,
                             onOpen = { itemStep = ItemStep.Detail(it) },
                             onPinCircular = { circular, pinned ->
                                 write(if (pinned) "Circolare aggiunta alla gita." else "Circolare tolta dalla gita.") {
-                                    repository.setCircularPinned(circular.number, pinned)
+                                    tripRepository.setCircularPinned(circular.number, pinned)
                                 }
                             },
                             onResolveReport = { report ->
-                                write("Segnalazione risolta.") { repository.setReportResolved(report.id, resolved = true) }
+                                write("Segnalazione risolta.") { tripRepository.setReportResolved(report.id, resolved = true) }
                             },
                             canEdit = ready.canEdit,
                             busy = busy,
-                        )
+                            onDeleteUpdate = { update -> write("Aggiornamento eliminato.") { tripRepository.deleteUpdate(update.id) } },
+                        ) }
                     }
                 }
             }
@@ -351,7 +378,7 @@ fun GitaScreen(
         // AILA Assistant in basso a destra: stessa origine del container transform della lente.
         AilaFab(
             contentDescription = "Chiedi ad AILA Assistant della gita",
-            onClick = onOpenAssistant,
+            onClick = { onOpenAssistant(selectedTripId ?: feed?.selectedTripId) },
             transformInGlass = true,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -359,6 +386,31 @@ fun GitaScreen(
         ) { tint ->
             AilaAssistantMark(size = 22.dp, brush = SolidColor(tint))
         }
+    }
+
+    tripDialog?.let { dialog ->
+        GitaTextDialog(
+            kind = dialog,
+            initialName = if (dialog == "rename") trips.firstOrNull { it.id == (selectedTripId ?: feed?.selectedTripId) }?.name.orEmpty()
+                else if (dialog == "create") "Gita ${trips.size + 1}" else "",
+            busy = busy,
+            error = notice?.takeIf { it.isError }?.text,
+            onDismiss = { tripDialog = null },
+            onSave = { title, text ->
+                write(if (dialog == "update") "Aggiornamento pubblicato." else "Gita salvata.") {
+                    when (dialog) {
+                        "create" -> {
+                            val created = repository.createTrip(title)
+                            selectedTripId = created.id
+                            feed = null
+                        }
+                        "rename" -> (selectedTripId ?: feed?.selectedTripId)?.let { repository.renameTrip(it, title) }
+                        else -> tripRepository.publishUpdate(title, text)
+                    }
+                    tripDialog = null
+                }
+            }
+        )
     }
 
     addStep?.let { step ->
@@ -369,7 +421,7 @@ fun GitaScreen(
             circularsLoading = pickerLoading,
             circularsError = pickerError,
             onLoadMoreCirculars = { loadPickerCirculars() },
-            onPickCircular = { number -> write("Circolare aggiunta alla gita.") { repository.setCircularPinned(number, true) } },
+            onPickCircular = { number -> write("Circolare aggiunta alla gita.") { tripRepository.setCircularPinned(number, true) } },
             busy = busy,
             closeRequested = addClose,
             onDismiss = {
@@ -385,9 +437,9 @@ fun GitaScreen(
                 pickPdf()
             },
             onSaveDocument = { title, category, note, fileName, bytes ->
-                write("Documento caricato.") { repository.addDocument(title, category, fileName, bytes, note) }
+                write("Documento caricato.") { tripRepository.addDocument(title, category, fileName, bytes, note) }
             },
-            onSaveLink = { title, url, note -> write("Link aggiunto.") { repository.addLink(title, url, note) } }
+            onSaveLink = { title, url, note -> write("Link aggiunto.") { tripRepository.addLink(title, url, note) } }
         )
     }
 
@@ -417,29 +469,29 @@ fun GitaScreen(
                 itemClose = false
                 pickPdf()
             },
-            loadVersions = { id -> repository.versions(id).second },
+            loadVersions = { id -> tripRepository.versions(id).second },
             onOpenVersion = { item, version ->
                 if (version.url != null) uriHandler.openUri(version.url) else openPdf(item, version)
             },
             onSaveEdit = { item, title, category ->
-                write("Modifiche salvate.") { repository.updateItem(item.id, title, category) }
+                write("Modifiche salvate.") { tripRepository.updateItem(item.id, title, category) }
             },
             onSaveLink = { item, url, note ->
-                write("Indirizzo aggiornato.") { repository.replaceLink(item.id, url, note) }
+                write("Indirizzo aggiornato.") { tripRepository.replaceLink(item.id, url, note) }
             },
             onSaveDocument = { item, fileName, bytes, note ->
-                write("Nuova versione caricata.") { repository.replaceDocument(item.id, fileName, bytes, note) }
+                write("Nuova versione caricata.") { tripRepository.replaceDocument(item.id, fileName, bytes, note) }
             },
             onSendReport = { item, reason ->
-                write("Segnalazione inviata: riceverai lo stato.") { repository.report(item.id, reason) }
+                write("Segnalazione inviata: riceverai lo stato.") { tripRepository.report(item.id, reason) }
             },
-            onWithdraw = { item -> write("Voce ritirata.") { repository.withdraw(item.id) } }
+            onWithdraw = { item -> write("Voce ritirata.") { tripRepository.withdraw(item.id) } }
         )
     }
 }
 
 private enum class GitaFilter(val label: String) {
-    ALL("Tutti"), CIRCULARS("Circolari"), DOCUMENTS("Documenti"), LINKS("Link"), REPORTS("Segnalazioni")
+    ALL("Tutti"), UPDATES("Aggiornamenti"), CIRCULARS("Circolari"), DOCUMENTS("Documenti"), LINKS("Link"), REPORTS("Segnalazioni")
 }
 
 /**
@@ -461,6 +513,7 @@ private fun GitaList(
     onResolveReport: (GitaReport) -> Unit,
     canEdit: Boolean,
     busy: Boolean,
+    onDeleteUpdate: (circolareplus.domain.model.GitaUpdate) -> Unit,
 ) {
     var filter by remember { mutableStateOf(GitaFilter.ALL) }
     var query by remember { mutableStateOf("") }
@@ -481,7 +534,7 @@ private fun GitaList(
     val documentsShown = documents.count { matches(it.title) }
     val linksShown = links.count { matches(it.title) }
     val show = { f: GitaFilter -> filter == GitaFilter.ALL || filter == f }
-    val allEmpty = feed.circulars.isEmpty() && feed.items.isEmpty() && feed.reports.isEmpty()
+    val allEmpty = feed.circulars.isEmpty() && feed.items.isEmpty() && feed.reports.isEmpty() && feed.updates.isEmpty()
 
     // Voci gia' presenti alla prima apertura: le righe che arrivano dopo (un documento appena
     // caricato) entrano con l'animazione, le altre sono semplicemente al loro posto.
@@ -555,6 +608,26 @@ private fun GitaList(
         notice?.let { shown ->
             item(key = "notice") {
                 NoticeBanner(shown, modifier = gitaMotion())
+            }
+        }
+
+        if (show(GitaFilter.UPDATES)) {
+            val updates = feed.updates.filter { matches(it.title) || matches(it.body) }
+            item(key = "updatesHeader") {
+                Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        AilaSectionTitle(text = "Aggiornamenti")
+                        Text("${updates.size}", style = MaterialTheme.typography.labelLarge, color = AppTheme.TextMuted)
+                    }
+                    if (updates.isEmpty()) Text(
+                        if (needle.isBlank()) "Qui trovi le novità pubblicate dal rappresentante." else "Nessun aggiornamento trovato.",
+                        style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted
+                    )
+                }
+            }
+            // Una card per elemento lazy: gli aggiornamenti fuori schermo non si compongono.
+            items(updates, key = { "update:${it.id}" }) { update ->
+                GitaUpdatesSection(updates = listOf(update), canEdit = canEdit, busy = busy, onDelete = onDeleteUpdate)
             }
         }
 

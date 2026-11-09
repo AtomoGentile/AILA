@@ -23,6 +23,7 @@ type GitaCategory = (typeof GITA_CATEGORIES)[number];
 interface ItemRow {
   id: string;
   class_id: string;
+  trip_id: string | null;
   kind: 'DOCUMENT' | 'LINK';
   category: string;
   title: string;
@@ -64,6 +65,75 @@ type Ctx = { Bindings: Env; Variables: { jwtPayload: JWTPayload } };
 const gita = new Hono<Ctx>();
 
 gita.use('*', authMiddleware());
+
+interface TripRow { id: string; name: string; created_at: string }
+interface UpdateRow { id: string; title: string; body: string; author_id: string; author_name: string; created_at: string }
+
+async function classTrips(env: Env, classId: string) {
+  await env.DB.prepare(`INSERT OR IGNORE INTO gita_trips (id, class_id, name, created_by, created_at)
+    VALUES (?, ?, 'Gita 1', '', ?)`).bind(`default:${classId}`, classId, romeNow()).run();
+  return (await env.DB.prepare(`SELECT * FROM gita_trips WHERE class_id = ? ORDER BY CASE WHEN id = 'default:' || class_id THEN 0 ELSE 1 END, created_at, rowid`)
+    .bind(classId).all<TripRow>()).results;
+}
+async function selectedTrip(c: { env: Env; req: { query: (key: string) => string | undefined } }, classId: string) {
+  const trips = await classTrips(c.env, classId);
+  const id = c.req.query('tripId') ?? `default:${classId}`;
+  return trips.find(t => t.id === id) ?? null;
+}
+const tripJson = (t: TripRow) => ({ id: t.id, name: t.name });
+const updateJson = (u: UpdateRow) => ({ id: u.id, title: u.title, body: u.body,
+  authorName: u.author_name, createdAt: u.created_at });
+
+gita.post('/trips', requireRole('REPRESENTATIVE'), async (c) => {
+  const classId = await resolveClassId(c);
+  await classTrips(c.env, classId);
+  const body = await c.req.json<Record<string, unknown>>().catch(() => null);
+  const name = clean(body?.name, 100);
+  if (!name) return c.json({ error: 'Nome della gita obbligatorio (massimo 100 caratteri)' }, 400);
+  const id = newUUID();
+  await c.env.DB.prepare('INSERT INTO gita_trips (id, class_id, name, created_by, created_at) VALUES (?, ?, ?, ?, ?)')
+    .bind(id, classId, name, c.get('jwtPayload').sub, romeNow()).run();
+  return c.json({ id, name }, 201);
+});
+
+gita.patch('/trips/:id', requireRole('REPRESENTATIVE'), async (c) => {
+  const classId = await resolveClassId(c);
+  const body = await c.req.json<Record<string, unknown>>().catch(() => null);
+  const name = clean(body?.name, 100);
+  if (!name) return c.json({ error: 'Nome della gita obbligatorio (massimo 100 caratteri)' }, 400);
+  const trip = (await classTrips(c.env, classId)).find(t => t.id === c.req.param('id'));
+  if (!trip) return c.json({ error: 'Gita non trovata' }, 404);
+  await c.env.DB.prepare('UPDATE gita_trips SET name = ? WHERE id = ? AND class_id = ?')
+    .bind(name, trip.id, classId).run();
+  return c.json({ ok: true });
+});
+
+gita.post('/updates', requireRole('REPRESENTATIVE'), async (c) => {
+  const classId = await resolveClassId(c);
+  const trip = await selectedTrip(c, classId);
+  if (!trip) return c.json({ error: 'Gita non trovata' }, 404);
+  const body = await c.req.json<Record<string, unknown>>().catch(() => null);
+  const title = clean(body?.title, 200);
+  const text = clean(body?.body, 5000);
+  if (!title || !text) return c.json({ error: 'Inserisci titolo (max 200) e testo (max 5000)' }, 400);
+  const me = c.get('jwtPayload').sub;
+  const author = await c.env.DB.prepare('SELECT first_name, last_name FROM users WHERE id = ?')
+    .bind(me).first<{ first_name: string; last_name: string }>();
+  const id = newUUID();
+  await c.env.DB.prepare(`INSERT INTO gita_updates (id, trip_id, title, body, author_id, author_name, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(id, trip.id, title, text, me,
+      author ? `${author.first_name} ${author.last_name}`.trim() : 'Rappresentante', romeNow()).run();
+  return c.json({ id }, 201);
+});
+
+gita.delete('/updates/:id', requireRole('REPRESENTATIVE'), async (c) => {
+  const classId = await resolveClassId(c);
+  const row = await c.env.DB.prepare(`SELECT u.id FROM gita_updates u JOIN gita_trips t ON t.id = u.trip_id
+    WHERE u.id = ? AND t.class_id = ?`).bind(c.req.param('id'), classId).first();
+  if (!row) return c.json({ error: 'Aggiornamento non trovato' }, 404);
+  await c.env.DB.prepare('DELETE FROM gita_updates WHERE id = ?').bind(c.req.param('id')).run();
+  return c.json({ ok: true });
+});
 
 /**
  * Data e ora di Roma nel formato "AAAA-MM-GG HH:MM:SS". CURRENT_TIMESTAMP di SQLite è in UTC: un
@@ -249,10 +319,12 @@ async function classMemberIds(env: Env, classId: string, roles: string[]): Promi
 // ---------------------------------------------------------------------------
 gita.get('/', async (c) => {
   const classId = await resolveClassId(c);
+  const trip = await selectedTrip(c, classId);
+  if (!trip) return c.json({ error: 'Gita non trovata' }, 404);
   const payload = c.get('jwtPayload');
   const items = await c.env.DB.prepare(
-    'SELECT * FROM gita_items WHERE class_id = ? AND withdrawn = 0 ORDER BY created_at DESC, id'
-  ).bind(classId).all<ItemRow>();
+    'SELECT * FROM gita_items WHERE class_id = ? AND COALESCE(trip_id, ?) = ? AND withdrawn = 0 ORDER BY created_at DESC, id'
+  ).bind(classId, `default:${classId}`, trip.id).all<ItemRow>();
 
   const out = [];
   for (const item of items.results) {
@@ -262,19 +334,24 @@ gita.get('/', async (c) => {
   // Solo circolari scelte esplicitamente dal Rappresentante per questa classe.
   const circulars = await c.env.DB.prepare(
     `SELECT c.number, c.title, c.publish_date, g.circular_number IS NOT NULL AS pinned
-     FROM circulars c LEFT JOIN gita_circulars g ON g.circular_number = c.number AND g.class_id = ?
+     FROM circulars c LEFT JOIN gita_circulars g ON g.circular_number = c.number AND g.class_id = ? AND g.trip_id = ?
      WHERE g.circular_number IS NOT NULL
      ORDER BY c.publish_date DESC, c.number DESC LIMIT 100`
-  ).bind(classId).all<{ number: number; title: string; publish_date: string; pinned: number }>();
+  ).bind(classId, trip.id).all<{ number: number; title: string; publish_date: string; pinned: number }>();
 
   // Il Rappresentante vede tutte le segnalazioni della classe; gli altri solo le proprie.
   const isRep = payload.role === 'REPRESENTATIVE';
   const reports = await c.env.DB.prepare(
     `SELECT r.*, i.title AS item_title FROM gita_reports r JOIN gita_items i ON i.id = r.item_id
-     WHERE r.class_id = ? ${isRep ? '' : 'AND r.reported_by = ?'} ORDER BY r.created_at DESC`
-  ).bind(...(isRep ? [classId] : [classId, payload.sub])).all<ReportRow & { item_title: string }>();
+     WHERE r.class_id = ? AND COALESCE(i.trip_id, ?) = ? ${isRep ? '' : 'AND r.reported_by = ?'} ORDER BY r.created_at DESC`
+  ).bind(...(isRep ? [classId, `default:${classId}`, trip.id] : [classId, `default:${classId}`, trip.id, payload.sub])).all<ReportRow & { item_title: string }>();
 
+  const updates = await c.env.DB.prepare('SELECT * FROM gita_updates WHERE trip_id = ? ORDER BY created_at DESC, id DESC')
+    .bind(trip.id).all<UpdateRow>();
   return c.json({
+    trips: (await classTrips(c.env, classId)).map(tripJson),
+    selectedTripId: trip.id,
+    updates: updates.results.map(updateJson),
     items: out,
     circulars: circulars.results.map((r) => ({
       number: r.number,
@@ -328,9 +405,12 @@ gita.get('/versions/:id/file', async (c) => {
 // ---------------------------------------------------------------------------
 gita.get('/corpus', async (c) => {
   const classId = await resolveClassId(c);
+  const trips = await classTrips(c.env, classId);
+  const tripId = c.req.query('tripId');
+  if (tripId && !trips.some(t => t.id === tripId)) return c.json({ error: 'Gita non trovata' }, 404);
   const items = await c.env.DB.prepare(
-    'SELECT * FROM gita_items WHERE class_id = ? AND withdrawn = 0 ORDER BY created_at DESC'
-  ).bind(classId).all<ItemRow>();
+    `SELECT * FROM gita_items WHERE class_id = ? AND withdrawn = 0 ${tripId ? 'AND COALESCE(trip_id, ?) = ?' : ''} ORDER BY created_at DESC`
+  ).bind(...(tripId ? [classId, `default:${classId}`, tripId] : [classId])).all<ItemRow>();
   const out = [];
   for (const item of items.results) {
     const v = await currentVersion(c.env, item.id);
@@ -338,13 +418,21 @@ gita.get('/corpus', async (c) => {
       itemId: item.id,
       kind: item.kind,
       category: item.category,
-      title: item.title,
+      title: tripId ? item.title : `${trips.find(t => t.id === (item.trip_id ?? `default:${classId}`))?.name ?? 'Gita'} · ${item.title}`,
       uploadedAt: v?.uploaded_at ?? item.created_at,
       versionNo: v?.version_no ?? null,
       url: v?.url ?? null,
       text: v ? await readText(c.env, v.text_r2_key) : '',
     });
   }
+  // Gli aggiornamenti del rappresentante sono fonti testuali della gita, senza file R2.
+  const updates = await c.env.DB.prepare(`SELECT u.*, t.name AS trip_name FROM gita_updates u
+    JOIN gita_trips t ON t.id = u.trip_id WHERE t.class_id = ? ${tripId ? 'AND t.id = ?' : ''}
+    ORDER BY u.created_at DESC`).bind(...(tripId ? [classId, tripId] : [classId]))
+    .all<UpdateRow & { trip_name: string }>();
+  for (const u of updates.results) out.push({ itemId: u.id, kind: 'UPDATE', category: 'ALTRO',
+    title: tripId ? u.title : `${u.trip_name} · ${u.title}`, uploadedAt: u.created_at,
+    versionNo: null, url: null, text: `${u.author_name}: ${u.body}` });
   return c.json({ documents: out });
 });
 
@@ -353,13 +441,15 @@ gita.get('/corpus', async (c) => {
 // ---------------------------------------------------------------------------
 gita.post('/circulars', requireRole('REPRESENTATIVE'), async (c) => {
   const classId = await resolveClassId(c);
+  const trip = await selectedTrip(c, classId);
+  if (!trip) return c.json({ error: 'Gita non trovata' }, 404);
   const body = await c.req.json<Record<string, unknown>>().catch(() => null);
   const number = typeof body?.number === 'number' ? body.number : Number(body?.number);
   if (!Number.isInteger(number) || number <= 0) return c.json({ error: 'Numero di circolare non valido' }, 400);
   const exists = await c.env.DB.prepare('SELECT number FROM circulars WHERE number = ?').bind(number).first();
   if (!exists) return c.json({ error: 'Circolare non trovata' }, 404);
-  await c.env.DB.prepare('INSERT OR IGNORE INTO gita_circulars (class_id, circular_number, added_by) VALUES (?, ?, ?)')
-    .bind(classId, number, c.get('jwtPayload').sub).run();
+  await c.env.DB.prepare('INSERT OR IGNORE INTO gita_circulars (class_id, trip_id, circular_number, added_by) VALUES (?, ?, ?, ?)')
+    .bind(classId, trip.id, number, c.get('jwtPayload').sub).run();
   return c.json({ ok: true }, 201);
 });
 
@@ -368,10 +458,12 @@ gita.post('/circulars', requireRole('REPRESENTATIVE'), async (c) => {
 // ---------------------------------------------------------------------------
 gita.delete('/circulars/:number', requireRole('REPRESENTATIVE'), async (c) => {
   const classId = await resolveClassId(c);
+  const trip = await selectedTrip(c, classId);
+  if (!trip) return c.json({ error: 'Gita non trovata' }, 404);
   const number = Number(c.req.param('number'));
   if (!Number.isInteger(number)) return c.json({ error: 'Numero di circolare non valido' }, 400);
-  await c.env.DB.prepare('DELETE FROM gita_circulars WHERE class_id = ? AND circular_number = ?')
-    .bind(classId, number).run();
+  await c.env.DB.prepare('DELETE FROM gita_circulars WHERE class_id = ? AND trip_id = ? AND circular_number = ?')
+    .bind(classId, trip.id, number).run();
   return c.json({ ok: true });
 });
 
@@ -380,6 +472,8 @@ gita.delete('/circulars/:number', requireRole('REPRESENTATIVE'), async (c) => {
 // ---------------------------------------------------------------------------
 gita.post('/items', requireRole('REPRESENTATIVE'), async (c) => {
   const classId = await resolveClassId(c);
+  const trip = await selectedTrip(c, classId);
+  if (!trip) return c.json({ error: 'Gita non trovata' }, 404);
   const me = c.get('jwtPayload').sub;
   const isMultipart = (c.req.header('content-type') ?? '').startsWith('multipart/form-data');
 
@@ -393,8 +487,8 @@ gita.post('/items', requireRole('REPRESENTATIVE'), async (c) => {
     if (!category) return c.json({ error: 'Categoria non valida' }, 400);
     const itemId = newUUID();
     await c.env.DB.prepare(
-      'INSERT INTO gita_items (id, class_id, kind, category, title, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).bind(itemId, classId, 'DOCUMENT', category, title, me, romeNow()).run();
+      'INSERT INTO gita_items (id, class_id, trip_id, kind, category, title, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(itemId, classId, trip.id, 'DOCUMENT', category, title, me, romeNow()).run();
     const version = await storeVersion(c.env, {
       classId, itemId, uploadedBy: me, file: form.file, text: form.text, url: null, note: form.note,
     });
@@ -409,8 +503,8 @@ gita.post('/items', requireRole('REPRESENTATIVE'), async (c) => {
   const note = clean(body?.note, MAX_NOTE);
   const itemId = newUUID();
   await c.env.DB.prepare(
-    'INSERT INTO gita_items (id, class_id, kind, category, title, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).bind(itemId, classId, 'LINK', 'ALTRO', title, me, romeNow()).run();
+    'INSERT INTO gita_items (id, class_id, trip_id, kind, category, title, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(itemId, classId, trip.id, 'LINK', 'ALTRO', title, me, romeNow()).run();
   const version = await storeVersion(c.env, {
     classId, itemId, uploadedBy: me, file: null, text: '', url, note,
   });

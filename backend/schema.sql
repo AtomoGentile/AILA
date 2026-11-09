@@ -475,9 +475,16 @@ CREATE INDEX IF NOT EXISTS idx_representative_invites_class ON representative_in
 
 -- 15. GITA (migrazione 018): documenti e link della gita con storico versioni e segnalazioni.
 -- Il file e il testo stanno su R2 (chiavi in gita_versions), vedi la migrazione.
+CREATE TABLE IF NOT EXISTS gita_trips (
+ id TEXT PRIMARY KEY, class_id TEXT NOT NULL REFERENCES classes(id),
+ name TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gita_trips_class ON gita_trips(class_id);
+
 CREATE TABLE IF NOT EXISTS gita_items (
     id TEXT PRIMARY KEY,
     class_id TEXT NOT NULL REFERENCES classes(id),
+    trip_id TEXT REFERENCES gita_trips(id),
     kind TEXT NOT NULL CHECK(kind IN ('DOCUMENT', 'LINK')),
     category TEXT NOT NULL DEFAULT 'ALTRO',
     title TEXT NOT NULL,
@@ -488,6 +495,8 @@ CREATE TABLE IF NOT EXISTS gita_items (
 );
 
 CREATE INDEX IF NOT EXISTS idx_gita_items_class ON gita_items(class_id);
+
+CREATE INDEX IF NOT EXISTS idx_gita_items_trip ON gita_items(trip_id);
 
 CREATE TABLE IF NOT EXISTS gita_versions (
     id TEXT PRIMARY KEY,
@@ -524,10 +533,11 @@ CREATE INDEX IF NOT EXISTS idx_gita_reports_reporter ON gita_reports(reported_by
 -- 16. CIRCOLARI DELLA GITA PER CLASSE (migrazione 019): quelle che il Rappresentante aggiunge.
 CREATE TABLE IF NOT EXISTS gita_circulars (
     class_id TEXT NOT NULL REFERENCES classes(id),
+    trip_id TEXT NOT NULL REFERENCES gita_trips(id),
     circular_number INTEGER NOT NULL REFERENCES circulars(number) ON DELETE CASCADE,
     added_by TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (class_id, circular_number)
+    PRIMARY KEY (trip_id, circular_number)
 );
 
 -- 17. CAMBIO NOME (migrazione 020): lo studente chiede, il Rappresentante (o la Guardia)
@@ -780,3 +790,10 @@ CREATE TABLE IF NOT EXISTS circular_notification_deliveries (
  class_id TEXT NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
  PRIMARY KEY(circular_number,class_id)
 );
+
+CREATE TABLE IF NOT EXISTS gita_updates (
+ id TEXT PRIMARY KEY, trip_id TEXT NOT NULL REFERENCES gita_trips(id),
+ title TEXT NOT NULL, body TEXT NOT NULL, author_id TEXT NOT NULL,
+ author_name TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gita_updates_trip ON gita_updates(trip_id, created_at);

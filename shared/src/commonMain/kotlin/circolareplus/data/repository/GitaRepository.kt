@@ -20,6 +20,7 @@ import circolareplus.domain.model.GitaReport
 import circolareplus.domain.model.GitaSourceDoc
 import circolareplus.domain.model.GitaVersion
 import io.ktor.client.request.forms.formData
+import io.ktor.http.encodeURLParameter
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
 
@@ -30,15 +31,36 @@ import io.ktor.http.HttpHeaders
  */
 class GitaRepository(
     private val api: ApiClient,
-    private val pdfTextExtractor: PdfTextExtractor
+    private val pdfTextExtractor: PdfTextExtractor,
+    private val tripId: String? = null
 ) {
 
+    fun forTrip(id: String?) = GitaRepository(api, pdfTextExtractor, id)
+    private fun scoped(path: String) = if (tripId == null) path
+        else "$path?tripId=${tripId.encodeURLParameter()}"
+
+    suspend fun createTrip(name: String): circolareplus.domain.model.GitaTrip =
+        api.post<Map<String, String>, circolareplus.domain.model.GitaTrip>("/api/gita/trips", mapOf("name" to name))
+
+    suspend fun renameTrip(id: String, name: String) {
+        api.patch<Map<String, String>, GitaOkDto>("/api/gita/trips/$id", mapOf("name" to name))
+    }
+
+    suspend fun publishUpdate(title: String, body: String) {
+        api.post<Map<String, String>, GitaCreatedDto>(scoped("/api/gita/updates"), mapOf("title" to title, "body" to body))
+    }
+
+    suspend fun deleteUpdate(id: String) { api.delete<GitaOkDto>("/api/gita/updates/$id") }
+
     suspend fun feed(): GitaFeed {
-        val dto: GitaFeedDto = api.get("/api/gita")
+        val dto: GitaFeedDto = api.get(scoped("/api/gita"))
         return GitaFeed(
             items = dto.items.map { it.toDomain() },
             reports = dto.reports.map { it.toDomain() },
             canEdit = dto.canEdit,
+            trips = dto.trips,
+            selectedTripId = dto.selectedTripId,
+            updates = dto.updates,
             circulars = dto.circulars.map { GitaCircular(it.number, it.title, it.publishDate, it.pinned) }
         )
     }
@@ -54,7 +76,7 @@ class GitaRepository(
 
     /** Versione corrente di ogni voce, con il testo estratto: il materiale che legge l'assistente. */
     suspend fun sourceDocuments(): List<GitaSourceDoc> {
-        val dto: GitaCorpusResponseDto = api.get("/api/gita/corpus")
+        val dto: GitaCorpusResponseDto = api.get(scoped("/api/gita/corpus"))
         return dto.documents.map { d ->
             GitaSourceDoc(
                 itemId = d.itemId,
@@ -72,7 +94,7 @@ class GitaRepository(
     suspend fun addDocument(title: String, category: GitaCategory, fileName: String, pdf: ByteArray, note: String?) {
         val text = pdfTextExtractor.extractText(pdf)
         val parts = documentParts(title, category, fileName, pdf, text, note)
-        api.postMultipart<GitaCreatedDto>("/api/gita/items", parts)
+        api.postMultipart<GitaCreatedDto>(scoped("/api/gita/items"), parts)
     }
 
     /** Sostituisce un documento: la versione precedente resta nello storico. */
@@ -88,7 +110,7 @@ class GitaRepository(
 
     suspend fun addLink(title: String, url: String, note: String?) {
         api.post<Map<String, String?>, GitaCreatedDto>(
-            "/api/gita/items",
+            scoped("/api/gita/items"),
             mapOf("title" to title, "url" to url, "note" to note?.takeIf { it.isNotBlank() })
         )
     }
@@ -124,8 +146,8 @@ class GitaRepository(
 
     /** Aggiunge o toglie una circolare dalla gita della classe. Solo Rappresentante. */
     suspend fun setCircularPinned(number: Int, pinned: Boolean) {
-        if (pinned) api.post<Map<String, Int>, GitaOkDto>("/api/gita/circulars", mapOf("number" to number))
-        else api.delete<GitaOkDto>("/api/gita/circulars/$number")
+        if (pinned) api.post<Map<String, Int>, GitaOkDto>(scoped("/api/gita/circulars"), mapOf("number" to number))
+        else api.delete<GitaOkDto>(scoped("/api/gita/circulars/$number"))
     }
 
     /** Il Rappresentante segna la segnalazione come risolta (o la riapre). */

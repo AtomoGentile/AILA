@@ -50,7 +50,10 @@ data class GitaFeed(
     val items: List<GitaItem>,
     val reports: List<GitaReport>,
     val canEdit: Boolean,
-    val circulars: List<GitaCircular> = emptyList()
+    val circulars: List<GitaCircular> = emptyList(),
+    val trips: List<GitaTrip> = emptyList(),
+    val selectedTripId: String? = null,
+    val updates: List<GitaUpdate> = emptyList()
 )
 
 /** Circolare che riguarda la gita di questa classe. [pinned]: aggiunta a mano dal Rappresentante. */
@@ -66,3 +69,10 @@ data class GitaSourceDoc(
     val url: String?,
     val text: String
 )
+
+@kotlinx.serialization.Serializable
+data class GitaTrip(val id: String, val name: String)
+
+@kotlinx.serialization.Serializable
+data class GitaUpdate(val id: String, val title: String, val body: String,
+    val authorName: String = "", val createdAt: String = "")
