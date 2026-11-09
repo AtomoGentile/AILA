@@ -321,28 +321,6 @@ fun GitaScreen(
                                     primary = true,
                                     enabled = !busy && !refreshing && tripDialog == null
                                 ) { tint -> AppIcons.Plus(modifier = Modifier.size(18.dp), color = tint) }
-                                androidx.compose.material3.DropdownMenu(
-                                    expanded = actionMenu,
-                                    onDismissRequest = { actionMenu = false }
-                                ) {
-                                    androidx.compose.material3.DropdownMenuItem(
-                                        text = { Text("Scrivi aggiornamento") },
-                                        onClick = { actionMenu = false; openTripDialog("update") }
-                                    )
-                                    androidx.compose.material3.DropdownMenuItem(
-                                        text = { Text("Aggiungi materiale") },
-                                        onClick = { actionMenu = false; addClose = false; addStep = AddStep.Choose }
-                                    )
-                                    androidx.compose.material3.HorizontalDivider()
-                                    androidx.compose.material3.DropdownMenuItem(
-                                        text = { Text("Nuova gita") },
-                                        onClick = { actionMenu = false; openTripDialog("create") }
-                                    )
-                                    androidx.compose.material3.DropdownMenuItem(
-                                        text = { Text("Rinomina gita") },
-                                        onClick = { actionMenu = false; openTripDialog("rename") }
-                                    )
-                                }
                             }
                         }
                     }
@@ -409,6 +387,19 @@ fun GitaScreen(
             AilaAssistantMark(size = 22.dp, brush = SolidColor(tint))
         }
     }
+
+    if (actionMenu && canEdit) GitaActionsSheet(
+        tripName = trips.firstOrNull { it.id == (selectedTripId ?: feed?.selectedTripId) }?.name ?: "Gita",
+        onDismiss = { actionMenu = false },
+        onAction = { action ->
+            when (action) {
+                GitaQuickAction.UPDATE -> openTripDialog("update")
+                GitaQuickAction.MATERIAL -> { addClose = false; addStep = AddStep.Choose }
+                GitaQuickAction.CREATE -> openTripDialog("create")
+                GitaQuickAction.RENAME -> openTripDialog("rename")
+            }
+        }
+    )
 
     tripDialog?.let { dialog ->
         GitaTextSheet(

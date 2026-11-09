@@ -23,7 +23,6 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import circolareplus.design.*
@@ -85,14 +84,10 @@ internal fun GitaTripHeader(
                 drawLine(ink, Offset(size.width * .5f, size.height * .7f), Offset(size.width * .8f, size.height * .4f), strokeWidth = 2.dp.toPx())
             }
         }
-        DropdownMenu(expanded = expanded && enabled, onDismissRequest = { expanded = false }) {
-            trips.forEach { trip ->
-                DropdownMenuItem(
-                    modifier = Modifier.semantics { selected = trip.id == selectedId },
-                    text = { Text(trip.name) }, onClick = { expanded = false; onSelect(trip.id) }
-                )
-            }
-        }
+        if (expanded && enabled) GitaTripPickerSheet(
+            trips = trips, selectedId = selectedId,
+            onDismiss = { expanded = false }, onSelect = onSelect
+        )
     }
 }
 
