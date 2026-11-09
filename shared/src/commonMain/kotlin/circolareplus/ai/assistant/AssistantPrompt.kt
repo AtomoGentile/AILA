@@ -265,7 +265,12 @@ MODALITA' SOLO MATERIALE: questa chat e' aperta dalla sezione Gita. Non usare co
                 historyText.length - FRAME_OVERHEAD_CHARS
             ).coerceAtLeast(MIN_CONTEXT_CHARS)
 
-        val context = AssistantContext.render(knowledge, question, deepTexts, contextBudget, searchQuery, mode)
+        // Keep the provider-window privacy decision independent of space reserved for working
+        // state. A cloud request must not look "local" merely because its remaining context shrank.
+        val contextKnowledge = if (maxChars >= 40_000) knowledge.copy(
+            dynamic = knowledge.dynamic.copy(ratings = emptyList())
+        ) else knowledge
+        val context = AssistantContext.render(contextKnowledge, question, deepTexts, contextBudget, searchQuery, mode)
         val userPrompt = assemble(context, historyText, trimmedQuestion, deepTexts.isNotEmpty())
 
         // Correzione finale: se i conti non tornano (istruzioni piu' lunghe dello spazio, budget

@@ -61,6 +61,19 @@ class AssistantReadToolsTest {
         }
     }
 
+    @Test fun reservingWorkingMemoryDoesNotReintroducePeerRatingsIntoCloudPrompts() {
+        val privateData = knowledge(emptyList()).copy(
+            user = user.copy(role = UserRole.REPRESENTATIVE),
+            dynamic = AssistantDynamicKnowledge(ratings = listOf(
+                circolareplus.data.remote.dto.RatingEntryDto("peer-private-id", "NomePrivatissimo", "CognomePrivatissimo", didactic = 2, behavior = 1)
+            )),
+            readContext = "calendar.search: ".repeat(1_200)
+        )
+        val prompt = AssistantPrompt.build(60_000, privateData, emptyList(), "Com’è la classe?", emptyMap())
+        assertFalse("NomePrivatissimo" in prompt.userPrompt)
+        assertFalse("peer-private-id" in prompt.userPrompt)
+    }
+
     @Test fun pendingDraftAndReadResultsSurviveConversationPersistence() {
         val plan = AssistantActionPlan(listOf(AssistantCalendarAction("calendar.create", "Inglese U7", "2026-11-25", CalendarEventCategory.VERIFICA, visibility = "CLASS")))
         val message = AssistantMessage("a", AssistantAuthor.ASSISTANT, "Ho preparato queste azioni.",
