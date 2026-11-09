@@ -1,10 +1,10 @@
 package circolareplus.ai
 
-/** Ore di lezione di un evento: da [from] a [to] (stessa ora se e' una sola), entrambe tra 1 e 6. */
+/** Ore di lezione di un evento: da [from] a [to] (stessa ora se e' una sola), entrambe tra 1 e 9. */
 internal data class LessonHourRange(val from: Int, val to: Int)
 
 /**
- * Legge le ore di lezione (1-6, il selettore "Da / A" del foglio evento) dal testo scritto
+ * Legge le ore di lezione (1-9, il selettore "Da / A" del foglio evento) dal testo scritto
  * dall'utente: "3ª ora", "terza ora", "dalla 2 alla 4 ora", "2ª-4ª ora", "prime due ore",
  * "ultima ora".
  *
@@ -13,20 +13,20 @@ internal data class LessonHourRange(val from: Int, val to: Int)
  */
 internal object LessonHours {
     const val MIN = 1
-    const val MAX = 6
+    const val MAX = 9
 
     private val WORDS = mapOf(
-        "prim" to 1, "second" to 2, "terz" to 3, "quart" to 4, "quint" to 5, "sest" to 6
+        "prim" to 1, "second" to 2, "terz" to 3, "quart" to 4, "quint" to 5, "sest" to 6, "settim" to 7, "ottav" to 8, "non" to 9
     )
-    private val COUNTS = mapOf("due" to 2, "tre" to 3, "quattro" to 4, "cinque" to 5, "sei" to 6)
+    private val COUNTS = mapOf("due" to 2, "tre" to 3, "quattro" to 4, "cinque" to 5, "sei" to 6, "sette" to 7, "otto" to 8, "nove" to 9)
 
-    private const val NUM = "([1-6]|prim[ao]|second[ao]|terz[ao]|quart[ao]|quint[ao]|sest[ao])"
+    private const val NUM = "([1-9]|prim[ao]|second[ao]|terz[ao]|quart[ao]|quint[ao]|sest[ao]|settim[ao]|ottav[ao]|non[ao])"
     // Suffisso ordinale: "3ª", "3º", "3°", "3a".
     private const val SUF = "[ªº°a]?"
 
     private val range = Regex("\\b(?:dalla|dal|da)\\s+(?:la\\s+)?$NUM\\s*$SUF\\s*(?:ora\\s+)?(?:alla|al|a)\\s+(?:la\\s+)?$NUM\\s*$SUF\\s*ora\\b")
     private val dashed = Regex("\\b$NUM\\s*$SUF\\s*(?:-|–|/|\\se\\s)\\s*$NUM\\s*$SUF\\s*ora\\b")
-    private val firstN = Regex("\\bprime\\s+(due|tre|quattro|cinque|sei|[2-6])\\s+ore\\b")
+    private val firstN = Regex("\\bprime\\s+(due|tre|quattro|cinque|sei|sette|otto|nove|[2-9])\\s+ore\\b")
     private val single = Regex("\\b$NUM\\s*$SUF\\s*ora\\b")
     private val last = Regex("\\bultima\\s+ora\\b")
 
@@ -37,7 +37,7 @@ internal object LessonHours {
      * Le ore dette nel testo. `null` se non ce ne sono o se qualcuna supera [maxHours]: una classe
      * da 5 ore non ha la 6ª. "Ultima ora" e' l'ultima della classe, cioe' [maxHours].
      */
-    fun parse(text: String, maxHours: Int = MAX): LessonHourRange? =
+    fun parse(text: String, maxHours: Int = 6): LessonHourRange? =
         parseAny(text, maxHours)?.takeIf { it.to <= maxHours }
 
     private fun parseAny(text: String, maxHours: Int): LessonHourRange? {
@@ -70,7 +70,7 @@ internal object LessonHours {
      * `null` se cade fuori dalle ore di lezione della classe (prima delle 8:00, dopo la fine della
      * [maxHours]-esima ora: 13:00 con 5 ore, 14:00 con 6) o non e' leggibile.
      */
-    fun fromClock(timeHm: String?, maxHours: Int = MAX): Int? {
+    fun fromClock(timeHm: String?, maxHours: Int = 6): Int? {
         val parts = timeHm?.split(':') ?: return null
         if (parts.size != 2) return null
         val minutes = (parts[0].toIntOrNull() ?: return null) * 60 + (parts[1].toIntOrNull() ?: return null)

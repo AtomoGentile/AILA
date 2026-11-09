@@ -106,7 +106,7 @@ visibility: CLASS per il calendario condiviso, SELF solo se l'utente chiede un e
 Massimo 12 azioni. Una per ciascuna data certa, senza duplicati. Non troncare elenchi più lunghi: chiedi di dividerli, senza azioni.
 Non inventare date, titoli, orari o dettagli. Una data mancante NON significa oggi. Non spostare anni o date esplicite, anche passate.
 time: null se non specificato; altrimenti HH:MM, "3ª ora" o "Dalla 2ª alla 4ª ora". Non trasformare ore di lezione in orari.
-"L'ultima ora" indica l'ultima ora della classe: usa "${knowledge.classLessonHours}ª ora" senza chiedere all'utente a quale ora corrisponde. La classe fa ${knowledge.classLessonHours} ore al giorno.
+Per "ultima ora" usa l'ultima lezione del giorno nell'ORARIO DELLA CLASSE. Senza orario noto usa "${knowledge.classLessonHours}ª ora". Non dedurre fasce dell'orologio. L'orario settimanale non verifica festività o sostituzioni.
 Se l'ultimo messaggio dell'assistente ha awaitingActionInput, interpreta la risposta dell'utente come chiarimento per la richiesta in sospeso. Mantieni tutti i dettagli già forniti nella conversazione (titolo, data, destinatari e orario) e chiedi solo ciò che manca davvero; non scartare il piano e non richiedere di nuovo il titolo o la data già specificati.
 Attività "da definire", "una delle tre date", alternative o proposte non sono appuntamenti certi: non creare eventi per esse, spiega cosa manca in clarification.
 Puoi inserire le attività con data certa e chiedere le date mancanti per le altre. Se la richiesta è soltanto informativa, negativa o annullata, restituisci actions vuoto e clarification vuota.
@@ -125,7 +125,7 @@ circularNumber solo se il numero esiste nei dati e l'evento viene da quella circ
         // Reserve the current turn and recent history before adding app context. A truncated
         // request must never become a partial write; reject it rather than silently clipping.
         val turns = history.takeLast(8).joinToString("\n") {
-            "${it.author}${if (it.awaitingActionInput) " (IN ATTESA DI CHIARIMENTO)" else ""}: ${it.text}" + it.actionPlan?.let { plan ->
+            "${it.author} [stato=${it.actionStatus}]${if (it.awaitingActionInput) " (IN ATTESA DI CHIARIMENTO)" else ""}: ${it.text}" + it.actionPlan?.let { plan ->
                 "\nANTEPRIMA: ${json.encodeToString(plan.copy(requestedByUserId = null, operationId = null, digest = null, expiresAt = null))}"
             }.orEmpty()
         }
@@ -133,8 +133,8 @@ circularNumber solo se il numero esiste nei dati e l'evento viene da quella circ
         val needsExisting = AssistantActionIntent.needsExisting(question) ||
             history.takeLast(8).any { it.author == AssistantAuthor.USER && AssistantActionIntent.needsExisting(it.text) } ||
             history.lastOrNull()?.actionPlan?.actions?.any { it.tool != "calendar.create" } == true
-        val editable = if (!needsExisting) emptyList() else knowledge.calendarEvents.filter { it.isAiGenerated || it.createdByUserId == knowledge.user?.id || knowledge.role == circolareplus.domain.model.UserRole.REPRESENTATIVE }
-            .sortedByDescending { event -> eventWords.count { AssistantContext.normalize(event.title).contains(it) } }
+        val editable = if (!needsExisting && knowledge.readContext.isBlank()) emptyList() else knowledge.calendarEvents.filter { it.isAiGenerated || it.createdByUserId == knowledge.user?.id || knowledge.role == circolareplus.domain.model.UserRole.REPRESENTATIVE }
+            .sortedByDescending { event -> (if (knowledge.readContext.contains(event.id)) 1000 else 0) + eventWords.count { AssistantContext.normalize(event.title).contains(it) } }
         val shown = editable.take(if (maxChars < 14_000) 4 else 40)
         val events = shown.joinToString("\n") { e -> "eventId=${e.id}; title=${e.title}; date=${e.date}; time=${e.time}; category=${e.category}; notes=${e.notes.orEmpty()}; visibility=${if(e.isForAll) "CLASS" else "SPECIFIC"}; visibleToUserIds=${e.visibleToUserIds.orEmpty()}" }
         val recipients = (knowledge.classmates + listOfNotNull(knowledge.user)).distinctBy { it.id }
@@ -221,8 +221,8 @@ circularNumber solo se il numero esiste nei dati e l'evento viene da quella circ
     private fun validTime(time: String?): Boolean {
         if (time == null) return true
         if (time.matches(Regex("([01]\\d|2[0-3]):[0-5]\\d"))) return true
-        if (time.matches(Regex("[1-6]ª ora"))) return true
-        val range = Regex("Dalla ([1-6])ª alla ([1-6])ª ora").matchEntire(time) ?: return false
+        if (time.matches(Regex("[1-9]ª ora"))) return true
+        val range = Regex("Dalla ([1-9])ª alla ([1-9])ª ora").matchEntire(time) ?: return false
         return range.groupValues[1] <= range.groupValues[2]
     }
 }

@@ -7,12 +7,12 @@ import { Hono } from 'hono';
 import type { Env, JWTPayload, EventCategory } from '../types';
 import { authMiddleware, requireRole, newUUID, resolveClassId } from '../auth';
 
-/** HH:MM oppure un'''ora di lezione 1-6: "3ª ora" o "Dalla 2ª alla 4ª ora". */
+/** HH:MM oppure un'''ora di lezione 1-9: "3ª ora" o "Dalla 2ª alla 4ª ora". */
 function isValidEventTime(value: string): boolean {
   if (/^([01]?\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(value)) return true;
-  const single = /^([1-6])ª ora$/.exec(value);
+  const single = /^([1-9])ª ora$/.exec(value);
   if (single) return true;
-  const range = /^Dalla ([1-6])ª alla ([1-6])ª ora$/.exec(value);
+  const range = /^Dalla ([1-9])ª alla ([1-9])ª ora$/.exec(value);
   return range !== null && Number(range[1]) <= Number(range[2]);
 }
 

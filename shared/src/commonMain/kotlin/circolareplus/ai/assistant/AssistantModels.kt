@@ -57,7 +57,9 @@ data class AssistantMessage(
     val actionPlan: AssistantActionPlan? = null,
     val actionStatus: AssistantActionStatus? = null,
     val awaitingActionInput: Boolean = false,
-    val attachedFiles: List<AssistantAttachedFile> = emptyList()
+    val attachedFiles: List<AssistantAttachedFile> = emptyList(),
+    /** Structured read observations, persisted with this turn for contextual follow-ups. */
+    val readContext: String = ""
 )
 
 /** Confirmation belongs to an assistant preview and to the account that requested it. */
@@ -76,5 +78,6 @@ data class AssistantReply(
     val actionPlan: AssistantActionPlan? = null,
     val awaitingActionInput: Boolean = false,
     val createdCalendarEvents: List<circolareplus.domain.model.CalendarEvent> = emptyList(),
-    val calendarChanged: Boolean = false
+    val calendarChanged: Boolean = false,
+    val readContext: String = ""
 )

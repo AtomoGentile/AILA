@@ -11,7 +11,7 @@ import kotlin.test.*
 
 class AssistantActionsTest {
     @Test fun compactUpdateLoadsUnchangedFieldsFromTheActualEvent() {
-        val existing = event(action).copy(createdByUserId = user.id, time = "8ª ora", notes = "Note originali")
+        val existing = event(action).copy(createdByUserId = user.id, time = "10ª ora", notes = "Note originali")
         val context = knowledge.copy(calendarEvents = listOf(existing))
         val plan = assertNotNull(AssistantActionPrompt.parse("""{"actions":[{"tool":"calendar.update","eventId":"e1","fields":["visibility"],"visibility":"SPECIFIC","visibleToUserIds":["u1"]}]}""", context))
         val update = plan.actions.single()
@@ -217,7 +217,7 @@ class AssistantActionsTest {
         listOf("2027-02-29", "2027-04-31", "2027-13-01", "", "20/03/2027").forEach {
             assertFalse(AssistantActionPrompt.validate(plan(action.copy(date = it)), knowledge), it)
         }
-        listOf("25:00", "09:75", "Dalla 4ª alla 2ª ora", "7ª ora", "non specificato").forEach {
+        listOf("25:00", "09:75", "Dalla 4ª alla 2ª ora", "10ª ora", "non specificato").forEach {
             assertFalse(AssistantActionPrompt.validate(plan(action.copy(time = it)), knowledge), it)
         }
     }

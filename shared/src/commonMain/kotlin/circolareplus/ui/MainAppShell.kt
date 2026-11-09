@@ -1455,7 +1455,13 @@ fun MainAppShell(
             "RUNNING" -> AssistantActionStatus.RUNNING
             else -> AssistantActionStatus.ERROR
         }
-        updateAssistantMessage(conversationId, messageId) { it.copy(actionStatus = status) }
+        val executionEvidence = operation.results.joinToString("\n") {
+            "strumento=${it.tool}; eventId=${it.eventId.orEmpty()}; stato=${it.status}"
+        }
+        updateAssistantMessage(conversationId, messageId) { it.copy(
+            actionStatus = status,
+            readContext = if (executionEvidence.isBlank()) it.readContext else "ESITO VERIFICATO DAL SERVER:\n$executionEvidence"
+        ) }
         if (status == AssistantActionStatus.COMPLETED || status == AssistantActionStatus.PARTIAL) {
             appendAssistantMessage(conversationId, AssistantMessage(
                 id = "operation-${operation.id}", author = AssistantAuthor.ASSISTANT,
@@ -1479,9 +1485,8 @@ fun MainAppShell(
         }
     }
 
-    fun cancelAssistantAction(messageId: String) {
-        val conversationId = assistantConversationId
-        val plan = assistantMessages.firstOrNull { it.id == messageId }?.actionPlan
+    fun cancelAssistantAction(messageId: String, conversationId: String = assistantConversationId, originalPlan: circolareplus.ai.assistant.AssistantActionPlan? = null) {
+        val plan = originalPlan ?: assistantMessages.firstOrNull { it.id == messageId }?.actionPlan
         updateAssistantMessage(conversationId, messageId) { it.copy(actionStatus = AssistantActionStatus.CANCELLED, awaitingActionInput = false) }
         plan?.operationId?.let { id -> coroutineScope.launch {
             try { AppContainer.acaRepository.cancel(id) } catch (e: CancellationException) { throw e } catch (_: Exception) {}
@@ -1534,14 +1539,8 @@ fun MainAppShell(
         val filesForTurn = assistantAttachments[conversationId].orEmpty()
         val sourceFiles = (history.flatMap{it.attachedFiles}+filesForTurn).distinctBy{it.localId}.takeLast(5)
 
-        // A new turn replaces older previews, so a later click cannot execute an obsolete plan.
-        assistantMessages.indices.forEach { index ->
-            val old = assistantMessages[index]
-            if (old.actionStatus == AssistantActionStatus.AWAITING_CONFIRMATION) {
-                cancelAssistantAction(old.id)
-            }
-        }
-
+        // Keep the active draft while the user asks questions or supplies a correction.
+        // Its execution authority is revoked only when a replacement preview is ready.
         assistantMessageCounter++
         assistantMessages += AssistantMessage(
             id = "q${currentTimeMillis()}-$assistantMessageCounter",
@@ -1610,10 +1609,30 @@ fun MainAppShell(
 
                 if (currentUser?.id != userAtRequest?.id) return@launch
                 val calendarActionRequest = circolareplus.ai.assistant.AssistantActionIntent.matches(trimmed, history)
-                if (calendarActionRequest) {
-                    calendarEvents = AppContainer.calendarRepository.listEvents()
-                    if (classmates.isEmpty()) classmates = AppContainer.usersRepository.listStudents()
+                var calendarWarning: String? = null
+                if (requestedMode == AssistantMode.GENERAL) {
+                    try {
+                        calendarEvents = AppContainer.calendarRepository.listEvents(requireFresh = true)
+                    } catch (e: CancellationException) { throw e }
+                    catch (e: circolareplus.data.remote.ApiException) {
+                        if (e.statusCode == 401 || e.statusCode == 403) throw e
+                        calendarWarning = "Calendario non aggiornato: lettura dal server non riuscita; dati locali potenzialmente incompleti."
+                    } catch (_: Exception) {
+                        calendarWarning = "Calendario non aggiornato: lettura dal server non riuscita; dati locali potenzialmente incompleti."
+                    }
+                    if (classmates.isEmpty()) {
+                        try { classmates = AppContainer.usersRepository.listStudents() }
+                        catch (e: CancellationException) { throw e }
+                        catch (_: Exception) { /* Missing recipients must not block read-only answers. */ }
+                    }
+                    if (myClassLabel == null) {
+                        try { myClassLabel = AppContainer.preferencesRepository.getClassConfig().classLabel }
+                        catch (e: CancellationException) { throw e }
+                        catch (_: Exception) { /* Unknown class: no timetable is assumed. */ }
+                    }
                 }
+                // Mutations require a verified current snapshot; stale data may only support read answers.
+                if (calendarActionRequest && calendarWarning != null) error(calendarWarning)
                 val reply = AppContainer.newAssistant().ask(
                     question = trimmed,
                     history = history,
@@ -1624,10 +1643,12 @@ fun MainAppShell(
                         user = userAtRequest,
                         profile = currentProfile,
                         classLessonHours = circolareplus.data.ClassSchedule.lessonHours,
+                        classLabel = myClassLabel,
+                        calendarWarning = calendarWarning,
                         classmates = classmates,
                         circulars = circulars,
                         classifications = classifications.toMap(),
-                        calendarEvents = if (calendarActionRequest) calendarEvents else calendarEvents.filter{it.isStudyRelevantFor(userAtRequest)},
+                        calendarEvents = calendarEvents,
                         proposals = boardProposals,
                         dynamic = boardUnavailable?.let { dynamic.copy(unavailable = dynamic.unavailable + it) } ?: dynamic,
                         gita = gita,
@@ -1639,8 +1660,13 @@ fun MainAppShell(
                 if (currentUser?.id != userAtRequest?.id) return@launch
 
                 val verifiedPlan = reply.actionPlan?.let { proposed ->
+                    check(calendarWarning == null) { "Calendario non aggiornato: riprova prima di preparare modifiche." }
                     val operation = AppContainer.acaRepository.preview(proposed)
                     operation.plan.copy(operationId = operation.id, digest = operation.digest, expiresAt = operation.expiresAt)
+                }
+                if (verifiedPlan != null) {
+                    history.filter { it.actionStatus == AssistantActionStatus.AWAITING_CONFIRMATION }
+                        .forEach { cancelAssistantAction(it.id, conversationId, it.actionPlan) }
                 }
                 assistantAgentPhases.remove(conversationId)
                 delay(140)
@@ -1656,7 +1682,8 @@ fun MainAppShell(
                         modelLabel = reply.modelLabel,
                         actionPlan = verifiedPlan,
                         actionStatus = if (verifiedPlan != null) AssistantActionStatus.AWAITING_CONFIRMATION else null,
-                        awaitingActionInput = reply.awaitingActionInput
+                        awaitingActionInput = reply.awaitingActionInput,
+                        readContext = circolareplus.ai.assistant.AssistantReadTools.boundedEvidence(reply.readContext)
                     )
                 )
             } catch (e: CancellationException) {
@@ -2077,6 +2104,9 @@ fun MainAppShell(
     // Ore di lezione della classe (5 o 6): il calendario offre solo quelle.
     LaunchedEffect(user.id) {
         circolareplus.data.ClassSchedule.refresh()
+        myClassLabel = try { AppContainer.preferencesRepository.getClassConfig().classLabel }
+            catch (e: CancellationException) { throw e }
+            catch (_: Exception) { null }
     }
 
     // Mentre si è dentro l'app, continua a classificare in background le circolari rimaste
@@ -2419,6 +2449,7 @@ fun MainAppShell(
             closeRequested = addEventCloseRequested,
             initialStep = addEventInitialStep,
             initialDateIso = addEventInitialDateIso,
+            classLabel = myClassLabel,
             onConfirm = { title, date, endDate, repeat, time, category, visibleToUserIds, notes, customSchedule ->
                 fun create(force: Boolean) {
                     coroutineScope.launch {
@@ -3465,6 +3496,7 @@ fun MainAppShell(
                             ) {
                                 CalendarScreen(
                                     events = calendarEvents,
+                                    classLabel = myClassLabel,
                                     onAddEventClick = {
                                         addEventInitialStep = EventCreationStep.MENU
                                         addEventInitialDateIso = null
@@ -5873,6 +5905,7 @@ private fun AddCalendarEventDialog(
     onConfirm: (String, String, String, String, String?, CalendarEventCategory, List<String>?, String?, List<circolareplus.data.remote.dto.CustomEventDayDto>?) -> Unit,
     initialStep: EventCreationStep = EventCreationStep.MENU,
     initialDateIso: String? = null,
+    classLabel: String? = null,
     /** true quando il chiamante vuole chiudere il foglio (evento creato): scende e poi chiama [onDismiss]. */
     closeRequested: Boolean = false
 ) {
@@ -5906,8 +5939,17 @@ private fun AddCalendarEventDialog(
     var expandedHourPicker by remember { mutableStateOf<String?>(null) }
     var fromHour by remember { mutableStateOf<Int?>(null) }
     var toHour by remember { mutableStateOf<Int?>(null) }
+    var timetableSelection by remember { mutableStateOf<Pair<Long?, circolareplus.data.TimetableLesson>?>(null) }
+    LaunchedEffect(selectedDateMillis, subject) {
+        timetableSelection?.let { (date, lesson) ->
+            if (date != selectedDateMillis || !subject.equals(lesson.subject, ignoreCase = true)) {
+                if (fromHour == lesson.fromHour && toHour == lesson.toHour) { fromHour = null; toHour = null }
+                timetableSelection = null
+            }
+        }
+    }
     // Ore di lezione della classe: 5 (8-13) o 6 (8-14).
-    val maxHours = circolareplus.data.ClassSchedule.lessonHours
+    val maxHours = circolareplus.data.SchoolTimetable.maxHours(classLabel) ?: circolareplus.data.ClassSchedule.lessonHours
     // Le ore di lezione scelte, scritte come le vede la classe: "3ª ora" o "Dalla 2ª alla 4ª ora".
     var aiClockTime by remember { mutableStateOf("") }
     val time = remember(fromHour, toHour, aiClockTime) { lessonHoursLabel(fromHour, toHour).ifBlank { aiClockTime } }
@@ -6372,6 +6414,28 @@ private fun AddCalendarEventDialog(
                         shape = RoundedCornerShape(AppTheme.SmallElementRadius),
                         modifier = Modifier.fillMaxWidth().ailaSheetReveal(2)
                     )
+                    val timetableSuggestions = selectedDateMillis?.let { millis ->
+                        circolareplus.data.SchoolTimetable.suggestions(classLabel, epochMillisToIsoDate(millis), subject)
+                    }.orEmpty()
+                    if (timetableSuggestions.isNotEmpty()) {
+                        Text("Dall’orario della classe", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted,
+                            modifier = Modifier.padding(top = AppTheme.Space8))
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                            timetableSuggestions.forEach { lesson ->
+                                circolareplus.design.AnimatedFilterChip(
+                                    label = "${lesson.subject} · ${lesson.timeLabel}",
+                                    isSelected = subject == lesson.subject && fromHour == lesson.fromHour && toHour == lesson.toHour,
+                                    onClick = {
+                                        timetableSelection = selectedDateMillis to lesson
+                                        subject = lesson.subject
+                                        fromHour = lesson.fromHour
+                                        toHour = lesson.toHour
+                                        aiClockTime = ""
+                                    }
+                                )
+                            }
+                        }
+                    }
                     Spacer(modifier = Modifier.height(AppTheme.Space16))
                     Text(
                         text = "Quando",

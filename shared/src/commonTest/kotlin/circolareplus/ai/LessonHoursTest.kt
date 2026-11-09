@@ -50,7 +50,8 @@ class LessonHoursTest {
         assertNull(LessonHours.parse("verifica alla 7 ora"))
         assertNull(LessonHours.parse("verifica alla 16 ora"))
         assertNull(LessonHours.valid(0))
-        assertNull(LessonHours.valid(7))
+        assertEquals(9, LessonHours.valid(9))
+        assertNull(LessonHours.valid(10))
         assertEquals(6, LessonHours.valid(6))
     }
 
@@ -73,7 +74,7 @@ class LessonHoursTest {
 
     @Test
     fun oreInvalideODiTestoSiScartano() {
-        val json = """{"title":"Verifica","category":"VERIFICA","fromHour":"9","toHour":12}"""
+        val json = """{"title":"Verifica","category":"VERIFICA","fromHour":"10","toHour":12}"""
         val draft = assertNotNull(EventGenerationPrompt.parse(json))
         assertNull(draft.fromHour)
         assertNull(draft.toHour)

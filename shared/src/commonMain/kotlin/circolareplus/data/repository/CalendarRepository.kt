@@ -13,9 +13,9 @@ import circolareplus.domain.model.CalendarEventCategory
 
 class CalendarRepository(private val api: ApiClient) {
 
-    suspend fun listEvents(category: CalendarEventCategory? = null): List<CalendarEvent> {
+    suspend fun listEvents(category: CalendarEventCategory? = null, requireFresh: Boolean = false): List<CalendarEvent> {
         val query = category?.let { "?category=${it.name}" } ?: ""
-        val response: CalendarEventsListResponseDto = api.get("/api/calendar$query")
+        val response: CalendarEventsListResponseDto = api.get("/api/calendar$query", offlineCopy = !requireFresh)
         return response.events.map { it.toDomain() }
     }
 
