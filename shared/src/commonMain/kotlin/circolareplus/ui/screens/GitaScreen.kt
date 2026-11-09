@@ -71,7 +71,6 @@ import circolareplus.design.AilaIconButton
 import circolareplus.design.AilaListRow
 import circolareplus.design.AilaMorphingLoader
 import circolareplus.design.AilaPillTextField
-import circolareplus.design.AilaSectionTitle
 import circolareplus.design.AilaSlidingChipRow
 import circolareplus.design.AnimatedFilterChip
 import circolareplus.design.AppIcons
@@ -146,7 +145,8 @@ fun GitaScreen(
     var trips by remember { mutableStateOf(cachedFeed?.trips.orEmpty()) }
     val tripRepository = remember(repository, selectedTripId) { repository.forTrip(selectedTripId) }
     var tripDialog by remember { mutableStateOf<String?>(null) }
-    var knownCanEdit by remember { mutableStateOf(cachedFeed?.canEdit == true) }
+    var tripDialogClose by remember { mutableStateOf(false) }
+    var actionMenu by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
     // Foglio "+" e foglio di una voce. Il "closeRequested" li fa scendere con la loro animazione
@@ -163,6 +163,11 @@ fun GitaScreen(
     var pickerCirculars by remember { mutableStateOf<List<circolareplus.domain.model.Circular>>(emptyList()) }
     var pickerLoading by remember { mutableStateOf(false) }
     var pickerError by remember { mutableStateOf<String?>(null) }
+    fun openTripDialog(kind: String) {
+        notice = null
+        tripDialogClose = false
+        tripDialog = kind
+    }
     fun loadPickerCirculars() {
         if (pickerLoading) return
         pickerLoading = true
@@ -235,7 +240,6 @@ fun GitaScreen(
         try {
             val loaded = tripRepository.feed()
             trips = loaded.trips
-            knownCanEdit = loaded.canEdit
             feed = loaded
             onFeedLoaded(loaded)
             error = null
@@ -263,6 +267,23 @@ fun GitaScreen(
         current != null -> GitaBody.READY
         error != null -> GitaBody.ERROR
         else -> GitaBody.LOADING
+    }
+
+    val tripHeader: @Composable () -> Unit = {
+        GitaTripHeader(
+            trips = trips,
+            selectedId = selectedTripId ?: feed?.selectedTripId,
+            enabled = !busy && !refreshing && addStep == null && itemStep == null,
+            onSelect = { id ->
+                if (id != (selectedTripId ?: feed?.selectedTripId)) {
+                    selectedTripId = id
+                    feed = null
+                    error = null
+                    notice = null
+                    onMaterialChanged()
+                }
+            }
+        )
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -293,42 +314,42 @@ fun GitaScreen(
                             exit = fadeOut(ailaFadeSpec(AilaDuration.Quick)) + scaleOut(ailaMoveSpec(), targetScale = 0.6f) +
                                 shrinkHorizontally(ailaMoveSpec())
                         ) {
-                            // Come il "+" del Calendario: gradiente del brand (vetro in Glass) e, in
-                            // Material, il foglio nasce da qui e ci rientra.
-                            AilaIconButton(
-                                contentDescription = "Aggiungi alla gita",
-                                onClick = {
-                                    addClose = false
-                                    addStep = AddStep.Choose
-                                },
-                                primary = true,
-                                enabled = !busy,
-                                opensPage = true
-                            ) { tint ->
-                                AppIcons.Plus(modifier = Modifier.size(18.dp), color = tint)
+                            Box {
+                                AilaIconButton(
+                                    contentDescription = "Aggiungi o gestisci la gita",
+                                    onClick = { actionMenu = true },
+                                    primary = true,
+                                    enabled = !busy && !refreshing && tripDialog == null
+                                ) { tint -> AppIcons.Plus(modifier = Modifier.size(18.dp), color = tint) }
+                                androidx.compose.material3.DropdownMenu(
+                                    expanded = actionMenu,
+                                    onDismissRequest = { actionMenu = false }
+                                ) {
+                                    androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text("Scrivi aggiornamento") },
+                                        onClick = { actionMenu = false; openTripDialog("update") }
+                                    )
+                                    androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text("Aggiungi materiale") },
+                                        onClick = { actionMenu = false; addClose = false; addStep = AddStep.Choose }
+                                    )
+                                    androidx.compose.material3.HorizontalDivider()
+                                    androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text("Nuova gita") },
+                                        onClick = { actionMenu = false; openTripDialog("create") }
+                                    )
+                                    androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text("Rinomina gita") },
+                                        onClick = { actionMenu = false; openTripDialog("rename") }
+                                    )
+                                }
                             }
                         }
                     }
                 }
             )
-            GitaTripHeader(
-                trips = trips,
-                selectedId = selectedTripId ?: feed?.selectedTripId,
-                canEdit = knownCanEdit,
-                enabled = !busy && !refreshing && addStep == null && itemStep == null,
-                onSelect = { id ->
-                    if (id != (selectedTripId ?: feed?.selectedTripId)) {
-                        selectedTripId = id
-                        feed = null
-                        error = null
-                        notice = null
-                        onMaterialChanged()
-                    }
-                },
-                onCreate = { tripDialog = "create" },
-                onRename = { tripDialog = "rename" },
-                onUpdate = { tripDialog = "update" }
-            )
+            if (body != GitaBody.READY) Box(Modifier.padding(horizontal = AppTheme.Space16)) { tripHeader() }
+
             AnimatedContent(
                 targetState = body,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -356,6 +377,7 @@ fun GitaScreen(
                     GitaBody.READY -> feed?.let { ready ->
                         key(ready.selectedTripId) { GitaList(
                             feed = ready,
+                            tripHeader = tripHeader,
                             notice = notice,
                             onOpen = { itemStep = ItemStep.Detail(it) },
                             onPinCircular = { circular, pinned ->
@@ -389,13 +411,14 @@ fun GitaScreen(
     }
 
     tripDialog?.let { dialog ->
-        GitaTextDialog(
+        GitaTextSheet(
             kind = dialog,
             initialName = if (dialog == "rename") trips.firstOrNull { it.id == (selectedTripId ?: feed?.selectedTripId) }?.name.orEmpty()
                 else if (dialog == "create") "Gita ${trips.size + 1}" else "",
             busy = busy,
             error = notice?.takeIf { it.isError }?.text,
-            onDismiss = { tripDialog = null },
+            closeRequested = tripDialogClose,
+            onDismiss = { tripDialog = null; tripDialogClose = false },
             onSave = { title, text ->
                 write(if (dialog == "update") "Aggiornamento pubblicato." else "Gita salvata.") {
                     when (dialog) {
@@ -407,7 +430,7 @@ fun GitaScreen(
                         "rename" -> (selectedTripId ?: feed?.selectedTripId)?.let { repository.renameTrip(it, title) }
                         else -> tripRepository.publishUpdate(title, text)
                     }
-                    tripDialog = null
+                    tripDialogClose = true
                 }
             }
         )
@@ -507,6 +530,7 @@ private fun LazyItemScope.gitaMotion(): Modifier = Modifier.animateItem(
 @Composable
 private fun GitaList(
     feed: GitaFeed,
+    tripHeader: @Composable () -> Unit,
     notice: GitaNotice?,
     onOpen: (GitaItem) -> Unit,
     onPinCircular: (GitaCircular, Boolean) -> Unit,
@@ -520,9 +544,16 @@ private fun GitaList(
     val needle = query.trim().lowercase()
     val listState = rememberLazyListState()
 
-    // "Segnalazioni" ha senso solo se ce ne sono: prima la chip c'era sempre e portava a una lista vuota.
-    val filters = if (feed.reports.isNotEmpty()) GitaFilter.entries else GitaFilter.entries.filter { it != GitaFilter.REPORTS }
-    LaunchedEffect(filters.size) { if (filter !in filters) filter = GitaFilter.ALL }
+    // I filtri descrivono i contenuti presenti: niente sezioni vuote nella vista Tutti.
+    val filters = GitaFilter.entries.filter { when (it) {
+        GitaFilter.ALL -> true
+        GitaFilter.UPDATES -> feed.updates.isNotEmpty()
+        GitaFilter.CIRCULARS -> feed.circulars.isNotEmpty()
+        GitaFilter.DOCUMENTS -> feed.items.any { item -> !item.isLink }
+        GitaFilter.LINKS -> feed.items.any { item -> item.isLink }
+        GitaFilter.REPORTS -> feed.reports.isNotEmpty()
+    } }
+    LaunchedEffect(filters) { if (filter !in filters) filter = GitaFilter.ALL }
     // Cambiando filtro si torna in cima, come nella lista delle Circolari.
     LaunchedEffect(filter) { listState.scrollToItem(0) }
 
@@ -533,7 +564,13 @@ private fun GitaList(
     val circularsShown = feed.circulars.count { circularMatches(it) }
     val documentsShown = documents.count { matches(it.title) }
     val linksShown = links.count { matches(it.title) }
+    val updates = feed.updates.filter { matches(it.title) || matches(it.body) }
     val show = { f: GitaFilter -> filter == GitaFilter.ALL || filter == f }
+    val hasResults = (show(GitaFilter.CIRCULARS) && circularsShown > 0) ||
+        (show(GitaFilter.DOCUMENTS) && documentsShown > 0) ||
+        (show(GitaFilter.LINKS) && linksShown > 0) ||
+        (show(GitaFilter.UPDATES) && updates.isNotEmpty()) ||
+        (show(GitaFilter.REPORTS) && feed.reports.isNotEmpty())
     val allEmpty = feed.circulars.isEmpty() && feed.items.isEmpty() && feed.reports.isEmpty() && feed.updates.isEmpty()
 
     // Voci gia' presenti alla prima apertura: le righe che arrivano dopo (un documento appena
@@ -552,6 +589,7 @@ private fun GitaList(
         contentPadding = PaddingValues(start = AppTheme.Space16, end = AppTheme.Space16, top = AppTheme.Space8, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)
     ) {
+        item(key = "tripHeader") { tripHeader() }
         item(key = "search") {
             Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
                 AilaPillTextField(
@@ -585,7 +623,7 @@ private fun GitaList(
                         }
                     }
                 )
-                AilaSlidingChipRow(
+                if (filters.size > 2) AilaSlidingChipRow(
                     selectedIndex = filters.indexOf(filter).coerceAtLeast(0),
                     itemCount = filters.size,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space4)
@@ -611,23 +649,15 @@ private fun GitaList(
             }
         }
 
-        if (show(GitaFilter.UPDATES)) {
-            val updates = feed.updates.filter { matches(it.title) || matches(it.body) }
-            item(key = "updatesHeader") {
-                Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        AilaSectionTitle(text = "Aggiornamenti")
-                        Text("${updates.size}", style = MaterialTheme.typography.labelLarge, color = AppTheme.TextMuted)
-                    }
-                    if (updates.isEmpty()) Text(
-                        if (needle.isBlank()) "Qui trovi le novità pubblicate dal rappresentante." else "Nessun aggiornamento trovato.",
-                        style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted
-                    )
-                }
-            }
-            // Una card per elemento lazy: gli aggiornamenti fuori schermo non si compongono.
+        if (show(GitaFilter.UPDATES) && updates.isNotEmpty()) {
+            item(key = "updatesHeader") { GitaSectionHeading("Aggiornamenti", "${updates.size}") }
             items(updates, key = { "update:${it.id}" }) { update ->
-                GitaUpdatesSection(updates = listOf(update), canEdit = canEdit, busy = busy, onDelete = onDeleteUpdate)
+                GitaUpdateCard(update = update, canEdit = canEdit, busy = busy, onDelete = onDeleteUpdate)
+            }
+        }
+        if (!allEmpty && needle.isNotBlank() && !hasResults) {
+            item(key = "noResults") {
+                AilaEmptyState(title = "Nessun risultato", message = "Prova con un altro titolo o una parola diversa.")
             }
         }
 
@@ -645,13 +675,9 @@ private fun GitaList(
                 )
             }
         } else {
-            if (show(GitaFilter.CIRCULARS)) {
+            if (show(GitaFilter.CIRCULARS) && circularsShown > 0) {
                 item(key = "circulars") {
                     GitaSection(title = "Circolari della gita", count = circularsShown, modifier = gitaMotion()) {
-                        EmptyLine(
-                            visible = circularsShown == 0,
-                            text = if (needle.isEmpty()) "Nessuna circolare sulla gita per questa classe." else "Nessuna circolare trovata."
-                        )
                         feed.circulars.forEach { circular ->
                             key(circular.number) {
                                 RowReveal(visible = circularMatches(circular), appear = "c${circular.number}" !in initialKeys) {
@@ -677,13 +703,9 @@ private fun GitaList(
                 }
             }
 
-            if (show(GitaFilter.DOCUMENTS)) {
+            if (show(GitaFilter.DOCUMENTS) && documentsShown > 0) {
                 item(key = "documents") {
                     GitaSection(title = "Documenti", count = documentsShown, modifier = gitaMotion()) {
-                        EmptyLine(
-                            visible = documentsShown == 0,
-                            text = if (needle.isEmpty()) "Nessun documento caricato." else "Nessun documento trovato."
-                        )
                         documents.forEach { item ->
                             key(item.id) {
                                 RowReveal(visible = matches(item.title), appear = item.id !in initialKeys) {
@@ -695,13 +717,9 @@ private fun GitaList(
                 }
             }
 
-            if (show(GitaFilter.LINKS)) {
+            if (show(GitaFilter.LINKS) && linksShown > 0) {
                 item(key = "links") {
                     GitaSection(title = "Link utili", count = linksShown, modifier = gitaMotion()) {
-                        EmptyLine(
-                            visible = linksShown == 0,
-                            text = if (needle.isEmpty()) "Nessun link." else "Nessun link trovato."
-                        )
                         links.forEach { item ->
                             key(item.id) {
                                 RowReveal(visible = matches(item.title), appear = item.id !in initialKeys) {
@@ -741,8 +759,7 @@ private fun GitaList(
 }
 
 /**
- * Sezione della Gita: un titolo con il conteggio (che si dissolve da un numero all'altro) e le
- * righe raccolte in una sola card. Il titolo è quello delle altre schermate ([AilaSectionTitle]).
+ * Sezione compatta: titolo neutro, conteggio discreto e righe raccolte in una card.
  */
 @Composable
 private fun GitaSection(
@@ -753,21 +770,7 @@ private fun GitaSection(
     content: @Composable ColumnScope.() -> Unit
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = AppTheme.Space4)) {
-            AilaSectionTitle(text = title, modifier = Modifier.weight(1f))
-            AnimatedContent(
-                targetState = if (countLabel != null) "$count $countLabel" else "$count",
-                transitionSpec = {
-                    ContentTransform(
-                        targetContentEnter = fadeIn(ailaFadeSpec(150, delayMillis = 50)),
-                        initialContentExit = fadeOut(ailaFadeSpec(80))
-                    )
-                },
-                label = "gitaCount"
-            ) { label ->
-                Text(label, style = MaterialTheme.typography.labelLarge, color = AppTheme.TextMuted)
-            }
-        }
+        GitaSectionHeading(title, if (countLabel != null) "$count $countLabel" else "$count")
         AilaCard(modifier = Modifier.fillMaxWidth(), content = content)
     }
 }
@@ -782,19 +785,6 @@ private fun RowReveal(visible: Boolean, appear: Boolean, content: @Composable ()
     state.targetState = visible
     AnimatedVisibility(visibleState = state, enter = ailaExpandEnter(), exit = ailaCollapseExit()) {
         content()
-    }
-}
-
-/** Riga di testo dentro una card quando non c'e' niente: si apre e si chiude come le righe vere. */
-@Composable
-private fun EmptyLine(visible: Boolean, text: String) {
-    AnimatedVisibility(visible = visible, enter = ailaExpandEnter(), exit = ailaCollapseExit()) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = AppTheme.TextMuted,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12)
-        )
     }
 }
 
