@@ -5,6 +5,7 @@ import circolareplus.domain.model.User
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
+import com.tom_roush.pdfbox.text.TextPosition
 import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -34,7 +35,18 @@ class SeatMapPdfExportTest {
             assertEquals(1, document.numberOfPages)
             assertEquals(842f, document.getPage(0).mediaBox.width)
             assertEquals(595f, document.getPage(0).mediaBox.height)
-            val text = PDFTextStripper().getText(document)
+            var titleBottom: Float? = null
+            var subtitleTop: Float? = null
+            val stripper = object : PDFTextStripper() {
+                override fun writeString(text: String, positions: MutableList<TextPosition>) {
+                    if (text.contains("Mappa Posti")) titleBottom = positions.maxOf { it.yDirAdj }
+                    if (text.contains("Generata il")) subtitleTop = positions.minOf { it.yDirAdj - it.heightDir }
+                    super.writeString(text, positions)
+                }
+            }
+            val text = stripper.getText(document)
+            assertTrue((subtitleTop ?: error("Missing date")) - (titleBottom ?: error("Missing title")) >= 6f,
+                "The printed date must have clear space below the title")
             assertTrue(text.contains("Mappa Posti"))
             assertTrue(text.contains("Generata il"))
             assertTrue(text.contains("Studente 12"))
