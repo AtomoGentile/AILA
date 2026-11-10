@@ -6687,37 +6687,23 @@ private fun HourDropdown(
     minHour: Int = 1,
     maxHour: Int = 6
 ) {
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    var anchorWidth by remember { mutableStateOf(0.dp) }
-    Box(modifier = modifier.onGloballyPositioned { anchorWidth = with(density) { it.size.width.toDp() } }) {
-        EventFormValueRow(
-            label = label,
-            value = value?.let { "${it}ª ora" } ?: "Non impostata",
-            onClick = onToggle,
-            icon = { AppIcons.ChevronRight(Modifier.size(18.dp).rotate(if (expanded) 270f else 90f), color = AppTheme.TextMuted) }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    EventFormValueRow(
+        label = label,
+        value = value?.let { "${it}ª ora" } ?: "Non impostata",
+        onClick = { focusManager.clearFocus(); onToggle() },
+        modifier = modifier,
+        icon = { AppIcons.ChevronRight(Modifier.size(18.dp).rotate(90f), color = AppTheme.TextMuted) }
+    )
+    if (expanded) {
+        val hours = (minHour..maxHour).toList()
+        circolareplus.ui.screens.EventFormOptionsSheet(
+            label = if (label == "Da") "Ora iniziale" else if (label == "A") "Ora finale" else label,
+            options = hours.map { "${it}ª ora" },
+            selectedIndex = hours.indexOf(value),
+            onDismiss = { if (expanded) onToggle() },
+            onSelect = { onSelect(hours[it]) }
         )
-        // DropdownMenu vive in un popup: apertura e chiusura non cambiano l'altezza del form.
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { if (expanded) onToggle() },
-            modifier = Modifier.width(anchorWidth.coerceAtLeast(120.dp)).heightIn(max = 260.dp)
-                .background(if (AppTheme.isGlass) AppTheme.FieldSurface else AppTheme.SurfaceWhite)
-        ) {
-            (minHour..maxHour).forEach { hour ->
-                val isSelected = value == hour
-                DropdownMenuItem(
-                    text = {
-                        Text("${hour}ª ora", fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelected) AppTheme.PrimaryBlue else AppTheme.TextDark)
-                    },
-                    onClick = { onSelect(hour) },
-                    modifier = Modifier.background(if (isSelected) AppTheme.TintBlue else Color.Transparent),
-                    trailingIcon = {
-                        if (isSelected) AppIcons.Check(modifier = Modifier.size(16.dp), color = AppTheme.PrimaryBlue)
-                    }
-                )
-            }
-        }
     }
 }
 

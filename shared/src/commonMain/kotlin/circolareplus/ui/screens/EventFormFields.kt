@@ -109,11 +109,21 @@ internal fun EventFormDropdown(
     EventFormValueRow(label, options.getOrElse(selectedIndex) { "Scegli" }, { focusManager.clearFocus(); expanded = true }, modifier = modifier, icon = {
         AppIcons.ChevronRight(Modifier.size(18.dp).rotate(90f), color = AppTheme.TextMuted)
     })
-    if (expanded) circolareplus.design.AilaBottomSheet(onDismissRequest = { expanded = false }) {
+    if (expanded) EventFormOptionsSheet(label, options, selectedIndex, { expanded = false }, onSelect)
+}
+
+/** Shared choice panel, also used by the lesson-hour range selectors. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun EventFormOptionsSheet(
+    label: String, options: List<String>, selectedIndex: Int,
+    onDismiss: () -> Unit, onSelect: (Int) -> Unit
+) {
+    circolareplus.design.AilaBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(label, style = MaterialTheme.typography.titleLarge, color = AppTheme.TextDark, modifier = Modifier.weight(1f))
-                circolareplus.design.AilaIconButton(contentDescription = "Chiudi $label", onClick = { expanded = false }) { tint ->
+                circolareplus.design.AilaIconButton(contentDescription = "Chiudi $label", onClick = onDismiss) { tint ->
                     AppIcons.Close(Modifier.size(18.dp), color = tint)
                 }
             }
@@ -124,7 +134,7 @@ internal fun EventFormDropdown(
                     Row(
                         Modifier.fillMaxWidth().clip(EventFormShape)
                             .background(if (index == selectedIndex) AppTheme.TintBlue else AppTheme.FieldSurface)
-                            .selectable(selected = index == selectedIndex, role = Role.RadioButton, onClick = { expanded = false; onSelect(index) })
+                            .selectable(selected = index == selectedIndex, role = Role.RadioButton, onClick = { onDismiss(); onSelect(index) })
                             .heightIn(min = 52.dp).padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)

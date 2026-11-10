@@ -278,19 +278,29 @@ fun CalendarScreen(
             if (timetable != null) {
                 val lessons = circolareplus.data.SchoolTimetable.lessons(classLabel, selectedDateIso)
                 AilaCard(onClick = { showTimetable = true }, transformKey = "class-timetable") {
-                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        AppIcons.Calendar(Modifier.size(20.dp), color = AppTheme.TextMuted)
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("Lezioni del giorno", style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
-                            Text(if (lessons.isEmpty()) "Nessuna lezione prevista · apri la settimana" else
-                                lessons.joinToString(" · ") {
-                                    val hours = if (it.fromHour == it.toHour) "${it.fromHour}ª" else "${it.fromHour}ª–${it.toHour}ª"
-                                    "$hours ${it.subject.lowercase().replaceFirstChar { char -> char.uppercase() }}"
-                                },
-                                style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            AppIcons.Calendar(Modifier.size(20.dp), color = AppTheme.TextMuted)
+                            Text("Lezioni del giorno", style = MaterialTheme.typography.labelLarge,
+                                color = AppTheme.TextDark, modifier = Modifier.weight(1f))
+                            AppIcons.ChevronRight(Modifier.size(18.dp), color = AppTheme.TextMuted)
                         }
-                        AppIcons.ChevronRight(Modifier.size(18.dp), color = AppTheme.TextMuted)
+                        if (lessons.isEmpty()) {
+                            Text("Nessuna lezione prevista · apri la settimana",
+                                style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+                        } else lessons.forEach { lesson ->
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Text(if (lesson.fromHour == lesson.toHour) "${lesson.fromHour}ª" else "${lesson.fromHour}ª–${lesson.toHour}ª",
+                                    style = MaterialTheme.typography.labelMedium, color = AppTheme.PrimaryBlue,
+                                    modifier = Modifier.width(48.dp))
+                                Text(if (lesson.subject.length <= 4) lesson.subject else
+                                    lesson.subject.lowercase().replaceFirstChar { it.uppercase() },
+                                    style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextDark,
+                                    modifier = Modifier.weight(1f))
+                            }
+                        }
                     }
                 }
                 Spacer(Modifier.height(AppTheme.Space12))
