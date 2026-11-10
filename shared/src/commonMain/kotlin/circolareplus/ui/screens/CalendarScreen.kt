@@ -78,10 +78,6 @@ fun CalendarScreen(
     var showTimetable by remember { mutableStateOf(false) }
     val timetable = circolareplus.data.SchoolTimetable.week(classLabel)
 
-    if (showTimetable && timetable != null) {
-        TimetableSheet(classLabel = classLabel.orEmpty(), onDismiss = { showTimetable = false })
-    }
-
     var visibleYear by rememberSaveable { mutableStateOf(todayDate.year) }
     var visibleMonth by rememberSaveable { mutableStateOf(todayDate.month) }
     var selectedDay by rememberSaveable { mutableStateOf(todayDate.day) }
@@ -131,6 +127,9 @@ fun CalendarScreen(
     // quindi il confronto fra stringhe e' quello fra date).
     val isPastDay = selectedDateIso < todayDate.toIso()
 
+    // The Material sheet is drawn in this layout (unlike a platform AlertDialog).
+    // Keep its host after the opaque calendar surface so it also receives touch input.
+    Box(Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -463,6 +462,10 @@ fun CalendarScreen(
                 daySection()
             }
         }
+    }
+    if (showTimetable && timetable != null) {
+        TimetableSheet(classLabel = classLabel.orEmpty(), onDismiss = { showTimetable = false })
+    }
     }
 }
 

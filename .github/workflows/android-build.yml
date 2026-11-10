@@ -1,8 +1,7 @@
 name: Android Build
 
-# Compila il codice Kotlin di :shared e :androidApp per Android. Nessun test a schermo: serve a
-# scoprire subito un errore di compilazione, dato che non tutti gli ambienti di sviluppo
-# riescono a scaricare le dipendenze da Google Maven.
+# Compila Android e verifica il codice condiviso, incluse interazioni Compose su Robolectric.
+# Gli screenshot dei test UI sono allegati al report per controllare anche il layout.
 # Produce anche AILA.apk (release firmato con la chiave debug) come artifact, e lo allega alla
 # release sui tag v*.
 

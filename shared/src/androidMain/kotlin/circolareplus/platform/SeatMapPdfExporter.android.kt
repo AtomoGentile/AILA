@@ -62,12 +62,7 @@ private fun renderSeatMapPdf(assignments: List<DeskAssignment>, studentsMap: Map
     val page = document.startPage(pageInfo)
     val canvas = page.canvas
 
-    var y = drawHeader(canvas)
-
-    val columns = ((assignments.maxOfOrNull { it.column } ?: 0) + 1).coerceAtLeast(1)
-    val rows = ((assignments.maxOfOrNull { it.row } ?: 0) + 1).coerceAtLeast(1)
-    drawDesks(canvas, assignments, studentsMap, columns, rows, top = y)
-    drawFooter(canvas)
+    drawSeatMapPage(canvas, assignments, studentsMap)
 
     document.finishPage(page)
 
@@ -76,6 +71,17 @@ private fun renderSeatMapPdf(assignments: List<DeskAssignment>, studentsMap: Map
     FileOutputStream(file).use { document.writeTo(it) }
     document.close()
     return file
+}
+
+/** Shared drawing entry point for PDF output and print-layout regression rendering. */
+internal fun drawSeatMapPage(canvas: Canvas, assignments: List<DeskAssignment>, studentsMap: Map<String, User>) {
+    val y = drawHeader(canvas)
+
+    val columns = ((assignments.maxOfOrNull { it.column } ?: 0) + 1).coerceAtLeast(1)
+    val rows = ((assignments.maxOfOrNull { it.row } ?: 0) + 1).coerceAtLeast(1)
+    drawDesks(canvas, assignments, studentsMap, columns, rows, top = y)
+    drawFooter(canvas)
+
 }
 
 // Palette allineata al design system AILA (vedi AppTheme.kt: PrimaryBlue, HeroGradient*, TextDark/Muted, Hairline).
@@ -103,11 +109,12 @@ private fun drawHeader(canvas: Canvas): Float {
         isAntiAlias = true
     }
 
-    var y = MARGIN + 6f
-    canvas.drawText("Mappa Posti", MARGIN, y + 15f, titlePaint)
-    y += 24f
-    canvas.drawText("Generata il ${currentDateLabel()}", MARGIN, y, subtitlePaint)
-    y += 14f
+    // Canvas coordinates are baselines: leave an actual 8 pt gap below the title's descenders.
+    val titleBaseline = MARGIN - titlePaint.fontMetrics.ascent
+    canvas.drawText("Mappa Posti", MARGIN, titleBaseline, titlePaint)
+    val subtitleBaseline = titleBaseline + titlePaint.fontMetrics.descent + 8f - subtitlePaint.fontMetrics.ascent
+    canvas.drawText("Generata il ${currentDateLabel()}", MARGIN, subtitleBaseline, subtitlePaint)
+    var y = subtitleBaseline + subtitlePaint.fontMetrics.descent + 14f
 
     // Sottile linea d'accento sfumata sotto al titolo, per legare la testata al resto del
     // design system senza appesantire (la stessa coppia di colori del gradiente hero dell'app).
