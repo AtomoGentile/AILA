@@ -5934,6 +5934,7 @@ private fun AddCalendarEventDialog(
     var showDatePicker by remember { mutableStateOf(false) }
     var showEndDatePicker by remember { mutableStateOf(false) }
     var repeatFrequency by remember { mutableStateOf("NONE") }
+    var showMultiDayOptions by remember { mutableStateOf(false) }
     var customWeekdays by remember { mutableStateOf(setOf<Int>()) }
     var customTimes by remember { mutableStateOf(mapOf<Int, Int?>()) }
     var expandedHourPicker by remember { mutableStateOf<String?>(null) }
@@ -6149,7 +6150,6 @@ private fun AddCalendarEventDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .appImePadding()
-                .verticalScroll(rememberScrollState())
                 .padding(horizontal = AppTheme.Space16)
                 .padding(top = AppTheme.Space12)
                 .padding(bottom = AppTheme.Space24)
@@ -6211,7 +6211,7 @@ private fun AddCalendarEventDialog(
             // L'altezza del foglio segue con una molla, senza tagliare il contenuto.
             androidx.compose.animation.AnimatedContent(
                 targetState = step,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.weight(1f, fill = false).fillMaxWidth().verticalScroll(rememberScrollState()),
                 transitionSpec = {
                     androidx.compose.animation.ContentTransform(
                         // Dissolvenze con ailaFadeSpec, la piccola crescita con ailaMoveSpec (con
@@ -6405,185 +6405,41 @@ private fun AddCalendarEventDialog(
                         modifier = Modifier.fillMaxWidth().ailaSheetReveal(1)
                     )
                     Spacer(modifier = Modifier.height(AppTheme.Space12))
-                    OutlinedTextField(
+                    EventFormValueRow(
+                        label = "Data",
+                        value = dateLabel.replaceFirstChar { it.uppercase() },
+                        onClick = { showDatePicker = true },
+                        icon = { AppIcons.Calendar(Modifier.size(20.dp), color = AppTheme.PrimaryBlue) },
+                        modifier = Modifier.ailaSheetReveal(2)
+                    )
+                    Spacer(modifier = Modifier.height(AppTheme.Space16))
+                    val lessonsForDate = selectedDateMillis?.let { millis ->
+                        circolareplus.data.SchoolTimetable.lessons(classLabel, epochMillisToIsoDate(millis))
+                    }.orEmpty()
+                    EventSubjectAutocomplete(
                         value = subject,
                         onValueChange = { subject = it },
-                        label = { Text("Materia (opzionale)") },
-                        singleLine = true,
-                        colors = circolareplus.design.ailaFieldColors(),
-                        shape = RoundedCornerShape(AppTheme.SmallElementRadius),
-                        modifier = Modifier.fillMaxWidth().ailaSheetReveal(2)
-                    )
-                    val timetableSuggestions = selectedDateMillis?.let { millis ->
-                        circolareplus.data.SchoolTimetable.suggestions(classLabel, epochMillisToIsoDate(millis), subject)
-                    }.orEmpty()
-                    if (timetableSuggestions.isNotEmpty()) {
-                        Text("Dall’orario della classe", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted,
-                            modifier = Modifier.padding(top = AppTheme.Space8))
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
-                            timetableSuggestions.forEach { lesson ->
-                                circolareplus.design.AnimatedFilterChip(
-                                    label = "${lesson.subject} · ${lesson.timeLabel}",
-                                    isSelected = subject == lesson.subject && fromHour == lesson.fromHour && toHour == lesson.toHour,
-                                    onClick = {
-                                        timetableSelection = selectedDateMillis to lesson
-                                        subject = lesson.subject
-                                        fromHour = lesson.fromHour
-                                        toHour = lesson.toHour
-                                        aiClockTime = ""
-                                    }
-                                )
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(AppTheme.Space16))
-                    Text(
-                        text = "Quando",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = AppTheme.TextMuted,
-                        modifier = Modifier.ailaSheetReveal(3).padding(bottom = AppTheme.Space8)
-                    )
-                    Row(
-                        modifier = Modifier.ailaSheetReveal(3),
-                        horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .weight(1.4f)
-                                .heightIn(min = 56.dp)
-                                .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                                .border(1.dp, AppTheme.FieldOutline, RoundedCornerShape(AppTheme.SmallElementRadius))
-                                .clickable { showDatePicker = true }
-                                .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space12),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            AppIcons.Calendar(modifier = Modifier.size(16.dp), color = AppTheme.PrimaryBlue)
-                            Spacer(modifier = Modifier.width(AppTheme.Space8))
-                            Text(
-                                text = dateLabel,
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Medium,
-                                color = if (selectedDateMillis != null) AppTheme.TextDark else AppTheme.TextFaint,
-                                maxLines = 1
-                            )
-                        }
-                    }
-                    val endDateLabel = selectedEndDateMillis?.let { millis ->
-                        val civil = circolareplus.util.parseIsoDate(epochMillisToIsoDate(millis))
-                        if (civil != null) "Fino al ${civil.day} ${circolareplus.util.ITALIAN_MONTHS.getOrNull(civil.month)?.lowercase().orEmpty()} ${civil.year}" else "Fino al"
-                    } ?: if (selectedDateMillis == null) "Scegli prima una data di inizio" else "Scegli la data finale"
-                    Spacer(modifier = Modifier.height(AppTheme.Space16))
-                    Text(
-                        text = "Ripeti",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = AppTheme.TextMuted,
-                        modifier = Modifier.ailaSheetReveal(3).padding(bottom = AppTheme.Space8)
-                    )
-                    Column(
-                        modifier = Modifier.fillMaxWidth().ailaSheetReveal(3),
-                        verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
-                    ) {
-                        listOf("NONE" to "Mai", "DAILY" to "Ogni giorno", "WEEKLY" to "Ogni settimana", "CUSTOM" to "Personalizzata").chunked(2).forEach { options ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
-                                options.forEach { (value, label) ->
-                                    circolareplus.design.AnimatedFilterChip(
-                                        label = label,
-                                        modifier = Modifier.weight(1f),
-                                        isSelected = repeatFrequency == value,
-                                        onClick = { repeatFrequency = value; expandedHourPicker = null }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    if (repeatFrequency == "CUSTOM") {
-                        Spacer(modifier = Modifier.height(AppTheme.Space12))
-                        Text("Giorni e orari", style = MaterialTheme.typography.labelMedium, color = AppTheme.TextMuted)
-                        FlowRow(
-                            modifier = Modifier.fillMaxWidth().padding(top = AppTheme.Space8),
-                            horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
-                            verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
-                        ) {
-                            circolareplus.util.ITALIAN_WEEKDAYS.forEachIndexed { index, day ->
-                                circolareplus.design.AnimatedFilterChip(
-                                    label = day.take(3).replaceFirstChar { it.uppercase() },
-                                    isSelected = index in customWeekdays,
-                                    onClick = {
-                                        customWeekdays = if (index in customWeekdays) customWeekdays - index else customWeekdays + index
-                                        if (index !in customWeekdays) customTimes = customTimes + (index to null)
-                                    }
-                                )
-                            }
-                        }
-                        customWeekdays.sorted().forEach { weekday ->
-                            Row(modifier = Modifier.fillMaxWidth().padding(top = AppTheme.Space8), verticalAlignment = Alignment.CenterVertically) {
-                                Text(circolareplus.util.ITALIAN_WEEKDAYS[weekday].replaceFirstChar { it.uppercase() }, modifier = Modifier.weight(1f), color = AppTheme.TextDark)
-                                HourDropdown(
-                                    label = "Ora",
-                                    modifier = Modifier.weight(1f),
-                                    value = customTimes[weekday],
-                                    maxHour = maxHours,
-                                    expanded = expandedHourPicker == "CUSTOM_$weekday",
-                                    onToggle = { expandedHourPicker = if (expandedHourPicker == "CUSTOM_$weekday") null else "CUSTOM_$weekday" },
-                                    onSelect = { customTimes = customTimes + (weekday to it); expandedHourPicker = null }
-                                )
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(AppTheme.Space12))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 56.dp)
-                            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                            .border(1.dp, AppTheme.FieldOutline, RoundedCornerShape(AppTheme.SmallElementRadius))
-                            .clickable(enabled = selectedDateMillis != null) { showEndDatePicker = true }
-                            .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        AppIcons.Calendar(modifier = Modifier.size(18.dp), color = AppTheme.PrimaryBlue)
-                        Spacer(modifier = Modifier.width(AppTheme.Space12))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = if (repeatFrequency == "NONE") "Giorni consecutivi" else "Ripeti fino al",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = AppTheme.TextDark
-                            )
-                            Text(
-                                text = endDateLabel,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (selectedEndDateMillis != null) AppTheme.TextMuted else AppTheme.TextFaint
-                            )
-                        }
-                        if (selectedEndDateMillis != null) {
-                            Text(
-                                text = "Rimuovi",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = AppTheme.PrimaryBlue,
-                                modifier = Modifier
-                                    .heightIn(min = 44.dp)
-                                    .clickable { selectedEndDateMillis = null }
-                                    .wrapContentHeight(Alignment.CenterVertically)
-                                    .padding(horizontal = AppTheme.Space8)
-                            )
-                        } else {
-                            AppIcons.ChevronRight(modifier = Modifier.size(16.dp), color = AppTheme.TextMuted)
-                        }
-                    }
-                    Text(
-                        text = when {
-                            selectedDateMillis == null -> "Scegli la data dell'evento prima di impostare la fine."
-                            repeatFrequency == "NONE" && selectedEndDateMillis == null -> "Un solo giorno. Scegli una data finale per continuare l'evento nei giorni successivi."
-                            repeatFrequency == "NONE" -> "$eventRangeDays giorni consecutivi · massimo un anno."
-                            selectedEndDateMillis == null -> "Scegli quando terminare: massimo un anno dalla prima data."
-                            else -> "$eventOccurrenceCount ${if (eventOccurrenceCount == 1) "occorrenza" else "occorrenze"} · massimo un anno."
+                        lessons = lessonsForDate,
+                        selectedLesson = timetableSelection?.second?.takeIf { lesson ->
+                            timetableSelection?.first == selectedDateMillis &&
+                                subject.equals(lesson.subject, ignoreCase = true) &&
+                                fromHour == lesson.fromHour && toHour == lesson.toHour
                         },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppTheme.TextMuted,
-                        modifier = Modifier.padding(start = AppTheme.Space12, top = AppTheme.Space8)
+                        hasDate = selectedDateMillis != null,
+                        onSelect = { lesson ->
+                            subject = lesson.subject.lowercase().replaceFirstChar { it.uppercase() }
+                            if (repeatFrequency != "CUSTOM") {
+                                timetableSelection = selectedDateMillis to lesson
+                                fromHour = lesson.fromHour
+                                toHour = lesson.toHour
+                                aiClockTime = ""
+                            }
+                        },
+                        fillHours = repeatFrequency != "CUSTOM",
+                        modifier = Modifier.fillMaxWidth().ailaSheetReveal(3)
                     )
-                    Spacer(modifier = Modifier.height(AppTheme.Space16))
-                    // Orario a ore di lezione (1-6) invece di un'ora libera tipo "8:00".
+                    Spacer(modifier = Modifier.height(AppTheme.Space8))
+                    // Ore della classe, modificabili anche dopo il completamento dalla materia.
                     if (repeatFrequency != "CUSTOM") {
                     if (aiClockTime.isNotBlank() && fromHour == null) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -6629,26 +6485,118 @@ private fun AddCalendarEventDialog(
                         )
                     }
                     Spacer(modifier = Modifier.height(AppTheme.Space16))
-                    Text(
-                        text = "Tipo di evento",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = AppTheme.TextMuted,
-                        modifier = Modifier.ailaSheetReveal(4).padding(bottom = AppTheme.Space8)
+                    EventFormDropdown(
+                        label = "Tipo di evento",
+                        options = EVENT_CATEGORY_ORDER.map { eventCategoryLabel(it) },
+                        selectedIndex = EVENT_CATEGORY_ORDER.indexOf(category),
+                        onSelect = { category = EVENT_CATEGORY_ORDER[it] },
+                        icon = { eventCategoryIcon(category, Modifier.size(20.dp), AppTheme.PrimaryBlue) },
+                        modifier = Modifier.fillMaxWidth().ailaSheetReveal(4)
                     )
-                    // FlowRow invece di Row: con 6 categorie una singola riga non ci stava (venivano
-                    // tagliate fuori dallo schermo su molti telefoni).
-                    FlowRow(
-                        modifier = Modifier.ailaSheetReveal(4),
-                        horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
-                        verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    val repeatOptions = listOf("NONE" to "Mai", "DAILY" to "Ogni giorno", "WEEKLY" to "Ogni settimana", "CUSTOM" to "Personalizzata")
+                    EventFormDropdown(
+                        label = "Ripeti",
+                        options = repeatOptions.map { it.second },
+                        selectedIndex = repeatOptions.indexOfFirst { it.first == repeatFrequency },
+                        onSelect = { repeatFrequency = repeatOptions[it].first; expandedHourPicker = null },
+                        modifier = Modifier.fillMaxWidth().ailaSheetReveal(4)
+                    )
+                    if (repeatFrequency == "CUSTOM") {
+                        Spacer(modifier = Modifier.height(AppTheme.Space12))
+                        Text("Giorni e orari", style = MaterialTheme.typography.labelMedium, color = AppTheme.TextMuted)
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth().padding(top = AppTheme.Space8),
+                            horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
+                            verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+                        ) {
+                            circolareplus.util.ITALIAN_WEEKDAYS.forEachIndexed { index, day ->
+                                circolareplus.design.AnimatedFilterChip(
+                                    label = day.take(3).replaceFirstChar { it.uppercase() },
+                                    isSelected = index in customWeekdays,
+                                    onClick = {
+                                        customWeekdays = if (index in customWeekdays) customWeekdays - index else customWeekdays + index
+                                        if (index !in customWeekdays) customTimes = customTimes + (index to null)
+                                    }
+                                )
+                            }
+                        }
+                        customWeekdays.sorted().forEach { weekday ->
+                            Row(modifier = Modifier.fillMaxWidth().padding(top = AppTheme.Space8), verticalAlignment = Alignment.CenterVertically) {
+                                Text(circolareplus.util.ITALIAN_WEEKDAYS[weekday].replaceFirstChar { it.uppercase() }, modifier = Modifier.weight(1f), color = AppTheme.TextDark)
+                                HourDropdown(
+                                    label = "Ora",
+                                    modifier = Modifier.weight(1f),
+                                    value = customTimes[weekday],
+                                    maxHour = maxHours,
+                                    expanded = expandedHourPicker == "CUSTOM_$weekday",
+                                    onToggle = { expandedHourPicker = if (expandedHourPicker == "CUSTOM_$weekday") null else "CUSTOM_$weekday" },
+                                    onSelect = { customTimes = customTimes + (weekday to it); expandedHourPicker = null }
+                                )
+                            }
+                        }
+                    }
+                    val endDateLabel = selectedEndDateMillis?.let { millis ->
+                        val civil = circolareplus.util.parseIsoDate(epochMillisToIsoDate(millis))
+                        if (civil != null) "Fino al ${civil.day} ${circolareplus.util.ITALIAN_MONTHS.getOrNull(civil.month)?.lowercase().orEmpty()} ${civil.year}" else "Fino al"
+                    } ?: if (selectedDateMillis == null) "Scegli prima una data di inizio" else "Scegli la data finale"
+                    if (repeatFrequency != "NONE" || showMultiDayOptions || selectedEndDateMillis != null) {
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp)
+                            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                            .border(1.dp, AppTheme.FieldOutline, RoundedCornerShape(AppTheme.SmallElementRadius))
+                            .clickable(enabled = selectedDateMillis != null) { showEndDatePicker = true }
+                            .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        EVENT_CATEGORY_ORDER.forEach { cat ->
-                            circolareplus.design.AnimatedFilterChip(
-                                label = eventCategoryLabel(cat),
-                                isSelected = category == cat,
-                                onClick = { category = cat },
-                                icon = { color -> eventCategoryIcon(cat, Modifier.size(13.dp), color) }
+                        AppIcons.Calendar(modifier = Modifier.size(18.dp), color = AppTheme.PrimaryBlue)
+                        Spacer(modifier = Modifier.width(AppTheme.Space12))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (repeatFrequency == "NONE") "Giorni consecutivi" else "Ripeti fino al",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = AppTheme.TextDark
                             )
+                            Text(
+                                text = endDateLabel,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (selectedEndDateMillis != null) AppTheme.TextMuted else AppTheme.TextFaint
+                            )
+                        }
+                        if (selectedEndDateMillis != null) {
+                            Text(
+                                text = "Rimuovi",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = AppTheme.PrimaryBlue,
+                                modifier = Modifier
+                                    .heightIn(min = 44.dp)
+                                    .clickable { selectedEndDateMillis = null; showMultiDayOptions = false }
+                                    .wrapContentHeight(Alignment.CenterVertically)
+                                    .padding(horizontal = AppTheme.Space8)
+                            )
+                        } else {
+                            AppIcons.ChevronRight(modifier = Modifier.size(16.dp), color = AppTheme.TextMuted)
+                        }
+                    }
+                    Text(
+                        text = when {
+                            selectedDateMillis == null -> "Scegli la data dell'evento prima di impostare la fine."
+                            repeatFrequency == "NONE" && selectedEndDateMillis == null -> "Scegli una data finale per estendere l’evento."
+                            repeatFrequency == "NONE" -> "$eventRangeDays giorni consecutivi · massimo un anno."
+                            selectedEndDateMillis == null -> "Scegli quando terminare: massimo un anno dalla prima data."
+                            else -> "$eventOccurrenceCount ${if (eventOccurrenceCount == 1) "occorrenza" else "occorrenze"} · massimo un anno."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTheme.TextMuted,
+                        modifier = Modifier.padding(start = AppTheme.Space12, top = AppTheme.Space8)
+                    )
+                    Spacer(modifier = Modifier.height(AppTheme.Space16))
+                    } else {
+                        TextButton(onClick = { showMultiDayOptions = true }, enabled = selectedDateMillis != null) {
+                            Text("Estendi su più giorni")
                         }
                     }
                     Spacer(modifier = Modifier.height(AppTheme.Space16))
@@ -6738,17 +6686,19 @@ private fun AddCalendarEventDialog(
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.height(AppTheme.Space24))
-                    circolareplus.design.AilaPrimaryButton(
-                        text = "Aggiungi evento",
-                        onClick = { submitManualEvent() },
-                        enabled = canSubmitManualEvent,
-                        fillMaxWidth = true,
-                        modifier = Modifier.ailaSheetReveal(7)
-                    )
+                    Spacer(modifier = Modifier.height(AppTheme.Space16))
                 }
             }
             }
+            }
+            if (step == EventCreationStep.MANUAL) {
+                HorizontalDivider(color = AppTheme.FieldOutline, modifier = Modifier.padding(bottom = AppTheme.Space12))
+                circolareplus.design.AilaPrimaryButton(
+                    text = "Aggiungi evento",
+                    onClick = { submitManualEvent() },
+                    enabled = canSubmitManualEvent,
+                    fillMaxWidth = true
+                )
             }
         }
     }
