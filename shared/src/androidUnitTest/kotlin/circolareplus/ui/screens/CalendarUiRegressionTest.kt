@@ -1,9 +1,9 @@
 package circolareplus.ui.screens
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import circolareplus.design.AilaTheme
@@ -79,8 +79,16 @@ class CalendarUiRegressionTest {
 
     private fun screenshot(name: String) {
         val directory = File(System.getProperty("aila.ui.screenshots") ?: "build/ui-screenshots").apply { mkdirs() }
-        File(directory, "$name.png").outputStream().use {
-            compose.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
+        compose.waitForIdle()
+        // PixelCopy waits for a real window frame; Robolectric renders synchronously to Canvas.
+        compose.runOnIdle {
+            val view = activity.get().window.decorView
+            val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+            view.draw(Canvas(bitmap))
+            File(directory, "$name.png").outputStream().use {
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
+            bitmap.recycle()
         }
     }
 }
