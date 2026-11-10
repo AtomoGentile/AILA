@@ -71,6 +71,8 @@ class CalendarUiRegressionTest {
         }
         compose.mainClock.advanceTimeBy(1500)
         compose.onNodeWithContentDescription("Titolo").performTextInput("Lezione")
+        compose.onNodeWithText("Dettagli evento").assertIsDisplayed()
+        compose.onNodeWithText("Aggiungi evento").assertIsDisplayed()
         screenshot("event-form-top")
         compose.onNodeWithText("Un solo giorno").performScrollTo().performTouchInput { click() }
         compose.onNodeWithText("Più giorni consecutivi").performClick()
@@ -88,6 +90,7 @@ class CalendarUiRegressionTest {
 
     private fun screenshot(name: String) {
         val directory = File(System.getProperty("aila.ui.screenshots") ?: "build/ui-screenshots").apply { mkdirs() }
+        compose.mainClock.advanceTimeBy(500)
         compose.waitForIdle()
         // PixelCopy waits for a real window frame; Robolectric renders synchronously to Canvas.
         compose.runOnIdle {
