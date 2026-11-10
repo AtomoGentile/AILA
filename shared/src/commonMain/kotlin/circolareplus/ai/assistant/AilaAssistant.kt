@@ -135,9 +135,9 @@ class AilaAssistant internal constructor(
                 ?: AssistantReply(result.reason, isError = true)
             result as AiTextResult.Success
             var parsed = AssistantPrompt.parse(result.text)
-            // Check an answer which skipped retrieval once. After reads, the next generation
-            // already has the evidence and should answer directly, without another model round.
-            if (mode == AssistantMode.GENERAL && !reviewAttempted && !readsPerformed &&
+            // Retrieval supplies evidence, not proof that the answer covers the request.
+            // Check the first terminal candidate once even when it follows a tool read.
+            if (mode == AssistantMode.GENERAL && !reviewAttempted &&
                 !parsed.incomplete && parsed.answer.isNotBlank() && parsed.actionRequest.isBlank() &&
                 parsed.calendarQueries.isEmpty() && parsed.needsCircularText.isEmpty() && parsed.searches.isEmpty()) {
                 reviewAttempted = true

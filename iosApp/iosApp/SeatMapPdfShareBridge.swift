@@ -32,7 +32,7 @@ class SeatMapPdfShareBridgeImpl: SeatMapPdfShareBridge {
     private let colorTextMuted = UIColor(red: 0x64 / 255.0, green: 0x74 / 255.0, blue: 0x8B / 255.0, alpha: 1)
     private let colorHairline = UIColor(red: 0xE8 / 255.0, green: 0xED / 255.0, blue: 0xF5 / 255.0, alpha: 1)
     private let colorGradientTop = UIColor(red: 0x1B / 255.0, green: 0x2E / 255.0, blue: 0x7A / 255.0, alpha: 1)
-    private let colorGradientBottom = UIColor(red: 0x7B / 255.0, green: 0x4F / 255.0, blue: 0xE3 / 255.0, alpha: 1)
+    private let colorGradientBottom = UIColor(red: 0x52 / 255.0, green: 0x67 / 255.0, blue: 0xD6 / 255.0, alpha: 1)
     private let colorPrimaryBlue = UIColor(red: 0x3B / 255.0, green: 0x82 / 255.0, blue: 0xF6 / 255.0, alpha: 1)
     private let colorBadgeTint = UIColor(red: 0xEF / 255.0, green: 0xF3 / 255.0, blue: 0xFF / 255.0, alpha: 1)
     private let colorZebraTint = UIColor(red: 0xF8 / 255.0, green: 0xFA / 255.0, blue: 0xFF / 255.0, alpha: 1)

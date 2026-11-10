@@ -36,6 +36,7 @@ class CalendarUiRegressionTest {
         activity = Robolectric.buildActivity(ComponentActivity::class.java)
         activity.get().setTheme(android.R.style.Theme_Material_NoActionBar)
         activity.setup()
+        activity.get().window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
     }
 
     @After fun teardown() {
@@ -45,7 +46,7 @@ class CalendarUiRegressionTest {
 
     @Test fun timetableOpensAboveCalendarAndAcceptsTouches() {
         activity.get().setContent { AilaTheme { CalendarScreen(events = emptyList(), classLabel = "4CSA") } }
-        compose.onNodeWithText("Orario").performTouchInput { click() }
+        compose.onNodeWithText("Lezioni del giorno").performScrollTo().performTouchInput { click() }
         compose.mainClock.advanceTimeBy(1500)
         compose.onNodeWithText("Gio").performTouchInput { click() }
         compose.onNodeWithContentDescription("Filosofia, 4ª ora").assertIsDisplayed()
@@ -55,15 +56,17 @@ class CalendarUiRegressionTest {
         compose.onNodeWithContentDescription("Chiudi orario").performTouchInput { click() }
         compose.mainClock.advanceTimeBy(1500)
         compose.onNodeWithText("Apri orario ufficiale").assertDoesNotExist()
+        screenshot("calendar-day-lessons")
     }
 
     @Test fun eventFormScrollsToRecipientsAndKeepsSubmitAccessible() {
         var createdTitle: String? = null
+        var createdCategory: circolareplus.domain.model.CalendarEventCategory? = null
         activity.get().setContent {
             AilaTheme {
                 AddCalendarEventDialog(
                     onDismiss = {},
-                    onConfirm = { title, _, _, _, _, _, _, _, _ -> createdTitle = title },
+                    onConfirm = { title, _, _, _, _, category, _, _, _ -> createdTitle = title; createdCategory = category },
                     initialStep = EventCreationStep.MANUAL,
                     initialDateIso = today().toIso(), classLabel = "4CSA"
                 )
@@ -74,18 +77,47 @@ class CalendarUiRegressionTest {
         compose.onNodeWithText("Dettagli evento").assertIsDisplayed()
         compose.onNodeWithText("Aggiungi evento").assertIsDisplayed()
         screenshot("event-form-top")
+        compose.onNodeWithText("Verifica").performScrollTo().performTouchInput { click() }
+        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithText("Altro").assertIsDisplayed()
+        screenshot("event-type-picker")
+        compose.onNodeWithText("Interrogazione").assertIsDisplayed().performTouchInput { click() }
         compose.onNodeWithText("Un solo giorno").performScrollTo().performTouchInput { click() }
-        compose.onNodeWithText("Più giorni consecutivi").performClick()
+        compose.mainClock.advanceTimeBy(500)
+        screenshot("event-duration-picker")
+        compose.onNodeWithText("Più giorni consecutivi").assertIsDisplayed().performTouchInput { click() }
         compose.onNodeWithText("Giorni consecutivi fino al").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Aggiungi evento").assertIsNotEnabled()
         compose.onNodeWithText("Più giorni consecutivi").performScrollTo().performTouchInput { click() }
-        compose.onNodeWithText("Un solo giorno").performClick()
+        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithText("Un solo giorno").performTouchInput { click() }
         compose.onNodeWithText("Giorni consecutivi fino al").assertDoesNotExist()
         compose.onNodeWithText("Destinatari").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Tutta la classe").performScrollTo().assertIsDisplayed()
         screenshot("event-form-bottom")
         compose.onNodeWithText("Aggiungi evento").assertIsEnabled().performTouchInput { click() }
-        compose.runOnIdle { assertEquals("Lezione", createdTitle) }
+        compose.runOnIdle {
+            assertEquals("Lezione", createdTitle)
+            assertEquals(circolareplus.domain.model.CalendarEventCategory.INTERROGAZIONE, createdCategory)
+        }
+    }
+
+    @Test fun assistantComposerRemainsEditableAndSendsTheDraft() {
+        var sent: String? = null
+        activity.get().setContent {
+            AilaTheme {
+                AssistantChatScreen(
+                    messages = listOf(circolareplus.ai.assistant.AssistantMessage("a", circolareplus.ai.assistant.AssistantAuthor.ASSISTANT, "Pronto per la domanda.")),
+                    isThinking = false, conversations = emptyList(),
+                    onSend = { sent = it }, onBackClick = {}, onClearChat = {},
+                    onOpenConversation = {}, onDeleteConversation = {}, onOpenSource = {}
+                )
+            }
+        }
+        compose.onNode(hasSetTextAction()).performTextInput("Confronta i due calendari")
+        screenshot("assistant-composer-focused")
+        compose.onNodeWithContentDescription("Invia").assertIsEnabled().performTouchInput { click() }
+        compose.runOnIdle { assertEquals("Confronta i due calendari", sent) }
     }
 
     private fun screenshot(name: String) {
@@ -94,7 +126,8 @@ class CalendarUiRegressionTest {
         compose.waitForIdle()
         // PixelCopy waits for a real window frame; Robolectric renders synchronously to Canvas.
         compose.runOnIdle {
-            val view = activity.get().window.decorView
+            val view = android.view.inspector.WindowInspector.getGlobalWindowViews().lastOrNull()
+                ?: activity.get().window.decorView
             val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
             view.draw(Canvas(bitmap))
             File(directory, "$name.png").outputStream().use {

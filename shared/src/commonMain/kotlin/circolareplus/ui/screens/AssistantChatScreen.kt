@@ -82,9 +82,6 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.lerp
 import kotlinx.coroutines.delay
 
@@ -164,21 +161,6 @@ fun AssistantChatScreen(
     newMessages.forEach { seenIds.add(it.id) }
 
     val showWelcome = messages.isEmpty() && !isThinking
-    // Keep the moving ACA edge visible until the answer has finished its letter-by-letter reveal.
-    var rainbowVisible by remember { mutableStateOf(isThinking) }
-    LaunchedEffect(isThinking) {
-        if (isThinking) rainbowVisible = true
-        else if (arrivalHolder[0] == null) rainbowVisible = false
-    }
-    val rainbowAlpha by androidx.compose.animation.core.animateFloatAsState(
-        if (rainbowVisible) 1f else 0f,
-        androidx.compose.animation.core.tween(if (AppTheme.reduceMotion) 80 else 1400, easing = androidx.compose.animation.core.LinearOutSlowInEasing),
-        label = "assistant waiting rainbow alpha"
-    )
-    val rainbowTravel = if (AppTheme.reduceMotion) null else androidx.compose.animation.core.rememberInfiniteTransition(label = "assistant waiting rainbow")
-        .animateFloat(0f, 1f, androidx.compose.animation.core.infiniteRepeatable(
-            androidx.compose.animation.core.tween(3600, easing = androidx.compose.animation.core.LinearEasing)
-        ), label = "assistant waiting perimeter position")
     // Mentre la conversazione svanisce (indietro alla schermata iniziale) i messaggi sono gia'
     // stati svuotati: la lista che esce deve poter mostrare ancora gli ultimi che c'erano.
     val lastShown = remember { arrayOf(emptyList<AssistantMessage>()) }
@@ -273,7 +255,6 @@ fun AssistantChatScreen(
                         onArrived = {
                             if (arrivalHolder[0] == message.id) {
                                 arrivalHolder[0] = null
-                                rainbowVisible = false
                             }
                         }
                     )
@@ -385,31 +366,12 @@ fun AssistantChatScreen(
             attachmentError?.let{Text(it,color=AppTheme.TintRedInk,style=MaterialTheme.typography.bodySmall)}
             if(recording) VoiceRecordingPanel(onStop={recorder?.stop()},onCancel={recorder?.cancel()})
             else Row(Modifier.fillMaxWidth().background(AppTheme.CardSurface,RoundedCornerShape(28.dp))
-                .border(1.dp, AppTheme.PrimaryBlue.copy(alpha = .12f), RoundedCornerShape(28.dp))
-                .drawBehind {
-                    if (rainbowAlpha > 0f) {
-                        val colors = listOf(
-                            AppTheme.PrimaryBlue.copy(alpha = .92f * rainbowAlpha),
-                            AilaAssistantViolet.copy(alpha = .82f * rainbowAlpha),
-                            AilaAssistantTeal.copy(alpha = .82f * rainbowAlpha),
-                            AppTheme.PrimaryBlue.copy(alpha = .92f * rainbowAlpha)
-                        )
-                        val radius = 28.dp.toPx()
-                        val perimeter = (2f * (size.width + size.height - 4f * radius) + 2f * kotlin.math.PI.toFloat() * radius).coerceAtLeast(1f)
-                        val segment = perimeter * .17f
-                        drawRoundRect(brush = Brush.sweepGradient(colors.map { it.copy(alpha = it.alpha * .16f) }),
-                            cornerRadius = CornerRadius(radius), style = Stroke(1.5.dp.toPx()))
-                        drawRoundRect(brush = Brush.sweepGradient(colors), cornerRadius = CornerRadius(radius),
-                            style = Stroke(2.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(
-                                floatArrayOf(segment, perimeter - segment), (rainbowTravel?.value ?: 0f) * perimeter)))
-                    }
-                }
                 .padding(horizontal = 12.dp, vertical = 6.dp),verticalAlignment = Alignment.CenterVertically) {
                 if(onAttachContent!=null){
                     AilaIconButton(contentDescription="Menu allegati",onClick={attachmentsMenu=true}){tint->AppIcons.Plus(Modifier.size(24.dp),tint)}
                     Spacer(Modifier.width(4.dp))
                 }
-                // Capsula con l'anello dell'Assistant al focus: stessa della ricerca.
+                // Input senza un secondo contorno: allegati, testo e invio condividono una sola superficie.
                 circolareplus.design.AilaPillTextField(
                     value = draft,
                     onValueChange = { draft = it },
@@ -418,7 +380,8 @@ fun AssistantChatScreen(
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(24.dp),
                     containerColor = Color.Transparent,
-                    maxLines = 4
+                    maxLines = 4,
+                    integrated = true
                 )
                 Spacer(modifier = Modifier.width(AppTheme.Space8))
                 if(draft.isBlank()&&attachedFiles.isEmpty()&&recorder!=null)AilaIconButton(contentDescription=if(recording)"Termina vocale"else"Registra vocale",onClick={if(recording)recorder?.stop()else if(!isThinking)recorder?.start()}){tint->

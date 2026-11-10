@@ -34,10 +34,10 @@ import circolareplus.util.weekdayOf
 
 /** Read-only weekly baseline, one day at a time; never infers clock times or substitutions. */
 @Composable
-internal fun TimetableSheet(classLabel: String, onDismiss: () -> Unit) {
+internal fun TimetableSheet(classLabel: String, onDismiss: () -> Unit, initialDay: Int? = null) {
     val currentDay = remember { weekdayOf(today()) }
-    var selectedDay by rememberSaveable(classLabel) { mutableStateOf(currentDay) }
-    val dayScroll = rememberLazyListState(initialFirstVisibleItemIndex = currentDay)
+    var selectedDay by rememberSaveable(classLabel, initialDay) { mutableStateOf(initialDay ?: currentDay) }
+    val dayScroll = rememberLazyListState(initialFirstVisibleItemIndex = initialDay ?: currentDay)
     val lessonScroll = rememberLazyListState()
     val uriHandler = LocalUriHandler.current
     val lessons = SchoolTimetable.day(classLabel, selectedDay)

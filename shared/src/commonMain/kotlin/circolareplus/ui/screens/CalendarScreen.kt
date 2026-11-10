@@ -140,10 +140,6 @@ fun CalendarScreen(
             // Niente più tasto AI separato in header: "AILA Assistant" è già la prima scelta
             // dentro il foglio che si apre da "Aggiungi", un tasto in più qui era ridondante.
             action = {
-                if (timetable != null) androidx.compose.material3.TextButton(
-                    onClick = { showTimetable = true },
-                    modifier = Modifier.ailaTransformOrigin(24.dp, liveKey = "class-timetable")
-                ) { Text("Orario") }
                 AilaIconButton(contentDescription = "Aggiungi evento", onClick = onAddEventClick, primary = true, opensPage = true) { tint ->
                     AppIcons.Plus(modifier = Modifier.size(18.dp), color = tint)
                 }
@@ -279,6 +275,26 @@ fun CalendarScreen(
             )
 
             Spacer(modifier = Modifier.height(AppTheme.Space12))
+            if (timetable != null) {
+                val lessons = circolareplus.data.SchoolTimetable.lessons(classLabel, selectedDateIso)
+                AilaCard(onClick = { showTimetable = true }, transformKey = "class-timetable") {
+                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        AppIcons.Calendar(Modifier.size(20.dp), color = AppTheme.TextMuted)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Lezioni del giorno", style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
+                            Text(if (lessons.isEmpty()) "Nessuna lezione prevista · apri la settimana" else
+                                lessons.joinToString(" · ") {
+                                    val hours = if (it.fromHour == it.toHour) "${it.fromHour}ª" else "${it.fromHour}ª–${it.toHour}ª"
+                                    "$hours ${it.subject.lowercase().replaceFirstChar { char -> char.uppercase() }}"
+                                },
+                                style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+                        }
+                        AppIcons.ChevronRight(Modifier.size(18.dp), color = AppTheme.TextMuted)
+                    }
+                }
+                Spacer(Modifier.height(AppTheme.Space12))
+            }
 
             // La molla sull'altezza: la card "Nessun evento" lascia il posto al nuovo evento, e le
             // card sotto scendono, invece di saltare.
@@ -464,7 +480,8 @@ fun CalendarScreen(
         }
     }
     if (showTimetable && timetable != null) {
-        TimetableSheet(classLabel = classLabel.orEmpty(), onDismiss = { showTimetable = false })
+        TimetableSheet(classLabel = classLabel.orEmpty(), onDismiss = { showTimetable = false },
+            initialDay = parseIsoDate(selectedDateIso)?.let { circolareplus.util.weekdayOf(it) })
     }
     }
 }

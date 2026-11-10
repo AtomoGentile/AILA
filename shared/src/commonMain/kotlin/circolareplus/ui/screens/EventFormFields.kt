@@ -3,6 +3,8 @@ package circolareplus.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -93,6 +95,7 @@ internal fun EventFormValueRow(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun EventFormDropdown(
     label: String,
@@ -102,18 +105,36 @@ internal fun EventFormDropdown(
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Box(modifier) {
-        EventFormValueRow(label, options.getOrElse(selectedIndex) { "Scegli" }, { expanded = true }, icon = {
-            AppIcons.ChevronRight(Modifier.size(18.dp).rotate(90f), color = AppTheme.TextMuted)
-        })
-        DropdownMenu(expanded, { expanded = false }, modifier = Modifier.heightIn(max = 320.dp)) {
-            options.forEachIndexed { index, option ->
-                DropdownMenuItem(
-                    text = { Text(option, color = if (index == selectedIndex) AppTheme.PrimaryBlue else AppTheme.TextDark) },
-                    onClick = { expanded = false; onSelect(index) },
-                    trailingIcon = { if (index == selectedIndex) AppIcons.Check(Modifier.size(16.dp), color = AppTheme.PrimaryBlue) }
-                )
+    val focusManager = LocalFocusManager.current
+    EventFormValueRow(label, options.getOrElse(selectedIndex) { "Scegli" }, { focusManager.clearFocus(); expanded = true }, modifier = modifier, icon = {
+        AppIcons.ChevronRight(Modifier.size(18.dp).rotate(90f), color = AppTheme.TextMuted)
+    })
+    if (expanded) circolareplus.design.AilaBottomSheet(onDismissRequest = { expanded = false }) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(label, style = MaterialTheme.typography.titleLarge, color = AppTheme.TextDark, modifier = Modifier.weight(1f))
+                circolareplus.design.AilaIconButton(contentDescription = "Chiudi $label", onClick = { expanded = false }) { tint ->
+                    AppIcons.Close(Modifier.size(18.dp), color = tint)
+                }
             }
+            Spacer(Modifier.height(16.dp))
+            Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState()).selectableGroup(),
+                verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                options.forEachIndexed { index, option ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(EventFormShape)
+                            .background(if (index == selectedIndex) AppTheme.TintBlue else AppTheme.FieldSurface)
+                            .selectable(selected = index == selectedIndex, role = Role.RadioButton, onClick = { expanded = false; onSelect(index) })
+                            .heightIn(min = 52.dp).padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(option, style = MaterialTheme.typography.bodyLarge, color = AppTheme.TextDark, modifier = Modifier.weight(1f))
+                        if (index == selectedIndex) AppIcons.Check(Modifier.size(18.dp), color = AppTheme.PrimaryBlue)
+                    }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
         }
     }
 }
