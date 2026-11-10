@@ -21,7 +21,7 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class SeatMapPdfExportTest {
     @Test fun exportedMapIsPrintableLandscapePdfWithHeader() {
-        val context = RuntimeEnvironment.getApplication<android.app.Application>()
+        val context = RuntimeEnvironment.getApplication()
         AndroidAppContext.init(context)
         PDFBoxResourceLoader.init(context)
         val students = (1..12).associate { id ->
@@ -31,6 +31,8 @@ class SeatMapPdfExportTest {
             DeskAssignment(index / 3, index % 3, "${index * 2 + 1}", "${index * 2 + 2}")
         }
         val pdf = renderSeatMapPdf(desks, students)
+        val directory = File(System.getProperty("aila.ui.screenshots") ?: "build/ui-screenshots").apply { mkdirs() }
+        pdf.copyTo(File(directory, "seat-map-print-preview.pdf"), overwrite = true)
         PDDocument.load(pdf).use { document ->
             assertEquals(1, document.numberOfPages)
             assertEquals(842f, document.getPage(0).mediaBox.width)
@@ -51,7 +53,5 @@ class SeatMapPdfExportTest {
             assertTrue(text.contains("Generata il"))
             assertTrue(text.contains("Studente 12"))
         }
-        val directory = File(System.getProperty("aila.ui.screenshots") ?: "build/ui-screenshots").apply { mkdirs() }
-        pdf.copyTo(File(directory, "seat-map-print-preview.pdf"), overwrite = true)
     }
 }
