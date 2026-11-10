@@ -48,7 +48,7 @@ import kotlinx.coroutines.SupervisorJob
  * sempre dati e callback dall'esterno.
  */
 /** Tempo massimo per ciascun tentativo di risposta dell'assistente: il primo modello, poi la riserva. */
-private const val ASSISTANT_ATTEMPT_MS = 30_000L
+private const val ASSISTANT_ATTEMPT_MS = circolareplus.ai.ASSISTANT_ANSWER_ATTEMPT_TIMEOUT_MS
 
 object AppContainer {
     val localContents by lazy { circolareplus.data.repository.LocalContentRepository(

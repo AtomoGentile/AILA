@@ -88,8 +88,8 @@ class AssistantReadToolsTest {
             assertTrue(request in prompt.userPrompt)
             assertTrue("VERIFICA PRIMA DELL'INVIO" in prompt.systemPrompt)
         }
-        assertFalse(AssistantPrompt.parse("""{"answer":"Bozza","verified":"yes"}""").verified)
-        assertTrue(AssistantPrompt.parse("""{"answer":"Verificata","verified":true}""").verified)
+        assertNull(AssistantPrompt.parse("""{"answer":"Bozza","verified":"yes"}""").verified)
+        assertEquals(true, AssistantPrompt.parse("""{"answer":"Verificata","verified":true}""").verified)
     }
 
     @Test fun largeRequestsAreNeverSilentlyClippedBeforePlanning() {
