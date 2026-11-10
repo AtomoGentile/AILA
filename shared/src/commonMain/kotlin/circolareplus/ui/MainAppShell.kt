@@ -5762,7 +5762,7 @@ private object StartupPrefetch {
     }
 }
 
-private enum class EventCreationStep { MENU, ASSISTANT, MANUAL }
+internal enum class EventCreationStep { MENU, ASSISTANT, MANUAL }
 
 /** Bozza estratta dal testo libero scritto in AILA Assistant. */
 private data class AiEventDraft(
@@ -5900,7 +5900,7 @@ private fun parseAiEventPrompt(raw: String): AiEventDraft {
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun AddCalendarEventDialog(
+internal fun AddCalendarEventDialog(
     onDismiss: () -> Unit,
     onConfirm: (String, String, String, String, String?, CalendarEventCategory, List<String>?, String?, List<circolareplus.data.remote.dto.CustomEventDayDto>?) -> Unit,
     initialStep: EventCreationStep = EventCreationStep.MENU,
@@ -6395,16 +6395,12 @@ private fun AddCalendarEventDialog(
                             modifier = Modifier.ailaSheetReveal(0).padding(bottom = AppTheme.Space12)
                         )
                     }
-                    OutlinedTextField(
-                        value = title,
-                        onValueChange = { title = it },
-                        label = { Text("Titolo") },
-                        singleLine = true,
-                        colors = circolareplus.design.ailaFieldColors(),
-                        shape = RoundedCornerShape(AppTheme.SmallElementRadius),
+                    EventFormTextField(
+                        value = title, onValueChange = { title = it },
+                        label = "Titolo", placeholder = "Es. Verifica di inglese",
                         modifier = Modifier.fillMaxWidth().ailaSheetReveal(1)
                     )
-                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    Spacer(modifier = Modifier.height(AppTheme.Space16))
                     EventFormValueRow(
                         label = "Data",
                         value = dateLabel.replaceFirstChar { it.uppercase() },
@@ -6438,7 +6434,7 @@ private fun AddCalendarEventDialog(
                         fillHours = repeatFrequency != "CUSTOM",
                         modifier = Modifier.fillMaxWidth().ailaSheetReveal(3)
                     )
-                    Spacer(modifier = Modifier.height(AppTheme.Space8))
+                    Spacer(modifier = Modifier.height(AppTheme.Space16))
                     // Ore della classe, modificabili anche dopo il completamento dalla materia.
                     if (repeatFrequency != "CUSTOM") {
                     if (aiClockTime.isNotBlank() && fromHour == null) {
@@ -6449,7 +6445,7 @@ private fun AddCalendarEventDialog(
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth().ailaSheetReveal(3),
-                        horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+                        horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12)
                     ) {
                         HourDropdown(
                             label = "Da",
@@ -6490,10 +6486,9 @@ private fun AddCalendarEventDialog(
                         options = EVENT_CATEGORY_ORDER.map { eventCategoryLabel(it) },
                         selectedIndex = EVENT_CATEGORY_ORDER.indexOf(category),
                         onSelect = { category = EVENT_CATEGORY_ORDER[it] },
-                        icon = { eventCategoryIcon(category, Modifier.size(20.dp), AppTheme.PrimaryBlue) },
                         modifier = Modifier.fillMaxWidth().ailaSheetReveal(4)
                     )
-                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    Spacer(modifier = Modifier.height(AppTheme.Space16))
                     val repeatOptions = listOf("NONE" to "Mai", "DAILY" to "Ogni giorno", "WEEKLY" to "Ogni settimana", "CUSTOM" to "Personalizzata")
                     EventFormDropdown(
                         label = "Ripeti",
@@ -6538,47 +6533,20 @@ private fun AddCalendarEventDialog(
                     }
                     val endDateLabel = selectedEndDateMillis?.let { millis ->
                         val civil = circolareplus.util.parseIsoDate(epochMillisToIsoDate(millis))
-                        if (civil != null) "Fino al ${civil.day} ${circolareplus.util.ITALIAN_MONTHS.getOrNull(civil.month)?.lowercase().orEmpty()} ${civil.year}" else "Fino al"
+                        if (civil != null) "${civil.day} ${circolareplus.util.ITALIAN_MONTHS.getOrNull(civil.month)?.lowercase().orEmpty()} ${civil.year}" else "Scegli la data finale"
                     } ?: if (selectedDateMillis == null) "Scegli prima una data di inizio" else "Scegli la data finale"
                     if (repeatFrequency != "NONE" || showMultiDayOptions || selectedEndDateMillis != null) {
                     Spacer(modifier = Modifier.height(AppTheme.Space12))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 56.dp)
-                            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                            .border(1.dp, AppTheme.FieldOutline, RoundedCornerShape(AppTheme.SmallElementRadius))
-                            .clickable(enabled = selectedDateMillis != null) { showEndDatePicker = true }
-                            .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        AppIcons.Calendar(modifier = Modifier.size(18.dp), color = AppTheme.PrimaryBlue)
-                        Spacer(modifier = Modifier.width(AppTheme.Space12))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = if (repeatFrequency == "NONE") "Giorni consecutivi" else "Ripeti fino al",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = AppTheme.TextDark
-                            )
-                            Text(
-                                text = endDateLabel,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (selectedEndDateMillis != null) AppTheme.TextMuted else AppTheme.TextFaint
-                            )
-                        }
-                        if (selectedEndDateMillis != null) {
-                            Text(
-                                text = "Rimuovi",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = AppTheme.PrimaryBlue,
-                                modifier = Modifier
-                                    .heightIn(min = 44.dp)
-                                    .clickable { selectedEndDateMillis = null; showMultiDayOptions = false }
-                                    .wrapContentHeight(Alignment.CenterVertically)
-                                    .padding(horizontal = AppTheme.Space8)
-                            )
-                        } else {
-                            AppIcons.ChevronRight(modifier = Modifier.size(16.dp), color = AppTheme.TextMuted)
+                    EventFormValueRow(
+                        label = if (repeatFrequency == "NONE") "Giorni consecutivi fino al" else "Ripeti fino al",
+                        value = endDateLabel,
+                        enabled = selectedDateMillis != null,
+                        onClick = { showEndDatePicker = true },
+                        icon = { AppIcons.Calendar(Modifier.size(20.dp), color = AppTheme.PrimaryBlue) }
+                    )
+                    if (selectedEndDateMillis != null) {
+                        TextButton(onClick = { selectedEndDateMillis = null; showMultiDayOptions = false }) {
+                            Text("Rimuovi data finale")
                         }
                     }
                     Text(
@@ -6593,53 +6561,29 @@ private fun AddCalendarEventDialog(
                         color = AppTheme.TextMuted,
                         modifier = Modifier.padding(start = AppTheme.Space12, top = AppTheme.Space8)
                     )
-                    Spacer(modifier = Modifier.height(AppTheme.Space16))
-                    } else {
-                        TextButton(onClick = { showMultiDayOptions = true }, enabled = selectedDateMillis != null) {
+                    } else if (selectedDateMillis != null) {
+                        TextButton(onClick = { showMultiDayOptions = true }) {
                             Text("Estendi su più giorni")
                         }
                     }
                     Spacer(modifier = Modifier.height(AppTheme.Space16))
-                    Text(
-                        text = "Note",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = AppTheme.TextMuted,
-                        modifier = Modifier.ailaSheetReveal(5).padding(bottom = AppTheme.Space8)
-                    )
-                    OutlinedTextField(
-                        value = notes,
-                        onValueChange = { notes = it },
-                        placeholder = { Text("Aggiungi note (facoltativo)") },
+                    EventFormTextField(
+                        value = notes, onValueChange = { notes = it },
+                        label = "Note (facoltative)", placeholder = "Aggiungi una nota",
                         singleLine = false,
-                        maxLines = 3,
-                        colors = circolareplus.design.ailaFieldColors(),
-                        shape = RoundedCornerShape(AppTheme.SmallElementRadius),
                         modifier = Modifier.fillMaxWidth().ailaSheetReveal(5)
                     )
                     Spacer(modifier = Modifier.height(AppTheme.Space16))
-                    Text(
-                        text = "Visibilità",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = AppTheme.TextMuted,
-                        modifier = Modifier.ailaSheetReveal(6).padding(bottom = AppTheme.Space8)
+                    EventFormDropdown(
+                        label = "Destinatari",
+                        options = listOf("Tutta la classe", "Persone specifiche"),
+                        selectedIndex = if (isForAllClass) 0 else 1,
+                        onSelect = {
+                            isForAllClass = it == 0
+                            if (isForAllClass) selectedRecipientUserIds = emptyList()
+                        },
+                        modifier = Modifier.fillMaxWidth().ailaSheetReveal(6)
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth().ailaSheetReveal(6),
-                        horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
-                    ) {
-                        circolareplus.design.AnimatedFilterChip(
-                            label = "Tutta la classe",
-                            isSelected = isForAllClass,
-                            onClick = { isForAllClass = true; selectedRecipientUserIds = emptyList() },
-                            modifier = Modifier.weight(1f)
-                        )
-                        circolareplus.design.AnimatedFilterChip(
-                            label = "Persone specifiche",
-                            isSelected = !isForAllClass,
-                            onClick = { isForAllClass = false },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
                     if (!isForAllClass) {
                         Spacer(modifier = Modifier.height(AppTheme.Space12))
                         Text(
@@ -6686,12 +6630,13 @@ private fun AddCalendarEventDialog(
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.height(AppTheme.Space16))
+                    Spacer(modifier = Modifier.height(AppTheme.Space24))
                 }
             }
             }
             }
             if (step == EventCreationStep.MANUAL) {
+                Spacer(Modifier.height(AppTheme.Space12))
                 HorizontalDivider(color = AppTheme.FieldOutline, modifier = Modifier.padding(bottom = AppTheme.Space12))
                 circolareplus.design.AilaPrimaryButton(
                     text = "Aggiungi evento",
@@ -6743,26 +6688,12 @@ private fun HourDropdown(
     val density = androidx.compose.ui.platform.LocalDensity.current
     var anchorWidth by remember { mutableStateOf(0.dp) }
     Box(modifier = modifier.onGloballyPositioned { anchorWidth = with(density) { it.size.width.toDp() } }) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 52.dp)
-                .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                .border(1.dp, AppTheme.FieldOutline, RoundedCornerShape(AppTheme.SmallElementRadius))
-                .clickable(onClick = onToggle)
-                .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space12),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = if (value != null) "$label: ${value}ª ora" else "$label: scegli",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Medium,
-                color = if (value != null) AppTheme.TextDark else AppTheme.TextFaint,
-                maxLines = 1,
-                modifier = Modifier.weight(1f)
-            )
-            AppIcons.ChevronRight(modifier = Modifier.size(14.dp).rotate(if (expanded) 270f else 90f), color = AppTheme.TextMuted)
-        }
+        EventFormValueRow(
+            label = label,
+            value = value?.let { "${it}ª ora" } ?: "Non impostata",
+            onClick = onToggle,
+            icon = { AppIcons.ChevronRight(Modifier.size(18.dp).rotate(if (expanded) 270f else 90f), color = AppTheme.TextMuted) }
+        )
         // DropdownMenu vive in un popup: apertura e chiusura non cambiano l'altezza del form.
         DropdownMenu(
             expanded = expanded,

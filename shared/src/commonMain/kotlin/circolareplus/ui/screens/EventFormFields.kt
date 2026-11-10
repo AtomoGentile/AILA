@@ -14,8 +14,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -25,6 +28,42 @@ import circolareplus.data.TimetableLesson
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
 import circolareplus.design.ailaFieldColors
+
+/** Shared metrics keep text inputs and selectors aligned, including their labels. */
+internal val EventFormShape = RoundedCornerShape(16.dp)
+
+@Composable
+internal fun EventFormField(label: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = AppTheme.TextMuted)
+        content()
+    }
+}
+
+@Composable
+internal fun EventFormTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    singleLine: Boolean = true,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    inputModifier: Modifier = Modifier
+) {
+    EventFormField(label, modifier) {
+        OutlinedTextField(
+            value, onValueChange,
+            placeholder = { Text(placeholder) },
+            textStyle = MaterialTheme.typography.bodyLarge,
+            singleLine = singleLine, minLines = if (singleLine) 1 else 2, maxLines = if (singleLine) 1 else 4,
+            shape = EventFormShape, colors = ailaFieldColors(),
+            keyboardOptions = keyboardOptions, keyboardActions = keyboardActions,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).semantics { contentDescription = label }.then(inputModifier)
+        )
+    }
+}
 
 /** A compact, accessible selector: one label/value row instead of a grid of large chips. */
 @Composable
@@ -36,23 +75,21 @@ internal fun EventFormValueRow(
     enabled: Boolean = true,
     icon: (@Composable () -> Unit)? = null
 ) {
-    Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-            .background(AppTheme.FieldSurface)
-            .border(1.dp, AppTheme.FieldOutline, RoundedCornerShape(16.dp))
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .heightIn(min = 64.dp).padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        icon?.invoke()
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(label, style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
+    EventFormField(label, modifier) {
+        Row(
+            Modifier.fillMaxWidth().clip(EventFormShape)
+                .background(AppTheme.FieldSurface)
+                .border(1.dp, AppTheme.FieldOutline, EventFormShape)
+                .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+                .heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             Text(value, style = MaterialTheme.typography.bodyLarge,
                 color = if (enabled) AppTheme.TextDark else AppTheme.TextFaint,
-                maxLines = 2, overflow = TextOverflow.Ellipsis)
+                modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (icon != null) icon() else AppIcons.ChevronRight(Modifier.size(18.dp), color = AppTheme.TextMuted)
         }
-        AppIcons.ChevronRight(Modifier.size(16.dp), color = AppTheme.TextMuted)
     }
 }
 
@@ -62,12 +99,13 @@ internal fun EventFormDropdown(
     options: List<String>,
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
-    modifier: Modifier = Modifier,
-    icon: (@Composable () -> Unit)? = null
+    modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier) {
-        EventFormValueRow(label, options.getOrElse(selectedIndex) { "Scegli" }, { expanded = true }, icon = icon)
+        EventFormValueRow(label, options.getOrElse(selectedIndex) { "Scegli" }, { expanded = true }, icon = {
+            AppIcons.ChevronRight(Modifier.size(18.dp).rotate(90f), color = AppTheme.TextMuted)
+        })
         DropdownMenu(expanded, { expanded = false }, modifier = Modifier.heightIn(max = 320.dp)) {
             options.forEachIndexed { index, option ->
                 DropdownMenuItem(
@@ -96,22 +134,22 @@ internal fun EventSubjectAutocomplete(
     val focusManager = LocalFocusManager.current
     val matches = lessons.filter { value.isBlank() || it.subject.contains(value.trim(), ignoreCase = true) }
     Column(modifier) {
-        OutlinedTextField(
-            value, onValueChange, label = { Text("Materia") }, placeholder = { Text("Facoltativa") },
-            singleLine = true, shape = RoundedCornerShape(16.dp), colors = ailaFieldColors(),
+        EventFormTextField(
+            value, onValueChange, label = "Materia (facoltativa)", placeholder = "Es. Inglese",
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
             keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus() }),
-            supportingText = {
-                Text(when {
+            inputModifier = Modifier.onFocusChanged { focused = it.isFocused }
+        )
+        if (focused || selectedLesson != null) {
+            Text(when {
                     !fillHours -> "Gli orari si impostano per ciascun giorno"
                     selectedLesson != null -> "Orario compilato · ${selectedLesson.timeLabel}"
-                    !hasDate -> "Scegli la data per vedere le lezioni del giorno"
+                    !hasDate -> "Scegli prima la data per vedere le lezioni"
                     lessons.isNotEmpty() -> "Scegli una lezione per compilare anche le ore"
                     else -> "Puoi inserire liberamente la materia"
-                }, color = AppTheme.TextMuted)
-            },
-            modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }
-        )
+                }, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted,
+                modifier = Modifier.padding(top = 6.dp))
+        }
         if (focused && matches.isNotEmpty()) {
             Column(
                 Modifier.fillMaxWidth().padding(top = 4.dp).clip(RoundedCornerShape(16.dp))

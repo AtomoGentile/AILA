@@ -118,6 +118,12 @@ kotlin {
                 implementation(libs.ktor.client.js)
             }
         }
+        val androidUnitTest by getting {
+            dependencies {
+                implementation(compose.uiTestJUnit4)
+                implementation("org.robolectric:robolectric:4.17")
+            }
+        }
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
@@ -131,6 +137,12 @@ android {
     compileSdk = 36
     defaultConfig {
         minSdk = 26
+    }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            systemProperty("aila.ui.screenshots", layout.buildDirectory.dir("reports/tests/ui-screenshots").get().asFile.absolutePath)
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
