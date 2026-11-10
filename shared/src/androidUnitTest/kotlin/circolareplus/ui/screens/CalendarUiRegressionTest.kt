@@ -56,6 +56,7 @@ class CalendarUiRegressionTest {
         compose.onNodeWithContentDescription("Chiudi orario").performTouchInput { click() }
         compose.mainClock.advanceTimeBy(1500)
         compose.onNodeWithText("Apri orario ufficiale").assertDoesNotExist()
+        screenshot("calendar-day-lessons")
     }
 
     @Test fun eventFormScrollsToRecipientsAndKeepsSubmitAccessible() {
@@ -78,6 +79,7 @@ class CalendarUiRegressionTest {
         screenshot("event-form-top")
         compose.onNodeWithText("Verifica").performScrollTo().performTouchInput { click() }
         compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithText("Altro").assertIsDisplayed()
         screenshot("event-type-picker")
         compose.onNodeWithText("Interrogazione").assertIsDisplayed().performTouchInput { click() }
         compose.onNodeWithText("Un solo giorno").performScrollTo().performTouchInput { click() }

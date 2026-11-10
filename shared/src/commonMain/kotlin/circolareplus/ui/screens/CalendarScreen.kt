@@ -284,7 +284,10 @@ fun CalendarScreen(
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text("Lezioni del giorno", style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
                             Text(if (lessons.isEmpty()) "Nessuna lezione prevista · apri la settimana" else
-                                lessons.joinToString(" · ") { "${it.timeLabel} ${it.subject.lowercase().replaceFirstChar { char -> char.uppercase() }}" },
+                                lessons.joinToString(" · ") {
+                                    val hours = if (it.fromHour == it.toHour) "${it.fromHour}ª" else "${it.fromHour}ª–${it.toHour}ª"
+                                    "$hours ${it.subject.lowercase().replaceFirstChar { char -> char.uppercase() }}"
+                                },
                                 style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
                         }
                         AppIcons.ChevronRight(Modifier.size(18.dp), color = AppTheme.TextMuted)

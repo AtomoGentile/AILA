@@ -118,7 +118,7 @@ internal fun EventFormDropdown(
                 }
             }
             Spacer(Modifier.height(16.dp))
-            Column(Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()).selectableGroup(),
+            Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState()).selectableGroup(),
                 verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 options.forEachIndexed { index, option ->
                     Row(
