@@ -37,6 +37,7 @@ import circolareplus.design.AilaScreenHeader
 import circolareplus.design.AilaSectionTitle
 import circolareplus.design.AnimatedFilterChip
 import circolareplus.design.ailaAppear
+import circolareplus.design.ailaTransformOrigin
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
 import circolareplus.domain.model.CalendarEvent
@@ -78,25 +79,7 @@ fun CalendarScreen(
     val timetable = circolareplus.data.SchoolTimetable.week(classLabel)
 
     if (showTimetable && timetable != null) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showTimetable = false },
-            title = { Text("Orario $classLabel") },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("A.S. ${circolareplus.data.SchoolTimetable.SCHOOL_YEAR} · Orario settimanale di base", style = MaterialTheme.typography.labelMedium)
-                    timetable.indices.forEach { day ->
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(circolareplus.util.ITALIAN_WEEKDAYS[day].replaceFirstChar { it.uppercase() }, fontWeight = FontWeight.SemiBold)
-                            val lessons = circolareplus.data.SchoolTimetable.day(classLabel, day)
-                            if (lessons.isEmpty()) Text("Nessuna lezione in orario")
-                            lessons.forEach { Text("${it.timeLabel} · ${it.subject}", style = MaterialTheme.typography.bodySmall) }
-                        }
-                    }
-                    Text("Fonte: orario definitivo IIS Primo Levi. Festività e variazioni giornaliere vanno verificate nelle comunicazioni della scuola.", style = MaterialTheme.typography.bodySmall)
-                }
-            },
-            confirmButton = { androidx.compose.material3.TextButton(onClick = { showTimetable = false }) { Text("Chiudi") } }
-        )
+        TimetableSheet(classLabel = classLabel.orEmpty(), onDismiss = { showTimetable = false })
     }
 
     var visibleYear by rememberSaveable { mutableStateOf(todayDate.year) }
@@ -158,7 +141,10 @@ fun CalendarScreen(
             // Niente più tasto AI separato in header: "AILA Assistant" è già la prima scelta
             // dentro il foglio che si apre da "Aggiungi", un tasto in più qui era ridondante.
             action = {
-                if (timetable != null) androidx.compose.material3.TextButton(onClick = { showTimetable = true }) { Text("Orario") }
+                if (timetable != null) androidx.compose.material3.TextButton(
+                    onClick = { showTimetable = true },
+                    modifier = Modifier.ailaTransformOrigin(24.dp, liveKey = "class-timetable")
+                ) { Text("Orario") }
                 AilaIconButton(contentDescription = "Aggiungi evento", onClick = onAddEventClick, primary = true, opensPage = true) { tint ->
                     AppIcons.Plus(modifier = Modifier.size(18.dp), color = tint)
                 }
