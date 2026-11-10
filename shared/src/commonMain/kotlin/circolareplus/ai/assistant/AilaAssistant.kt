@@ -119,13 +119,31 @@ class AilaAssistant internal constructor(
         for (round in 0 until AssistantReadTools.MAX_ROUNDS) {
             val canRead = round < AssistantReadTools.MAX_ROUNDS - 1
             onAgentPhase(AssistantAgentPhase.WRITING)
-            val result = classifier.generateAnswer(
+            var result = classifier.generateAnswer(
                 AssistantPrompt.builderFor(known, history, question, texts, searchQuery, mode, canRead)
                     .withAttachmentServices(known.attachedSources.map { it.file.service }.toSet())
             )
             if (result is AiTextResult.Failure) return AssistantReply(result.reason, isError = true)
             result as AiTextResult.Success
-            val parsed = AssistantPrompt.parse(result.text)
+            var parsed = AssistantPrompt.parse(result.text)
+            // Reads remain model-selected. A separate completion pass must check an apparent
+            // final answer, including answers which skipped retrieval altogether. Never treat
+            // the candidate's own verified flag as evidence that this pass happened.
+            if (mode == AssistantMode.GENERAL && !parsed.incomplete && parsed.actionRequest.isBlank() &&
+                parsed.calendarQueries.isEmpty() && parsed.needsCircularText.isEmpty() && parsed.searches.isEmpty()) {
+                result = classifier.generateAnswer(
+                    AssistantPrompt.builderFor(known, history, question, texts, searchQuery, mode, canRead, result.text)
+                        .withAttachmentServices(known.attachedSources.map { it.file.service }.toSet())
+                )
+                if (result is AiTextResult.Failure) return AssistantReply(result.reason, isError = true)
+                result as AiTextResult.Success
+                parsed = AssistantPrompt.parse(result.text)
+                if (!parsed.incomplete && !parsed.verified && parsed.actionRequest.isBlank() &&
+                    parsed.calendarQueries.isEmpty() && parsed.needsCircularText.isEmpty() && parsed.searches.isEmpty()) {
+                    return AssistantReply("Non sono riuscito a verificare una risposta completa alla richiesta. Riprova: i dati consultati potrebbero essere insufficienti.",
+                        isError = true, modelLabel = result.modelLabel, readContext = known.readContext)
+                }
+            }
             if (parsed.incomplete) return AssistantReply(
                 "La risposta è incompleta. Riprova: nessuna nuova azione è stata eseguita.", isError = true,
                 modelLabel = result.modelLabel

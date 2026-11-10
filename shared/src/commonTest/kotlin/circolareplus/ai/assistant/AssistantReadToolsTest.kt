@@ -52,6 +52,46 @@ class AssistantReadToolsTest {
         assertFalse("SOVRAPPOSIZIONE_VERIFICATA" in unknown)
     }
 
+    @Test fun clockIntervalsRespectEndpointsAndKeepStartOnlyTimesUncertain() {
+        val query = AssistantCalendarQuery("giornalino", compareWith = "FCE")
+        val first = event("g", "Giornalino").copy(time = "14:15–15:45")
+        val second = event("f", "FCE").copy(time = "ore 14:30-16:00")
+        assertTrue("SOVRAPPOSIZIONE_VERIFICATA" in AssistantReadTools.execute(query, knowledge(listOf(first, second))))
+        assertTrue("totale=0" in AssistantReadTools.execute(query, knowledge(listOf(first, second.copy(time = "15:45—16:30")))))
+        for (unknown in listOf("14:30", "24:00-25:00", "15:45-14:30")) {
+            assertTrue("STESSA_DATA_ORARIO_INSUFFICIENTE" in AssistantReadTools.execute(query, knowledge(listOf(first, second.copy(time = unknown)))))
+        }
+    }
+
+    @Test fun sourceSelectorsFindRenamedEventsAndExposeAMissingComparisonGroup() {
+        val events = listOf(
+            event("g", "Riunione di redazione").copy(circularNumber = 11),
+            event("f", "Introduzione alla certificazione").copy(circularNumber = 53),
+            event("unrelated", "Riunione di redazione").copy(circularNumber = 12)
+        )
+        val query = AssistantCalendarQuery(circularNumber = 11, compareCircularNumber = 53)
+        val result = AssistantReadTools.execute(query, knowledge(events))
+        assertTrue("primoGruppo=1; secondoGruppo=1" in result)
+        assertTrue("SOVRAPPOSIZIONE_VERIFICATA" in result)
+        assertFalse("unrelated" in result)
+        val missing = AssistantReadTools.execute(query.copy(compareCircularNumber = 99), knowledge(events))
+        assertTrue("CONFRONTO INCOMPLETO" in missing)
+        assertTrue("completo=false" in missing)
+    }
+
+    @Test fun reviewBudgetsKeepTheOriginalQuestionAndCloudPrivacy() {
+        val request = "Confronta gli impegni mantenendo tutti i destinatari " + "dettagli ".repeat(100)
+        for (budget in listOf(9_000, 60_000)) {
+            val prompt = AssistantPrompt.builderFor(knowledge(emptyList()), emptyList(), request,
+                emptyMap(), reviewDraft = "Bozza ".repeat(2_000)).build(budget)
+            assertTrue(prompt.totalChars <= budget, "${prompt.totalChars} > $budget")
+            assertTrue(request in prompt.userPrompt)
+            assertTrue("VERIFICA PRIMA DELL'INVIO" in prompt.systemPrompt)
+        }
+        assertFalse(AssistantPrompt.parse("""{"answer":"Bozza","verified":"yes"}""").verified)
+        assertTrue(AssistantPrompt.parse("""{"answer":"Verificata","verified":true}""").verified)
+    }
+
     @Test fun largeRequestsAreNeverSilentlyClippedBeforePlanning() {
         val request = "Prepara gli eventi: " + "Evento con dettagli; ".repeat(160) + "ULTIMO EVENTO DA CONSERVARE"
         val prompt = AssistantPrompt.build(60_000, knowledge(emptyList()), emptyList(), request, emptyMap())
