@@ -120,7 +120,7 @@ kotlin {
         }
         val androidUnitTest by getting {
             dependencies {
-                implementation(compose.uiTestJUnit4)
+                implementation("org.jetbrains.compose.ui:ui-test-junit4:${libs.versions.compose.multiplatform.get()}")
                 implementation("org.robolectric:robolectric:4.17")
             }
         }
@@ -140,12 +140,25 @@ android {
     }
     testOptions {
         unitTests.isIncludeAndroidResources = true
-        unitTests.all {
-            systemProperty("aila.ui.screenshots", layout.buildDirectory.dir("reports/tests/ui-screenshots").get().asFile.absolutePath)
-        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+}
+
+// Robolectric renders Android Compose locally and exports screenshots alongside the JUnit report.
+tasks.withType<Test>().configureEach {
+    systemProperty("aila.ui.screenshots", layout.buildDirectory.dir("reports/tests/ui-screenshots").get().asFile.absolutePath)
+    jvmArgs(
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.security=ALL-UNNAMED",
+        "--add-opens=java.base/java.text=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.access=ALL-UNNAMED",
+        "--add-opens=java.desktop/java.awt.font=ALL-UNNAMED",
+        "--add-opens=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED"
+    )
 }
