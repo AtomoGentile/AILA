@@ -133,7 +133,10 @@ Rispondi SOLO con un oggetto JSON, senza testo prima o dopo, con questa struttur
 {
   "answer": "la risposta in italiano, testo normale, a capo con \n (sempre una stringa, mai un array)",
   "sources": [],
-  "needsCircularText": []
+  "needsCircularText": [],
+  "searches": [],
+  "calendarQueries": [],
+  "actionRequest": ""
 }
 - "sources": le fonti che hai davvero usato, al massimo 6, ognuna nella forma
   {"kind": "CIRCULAR", "label": "Circolare n. <numero> - <titolo>", "circularNumber": <numero>}
@@ -171,7 +174,7 @@ Se nel testo di una circolare piu' righe rispondono (piu' giorni, orari, aule), 
 Se la domanda chiede regole, divieti o obblighi su un argomento, riporta subito TUTTI i punti del testo su quell'argomento in elenco puntato, senza aspettare "altro"; se e' un seguito, aggiungi solo cio' che non hai gia' scritto.
 Momenti scritti a parole ("l'ultima ora", "la terza ora") riportali cosi' come sono, senza trasformarli in orari. Non copiare date o orari da risposte precedenti o da altre circolari.
 Rispondi SOLO con questo oggetto JSON, senza altro testo:
-{"answer":"...","sources":[7,4],"needsCircularText":[],"searches":[]}
+{"answer":"...","sources":[7,4],"needsCircularText":[],"searches":[],"calendarQueries":[],"actionRequest":""}
 "answer" e' SEMPRE una stringa di testo (mai un array o un oggetto): gli elenchi vanno dentro la stringa, una riga per voce, separate da \n.
 A un saluto ("ciao", "buongiorno") rispondi con un saluto breve e chiedi come puoi aiutare: non elencare eventi, scadenze o circolari se non sono stati chiesti.
 "sources" contiene SOLO i numeri (interi, senza virgolette) delle circolari del CONTESTO che hai usato; per saluti e domande generali resta []. "needsCircularText": al massimo 2 numeri di circolari di cui ti serve il testo integrale, altrimenti []. "searches": al massimo 2 parole chiave da cercare nel testo integrale di tutte le circolari se il CONTESTO non basta (es. "ICDL"), altrimenti [].
@@ -427,7 +430,7 @@ non significa che dati mancanti provino l'assenza di eventi. Non proporre nuove 
         val calendarQueries: List<AssistantCalendarQuery> = emptyList(),
         val actionRequest: String = "",
         val incomplete: Boolean = false,
-        val verified: Boolean = false
+        val verified: Boolean? = null
     )
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -478,7 +481,7 @@ non significa che dati mancanti provino l'assenza di eventi. Non proporre nuove 
             .mapNotNull { runCatching { json.decodeFromJsonElement(AssistantCalendarQuery.serializer(), it) }.getOrNull() }
         return ParsedAnswer(tidyAnswer(answer.orEmpty()), sources, needs, searches, queries,
             (root["actionRequest"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
-            verified = (root["verified"] as? JsonPrimitive)?.booleanOrNull == true)
+            verified = (root["verified"] as? JsonPrimitive)?.booleanOrNull)
     }
 
     /**

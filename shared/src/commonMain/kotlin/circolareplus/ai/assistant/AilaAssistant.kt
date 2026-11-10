@@ -116,6 +116,12 @@ class AilaAssistant internal constructor(
         val seenSearches = mutableSetOf<String>()
         val seenCirculars = texts.keys.toMutableSet()
         val studyOnly = studyPlan
+        var reviewAttempted = false
+        var partialCandidate: AssistantReply? = null
+        fun partialReply(parsed: AssistantPrompt.ParsedAnswer, modelLabel: String): AssistantReply = AssistantReply(
+            parsed.answer + "\n\nNon ho completato la verifica di tutte le parti della richiesta: questa risposta può essere parziale.",
+            sources = checkedSources(parsed, searchQuery, known), modelLabel = modelLabel, readContext = known.readContext
+        )
         for (round in 0 until AssistantReadTools.MAX_ROUNDS) {
             val canRead = round < AssistantReadTools.MAX_ROUNDS - 1
             onAgentPhase(AssistantAgentPhase.WRITING)
@@ -123,28 +129,40 @@ class AilaAssistant internal constructor(
                 AssistantPrompt.builderFor(known, history, question, texts, searchQuery, mode, canRead)
                     .withAttachmentServices(known.attachedSources.map { it.file.service }.toSet())
             )
-            if (result is AiTextResult.Failure) return AssistantReply(result.reason, isError = true)
+            if (result is AiTextResult.Failure) return partialCandidate?.copy(readContext = known.readContext)
+                ?: AssistantReply(result.reason, isError = true)
             result as AiTextResult.Success
             var parsed = AssistantPrompt.parse(result.text)
-            // Reads remain model-selected. A separate completion pass must check an apparent
-            // final answer, including answers which skipped retrieval altogether. Never treat
-            // the candidate's own verified flag as evidence that this pass happened.
-            if (mode == AssistantMode.GENERAL && !parsed.incomplete && parsed.actionRequest.isBlank() &&
+            // Check an answer which skipped retrieval once. After reads, the next generation
+            // already has the evidence and should answer directly, without another model round.
+            if (mode == AssistantMode.GENERAL && !reviewAttempted && observations.isEmpty() &&
+                !parsed.incomplete && parsed.answer.isNotBlank() && parsed.actionRequest.isBlank() &&
                 parsed.calendarQueries.isEmpty() && parsed.needsCircularText.isEmpty() && parsed.searches.isEmpty()) {
+                reviewAttempted = true
+                val candidate = partialReply(parsed, result.modelLabel)
+                partialCandidate = candidate
                 result = classifier.generateAnswer(
                     AssistantPrompt.builderFor(known, history, question, texts, searchQuery, mode, canRead, result.text)
                         .withAttachmentServices(known.attachedSources.map { it.file.service }.toSet())
                 )
-                if (result is AiTextResult.Failure) return AssistantReply(result.reason, isError = true)
+                if (result is AiTextResult.Failure) return candidate
                 result as AiTextResult.Success
                 parsed = AssistantPrompt.parse(result.text)
-                if (!parsed.incomplete && !parsed.verified && parsed.actionRequest.isBlank() &&
+                if (parsed.incomplete) return candidate
+                if (parsed.verified == false && parsed.actionRequest.isBlank() &&
                     parsed.calendarQueries.isEmpty() && parsed.needsCircularText.isEmpty() && parsed.searches.isEmpty()) {
-                    return AssistantReply("Non sono riuscito a verificare una risposta completa alla richiesta. Riprova: i dati consultati potrebbero essere insufficienti.",
-                        isError = true, modelLabel = result.modelLabel, readContext = known.readContext)
+                    if (parsed.answer.isNotBlank()) partialCandidate = partialReply(parsed, result.modelLabel)
+                    if (!canRead) return partialCandidate!!
+                    observations += "La verifica precedente ha segnalato parti non completate. Recupera i dati mancanti con gli strumenti oppure rispondi con le informazioni disponibili e limiti espliciti. Non chiedere di ripetere la stessa domanda."
+                    known = known.copy(readContext = AssistantReadTools.boundedEvidence(observations.joinToString("\n\n")))
+                    continue
                 }
+                // `verified` is advisory, never an execution permission or a required schema
+                // field: ordinary valid JSON/plain-text replies must remain usable.
+                if (parsed.answer.isBlank() && parsed.actionRequest.isBlank() &&
+                    parsed.calendarQueries.isEmpty() && parsed.needsCircularText.isEmpty() && parsed.searches.isEmpty()) return candidate
             }
-            if (parsed.incomplete) return AssistantReply(
+            if (parsed.incomplete) return partialCandidate?.copy(readContext = known.readContext) ?: AssistantReply(
                 "La risposta è incompleta. Riprova: nessuna nuova azione è stata eseguita.", isError = true,
                 modelLabel = result.modelLabel
             )
@@ -160,7 +178,8 @@ class AilaAssistant internal constructor(
             val wantsMore = queries.isNotEmpty() || requested.isNotEmpty() || searches.isNotEmpty()
             val requestedReads = parsed.calendarQueries.isNotEmpty() || parsed.needsCircularText.isNotEmpty() || parsed.searches.isNotEmpty()
             if (!canRead || !wantsMore) {
-                val limitNotice = if (requestedReads) "\n\nNon ho completato tutte le verifiche richieste: i risultati possono essere parziali." else ""
+                if (parsed.answer.isBlank() && partialCandidate != null) return partialCandidate.copy(readContext = known.readContext)
+                val limitNotice = if (requestedReads || parsed.verified == false) "\n\nNon ho completato tutte le verifiche richieste: i risultati possono essere parziali." else ""
                 return AssistantReply(
                     text = parsed.answer.ifBlank { "Non ho trovato informazioni sufficienti per completare la richiesta." } + limitNotice,
                     sources = checkedSources(parsed, searchQuery, known), modelLabel = result.modelLabel,

@@ -3,6 +3,10 @@ package circolareplus.ai
 import kotlinx.coroutines.withTimeoutOrNull
 import circolareplus.domain.model.CircularAiClassification
 
+// Google owns a 30 s model ladder. Leave time for its result/error to cross the outer
+// classifier boundary instead of racing two equal deadlines and losing the real reason.
+internal const val ASSISTANT_ANSWER_ATTEMPT_TIMEOUT_MS = 45_000L
+
 /**
  * Prova il provider scelto e, se quello non ce la fa, l'altro.
  *

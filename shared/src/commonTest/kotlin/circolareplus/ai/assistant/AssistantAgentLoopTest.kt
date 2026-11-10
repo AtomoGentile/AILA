@@ -12,8 +12,10 @@ class AssistantAgentLoopTest {
     private class ScriptedClassifier(vararg responses: String) : AiClassifier {
         val remaining = responses.toMutableList()
         val prompts = mutableListOf<AiPrompt>()
+        var failAt: Int? = null
         override suspend fun generateAnswer(prompt: AiPromptBuilder): AiTextResult {
             prompts += prompt.build(60_000)
+            if (prompts.size == failAt) return AiTextResult.Failure("Nessuna risposta entro 30 secondi.")
             return AiTextResult.Success(remaining.removeAt(0), "test-model")
         }
         override suspend fun classifyCircularText(circularNumber: Int, circularTitle: String, pdfText: String, studentContext: String): CircularAiClassification = error("Unexpected classification")
@@ -46,8 +48,7 @@ class AssistantAgentLoopTest {
     @Test fun theModelCanReadBothGroupsThenAnswerFromActualResults() = runTest {
         val model = ScriptedClassifier(
             """{"answer":"","calendarQueries":[{"text":"giornalino","compareWith":"FCE"}]}""",
-            """{"answer":"Il 20 novembre gli eventi coincidono alla terza ora.","sources":[]}""",
-            """{"answer":"Il 20 novembre gli eventi coincidono alla terza ora.","sources":[],"verified":true}"""
+            """{"answer":"Il 20 novembre gli eventi coincidono alla terza ora.","sources":[]}"""
         )
         val events = listOf(
             CalendarEvent("g", "Giornalino", "2026-11-20", "3ª ora", CalendarEventCategory.ALTRO),
@@ -56,7 +57,7 @@ class AssistantAgentLoopTest {
         val reply = assistant(model).ask("Il giornalino si sovrappone al FCE?", emptyList(), knowledge.copy(calendarEvents = events))
         assertTrue("SOVRAPPOSIZIONE_VERIFICATA" in model.prompts[1].userPrompt)
         assertTrue("SOVRAPPOSIZIONE_VERIFICATA" in reply.readContext)
-        assertEquals(3, model.prompts.size)
+        assertEquals(2, model.prompts.size)
         assertNull(reply.actionPlan)
     }
 
@@ -64,8 +65,7 @@ class AssistantAgentLoopTest {
         val model = ScriptedClassifier(
             """{"answer":"Il giornalino si svolge il venerdì. Le attività possono sovrapporsi: gestisci bene gli impegni.","verified":true}""",
             """{"answer":"","calendarQueries":[{"circularNumber":11,"compareWith":"FCE"}],"verified":false}""",
-            """{"answer":"Ci sono coincidenze il 20 novembre e il 4 dicembre, ma manca la durata FCE."}""",
-            """{"answer":"Gli incontri del giornalino sono il 20 novembre e il 4 dicembre, 14:15–15:45. L'FCE inizia alle 14:30 in entrambi i giorni: le date coincidono, ma manca l'orario finale per verificare tutto l'intervallo.","verified":true}"""
+            """{"answer":"Ci sono coincidenze il 20 novembre e il 4 dicembre, ma manca la durata FCE."}"""
         )
         val events = listOf("2026-11-20", "2026-12-04").flatMap { date -> listOf(
             CalendarEvent("g$date", "Riunione di redazione", date, "14:15–15:45", CalendarEventCategory.ALTRO, circularNumber = 11),
@@ -73,7 +73,7 @@ class AssistantAgentLoopTest {
         ) }
         val reply = assistant(model).ask("Quando sono gli incontri del giornalino? Si intrecciano con l'FCE?", emptyList(), knowledge.copy(calendarEvents = events))
         assertFalse(reply.isError)
-        assertEquals(4, model.prompts.size)
+        assertEquals(3, model.prompts.size)
         assertTrue("VERIFICA PRIMA DELL'INVIO" in model.prompts[1].systemPrompt)
         assertTrue("2026-12-04" in model.prompts[2].userPrompt)
         assertTrue("4 dicembre" in reply.text)
@@ -88,8 +88,7 @@ class AssistantAgentLoopTest {
         val model = ScriptedClassifier(
             """{"answer":"Ho già elencato tutto."}""",
             """{"answer":"","calendarQueries":[{"text":"giornalino","compareWith":"FCE"}]}""",
-            """{"answer":"Mancava anche il 4 dicembre."}""",
-            """{"answer":"Mancava anche il 4 dicembre: 14:30–15:30, dentro l'incontro 14:15–15:45.","verified":true}"""
+            """{"answer":"Mancava anche il 4 dicembre: 14:30–15:30, dentro l'incontro 14:15–15:45."}"""
         )
         val events = listOf(
             CalendarEvent("g", "Giornalino", "2026-12-04", "14:15–15:45", CalendarEventCategory.ALTRO),
@@ -101,11 +100,51 @@ class AssistantAgentLoopTest {
         assertTrue("4 dicembre" in reply.text)
     }
 
-    @Test fun anUnverifiedReviewIsNotPresentedAsAFactualAnswer() = runTest {
-        val model = ScriptedClassifier("""{"answer":"Tutti gli eventi sono stati elencati."}""", """{"answer":"Tutti gli eventi sono stati elencati."}""")
+    @Test fun aMissingAdvisoryFlagDoesNotDiscardAValidReview() = runTest {
+        for (review in listOf("""{"answer":"Il giornalino è il 20 novembre; per il confronto manca la durata FCE."}""",
+            "Il giornalino è il 20 novembre; per il confronto manca la durata FCE.")) {
+            val model = ScriptedClassifier("""{"answer":"Controllo le date."}""", review)
+            val reply = assistant(model).ask("Controlla gli incontri del corso", emptyList(), knowledge)
+            assertFalse(reply.isError)
+            assertTrue("manca la durata FCE" in reply.text)
+        }
+    }
+
+    @Test fun aFailedReviewKeepsTheExistingAnswerWithAnExplicitLimit() = runTest {
+        val model = ScriptedClassifier("""{"answer":"Il giornalino si riunisce il 20 novembre."}""").apply { failAt = 2 }
         val reply = assistant(model).ask("Controlla gli incontri del corso", emptyList(), knowledge)
-        assertTrue(reply.isError)
-        assertFalse("Tutti gli eventi" in reply.text)
+        assertFalse(reply.isError)
+        assertTrue("20 novembre" in reply.text)
+        assertTrue("parziale" in reply.text)
+    }
+
+    @Test fun aNegativeReviewRecoversAutomaticallyWithoutAskingTheUserAgain() = runTest {
+        val model = ScriptedClassifier(
+            """{"answer":"Ci sono incontri del giornalino."}""",
+            """{"answer":"Manca il confronto con FCE.","verified":false}""",
+            """{"answer":"","calendarQueries":[{"text":"giornalino","compareWith":"FCE"}]}""",
+            """{"answer":"Il 4 dicembre coincidono; manca la durata FCE."}"""
+        )
+        val events = listOf(
+            CalendarEvent("g", "Giornalino", "2026-12-04", "14:15–15:45", CalendarEventCategory.ALTRO),
+            CalendarEvent("f", "FCE", "2026-12-04", "14:30", CalendarEventCategory.ALTRO)
+        )
+        val reply = assistant(model).ask("Confronta gli incontri", emptyList(), knowledge.copy(calendarEvents = events))
+        assertFalse(reply.isError)
+        assertTrue("4 dicembre" in reply.text)
+        assertTrue("STESSA_DATA_ORARIO_INSUFFICIENTE" in reply.readContext)
+        assertEquals(4, model.prompts.size)
+    }
+
+    @Test fun aFailedRecoveryPreservesPartialInformation() = runTest {
+        val model = ScriptedClassifier(
+            """{"answer":"Giornalino il 20 novembre."}""",
+            """{"answer":"Giornalino il 20 novembre. Mancano gli orari FCE.","verified":false}"""
+        ).apply { failAt = 3 }
+        val reply = assistant(model).ask("Confronta gli incontri", emptyList(), knowledge)
+        assertFalse(reply.isError)
+        assertTrue("20 novembre" in reply.text)
+        assertTrue("parziale" in reply.text)
     }
 
     @Test fun readLoopsStopAndExposeTheLimitInsteadOfPretendingToFinish() = runTest {
