@@ -273,17 +273,20 @@ fun AilaPillTextField(
     maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
     containerColor: Color? = null,
     leadingIcon: (@Composable () -> Unit)? = null,
-    trailingIcon: (@Composable () -> Unit)? = null
+    trailingIcon: (@Composable () -> Unit)? = null,
+    /** Embed the input in an existing composer; keep decoration on that single container. */
+    integrated: Boolean = false
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
     Box(
         modifier = modifier
             .then(
-                if (AppTheme.isGlass) Modifier.ailaGlassSurface(shape)
+                if (integrated) Modifier
+                else if (AppTheme.isGlass) Modifier.ailaGlassSurface(shape)
                 else Modifier.clip(shape).background(containerColor ?: AppTheme.TrackFill)
             )
-            .ailaFocusRing(focused, shape)
+            .then(if (integrated) Modifier else Modifier.ailaFocusRing(focused, shape))
     ) {
         OutlinedTextField(
             value = value,
