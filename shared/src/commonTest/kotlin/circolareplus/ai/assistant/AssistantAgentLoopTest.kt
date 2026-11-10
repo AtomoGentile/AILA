@@ -110,6 +110,17 @@ class AssistantAgentLoopTest {
         }
     }
 
+    @Test fun aCircularSearchDoesNotAddAnotherReviewAfterItsAnswer() = runTest {
+        val model = ScriptedClassifier(
+            """{"answer":"","searches":["FCE"]}""",
+            """{"answer":"Non ho trovato il calendario FCE nei testi disponibili."}"""
+        )
+        val reply = assistant(model).ask("Cerca gli incontri FCE nelle circolari", emptyList(), knowledge)
+        assertFalse(reply.isError)
+        assertEquals(2, model.prompts.size)
+        assertTrue("testi disponibili" in reply.text)
+    }
+
     @Test fun aFailedReviewKeepsTheExistingAnswerWithAnExplicitLimit() = runTest {
         val model = ScriptedClassifier("""{"answer":"Il giornalino si riunisce il 20 novembre."}""").apply { failAt = 2 }
         val reply = assistant(model).ask("Controlla gli incontri del corso", emptyList(), knowledge)

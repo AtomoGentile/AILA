@@ -117,6 +117,7 @@ class AilaAssistant internal constructor(
         val seenCirculars = texts.keys.toMutableSet()
         val studyOnly = studyPlan
         var reviewAttempted = false
+        var readsPerformed = false
         var partialCandidate: AssistantReply? = null
         fun partialReply(parsed: AssistantPrompt.ParsedAnswer, modelLabel: String): AssistantReply = AssistantReply(
             parsed.answer + "\n\nNon ho completato la verifica di tutte le parti della richiesta: questa risposta può essere parziale.",
@@ -135,7 +136,7 @@ class AilaAssistant internal constructor(
             var parsed = AssistantPrompt.parse(result.text)
             // Check an answer which skipped retrieval once. After reads, the next generation
             // already has the evidence and should answer directly, without another model round.
-            if (mode == AssistantMode.GENERAL && !reviewAttempted && observations.isEmpty() &&
+            if (mode == AssistantMode.GENERAL && !reviewAttempted && !readsPerformed &&
                 !parsed.incomplete && parsed.answer.isNotBlank() && parsed.actionRequest.isBlank() &&
                 parsed.calendarQueries.isEmpty() && parsed.needsCircularText.isEmpty() && parsed.searches.isEmpty()) {
                 reviewAttempted = true
@@ -187,6 +188,7 @@ class AilaAssistant internal constructor(
                 )
             }
             onAgentPhase(AssistantAgentPhase.READING)
+            readsPerformed = true
             queries.forEach { observations += AssistantReadTools.execute(it, known, studyOnly) }
             val searched = searchedTexts(searches, texts.keys)
             val fetched = fetchCircularTexts(requested, known.circulars, PREFETCH_BUDGET_MS)
