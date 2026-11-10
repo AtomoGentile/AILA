@@ -56,18 +56,13 @@ actual suspend fun exportSeatMapPdf(
     context.startActivity(chooser)
 }
 
-internal fun renderSeatMapPdf(assignments: List<DeskAssignment>, studentsMap: Map<String, User>): File {
+private fun renderSeatMapPdf(assignments: List<DeskAssignment>, studentsMap: Map<String, User>): File {
     val document = PdfDocument()
     val pageInfo = PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, 1).create()
     val page = document.startPage(pageInfo)
     val canvas = page.canvas
 
-    var y = drawHeader(canvas)
-
-    val columns = ((assignments.maxOfOrNull { it.column } ?: 0) + 1).coerceAtLeast(1)
-    val rows = ((assignments.maxOfOrNull { it.row } ?: 0) + 1).coerceAtLeast(1)
-    drawDesks(canvas, assignments, studentsMap, columns, rows, top = y)
-    drawFooter(canvas)
+    drawSeatMapPage(canvas, assignments, studentsMap)
 
     document.finishPage(page)
 
@@ -76,6 +71,17 @@ internal fun renderSeatMapPdf(assignments: List<DeskAssignment>, studentsMap: Ma
     FileOutputStream(file).use { document.writeTo(it) }
     document.close()
     return file
+}
+
+/** Shared drawing entry point for PDF output and print-layout regression rendering. */
+internal fun drawSeatMapPage(canvas: Canvas, assignments: List<DeskAssignment>, studentsMap: Map<String, User>) {
+    val y = drawHeader(canvas)
+
+    val columns = ((assignments.maxOfOrNull { it.column } ?: 0) + 1).coerceAtLeast(1)
+    val rows = ((assignments.maxOfOrNull { it.row } ?: 0) + 1).coerceAtLeast(1)
+    drawDesks(canvas, assignments, studentsMap, columns, rows, top = y)
+    drawFooter(canvas)
+
 }
 
 // Palette allineata al design system AILA (vedi AppTheme.kt: PrimaryBlue, HeroGradient*, TextDark/Muted, Hairline).
