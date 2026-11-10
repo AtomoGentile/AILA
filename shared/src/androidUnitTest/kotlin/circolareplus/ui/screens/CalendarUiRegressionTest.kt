@@ -41,6 +41,7 @@ class CalendarUiRegressionTest {
 
     @After fun teardown() {
         activity.pause().stop().destroy()
+        AppTheme.reduceMotion = false
         AppTheme.uiStyle = UiStyle.AUTO
     }
 
@@ -53,6 +54,18 @@ class CalendarUiRegressionTest {
         screenshot("timetable-thursday")
         compose.onNodeWithText("Dom").performScrollTo().performTouchInput { click() }
         compose.onNodeWithText("Nessuna lezione prevista").assertIsDisplayed()
+        compose.onNodeWithText("Oggi").performTouchInput { click() }
+        compose.mainClock.advanceTimeBy(1500)
+        compose.onNodeWithContentDescription("${circolareplus.util.ITALIAN_WEEKDAYS[circolareplus.util.weekdayOf(today())].replaceFirstChar { it.uppercase() }}, oggi")
+            .assertIsSelected()
+        screenshot("timetable-today")
+        compose.runOnIdle { AppTheme.reduceMotion = true }
+        compose.onNodeWithText("Dom").performScrollTo().performTouchInput { click() }
+        compose.onNodeWithText("Nessuna lezione prevista").assertIsDisplayed()
+        compose.onNodeWithText("Oggi").performTouchInput { click() }
+        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithContentDescription("${circolareplus.util.ITALIAN_WEEKDAYS[circolareplus.util.weekdayOf(today())].replaceFirstChar { it.uppercase() }}, oggi")
+            .assertIsSelected()
         compose.onNodeWithContentDescription("Chiudi orario").performTouchInput { click() }
         compose.mainClock.advanceTimeBy(1500)
         compose.onNodeWithText("Apri orario ufficiale").assertDoesNotExist()
@@ -77,6 +90,20 @@ class CalendarUiRegressionTest {
         compose.onNodeWithText("Dettagli evento").assertIsDisplayed()
         compose.onNodeWithText("Aggiungi evento").assertIsDisplayed()
         screenshot("event-form-top")
+        compose.onAllNodesWithText("Non impostata")[0].performScrollTo().performTouchInput { click() }
+        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithText("Ora iniziale").assertIsDisplayed()
+        compose.onNodeWithText("3ª ora").performTouchInput { click() }
+        compose.onNodeWithText("Ora iniziale").assertDoesNotExist()
+        compose.onNodeWithText("Non impostata").performScrollTo().performTouchInput { click() }
+        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithText("Ora finale").assertIsDisplayed()
+        compose.onNodeWithText("1ª ora").assertDoesNotExist()
+        screenshot("event-end-hour-picker")
+        compose.onNodeWithText("4ª ora").performTouchInput { click() }
+        compose.onNodeWithText("Ora finale").assertDoesNotExist()
+        compose.onNodeWithText("3ª ora").assertIsDisplayed()
+        compose.onNodeWithText("4ª ora").assertIsDisplayed()
         compose.onNodeWithText("Verifica").performScrollTo().performTouchInput { click() }
         compose.mainClock.advanceTimeBy(500)
         compose.onNodeWithText("Altro").assertIsDisplayed()
