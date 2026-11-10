@@ -128,11 +128,12 @@ class SeatMapPdfShareBridgeImpl: SeatMapPdfShareBridge {
             .foregroundColor: colorTextMuted
         ]
 
-        var y = margin + 6
-        ("Mappa Posti" as NSString).draw(at: CGPoint(x: margin, y: y), withAttributes: titleAttributes)
-        y += 26
-        ("Generata il \(dateLabel)" as NSString).draw(at: CGPoint(x: margin, y: y), withAttributes: subtitleAttributes)
-        y += 16
+        let title = "Mappa Posti" as NSString
+        let subtitle = "Generata il \(dateLabel)" as NSString
+        title.draw(at: CGPoint(x: margin, y: margin), withAttributes: titleAttributes)
+        let subtitleTop = margin + title.size(withAttributes: titleAttributes).height + 8
+        subtitle.draw(at: CGPoint(x: margin, y: subtitleTop), withAttributes: subtitleAttributes)
+        var y = subtitleTop + subtitle.size(withAttributes: subtitleAttributes).height + 14
 
         // Sottile linea d'accento sfumata sotto al titolo, per legare la testata al resto del
         // design system senza appesantire (stessa coppia di colori del gradiente hero dell'app).

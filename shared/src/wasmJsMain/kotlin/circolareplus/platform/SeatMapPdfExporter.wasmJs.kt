@@ -121,13 +121,13 @@ private fun textWidth(measurer: TextMeasurer, text: String, size: Float, bold: B
     ).size.width.toFloat()
 
 private fun DrawScope.drawHeader(measurer: TextMeasurer): Float {
-    var y = MARGIN + 6f
-    drawLabel(measurer, "Mappa Posti", MARGIN, y + 15f, 21f, COLOR_TEXT_DARK, bold = true)
-    // 4 punti in piu' dell'esportazione Android: li' le discendenti del titolo ("pp") sfiorano la
-    // riga della data, sul web con questo font si toccavano.
-    y += 28f
-    drawLabel(measurer, "Generata il ${currentDateLabel()}", MARGIN, y, 10f, COLOR_TEXT_MUTED)
-    y += 10f
+    val title = measurer.measure("Mappa Posti", TextStyle(fontSize = 21.sp, fontWeight = FontWeight.Bold))
+    val subtitleText = "Generata il ${currentDateLabel()}"
+    val subtitle = measurer.measure(subtitleText, TextStyle(fontSize = 10.sp))
+    drawLabel(measurer, "Mappa Posti", MARGIN, MARGIN + title.firstBaseline, 21f, COLOR_TEXT_DARK, bold = true)
+    val subtitleTop = MARGIN + title.size.height + 8f
+    drawLabel(measurer, subtitleText, MARGIN, subtitleTop + subtitle.firstBaseline, 10f, COLOR_TEXT_MUTED)
+    var y = subtitleTop + subtitle.size.height + 14f
 
     val gradient = Brush.horizontalGradient(
         listOf(COLOR_GRADIENT_TOP, COLOR_GRADIENT_BOTTOM), startX = MARGIN, endX = PAGE_WIDTH - MARGIN

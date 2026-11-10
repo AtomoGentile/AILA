@@ -56,7 +56,7 @@ actual suspend fun exportSeatMapPdf(
     context.startActivity(chooser)
 }
 
-private fun renderSeatMapPdf(assignments: List<DeskAssignment>, studentsMap: Map<String, User>): File {
+internal fun renderSeatMapPdf(assignments: List<DeskAssignment>, studentsMap: Map<String, User>): File {
     val document = PdfDocument()
     val pageInfo = PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, 1).create()
     val page = document.startPage(pageInfo)
@@ -103,11 +103,12 @@ private fun drawHeader(canvas: Canvas): Float {
         isAntiAlias = true
     }
 
-    var y = MARGIN + 6f
-    canvas.drawText("Mappa Posti", MARGIN, y + 15f, titlePaint)
-    y += 24f
-    canvas.drawText("Generata il ${currentDateLabel()}", MARGIN, y, subtitlePaint)
-    y += 14f
+    // Canvas coordinates are baselines: leave an actual 8 pt gap below the title's descenders.
+    val titleBaseline = MARGIN - titlePaint.fontMetrics.ascent
+    canvas.drawText("Mappa Posti", MARGIN, titleBaseline, titlePaint)
+    val subtitleBaseline = titleBaseline + titlePaint.fontMetrics.descent + 8f - subtitlePaint.fontMetrics.ascent
+    canvas.drawText("Generata il ${currentDateLabel()}", MARGIN, subtitleBaseline, subtitlePaint)
+    var y = subtitleBaseline + subtitlePaint.fontMetrics.descent + 14f
 
     // Sottile linea d'accento sfumata sotto al titolo, per legare la testata al resto del
     // design system senza appesantire (la stessa coppia di colori del gradiente hero dell'app).

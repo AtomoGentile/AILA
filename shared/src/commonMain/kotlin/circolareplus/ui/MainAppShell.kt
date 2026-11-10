@@ -6489,12 +6489,23 @@ internal fun AddCalendarEventDialog(
                         modifier = Modifier.fillMaxWidth().ailaSheetReveal(4)
                     )
                     Spacer(modifier = Modifier.height(AppTheme.Space16))
-                    val repeatOptions = listOf("NONE" to "Mai", "DAILY" to "Ogni giorno", "WEEKLY" to "Ogni settimana", "CUSTOM" to "Personalizzata")
+                    val durationOptions = listOf(
+                        "NONE" to "Un solo giorno", "RANGE" to "Più giorni consecutivi",
+                        "DAILY" to "Ogni giorno", "WEEKLY" to "Ogni settimana", "CUSTOM" to "Personalizzata"
+                    )
+                    val durationMode = if (repeatFrequency == "NONE" &&
+                        (showMultiDayOptions || selectedEndDateMillis != null)) "RANGE" else repeatFrequency
                     EventFormDropdown(
-                        label = "Ripeti",
-                        options = repeatOptions.map { it.second },
-                        selectedIndex = repeatOptions.indexOfFirst { it.first == repeatFrequency },
-                        onSelect = { repeatFrequency = repeatOptions[it].first; expandedHourPicker = null },
+                        label = "Durata e ripetizione",
+                        options = durationOptions.map { it.second },
+                        selectedIndex = durationOptions.indexOfFirst { it.first == durationMode },
+                        onSelect = {
+                            val mode = durationOptions[it].first
+                            showMultiDayOptions = mode == "RANGE"
+                            repeatFrequency = if (mode == "RANGE") "NONE" else mode
+                            if (mode == "NONE") selectedEndDateMillis = null
+                            expandedHourPicker = null
+                        },
                         modifier = Modifier.fillMaxWidth().ailaSheetReveal(4)
                     )
                     if (repeatFrequency == "CUSTOM") {
@@ -6544,11 +6555,6 @@ internal fun AddCalendarEventDialog(
                         onClick = { showEndDatePicker = true },
                         icon = { AppIcons.Calendar(Modifier.size(20.dp), color = AppTheme.PrimaryBlue) }
                     )
-                    if (selectedEndDateMillis != null) {
-                        TextButton(onClick = { selectedEndDateMillis = null; showMultiDayOptions = false }) {
-                            Text("Rimuovi data finale")
-                        }
-                    }
                     Text(
                         text = when {
                             selectedDateMillis == null -> "Scegli la data dell'evento prima di impostare la fine."
@@ -6561,10 +6567,6 @@ internal fun AddCalendarEventDialog(
                         color = AppTheme.TextMuted,
                         modifier = Modifier.padding(start = AppTheme.Space12, top = AppTheme.Space8)
                     )
-                    } else if (selectedDateMillis != null) {
-                        TextButton(onClick = { showMultiDayOptions = true }) {
-                            Text("Estendi su più giorni")
-                        }
                     }
                     Spacer(modifier = Modifier.height(AppTheme.Space16))
                     EventFormTextField(

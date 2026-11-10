@@ -72,6 +72,12 @@ class CalendarUiRegressionTest {
         compose.mainClock.advanceTimeBy(1500)
         compose.onNodeWithContentDescription("Titolo").performTextInput("Lezione")
         screenshot("event-form-top")
+        compose.onNodeWithText("Un solo giorno").performScrollTo().performTouchInput { click() }
+        compose.onNodeWithText("Più giorni consecutivi").performClick()
+        compose.onNodeWithText("Giorni consecutivi fino al").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Più giorni consecutivi").performScrollTo().performTouchInput { click() }
+        compose.onNodeWithText("Un solo giorno").performClick()
+        compose.onNodeWithText("Giorni consecutivi fino al").assertDoesNotExist()
         compose.onNodeWithText("Destinatari").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Tutta la classe").performScrollTo().assertIsDisplayed()
         screenshot("event-form-bottom")
