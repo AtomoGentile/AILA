@@ -59,6 +59,13 @@ class CalendarUiRegressionTest {
         compose.onNodeWithContentDescription("${circolareplus.util.ITALIAN_WEEKDAYS[circolareplus.util.weekdayOf(today())].replaceFirstChar { it.uppercase() }}, oggi")
             .assertIsSelected()
         screenshot("timetable-today")
+        compose.runOnIdle { AppTheme.reduceMotion = true }
+        compose.onNodeWithText("Dom").performScrollTo().performTouchInput { click() }
+        compose.onNodeWithText("Nessuna lezione prevista").assertIsDisplayed()
+        compose.onNodeWithText("Oggi").performTouchInput { click() }
+        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithContentDescription("${circolareplus.util.ITALIAN_WEEKDAYS[circolareplus.util.weekdayOf(today())].replaceFirstChar { it.uppercase() }}, oggi")
+            .assertIsSelected()
         compose.onNodeWithContentDescription("Chiudi orario").performTouchInput { click() }
         compose.mainClock.advanceTimeBy(1500)
         compose.onNodeWithText("Apri orario ufficiale").assertDoesNotExist()

@@ -1,7 +1,8 @@
 package circolareplus.ui.screens
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.*
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -28,7 +29,7 @@ import circolareplus.data.SchoolTimetable
 import circolareplus.data.TimetableLesson
 import circolareplus.design.LocalAilaSheetReveal
 import circolareplus.design.ailaSheetReveal
-import circolareplus.design.ailaPushTransition
+import circolareplus.design.ailaNavigationSpring
 import circolareplus.design.AilaIconButton
 import circolareplus.design.AilaOriginSheet
 import circolareplus.design.AppIcons
@@ -94,7 +95,18 @@ internal fun TimetableSheet(classLabel: String, onDismiss: () -> Unit, initialDa
                 }
                 AnimatedContent(
                     targetState = selectedDay,
-                    transitionSpec = { ailaPushTransition(forward = targetState > initialState) },
+                    transitionSpec = {
+                        val direction = if (targetState > initialState) 1 else -1
+                        val enter = fadeIn(tween(180))
+                        val exit = fadeOut(tween(120))
+                        if (AppTheme.reduceMotion) {
+                            (enter togetherWith exit).using(SizeTransform { _, _ -> snap() })
+                        } else {
+                            ((enter + slideInHorizontally(ailaNavigationSpring()) { direction * it / 8 }) togetherWith
+                                (exit + slideOutHorizontally(ailaNavigationSpring()) { -direction * it / 8 }))
+                                .using(SizeTransform { _, _ -> ailaNavigationSpring() })
+                        }
+                    },
                     modifier = Modifier.weight(1f, fill = false).fillMaxWidth().ailaSheetReveal(2),
                     label = "timetableDay"
                 ) { day ->
