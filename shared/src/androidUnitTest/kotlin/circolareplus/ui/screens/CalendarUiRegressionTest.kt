@@ -36,6 +36,7 @@ class CalendarUiRegressionTest {
         activity = Robolectric.buildActivity(ComponentActivity::class.java)
         activity.get().setTheme(android.R.style.Theme_Material_NoActionBar)
         activity.setup()
+        activity.get().window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
     }
 
     @After fun teardown() {
@@ -97,6 +98,24 @@ class CalendarUiRegressionTest {
             assertEquals("Lezione", createdTitle)
             assertEquals(circolareplus.domain.model.CalendarEventCategory.INTERROGAZIONE, createdCategory)
         }
+    }
+
+    @Test fun assistantComposerRemainsEditableAndSendsTheDraft() {
+        var sent: String? = null
+        activity.get().setContent {
+            AilaTheme {
+                AssistantChatScreen(
+                    messages = listOf(circolareplus.ai.assistant.AssistantMessage("a", circolareplus.ai.assistant.AssistantAuthor.ASSISTANT, "Pronto per la domanda.")),
+                    isThinking = false, conversations = emptyList(),
+                    onSend = { sent = it }, onBackClick = {}, onClearChat = {},
+                    onOpenConversation = {}, onDeleteConversation = {}, onOpenSource = {}
+                )
+            }
+        }
+        compose.onNode(hasSetTextAction()).performTextInput("Confronta i due calendari")
+        screenshot("assistant-composer-focused")
+        compose.onNodeWithContentDescription("Invia").assertIsEnabled().performTouchInput { click() }
+        compose.runOnIdle { assertEquals("Confronta i due calendari", sent) }
     }
 
     private fun screenshot(name: String) {
