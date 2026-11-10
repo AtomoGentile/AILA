@@ -146,15 +146,14 @@ fun SeatMapScreen(
     // ogni fila scelti dal Rappresentante (es. 8, 7, 7).
     val studentCount = studentsMap.size
     var customLayout by remember { mutableStateOf(false) }
-    var customDeskSlots by remember(studentCount) {
+    // La preferenza di capienza fa parte della chiave dello stato: se resta fuori,
+    // Compose conserva gli slot creati in modalità coppia anche dopo aver selezionato "Trii".
+    // In quel caso la schermata mostra la nuova preferenza ma il generatore riceve ancora slot
+    // da 2 posti, quindi produce soltanto coppie.
+    var customDeskSlots by remember(studentCount, seatsPerDesk) {
         mutableStateOf(SeatMapOptimizer.rectangularDeskSlots(defaultRowSeats(studentCount), seatsPerDesk))
     }
-    var deskPositionsEdited by remember(studentCount) { mutableStateOf(false) }
-    LaunchedEffect(studentCount, seatsPerDesk) {
-        if (!deskPositionsEdited) {
-            customDeskSlots = SeatMapOptimizer.rectangularDeskSlots(defaultRowSeats(studentCount), seatsPerDesk)
-        }
-    }
+    var deskPositionsEdited by remember(studentCount, seatsPerDesk) { mutableStateOf(false) }
     // Una disposizione pubblicata usa banchi da trio se un banco ha capienza 3 (campo `seats`,
     // salvato nel JSON) o, per le mappe vecchie senza il campo, un terzo occupante.
 
