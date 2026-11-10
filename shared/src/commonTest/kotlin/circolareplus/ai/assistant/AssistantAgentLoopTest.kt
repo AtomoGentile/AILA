@@ -158,6 +158,18 @@ class AssistantAgentLoopTest {
         assertTrue("parziale" in reply.text)
     }
 
+    @Test fun recoveryWithoutNewEvidenceRetainsThePartialResultNotice() = runTest {
+        val model = ScriptedClassifier(
+            """{"answer":"Giornalino il 20 novembre."}""",
+            """{"answer":"Il confronto non è completato.","verified":false}""",
+            """{"answer":"Gli incontri coincidono il 20 novembre."}"""
+        )
+        val reply = assistant(model).ask("Confronta gli incontri", emptyList(), knowledge)
+        assertFalse(reply.isError)
+        assertTrue("parziali" in reply.text)
+        assertEquals(3, model.prompts.size)
+    }
+
     @Test fun readLoopsStopAndExposeTheLimitInsteadOfPretendingToFinish() = runTest {
         val model = ScriptedClassifier(*(0..2).map { """{"answer":"Controllo in corso","calendarQueries":[{"text":"FCE","offset":${it * 20}}]}""" }.toTypedArray())
         val reply = assistant(model).ask("Confronta FCE e giornalino", emptyList(), knowledge)

@@ -118,6 +118,7 @@ class AilaAssistant internal constructor(
         val studyOnly = studyPlan
         var reviewAttempted = false
         var readsPerformed = false
+        var reviewIncomplete = false
         var partialCandidate: AssistantReply? = null
         fun partialReply(parsed: AssistantPrompt.ParsedAnswer, modelLabel: String): AssistantReply = AssistantReply(
             parsed.answer + "\n\nNon ho completato la verifica di tutte le parti della richiesta: questa risposta può essere parziale.",
@@ -152,6 +153,7 @@ class AilaAssistant internal constructor(
                 if (parsed.incomplete) return candidate
                 if (parsed.verified == false && parsed.actionRequest.isBlank() &&
                     parsed.calendarQueries.isEmpty() && parsed.needsCircularText.isEmpty() && parsed.searches.isEmpty()) {
+                    reviewIncomplete = true
                     if (parsed.answer.isNotBlank()) partialCandidate = partialReply(parsed, result.modelLabel)
                     if (!canRead) return partialCandidate!!
                     observations += "La verifica precedente ha segnalato parti non completate. Recupera i dati mancanti con gli strumenti oppure rispondi con le informazioni disponibili e limiti espliciti. Non chiedere di ripetere la stessa domanda."
@@ -180,7 +182,7 @@ class AilaAssistant internal constructor(
             val requestedReads = parsed.calendarQueries.isNotEmpty() || parsed.needsCircularText.isNotEmpty() || parsed.searches.isNotEmpty()
             if (!canRead || !wantsMore) {
                 if (parsed.answer.isBlank() && partialCandidate != null) return partialCandidate.copy(readContext = known.readContext)
-                val limitNotice = if (requestedReads || parsed.verified == false) "\n\nNon ho completato tutte le verifiche richieste: i risultati possono essere parziali." else ""
+                val limitNotice = if (requestedReads || parsed.verified == false || reviewIncomplete && !readsPerformed) "\n\nNon ho completato tutte le verifiche richieste: i risultati possono essere parziali." else ""
                 return AssistantReply(
                     text = parsed.answer.ifBlank { "Non ho trovato informazioni sufficienti per completare la richiesta." } + limitNotice,
                     sources = checkedSources(parsed, searchQuery, known), modelLabel = result.modelLabel,
