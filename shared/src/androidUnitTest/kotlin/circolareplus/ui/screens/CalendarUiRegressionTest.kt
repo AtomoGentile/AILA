@@ -33,7 +33,9 @@ class CalendarUiRegressionTest {
     @Before fun setup() {
         AppTheme.uiStyle = UiStyle.EXPRESSIVE
         AppTheme.isDarkMode = true
-        activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+        activity = Robolectric.buildActivity(ComponentActivity::class.java)
+        activity.get().setTheme(android.R.style.Theme_Material_NoActionBar)
+        activity.setup()
     }
 
     @After fun teardown() {
@@ -71,7 +73,7 @@ class CalendarUiRegressionTest {
         compose.onNodeWithContentDescription("Titolo").performTextInput("Lezione")
         screenshot("event-form-top")
         compose.onNodeWithText("Destinatari").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Tutta la classe").assertIsDisplayed()
+        compose.onNodeWithText("Tutta la classe").performScrollTo().assertIsDisplayed()
         screenshot("event-form-bottom")
         compose.onNodeWithText("Aggiungi evento").assertIsEnabled().performTouchInput { click() }
         compose.runOnIdle { assertEquals("Lezione", createdTitle) }
