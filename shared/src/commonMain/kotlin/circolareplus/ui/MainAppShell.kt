@@ -6090,7 +6090,7 @@ internal fun AddCalendarEventDialog(
     }
     val canSubmitManualEvent = title.isNotBlank() && startDateMillis != null && !isPastDate &&
         (endDateMillis == null || (endDateMillis >= startDateMillis && endDateMillis <= startDateMillis + EVENT_MAX_RANGE_DAYS * EVENT_DAY_MILLIS)) &&
-        (repeatFrequency == "NONE" || selectedEndDateMillis != null) &&
+        ((repeatFrequency == "NONE" && !showMultiDayOptions) || selectedEndDateMillis != null) &&
         (repeatFrequency != "CUSTOM" || (eventOccurrenceCount > 0 && customWeekdays.all { customTimes[it] != null }))
 
     // Lo stesso calendario a griglia viene usato su Android, iOS e web; per la data finale

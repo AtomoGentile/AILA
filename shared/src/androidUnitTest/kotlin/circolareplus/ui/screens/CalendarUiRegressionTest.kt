@@ -75,6 +75,7 @@ class CalendarUiRegressionTest {
         compose.onNodeWithText("Un solo giorno").performScrollTo().performTouchInput { click() }
         compose.onNodeWithText("Più giorni consecutivi").performClick()
         compose.onNodeWithText("Giorni consecutivi fino al").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Aggiungi evento").assertIsNotEnabled()
         compose.onNodeWithText("Più giorni consecutivi").performScrollTo().performTouchInput { click() }
         compose.onNodeWithText("Un solo giorno").performClick()
         compose.onNodeWithText("Giorni consecutivi fino al").assertDoesNotExist()
