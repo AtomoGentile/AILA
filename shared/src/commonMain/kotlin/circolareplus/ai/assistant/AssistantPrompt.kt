@@ -250,7 +250,7 @@ MODALITA' SOLO MATERIALE: questa chat e' aperta dalla sezione Gita. Non usare co
             knowledge.gita.isEmpty() && mode == AssistantMode.GENERAL -> basePrompt
             mode == AssistantMode.GITA_ONLY -> basePrompt + GITA_RULES + GITA_ONLY_RULES
             else -> basePrompt + GITA_RULES
-        }) + (if (mode == AssistantMode.GENERAL) "\n" + AssistantReadTools.INSTRUCTIONS +
+        }) + (if (mode == AssistantMode.GENERAL) "\n" + (if (maxChars < COMPACT_THRESHOLD) AssistantReadTools.COMPACT_INSTRUCTIONS else AssistantReadTools.INSTRUCTIONS) +
             if (readsAllowed) "\nPuoi richiedere letture prima della risposta finale."
             else "\nUltimo giro: non richiedere altre letture. Rispondi dai risultati e dichiara eventuali limiti."
         else "") + if (reviewDraft != null && maxChars < COMPACT_THRESHOLD) """
