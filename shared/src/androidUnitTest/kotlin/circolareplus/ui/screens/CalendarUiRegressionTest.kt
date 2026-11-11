@@ -21,6 +21,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.junit.runner.RunWith
 import java.io.File
+import kotlin.test.assertTrue
 import kotlin.test.assertEquals
 
 @RunWith(RobolectricTestRunner::class)
@@ -47,7 +48,10 @@ class CalendarUiRegressionTest {
 
     @Test fun timetableOpensAboveCalendarAndAcceptsTouches() {
         activity.get().setContent { AilaTheme { CalendarScreen(events = emptyList(), classLabel = "4CSA") } }
-        compose.onNodeWithText("Lezioni del giorno").performScrollTo().performTouchInput { click() }
+        compose.onNodeWithContentDescription("Apri orario della classe").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Lezioni del giorno").assertDoesNotExist()
+        compose.onNodeWithText("Fisica", substring = true).assertDoesNotExist()
+        compose.onNodeWithContentDescription("Apri orario della classe").performTouchInput { click() }
         compose.mainClock.advanceTimeBy(1500)
         compose.onNodeWithText("Gio").performTouchInput { click() }
         compose.onNodeWithContentDescription("Filosofia, 4ª ora").assertIsDisplayed()
@@ -70,6 +74,31 @@ class CalendarUiRegressionTest {
         compose.mainClock.advanceTimeBy(1500)
         compose.onNodeWithText("Apri orario ufficiale").assertDoesNotExist()
         screenshot("calendar-day-lessons")
+    }
+
+    @Test fun timetableSlidesInAndKeepsExitUntilAnimationFinishes() {
+        val visible = androidx.compose.runtime.mutableStateOf(false)
+        activity.get().setContent {
+            AilaTheme {
+                if (visible.value) TimetableSheet("4CSA", onDismiss = { visible.value = false }, initialDay = 3)
+            }
+        }
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { visible.value = true }
+        compose.mainClock.advanceTimeBy(64)
+        val enteringTop = compose.onNodeWithText("Orario", useUnmergedTree = true).getUnclippedBoundsInRoot().top
+        compose.mainClock.advanceTimeBy(160)
+        val laterTop = compose.onNodeWithText("Orario", useUnmergedTree = true).getUnclippedBoundsInRoot().top
+        assertTrue(laterTop < enteringTop, "The sheet must move upwards during entry")
+        compose.mainClock.advanceTimeBy(1200)
+        compose.onNodeWithContentDescription("Chiudi orario").performTouchInput { click() }
+        compose.mainClock.advanceTimeBy(80)
+        compose.onNodeWithText("Apri orario ufficiale").assertExists()
+        compose.runOnIdle { assertTrue(visible.value, "Exit must finish before disposing the sheet") }
+        compose.mainClock.advanceTimeBy(600)
+        compose.runOnIdle { assertTrue(!visible.value) }
+        compose.onNodeWithText("Apri orario ufficiale").assertDoesNotExist()
+        compose.mainClock.autoAdvance = true
     }
 
     @Test fun eventFormScrollsToRecipientsAndKeepsSubmitAccessible() {

@@ -198,7 +198,8 @@ fun AilaTopSheet(
         } else {
             withFrameNanos { }
             withFrameNanos { }
-            progress.animateTo(1f, spring(dampingRatio = 1f, stiffness = 500f))
+            if (AppTheme.reduceMotion) progress.animateTo(1f, tween(140))
+            else progress.animateTo(1f, spring(dampingRatio = 1f, stiffness = 500f))
         }
     }
     val requestClose: () -> Unit = {
@@ -206,7 +207,8 @@ fun AilaTopSheet(
             closing.value = true
             scope.launch {
                 if (origin != null) progress.animateContainerClose()
-                else progress.animateTo(0f, tween(260, easing = androidx.compose.animation.core.FastOutLinearInEasing))
+                else progress.animateTo(0f, tween(if (AppTheme.reduceMotion) 140 else 260,
+                    easing = androidx.compose.animation.core.FastOutLinearInEasing))
                 onClosed()
             }
         }
@@ -272,7 +274,8 @@ fun AilaTopSheet(
                     )
                     .then(
                         if (origin == null) Modifier.graphicsLayer {
-                            translationY = (if (fromBottom) 1f else -1f) * (1f - progress.value) * size.height
+                            if (AppTheme.reduceMotion) alpha = progress.value.coerceIn(0f, 1f)
+                            else translationY = (if (fromBottom) 1f else -1f) * (1f - progress.value) * size.height
                         } else Modifier
                     )
                     .onGloballyPositioned { panelBounds.value = it.boundsInParent() }
@@ -418,6 +421,8 @@ fun AilaOriginSheet(
     faded: Boolean = false,
     /** Il pulsante che lo apre sta in basso (FAB): il foglio si aggancia al fondo e cresce verso l'alto. */
     fromBottom: Boolean = false,
+    /** Use a plain sliding sheet when a card is only a shortcut, without a color morph. */
+    useOrigin: Boolean = true,
     content: @Composable ColumnScope.(close: () -> Unit) -> Unit
 ) {
     if (AppTheme.isGlass) {
@@ -444,9 +449,9 @@ fun AilaOriginSheet(
         LaunchedEffect(closeRequested) { if (closeRequested) close() }
         AilaBottomSheet(onDismissRequest = onDismiss, faded = faded, sheetState = sheetState) { content(close) }
     } else {
-        val origin = remember(originKey) {
+        val origin = remember(originKey, useOrigin) {
             AilaContainerTransform.assignFreshTo(originKey)
-            AilaContainerTransform.originOf(originKey)
+            if (useOrigin) AilaContainerTransform.originOf(originKey) else null
         }
         AilaTopSheet(origin = origin, fromBottom = fromBottom, onClosed = onDismiss) { requestClose ->
             LaunchedEffect(closeRequested) { if (closeRequested) requestClose() }
