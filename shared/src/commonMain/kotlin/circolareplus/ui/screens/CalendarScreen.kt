@@ -279,23 +279,33 @@ fun CalendarScreen(
             Spacer(modifier = Modifier.height(AppTheme.Space12))
             if (timetable != null) {
                 AilaCard(
-                    modifier = Modifier.semantics { contentDescription = "Apri orario della classe" },
+                    modifier = Modifier
+                        .then(if (AppTheme.isGlass) Modifier else Modifier.border(
+                            1.dp, AppTheme.PrimaryBlue.copy(alpha = 0.22f), RoundedCornerShape(AppTheme.CardCornerRadius)
+                        ))
+                        .semantics { contentDescription = "Apri orario della classe" },
                     onClick = { showTimetable = true }
                 ) {
                     Row(
-                        Modifier.fillMaxWidth().padding(20.dp),
+                        Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Box(
-                            Modifier.size(52.dp).clip(RoundedCornerShape(18.dp)).background(AppTheme.TintBlue),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            AppIcons.Calendar(Modifier.size(28.dp), color = AppTheme.PrimaryBlue)
-                        }
-                        Text("Orario", style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.SemiBold, color = AppTheme.TextDark,
+                            Modifier.width(3.dp).height(38.dp).clip(RoundedCornerShape(50))
+                                .background(AppTheme.PrimaryBlue)
+                        )
+                        Text("Orario", style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold, color = AppTheme.TextDark,
                             modifier = Modifier.weight(1f))
+                        Box(
+                            Modifier.clip(RoundedCornerShape(50)).background(AppTheme.TintBlue)
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(circolareplus.data.SchoolTimetable.normalizeClass(classLabel.orEmpty()),
+                                style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
+                                color = AppTheme.PrimaryBlue)
+                        }
                         AppIcons.ChevronRight(Modifier.size(20.dp), color = AppTheme.TextMuted)
                     }
                 }
