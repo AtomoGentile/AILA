@@ -142,7 +142,7 @@ internal fun TimetableSheet(classLabel: String, onDismiss: () -> Unit, initialDa
                         }
                         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                             if (lessons.isEmpty()) {
-                                Text("Nessuna lezione prevista.", style = MaterialTheme.typography.bodyMedium,
+                                Text("Nessuna lezione prevista", style = MaterialTheme.typography.bodyMedium,
                                     color = AppTheme.TextMuted, modifier = Modifier.padding(vertical = 18.dp))
                             } else lessons.forEachIndexed { index, lesson ->
                                 TimetableLessonRow(lesson)
