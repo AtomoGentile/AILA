@@ -948,6 +948,7 @@ fun MainAppShell(
     }
 
     var selectedTab by rememberSaveable { mutableStateOf(MainTab.HOME) }
+    var timetableOverlayVisible by remember { mutableStateOf(false) }
     // Giorno da aprire nel calendario (evento toccato nella Home), consumato dal calendario.
     var calendarFocusDateIso by remember { mutableStateOf<String?>(null) }
     // I Sondaggi sono ora una tab: "essere nei sondaggi" vuol dire avere quella tab selezionata.
@@ -3245,7 +3246,10 @@ fun MainAppShell(
                 androidx.compose.runtime.CompositionLocalProvider(
                     circolareplus.design.LocalBottomBarPadding provides bottomBarPadding,
                     circolareplus.design.LocalProfileEntry provides profileEntry,
-                    circolareplus.design.LocalWideLayout provides twoPane
+                    circolareplus.design.LocalWideLayout provides twoPane,
+                    circolareplus.design.LocalFloatingTabBarVisibility provides { visible ->
+                        timetableOverlayVisible = !visible
+                    }
                 ) {
                     // Da qualunque tab diversa da Home, il back di sistema torna a Home invece di
                     // chiudere l'app subito — comportamento standard delle bottom bar Android. Da
@@ -4378,7 +4382,7 @@ fun MainAppShell(
                     // la schermata di voto deve usare tutto lo spazio in fondo, senza la pillola che
                     // copre il pulsante "Salva preferenze".
                     // Con "Riduci movimento" la barra compare e sparisce in dissolvenza, senza salire.
-                    visible = !imeVisible && !isVotingSocial,
+                    visible = !imeVisible && !isVotingSocial && !timetableOverlayVisible,
                     modifier = Modifier.align(Alignment.BottomCenter),
                     // Con "Riduci movimento" la barra compare e sparisce in dissolvenza, senza salire.
                     enter = if (AppTheme.reduceMotion) androidx.compose.animation.fadeIn(circolareplus.design.ailaFadeSpec())

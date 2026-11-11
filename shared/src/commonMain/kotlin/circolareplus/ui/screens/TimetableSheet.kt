@@ -5,10 +5,10 @@ import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,6 +45,11 @@ internal fun TimetableSheet(classLabel: String, onDismiss: () -> Unit, initialDa
     var selectedDay by rememberSaveable(classLabel, initialDay) { mutableStateOf(initialDay ?: currentDay) }
     val dayScroll = rememberLazyListState(initialFirstVisibleItemIndex = initialDay ?: currentDay)
     val uriHandler = LocalUriHandler.current
+    val setTabBarVisible = circolareplus.design.LocalFloatingTabBarVisibility.current
+    DisposableEffect(Unit) {
+        setTabBarVisible(false)
+        onDispose { setTabBarVisible(true) }
+    }
     LaunchedEffect(selectedDay) {
         // Keep the selected day visible even on narrow screens and with larger font sizes.
         if (AppTheme.reduceMotion) dayScroll.scrollToItem(selectedDay)
@@ -67,7 +72,7 @@ internal fun TimetableSheet(classLabel: String, onDismiss: () -> Unit, initialDa
                         AppIcons.Close(Modifier.size(18.dp), color = tint)
                     }
                 }
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(12.dp))
                 LazyRow(
                     state = dayScroll,
                     modifier = Modifier.fillMaxWidth().ailaSheetReveal(1).selectableGroup(),
@@ -80,11 +85,11 @@ internal fun TimetableSheet(classLabel: String, onDismiss: () -> Unit, initialDa
                             animationSpec = circolareplus.design.ailaNavigationSpring(), label = "timetableDaySelection")
                         val fullName = ITALIAN_WEEKDAYS[index].replaceFirstChar { it.uppercase() }
                         Column(
-                            Modifier.widthIn(min = 48.dp).clip(RoundedCornerShape(16.dp))
+                            Modifier.widthIn(min = 44.dp).clip(RoundedCornerShape(14.dp))
                                 .background(dayBackground)
                                 .selectable(selected = isSelected, role = Role.Tab, onClick = { selectedDay = index })
                                 .semantics { contentDescription = if (index == currentDay) "$fullName, oggi" else fullName }
-                                .padding(horizontal = 10.dp, vertical = 10.dp),
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
@@ -116,15 +121,16 @@ internal fun TimetableSheet(classLabel: String, onDismiss: () -> Unit, initialDa
                     val lessons = SchoolTimetable.day(classLabel, day)
                     Column(Modifier.fillMaxWidth()) {
                         Row(
-                            Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 14.dp),
+                            Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 Text(ITALIAN_WEEKDAYS[day].replaceFirstChar { it.uppercase() },
-                                    style = MaterialTheme.typography.titleLarge, color = AppTheme.TextDark)
-                                Text(if (lessons.isEmpty()) "Nessuna lezione prevista" else
-                                    "${lessons.sumOf { it.toHour - it.fromHour + 1 }} ore di lezione",
-                                    style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+                                    style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
+                                    color = AppTheme.TextDark)
+                                if (lessons.isNotEmpty()) Text(
+                                    "${lessons.sumOf { it.toHour - it.fromHour + 1 }} ore",
+                                    style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
                             }
                             if (day == currentDay) {
                                 Text("Oggi", style = MaterialTheme.typography.labelMedium, color = AppTheme.PrimaryBlue,
@@ -134,33 +140,22 @@ internal fun TimetableSheet(classLabel: String, onDismiss: () -> Unit, initialDa
                                 TextButton(onClick = { selectedDay = currentDay }) { Text("Oggi") }
                             }
                         }
-                        LazyColumn(
-                            state = rememberLazyListState(),
-                            modifier = Modifier.weight(1f, fill = false).fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            contentPadding = PaddingValues(bottom = 16.dp)
-                        ) {
+                        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                             if (lessons.isEmpty()) {
-                                item {
-                                    Column(
-                                        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(AppTheme.FieldSurface)
-                                            .padding(horizontal = 20.dp, vertical = 28.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                                    ) {
-                                        AppIcons.Calendar(Modifier.size(28.dp), color = AppTheme.TextMuted)
-                                        Text("Il prospetto settimanale non prevede lezioni per questo giorno.",
-                                            style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
-                                    }
-                                }
-                            } else items(lessons, key = { it.fromHour }) { lesson -> TimetableLessonRow(lesson) }
+                                Text("Nessuna lezione prevista", style = MaterialTheme.typography.bodyMedium,
+                                    color = AppTheme.TextMuted, modifier = Modifier.padding(vertical = 18.dp))
+                            } else lessons.forEachIndexed { index, lesson ->
+                                TimetableLessonRow(lesson)
+                                if (index != lessons.lastIndex) HorizontalDivider(
+                                    color = AppTheme.FieldOutline.copy(alpha = 0.55f), thickness = 0.7.dp)
+                            }
                         }
                     }
                 }
                 HorizontalDivider(color = AppTheme.FieldOutline)
-                Text("Schema di base: verifica festività e variazioni nelle comunicazioni della scuola.",
-                    style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted,
-                    modifier = Modifier.padding(top = 12.dp).ailaSheetReveal(3))
+                Text("Orario di base · possibili variazioni nelle comunicazioni scolastiche.",
+                    style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted,
+                    modifier = Modifier.padding(top = 8.dp).ailaSheetReveal(3))
                 TextButton(
                     onClick = { uriHandler.openUri(SchoolTimetable.SOURCE_URL) },
                     modifier = Modifier.align(Alignment.Start)
@@ -179,23 +174,15 @@ private fun TimetableLessonRow(lesson: TimetableLesson) {
     val subject = if (lesson.subject.length <= 4) lesson.subject else
         lesson.subject.lowercase().replaceFirstChar { it.uppercase() }
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(AppTheme.FieldSurface)
-            .clearAndSetSemantics { contentDescription = "$subject, ${lesson.timeLabel}" }
-            .heightIn(min = 76.dp).padding(12.dp),
+        Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = "$subject, ${lesson.timeLabel}" }
+            .heightIn(min = 48.dp).padding(horizontal = 4.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Column(
-            Modifier.width(56.dp).clip(RoundedCornerShape(12.dp)).background(AppTheme.TintBlue)
-                .padding(vertical = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(if (lesson.fromHour == lesson.toHour) "${lesson.fromHour}ª" else "${lesson.fromHour}–${lesson.toHour}",
-                style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = AppTheme.PrimaryBlue)
-            Text(if (lesson.fromHour == lesson.toHour) "ORA" else "ORE", style = MaterialTheme.typography.labelSmall,
-                color = AppTheme.TextMuted)
-        }
-        Text(subject, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium,
+        Text(if (lesson.fromHour == lesson.toHour) "${lesson.fromHour}ª" else "${lesson.fromHour}ª–${lesson.toHour}ª",
+            style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
+            color = AppTheme.PrimaryBlue, modifier = Modifier.widthIn(min = 48.dp))
+        Text(subject, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium,
             color = AppTheme.TextDark, modifier = Modifier.weight(1f))
     }
 }
