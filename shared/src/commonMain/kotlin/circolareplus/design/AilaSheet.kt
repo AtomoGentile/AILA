@@ -51,6 +51,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
+/** Allows full-screen overlays to temporarily dismiss the floating tab bar. */
+val LocalFloatingTabBarVisibility = androidx.compose.runtime.staticCompositionLocalOf<(Boolean) -> Unit> { {} }
+
 /**
  * Il menu che sale dal basso, uguale in tutta l'app.
  *
