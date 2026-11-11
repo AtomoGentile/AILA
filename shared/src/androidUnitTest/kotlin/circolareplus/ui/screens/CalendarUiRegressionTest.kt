@@ -78,18 +78,20 @@ class CalendarUiRegressionTest {
     }
 
     @Test fun timetableSlidesInAndKeepsExitUntilAnimationFinishes() {
-        val visible = androidx.compose.runtime.mutableStateOf(false)
+        val visible = androidx.compose.runtime.mutableStateOf(true)
+        compose.mainClock.autoAdvance = false
         activity.get().setContent {
             AilaTheme {
                 if (visible.value) TimetableSheet("4CSA", onDismiss = { visible.value = false }, initialDay = 3)
             }
         }
-        compose.mainClock.autoAdvance = false
-        compose.runOnIdle { visible.value = true }
+        compose.waitForIdle()
         compose.mainClock.advanceTimeBy(64)
+        compose.waitForIdle()
         val enteringTop = compose.onNodeWithText("Orario", useUnmergedTree = true).getUnclippedBoundsInRoot().top
         screenshot("timetable-enter-early", settle = false)
         compose.mainClock.advanceTimeBy(160)
+        compose.waitForIdle()
         val laterTop = compose.onNodeWithText("Orario", useUnmergedTree = true).getUnclippedBoundsInRoot().top
         assertTrue(laterTop < enteringTop, "The sheet must move upwards during entry")
         screenshot("timetable-enter-later", settle = false)
