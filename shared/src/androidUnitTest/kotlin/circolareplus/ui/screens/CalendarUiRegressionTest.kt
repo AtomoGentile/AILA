@@ -34,6 +34,7 @@ class CalendarUiRegressionTest {
     @Before fun setup() {
         AppTheme.uiStyle = UiStyle.EXPRESSIVE
         AppTheme.isDarkMode = true
+        AppTheme.reduceMotion = false
         activity = Robolectric.buildActivity(ComponentActivity::class.java)
         activity.get().setTheme(android.R.style.Theme_Material_NoActionBar)
         activity.setup()
@@ -87,13 +88,16 @@ class CalendarUiRegressionTest {
         compose.runOnIdle { visible.value = true }
         compose.mainClock.advanceTimeBy(64)
         val enteringTop = compose.onNodeWithText("Orario", useUnmergedTree = true).getUnclippedBoundsInRoot().top
+        screenshot("timetable-enter-early", settle = false)
         compose.mainClock.advanceTimeBy(160)
         val laterTop = compose.onNodeWithText("Orario", useUnmergedTree = true).getUnclippedBoundsInRoot().top
         assertTrue(laterTop < enteringTop, "The sheet must move upwards during entry")
+        screenshot("timetable-enter-later", settle = false)
         compose.mainClock.advanceTimeBy(1200)
         compose.onNodeWithContentDescription("Chiudi orario").performTouchInput { click() }
         compose.mainClock.advanceTimeBy(80)
         compose.onNodeWithText("Apri orario ufficiale").assertExists()
+        screenshot("timetable-exit-midway", settle = false)
         compose.runOnIdle { assertTrue(visible.value, "Exit must finish before disposing the sheet") }
         compose.mainClock.advanceTimeBy(600)
         compose.runOnIdle { assertTrue(!visible.value) }
@@ -176,9 +180,9 @@ class CalendarUiRegressionTest {
         compose.runOnIdle { assertEquals("Confronta i due calendari", sent) }
     }
 
-    private fun screenshot(name: String) {
+    private fun screenshot(name: String, settle: Boolean = true) {
         val directory = File(System.getProperty("aila.ui.screenshots") ?: "build/ui-screenshots").apply { mkdirs() }
-        compose.mainClock.advanceTimeBy(500)
+        if (settle) compose.mainClock.advanceTimeBy(500)
         compose.waitForIdle()
         // PixelCopy waits for a real window frame; Robolectric renders synchronously to Canvas.
         compose.runOnIdle {
