@@ -51,7 +51,10 @@ internal fun TimetableSheet(classLabel: String, onDismiss: () -> Unit, initialDa
         else dayScroll.animateScrollToItem(selectedDay)
     }
 
-    AilaOriginSheet(originKey = "class-timetable", onDismiss = onDismiss) { close ->
+    AilaOriginSheet(
+        originKey = "class-timetable", onDismiss = onDismiss,
+        fromBottom = true, useOrigin = false
+    ) { close ->
         CompositionLocalProvider(LocalAilaSheetReveal provides true) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
                 Row(Modifier.fillMaxWidth().ailaSheetReveal(0), verticalAlignment = Alignment.CenterVertically) {

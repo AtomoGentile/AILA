@@ -17,6 +17,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clipToBounds
 import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -276,31 +278,25 @@ fun CalendarScreen(
 
             Spacer(modifier = Modifier.height(AppTheme.Space12))
             if (timetable != null) {
-                val lessons = circolareplus.data.SchoolTimetable.lessons(classLabel, selectedDateIso)
-                AilaCard(onClick = { showTimetable = true }, transformKey = "class-timetable") {
-                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            AppIcons.Calendar(Modifier.size(20.dp), color = AppTheme.TextMuted)
-                            Text("Lezioni del giorno", style = MaterialTheme.typography.labelLarge,
-                                color = AppTheme.TextDark, modifier = Modifier.weight(1f))
-                            AppIcons.ChevronRight(Modifier.size(18.dp), color = AppTheme.TextMuted)
+                AilaCard(
+                    modifier = Modifier.semantics { contentDescription = "Apri orario della classe" },
+                    onClick = { showTimetable = true }
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(20.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Box(
+                            Modifier.size(52.dp).clip(RoundedCornerShape(18.dp)).background(AppTheme.TintBlue),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            AppIcons.Calendar(Modifier.size(28.dp), color = AppTheme.PrimaryBlue)
                         }
-                        if (lessons.isEmpty()) {
-                            Text("Nessuna lezione prevista · apri la settimana",
-                                style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
-                        } else lessons.forEach { lesson ->
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalAlignment = Alignment.CenterVertically) {
-                                Text(if (lesson.fromHour == lesson.toHour) "${lesson.fromHour}ª" else "${lesson.fromHour}ª–${lesson.toHour}ª",
-                                    style = MaterialTheme.typography.labelMedium, color = AppTheme.PrimaryBlue,
-                                    modifier = Modifier.width(48.dp))
-                                Text(if (lesson.subject.length <= 4) lesson.subject else
-                                    lesson.subject.lowercase().replaceFirstChar { it.uppercase() },
-                                    style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextDark,
-                                    modifier = Modifier.weight(1f))
-                            }
-                        }
+                        Text("Orario", style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.SemiBold, color = AppTheme.TextDark,
+                            modifier = Modifier.weight(1f))
+                        AppIcons.ChevronRight(Modifier.size(20.dp), color = AppTheme.TextMuted)
                     }
                 }
                 Spacer(Modifier.height(AppTheme.Space12))

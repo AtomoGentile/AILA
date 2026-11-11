@@ -21,6 +21,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.junit.runner.RunWith
 import java.io.File
+import kotlin.test.assertTrue
 import kotlin.test.assertEquals
 
 @RunWith(RobolectricTestRunner::class)
@@ -33,6 +34,7 @@ class CalendarUiRegressionTest {
     @Before fun setup() {
         AppTheme.uiStyle = UiStyle.EXPRESSIVE
         AppTheme.isDarkMode = true
+        AppTheme.reduceMotion = false
         activity = Robolectric.buildActivity(ComponentActivity::class.java)
         activity.get().setTheme(android.R.style.Theme_Material_NoActionBar)
         activity.setup()
@@ -47,7 +49,10 @@ class CalendarUiRegressionTest {
 
     @Test fun timetableOpensAboveCalendarAndAcceptsTouches() {
         activity.get().setContent { AilaTheme { CalendarScreen(events = emptyList(), classLabel = "4CSA") } }
-        compose.onNodeWithText("Lezioni del giorno").performScrollTo().performTouchInput { click() }
+        compose.onNodeWithContentDescription("Apri orario della classe").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Lezioni del giorno").assertDoesNotExist()
+        compose.onNodeWithText("Fisica", substring = true).assertDoesNotExist()
+        compose.onNodeWithContentDescription("Apri orario della classe").performTouchInput { click() }
         compose.mainClock.advanceTimeBy(1500)
         compose.onNodeWithText("Gio").performTouchInput { click() }
         compose.onNodeWithContentDescription("Filosofia, 4ª ora").assertIsDisplayed()
@@ -70,6 +75,36 @@ class CalendarUiRegressionTest {
         compose.mainClock.advanceTimeBy(1500)
         compose.onNodeWithText("Apri orario ufficiale").assertDoesNotExist()
         screenshot("calendar-day-lessons")
+    }
+
+    @Test fun timetableSlidesInAndKeepsExitUntilAnimationFinishes() {
+        val visible = androidx.compose.runtime.mutableStateOf(true)
+        compose.mainClock.autoAdvance = false
+        activity.get().setContent {
+            AilaTheme {
+                if (visible.value) TimetableSheet("4CSA", onDismiss = { visible.value = false }, initialDay = 3)
+            }
+        }
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(64)
+        compose.waitForIdle()
+        val enteringTop = compose.onNodeWithText("Orario", useUnmergedTree = true).getUnclippedBoundsInRoot().top
+        screenshot("timetable-enter-early", settle = false)
+        compose.mainClock.advanceTimeBy(160)
+        compose.waitForIdle()
+        val laterTop = compose.onNodeWithText("Orario", useUnmergedTree = true).getUnclippedBoundsInRoot().top
+        assertTrue(laterTop < enteringTop, "The sheet must move upwards during entry")
+        screenshot("timetable-enter-later", settle = false)
+        compose.mainClock.advanceTimeBy(1200)
+        compose.onNodeWithContentDescription("Chiudi orario").performTouchInput { click() }
+        compose.mainClock.advanceTimeBy(80)
+        compose.onNodeWithText("Apri orario ufficiale").assertExists()
+        screenshot("timetable-exit-midway", settle = false)
+        compose.runOnIdle { assertTrue(visible.value, "Exit must finish before disposing the sheet") }
+        compose.mainClock.advanceTimeBy(600)
+        compose.runOnIdle { assertTrue(!visible.value) }
+        compose.onNodeWithText("Apri orario ufficiale").assertDoesNotExist()
+        compose.mainClock.autoAdvance = true
     }
 
     @Test fun eventFormScrollsToRecipientsAndKeepsSubmitAccessible() {
@@ -147,9 +182,9 @@ class CalendarUiRegressionTest {
         compose.runOnIdle { assertEquals("Confronta i due calendari", sent) }
     }
 
-    private fun screenshot(name: String) {
+    private fun screenshot(name: String, settle: Boolean = true) {
         val directory = File(System.getProperty("aila.ui.screenshots") ?: "build/ui-screenshots").apply { mkdirs() }
-        compose.mainClock.advanceTimeBy(500)
+        if (settle) compose.mainClock.advanceTimeBy(500)
         compose.waitForIdle()
         // PixelCopy waits for a real window frame; Robolectric renders synchronously to Canvas.
         compose.runOnIdle {
