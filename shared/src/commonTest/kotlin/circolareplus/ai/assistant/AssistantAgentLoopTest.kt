@@ -41,6 +41,27 @@ class AssistantAgentLoopTest {
         assertTrue(model.prompts.isEmpty())
     }
 
+    @Test fun missingGroupCanBeRecoveredFromExplicitDatedPdfRows() = runTest {
+        val circular = Circular(71, "Corso B2 First", "2026-09-10", "b2-english")
+        val g = CalendarEvent("g", "Giornalino", "2026-11-20", "14:15–15:45", CalendarEventCategory.ALTRO)
+        val data = knowledge.copy(calendarEvents = listOf(g), circulars = listOf(circular))
+        val reply = assertNotNull(AssistantMeetingComparison.answer("Il giornalino si sovrappone al FCE?", data) { ids ->
+            assertEquals(listOf(71), ids)
+            mapOf(71 to "Lezione B2 First: 20 novembre 2026 dalle 14.30 alle 16.00\nLezione B2 First annullata: 20/11/2026 13:00–16:00")
+        })
+        assertTrue("14:30–15:45" in reply.text)
+        assertFalse("14:15–15:45" in reply.text.substringAfter("Sovrapposizioni verificate:"))
+        assertTrue(reply.sources.any { it.circularNumber == 71 })
+    }
+
+    @Test fun semanticActionAlsoRequiresAFreshCalendar() = runTest {
+        val model = ScriptedClassifier("""{"answer":"","actionRequest":"Sposta la verifica di inglese"}""")
+        val reply = assistant(model).ask("Mettila domani", emptyList(), knowledge.copy(calendarWarning = "Calendario non aggiornato"))
+        assertTrue(reply.isError)
+        assertNull(reply.actionPlan)
+        assertEquals(1, model.prompts.size)
+    }
+
     @Test fun aShortCorrectionCanBeSemanticallyRoutedToTheExistingDraft() = runTest {
         val model = ScriptedClassifier(
             """{"answer":"","actionRequest":"Prepara la verifica di inglese su U7 il 25 novembre 2026 alla terza ora"}""",

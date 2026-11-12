@@ -12,6 +12,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Assistant con letture iterative limitate: il modello può cercare eventi, confrontare attività
@@ -58,10 +59,10 @@ class AilaAssistant internal constructor(
         /** Circolari portate al secondo giro da una ricerca dell'assistente nel testo integrale. */
         private const val MAX_SEARCHED_CIRCULARS = 2
 
+        // The UI creates an assistant per turn. Keep complete documents across turns.
+        private val textCache = linkedMapOf<Circular, String>()
+        private val cacheMutex = kotlinx.coroutines.sync.Mutex()
     }
-
-    /** Session cache keyed by the document and its attachment metadata. */
-    private val textCache = mutableMapOf<Circular, String>()
 
     /**
      * Risponde a [question] tenendo conto di [history] (la conversazione in corso) e di
@@ -88,7 +89,9 @@ class AilaAssistant internal constructor(
         // Le risposte pronte del codice rispondono sull'app intera: nella chat della Gita no,
         // li' l'unica fonte e' il materiale della gita e il modello la legge tutta.
         if (mode == AssistantMode.GENERAL && knowledge.attachedSources.isEmpty() && !AssistantActionIntent.matches(question, history)) {
-            AssistantMeetingComparison.answer(question, knowledge)?.let { return it }
+            AssistantMeetingComparison.answer(question, knowledge) { numbers ->
+                fetchCircularTexts(numbers, knowledge.circulars, PREFETCH_BUDGET_MS)
+            }?.let { return it }
         }
         val studyPlan = AssistantContext.normalize(question).let { "piano" in it && ("studio" in it || "ripasso" in it) }
         if (mode == AssistantMode.GENERAL && !studyPlan && knowledge.attachedSources.isEmpty() && history.isEmpty() && !AssistantActionIntent.matches(question, history) && knowledge.calendarWarning == null) {
@@ -174,6 +177,7 @@ class AilaAssistant internal constructor(
                 if (!actionsEnabled) return AssistantReply(
                     "Le azioni di ACA sono disattivate. Puoi abilitarle in Impostazioni → AI → ACA e Calendario.", modelLabel = "AILA"
                 )
+                known.calendarWarning?.let { return AssistantReply(it, isError = true) }
                 return planAction(question, history, known, onAgentPhase, parsed.actionRequest)
             }
             val queries = if (mode == AssistantMode.GENERAL) parsed.calendarQueries.filter { seenQueries.add(it) } else emptyList()
@@ -341,7 +345,7 @@ class AilaAssistant internal constructor(
         val result = mutableMapOf<Int, String>()
         val toDownload = numbers.mapNotNull { number ->
             val circular = circulars.firstOrNull { it.number == number } ?: return@mapNotNull null
-            val cached = textCache[circular]
+            val cached = cacheMutex.withLock { textCache[circular] }
             if (cached != null) {
                 result[number] = cached
                 null
@@ -377,7 +381,10 @@ class AilaAssistant internal constructor(
             result[circular.number] = if (complete[index]) text else "$text\n[Testo parziale: uno o più documenti non sono stati letti integralmente.]"
             // In cache solo il testo completo: uno parziale lascerebbe fuori gli allegati per
             // sempre, anche dalle domande successive che avrebbero il tempo di leggerli.
-            if (complete[index]) textCache[circular] = text
+            if (complete[index]) cacheMutex.withLock {
+                textCache[circular] = text
+                if (textCache.size > 32) textCache.remove(textCache.keys.first())
+            }
         }
         return result
     }
