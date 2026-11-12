@@ -42,69 +42,199 @@ class CalendarUiRegressionTest {
     }
 
     @After fun teardown() {
+        android.provider.Settings.Global.putFloat(activity.get().contentResolver,
+            android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
         activity.pause().stop().destroy()
         AppTheme.reduceMotion = false
+        AppTheme.isDarkMode = true
         AppTheme.uiStyle = UiStyle.AUTO
     }
 
-    @Test fun timetableOpensAboveCalendarAndAcceptsTouches() {
-        activity.get().setContent { AilaTheme { CalendarScreen(events = emptyList(), classLabel = "4CSA") } }
-        compose.onNodeWithContentDescription("Apri orario della classe").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Lezioni del giorno").assertDoesNotExist()
-        compose.onNodeWithText("Fisica", substring = true).assertDoesNotExist()
-        compose.onNodeWithContentDescription("Apri orario della classe").performTouchInput { click() }
-        compose.mainClock.advanceTimeBy(1500)
-        compose.onNodeWithText("Gio").performTouchInput { click() }
-        compose.onNodeWithContentDescription("Filosofia, 4ª ora").assertIsDisplayed()
-        screenshot("timetable-thursday")
-        compose.onNodeWithText("Dom").performScrollTo().performTouchInput { click() }
-        compose.onNodeWithText("Nessuna lezione prevista").assertIsDisplayed()
-        compose.onNodeWithText("Oggi").performTouchInput { click() }
-        compose.mainClock.advanceTimeBy(1500)
-        compose.onNodeWithContentDescription("${circolareplus.util.ITALIAN_WEEKDAYS[circolareplus.util.weekdayOf(today())].replaceFirstChar { it.uppercase() }}, oggi")
-            .assertIsSelected()
-        screenshot("timetable-today")
-        compose.runOnIdle { AppTheme.reduceMotion = true }
-        compose.onNodeWithText("Dom").performScrollTo().performTouchInput { click() }
-        compose.onNodeWithText("Nessuna lezione prevista").assertIsDisplayed()
-        compose.onNodeWithText("Oggi").performTouchInput { click() }
-        compose.mainClock.advanceTimeBy(500)
-        compose.onNodeWithContentDescription("${circolareplus.util.ITALIAN_WEEKDAYS[circolareplus.util.weekdayOf(today())].replaceFirstChar { it.uppercase() }}, oggi")
-            .assertIsSelected()
-        compose.onNodeWithContentDescription("Chiudi orario").performTouchInput { click() }
-        compose.mainClock.advanceTimeBy(1500)
-        compose.onNodeWithText("Apri orario ufficiale").assertDoesNotExist()
-        screenshot("calendar-day-lessons")
+    private fun calendar(date: String = "2026-11-11") {
+        activity.get().setContent {
+            AilaTheme { CalendarScreen(events = emptyList(), classLabel = "4CSA", focusDateIso = date) }
+        }
+        compose.mainClock.advanceTimeBy(1000)
     }
 
-    @Test fun timetableSlidesInAndKeepsExitUntilAnimationFinishes() {
-        val visible = androidx.compose.runtime.mutableStateOf(true)
-        compose.mainClock.autoAdvance = false
+    private fun openTimetable() {
+        compose.onNodeWithContentDescription("Apri orario della classe").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1200)
+        compose.onNodeWithContentDescription("Torna al calendario").assertIsDisplayed()
+    }
+
+    @Test fun timetableKeepsDateAndNavigatesAcrossMonthBoundary() {
+        calendar("2026-11-30")
+        openTimetable()
+        compose.onNodeWithText("30", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithContentDescription("Giorno successivo").performClick()
+        compose.mainClock.advanceTimeBy(1200)
+        compose.onNodeWithText("1", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithContentDescription("Torna al calendario").performClick()
+        compose.mainClock.advanceTimeBy(1200)
+        compose.onNodeWithText("Dicembre 2026").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Mese successivo").performClick()
+        compose.mainClock.advanceTimeBy(1200)
+        compose.onNodeWithText("Gennaio 2027").assertIsDisplayed()
+    }
+
+    @Test fun morphFollowsDragThenCancelsBelowThreshold() {
+        calendar()
+        compose.onNodeWithContentDescription("Apri orario della classe").performTouchInput {
+            swipe(center, center + androidx.compose.ui.geometry.Offset(0f, height * 0.6f), 700)
+        }
+        compose.mainClock.advanceTimeBy(1200)
+        compose.onNodeWithText("Novembre 2026").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Apri orario della classe").assertIsDisplayed()
+        compose.onNodeWithText("Apri orario ufficiale").assertDoesNotExist()
+    }
+
+    @Test fun fullDragAndInverseDragUseSameSurface() {
+        calendar()
+        compose.onNodeWithContentDescription("Apri orario della classe").performTouchInput {
+            swipe(center, center + androidx.compose.ui.geometry.Offset(0f, height * 4.5f), 700)
+        }
+        compose.mainClock.advanceTimeBy(1200)
+        compose.onNodeWithContentDescription("Torna al calendario").assertIsDisplayed()
+        screenshot("calendar-morph-timetable")
+        compose.onNodeWithContentDescription("Torna al calendario").performTouchInput {
+            swipe(center, center - androidx.compose.ui.geometry.Offset(0f, height * 3.1f), 700)
+        }
+        compose.mainClock.advanceTimeBy(1200)
+        compose.onNodeWithContentDescription("Apri orario della classe").assertIsDisplayed()
+        compose.onNodeWithText("11", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test fun sundayReducedMotionLightModeAndRepeatedTransitions() {
+        android.provider.Settings.Global.putFloat(activity.get().contentResolver,
+            android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
+        AppTheme.isDarkMode = false
+        calendar("2026-11-15")
+        repeat(3) {
+            openTimetable()
+            compose.onNodeWithText("Nessuna lezione prevista per questa data").assertIsDisplayed()
+            compose.onNodeWithContentDescription("Torna al calendario").performClick()
+        }
+        openTimetable()
+        compose.onNodeWithText("Oggi").performClick()
+        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithText("${today().day}", useUnmergedTree = true).assertIsDisplayed()
+        screenshot("calendar-morph-light-reduced-motion")
+    }
+
+    @Test fun fastReleaseCanCompleteBeforeDistanceThreshold() {
+        calendar()
+        compose.onNodeWithContentDescription("Apri orario della classe").performTouchInput {
+            swipe(center, center + androidx.compose.ui.geometry.Offset(0f, height * 1.5f), 80)
+        }
+        compose.mainClock.advanceTimeBy(1200)
+        compose.onNodeWithContentDescription("Torna al calendario").assertIsDisplayed()
+    }
+
+    @Test fun scrollingEventsDoesNotOpenTimetable() {
+        calendar()
+        compose.onNodeWithText("Nessun evento").performTouchInput { swipeUp() }
+        compose.mainClock.advanceTimeBy(1000)
+        compose.onNodeWithContentDescription("Torna al calendario").assertDoesNotExist()
+    }
+
+    @Test fun interruptedGestureReturnsToOriginAndMovesBeforeRelease() {
+        calendar()
+        val before = compose.onNodeWithText("11", useUnmergedTree = true).getUnclippedBoundsInRoot().top
+        compose.onNodeWithContentDescription("Apri orario della classe").performTouchInput {
+            down(center)
+            moveBy(androidx.compose.ui.geometry.Offset(0f, height * 2.8f), 300)
+        }
+        compose.mainClock.advanceTimeByFrame()
+        val during = compose.onNodeWithText("11", useUnmergedTree = true).getUnclippedBoundsInRoot().top
+        assertTrue(during < before, "The selected day must move while the pointer is still down")
+        screenshot("calendar-morph-interactive", settle = false)
+        compose.onNodeWithContentDescription("Apri orario della classe").performTouchInput { cancel() }
+        compose.mainClock.advanceTimeBy(1200)
+        compose.onNodeWithText("Novembre 2026").assertIsDisplayed()
+    }
+
+    @Test fun returningFromTimetablePreservesEventClicks() {
+        var clicked: String? = null
+        val event = circolareplus.domain.model.CalendarEvent("test", "Evento di prova", "2026-11-11",
+            category = circolareplus.domain.model.CalendarEventCategory.VERIFICA)
         activity.get().setContent {
-            AilaTheme {
-                if (visible.value) TimetableSheet("4CSA", onDismiss = { visible.value = false }, initialDay = 3)
+            AilaTheme { CalendarScreen(events = listOf(event), classLabel = "4CSA", focusDateIso = event.date,
+                onEventClick = { clicked = it.id }) }
+        }
+        compose.mainClock.advanceTimeBy(1000)
+        openTimetable()
+        compose.onNodeWithContentDescription("Torna al calendario").performClick()
+        compose.mainClock.advanceTimeBy(1200)
+        compose.onNodeWithText(event.title).performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(event.id, clicked) }
+    }
+
+    @Test @Config(qualifiers = "w1000dp-h850dp-xhdpi")
+    fun tabletMorphExpandsAcrossEventPane() {
+        activity.get().setContent {
+            androidx.compose.runtime.CompositionLocalProvider(circolareplus.design.LocalWideLayout provides true) {
+                AilaTheme { CalendarScreen(events = emptyList(), classLabel = "4CSA", focusDateIso = "2026-11-11") }
             }
         }
-        compose.waitForIdle()
-        compose.mainClock.advanceTimeBy(64)
-        compose.waitForIdle()
-        val enteringTop = compose.onNodeWithText("Orario", useUnmergedTree = true).getUnclippedBoundsInRoot().top
-        screenshot("timetable-enter-early", settle = false)
-        compose.mainClock.advanceTimeBy(160)
-        compose.waitForIdle()
-        val laterTop = compose.onNodeWithText("Orario", useUnmergedTree = true).getUnclippedBoundsInRoot().top
-        assertTrue(laterTop < enteringTop, "The sheet must move upwards during entry")
-        screenshot("timetable-enter-later", settle = false)
+        compose.mainClock.advanceTimeBy(1000)
+        openTimetable()
+        compose.onNodeWithContentDescription("Giorno successivo").performClick()
         compose.mainClock.advanceTimeBy(1200)
-        compose.onNodeWithContentDescription("Chiudi orario").performTouchInput { click() }
-        compose.mainClock.advanceTimeBy(80)
-        compose.onNodeWithText("Apri orario ufficiale").assertExists()
-        screenshot("timetable-exit-midway", settle = false)
-        compose.runOnIdle { assertTrue(visible.value, "Exit must finish before disposing the sheet") }
-        compose.mainClock.advanceTimeBy(600)
-        compose.runOnIdle { assertTrue(!visible.value) }
-        compose.onNodeWithText("Apri orario ufficiale").assertDoesNotExist()
-        compose.mainClock.autoAdvance = true
+        compose.onNodeWithText("12", useUnmergedTree = true).assertIsDisplayed()
+        screenshot("calendar-morph-tablet")
+    }
+
+    @Test fun recreatedCompositionRestoresModeAndSelectedDate() {
+        val visible = androidx.compose.runtime.mutableStateOf(true)
+        val focus = androidx.compose.runtime.mutableStateOf<String?>("2026-11-11")
+        var registry = androidx.compose.runtime.saveable.SaveableStateRegistry(null) { true }
+        activity.get().setContent {
+            AilaTheme {
+                if (visible.value) androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.runtime.saveable.LocalSaveableStateRegistry provides registry
+                ) {
+                    CalendarScreen(events = emptyList(), classLabel = "4CSA", focusDateIso = focus.value,
+                        onFocusConsumed = { focus.value = null })
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(1000)
+        openTimetable()
+        compose.onNodeWithContentDescription("Giorno successivo").performClick()
+        compose.mainClock.advanceTimeBy(1200)
+        var saved: Map<String, List<Any?>> = emptyMap()
+        compose.runOnIdle {
+            saved = registry.performSave()
+            visible.value = false
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            registry = androidx.compose.runtime.saveable.SaveableStateRegistry(saved) { true }
+            visible.value = true
+        }
+        compose.mainClock.advanceTimeBy(1000)
+        compose.onNodeWithContentDescription("Torna al calendario").assertIsDisplayed()
+        compose.onNodeWithText("12", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test fun glassSurfaceSupportsTheSameRoundTrip() {
+        AppTheme.uiStyle = UiStyle.GLASS
+        calendar()
+        openTimetable()
+        screenshot("calendar-morph-glass")
+        compose.onNodeWithContentDescription("Torna al calendario").performClick()
+        compose.mainClock.advanceTimeBy(1200)
+        compose.onNodeWithText("Novembre 2026").assertIsDisplayed()
+        screenshot("calendar-morph-glass-restored")
+    }
+
+    @Test fun systemBackReturnsToCalendarBeforeLeavingSection() {
+        calendar()
+        openTimetable()
+        compose.runOnIdle { activity.get().onBackPressedDispatcher.onBackPressed() }
+        compose.mainClock.advanceTimeBy(1200)
+        compose.onNodeWithContentDescription("Apri orario della classe").assertIsDisplayed()
     }
 
     @Test fun eventFormScrollsToRecipientsAndKeepsSubmitAccessible() {

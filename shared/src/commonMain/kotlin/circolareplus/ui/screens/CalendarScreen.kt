@@ -4,7 +4,6 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -17,8 +16,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import circolareplus.util.plusDays
 import androidx.compose.ui.draw.clipToBounds
 import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -39,7 +42,6 @@ import circolareplus.design.AilaScreenHeader
 import circolareplus.design.AilaSectionTitle
 import circolareplus.design.AnimatedFilterChip
 import circolareplus.design.ailaAppear
-import circolareplus.design.ailaTransformOrigin
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
 import circolareplus.domain.model.CalendarEvent
@@ -77,8 +79,13 @@ fun CalendarScreen(
     classLabel: String? = null
 ) {
     val todayDate = remember { today() }
-    var showTimetable by remember { mutableStateOf(false) }
-    val timetable = circolareplus.data.SchoolTimetable.week(classLabel)
+    val morph = rememberSaveable(saver = CalendarMorphState.saver) { CalendarMorphState() }
+    val morphScope = rememberCoroutineScope()
+    // Reduced motion keeps direct gesture feedback on the handle but avoids spatial morphing.
+    val progress = if (AppTheme.reduceMotion) { if (morph.timetable) 1f else 0f } else morph.progress
+    circolareplus.platform.PlatformBackHandler(enabled = morph.progress > 0f || morph.timetable) {
+        morph.settle(morphScope, false, AppTheme.reduceMotion)
+    }
 
     var visibleYear by rememberSaveable { mutableStateOf(todayDate.year) }
     var visibleMonth by rememberSaveable { mutableStateOf(todayDate.month) }
@@ -120,6 +127,7 @@ fun CalendarScreen(
         visibleYear = focus.year
         visibleMonth = focus.month
         selectedDay = focus.day
+        morph.settle(morphScope, false, AppTheme.reduceMotion)
         onFocusConsumed()
     }
     val selectedDateIso = remember(visibleYear, visibleMonth, selectedDay) {
@@ -129,8 +137,12 @@ fun CalendarScreen(
     // quindi il confronto fra stringhe e' quello fra date).
     val isPastDay = selectedDateIso < todayDate.toIso()
 
-    // The Material sheet is drawn in this layout (unlike a platform AlertDialog).
-    // Keep its host after the opaque calendar surface so it also receives touch input.
+    val selectedDate = CivilDate(visibleYear, visibleMonth, selectedDay)
+    val changeDate: (CivilDate) -> Unit = { date ->
+        visibleYear = date.year
+        visibleMonth = date.month
+        selectedDay = date.day
+    }
     Box(Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
@@ -138,7 +150,7 @@ fun CalendarScreen(
             .background(AppTheme.BackgroundLight)
     ) {
         AilaScreenHeader(
-            title = "Calendario",
+            title = if (morph.timetable) "Orario" else "Calendario",
             // Niente più tasto AI separato in header: "AILA Assistant" è già la prima scelta
             // dentro il foglio che si apre da "Aggiungi", un tasto in più qui era ridondante.
             action = {
@@ -149,28 +161,42 @@ fun CalendarScreen(
         )
 
         val monthSection: @Composable () -> Unit = {
-            AilaCard(modifier = Modifier.ailaAppear(0)) {
+            // Same surface throughout: it opens into the page as its corner and tint recede.
+            CalendarMorphSurface(progress) {
                 Column(modifier = Modifier.padding(AppTheme.Space12)) {
                     MonthNavigator(
                         year = visibleYear,
                         month = visibleMonth,
+                        date = selectedDate,
+                        progress = progress,
+                        onToday = { changeDate(today()) },
                         onPrevious = {
-                            val (y, m) = previousMonth(visibleYear, visibleMonth)
-                            visibleYear = y
-                            visibleMonth = m
-                            selectedDay = selectedDay.coerceAtMost(daysInMonth(y, m))
+                            if (morph.progress == 0f || morph.progress == 1f) {
+                                if (morph.timetable) changeDate(selectedDate.plusDays(-1)) else {
+                                    val (y, m) = previousMonth(visibleYear, visibleMonth)
+                                    visibleYear = y
+                                    visibleMonth = m
+                                    selectedDay = selectedDay.coerceAtMost(daysInMonth(y, m))
+                                }
+                            }
                         },
                         onNext = {
-                            val (y, m) = nextMonth(visibleYear, visibleMonth)
-                            visibleYear = y
-                            visibleMonth = m
-                            selectedDay = selectedDay.coerceAtMost(daysInMonth(y, m))
+                            if (morph.progress == 0f || morph.progress == 1f) {
+                                if (morph.timetable) changeDate(selectedDate.plusDays(1)) else {
+                                    val (y, m) = nextMonth(visibleYear, visibleMonth)
+                                    visibleYear = y
+                                    visibleMonth = m
+                                    selectedDay = selectedDay.coerceAtMost(daysInMonth(y, m))
+                                }
+                            }
                         }
                     )
 
                     Spacer(modifier = Modifier.height(AppTheme.Space12))
 
-                    Row(modifier = Modifier.fillMaxWidth()) {
+                    Row(modifier = Modifier.fillMaxWidth()
+                        .graphicsLayer { alpha = (1f - progress * 5f).coerceAtLeast(0f) }
+                        .morphCollapse(1f - ((progress - 0.2f) / 0.8f).coerceIn(0f, 1f))) {
                         ITALIAN_WEEKDAY_INITIALS.forEach { initial ->
                             Text(
                                 text = initial,
@@ -228,10 +254,13 @@ fun CalendarScreen(
                             selectedDay = selectedDay,
                             today = todayDate.takeIf { it.year == gridYear && it.month == gridMonth },
                             daysWithEvents = gridDotDays,
-                            onSelectDay = { selectedDay = it }
+                            onSelectDay = { if (morph.progress == 0f) selectedDay = it },
+                            progress = progress,
+                            monthLabel = ITALIAN_MONTHS.getOrElse(gridMonth) { "" }
                         )
                     }
                 }
+                CalendarMorphHandle(morph)
             }
         }
         val filtersSection: @Composable () -> Unit = {
@@ -277,41 +306,6 @@ fun CalendarScreen(
             )
 
             Spacer(modifier = Modifier.height(AppTheme.Space12))
-            if (timetable != null) {
-                AilaCard(
-                    modifier = Modifier
-                        .then(if (AppTheme.isGlass) Modifier else Modifier.border(
-                            1.dp, AppTheme.PrimaryBlue.copy(alpha = 0.22f), RoundedCornerShape(AppTheme.CardCornerRadius)
-                        ))
-                        .semantics { contentDescription = "Apri orario della classe" },
-                    onClick = { showTimetable = true }
-                ) {
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Box(
-                            Modifier.width(3.dp).height(38.dp).clip(RoundedCornerShape(50))
-                                .background(AppTheme.PrimaryBlue)
-                        )
-                        Text("Orario", style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold, color = AppTheme.TextDark,
-                            modifier = Modifier.weight(1f))
-                        Box(
-                            Modifier.clip(RoundedCornerShape(50)).background(AppTheme.TintBlue)
-                                .padding(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            Text(circolareplus.data.SchoolTimetable.normalizeClass(classLabel.orEmpty()),
-                                style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
-                                color = AppTheme.PrimaryBlue)
-                        }
-                        AppIcons.ChevronRight(Modifier.size(20.dp), color = AppTheme.TextMuted)
-                    }
-                }
-                Spacer(Modifier.height(AppTheme.Space12))
-            }
-
             // La molla sull'altezza: la card "Nessun evento" lascia il posto al nuovo evento, e le
             // card sotto scendono, invece di saltare.
             Column(
@@ -421,23 +415,23 @@ fun CalendarScreen(
             // Tablet e iPad larghi: il mese a sinistra, i filtri e gli eventi del giorno scelto a
             // destra, ognuno col suo scorrimento: toccando un giorno i suoi eventi compaiono
             // accanto invece che sotto al mese.
-            Row(
-                modifier = Modifier.fillMaxWidth().weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(AppTheme.Space4)
-            ) {
+            CalendarMorphWideLayout(progress, Modifier.fillMaxWidth().weight(1f)) {
                 Column(
                     modifier = Modifier
-                        .weight(1f)
                         .fillMaxHeight()
                         .verticalScroll(rememberScrollState())
                         .then(listPadding)
                 ) {
                     monthSection()
+                    Column(Modifier.fillMaxWidth().morphCollapse(progress)) {
+                        TimetableTimeline(classLabel, selectedDate, progress)
+                    }
                 }
                 Column(
                     modifier = Modifier
-                        .weight(1f)
                         .fillMaxHeight()
+                        .graphicsLayer { alpha = 1f - progress }
+                        .morphInactive(progress > 0f)
                         .verticalScroll(rememberScrollState())
                         .then(listPadding)
                 ) {
@@ -488,16 +482,17 @@ fun CalendarScreen(
                     .then(listPadding)
             ) {
                 monthSection()
-                Spacer(modifier = Modifier.height(AppTheme.Space20))
-                filtersSection()
-                Spacer(modifier = Modifier.height(AppTheme.Space20))
-                daySection()
+                Column(Modifier.fillMaxWidth().morphCollapse(progress)) {
+                    TimetableTimeline(classLabel, selectedDate, progress)
+                }
+                Column(Modifier.fillMaxWidth().morphCollapse(1f - progress)) {
+                    Spacer(modifier = Modifier.height(AppTheme.Space20))
+                    filtersSection()
+                    Spacer(modifier = Modifier.height(AppTheme.Space20))
+                    daySection()
+                }
             }
         }
-    }
-    if (showTimetable && timetable != null) {
-        TimetableSheet(classLabel = classLabel.orEmpty(), onDismiss = { showTimetable = false },
-            initialDay = parseIsoDate(selectedDateIso)?.let { circolareplus.util.weekdayOf(it) })
     }
     }
 }
@@ -507,6 +502,9 @@ fun CalendarScreen(
 private fun MonthNavigator(
     year: Int,
     month: Int,
+    date: CivilDate,
+    progress: Float,
+    onToday: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit
 ) {
@@ -515,11 +513,14 @@ private fun MonthNavigator(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        MonthArrow(contentDescription = "Mese precedente", onClick = onPrevious) {
+        MonthArrow(contentDescription = if (progress == 1f) "Giorno precedente" else "Mese precedente", onClick = onPrevious) {
             AppIcons.ChevronLeft(modifier = Modifier.size(18.dp), color = AppTheme.TextDark)
         }
+        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
         androidx.compose.animation.AnimatedContent(
             targetState = year * 100 + month,
+            modifier = Modifier.graphicsLayer { alpha = (1f - progress * 2f).coerceAtLeast(0f) }
+                .then(if (progress > 0f) Modifier.clearAndSetSemantics { } else Modifier),
             transitionSpec = {
                 androidx.compose.animation.ContentTransform(
                     targetContentEnter = androidx.compose.animation.fadeIn(
@@ -534,11 +535,27 @@ private fun MonthNavigator(
         ) { key ->
             Text(
                 text = "${ITALIAN_MONTHS.getOrElse(key % 100) { "" }} ${key / 100}",
+                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.titleMedium,
                 color = AppTheme.TextDark
             )
         }
-        MonthArrow(contentDescription = "Mese successivo", onClick = onNext) {
+        Text(circolareplus.util.ITALIAN_WEEKDAYS[circolareplus.util.weekdayOf(date)].replaceFirstChar { it.uppercase() } + " · ${date.year}",
+            style = MaterialTheme.typography.titleMedium, color = AppTheme.TextDark,
+            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.graphicsLayer { alpha = ((progress - 0.5f) * 2f).coerceAtLeast(0f) }
+                .then(if (progress < 1f) Modifier.clearAndSetSemantics { } else Modifier))
+        }
+        androidx.compose.material3.TextButton(
+            onClick = onToday,
+            modifier = Modifier.height(44.dp)
+                .graphicsLayer { alpha = ((progress - 0.7f) / 0.3f).coerceIn(0f, 1f) }
+                .morphInactive(progress < 1f).clipToBounds().layout { measurable, constraints ->
+                    val child = measurable.measure(constraints.copy(minWidth = 0))
+                    layout((child.width * progress).toInt(), child.height) { child.place(0, 0) }
+                }.width(64.dp)
+        ) { Text("Oggi", maxLines = 1, color = AppTheme.AccentCyan) }
+        MonthArrow(contentDescription = if (progress == 1f) "Giorno successivo" else "Mese successivo", onClick = onNext) {
             AppIcons.ChevronRight(modifier = Modifier.size(18.dp), color = AppTheme.TextDark)
         }
     }
@@ -556,7 +573,7 @@ private fun MonthArrow(contentDescription: String, onClick: () -> Unit, icon: @C
     }
 }
 
-/** Griglia del mese: sei righe da sette celle, con i vuoti iniziali per allineare i giorni. */
+/** The selected cell itself becomes the full-width date heading. No duplicate hero. */
 @Composable
 private fun MonthGrid(
     daysCount: Int,
@@ -564,30 +581,39 @@ private fun MonthGrid(
     selectedDay: Int,
     today: CivilDate?,
     daysWithEvents: Set<Int>,
-    onSelectDay: (Int) -> Unit
+    onSelectDay: (Int) -> Unit,
+    progress: Float = 0f,
+    monthLabel: String = ""
 ) {
-    val totalCells = leadingBlanks + daysCount
-    val rows = (totalCells + 6) / 7
-
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        for (row in 0 until rows) {
-            Row(modifier = Modifier.fillMaxWidth()) {
-                for (column in 0 until 7) {
-                    val cellIndex = row * 7 + column
-                    val day = cellIndex - leadingBlanks + 1
-                    if (day in 1..daysCount) {
-                        DayCell(
-                            day = day,
-                            isSelected = day == selectedDay,
-                            isToday = today?.day == day,
-                            hasEvents = day in daysWithEvents,
-                            onClick = { onSelectDay(day) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    } else {
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
-                }
+    Layout(content = {
+        for (day in 1..daysCount) {
+            val selected = day == selectedDay
+            DayCell(day = day, isSelected = selected, isToday = today?.day == day,
+                hasEvents = day in daysWithEvents, onClick = { onSelectDay(day) },
+                progress = if (selected) progress else 0f, monthLabel = monthLabel,
+                modifier = Modifier.graphicsLayer {
+                    alpha = if (selected) 1f else (1f - progress * 1.8f).coerceAtLeast(0f)
+                }.then(if (!selected && progress > 0f) Modifier.clearAndSetSemantics { } else Modifier))
+        }
+    }, modifier = Modifier.fillMaxWidth().clipToBounds()) { measurables, constraints ->
+        val width = constraints.maxWidth
+        val cellWidth = width / 7
+        val children = measurables.mapIndexed { index, measurable ->
+            val selected = index + 1 == selectedDay
+            val w = if (selected) (cellWidth + (width - cellWidth) * progress).toInt() else cellWidth
+            measurable.measure(constraints.copy(minWidth = w, maxWidth = w, minHeight = 0))
+        }
+        val rowHeight = children.maxOfOrNull { it.height } ?: 0
+        val rows = (leadingBlanks + daysCount + 6) / 7
+        val fullHeight = rows * rowHeight + (rows - 1) * 2.dp.roundToPx()
+        val height = (fullHeight + (rowHeight - fullHeight) * progress).toInt()
+        layout(width, height) {
+            // Place the selected child last so it remains above fading neighbours.
+            children.indices.sortedBy { if (it + 1 == selectedDay) 1 else 0 }.forEach { index ->
+                val cell = leadingBlanks + index
+                val x = (cell % 7 * cellWidth * (1f - progress)).toInt()
+                val y = (cell / 7 * (rowHeight + 2.dp.roundToPx()) * (1f - progress)).toInt()
+                children[index].placeRelative(x, y)
             }
         }
     }
@@ -600,7 +626,9 @@ private fun DayCell(
     isToday: Boolean,
     hasEvents: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    progress: Float = 0f,
+    monthLabel: String = ""
 ) {
     Box(
         modifier = modifier.heightIn(min = 46.dp),
@@ -613,13 +641,14 @@ private fun DayCell(
             // stavano e l'evidenziazione del giorno scelto si sovrapponeva a quelli accanto.
             // Altezza minima e non fissa: col testo di sistema ingrandito il numero non si taglia.
             modifier = Modifier
-                .widthIn(max = 40.dp)
+                .widthIn(max = if (progress == 0f) 40.dp else androidx.compose.ui.unit.Dp.Infinity)
                 .fillMaxWidth()
                 .heightIn(min = 42.dp)
                 .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
                 .then(
                     when {
-                        isSelected -> Modifier.background(AppTheme.PrimaryGradient)
+                        isSelected -> if (progress == 0f) Modifier.background(AppTheme.PrimaryGradient)
+                            else Modifier.background(AppTheme.PrimaryBlue.copy(alpha = 1f - progress))
                         isToday -> Modifier.border(
                             1.5.dp,
                             AppTheme.PrimaryBlue,
@@ -628,23 +657,32 @@ private fun DayCell(
                         else -> Modifier
                     }
                 )
-                .clickable { onClick() }
+                .then(if (progress == 0f) Modifier.clickable { onClick() } else Modifier)
                 .padding(top = 7.dp)
         ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
             Text(
                 text = "$day",
+                fontSize = (14f + 6f * progress).sp,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Medium,
                 color = when {
-                    isSelected -> Color.White
+                    isSelected -> androidx.compose.ui.graphics.lerp(Color.White, AppTheme.AccentCyan, progress)
                     isToday -> AppTheme.PrimaryBlue
                     else -> AppTheme.TextDark
                 }
             )
+            if (progress > 0f) Text(" $monthLabel", style = MaterialTheme.typography.titleMedium,
+                color = AppTheme.TextDark, maxLines = 1, softWrap = false,
+                modifier = Modifier.graphicsLayer { alpha = ((progress - 0.33f) / 0.5f).coerceIn(0f, 1f) }.clipToBounds().layout { measurable, constraints ->
+                    val child = measurable.measure(constraints.copy(minWidth = 0, maxWidth = androidx.compose.ui.unit.Constraints.Infinity))
+                    layout((child.width * (progress * 3f).coerceAtMost(1f)).toInt(), child.height) { child.place(0, 0) }
+                })
+            }
             Spacer(modifier = Modifier.height(AppTheme.Space4))
             AilaDot(
                 color = when {
-                    !hasEvents -> Color.Transparent
+                    !hasEvents || progress > 0f -> Color.Transparent
                     isSelected -> Color.White
                     else -> AppTheme.PrimaryBlue
                 },
