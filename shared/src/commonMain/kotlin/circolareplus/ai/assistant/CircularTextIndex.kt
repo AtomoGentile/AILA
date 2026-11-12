@@ -57,7 +57,7 @@ internal class CircularTextIndex {
      * molte volte pesa di più, ma senza che un documento lungo domini solo per la lunghezza.
      */
     fun search(terms: List<String>): List<Hit> {
-        val stems = terms.filter { it.length >= MIN_TERM_CHARS }.map { AssistantContext.stemOf(it) }.distinct()
+        val stems = terms.flatMap { AssistantContext.normalize(it).split(' ') }.filter { it.length >= MIN_TERM_CHARS }.map { AssistantContext.stemOf(it) }.distinct()
         if (stems.isEmpty()) return emptyList()
 
         val scores = mutableMapOf<Int, Double>()

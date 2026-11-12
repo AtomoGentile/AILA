@@ -19,6 +19,11 @@ class CircularTextIndexTest {
     }
 
     @Test
+    fun multiwordSearchNormalizesCaseAndPunctuation() {
+        assertEquals(listOf(214), index.search(listOf("CORSO ICDL!")).map { it.number })
+    }
+
+    @Test
     fun laRicercaPerPrefissoTrovaLeFormeFlesse() {
         // "sportelli" e "sportello" hanno radici diverse: il prefisso comune le unisce.
         assertEquals(listOf(216), index.search(listOf("sportelli")).map { it.number })

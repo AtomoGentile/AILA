@@ -58,12 +58,10 @@ class AilaAssistant internal constructor(
         /** Circolari portate al secondo giro da una ricerca dell'assistente nel testo integrale. */
         private const val MAX_SEARCHED_CIRCULARS = 2
 
-        /**
-         * Testo gia' estratto per circolare: la stessa domanda riformulata, o la domanda dopo,
-         * non riscarica e non rilegge lo stesso PDF.
-         */
-        private val textCache = mutableMapOf<Int, String>()
     }
+
+    /** Session cache keyed by the document and its attachment metadata. */
+    private val textCache = mutableMapOf<Circular, String>()
 
     /**
      * Risponde a [question] tenendo conto di [history] (la conversazione in corso) e di
@@ -89,6 +87,9 @@ class AilaAssistant internal constructor(
         AssistantGreeting.answer(question)?.let { return it }
         // Le risposte pronte del codice rispondono sull'app intera: nella chat della Gita no,
         // li' l'unica fonte e' il materiale della gita e il modello la legge tutta.
+        if (mode == AssistantMode.GENERAL && knowledge.attachedSources.isEmpty() && !AssistantActionIntent.matches(question, history)) {
+            AssistantMeetingComparison.answer(question, knowledge)?.let { return it }
+        }
         val studyPlan = AssistantContext.normalize(question).let { "piano" in it && ("studio" in it || "ripasso" in it) }
         if (mode == AssistantMode.GENERAL && !studyPlan && knowledge.attachedSources.isEmpty() && history.isEmpty() && !AssistantActionIntent.matches(question, history) && knowledge.calendarWarning == null) {
             // Scadenze, pagamenti, "cosa ho questa settimana": l'elenco lo fa il codice, esatto e
@@ -117,7 +118,7 @@ class AilaAssistant internal constructor(
         val seenCirculars = texts.keys.toMutableSet()
         val studyOnly = studyPlan
         var reviewAttempted = false
-        var readsPerformed = false
+        var readsAfterReview = false
         var reviewIncomplete = false
         var partialCandidate: AssistantReply? = null
         fun partialReply(parsed: AssistantPrompt.ParsedAnswer, modelLabel: String): AssistantReply = AssistantReply(
@@ -182,7 +183,7 @@ class AilaAssistant internal constructor(
             val requestedReads = parsed.calendarQueries.isNotEmpty() || parsed.needsCircularText.isNotEmpty() || parsed.searches.isNotEmpty()
             if (!canRead || !wantsMore) {
                 if (parsed.answer.isBlank() && partialCandidate != null) return partialCandidate.copy(readContext = known.readContext)
-                val limitNotice = if (requestedReads || parsed.verified == false || reviewIncomplete && !readsPerformed) "\n\nNon ho completato tutte le verifiche richieste: i risultati possono essere parziali." else ""
+                val limitNotice = if (requestedReads || parsed.verified == false || reviewIncomplete && !readsAfterReview) "\n\nNon ho completato tutte le verifiche richieste: i risultati possono essere parziali." else ""
                 return AssistantReply(
                     text = parsed.answer.ifBlank { "Non ho trovato informazioni sufficienti per completare la richiesta." } + limitNotice,
                     sources = checkedSources(parsed, searchQuery, known), modelLabel = result.modelLabel,
@@ -190,7 +191,7 @@ class AilaAssistant internal constructor(
                 )
             }
             onAgentPhase(AssistantAgentPhase.READING)
-            readsPerformed = true
+            if (reviewIncomplete) readsAfterReview = true
             queries.forEach { observations += AssistantReadTools.execute(it, known, studyOnly) }
             val searched = searchedTexts(searches, texts.keys)
             val fetched = fetchCircularTexts(requested, known.circulars, PREFETCH_BUDGET_MS)
@@ -339,12 +340,13 @@ class AilaAssistant internal constructor(
     ): Map<Int, String> {
         val result = mutableMapOf<Int, String>()
         val toDownload = numbers.mapNotNull { number ->
-            val cached = textCache[number]
+            val circular = circulars.firstOrNull { it.number == number } ?: return@mapNotNull null
+            val cached = textCache[circular]
             if (cached != null) {
                 result[number] = cached
                 null
             } else {
-                circulars.firstOrNull { it.number == number }
+                circular
             }
         }
         if (toDownload.isEmpty() || budgetMs <= 0) return result
@@ -363,8 +365,7 @@ class AilaAssistant internal constructor(
         coroutineScope {
             val jobs = toDownload.mapIndexed { index, circular ->
                 launch {
-                    downloadCircularText(circular) { text -> downloaded[index] = text }
-                    complete[index] = true
+                    complete[index] = downloadCircularText(circular) { text -> downloaded[index] = text }
                 }
             }
             withTimeoutOrNull(budgetMs) { jobs.joinAll() }
@@ -373,10 +374,10 @@ class AilaAssistant internal constructor(
         }
         toDownload.forEachIndexed { index, circular ->
             val text = downloaded[index] ?: return@forEachIndexed
-            result[circular.number] = text
+            result[circular.number] = if (complete[index]) text else "$text\n[Testo parziale: uno o più documenti non sono stati letti integralmente.]"
             // In cache solo il testo completo: uno parziale lascerebbe fuori gli allegati per
             // sempre, anche dalle domande successive che avrebbero il tempo di leggerli.
-            if (complete[index]) textCache[circular.number] = text
+            if (complete[index]) textCache[circular] = text
         }
         return result
     }
@@ -385,11 +386,12 @@ class AilaAssistant internal constructor(
      * Legge il PDF di una circolare e poi i suoi allegati, passando a [onText] il testo letto
      * finora dopo ogni documento. Una circolare che non si lascia leggere non chiama [onText].
      */
-    private suspend fun downloadCircularText(circular: Circular, onText: (String) -> Unit) {
+    private suspend fun downloadCircularText(circular: Circular, onText: (String) -> Unit): Boolean {
+        var complete = true
         try {
             val bytes = downloadPdf(circular.r2PdfKey)
             var text = extractPdf(bytes)
-            if (text.isNotBlank()) onText(text.take(MAX_PDF_CHARS_PER_CIRCULAR))
+            if (text.isNotBlank()) onText(text.take(MAX_PDF_CHARS_PER_CIRCULAR)) else complete = false
 
             for (attachment in circular.attachments) {
                 val pdfKey = attachment.pdfKey ?: continue
@@ -400,18 +402,19 @@ class AilaAssistant internal constructor(
                     if (attachmentText.isNotBlank()) {
                         text += "\n\n--- Allegato: ${attachment.label} ---\n\n$attachmentText"
                         onText(text.take(MAX_PDF_CHARS_PER_CIRCULAR))
-                    }
+                    } else complete = false
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    // Ignorato di proposito: vedi commento sopra.
+                    complete = false
                 }
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            // Ignorato di proposito: vedi commento sopra.
+            complete = false
         }
+        return complete
     }
 
 }

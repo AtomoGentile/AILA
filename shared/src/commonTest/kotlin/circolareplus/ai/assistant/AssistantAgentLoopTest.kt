@@ -28,6 +28,19 @@ class AssistantAgentLoopTest {
         extractPdf = { error("Unexpected PDF extraction") }, actionsEnabled = actions
     )
 
+    @Test fun screenshotComparisonUsesBothSchedulesEvenIfTheProviderIsOffline() = runTest {
+        val model = ScriptedClassifier()
+        val question = "Quando sono gli incontri del giornalino scolastico?\nSi intrecciano con L’FCE?"
+        val g = CalendarEvent("g", "Riunione di redazione", "2026-11-20", "14:15–15:45", CalendarEventCategory.ALTRO)
+        val f = g.copy(id = "f", title = "Corso B2 First", time = "dalle 14.30 alle 16.00")
+        suspend fun ask(vararg events: CalendarEvent) = assistant(model).ask(question, emptyList(), knowledge.copy(calendarEvents = events.toList())).text
+        assertTrue("14:30–15:45" in ask(g, f))
+        assertTrue("Mi manca" in ask(g))
+        assertTrue("da verificare" in ask(g, f.copy(time = "14:30")))
+        assertTrue("non risultano sovrapposizioni" in ask(g, f.copy(time = "15:45–16:30")))
+        assertTrue(model.prompts.isEmpty())
+    }
+
     @Test fun aShortCorrectionCanBeSemanticallyRoutedToTheExistingDraft() = runTest {
         val model = ScriptedClassifier(
             """{"answer":"","actionRequest":"Prepara la verifica di inglese su U7 il 25 novembre 2026 alla terza ora"}""",
@@ -73,7 +86,7 @@ class AssistantAgentLoopTest {
             CalendarEvent("g", "Riunione di redazione", "2026-11-20", "14:15–15:45", CalendarEventCategory.ALTRO, circularNumber = 11),
             CalendarEvent("f", "FCE", "2026-11-20", "14:30", CalendarEventCategory.ALTRO)
         )
-        val reply = assistant(model).ask("Quando sono gli incontri del giornalino? Si intrecciano con FCE?", emptyList(), knowledge.copy(calendarEvents = events))
+        val reply = assistant(model).ask("Leggi gli incontri del giornalino e verifica il confronto con FCE.", emptyList(), knowledge.copy(calendarEvents = events))
         assertEquals(4, model.prompts.size)
         assertTrue("VERIFICA PRIMA DELL'INVIO" in model.prompts[2].systemPrompt)
         assertTrue("STESSA_DATA_ORARIO_INSUFFICIENTE" in model.prompts[3].userPrompt)
@@ -102,7 +115,7 @@ class AssistantAgentLoopTest {
             CalendarEvent("g$date", "Riunione di redazione", date, "14:15–15:45", CalendarEventCategory.ALTRO, circularNumber = 11),
             CalendarEvent("f$date", "FCE", date, "14:30", CalendarEventCategory.ALTRO)
         ) }
-        val reply = assistant(model).ask("Quando sono gli incontri del giornalino? Si intrecciano con l'FCE?", emptyList(), knowledge.copy(calendarEvents = events))
+        val reply = assistant(model).ask("Verifica tutte le date del giornalino e del FCE, incluse le sovrapposizioni.", emptyList(), knowledge.copy(calendarEvents = events))
         assertFalse(reply.isError)
         assertEquals(3, model.prompts.size)
         assertTrue("VERIFICA PRIMA DELL'INVIO" in model.prompts[1].systemPrompt)
