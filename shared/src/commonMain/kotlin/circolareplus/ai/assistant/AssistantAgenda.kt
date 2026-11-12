@@ -188,7 +188,7 @@ internal object AssistantAgenda {
     }
 
     private fun sameThing(a: Item, b: Item): Boolean {
-        if (a.date != b.date) return false
+        if (a.date != b.date || (!a.time.isNullOrBlank() && !b.time.isNullOrBlank() && a.time != b.time)) return false
         val x = AssistantContext.normalize(a.title).trim().replace(Regex("\\s+"), " ")
         val y = AssistantContext.normalize(b.title).trim().replace(Regex("\\s+"), " ")
         if (x.isEmpty() || y.isEmpty()) return x == y

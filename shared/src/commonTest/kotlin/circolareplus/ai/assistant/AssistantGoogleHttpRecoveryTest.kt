@@ -33,7 +33,7 @@ class AssistantGoogleHttpRecoveryTest {
         try {
             val google = ClientSideAiClassifier("test-only", "recovery-test-model", http)
             val assistant = AilaAssistant({ google }, { error("Unexpected PDF") }, { error("Unexpected extraction") })
-            val reply = assistant.ask("Quando sono gli incontri del giornalino? Si intrecciano con FCE?", emptyList(), AssistantKnowledge("2026-11-10", null, null))
+            val reply = assistant.ask("Leggi le circolari del giornalino e del FCE e verifica se hanno date in comune.", emptyList(), AssistantKnowledge("2026-11-10", null, null))
             assertFalse(reply.isError, reply.text)
             assertTrue("per FCE manca la durata" in reply.text)
             assertEquals(2, calls)
@@ -61,7 +61,7 @@ class AssistantGoogleHttpRecoveryTest {
                 circolareplus.domain.model.CalendarEvent("g", "Riunione di redazione", "2026-11-20", "14:15–15:45", circolareplus.domain.model.CalendarEventCategory.ALTRO, circularNumber = 11),
                 circolareplus.domain.model.CalendarEvent("f", "FCE", "2026-11-20", "14:30", circolareplus.domain.model.CalendarEventCategory.ALTRO)
             )
-            val reply = assistant.ask("Quando sono gli incontri del giornalino? Si intrecciano con FCE?", emptyList(),
+            val reply = assistant.ask("Leggi le circolari del giornalino e del FCE e verifica se hanno date in comune.", emptyList(),
                 AssistantKnowledge("2026-11-10", null, null, calendarEvents = events))
             assertFalse(reply.isError, reply.text)
             assertEquals(4, calls)

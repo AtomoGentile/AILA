@@ -106,6 +106,13 @@ class AssistantAgendaTest {
     }
 
     @Test
+    fun dueTurniConLoStessoTitoloRestanoDistinti() {
+        val event = knowledge.calendarEvents.first().copy(time = "14:00")
+        val data = knowledge.copy(calendarEvents = listOf(event, event.copy(id = "next", time = "15:00")), classifications = emptyMap())
+        assertEquals(listOf("14:00", "15:00"), AssistantAgenda.collectItems(data).map { it.time })
+    }
+
+    @Test
     fun riconosceLeDomandeElenco() {
         assertEquals(AssistantAgenda.Kind.DEADLINES, AssistantAgenda.kindOf(knowledge, "Ci sono pagamenti o scadenze in arrivo?"))
         assertEquals(AssistantAgenda.Kind.PAYMENTS, AssistantAgenda.kindOf(knowledge, "Quali pagamenti ci sono?"))

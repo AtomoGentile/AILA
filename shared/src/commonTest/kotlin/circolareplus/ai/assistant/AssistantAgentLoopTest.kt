@@ -68,7 +68,7 @@ class AssistantAgentLoopTest {
             CalendarEvent("g", "Giornalino", "2026-11-20", "3ª ora", CalendarEventCategory.ALTRO),
             CalendarEvent("f", "FCE", "2026-11-20", "Dalla 2ª alla 4ª ora", CalendarEventCategory.ALTRO)
         )
-        val reply = assistant(model).ask("Il giornalino si sovrappone al FCE?", emptyList(), knowledge.copy(calendarEvents = events))
+        val reply = assistant(model).ask("Verifica sul calendario le sovrapposizioni del giornalino con FCE.", emptyList(), knowledge.copy(calendarEvents = events))
         assertTrue("SOVRAPPOSIZIONE_VERIFICATA" in model.prompts[1].userPrompt)
         assertTrue("SOVRAPPOSIZIONE_VERIFICATA" in reply.readContext)
         assertEquals(3, model.prompts.size)

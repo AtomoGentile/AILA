@@ -250,6 +250,7 @@ MODALITA' SOLO MATERIALE: questa chat e' aperta dalla sezione Gita. Non usare co
     ): AiPrompt {
         val basePrompt = if (maxChars < COMPACT_THRESHOLD) COMPACT_SYSTEM_PROMPT else SYSTEM_PROMPT
         val systemPrompt = (when {
+            maxChars < COMPACT_THRESHOLD && mode == AssistantMode.GITA_ONLY -> basePrompt + COMPACT_GITA_RULE + GITA_ONLY_RULES
             maxChars < COMPACT_THRESHOLD -> if (knowledge.gita.isEmpty()) basePrompt else basePrompt + COMPACT_GITA_RULE
             knowledge.gita.isEmpty() && mode == AssistantMode.GENERAL -> basePrompt
             mode == AssistantMode.GITA_ONLY -> basePrompt + GITA_RULES + GITA_ONLY_RULES

@@ -53,6 +53,14 @@ class AssistantGitaTest {
     }
 
     @Test
+    fun modelloCompattoRispettaLaModalitaGitaAncheSenzaDocumenti() {
+        val prompt = AssistantPrompt.build(9_000, knowledge.copy(gita = emptyList()), emptyList(),
+            "Quanto costa il viaggio?", emptyMap(), mode = AssistantMode.GITA_ONLY)
+        assertTrue("MODALITA' SOLO MATERIALE" in prompt.systemPrompt)
+        assertTrue("Non lo trovo nel materiale disponibile" in prompt.systemPrompt)
+    }
+
+    @Test
     fun senzaMaterialeGitaIlPromptNonCambia() {
         val plain = AssistantKnowledge(todayIso = "2026-10-10", user = null, profile = null)
         val prompt = AssistantPrompt.build(

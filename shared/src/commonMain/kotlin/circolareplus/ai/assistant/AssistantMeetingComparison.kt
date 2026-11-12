@@ -9,15 +9,21 @@ internal object AssistantMeetingComparison {
     private val questionPattern = Regex(
         """quando (?:sono|si tengono) (?:gli incontri|le riunioni|le lezioni) (?:del |della |di |dell )?(.+?) si (?:intrecciano|sovrappongono|accavallano) con (?:il |la |l |i |le )?(.+)"""
     )
+    private val simpleComparison = Regex(
+        """(?:il |la |l |gli incontri del |le lezioni di )?(.+?) (?:si (?:sovrappone|sovrappongono|intreccia|intrecciano|accavalla|accavallano)|coincide|coincidono) (?:con |al |alla |all )(?:(?:il|lo|la|l|i|le) )?(.+)"""
+    )
     private val aliases = listOf(
         setOf("giornalino", "giornalino scolastico", "rasoio di ockham", "riunione di redazione"),
         setOf("fce", "b2 first", "first certificate", "first for schools")
     )
+    fun aliasesFor(label: String): Set<String> = aliases.firstOrNull { label in it } ?: setOf(label)
+
     private data class Meeting(val date: String, val time: String?, val title: String, val number: Int?)
 
     fun answer(question: String, knowledge: AssistantKnowledge): AssistantReply? {
         val normalized = AssistantContext.normalize(question).trim().replace(Regex("""\s+"""), " ")
-        val match = questionPattern.matchEntire(normalized) ?: return null
+        val match = questionPattern.matchEntire(normalized) ?: simpleComparison.matchEntire(normalized) ?: return null
+        if (TimeScopeParser.parse(question, knowledge.todayIso) != null) return null
         val labels = match.groupValues.drop(1)
         if (labels.any { it.split(' ').size > 5 || it.contains(" e ") }) return null
         val circulars = knowledge.circulars.associateBy { it.number }
@@ -29,7 +35,7 @@ internal object AssistantMeetingComparison {
             analysis.detectedDeadlines.map { Meeting(it.dueDate.take(10), it.time, it.title, analysis.circularNumber) }
         }
         fun group(label: String): List<Meeting> {
-            val names = aliases.firstOrNull { label in it } ?: setOf(label)
+            val names = aliasesFor(label)
             fun matches(text: String): Boolean {
                 val words = " " + AssistantContext.normalize(text).trim().replace(Regex("""\s+"""), " ") + " "
                 return names.any { " $it " in words }
@@ -37,7 +43,7 @@ internal object AssistantMeetingComparison {
             return meetings.filter { meeting ->
                 val title = AssistantContext.normalize(meeting.title)
                 val source = circulars[meeting.number]
-                val session = Regex("""\b(incontro|lezione|riunione|sessione)\b""").containsMatchIn(title)
+                val session = Regex("""(?:incontro|lezione|riunione|sessione)(?: (?:n |numero )?\d+)?""").matches(title.trim())
                 val deadline = Regex("""\b(scadenza|iscrizione|iscrizioni|pagamento|adesione)\b""").containsMatchIn(title)
                 val date = parseIsoDate(meeting.date)
                 date != null && date.toIso() == meeting.date && date.day <= daysInMonth(date.year, date.month) && !deadline && (matches(title) ||
