@@ -168,13 +168,13 @@ class CompatibleApiAiClassifier(
         // Reasoning tokens share the completion budget: 32 can yield no visible text.
         val probeTokens=if(format==CompatibleAiFormat.OPENAI&&isOpenAiReasoningModel(model.trim()))1024 else 32
         request("Rispondi solo con OK.", "Verifica di connessione.", probeTokens)
-        "Connessione riuscita con ${format.label} (${model.ifBlank { "gemini-2.5-flash" }})."
+        "Connessione riuscita con ${format.label} (${model.ifBlank { "gemini-4-hydrogen" }})."
     } catch (e: Exception) {
         "Connessione non riuscita: ${e.message ?: "errore sconosciuto"}"
     }
 
     private suspend fun request(system: String, user: String, maxTokens: Int): String {
-        val effectiveModel = model.trim().ifBlank { if (format == CompatibleAiFormat.GOOGLE) "gemini-2.5-flash" else "" }
+        val effectiveModel = model.trim().ifBlank { if (format == CompatibleAiFormat.GOOGLE) "gemini-4-hydrogen" else "" }
         require(apiKey.isNotBlank()) { "Inserisci la chiave API." }
         require(effectiveModel.isNotBlank()) { "Inserisci il modello." }
         val endpoint = endpointUrl(effectiveModel)
