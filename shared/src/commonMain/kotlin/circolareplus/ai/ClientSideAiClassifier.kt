@@ -92,7 +92,7 @@ class ClientSideAiClassifier(
          * Con l'alias il problema non si ripresenta al prossimo giro di versioni: punta sempre al
          * flash corrente. Elenco: https://ai.google.dev/gemini-api/docs/models
          */
-        const val DEFAULT_MODEL = "gemini-flash-latest"
+        const val DEFAULT_MODEL = "gemini-4-hydrogen"
 
         /**
          * Scaletta di ripiego, provata in ordine se il modello predefinito viene rifiutato.
@@ -103,7 +103,7 @@ class ClientSideAiClassifier(
          * la ricerca automatica nell'elenco di Google, che sceglieva proprio gemini-2.5-flash.
          */
         private val MODEL_LADDER = listOf(
-            "gemini-flash-latest",
+            "gemini-4-hydrogen",
             "gemini-flash-lite-latest",
             "gemini-pro-latest"
         )
@@ -146,7 +146,7 @@ class ClientSideAiClassifier(
         /**
          * Modelli che hanno appena risposto 503 o non hanno risposto in tempo, con l'istante fino
          * a cui vanno messi in fondo alla fila. Senza, ogni domanda in chat ripartiva da
-         * gemini-flash-latest e ripagava lo stesso fallimento prima di arrivare al modello che
+         * gemini-4-hydrogen e ripagava lo stesso fallimento prima di arrivare al modello che
          * risponde.
          */
         private val busyUntil = mutableMapOf<String, Long>()
@@ -566,7 +566,7 @@ class ClientSideAiClassifier(
      * `UNAVAILABLE` — "This model is currently experiencing high demand" — e prima di questa
      * modifica l'app si fermava li', perche' 503 non e' 404. Ma un sovraccarico riguarda *quel*
      * modello, non la chiave: `gemini-flash-lite-latest` gira su una capacita' diversa e
-     * risponde mentre `gemini-flash-latest` e' pieno. Fermarsi al primo 503 significava dire
+     * risponde mentre `gemini-4-hydrogen` e' pieno. Fermarsi al primo 503 significava dire
      * "non sono riuscito a rispondere" avendo in tasca quattro alternative non provate.
      */
     private fun isModelUnavailable(statusCode: Int, body: String): Boolean {
