@@ -56,7 +56,7 @@ data class CircularAiClassification(
      */
     val isFallback: Boolean = false,
     /**
-     * Chi ha prodotto questa analisi (es. "Google Gemini (gemini-flash-latest)", "AI locale
+     * Chi ha prodotto questa analisi (es. "Google Gemini (gemini-4-hydrogen)", "AI locale
      * (TinyLlama 1.1B)", "Euristica a parole chiave"). Mostrata in app quando l'analisi viene
      * condivisa fra utenti tramite la cache server, così chi la legge sa quanto fidarsene senza
      * doverla rifare per controllare. Default per compatibilità con classificazioni salvate prima
