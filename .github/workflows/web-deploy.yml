@@ -117,7 +117,7 @@ jobs:
       # Main updates maintain the stable PWA; beta tags publish to an isolated Pages preview.
       # Deployment credentials are normalized before use, matching the Worker deployment flow.
       - name: Check secrets
-        if: steps.release.outputs.prerelease == 'false' && github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request'
         env:
           RAW_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           RAW_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -135,7 +135,7 @@ jobs:
 
       # Al primo deploy il progetto Pages non esiste ancora: lo si crea.
       - name: Ensure Pages project
-        if: steps.release.outputs.prerelease == 'false' && github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request'
         run: |
           if ! npx --yes wrangler@4 pages project list | grep -qw "$PAGES_PROJECT"; then
             npx --yes wrangler@4 pages project create "$PAGES_PROJECT" --production-branch=main
