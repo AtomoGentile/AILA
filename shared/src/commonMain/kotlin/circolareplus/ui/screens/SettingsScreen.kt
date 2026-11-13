@@ -582,7 +582,7 @@ fun SettingsScreen(
                             }
                             val modelPlaceholder = when (compatibleFormat) {
                                 "ANTHROPIC" -> "claude-3-5-sonnet-20241022"
-                                "GOOGLE" -> "gemini-2.5-flash"
+                                "GOOGLE" -> "gemini-4-hydrogen"
                                 else -> "gpt-4o-mini"
                             }
                             if (compatibleFormat != "GOOGLE") {
