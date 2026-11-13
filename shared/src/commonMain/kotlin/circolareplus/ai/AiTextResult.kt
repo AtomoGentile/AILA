@@ -10,7 +10,7 @@ package circolareplus.ai
  * vero, che una frase generica indistinguibile da una risposta reale.
  */
 sealed class AiTextResult {
-    /** [modelLabel] è quello mostrato sotto il messaggio in chat (es. "Google Gemini (gemini-flash-latest)"). */
+    /** [modelLabel] è quello mostrato sotto il messaggio in chat (es. "Google Gemini (gemini-4-hydrogen)"). */
     data class Success(val text: String, val modelLabel: String) : AiTextResult()
 
     /** [reason] è pensato per essere mostrato all'utente: deve dire cosa è andato storto. */
