@@ -1140,7 +1140,7 @@ fun SettingsScreen(
                             subtitle = "Versione $appVersion",
                             tint = AppTheme.TintSlate,
                             showChevron = false,
-                            // Opzione nascosta: 7 tocchi sbloccano la diagnostica.
+                            // 7 tocchi sbloccano la diagnostica e il canale beta della piattaforma.
                             onClick = {
                                 versionTaps++
                                 if (versionTaps >= 7) {
