@@ -9,7 +9,16 @@ name: PWA deploy
 # CLOUDFLARE_ACCOUNT_ID, gli stessi del deploy del Worker se il token ha anche quel permesso.
 on:
   push:
+    branches: [main]
     tags: ['v*']
+    paths:
+      - 'shared/**'
+      - 'webApp/**'
+      - '.github/workflows/web-deploy.yml'
+      - 'scripts/prepare_release.py'
+      - 'gradle/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
   pull_request:
     paths:
       - 'shared/**'
@@ -105,8 +114,8 @@ jobs:
           path: ${{ env.DIST }}
           retention-days: 7
 
-      # Il deploy di produzione parte solo da una release stabile validata.
-      # Toglie spazi e "a capo" copiati per sbaglio insieme ai secret (come nel deploy del Worker).
+      # Main updates maintain the stable PWA; beta tags publish to an isolated Pages preview.
+      # Deployment credentials are normalized before use, matching the Worker deployment flow.
       - name: Check secrets
         if: steps.release.outputs.prerelease == 'false' && github.event_name != 'pull_request'
         env:
@@ -132,6 +141,10 @@ jobs:
             npx --yes wrangler@4 pages project create "$PAGES_PROJECT" --production-branch=main
           fi
 
-      - name: Deploy to Cloudflare Pages
-        if: steps.release.outputs.prerelease == 'false' && github.event_name != 'pull_request'
+      - name: Deploy stable PWA
+        if: (steps.release.outputs.prerelease == 'false' && github.event_name != 'pull_request') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: npx --yes wrangler@4 pages deploy "$DIST" --project-name="$PAGES_PROJECT" --branch=main --commit-dirty=true
+
+      - name: Deploy beta PWA preview
+        if: steps.release.outputs.prerelease == 'true' && github.event_name != 'pull_request'
+        run: npx --yes wrangler@4 pages deploy "$DIST" --project-name="$PAGES_PROJECT" --branch=beta --commit-dirty=true
