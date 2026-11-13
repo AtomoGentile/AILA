@@ -25,7 +25,7 @@ const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 // Stessa scaletta dell'app (ClientSideAiClassifier.MODEL_LADDER): se un alias sparisce si prova il
 // successivo invece di smettere di funzionare. Solo alias -latest: i gemini-2.5-* rispondono
 // ormai 404 "no longer available to new users".
-const MODEL_LADDER = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest'];
+const MODEL_LADDER = ['gemini-4-hydrogen', 'gemini-flash-lite-latest', 'gemini-pro-latest'];
 
 // Una sola chiamata per circolare vale per tutte le classi registrate: il prompt le elenca e il
 // modello risponde con un riassunto comune più badge e nota per ciascuna (vedi classAnalysis.ts).
