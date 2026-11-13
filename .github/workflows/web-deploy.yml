@@ -1,10 +1,9 @@
 name: PWA deploy
 
-# Compila la PWA (modulo :webApp: lo stesso codice Compose di :shared per il browser, WebAssembly)
-# e la pubblica su Cloudflare Pages, progetto "aila-scuola".
-# Compila sui pull request e sui tag di release. Pubblica solo i tag stabili vX.Y.Z:
-# i push a main e i tag beta non devono esporre beta sul sito/PWA.
-# L'avvio manuale richiede il tag da compilare e pubblica soltanto se e' stabile.
+# Compila la PWA (WebAssembly) e la pubblica su Cloudflare Pages, progetto "aila-scuola".
+# Le modifiche di main aggiornano il sito stabile; i tag stabili pubblicano in produzione,
+# mentre i tag beta aggiornano il branch preview "beta" senza esporre la beta sul sito stabile.
+# I pull request eseguono solo la build. L'avvio manuale richiede il tag da compilare.
 # Secret richiesti: CLOUDFLARE_API_TOKEN (permesso "Cloudflare Pages: Edit") e
 # CLOUDFLARE_ACCOUNT_ID, gli stessi del deploy del Worker se il token ha anche quel permesso.
 on:
@@ -30,7 +29,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Tag stabile da distribuire (es. v1.6.4)'
+        description: 'Tag stabile o beta da compilare e distribuire (es. v2.0.0-beta.45)'
         required: true
         type: string
 
