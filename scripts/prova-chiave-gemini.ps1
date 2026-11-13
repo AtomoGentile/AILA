@@ -19,7 +19,7 @@ function Show($label, $code) {
 $code = curl.exe -s -o $out -w '%{http_code}' -H "x-goog-api-key: $key" "$base`?pageSize=5"
 Show 'elenco modelli' $code
 
-foreach ($m in 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest',
+foreach ($m in 'gemini-4-hydrogen', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest',
                 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite') {
     $code = curl.exe -s -o $out -w '%{http_code}' -X POST -H 'Content-Type: application/json' `
         -H "x-goog-api-key: $key" --data-binary "@$body" "$base/$m`:generateContent"
