@@ -3402,6 +3402,8 @@ fun MainAppShell(
                         MainTab.HOME -> {
                             HomeScreen(
                                 subjectColorsRevision = subjectColorsRevision,
+                                subjectColorsEnabled = run { subjectColorsRevision; AppContainer.settings.subjectColorsEnabled },
+                                subjectColorOverrides = run { subjectColorsRevision; AppContainer.settings.subjectColorOverrides },
                                 studentFirstName = user.firstName,
                                 experience = acaExperience,
                                 aiEnabled = aiPolicy.aiEnabled && "CIRCULARS" in aiPolicy.services,
@@ -3503,6 +3505,8 @@ fun MainAppShell(
                                 CalendarScreen(
                                     events = calendarEvents,
                                     subjectColorsRevision = subjectColorsRevision,
+                                    subjectColorsEnabled = run { subjectColorsRevision; AppContainer.settings.subjectColorsEnabled },
+                                    subjectColorOverrides = run { subjectColorsRevision; AppContainer.settings.subjectColorOverrides },
                                     classLabel = myClassLabel,
                                     onAddEventClick = {
                                         addEventInitialStep = EventCreationStep.MENU
