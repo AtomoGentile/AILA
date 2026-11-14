@@ -78,7 +78,9 @@ fun CalendarScreen(
     /** Eventi in corso di eliminazione: la loro card esce con un'animazione prima di sparire. */
     removingEventIds: Set<String> = emptySet(),
     classLabel: String? = null,
-    subjectColorsRevision: Int = 0
+    subjectColorsRevision: Int = 0,
+    subjectColorsEnabled: Boolean = false,
+    subjectColorOverrides: Map<String, String> = emptyMap()
 ) {
     val todayDate = remember { today() }
     val morph = rememberSaveable(saver = CalendarMorphState.saver) { CalendarMorphState() }
@@ -383,7 +385,8 @@ fun CalendarScreen(
                                     CalendarEventCard(
                                         event = event,
                                         onClick = { onEventClick(event) },
-                                        subjectColorsRevision = subjectColorsRevision,
+                                        subjectColorsEnabled = subjectColorsEnabled,
+                                        subjectColorOverrides = subjectColorOverrides,
                                         modifier = Modifier
                                             .ailaAppear(index + 3)
                                             .drawWithContent {
@@ -427,7 +430,7 @@ fun CalendarScreen(
                 ) {
                     monthSection()
                     Column(Modifier.fillMaxWidth().morphCollapse(progress)) {
-                        TimetableTimeline(classLabel, selectedDate, progress, subjectColorsRevision)
+                        TimetableTimeline(classLabel, selectedDate, progress, subjectColorsEnabled, subjectColorOverrides)
                     }
                 }
                 Column(
@@ -459,7 +462,8 @@ fun CalendarScreen(
                         upcoming.forEachIndexed { index, event ->
                             CalendarEventCard(
                                 event = event,
-                                subjectColorsRevision = subjectColorsRevision,
+                                subjectColorsEnabled = subjectColorsEnabled,
+                                subjectColorOverrides = subjectColorOverrides,
                                 onClick = {
                                     // Tocco su un evento in arrivo: il mese e il giorno vanno su di lui.
                                     parseIsoDate(event.date)?.let {
@@ -487,7 +491,7 @@ fun CalendarScreen(
             ) {
                 monthSection()
                 Column(Modifier.fillMaxWidth().morphCollapse(progress)) {
-                    TimetableTimeline(classLabel, selectedDate, progress, subjectColorsRevision)
+                    TimetableTimeline(classLabel, selectedDate, progress, subjectColorsEnabled, subjectColorOverrides)
                 }
                 Column(Modifier.fillMaxWidth().morphCollapse(1f - progress)) {
                     Spacer(modifier = Modifier.height(AppTheme.Space20))
@@ -703,10 +707,9 @@ fun CalendarEventCard(
     modifier: Modifier = Modifier,
     /** Scrive anche il giorno accanto all'ora (elenco "In arrivo", fuori dal giorno scelto). */
     showDate: Boolean = false,
-    subjectColorsRevision: Int = 0
+    subjectColorsEnabled: Boolean = false,
+    subjectColorOverrides: Map<String, String> = emptyMap()
 ) {
-    val subjectColorsEnabled = remember(subjectColorsRevision) { circolareplus.data.AppContainer.settings.subjectColorsEnabled }
-    val subjectColorOverrides = remember(subjectColorsRevision) { circolareplus.data.AppContainer.settings.subjectColorOverrides }
     val subjectColor = if (subjectColorsEnabled) SubjectColors.choiceForSubject(event.title, subjectColorOverrides) else null
     // transformKey: al ritorno il dettaglio si richiude su questa card, dove sta adesso.
     AilaCard(onClick = onClick, modifier = modifier, transformKey = "event:${event.id}") {
