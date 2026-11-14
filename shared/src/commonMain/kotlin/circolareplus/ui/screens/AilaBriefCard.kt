@@ -112,7 +112,7 @@ internal fun AilaBriefCard(
                         Box(
                             Modifier.size(36.dp).background(
                                 if (subjectColor?.key == "rainbow") Brush.horizontalGradient(subjectColor.colors.map { it.copy(alpha = if (dark) .34f else .24f) })
-                                else Brush.horizontalGradient(listOf(tint.copy(alpha = if (dark) .14f else .10f))),
+                                else Brush.horizontalGradient(listOf(tint.copy(alpha = if (dark) .14f else .10f), tint.copy(alpha = if (dark) .14f else .10f))),
                                 RoundedCornerShape(12.dp)
                             ),
                             contentAlignment = Alignment.Center
