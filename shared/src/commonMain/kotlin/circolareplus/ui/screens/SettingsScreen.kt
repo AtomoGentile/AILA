@@ -166,6 +166,8 @@ fun SettingsScreen(
     var notificationRevision by remember { mutableStateOf(0) }
     var versionTaps by remember { mutableStateOf(0) }
     var showBetaProgram by remember { mutableStateOf(false) }
+    var showPwaBetaDialog by remember { mutableStateOf(false) }
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
     if (showBetaProgram) {
         val enabled = circolareplus.update.AppUpdateManager.betaProgramEnabled
         AlertDialog(onDismissRequest = { showBetaProgram = false },
@@ -176,6 +178,22 @@ fun SettingsScreen(
                 showBetaProgram = false
             }) { Text(if (enabled) "Esci dalla beta" else "Iscriviti alla beta") } },
             dismissButton = { TextButton(onClick = { showBetaProgram = false }) { Text("Annulla") } })
+    }
+    if (showPwaBetaDialog) {
+        AlertDialog(
+            onDismissRequest = { showPwaBetaDialog = false },
+            title = { Text("Anteprima beta PWA") },
+            text = { Text("Apri AILA sul canale beta in una pagina separata. L’indirizzo stabile resta disponibile; le beta possono contenere errori.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showPwaBetaDialog = false
+                    uriHandler.openUri("https://beta.aila-scuola.pages.dev")
+                }) { Text("Apri beta") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPwaBetaDialog = false }) { Text("Annulla") }
+            }
+        )
     }
     val scope = rememberCoroutineScope()
 
@@ -1089,12 +1107,15 @@ fun SettingsScreen(
                             subtitle = "Versione $appVersion",
                             tint = AppTheme.TintSlate,
                             showChevron = false,
-                            // Opzione nascosta: 7 tocchi sbloccano la diagnostica.
+                            // 7 tocchi sbloccano la diagnostica e il canale beta della piattaforma.
                             onClick = {
                                 versionTaps++
                                 if (versionTaps >= 7) {
                                     if (!showDebugMenu) onUnlockDebugMenu()
-                                    if (circolareplus.platform.isAndroid() && circolareplus.platform.isInAppUpdateSupported()) showBetaProgram = true
+                                    when {
+                                        circolareplus.platform.isWeb() -> showPwaBetaDialog = true
+                                        circolareplus.platform.isAndroid() && circolareplus.platform.isInAppUpdateSupported() -> showBetaProgram = true
+                                    }
                                     versionTaps = 0
                                 }
                             },
