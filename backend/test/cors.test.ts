@@ -1,4 +1,4 @@
-// CORS: solo la PWA (WEB_ORIGINS) e localhost; l'app nativa (senza Origin) non cambia.
+// CORS: PWA stable e beta, localhost; l'app nativa (senza Origin) non cambia.
 import { describe, expect, it } from 'vitest';
 import worker from '../src/index';
 
@@ -12,9 +12,14 @@ async function preflight(origin?: string) {
 }
 
 describe('CORS', () => {
-  it('ammette la PWA', async () => {
+  it('ammette la PWA stabile', async () => {
     const res = await preflight('https://aila-scuola.pages.dev');
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://aila-scuola.pages.dev');
+  });
+
+  it('ammette la PWA beta sul branch preview dedicato', async () => {
+    const res = await preflight('https://beta.aila-scuola.pages.dev');
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://beta.aila-scuola.pages.dev');
   });
 
   it('ammette localhost in sviluppo', async () => {
@@ -22,8 +27,13 @@ describe('CORS', () => {
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:5173');
   });
 
-  it('rifiuta gli altri siti', async () => {
-    for (const origin of ['https://evil.example', 'https://aila-scuola.pages.dev.evil.example', 'http://localhost.evil.example']) {
+  it('rifiuta gli altri siti e preview', async () => {
+    for (const origin of [
+      'https://evil.example',
+      'https://aila-scuola.pages.dev.evil.example',
+      'https://other-branch.aila-scuola.pages.dev',
+      'http://localhost.evil.example',
+    ]) {
       const res = await preflight(origin);
       expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
     }
