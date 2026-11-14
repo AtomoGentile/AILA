@@ -8,7 +8,9 @@ object SubjectColors {
     data class Subject(val key: String, val label: String, val defaultColor: String)
     data class Choice(val key: String, val label: String, val colors: List<Color>) {
         val color: Color get() = colors.first()
-        val brush: Brush get() = Brush.horizontalGradient(colors)
+        private val gradientColors: List<Color> get() = if (colors.size == 1) listOf(colors.first(), colors.first()) else colors
+        val brush: Brush get() = Brush.horizontalGradient(gradientColors)
+
     }
 
     val subjects = listOf(
