@@ -26,7 +26,7 @@ object SubjectColors {
         Subject("filosofia", "Filosofia", "black"),
         Subject("religione", "Religione", "fuchsia"),
         Subject("informatica", "Informatica", "lightblue"),
-        Subject("arte", "Arte", "purple"),
+        Subject("arte", "Arte", "violet"),
         Subject("educazione_civica", "Educazione civica", "rainbow")
     )
 
@@ -40,7 +40,8 @@ object SubjectColors {
         Choice("black", "Nero", listOf(Color(0xFF212121))),
         Choice("fuchsia", "Fucsia", listOf(Color(0xFFD81B60))),
         Choice("lightblue", "Azzurro", listOf(Color(0xFF29B6F6))),
-        Choice("purple", "Viola", listOf(Color(0xFF8E24AA))),
+        Choice("violet", "Viola", listOf(Color(0xFF6B4FD8))),
+        Choice("purple", "Porpora", listOf(Color(0xFF8E24AA))),
         Choice("rainbow", "Arcobaleno", listOf(
             Color(0xFFE53935), Color(0xFFFF9800), Color(0xFFFFEB3B),
             Color(0xFF43A047), Color(0xFF1E88E5), Color(0xFF8E24AA)
