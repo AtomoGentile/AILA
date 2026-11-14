@@ -28,9 +28,14 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Tag stabile o beta da compilare e distribuire (es. v2.0.0-beta.45)'
+        description: 'Versione da pubblicare (es. v1.6.4); determina se va su stable o beta'
         required: true
         type: string
+      source_ref:
+        description: 'Branch/tag sorgente (opzionale; predefinito: release_tag)'
+        required: false
+        type: string
+        default: ''
 
 concurrency:
   group: web-deploy-${{ github.ref }}
@@ -48,7 +53,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.release_tag || github.ref }}
+          ref: ${{ inputs.source_ref || inputs.release_tag || github.ref }}
 
       - name: Validate release tag
         id: release
