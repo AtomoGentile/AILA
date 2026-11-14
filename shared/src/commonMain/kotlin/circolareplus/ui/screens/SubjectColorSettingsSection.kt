@@ -116,7 +116,8 @@ internal fun SubjectColorSettingsSection(
 
 @Composable
 private fun ColorSwatch(key: String, colors: List<androidx.compose.ui.graphics.Color>) {
-    val brush = if (key == "rainbow") Brush.horizontalGradient(colors) else Brush.linearGradient(colors)
+    val swatchColors = if (colors.size == 1) listOf(colors.first(), colors.first()) else colors
+    val brush = if (key == "rainbow") Brush.horizontalGradient(swatchColors) else Brush.linearGradient(swatchColors)
     Box(
         Modifier.size(22.dp).clip(CircleShape)
             .background(brush)
