@@ -31,7 +31,9 @@ internal fun AilaBriefCard(
     items: List<AilaBriefItemDto>, onDismiss: (AilaBriefItemDto) -> Unit,
     onOpen: (AilaBriefItemDto) -> Unit, onStudy: (String) -> Unit,
     loading: Boolean = false, error: String? = null, onRefresh: () -> Unit = {}, modifier: Modifier = Modifier,
-    subjectColorsRevision: Int = 0
+    subjectColorsRevision: Int = 0,
+    subjectColorsEnabled: Boolean = false,
+    subjectColorOverrides: Map<String, String> = emptyMap()
 ) {
     val relevant = items
     val visible = relevant.take(3)
@@ -49,8 +51,6 @@ internal fun AilaBriefCard(
         .border(1.dp, if(dark) Color.White.copy(alpha=.12f) else Color(0xFF27324B).copy(alpha=.12f), panelShape)
     val itemFill = if(dark) Color.White.copy(alpha=.075f) else Color(0xFF17213A).copy(alpha=.045f)
     val itemBorder = if(dark) Color.White.copy(alpha=.12f) else Color(0xFF17213A).copy(alpha=.10f)
-    val subjectColorsEnabled = remember(subjectColorsRevision) { circolareplus.data.AppContainer.settings.subjectColorsEnabled }
-    val subjectColorOverrides = remember(subjectColorsRevision) { circolareplus.data.AppContainer.settings.subjectColorOverrides }
     Box(modifier.fillMaxWidth().then(panelSurface)) {
         Canvas(Modifier.matchParentSize()) {
             val center = Offset(size.width * .96f, size.height * .04f)
