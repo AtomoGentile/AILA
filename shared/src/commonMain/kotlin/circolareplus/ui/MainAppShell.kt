@@ -3507,6 +3507,7 @@ fun MainAppShell(
                                     subjectColorsRevision = subjectColorsRevision,
                                     subjectColorsEnabled = run { subjectColorsRevision; AppContainer.settings.subjectColorsEnabled },
                                     subjectColorOverrides = run { subjectColorsRevision; AppContainer.settings.subjectColorOverrides },
+                                    daySelectorColorsEnabled = run { subjectColorsRevision; AppContainer.settings.daySelectorColorsEnabled },
                                     classLabel = myClassLabel,
                                     onAddEventClick = {
                                         addEventInitialStep = EventCreationStep.MENU
@@ -4705,6 +4706,11 @@ fun MainAppShell(
                         subjectColorsEnabled = run { subjectColorsRevision; AppContainer.settings.subjectColorsEnabled },
                         onSubjectColorsEnabledChange = { enabled ->
                             AppContainer.settings.subjectColorsEnabled = enabled
+                            subjectColorsRevision++
+                        },
+                        daySelectorColorsEnabled = run { subjectColorsRevision; AppContainer.settings.daySelectorColorsEnabled },
+                        onDaySelectorColorsEnabledChange = { enabled ->
+                            AppContainer.settings.daySelectorColorsEnabled = enabled
                             subjectColorsRevision++
                         },
                         subjectColorOverrides = run { subjectColorsRevision; AppContainer.settings.subjectColorOverrides },
