@@ -7,6 +7,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
@@ -144,7 +145,7 @@ internal fun TimetableTimeline(classLabel: String?, date: CivilDate, progress: F
                         modifier = Modifier.widthIn(min = 52.dp))
                     Box(Modifier.width(16.dp).height(76.dp), contentAlignment = Alignment.Center) {
                         Box(Modifier.width(1.dp).fillMaxHeight().background(lineBrush))
-                        Box(Modifier.size(6.dp).clip(RoundedCornerShape(50)).background(markerBrush))
+                        Box(Modifier.size(7.dp).clip(RoundedCornerShape(50)).background(markerBrush).border(1.dp, AppTheme.Hairline, RoundedCornerShape(50)))
                     }
                     Column(Modifier.weight(1f).padding(start = 12.dp, top = 10.dp, bottom = 10.dp)) {
                         Text(if (lesson.subject.length <= 4) lesson.subject else lesson.subject.lowercase().replaceFirstChar { it.uppercase() },
