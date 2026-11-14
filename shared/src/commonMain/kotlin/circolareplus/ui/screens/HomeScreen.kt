@@ -57,7 +57,6 @@ import circolareplus.domain.model.Circular
  */
 @Composable
 fun HomeScreen(
-    subjectColorsRevision: Int = 0,
     studentFirstName: String = "Simone",
     circulars: List<Circular> = emptyList(),
     calendarEvents: List<CalendarEvent> = emptyList(),
@@ -85,7 +84,8 @@ fun HomeScreen(
     onOpenBrief: (circolareplus.data.remote.dto.AilaBriefItemDto) -> Unit = {},
     onPlanStudy: (String) -> Unit = {},
     aiEnabled: Boolean = true,
-    isEventsLoading: Boolean = false
+    isEventsLoading: Boolean = false,
+    subjectColorsRevision: Int = 0
 ) {
     val scrollState = rememberScrollState()
 
