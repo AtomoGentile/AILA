@@ -76,6 +76,10 @@ fun SettingsScreen(
     onSecondaryAccentChange: (circolareplus.design.AilaAccent) -> Unit = {},
     tertiaryAccent: circolareplus.design.AilaAccent = circolareplus.design.AilaAccent.TEAL,
     onTertiaryAccentChange: (circolareplus.design.AilaAccent) -> Unit = {},
+    subjectColorsEnabled: Boolean = true,
+    onSubjectColorsEnabledChange: (Boolean) -> Unit = {},
+    subjectColorOverrides: Map<String, String> = emptyMap(),
+    onSubjectColorChange: (String, String?) -> Unit = { _, _ -> },
     isNotificationKindEnabled: (NotificationKind) -> Boolean,
     onNotificationKindChange: (NotificationKind, Boolean) -> Unit,
     boardNotificationsEnabled: Boolean = true,
@@ -284,6 +288,18 @@ fun SettingsScreen(
                         }
                     }
             
+                }
+            }
+            add {
+                Column {
+                    AilaSectionTitle(text = "Colori materie")
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    SubjectColorSettingsSection(
+                        enabled = subjectColorsEnabled,
+                        onEnabledChange = onSubjectColorsEnabledChange,
+                        overrides = subjectColorOverrides,
+                        onColorChange = onSubjectColorChange
+                    )
                 }
             }
             // --- Offline -----------------------------------------------------------------
