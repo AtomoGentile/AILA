@@ -76,7 +76,8 @@ fun CalendarScreen(
     onFocusConsumed: () -> Unit = {},
     /** Eventi in corso di eliminazione: la loro card esce con un'animazione prima di sparire. */
     removingEventIds: Set<String> = emptySet(),
-    classLabel: String? = null
+    classLabel: String? = null,
+    subjectColorsRevision: Int = 0
 ) {
     val todayDate = remember { today() }
     val morph = rememberSaveable(saver = CalendarMorphState.saver) { CalendarMorphState() }
@@ -424,7 +425,7 @@ fun CalendarScreen(
                 ) {
                     monthSection()
                     Column(Modifier.fillMaxWidth().morphCollapse(progress)) {
-                        TimetableTimeline(classLabel, selectedDate, progress)
+                        TimetableTimeline(classLabel, selectedDate, progress, subjectColorsRevision)
                     }
                 }
                 Column(
@@ -483,7 +484,7 @@ fun CalendarScreen(
             ) {
                 monthSection()
                 Column(Modifier.fillMaxWidth().morphCollapse(progress)) {
-                    TimetableTimeline(classLabel, selectedDate, progress)
+                    TimetableTimeline(classLabel, selectedDate, progress, subjectColorsRevision)
                 }
                 Column(Modifier.fillMaxWidth().morphCollapse(1f - progress)) {
                     Spacer(modifier = Modifier.height(AppTheme.Space20))
