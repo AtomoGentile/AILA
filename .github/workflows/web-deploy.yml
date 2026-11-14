@@ -1,14 +1,13 @@
 name: PWA deploy
 
 # Compila la PWA (WebAssembly) e la pubblica su Cloudflare Pages, progetto "aila-scuola".
-# Le modifiche di main aggiornano il sito stabile; i tag stabili pubblicano in produzione,
-# mentre i tag beta aggiornano il branch preview "beta" senza esporre la beta sul sito stabile.
+# I tag stabili pubblicano in produzione, mentre i tag beta aggiornano il branch preview
+# "beta". I commit di main eseguono solo CI, così il codice beta non finisce in produzione.
 # I pull request eseguono solo la build. L'avvio manuale richiede il tag da compilare.
 # Secret richiesti: CLOUDFLARE_API_TOKEN (permesso "Cloudflare Pages: Edit") e
 # CLOUDFLARE_ACCOUNT_ID, gli stessi del deploy del Worker se il token ha anche quel permesso.
 on:
   push:
-    branches: [main]
     tags: ['v*']
     paths:
       - 'shared/**'
@@ -141,7 +140,7 @@ jobs:
           fi
 
       - name: Deploy stable PWA
-        if: (steps.release.outputs.prerelease == 'false' && github.event_name != 'pull_request') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        if: steps.release.outputs.prerelease == 'false' && github.event_name != 'pull_request'
         run: npx --yes wrangler@4 pages deploy "$DIST" --project-name="$PAGES_PROJECT" --branch=main --commit-dirty=true
 
       - name: Deploy beta PWA preview
