@@ -32,7 +32,7 @@ object SubjectColors {
 
     val choices = listOf(
         Choice("red", "Rosso", listOf(Color(0xFFE53935))),
-        Choice("blue", "Blu", listOf(Color(0xFF1976D2))),
+        Choice("blue", "Blu", listOf(Color(0xFF0D47A1))),
         Choice("yellow", "Giallo", listOf(Color(0xFFFFEB00))),
         Choice("green", "Verde", listOf(Color(0xFF2E7D32))),
         Choice("white", "Bianco", listOf(Color(0xFFFFFFFF))),
