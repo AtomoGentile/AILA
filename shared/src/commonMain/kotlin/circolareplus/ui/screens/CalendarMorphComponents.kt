@@ -103,10 +103,14 @@ internal fun Modifier.morphInactive(inactive: Boolean): Modifier = if (!inactive
     }
 
 @Composable
-internal fun TimetableTimeline(classLabel: String?, date: CivilDate, progress: Float, subjectColorsRevision: Int) {
+internal fun TimetableTimeline(
+    classLabel: String?,
+    date: CivilDate,
+    progress: Float,
+    subjectColorsEnabled: Boolean,
+    subjectColorOverrides: Map<String, String>
+) {
     val uri = LocalUriHandler.current
-    val subjectColorsEnabled = remember(subjectColorsRevision) { circolareplus.data.AppContainer.settings.subjectColorsEnabled }
-    val subjectColorOverrides = remember(subjectColorsRevision) { circolareplus.data.AppContainer.settings.subjectColorOverrides }
     AnimatedContent(
         targetState = date.toIso(),
         transitionSpec = {
