@@ -21,6 +21,8 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import circolareplus.util.plusDays
 import androidx.compose.ui.draw.clipToBounds
 import kotlinx.coroutines.delay
@@ -80,7 +82,8 @@ fun CalendarScreen(
     classLabel: String? = null,
     subjectColorsRevision: Int = 0,
     subjectColorsEnabled: Boolean = false,
-    subjectColorOverrides: Map<String, String> = emptyMap()
+    subjectColorOverrides: Map<String, String> = emptyMap(),
+    daySelectorColorsEnabled: Boolean = true
 ) {
     val todayDate = remember { today() }
     val morph = rememberSaveable(saver = CalendarMorphState.saver) { CalendarMorphState() }
@@ -244,20 +247,30 @@ fun CalendarScreen(
                         val gridMonth = key % 100
                         val gridDays = remember(gridYear, gridMonth) { daysInMonth(gridYear, gridMonth) }
                         val gridBlanks = remember(gridYear, gridMonth) { firstWeekdayOfMonth(gridYear, gridMonth) }
-                        val gridDotDays = remember(events, gridYear, gridMonth, selectedCategoryFilter) {
+                        val gridEventsByDay = remember(events, gridYear, gridMonth, selectedCategoryFilter) {
                             events
                                 .filter { selectedCategoryFilter == null || it.category == selectedCategoryFilter }
-                                .mapNotNull { event -> parseIsoDate(event.date) }
-                                .filter { it.year == gridYear && it.month == gridMonth }
-                                .map { it.day }
-                                .toSet()
+                                .mapNotNull { event -> parseIsoDate(event.date)?.takeIf { it.year == gridYear && it.month == gridMonth }?.let { it.day to event } }
+                                .groupBy({ it.first }, { it.second })
+                        }
+                        val defaultEventChoice = remember(AppTheme.accent, AppTheme.isDarkMode) {
+                            SubjectColors.Choice("aila", "AILA", listOf(AppTheme.PrimaryBlue))
+                        }
+                        val gridEventColors = remember(gridEventsByDay, daySelectorColorsEnabled, subjectColorOverrides, defaultEventChoice) {
+                            if (!daySelectorColorsEnabled) emptyMap()
+                            else gridEventsByDay.mapValues { (_, dayEvents) ->
+                                dayEvents.take(3).map { event ->
+                                    SubjectColors.choiceForSubject(event.title, subjectColorOverrides) ?: defaultEventChoice
+                                }
+                            }
                         }
                         MonthGrid(
                             daysCount = gridDays,
                             leadingBlanks = gridBlanks,
                             selectedDay = selectedDay,
                             today = todayDate.takeIf { it.year == gridYear && it.month == gridMonth },
-                            daysWithEvents = gridDotDays,
+                            daysWithEvents = gridEventsByDay.keys,
+                            eventColorsByDay = gridEventColors,
                             onSelectDay = { if (morph.progress == 0f) selectedDay = it },
                             progress = progress,
                             monthLabel = ITALIAN_MONTHS.getOrElse(gridMonth) { "" }
@@ -589,6 +602,7 @@ private fun MonthGrid(
     selectedDay: Int,
     today: CivilDate?,
     daysWithEvents: Set<Int>,
+    eventColorsByDay: Map<Int, List<SubjectColors.Choice>> = emptyMap(),
     onSelectDay: (Int) -> Unit,
     progress: Float = 0f,
     monthLabel: String = ""
@@ -598,6 +612,7 @@ private fun MonthGrid(
             val selected = day == selectedDay
             DayCell(day = day, isSelected = selected, isToday = today?.day == day,
                 hasEvents = day in daysWithEvents, onClick = { onSelectDay(day) },
+                eventColors = eventColorsByDay[day].orEmpty(),
                 progress = if (selected) progress else 0f, monthLabel = monthLabel,
                 modifier = Modifier.graphicsLayer {
                     alpha = if (selected) 1f else (1f - progress * 1.8f).coerceAtLeast(0f)
@@ -633,6 +648,7 @@ private fun DayCell(
     isSelected: Boolean,
     isToday: Boolean,
     hasEvents: Boolean,
+    eventColors: List<SubjectColors.Choice> = emptyList(),
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     progress: Float = 0f,
@@ -688,14 +704,32 @@ private fun DayCell(
                 })
             }
             Spacer(modifier = Modifier.height(AppTheme.Space4))
-            AilaDot(
-                color = when {
-                    !hasEvents || progress > 0f -> Color.Transparent
-                    isSelected -> Color.White
-                    else -> AppTheme.PrimaryBlue
-                },
-                size = 5.dp
-            )
+            if (eventColors.isNotEmpty() && progress == 0f) {
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    eventColors.take(3).forEachIndexed { index, choice ->
+                        Box(
+                            Modifier.size(5.dp).clip(CircleShape).background(choice.brush)
+                                .border(
+                                    0.5.dp,
+                                    if (choice.key == "white") AppTheme.TextMuted.copy(alpha = 0.8f)
+                                    else if (isSelected && choice.key == "yellow") Color(0xFF8A7900)
+                                    else Color.Transparent,
+                                    CircleShape
+                                )
+                                .semantics { contentDescription = "Evento ${index + 1}: ${choice.label}" }
+                        )
+                    }
+                }
+            } else {
+                AilaDot(
+                    color = when {
+                        !hasEvents || progress > 0f -> Color.Transparent
+                        isSelected -> Color.White
+                        else -> AppTheme.PrimaryBlue
+                    },
+                    size = 5.dp
+                )
+            }
         }
     }
 }

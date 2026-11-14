@@ -29,6 +29,8 @@ import circolareplus.design.SubjectColors
 internal fun SubjectColorSettingsSection(
     enabled: Boolean,
     onEnabledChange: (Boolean) -> Unit,
+    daySelectorEnabled: Boolean,
+    onDaySelectorEnabledChange: (Boolean) -> Unit,
     overrides: Map<String, String>,
     onColorChange: (String, String?) -> Unit
 ) {
@@ -44,14 +46,32 @@ internal fun SubjectColorSettingsSection(
                     Text("Colori delle materie", style = MaterialTheme.typography.titleMedium, color = AppTheme.TextDark)
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "Applica i colori nel calendario e nel Brief. Le scelte restano su questo dispositivo.",
+                        "Applica i colori delle materie agli eventi del calendario e del Brief. Le scelte restano su questo dispositivo.",
                         style = MaterialTheme.typography.bodySmall,
                         color = AppTheme.TextMuted
                     )
                 }
                 AilaSwitch(checked = enabled, onCheckedChange = onEnabledChange)
             }
-            if (enabled) {
+            Spacer(Modifier.height(AppTheme.Space8))
+            HorizontalDivider(color = AppTheme.Hairline)
+            Row(
+                Modifier.fillMaxWidth().padding(top = AppTheme.Space8),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f).padding(end = AppTheme.Space12)) {
+                    Text("Colori nel selettore dei giorni", style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextDark)
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        "Mostra fino a tre indicatori per giorno: materia riconosciuta o colore AILA per gli altri eventi.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTheme.TextMuted
+                    )
+                }
+                AilaSwitch(checked = daySelectorEnabled, onCheckedChange = onDaySelectorEnabledChange)
+            }
+            if (enabled || daySelectorEnabled) {
                 Spacer(Modifier.height(AppTheme.Space8))
                 HorizontalDivider(color = AppTheme.Hairline)
                 SubjectColors.subjects.forEachIndexed { index, subject ->

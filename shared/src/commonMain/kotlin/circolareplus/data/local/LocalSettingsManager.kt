@@ -65,6 +65,7 @@ class LocalSettingsManager(
         private const val KEY_ACCENT = "accent_color"
         private const val KEY_SUBJECT_COLORS_ENABLED = "subject_colors_enabled"
         private const val KEY_SUBJECT_COLOR_OVERRIDES = "subject_color_overrides"
+        private const val KEY_DAY_SELECTOR_COLORS_ENABLED = "day_selector_colors_enabled"
         private const val KEY_LAST_ONLINE_SYNC = "last_online_sync_millis"
         private const val KEY_LAST_FULL_OFFLINE_SYNC = "last_full_offline_sync_millis"
         private const val KEY_OFFLINE_CIRCULAR_LIMIT = "offline_circular_limit"
@@ -380,6 +381,11 @@ class LocalSettingsManager(
         set(value) {
             settings.putString(KEY_SUBJECT_COLOR_OVERRIDES, Json.encodeToString(value))
         }
+
+    /** Indicatori colorati per gli eventi nel selettore mensile; la scelta resta sul dispositivo. */
+    var daySelectorColorsEnabled: Boolean
+        get() = settings.getBoolean(KEY_DAY_SELECTOR_COLORS_ENABLED, true)
+        set(value) = settings.putBoolean(KEY_DAY_SELECTOR_COLORS_ENABLED, value)
 
     var localTranscriptionOnly: Boolean
         get() = settings.getBoolean("local_transcription_only", false)
