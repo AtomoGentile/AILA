@@ -57,6 +57,7 @@ import circolareplus.domain.model.Circular
  */
 @Composable
 fun HomeScreen(
+    subjectColorsRevision: Int = 0,
     studentFirstName: String = "Simone",
     circulars: List<Circular> = emptyList(),
     calendarEvents: List<CalendarEvent> = emptyList(),
@@ -130,7 +131,8 @@ fun HomeScreen(
 
         if (circolareplus.ai.AcaPolicyState.preferences.let { it.aiEnabled && it.acaEnabled && it.nudgesEnabled && "NOW_NUDGE" in it.services }) {
             AilaBriefCard(briefItems, onDismissBrief, onOpenBrief, onPlanStudy, briefLoading, briefError, onRefreshBrief,
-                Modifier.padding(horizontal = AppTheme.Space16).padding(top = 18.dp, bottom = 4.dp))
+                Modifier.padding(horizontal = AppTheme.Space16).padding(top = 18.dp, bottom = 4.dp),
+                subjectColorsRevision = subjectColorsRevision)
         }
 
         val latestSection: @Composable () -> Unit = {
