@@ -26,19 +26,21 @@ object SubjectColors {
         Subject("filosofia", "Filosofia", "black"),
         Subject("religione", "Religione", "fuchsia"),
         Subject("informatica", "Informatica", "lightblue"),
+        Subject("arte", "Arte", "purple"),
         Subject("educazione_civica", "Educazione civica", "rainbow")
     )
 
     val choices = listOf(
         Choice("red", "Rosso", listOf(Color(0xFFE53935))),
         Choice("blue", "Blu", listOf(Color(0xFF1976D2))),
-        Choice("yellow", "Giallo", listOf(Color(0xFFF9A825))),
+        Choice("yellow", "Giallo", listOf(Color(0xFFFFEB00))),
         Choice("green", "Verde", listOf(Color(0xFF2E7D32))),
         Choice("white", "Bianco", listOf(Color(0xFFFFFFFF))),
         Choice("orange", "Arancione", listOf(Color(0xFFEF6C00))),
         Choice("black", "Nero", listOf(Color(0xFF212121))),
         Choice("fuchsia", "Fucsia", listOf(Color(0xFFD81B60))),
         Choice("lightblue", "Azzurro", listOf(Color(0xFF29B6F6))),
+        Choice("purple", "Viola", listOf(Color(0xFF8E24AA))),
         Choice("rainbow", "Arcobaleno", listOf(
             Color(0xFFE53935), Color(0xFFFF9800), Color(0xFFFFEB3B),
             Color(0xFF43A047), Color(0xFF1E88E5), Color(0xFF8E24AA)
@@ -60,11 +62,13 @@ object SubjectColors {
             "biologia" in normalized -> "biologia"
             "scienze" in normalized -> "scienze"
             "inglese" in normalized || "english" in normalized -> "inglese"
+            "storia dell'arte" in normalized || "storia dell arte" in normalized -> "arte"
             "storia" in normalized -> "storia"
             "motoria" in normalized || "educazione fisica" in normalized -> "motoria"
             "filosofia" in normalized -> "filosofia"
             "religione" in normalized -> "religione"
             "informatica" in normalized -> "informatica"
+            normalized.split(Regex("[^a-z]+" )).any { it == "arte" || it == "disegno" } -> "arte"
             else -> null
         }
     }
