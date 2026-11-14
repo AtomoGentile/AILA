@@ -44,6 +44,7 @@ import circolareplus.design.AnimatedFilterChip
 import circolareplus.design.ailaAppear
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
+import circolareplus.design.SubjectColors
 import circolareplus.domain.model.CalendarEvent
 import circolareplus.domain.model.CalendarEventCategory
 import circolareplus.util.CivilDate
@@ -382,6 +383,7 @@ fun CalendarScreen(
                                     CalendarEventCard(
                                         event = event,
                                         onClick = { onEventClick(event) },
+                                        subjectColorsRevision = subjectColorsRevision,
                                         modifier = Modifier
                                             .ailaAppear(index + 3)
                                             .drawWithContent {
@@ -457,6 +459,7 @@ fun CalendarScreen(
                         upcoming.forEachIndexed { index, event ->
                             CalendarEventCard(
                                 event = event,
+                                subjectColorsRevision = subjectColorsRevision,
                                 onClick = {
                                     // Tocco su un evento in arrivo: il mese e il giorno vanno su di lui.
                                     parseIsoDate(event.date)?.let {
@@ -699,8 +702,12 @@ fun CalendarEventCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     /** Scrive anche il giorno accanto all'ora (elenco "In arrivo", fuori dal giorno scelto). */
-    showDate: Boolean = false
+    showDate: Boolean = false,
+    subjectColorsRevision: Int = 0
 ) {
+    val subjectColorsEnabled = remember(subjectColorsRevision) { circolareplus.data.AppContainer.settings.subjectColorsEnabled }
+    val subjectColorOverrides = remember(subjectColorsRevision) { circolareplus.data.AppContainer.settings.subjectColorOverrides }
+    val subjectColor = if (subjectColorsEnabled) SubjectColors.choiceForSubject(event.title, subjectColorOverrides) else null
     // transformKey: al ritorno il dettaglio si richiude su questa card, dove sta adesso.
     AilaCard(onClick = onClick, modifier = modifier, transformKey = "event:${event.id}") {
         Row(
@@ -716,18 +723,18 @@ fun CalendarEventCard(
                 CalendarEventCategory.AVVISO -> AppTheme.TintRed to AppTheme.TintRedInk
                 else -> AppTheme.TintSlate to AppTheme.TintSlateInk
             }
-            AilaIconTile(tint = tint) {
+            AilaIconTile(tint = subjectColor?.color ?: tint) {
                 when (event.category) {
                     CalendarEventCategory.VERIFICA ->
-                        AppIcons.Pencil(modifier = Modifier.size(20.dp), color = ink)
+                        AppIcons.Pencil(modifier = Modifier.size(20.dp), color = subjectColor?.let { if (it.key == "white") AppTheme.TextDark else it.color } ?: ink)
                     CalendarEventCategory.PAGAMENTO ->
-                        AppIcons.Card(modifier = Modifier.size(20.dp), color = ink)
+                        AppIcons.Card(modifier = Modifier.size(20.dp), color = subjectColor?.let { if (it.key == "white") AppTheme.TextDark else it.color } ?: ink)
                     CalendarEventCategory.USCITA_DIDATTICA ->
-                        AppIcons.Bus(modifier = Modifier.size(20.dp), color = ink)
+                        AppIcons.Bus(modifier = Modifier.size(20.dp), color = subjectColor?.let { if (it.key == "white") AppTheme.TextDark else it.color } ?: ink)
                     CalendarEventCategory.AVVISO ->
-                        AppIcons.Bell(modifier = Modifier.size(20.dp), color = ink)
+                        AppIcons.Bell(modifier = Modifier.size(20.dp), color = subjectColor?.let { if (it.key == "white") AppTheme.TextDark else it.color } ?: ink)
                     else ->
-                        AppIcons.Calendar(modifier = Modifier.size(20.dp), color = ink)
+                        AppIcons.Calendar(modifier = Modifier.size(20.dp), color = subjectColor?.let { if (it.key == "white") AppTheme.TextDark else it.color } ?: ink)
                 }
             }
 
