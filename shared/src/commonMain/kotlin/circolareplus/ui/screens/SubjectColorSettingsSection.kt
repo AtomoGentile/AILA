@@ -120,6 +120,7 @@ private fun ColorSwatch(key: String, colors: List<androidx.compose.ui.graphics.C
     Box(
         Modifier.size(22.dp).clip(CircleShape)
             .background(brush)
+            .then(if (key == "white") Modifier.border(1.dp, AppTheme.Hairline, CircleShape) else Modifier)
             .semantics { contentDescription = "Campione colore" }
     )
 }
