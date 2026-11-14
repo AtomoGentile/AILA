@@ -47,13 +47,14 @@ const app = new Hono<{ Bindings: Env }>();
 
 // Global middleware
 app.use('*', logger());
-// CORS solo per la PWA e per lo sviluppo in locale. L'app nativa non manda l'header Origin,
-// quindi non ne è toccata.
+// CORS solo per le PWA e per lo sviluppo in locale. L'app nativa non manda l'header Origin,
+// quindi non ne è toccata. La beta vive sul branch preview dedicato di Cloudflare Pages.
 const LOCALHOST_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+const BETA_PWA_ORIGIN = 'https://beta.aila-scuola.pages.dev';
 app.use('*', async (c, next) => {
   const allowed = (c.env.WEB_ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean);
   return cors({
-    origin: (origin) => (allowed.includes(origin) || LOCALHOST_ORIGIN.test(origin) ? origin : null),
+    origin: (origin) => (allowed.includes(origin) || origin === BETA_PWA_ORIGIN || LOCALHOST_ORIGIN.test(origin) ? origin : null),
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],
     maxAge: 86400,
