@@ -49,8 +49,6 @@ internal fun AilaBriefCard(
     ) else Modifier.clip(panelShape)
         .background(Brush.linearGradient(panelColors))
         .border(1.dp, if(dark) Color.White.copy(alpha=.12f) else Color(0xFF27324B).copy(alpha=.12f), panelShape)
-    val itemFill = if(dark) Color.White.copy(alpha=.075f) else Color(0xFF17213A).copy(alpha=.045f)
-    val itemBorder = if(dark) Color.White.copy(alpha=.12f) else Color(0xFF17213A).copy(alpha=.10f)
     Box(modifier.fillMaxWidth().then(panelSurface)) {
         Canvas(Modifier.matchParentSize()) {
             val center = Offset(size.width * .96f, size.height * .04f)
@@ -79,9 +77,10 @@ internal fun AilaBriefCard(
                 val subjectColor = if (subjectColorsEnabled && item.kind == AilaBriefKind.EVENT) {
                     SubjectColors.choiceForSubject(item.title, subjectColorOverrides)
                 } else null
-                val tint = subjectColor?.color ?: when(item.kind) {
-                    AilaBriefKind.EVENT -> if(dark) Color(0xFF9EDFD8) else Color(0xFF0F766E)
-                    AilaBriefKind.CIRCULAR -> if(dark) Color(0xFFF2D398) else Color(0xFF9A5B00)
+                val tint = subjectColor?.let {
+                    if (it.key == "white") if (dark) Color.White else Color(0xFF667085) else it.color
+                } ?: when(item.kind) {
+                    AilaBriefKind.EVENT, AilaBriefKind.CIRCULAR -> AppTheme.PrimaryBlue
                     AilaBriefKind.POLL, AilaBriefKind.RANKING_POLL -> if(dark) Color(0xFFC9B9FF) else Color(0xFF6D28D9)
                     AilaBriefKind.FORUM -> if(dark) Color(0xFFA0D5FF) else Color(0xFF0369A1)
                     AilaBriefKind.PROPOSAL -> if(dark) Color(0xFFFFBDD5) else Color(0xFFBE185D)
@@ -95,31 +94,41 @@ internal fun AilaBriefCard(
                     AilaBriefKind.PROPOSAL -> "BACHECA"
                     AilaBriefKind.SEATMAP -> "POSTI"
                 }
-                if(item.kind == AilaBriefKind.CIRCULAR) {
-                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
-                        .background(itemFill).border(1.dp,itemBorder,RoundedCornerShape(24.dp))
-                        .clickable(role=Role.Button) { onOpen(item) }.padding(16.dp),
-                        verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                        Text("Circolare n. ${item.sourceId}",color=tint,style=MaterialTheme.typography.labelMedium,fontWeight=FontWeight.Bold)
-                        Text(item.title,color=primaryText,style=MaterialTheme.typography.titleMedium)
-                    }
-                } else Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
-                    .background(itemFill).border(1.dp, itemBorder, RoundedCornerShape(24.dp))
+                val itemShape = RoundedCornerShape(24.dp)
+                val fillAlpha = if (dark) .17f else .10f
+                val itemFillBrush = if (subjectColor?.key == "rainbow") {
+                    Brush.horizontalGradient(subjectColor.colors.map { it.copy(alpha = fillAlpha) })
+                } else if (subjectColor?.key == "white") {
+                    Brush.horizontalGradient(listOf(Color.White.copy(alpha = if (dark) .18f else .72f), Color.White.copy(alpha = if (dark) .10f else .50f)))
+                } else {
+                    Brush.horizontalGradient(listOf(tint.copy(alpha = fillAlpha), tint.copy(alpha = fillAlpha * .55f)))
+                }
+                val iconFillBrush = if (subjectColor?.key == "rainbow") {
+                    Brush.horizontalGradient(subjectColor.colors.map { it.copy(alpha = if (dark) .34f else .23f) })
+                } else if (subjectColor?.key == "white") {
+                    Brush.horizontalGradient(listOf(Color.White.copy(alpha = if (dark) .32f else .95f), Color.White.copy(alpha = if (dark) .22f else .82f)))
+                } else {
+                    Brush.horizontalGradient(listOf(tint.copy(alpha = if (dark) .34f else .20f), tint.copy(alpha = if (dark) .22f else .14f)))
+                }
+                val itemBorderColor = if (subjectColor?.key == "white") AppTheme.TextMuted.copy(alpha = .62f)
+                    else tint.copy(alpha = if (dark) .42f else .28f)
+                val itemBorderBrush = if (subjectColor?.key == "rainbow") {
+                    Brush.horizontalGradient(subjectColor.colors.map { it.copy(alpha = if (dark) .68f else .52f) })
+                } else Brush.horizontalGradient(listOf(itemBorderColor, itemBorderColor))
+                Row(Modifier.fillMaxWidth().clip(itemShape)
+                    .background(itemFillBrush, itemShape)
+                    .border(1.dp, itemBorderBrush, itemShape)
                     .clickable(role=Role.Button) { onOpen(item) }.padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
-                            Modifier.size(36.dp).background(
-                                if (subjectColor?.key == "rainbow") Brush.horizontalGradient(subjectColor.colors.map { it.copy(alpha = if (dark) .34f else .24f) })
-                                else Brush.horizontalGradient(listOf(tint.copy(alpha = if (dark) .14f else .10f), tint.copy(alpha = if (dark) .14f else .10f))),
-                                RoundedCornerShape(12.dp)
-                            ),
+                            Modifier.size(36.dp).background(iconFillBrush, RoundedCornerShape(12.dp)),
                             contentAlignment = Alignment.Center
                         ) {
                             when(item.kind) {
-                                AilaBriefKind.SEATMAP -> AppIcons.Chair(Modifier.size(20.dp), tint)
-                                AilaBriefKind.EVENT -> AppIcons.Calendar(Modifier.size(20.dp), tint)
+                                AilaBriefKind.SEATMAP -> AppIcons.Chair(Modifier.size(20.dp), if (subjectColor?.key == "white") AppTheme.TextDark else tint)
+                                AilaBriefKind.EVENT -> AppIcons.Calendar(Modifier.size(20.dp), if (subjectColor?.key == "white") AppTheme.TextDark else tint)
                                 AilaBriefKind.CIRCULAR -> AppIcons.Document(Modifier.size(20.dp), tint)
                                 AilaBriefKind.POLL, AilaBriefKind.RANKING_POLL -> AppIcons.Poll(Modifier.size(20.dp), tint)
                                 AilaBriefKind.FORUM, AilaBriefKind.PROPOSAL -> AppIcons.ChatBubble(Modifier.size(20.dp), tint)
