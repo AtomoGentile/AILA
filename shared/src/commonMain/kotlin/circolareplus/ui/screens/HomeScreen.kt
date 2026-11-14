@@ -85,7 +85,9 @@ fun HomeScreen(
     onPlanStudy: (String) -> Unit = {},
     aiEnabled: Boolean = true,
     isEventsLoading: Boolean = false,
-    subjectColorsRevision: Int = 0
+    subjectColorsRevision: Int = 0,
+    subjectColorsEnabled: Boolean = false,
+    subjectColorOverrides: Map<String, String> = emptyMap()
 ) {
     val scrollState = rememberScrollState()
 
@@ -132,7 +134,9 @@ fun HomeScreen(
         if (circolareplus.ai.AcaPolicyState.preferences.let { it.aiEnabled && it.acaEnabled && it.nudgesEnabled && "NOW_NUDGE" in it.services }) {
             AilaBriefCard(briefItems, onDismissBrief, onOpenBrief, onPlanStudy, briefLoading, briefError, onRefreshBrief,
                 Modifier.padding(horizontal = AppTheme.Space16).padding(top = 18.dp, bottom = 4.dp),
-                subjectColorsRevision = subjectColorsRevision)
+                subjectColorsRevision = subjectColorsRevision,
+                subjectColorsEnabled = subjectColorsEnabled,
+                subjectColorOverrides = subjectColorOverrides)
         }
 
         val latestSection: @Composable () -> Unit = {
