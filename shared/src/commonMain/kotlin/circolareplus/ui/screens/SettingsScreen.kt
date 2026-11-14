@@ -76,10 +76,6 @@ fun SettingsScreen(
     onSecondaryAccentChange: (circolareplus.design.AilaAccent) -> Unit = {},
     tertiaryAccent: circolareplus.design.AilaAccent = circolareplus.design.AilaAccent.TEAL,
     onTertiaryAccentChange: (circolareplus.design.AilaAccent) -> Unit = {},
-    subjectColorsEnabled: Boolean = true,
-    onSubjectColorsEnabledChange: (Boolean) -> Unit = {},
-    subjectColorOverrides: Map<String, String> = emptyMap(),
-    onSubjectColorChange: (String, String?) -> Unit = { _, _ -> },
     isNotificationKindEnabled: (NotificationKind) -> Boolean,
     onNotificationKindChange: (NotificationKind, Boolean) -> Unit,
     boardNotificationsEnabled: Boolean = true,
@@ -140,7 +136,11 @@ fun SettingsScreen(
     onBackClick: () -> Unit,
     aiOnly: Boolean = false,
     onOpenLocalFiles: () -> Unit = {},
-    onOpenAiSettings: () -> Unit = {}
+    onOpenAiSettings: () -> Unit = {},
+    subjectColorsEnabled: Boolean = true,
+    onSubjectColorsEnabledChange: (Boolean) -> Unit = {},
+    subjectColorOverrides: Map<String, String> = emptyMap(),
+    onSubjectColorChange: (String, String?) -> Unit = { _, _ -> }
 ) {
     var apiKeyInput by remember(apiKey) { mutableStateOf(apiKey) }
     var apiKeyStatus by remember { mutableStateOf<String?>(null) }
