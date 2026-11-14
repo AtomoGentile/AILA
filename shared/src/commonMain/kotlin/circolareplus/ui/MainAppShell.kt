@@ -1031,6 +1031,7 @@ fun MainAppShell(
     // LocalSettingsManager, che non è stato di Compose e da solo non farebbe ridisegnare nulla.
     var apiKeyRevision by remember { mutableStateOf(0) }
     var seatMapSettingsRevision by remember { mutableStateOf(0) }
+    var subjectColorsRevision by remember { mutableStateOf(0) }
     var selectedCircularForDetail by remember { mutableStateOf<Circular?>(null) }
     // Su schermi larghi (iPad in orizzontale, tablet) la circolare si apre accanto alla lista,
     // nella tab Classe, invece che sopra a tutto: e' questa, non selectedCircularForDetail.
@@ -3400,6 +3401,9 @@ fun MainAppShell(
                     when (tab) {
                         MainTab.HOME -> {
                             HomeScreen(
+                                subjectColorsRevision = subjectColorsRevision,
+                                subjectColorsEnabled = run { subjectColorsRevision; AppContainer.settings.subjectColorsEnabled },
+                                subjectColorOverrides = run { subjectColorsRevision; AppContainer.settings.subjectColorOverrides },
                                 studentFirstName = user.firstName,
                                 experience = acaExperience,
                                 aiEnabled = aiPolicy.aiEnabled && "CIRCULARS" in aiPolicy.services,
@@ -3500,6 +3504,9 @@ fun MainAppShell(
                             ) {
                                 CalendarScreen(
                                     events = calendarEvents,
+                                    subjectColorsRevision = subjectColorsRevision,
+                                    subjectColorsEnabled = run { subjectColorsRevision; AppContainer.settings.subjectColorsEnabled },
+                                    subjectColorOverrides = run { subjectColorsRevision; AppContainer.settings.subjectColorOverrides },
                                     classLabel = myClassLabel,
                                     onAddEventClick = {
                                         addEventInitialStep = EventCreationStep.MENU
@@ -4695,6 +4702,18 @@ fun MainAppShell(
                         onOpenLocalFiles = { filesOpenedFromSettings = true; isInSettingsScreen = false; isInLocalFiles = true },
                         onOpenAiSettings = { isInAiSettings = true },
                         isRepresentative = isRepresentative,
+                        subjectColorsEnabled = run { subjectColorsRevision; AppContainer.settings.subjectColorsEnabled },
+                        onSubjectColorsEnabledChange = { enabled ->
+                            AppContainer.settings.subjectColorsEnabled = enabled
+                            subjectColorsRevision++
+                        },
+                        subjectColorOverrides = run { subjectColorsRevision; AppContainer.settings.subjectColorOverrides },
+                        onSubjectColorChange = { key, color ->
+                            val overrides = AppContainer.settings.subjectColorOverrides.toMutableMap()
+                            if (color == null) overrides.remove(key) else overrides[key] = color
+                            AppContainer.settings.subjectColorOverrides = overrides
+                            subjectColorsRevision++
+                        },
                         seatMapDummiesMenuEnabled = run {
                             seatMapSettingsRevision
                             AppContainer.settings.isSeatMapDummiesMenuEnabled

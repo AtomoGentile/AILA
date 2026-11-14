@@ -7,6 +7,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
@@ -21,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -101,7 +103,13 @@ internal fun Modifier.morphInactive(inactive: Boolean): Modifier = if (!inactive
     }
 
 @Composable
-internal fun TimetableTimeline(classLabel: String?, date: CivilDate, progress: Float) {
+internal fun TimetableTimeline(
+    classLabel: String?,
+    date: CivilDate,
+    progress: Float,
+    subjectColorsEnabled: Boolean,
+    subjectColorOverrides: Map<String, String>
+) {
     val uri = LocalUriHandler.current
     AnimatedContent(
         targetState = date.toIso(),
@@ -123,6 +131,11 @@ internal fun TimetableTimeline(classLabel: String?, date: CivilDate, progress: F
                     modifier = Modifier.padding(vertical = 24.dp))
             }
             lessons.forEachIndexed { index, lesson ->
+                val subjectColor = if (subjectColorsEnabled) SubjectColors.choiceForSubject(lesson.subject, subjectColorOverrides) else null
+                val markerBrush = subjectColor?.let { Brush.verticalGradient(if (it.colors.size == 1) listOf(it.colors.first(), it.colors.first()) else it.colors) }
+                    ?: Brush.verticalGradient(listOf(AppTheme.AccentCyan, AppTheme.AccentCyan))
+                val lineBrush = subjectColor?.let { Brush.verticalGradient((if (it.colors.size == 1) listOf(it.colors.first(), it.colors.first()) else it.colors).map { color -> color.copy(alpha = 0.42f) }) }
+                    ?: Brush.verticalGradient(listOf(AppTheme.AccentCyan.copy(alpha = 0.35f), AppTheme.AccentCyan.copy(alpha = 0.35f)))
                 val reveal = ((progress - 0.18f - index * 0.055f) / 0.38f).coerceIn(0f, 1f)
                 Row(
                     Modifier.fillMaxWidth().graphicsLayer {
@@ -135,8 +148,8 @@ internal fun TimetableTimeline(classLabel: String?, date: CivilDate, progress: F
                         style = MaterialTheme.typography.labelLarge, color = AppTheme.AccentCyan,
                         modifier = Modifier.widthIn(min = 52.dp))
                     Box(Modifier.width(16.dp).height(76.dp), contentAlignment = Alignment.Center) {
-                        Box(Modifier.width(1.dp).fillMaxHeight().background(AppTheme.AccentCyan.copy(alpha = 0.35f)))
-                        Box(Modifier.size(6.dp).clip(RoundedCornerShape(50)).background(AppTheme.AccentCyan))
+                        Box(Modifier.width(1.dp).fillMaxHeight().background(lineBrush))
+                        Box(Modifier.size(7.dp).clip(RoundedCornerShape(50)).background(markerBrush).border(1.dp, AppTheme.Hairline, RoundedCornerShape(50)))
                     }
                     Column(Modifier.weight(1f).padding(start = 12.dp, top = 10.dp, bottom = 10.dp)) {
                         Text(if (lesson.subject.length <= 4) lesson.subject else lesson.subject.lowercase().replaceFirstChar { it.uppercase() },

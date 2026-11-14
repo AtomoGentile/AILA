@@ -136,7 +136,11 @@ fun SettingsScreen(
     onBackClick: () -> Unit,
     aiOnly: Boolean = false,
     onOpenLocalFiles: () -> Unit = {},
-    onOpenAiSettings: () -> Unit = {}
+    onOpenAiSettings: () -> Unit = {},
+    subjectColorsEnabled: Boolean = true,
+    onSubjectColorsEnabledChange: (Boolean) -> Unit = {},
+    subjectColorOverrides: Map<String, String> = emptyMap(),
+    onSubjectColorChange: (String, String?) -> Unit = { _, _ -> }
 ) {
     var apiKeyInput by remember(apiKey) { mutableStateOf(apiKey) }
     var apiKeyStatus by remember { mutableStateOf<String?>(null) }
@@ -284,6 +288,18 @@ fun SettingsScreen(
                         }
                     }
             
+                }
+            }
+            add {
+                Column {
+                    AilaSectionTitle(text = "Colori materie")
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    SubjectColorSettingsSection(
+                        enabled = subjectColorsEnabled,
+                        onEnabledChange = onSubjectColorsEnabledChange,
+                        overrides = subjectColorOverrides,
+                        onColorChange = onSubjectColorChange
+                    )
                 }
             }
             // --- Offline -----------------------------------------------------------------

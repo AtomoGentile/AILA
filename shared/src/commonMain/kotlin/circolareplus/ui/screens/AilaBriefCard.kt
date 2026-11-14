@@ -30,7 +30,10 @@ import circolareplus.util.today
 internal fun AilaBriefCard(
     items: List<AilaBriefItemDto>, onDismiss: (AilaBriefItemDto) -> Unit,
     onOpen: (AilaBriefItemDto) -> Unit, onStudy: (String) -> Unit,
-    loading: Boolean = false, error: String? = null, onRefresh: () -> Unit = {}, modifier: Modifier = Modifier
+    loading: Boolean = false, error: String? = null, onRefresh: () -> Unit = {}, modifier: Modifier = Modifier,
+    subjectColorsRevision: Int = 0,
+    subjectColorsEnabled: Boolean = false,
+    subjectColorOverrides: Map<String, String> = emptyMap()
 ) {
     val relevant = items
     val visible = relevant.take(3)
@@ -73,7 +76,10 @@ internal fun AilaBriefCard(
                 Text("Sei in pari. Qui troverai novità, risposte e cose da fare per te.", color = soft, style = MaterialTheme.typography.bodyMedium)
             }
             visible.forEach { item ->
-                val tint = when(item.kind) {
+                val subjectColor = if (subjectColorsEnabled && item.kind == AilaBriefKind.EVENT) {
+                    SubjectColors.choiceForSubject(item.title, subjectColorOverrides)
+                } else null
+                val tint = subjectColor?.color ?: when(item.kind) {
                     AilaBriefKind.EVENT -> if(dark) Color(0xFF9EDFD8) else Color(0xFF0F766E)
                     AilaBriefKind.CIRCULAR -> if(dark) Color(0xFFF2D398) else Color(0xFF9A5B00)
                     AilaBriefKind.POLL, AilaBriefKind.RANKING_POLL -> if(dark) Color(0xFFC9B9FF) else Color(0xFF6D28D9)
@@ -103,7 +109,14 @@ internal fun AilaBriefCard(
                     verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(36.dp).background(tint.copy(alpha = if(dark) .14f else .10f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                        Box(
+                            Modifier.size(36.dp).background(
+                                if (subjectColor?.key == "rainbow") Brush.horizontalGradient(subjectColor.colors.map { it.copy(alpha = if (dark) .34f else .24f) })
+                                else Brush.horizontalGradient(listOf(tint.copy(alpha = if (dark) .14f else .10f), tint.copy(alpha = if (dark) .14f else .10f))),
+                                RoundedCornerShape(12.dp)
+                            ),
+                            contentAlignment = Alignment.Center
+                        ) {
                             when(item.kind) {
                                 AilaBriefKind.SEATMAP -> AppIcons.Chair(Modifier.size(20.dp), tint)
                                 AilaBriefKind.EVENT -> AppIcons.Calendar(Modifier.size(20.dp), tint)
