@@ -139,6 +139,8 @@ fun SettingsScreen(
     onOpenAiSettings: () -> Unit = {},
     subjectColorsEnabled: Boolean = true,
     onSubjectColorsEnabledChange: (Boolean) -> Unit = {},
+    daySelectorColorsEnabled: Boolean = true,
+    onDaySelectorColorsEnabledChange: (Boolean) -> Unit = {},
     subjectColorOverrides: Map<String, String> = emptyMap(),
     onSubjectColorChange: (String, String?) -> Unit = { _, _ -> }
 ) {
@@ -297,6 +299,8 @@ fun SettingsScreen(
                     SubjectColorSettingsSection(
                         enabled = subjectColorsEnabled,
                         onEnabledChange = onSubjectColorsEnabledChange,
+                        daySelectorEnabled = daySelectorColorsEnabled,
+                        onDaySelectorEnabledChange = onDaySelectorColorsEnabledChange,
                         overrides = subjectColorOverrides,
                         onColorChange = onSubjectColorChange
                     )
