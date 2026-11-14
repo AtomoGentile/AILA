@@ -128,10 +128,10 @@ internal fun TimetableTimeline(classLabel: String?, date: CivilDate, progress: F
             }
             lessons.forEachIndexed { index, lesson ->
                 val subjectColor = if (subjectColorsEnabled) SubjectColors.choiceForSubject(lesson.subject, subjectColorOverrides) else null
-                val markerBrush = subjectColor?.let { Brush.verticalGradient(it.colors) }
-                    ?: Brush.verticalGradient(listOf(AppTheme.AccentCyan))
-                val lineBrush = subjectColor?.let { Brush.verticalGradient(it.colors.map { color -> color.copy(alpha = 0.42f) }) }
-                    ?: Brush.verticalGradient(listOf(AppTheme.AccentCyan.copy(alpha = 0.35f)))
+                val markerBrush = subjectColor?.let { Brush.verticalGradient(if (it.colors.size == 1) listOf(it.colors.first(), it.colors.first()) else it.colors) }
+                    ?: Brush.verticalGradient(listOf(AppTheme.AccentCyan, AppTheme.AccentCyan))
+                val lineBrush = subjectColor?.let { Brush.verticalGradient((if (it.colors.size == 1) listOf(it.colors.first(), it.colors.first()) else it.colors).map { color -> color.copy(alpha = 0.42f) }) }
+                    ?: Brush.verticalGradient(listOf(AppTheme.AccentCyan.copy(alpha = 0.35f), AppTheme.AccentCyan.copy(alpha = 0.35f)))
                 val reveal = ((progress - 0.18f - index * 0.055f) / 0.38f).coerceIn(0f, 1f)
                 Row(
                     Modifier.fillMaxWidth().graphicsLayer {
