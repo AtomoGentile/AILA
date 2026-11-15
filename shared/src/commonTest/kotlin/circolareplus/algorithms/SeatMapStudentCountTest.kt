@@ -41,7 +41,12 @@ class SeatMapStudentCountTest {
         val history = listOf(SeatMapHistoryRecord(1, emptySet(), emptyMap(), "2020-01-01 00:00:00"))
         val before = history.toList()
         val proposals = SeatMapRepository().generateThreeProposals(students, emptyMap(), emptyMap(), emptyMap(), history)
-        assertEquals(3, proposals.size)
+        assertTrue(proposals.size in 1..3)
+        assertEquals(proposals.sortedByDescending { it.totalScore }, proposals)
+        val best = proposals.first().totalScore
+        val tolerance = maxOf(kotlin.math.abs(best) * 0.05, 1.0)
+        assertTrue(proposals.all { it.totalScore >= best - tolerance })
+        assertEquals(proposals.size, proposals.map { it.id }.toSet().size)
         proposals.forEach { proposal ->
             val assigned = occupants(proposal.assignments)
             assertEquals(22, assigned.size)

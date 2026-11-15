@@ -5253,6 +5253,52 @@ fun MainAppShell(
                         SeatMapProposalsScreen(
                             proposals = proposalOptions,
                             studentsMap = proposalsStudentsMap,
+                            retainedProposalIds = savedSeatMapDraft?.retainedProposalIds.orEmpty(),
+                            onToggleRetain = { proposal ->
+                                savedSeatMapDraft?.let { draft ->
+                                    val ids = draft.retainedProposalIds
+                                    updateSeatMapDraft(draft.copy(retainedProposalIds =
+                                        if (proposal.id in ids) ids - proposal.id else ids + proposal.id))
+                                }
+                            },
+                            onRegenerate = {
+                                savedSeatMapDraft?.let { draft ->
+                                    coroutineScope.launch {
+                                        isGeneratingProposals = true
+                                        try {
+                                            val students = seatMapGenerationStudents.toList()
+                                            val expectedIds = students.map { it.id }.toSet()
+                                            val retained = draft.proposals.filter { it.id in draft.retainedProposalIds }
+                                            check(retained.all { proposal ->
+                                                proposal.assignments.flatMap {
+                                                    listOfNotNull(it.studentAId, it.studentBId, it.studentCId)
+                                                }.toSet() == expectedIds
+                                            }) { "La classe è cambiata: rimuovi le mappe conservate prima di rigenerare." }
+                                            val slots = draft.proposals.firstOrNull()?.assignments?.map {
+                                                SeatMapOptimizer.DeskSlot(it.row, it.column, it.seats)
+                                            }
+                                            val latestHistory = AppContainer.seatMapRepository.getHistoryForOptimizer()
+                                            val generated = withContext(Dispatchers.Default) {
+                                                AppContainer.seatMapRepository.generateThreeProposals(
+                                                    students = students, profiles = draft.profiles,
+                                                    ratings = draft.ratings, socialPreferences = draft.socialPreferences,
+                                                    history = latestHistory, weights = draft.weights,
+                                                    seatsPerDesk = draft.seatsPerDesk,
+                                                    disciplinePairs = draft.disciplinePairs, customDeskSlots = slots
+                                                )
+                                            }
+                                            val combined = (retained + generated).sortedByDescending { it.totalScore }
+                                            proposalOptions = combined
+                                            seatMapOptimizerHistory = latestHistory
+                                            updateSeatMapDraft(draft.copy(proposals = combined, history = latestHistory))
+                                        } catch (e: Exception) {
+                                            seatMapActionError = "Impossibile rigenerare: ${e.message}"
+                                        } finally {
+                                            isGeneratingProposals = false
+                                        }
+                                    }
+                                }
+                            },
                             seatsPerDesk = lastRequestedSeatsPerDesk,
                             isBusy = isGeneratingProposals,
                             // Riavvolgibile solo se c'e' una bozza salvata: le proposte vive di questa
@@ -5261,7 +5307,9 @@ fun MainAppShell(
                             // Riavvolgi: le bozze spariscono sul telefono e in memoria, come se non
                             // fossero mai state create. Il prossimo "Calcola" riparte da zero.
                             onRewind = {
-                                updateSeatMapDraft(null)
+                                val draft = savedSeatMapDraft
+                                val retained = draft?.proposals.orEmpty().filter { it.id in draft?.retainedProposalIds.orEmpty() }
+                                updateSeatMapDraft(if (retained.isEmpty()) null else draft?.copy(proposals = retained))
                                 proposalOptions = emptyList()
                                 seatMapOptimizerProfiles = emptyMap()
                                 seatMapOptimizerRatings = emptyMap()

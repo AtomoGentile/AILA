@@ -844,17 +844,21 @@ object SeatMapOptimizer {
         }
         if (students.isEmpty()) return emptyList()
 
+        // Use the existing hard-pair constraint in initialization, row matching and swaps.
+        // Keep the original preferences for the objective and satisfaction calculations.
+        val constraintPreferences = socialPreferences.toMutableMap()
+        recentCompanionPairs(history).forEach { constraintPreferences[it] = SocialPreferenceScore.STRONG_REJECTION }
         val random = Random(seed)
         fun score(layout: List<DeskAssignment>) =
             scoreLayout(layout, profiles, ratings, socialPreferences, history, weights, isSmallClass, disciplinePairs).total
 
-        var current = if (slots != null) buildInitialLayoutFromSlots(students, socialPreferences, random, slots)
-        else buildInitialLayout(students, socialPreferences, random, seatsPerDesk)
+        var current = if (slots != null) buildInitialLayoutFromSlots(students, constraintPreferences, random, slots)
+        else buildInitialLayout(students, constraintPreferences, random, seatsPerDesk)
         val rowCount = ((slots?.maxOfOrNull { it.row } ?: current.maxOf { it.row }) + 1)
         val allowedRows = students.associate { student ->
             student.id to allowedRowsForStudent(student.id, profiles, history, rowCount)
         }
-        current = arrangeWithRowRotation(current, students, allowedRows, socialPreferences, random)
+        current = arrangeWithRowRotation(current, students, allowedRows, constraintPreferences, random)
         var currentScore = score(current)
         var best = current
         var bestScore = currentScore
@@ -884,7 +888,7 @@ object SeatMapOptimizer {
             } else {
                 listOf(candidate[seat1.deskIndex], candidate[seat2.deskIndex])
             }
-            if (affectedDesks.any { hasForbiddenPairAtDesk(it, socialPreferences) }) continue
+            if (affectedDesks.any { hasForbiddenPairAtDesk(it, constraintPreferences) }) continue
 
             val candidateScore = score(candidate)
             val delta = candidateScore - currentScore
@@ -913,6 +917,33 @@ object SeatMapOptimizer {
         }
 
         return best
+    }
+
+    /** Coppie vietate fino allo stesso giorno di calendario, tre mesi dopo la pubblicazione. */
+    fun recentCompanionPairs(
+        history: List<SeatMapHistoryRecord>,
+        todayIso: String = circolareplus.util.today().toIso()
+    ): Set<Pair<String, String>> {
+        val now = circolareplus.util.parseIsoDate(todayIso) ?: error("Data non valida")
+        val todayKey = now.year * 10000 + now.month * 100 + now.day
+        return history.filter { record ->
+            val date = record.publishedAt?.take(10)?.let { circolareplus.util.parseIsoDate(it) }
+                ?: return@filter false
+            val monthIndex = date.year * 12 + date.month - 1 + 3
+            val year = monthIndex / 12
+            val month = monthIndex % 12 + 1
+            val day = minOf(date.day, circolareplus.util.daysInMonth(year, month))
+            val startKey = date.year * 10000 + date.month * 100 + date.day
+            todayKey >= startKey && todayKey < year * 10000 + month * 100 + day
+        }.flatMap { it.pairs }.flatMap { listOf(it, it.second to it.first) }.toSet()
+    }
+
+    fun recentCompanionViolations(
+        layout: List<DeskAssignment>, history: List<SeatMapHistoryRecord>,
+        todayIso: String = circolareplus.util.today().toIso()
+    ): List<Pair<String, String>> {
+        val blocked = recentCompanionPairs(history, todayIso)
+        return layout.flatMap { deskPairIds(it) }.filter { it in blocked }
     }
 
     /** Una fila visitata a ottobre torna disponibile a febbraio con quattro file,
@@ -998,7 +1029,7 @@ object SeatMapOptimizer {
         }
         require(search()) {
             "Non è stata trovata una disposizione che rispetti rotazione e coppie vietate. " +
-                "Modifica i banchi o le preferenze e riprova."
+                "Modifica i banchi o le preferenze e riprova. I compagni degli ultimi tre mesi devono restare separati."
         }
         return layout.mapIndexed { index, desk -> desk.copy(
             studentAId = members[index].getOrNull(0), studentBId = members[index].getOrNull(1),

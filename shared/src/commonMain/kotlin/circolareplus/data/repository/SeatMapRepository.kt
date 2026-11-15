@@ -82,6 +82,10 @@ class SeatMapRepository(private val api: ApiClient? = null) {
 
     /** Solo Rappresentante: pubblica la disposizione scelta e la aggiunge allo storico condiviso. */
     suspend fun publish(assignments: List<DeskAssignment>): SuccessDto {
+        val latestHistory = getHistoryForOptimizer()
+        require(SeatMapOptimizer.recentCompanionViolations(assignments, latestHistory).isEmpty()) {
+            "Alcuni compagni sono già stati insieme negli ultimi tre mesi. Separa queste coppie prima di pubblicare."
+        }
         val layoutJson = apiJson.encodeToString(assignments)
         val layoutElement = apiJson.parseToJsonElement(layoutJson)
         return requireApi().post("/api/seat-map/publish", PublishSeatMapRequestDto(layoutElement))
@@ -140,9 +144,9 @@ class SeatMapRepository(private val api: ApiClient? = null) {
         requireApi().delete("/api/seat-map/dummies/$id")
 
     /**
-     * Genera le 3 proposte d'aula eseguendo l'ottimizzatore a ricerca locale (hill-climbing con
-     * accettazione probabilistica, vincolo hard sulle coppie -2/-2) con 3 seed distinti, per dare
-     * varietà al Rappresentante pur partendo da punti di partenza diversi.
+     * Genera fino a 3 proposte d'aula eseguendo l'ottimizzatore a ricerca locale (hill-climbing con
+     * accettazione probabilistica, vincolo hard sulle coppie -2/-2) con 12 seed distinti, selezionando i risultati migliori entro il 5%
+     * del punteggio complessivo massimo trovato.
      */
     fun generateThreeProposals(
         students: List<User>,
@@ -165,7 +169,7 @@ class SeatMapRepository(private val api: ApiClient? = null) {
         val isSmallClass = students.size < 22
         val baseSeed = kotlin.random.Random.nextLong()
 
-        val proposals = (1..3).map { i ->
+        val proposals = (1..12).map { i ->
             val seed = baseSeed + i
             val generated = SeatMapOptimizer.optimize(
                 students = students,
@@ -198,7 +202,7 @@ class SeatMapRepository(private val api: ApiClient? = null) {
             )
 
             SeatMapProposal(
-                id = "proposal_$i",
+                id = "proposal_${baseSeed}_$i",
                 assignments = assignments,
                 totalScore = breakdown.total,
                 satisfaction = SeatMapOptimizer.voteSatisfaction(assignments, socialPreferences),
@@ -213,18 +217,15 @@ class SeatMapRepository(private val api: ApiClient? = null) {
             )
         }
 
-        // Ordine allineato a quello che la UI mostra: la proposta in testa (index 0) prende il
-        // badge "MIGLIORE", e la % che l'utente vede e confronta è la soddisfazione media
-        // (satisfaction.percentage), non il totalScore dell'ottimizzatore (che include anche
-        // penalità invisibili in UI: memoria, altezza, burnout, chiasso di colonna). Ordinare
-        // solo per totalScore poteva quindi mettere "MIGLIORE" su una proposta con soddisfazione
-        // più bassa (es. 69% in testa davanti a 71%). Regola: prima soddisfazione più alta, a
-        // parità di soddisfazione vince il totalScore. Nessun voto espresso (satisfaction null)
-        // va in fondo: senza misura non può dichiararsi "MIGLIORE". Non cambia la matematica
-        // dell'ottimizzatore né l'uso del totalScore altrove (es. rendiconto/scorciatoie).
-        return proposals.sortedWith(
-            compareByDescending<SeatMapProposal> { it.satisfaction?.percentage ?: Double.NEGATIVE_INFINITY }
-                .thenByDescending { it.totalScore }
-        )
+        // Multi-start: prioritize the weighted objective, not social satisfaction alone.
+        // Do not force diversity at the expense of quality; return fewer alternatives if needed.
+        val ranked = proposals.sortedByDescending { it.totalScore }.distinctBy { proposal ->
+            proposal.assignments.sortedWith(compareBy({ it.row }, { it.column })).map {
+                Triple(it.row, it.column, listOfNotNull(it.studentAId, it.studentBId, it.studentCId).sorted())
+            }
+        }
+        val best = ranked.firstOrNull()?.totalScore ?: return emptyList()
+        val tolerance = maxOf(kotlin.math.abs(best) * 0.05, 1.0)
+        return ranked.filter { it.totalScore >= best - tolerance }.take(3)
     }
 }

@@ -1,5 +1,7 @@
 package circolareplus.ui.screens
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -34,20 +36,15 @@ import circolareplus.design.AppTheme
 import circolareplus.design.ailaPressable
 import circolareplus.domain.model.User
 
-/**
- * Confronto delle proposte calcolate dall'algoritmo.
- *
- * Prima erano tre righe in una finestra, ognuna con il solo "Scegli": non c'era modo di guardare
- * le mappe, e scegliere una proposta scartava le altre — quindi si sceglieva senza aver visto
- * niente. Ora ogni proposta ha l'occhio, che mostra la sua mappa sotto le schede senza
- * selezionarla, e un selettore 1/2/3 per passare da una mappa all'altra. Le proposte restano
- * tutte disponibili finché non se ne sceglie una (o si esce).
- */
+/** Confronto delle mappe con preferiti persistenti fino alla pubblicazione. */
 @Composable
 fun SeatMapProposalsScreen(
     proposals: List<SeatMapProposal>,
     studentsMap: Map<String, User>,
     onSelect: (SeatMapProposal) -> Unit,
+    retainedProposalIds: Set<String> = emptySet(),
+    onToggleRetain: (SeatMapProposal) -> Unit = {},
+    onRegenerate: () -> Unit = {},
     // Modalità richiesta dall'utente per QUESTA generazione (coppia o trio): decide l'etichetta e
     // se disegnare il terzo posto, invece di dedurlo dai soli dati (proposal.assignments.any { it.studentCId != null }),
     // che darebbe "banchi da due" anche in modalità trio quando nessun banco arriva ad avere un
@@ -63,10 +60,10 @@ fun SeatMapProposalsScreen(
     onRewind: () -> Unit = {}
 ) {
     // Indice della proposta di cui si sta guardando la mappa; null = nessuna anteprima aperta.
-    var previewIndex by remember { mutableStateOf<Int?>(null) }
+    var previewId by remember { mutableStateOf<String?>(null) }
     // Conferma del tasto "Riavvolgi": le bozze spariscono davvero, meglio un passo in piu'.
     var showRewindConfirm by remember { mutableStateOf(false) }
-    val safePreview = previewIndex?.takeIf { it in proposals.indices }
+    val safePreview = proposals.indexOfFirst { it.id == previewId }.takeIf { it >= 0 }
 
     val previewCells = remember(safePreview, proposals) {
         safePreview?.let { deskGridCells(proposals[it].assignments) } ?: (3 to emptyList())
@@ -93,17 +90,14 @@ fun SeatMapProposalsScreen(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "Tocca l'occhio per guardare la mappa di una proposta senza sceglierla: " +
-                            "le altre restano disponibili. Dopo la scelta potrai ancora modificare i posti.",
+                        text = "Confronta le mappe e conserva quelle che preferisci fino alla pubblicazione.",
                         style = MaterialTheme.typography.bodySmall,
                         color = AppTheme.TextMuted
                     )
-                    Spacer(modifier = Modifier.height(AppTheme.Space8))
-                    Text(
-                        text = "La media considera chi ha espresso preferenze non neutre e siede con almeno un compagno. " +
-                            "Il totale degli studenti in mappa è indicato separatamente.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppTheme.TextMuted
+                    Spacer(Modifier.height(12.dp))
+                    AilaPrimaryButton(
+                        text = if (isBusy) "Calcolo in corso…" else "Rigenera proposte",
+                        onClick = onRegenerate, enabled = !isBusy, compact = true
                     )
                 }
                 // Riavvolgi: fuori dalle proposte salvate senza pubblicarle, come se non fossero
@@ -136,10 +130,12 @@ fun SeatMapProposalsScreen(
                 ProposalCard(
                     number = index + 1,
                     proposal = proposal,
-                    isBest = index == 0,
+                    isBest = proposal.totalScore == proposals.maxOf { it.totalScore },
+                    isRetained = proposal.id in retainedProposalIds,
+                    onToggleRetain = { onToggleRetain(proposal) },
                     isPreviewed = safePreview == index,
                     isBusy = isBusy,
-                    onToggleView = { previewIndex = if (safePreview == index) null else index },
+                    onToggleView = { previewId = if (safePreview == index) null else proposal.id },
                     onSelect = { onSelect(proposal) }
                 )
             }
@@ -163,13 +159,18 @@ fun SeatMapProposalsScreen(
                     )
                     Spacer(modifier = Modifier.height(AppTheme.Space8))
                     // Il menu per passare da una mappa all'altra: 1, 2, 3.
-                    AilaSegmentedTabs(
-                        labels = proposals.indices.map { (it + 1).toString() },
-                        selectedIndex = safePreview,
-                        onSelect = { previewIndex = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        key = safePreview
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        proposals.forEachIndexed { index, item ->
+                            androidx.compose.material3.FilterChip(
+                                selected = safePreview == index,
+                                onClick = { previewId = item.id },
+                                label = { Text("${index + 1}" + if (item.id in retainedProposalIds) " · Conservata" else "") }
+                            )
+                        }
+                    }
                     Spacer(modifier = Modifier.height(AppTheme.Space8))
                     Text(
                         text = "Proposta ${safePreview + 1} • " +
@@ -218,7 +219,7 @@ fun SeatMapProposalsScreen(
 
             fullRow {
                 AilaPrimaryButton(
-                    text = "Scegli la proposta ${safePreview + 1}",
+                    text = "Modifica proposta ${safePreview + 1}",
                     onClick = { onSelect(proposal) },
                     fillMaxWidth = true,
                     enabled = !isBusy
@@ -232,8 +233,7 @@ fun SeatMapProposalsScreen(
     if (showRewindConfirm) {
         AilaConfirmDialog(
             title = "Riavvolgere le proposte?",
-            message = "Eliminare le bozze attuali? Le mappe generate verranno perse come se non " +
-                "fossero mai state create.",
+            message = "Eliminare le proposte non conservate? Le mappe conservate resteranno disponibili fino alla pubblicazione.",
             onDismiss = { showRewindConfirm = false },
             onConfirm = {
                 showRewindConfirm = false
@@ -249,6 +249,8 @@ private fun ProposalCard(
     number: Int,
     proposal: SeatMapProposal,
     isBest: Boolean,
+    isRetained: Boolean,
+    onToggleRetain: () -> Unit,
     isPreviewed: Boolean,
     isBusy: Boolean,
     onToggleView: () -> Unit,
@@ -269,7 +271,7 @@ private fun ProposalCard(
                         if (isBest) {
                             Spacer(modifier = Modifier.width(AppTheme.Space8))
                             Text(
-                                text = "MIGLIORE",
+                                text = "CONSIGLIATA",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = AppTheme.TintGreenInk,
                                 modifier = Modifier
@@ -279,12 +281,25 @@ private fun ProposalCard(
                             )
                         }
                     }
-                    Text(
-                        text = satisfactionLabel(proposal.satisfaction, proposal.assignments),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppTheme.TextMuted
-                    )
                 }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = satisfactionLabel(proposal.satisfaction, proposal.assignments),
+                style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                androidx.compose.material3.FilterChip(
+                    selected = isRetained, onClick = onToggleRetain,
+                    enabled = !isBusy,
+                    label = { Text(if (isRetained) "Conservata" else "Conserva") }
+                )
+                Spacer(Modifier.weight(1f))
 
                 // L'occhio: guarda la mappa senza scegliere. Pieno quando l'anteprima è aperta.
                 // 44dp di tocco e un nome che segue lo stato: il colore pieno si vede soltanto,
@@ -307,7 +322,7 @@ private fun ProposalCard(
                     )
                 }
                 Spacer(modifier = Modifier.width(AppTheme.Space8))
-                AilaPrimaryButton(text = "Scegli", onClick = onSelect, compact = true, enabled = !isBusy)
+                AilaPrimaryButton(text = "Modifica", onClick = onSelect, compact = true, enabled = !isBusy)
             }
 
             Spacer(modifier = Modifier.height(AppTheme.Space8))
@@ -334,6 +349,9 @@ private fun ProposalCard(
                 Spacer(modifier = Modifier.height(AppTheme.Space8))
             }
 
+            Text("Punteggio complessivo · ${proposal.totalScore.toInt()}",
+                style = MaterialTheme.typography.labelMedium, color = AppTheme.TextMuted)
+            Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
                 StatChip("Sociale", proposal.socialScore.toInt(), Modifier.weight(1f))
                 StatChip("Didattica", proposal.didacticScore.toInt(), Modifier.weight(1f))
@@ -360,9 +378,7 @@ internal fun satisfactionLabel(satisfaction: SeatMapOptimizer.VoteSatisfaction?,
 internal fun StatChip(label: String, value: Int, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-            .background(AppTheme.TintSlate)
-            .padding(vertical = AppTheme.Space8),
+            .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
