@@ -37,7 +37,9 @@ class SeatMapNeighborhoodTest {
             ("s$a" to "s$b") to SocialPreferenceScore.fromValue((a * 3 + b) % 4 - 1)
         } }.toMap()
         val weights = OptimizerWeights(0.7, 1.3, 1.1)
-        val history = listOf(SeatMapHistoryRecord(1, setOf("s0" to "s2"), emptyMap(), circolareplus.util.today().toIso()))
+        val history = listOf(SeatMapHistoryRecord(1, setOf("s0" to "s2"), (0..5).associate {
+            "s$it" to (when (it / 2) { 0 -> 2; 1 -> 0; else -> 1 } to 0)
+        }, circolareplus.util.today().toIso()))
         fun score(map: List<DeskAssignment>) = SeatMapOptimizer.scoreLayout(map, profiles, ratings, prefs,
             history, weights, true).total
         fun satisfaction(map: List<DeskAssignment>) = SeatMapOptimizer.voteSatisfaction(map, prefs)
@@ -45,7 +47,8 @@ class SeatMapNeighborhoodTest {
         fun permutations(remaining: List<String>, order: List<String>) {
             if (remaining.isEmpty()) {
                 val candidate = (0..2).map { i -> layout[i].copy(studentAId = order[2 * i], studentBId = order[2 * i + 1]) } + layout.last()
-                if (SeatMapOptimizer.recentCompanionViolations(candidate, history).isNotEmpty()) return
+                if (SeatMapOptimizer.recentCompanionViolations(candidate, history).isNotEmpty() ||
+                    SeatMapOptimizer.rowRotationViolations(candidate, profiles, history).isNotEmpty()) return
                 if (SeatMapRanking.compare(score(candidate), satisfaction(candidate), score(oracle), satisfaction(oracle)) > 0) oracle = candidate
             } else for (id in remaining) permutations(remaining - id, order + id)
         }
@@ -55,8 +58,23 @@ class SeatMapNeighborhoodTest {
         assertEquals(0, SeatMapRanking.compare(score(oracle), satisfaction(oracle), score(actual), satisfaction(actual)))
         assertEquals(layout.last(), actual.last())
         assertTrue(SeatMapOptimizer.recentCompanionViolations(actual, history).isEmpty())
+        assertTrue(SeatMapOptimizer.rowRotationViolations(actual, profiles, history).isEmpty())
         assertEquals(layout, SeatMapOptimizer.improveDeskNeighborhood(layout, listOf(0, 1, 2), profiles,
             ratings, prefs, history, weights, true, maxCandidates = 0))
+    }
+
+    @Test fun threeFullTriosCanReachTheirKnownScoreUpperBound() {
+        val layout = (0..2).map { i -> DeskAssignment(0, i, "s${3 * i}", "s${3 * i + 1}", "s${3 * i + 2}", 3) }
+        val prefs = buildMap {
+            for (a in 0..8) for (b in 0..8) if (a != b && a % 3 == b % 3)
+                put("s$a" to "s$b", SocialPreferenceScore.STRONG_AFFINITY)
+        }
+        val actual = SeatMapOptimizer.improveDeskNeighborhood(layout, listOf(0, 1, 2), emptyMap(),
+            emptyMap(), prefs, emptyList(), OptimizerWeights(), true)
+        // Nine pair contributions, each bounded above by 90. This fixture has no other terms.
+        assertEquals(810.0, SeatMapOptimizer.scoreLayout(actual, emptyMap(), emptyMap(), prefs,
+            emptyList(), OptimizerWeights(), true).total)
+        assertEquals(9, actual.flatMap { listOfNotNull(it.studentAId, it.studentBId, it.studentCId) }.toSet().size)
     }
 
     @Test fun cachedScoringMatchesReferenceWithMixedDesksHistoryAndFractionalWeights() {
