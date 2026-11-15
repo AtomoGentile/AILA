@@ -55,6 +55,27 @@ data class SeatMapProposal(
     val columnNoisePenalty: Double = 0.0
 )
 
+/** One lexicographic order for search, ranking, saved proposals and recommendation badges. */
+object SeatMapRanking {
+    fun compare(
+        scoreA: Double, satisfactionA: SeatMapOptimizer.VoteSatisfaction?,
+        scoreB: Double, satisfactionB: SeatMapOptimizer.VoteSatisfaction?
+    ): Int {
+        val score = scoreA.compareTo(scoreB)
+        if (score != 0) return score
+        val discomfort = (satisfactionB?.uncomfortableStudents ?: Int.MAX_VALUE)
+            .compareTo(satisfactionA?.uncomfortableStudents ?: Int.MAX_VALUE)
+        if (discomfort != 0) return discomfort
+        return (satisfactionA?.percentage ?: Double.NEGATIVE_INFINITY)
+            .compareTo(satisfactionB?.percentage ?: Double.NEGATIVE_INFINITY)
+    }
+
+    fun compare(a: SeatMapProposal, b: SeatMapProposal): Int =
+        compare(a.totalScore, a.satisfaction, b.totalScore, b.satisfaction)
+
+    val bestFirst: Comparator<SeatMapProposal> = Comparator { a, b -> compare(b, a) }
+}
+
 /** @Serializable:una mappa dello storico puo' comparire dentro una bozza (input dell'ottimizzatore). */
 @Serializable
 data class SeatMapHistoryRecord(
@@ -872,16 +893,30 @@ object SeatMapOptimizer {
         var currentScore = score(current)
         var best = current
         var bestScore = currentScore
+        var bestSatisfaction = voteSatisfaction(best, socialPreferences)
         var noImprovement = 0
         var iteration = 0
+        // Geometry never changes during a search: avoid rebuilding the seat list per move.
+        val seats = allSeats(current, seatsPerDesk)
+        fun valid(layout: List<DeskAssignment>) = layout.all { desk ->
+            deskOccupantIds(desk).all { desk.row in allowedRows.getValue(it) } &&
+                !hasForbiddenPairAtDesk(desk, constraintPreferences)
+        }
+        fun troubledSeats(layout: List<DeskAssignment>) = seats.filter { seat ->
+            val id = seat.studentId(layout) ?: return@filter false
+            deskOccupantIds(layout[seat.deskIndex]).any { mate ->
+                mate != id && (socialPreferences[id to mate]?.value ?: 0) < 0
+            }
+        }
+        var troubled = troubledSeats(current)
 
         while (iteration < maxIterations && noImprovement < maxNoImprovement) {
             iteration++
 
-            val seats = allSeats(current, seatsPerDesk)
             if (seats.size < 2) break
 
-            val seat1 = seats.random(random)
+            val seat1 = if (iteration % 3 == 0 && troubled.isNotEmpty()) troubled.random(random)
+                else seats.random(random)
             var seat2 = seats.random(random)
             var guard = 0
             while (seat2 == seat1 && guard < 10) {
@@ -890,15 +925,13 @@ object SeatMapOptimizer {
             }
             if (seat2 == seat1) continue
 
-            val candidate = swapSeats(current, seat1, seat2)
-            if (candidate.any { desk -> deskOccupantIds(desk).any { desk.row !in allowedRows.getValue(it) } }) continue
-
-            val affectedDesks = if (seat1.deskIndex == seat2.deskIndex) {
-                listOf(candidate[seat1.deskIndex])
-            } else {
-                listOf(candidate[seat1.deskIndex], candidate[seat2.deskIndex])
-            }
-            if (affectedDesks.any { hasForbiddenPairAtDesk(it, constraintPreferences) }) continue
+            // A three-cycle can cross a barrier that no single legal/improving swap crosses.
+            // Validate the FINAL cycle, not its intermediate swaps.
+            val third = if (iteration % 5 == 0 && seats.size >= 3)
+                seats.filter { it != seat1 && it != seat2 }.random(random) else null
+            val candidate = if (third == null) swapSeats(current, seat1, seat2)
+                else rotateSeats(current, seat1, seat2, third)
+            if (!valid(candidate)) continue
 
             val candidateScore = score(candidate)
             val delta = candidateScore - currentScore
@@ -913,10 +946,13 @@ object SeatMapOptimizer {
 
             if (accepted) {
                 current = candidate
+                troubled = troubledSeats(current)
                 currentScore = candidateScore
-                if (currentScore > bestScore) {
+                val currentSatisfaction = if (currentScore >= bestScore) voteSatisfaction(current, socialPreferences) else null
+                if (SeatMapRanking.compare(currentScore, currentSatisfaction, bestScore, bestSatisfaction) > 0) {
                     best = current
                     bestScore = currentScore
+                    bestSatisfaction = currentSatisfaction
                     noImprovement = 0
                 } else {
                     noImprovement++
@@ -926,7 +962,41 @@ object SeatMapOptimizer {
             }
         }
 
+        // Deterministic best-improvement polish: inspect every pair, prioritizing discomfort.
+        // Bounded passes keep this affordable; there is no claim of global optimality.
+        for (pass in 0 until 3) {
+            var improved = false
+            val prioritySeats = troubledSeats(best).toSet()
+            val orderedSeats = seats.sortedBy { if (it in prioritySeats) 0 else 1 }
+            val origin = best
+            for (a in orderedSeats.indices) for (b in a + 1 until orderedSeats.size) {
+                val candidate = swapSeats(origin, orderedSeats[a], orderedSeats[b])
+                if (!valid(candidate)) continue
+                val candidateScore = score(candidate)
+                if (candidateScore < bestScore) continue
+                val satisfaction = voteSatisfaction(candidate, socialPreferences)
+                if (SeatMapRanking.compare(candidateScore, satisfaction, bestScore, bestSatisfaction) > 0) {
+                    best = candidate
+                    bestScore = candidateScore
+                    bestSatisfaction = satisfaction
+                    improved = true
+                }
+            }
+            if (!improved) break
+        }
         return best
+    }
+
+    /** Simultaneous three-seat rotation; preserves occupants, desk capacity and reserved slots. */
+    internal fun rotateSeats(
+        assignments: List<DeskAssignment>, first: SeatRef, second: SeatRef, third: SeatRef
+    ): List<DeskAssignment> {
+        require(setOf(first, second, third).size == 3)
+        val rotated = assignments.toMutableList()
+        for ((target, source) in listOf(first to third, second to first, third to second)) {
+            rotated[target.deskIndex] = withSeat(rotated[target.deskIndex], target.seatIndex, source.studentId(assignments))
+        }
+        return rotated
     }
 
     /** Coppie vietate fino allo stesso giorno di calendario, tre mesi dopo la pubblicazione. */

@@ -1214,6 +1214,7 @@ fun MainAppShell(
     var lastRequestedDeskSlots by remember { mutableStateOf<List<SeatMapOptimizer.DeskSlot>>(emptyList()) }
     var isGeneratingProposals by remember { mutableStateOf(false) }
     var seatMapSearchesCompleted by remember { mutableStateOf(0) }
+    var stopSeatMapSearch by remember { mutableStateOf(false) }
     var seatMapSearchSummary by remember { mutableStateOf<String?>(null) }
     var seatMapActionError by remember { mutableStateOf<String?>(null) }
     var isExportingSeatMapPdf by remember { mutableStateOf(false) }
@@ -3730,6 +3731,7 @@ fun MainAppShell(
                                                         }
                                                         isGeneratingProposals = true
                                                         seatMapSearchesCompleted = 0
+                                                        stopSeatMapSearch = false
                                                         lastRequestedSeatsPerDesk = seatsPerDesk
                                                         // Griglia COMPLETA scelta (v1.1.6, layout personalizzato):
                                                         // serve all'editor per materializzare i banchi vuoti in
@@ -3794,6 +3796,10 @@ fun MainAppShell(
                                                                     disciplinePairs = disciplinePairs,
                                                                     rowSeats = rowSeats,
                                                                     customDeskSlots = customDeskSlots,
+                                                                    shouldStop = { stopSeatMapSearch },
+                                                                    onBest = { best ->
+                                                                        withContext(Dispatchers.Main) { proposalOptions = listOf(best) }
+                                                                    },
                                                                     onProgress = { completed, _ ->
                                                                         withContext(Dispatchers.Main) { seatMapSearchesCompleted = completed }
                                                                     }
@@ -3812,7 +3818,7 @@ fun MainAppShell(
                                                                 requestedDeskSlots = requestedSlots,
                                                                 retainedProposalIds = draft?.retainedProposalIds.orEmpty(),
                                                                 proposals = (draft?.proposals.orEmpty().filter { it.id in draft?.retainedProposalIds.orEmpty() } + computed)
-                                                                    .sortedByDescending { it.totalScore },
+                                                                    .sortedWith(circolareplus.algorithms.SeatMapRanking.bestFirst),
                                                                 seatsPerDesk = seatsPerDesk,
                                                                 profiles = profiles,
                                                                 ratings = ratingsMap,
@@ -5285,6 +5291,7 @@ fun MainAppShell(
                                     coroutineScope.launch {
                                         isGeneratingProposals = true
                                         seatMapSearchesCompleted = 0
+                                        stopSeatMapSearch = false
                                         try {
                                             val students = seatMapGenerationStudents.toList()
                                             val expectedIds = students.map { it.id }.toSet()
@@ -5306,17 +5313,34 @@ fun MainAppShell(
                                                     seatsPerDesk = draft.seatsPerDesk,
                                                     disciplinePairs = draft.disciplinePairs, customDeskSlots = slots,
                                                     previousProposals = draft.proposals,
+                                                    shouldStop = { stopSeatMapSearch },
+                                                    onBest = { best ->
+                                                        withContext(Dispatchers.Main) {
+                                                            val kept = savedSeatMapDraft?.proposals.orEmpty()
+                                                                .filter { it.id in draft.retainedProposalIds }
+                                                            proposalOptions = (kept + best).distinctBy { it.id }
+                                                                .sortedWith(circolareplus.algorithms.SeatMapRanking.bestFirst)
+                                                        }
+                                                    },
                                                     onProgress = { completed, _ ->
                                                         withContext(Dispatchers.Main) { seatMapSearchesCompleted = completed }
                                                     }
                                                 )
                                             }
-                                            val oldBest = draft.proposals.maxOfOrNull { it.totalScore }
-                                            val newBest = generated.maxOfOrNull { it.totalScore }
+                                            val ranking = circolareplus.algorithms.SeatMapRanking
+                                            val oldBest = draft.proposals.minWithOrNull(ranking.bestFirst)
+                                            val newBest = generated.minWithOrNull(ranking.bestFirst)
                                             seatMapSearchSummary = if (oldBest != null && newBest != null && latestHistory == draft.history) {
-                                                if (newBest > oldBest) "Punteggio migliore: ${newBest.toInt()} (+${(newBest - oldBest).toInt()})"
-                                                else if (newBest == oldBest) "500 ricerche · miglior risultato confermato."
-                                                else "Punteggio ricalcolato con i vincoli attuali: ${newBest.toInt()}"
+                                                when {
+                                                    newBest.totalScore > oldBest.totalScore -> "Punteggio migliore: ${newBest.totalScore.toInt()} (+${(newBest.totalScore - oldBest.totalScore).toInt()})"
+                                                    ranking.compare(newBest, oldBest) > 0 -> {
+                                                        if (newBest.satisfaction?.uncomfortableStudents != oldBest.satisfaction?.uncomfortableStudents)
+                                                            "Stesso punteggio · meno studenti a disagio."
+                                                        else "Stesso punteggio · soddisfazione migliorata."
+                                                    }
+                                                    ranking.compare(newBest, oldBest) == 0 -> "${seatMapSearchesCompleted} ricerche · miglior risultato confermato."
+                                                    else -> "Punteggio ricalcolato con i vincoli attuali: ${newBest.totalScore.toInt()}"
+                                                }
                                             } else null
                                             fun layoutKey(proposal: SeatMapProposal) = proposal.assignments
                                                 .sortedWith(compareBy({ it.row }, { it.column }))
@@ -5324,7 +5348,7 @@ fun MainAppShell(
                                                     listOfNotNull(it.studentAId, it.studentBId, it.studentCId).sorted()) }
                                             val retainedKeys = retained.map { layoutKey(it) }.toSet()
                                             val combined = (retained + generated.filter { layoutKey(it) !in retainedKeys })
-                                                .sortedByDescending { it.totalScore }
+                                                .sortedWith(circolareplus.algorithms.SeatMapRanking.bestFirst)
                                             proposalOptions = combined
                                             seatMapOptimizerHistory = latestHistory
                                             updateSeatMapDraft(draft.copy(proposals = combined, history = latestHistory))
@@ -5339,6 +5363,7 @@ fun MainAppShell(
                             seatsPerDesk = lastRequestedSeatsPerDesk,
                             isBusy = isGeneratingProposals,
                             generationCompleted = seatMapSearchesCompleted,
+                            onUseCurrentResult = { stopSeatMapSearch = true },
                             generationSummary = seatMapSearchSummary,
                             // Riavvolgibile solo se c'e' una bozza salvata: le proposte vive di questa
                             // sessione non ancora salvata cambiano di nuovo al prossimo "Calcola".

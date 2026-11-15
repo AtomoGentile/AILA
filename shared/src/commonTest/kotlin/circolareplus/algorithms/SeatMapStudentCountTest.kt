@@ -5,6 +5,7 @@ import circolareplus.domain.model.User
 import circolareplus.data.repository.SeatMapRepository
 import circolareplus.ui.screens.satisfactionLabel
 import kotlinx.coroutines.test.runTest
+import kotlin.time.Duration.Companion.minutes
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -37,16 +38,16 @@ class SeatMapStudentCountTest {
     }
 
     @Test
-    fun allThreeGeneratedProposalsContainEveryStudentExactlyOnceAndLeaveHistoryUnchanged() = runTest {
+    fun allThreeGeneratedProposalsContainEveryStudentExactlyOnceAndLeaveHistoryUnchanged() = runTest(timeout = 5.minutes) {
         val students = (0 until 22).map { User(id = "s$it", firstName = "Studente", lastName = "$it", username = "s$it") }
         val history = listOf(SeatMapHistoryRecord(1, emptySet(), emptyMap(), "2020-01-01 00:00:00"))
         val before = history.toList()
         val progress = mutableListOf<Pair<Int, Int>>()
         val proposals = SeatMapRepository().generateThreeProposals(students, emptyMap(), emptyMap(), emptyMap(), history,
             onProgress = { completed, total -> progress.add(completed to total) })
-        assertEquals((0..500).map { it to 500 }, progress)
+        assertEquals((0..2000).map { it to 2000 }, progress)
         assertTrue(proposals.size in 1..3)
-        assertEquals(proposals.sortedByDescending { it.totalScore }, proposals)
+        assertEquals(proposals.sortedWith(circolareplus.algorithms.SeatMapRanking.bestFirst), proposals)
         val best = proposals.first().totalScore
         val tolerance = maxOf(kotlin.math.abs(best) * 0.05, 1.0)
         assertTrue(proposals.all { it.totalScore >= best - tolerance })
@@ -58,7 +59,7 @@ class SeatMapStudentCountTest {
         }
         assertEquals(before, history)
     }
-    @Test fun reservedDeskRemainsEmptyAndEveryUsableSeatIsFilled() = runTest {
+    @Test fun reservedDeskRemainsEmptyAndEveryUsableSeatIsFilled() = runTest(timeout = 5.minutes) {
         val students = (0 until 22).map { User(id = "s$it", firstName = "S", lastName = "$it", username = "s$it") }
         val slots = (0 until 4).flatMap { row -> (0 until 3).map { col ->
             SeatMapOptimizer.DeskSlot(row, col, if (row == 3 && col == 1) 0 else 2)
@@ -76,7 +77,7 @@ class SeatMapStudentCountTest {
         }
     }
 
-    @Test fun regenerationNeverLosesAValidIncumbentEvenWithUntrustedSavedScores() = runTest {
+    @Test fun regenerationNeverLosesAValidIncumbentEvenWithUntrustedSavedScores() = runTest(timeout = 5.minutes) {
         val students = (0 until 6).map { User(id = "s$it", firstName = "S", lastName = "$it", username = "s$it") }
         val repo = SeatMapRepository()
         val first = repo.generateThreeProposals(students, emptyMap(), emptyMap(), emptyMap(), emptyList())

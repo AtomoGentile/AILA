@@ -33,19 +33,23 @@ fun SeatMapProposalsScreen(
     seatsPerDesk: Int = SeatMapOptimizer.SEATS_PER_DESK_PAIR,
     isBusy: Boolean = false,
     generationCompleted: Int = 0,
+    onUseCurrentResult: () -> Unit = {},
     generationSummary: String? = null,
     canRewind: Boolean = false,
     onRewind: () -> Unit = {}
 ) {
+    val rankedProposals = remember(proposals) {
+        proposals.sortedWith(circolareplus.algorithms.SeatMapRanking.bestFirst)
+    }
     var previewId by remember { mutableStateOf<String?>(null) }
     var showRewindConfirm by remember { mutableStateOf(false) }
     var showAnalysis by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
-    LaunchedEffect(proposals) { previewId = proposals.firstOrNull()?.id }
-    val selected = proposals.firstOrNull { it.id == previewId } ?: proposals.firstOrNull()
+    LaunchedEffect(rankedProposals) { previewId = rankedProposals.firstOrNull()?.id }
+    val selected = rankedProposals.firstOrNull { it.id == previewId } ?: rankedProposals.firstOrNull()
     val cells = remember(selected?.assignments) { deskGridCells(selected?.assignments.orEmpty()) }
-    val bestId = proposals.maxByOrNull { it.totalScore }?.id
-    val retainedCount = proposals.count { it.id in retainedProposalIds }
+    val bestId = rankedProposals.firstOrNull()?.id
+    val retainedCount = rankedProposals.count { it.id in retainedProposalIds }
 
     Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
         Row(
@@ -53,7 +57,7 @@ fun SeatMapProposalsScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(if (proposals.size == 1) "1 proposta" else "${proposals.size} proposte",
+            Text(if (rankedProposals.size == 1) "1 proposta" else "${rankedProposals.size} proposte",
                 style = MaterialTheme.typography.labelMedium, color = AppTheme.TextMuted)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onRegenerate, enabled = !isBusy) {
@@ -74,14 +78,17 @@ fun SeatMapProposalsScreen(
             }
         }
         if (isBusy) Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-            SeatMapGenerationProgress(generationCompleted)
+            Column {
+                SeatMapGenerationProgress(generationCompleted)
+                TextButton(onClick = onUseCurrentResult) { Text("Usa questo risultato") }
+            }
         }
         // A single proposal needs no navigation tile or empty horizontal carousel.
-        if (proposals.size > 1) Row(
+        if (rankedProposals.size > 1) Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            proposals.forEachIndexed { index, proposal ->
+            rankedProposals.forEachIndexed { index, proposal ->
                 val active = selected?.id == proposal.id
                 AilaCard(
                     modifier = Modifier.widthIn(min = 90.dp).semantics {
@@ -118,7 +125,7 @@ fun SeatMapProposalsScreen(
                     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
-                            Text(if (proposals.size == 1) "Disposizione" else "Disposizione ${proposals.indexOf(selected) + 1}",
+                            Text(if (rankedProposals.size == 1) "Disposizione" else "Disposizione ${rankedProposals.indexOf(selected) + 1}",
                                 style = MaterialTheme.typography.titleMedium, color = AppTheme.TextDark)
                             Text("$studentCount studenti" + when {
                                 retained -> " · Conservata"
@@ -191,7 +198,7 @@ fun SeatMapProposalsScreen(
                                         StatChip("Didattica", selected.didacticScore.toInt(), Modifier.weight(1f))
                                         StatChip("Disciplina", selected.disciplinePenalty.toInt(), Modifier.weight(1f))
                                     }
-                                    Text("La soddisfazione considera i voti utili. La proposta consigliata bilancia tutti i criteri scelti.",
+                                    Text("La soddisfazione considera i voti utili. A pari punteggio: prima meno studenti a disagio, poi soddisfazione più alta.",
                                         style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
                                     if (retainedCount > 0) Text(
                                         if (retainedCount == 1) "1 proposta conservata fino alla pubblicazione."

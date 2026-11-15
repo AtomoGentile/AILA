@@ -28,7 +28,7 @@ import kotlinx.serialization.json.decodeFromJsonElement
  */
 class SeatMapRepository(private val api: ApiClient? = null) {
     companion object {
-        const val GENERATION_SEARCH_COUNT = 500
+        const val GENERATION_SEARCH_COUNT = 2000
     }
 
 
@@ -150,7 +150,7 @@ class SeatMapRepository(private val api: ApiClient? = null) {
 
     /**
      * Genera fino a 3 proposte d'aula eseguendo l'ottimizzatore a ricerca locale (hill-climbing con
-     * accettazione probabilistica, vincolo hard sulle coppie -2/-2) con 500 seed distinti, selezionando i risultati migliori entro il 5%
+     * accettazione probabilistica, vincolo hard sulle coppie -2/-2) con 2000 seed distinti, selezionando i risultati migliori entro il 5%
      * del punteggio complessivo massimo trovato.
      */
     suspend fun generateThreeProposals(
@@ -168,7 +168,9 @@ class SeatMapRepository(private val api: ApiClient? = null) {
         rowSeats: List<Int> = emptyList(),
         customDeskSlots: List<SeatMapOptimizer.DeskSlot>? = null,
         onProgress: suspend (completed: Int, total: Int) -> Unit = { _, _ -> },
-        previousProposals: List<SeatMapProposal> = emptyList()
+        previousProposals: List<SeatMapProposal> = emptyList(),
+        onBest: suspend (SeatMapProposal) -> Unit = {},
+        shouldStop: () -> Boolean = { false }
     ): List<SeatMapProposal> {
         val slots = customDeskSlots?.filter { it.seats > 0 }
             ?: if (rowSeats.isEmpty()) null else SeatMapOptimizer.buildDeskSlots(rowSeats, seatsPerDesk, students.size)
@@ -189,13 +191,18 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                 !SeatMapOptimizer.scoreLayout(proposal.assignments, profiles, ratings, socialPreferences,
                     history, weights, isSmallClass, disciplinePairs).hasForbiddenPair
         }
-        var incumbent = reusable.maxByOrNull { proposal ->
-            SeatMapOptimizer.scoreLayout(proposal.assignments, profiles, ratings, socialPreferences,
-                history, weights, isSmallClass, disciplinePairs).total
-        }?.assignments
-        var incumbentScore = Double.NEGATIVE_INFINITY
+        var incumbentProposal = reusable.map { proposal ->
+            proposal.copy(
+                totalScore = SeatMapOptimizer.scoreLayout(proposal.assignments, profiles, ratings,
+                    socialPreferences, history, weights, isSmallClass, disciplinePairs).total,
+                satisfaction = SeatMapOptimizer.voteSatisfaction(proposal.assignments, socialPreferences)
+            )
+        }.minWithOrNull(SeatMapRanking.bestFirst)
+        var incumbent = incumbentProposal?.assignments
         onProgress(0, GENERATION_SEARCH_COUNT)
-        val proposals = (1..GENERATION_SEARCH_COUNT).map { i ->
+        val proposals = mutableListOf<SeatMapProposal>()
+        for (i in 1..GENERATION_SEARCH_COUNT) {
+            if (proposals.isNotEmpty() && shouldStop()) break
             kotlinx.coroutines.currentCoroutineContext().ensureActive()
             // A real suspension lets the browser render progress between CPU-bound searches.
             kotlinx.coroutines.delay(1)
@@ -250,17 +257,18 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                 priorityBonus = breakdown.priorityBonus,
                 columnNoisePenalty = breakdown.columnNoisePenalty
             )
-            if (proposal.totalScore > incumbentScore) {
+            if (incumbentProposal?.let { SeatMapRanking.compare(proposal, it) > 0 } != false) {
                 incumbent = proposal.assignments
-                incumbentScore = proposal.totalScore
+                incumbentProposal = proposal
+                onBest(proposal)
             }
+            proposals.add(proposal)
             onProgress(i, GENERATION_SEARCH_COUNT)
-            proposal
         }
 
         // Multi-start: prioritize the weighted objective, not social satisfaction alone.
         // Do not force diversity at the expense of quality; return fewer alternatives if needed.
-        val ranked = proposals.sortedByDescending { it.totalScore }.distinctBy { proposal ->
+        val ranked = proposals.sortedWith(SeatMapRanking.bestFirst).distinctBy { proposal ->
             proposal.assignments.sortedWith(compareBy({ it.row }, { it.column })).map {
                 Triple(it.row, it.column, listOfNotNull(it.studentAId, it.studentBId, it.studentCId).sorted())
             }

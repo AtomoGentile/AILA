@@ -149,6 +149,7 @@ fun SeatMapDeskCard(
                 SeatRow(
                     number = index + 1,
                     name = studentId?.let { studentsMap[it]?.firstName },
+                    surname = studentId?.let { studentsMap[it]?.lastName },
                     isFocused = studentId != null && studentId == focusedStudentId,
                     showNumber = showSeatNumbers
                 )
@@ -158,7 +159,7 @@ fun SeatMapDeskCard(
 }
 
 @Composable
-private fun SeatRow(number: Int, name: String?, isFocused: Boolean, showNumber: Boolean = true) {
+private fun SeatRow(number: Int, name: String?, isFocused: Boolean, showNumber: Boolean = true, surname: String? = null) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         // Almeno 15dp e non fisso: col testo di sistema ingrandito il numero usciva dal cerchio.
         // Material: numero del posto in un cerchio primario pieno (vuoto = solo contorno).
@@ -189,13 +190,22 @@ private fun SeatRow(number: Int, name: String?, isFocused: Boolean, showNumber: 
             )
         }
         if (showNumber) Spacer(modifier = Modifier.width(5.dp))
-        Text(
-            text = name ?: "Vuoto",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Normal,
-            color = if (name == null) AppTheme.TextFaint else AppTheme.TextDark,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = name ?: "Vuoto",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Normal,
+                color = if (name == null) AppTheme.TextFaint else AppTheme.TextDark,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (!surname.isNullOrBlank()) Text(
+                text = surname,
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTheme.TextMuted,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }

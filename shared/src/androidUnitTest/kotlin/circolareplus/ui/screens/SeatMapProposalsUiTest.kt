@@ -38,7 +38,7 @@ class SeatMapProposalsUiTest {
         activity.get().setTheme(android.R.style.Theme_Material_NoActionBar)
         activity.setup()
         try {
-            val students = (0 until 22).map { User(id = "s$it", firstName = "Nome$it", lastName = "", username = "s$it") }
+            val students = (0 until 22).map { User(id = "s$it", firstName = "Nome$it", lastName = "Cognome$it", username = "s$it") }
             var next = 0
             val layout = (0 until 4).flatMap { row -> (0 until 3).map { col ->
                 if (row == 3 && col == 1) DeskAssignment(row, col, null, null, seats = 0)
@@ -54,11 +54,12 @@ class SeatMapProposalsUiTest {
             activity.get().setContent {
                 AilaTheme { SeatMapProposalsScreen(proposals, students.associateBy { it.id }, { chosen = it.id },
                     retainedProposalIds = if (count == 1) setOf("p1") else emptySet(),
-                    generationSummary = if (count == 1) "500 ricerche · miglior risultato confermato." else null,
+                    generationSummary = if (count == 1) "2.000 ricerche · miglior risultato confermato." else null,
                     canRewind = true) }
             }
             compose.mainClock.advanceTimeBy(1000)
             compose.onNodeWithText("Nome0", substring = true, useUnmergedTree = true).assertIsDisplayed()
+            compose.onNodeWithText("Cognome0", useUnmergedTree = true).assertIsDisplayed()
             compose.onNodeWithText("Modifica").assertIsDisplayed()
             if (count == 1) {
                 compose.onNodeWithText("1 proposta").assertIsDisplayed()
