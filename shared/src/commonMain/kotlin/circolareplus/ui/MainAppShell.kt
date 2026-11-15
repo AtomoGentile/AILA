@@ -1214,6 +1214,7 @@ fun MainAppShell(
     var lastRequestedDeskSlots by remember { mutableStateOf<List<SeatMapOptimizer.DeskSlot>>(emptyList()) }
     var isGeneratingProposals by remember { mutableStateOf(false) }
     var seatMapSearchesCompleted by remember { mutableStateOf(0) }
+    var seatMapSearchSummary by remember { mutableStateOf<String?>(null) }
     var seatMapActionError by remember { mutableStateOf<String?>(null) }
     var isExportingSeatMapPdf by remember { mutableStateOf(false) }
     // Disposizione in editing manuale (dopo aver scelto una delle 3 proposte) e copia originale
@@ -5304,11 +5305,19 @@ fun MainAppShell(
                                                     history = latestHistory, weights = draft.weights,
                                                     seatsPerDesk = draft.seatsPerDesk,
                                                     disciplinePairs = draft.disciplinePairs, customDeskSlots = slots,
+                                                    previousProposals = draft.proposals,
                                                     onProgress = { completed, _ ->
                                                         withContext(Dispatchers.Main) { seatMapSearchesCompleted = completed }
                                                     }
                                                 )
                                             }
+                                            val oldBest = draft.proposals.maxOfOrNull { it.totalScore }
+                                            val newBest = generated.maxOfOrNull { it.totalScore }
+                                            seatMapSearchSummary = if (oldBest != null && newBest != null && latestHistory == draft.history) {
+                                                if (newBest > oldBest) "Punteggio migliore: ${newBest.toInt()} (+${(newBest - oldBest).toInt()})"
+                                                else if (newBest == oldBest) "Nessun miglioramento nelle 500 ricerche. Mantenuto il miglior risultato valido."
+                                                else "Punteggio ricalcolato con i vincoli attuali: ${newBest.toInt()}"
+                                            } else null
                                             val combined = (retained + generated).sortedByDescending { it.totalScore }
                                             proposalOptions = combined
                                             seatMapOptimizerHistory = latestHistory
@@ -5324,6 +5333,7 @@ fun MainAppShell(
                             seatsPerDesk = lastRequestedSeatsPerDesk,
                             isBusy = isGeneratingProposals,
                             generationCompleted = seatMapSearchesCompleted,
+                            generationSummary = seatMapSearchSummary,
                             // Riavvolgibile solo se c'e' una bozza salvata: le proposte vive di questa
                             // sessione non ancora salvata cambiano di nuovo al prossimo "Calcola".
                             canRewind = savedSeatMapDraft != null,

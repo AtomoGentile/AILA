@@ -28,7 +28,7 @@ import kotlinx.serialization.json.decodeFromJsonElement
  */
 class SeatMapRepository(private val api: ApiClient? = null) {
     companion object {
-        const val GENERATION_SEARCH_COUNT = 200
+        const val GENERATION_SEARCH_COUNT = 500
     }
 
 
@@ -150,7 +150,7 @@ class SeatMapRepository(private val api: ApiClient? = null) {
 
     /**
      * Genera fino a 3 proposte d'aula eseguendo l'ottimizzatore a ricerca locale (hill-climbing con
-     * accettazione probabilistica, vincolo hard sulle coppie -2/-2) con 200 seed distinti, selezionando i risultati migliori entro il 5%
+     * accettazione probabilistica, vincolo hard sulle coppie -2/-2) con 500 seed distinti, selezionando i risultati migliori entro il 5%
      * del punteggio complessivo massimo trovato.
      */
     suspend fun generateThreeProposals(
@@ -167,7 +167,8 @@ class SeatMapRepository(private val api: ApiClient? = null) {
         // Posti di ogni fila (da davanti a dietro), es. [7, 8, 7]. Vuoto = disposizione automatica.
         rowSeats: List<Int> = emptyList(),
         customDeskSlots: List<SeatMapOptimizer.DeskSlot>? = null,
-        onProgress: suspend (completed: Int, total: Int) -> Unit = { _, _ -> }
+        onProgress: suspend (completed: Int, total: Int) -> Unit = { _, _ -> },
+        previousProposals: List<SeatMapProposal> = emptyList()
     ): List<SeatMapProposal> {
         val slots = customDeskSlots?.filter { it.seats > 0 }
             ?: if (rowSeats.isEmpty()) null else SeatMapOptimizer.buildDeskSlots(rowSeats, seatsPerDesk, students.size)
@@ -175,6 +176,24 @@ class SeatMapRepository(private val api: ApiClient? = null) {
         val isSmallClass = students.size < 22
         val baseSeed = kotlin.random.Random.nextLong()
 
+        // Re-evaluate old layouts under the CURRENT inputs; never trust their saved scores.
+        val expectedIds = students.map { it.id }.toSet()
+        val expectedSlots = slots?.map { Triple(it.row, it.column, it.seats) }?.toSet()
+        val reusable = previousProposals.filter { proposal ->
+            val ids = proposal.assignments.flatMap { listOfNotNull(it.studentAId, it.studentBId, it.studentCId) }
+            ids.size == students.size && ids.toSet() == expectedIds &&
+                (expectedSlots == null || proposal.assignments.filter { it.seats > 0 }
+                    .map { Triple(it.row, it.column, it.seats) }.toSet() == expectedSlots) &&
+                SeatMapOptimizer.rowRotationViolations(proposal.assignments.filter { it.seats > 0 }, profiles, history).isEmpty() &&
+                SeatMapOptimizer.recentCompanionViolations(proposal.assignments, history).isEmpty() &&
+                !SeatMapOptimizer.scoreLayout(proposal.assignments, profiles, ratings, socialPreferences,
+                    history, weights, isSmallClass, disciplinePairs).hasForbiddenPair
+        }
+        var incumbent = reusable.maxByOrNull { proposal ->
+            SeatMapOptimizer.scoreLayout(proposal.assignments, profiles, ratings, socialPreferences,
+                history, weights, isSmallClass, disciplinePairs).total
+        }?.assignments
+        var incumbentScore = Double.NEGATIVE_INFINITY
         onProgress(0, GENERATION_SEARCH_COUNT)
         val proposals = (1..GENERATION_SEARCH_COUNT).map { i ->
             kotlinx.coroutines.currentCoroutineContext().ensureActive()
@@ -192,7 +211,9 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                 seed = seed,
                 seatsPerDesk = seatsPerDesk,
                 disciplinePairs = disciplinePairs,
-                slots = slots
+                slots = slots,
+                // Alternate fresh starts with refinement of the best layout found so far.
+                initialLayout = if (i % 2 == 1) incumbent else null
             )
             val assignments = if (customDeskSlots != null) SeatMapOptimizer.withVacantDesks(generated, customDeskSlots) else generated
             check(customDeskSlots.orEmpty().filter { it.seats == 0 }.all { slot ->
@@ -229,6 +250,10 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                 priorityBonus = breakdown.priorityBonus,
                 columnNoisePenalty = breakdown.columnNoisePenalty
             )
+            if (proposal.totalScore > incumbentScore) {
+                incumbent = proposal.assignments
+                incumbentScore = proposal.totalScore
+            }
             onProgress(i, GENERATION_SEARCH_COUNT)
             proposal
         }

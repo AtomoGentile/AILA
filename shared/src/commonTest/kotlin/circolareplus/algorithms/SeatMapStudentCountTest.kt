@@ -44,7 +44,7 @@ class SeatMapStudentCountTest {
         val progress = mutableListOf<Pair<Int, Int>>()
         val proposals = SeatMapRepository().generateThreeProposals(students, emptyMap(), emptyMap(), emptyMap(), history,
             onProgress = { completed, total -> progress.add(completed to total) })
-        assertEquals((0..200).map { it to 200 }, progress)
+        assertEquals((0..500).map { it to 500 }, progress)
         assertTrue(proposals.size in 1..3)
         assertEquals(proposals.sortedByDescending { it.totalScore }, proposals)
         val best = proposals.first().totalScore
@@ -74,6 +74,15 @@ class SeatMapStudentCountTest {
             })
             assertEquals(students.map { it.id }.toSet(), occupants(proposal.assignments).toSet())
         }
+    }
+
+    @Test fun regenerationNeverLosesAValidIncumbentEvenWithUntrustedSavedScores() = runTest {
+        val students = (0 until 6).map { User(id = "s$it", firstName = "S", lastName = "$it", username = "s$it") }
+        val repo = SeatMapRepository()
+        val first = repo.generateThreeProposals(students, emptyMap(), emptyMap(), emptyMap(), emptyList())
+        val second = repo.generateThreeProposals(students, emptyMap(), emptyMap(), emptyMap(), emptyList(),
+            previousProposals = first.map { it.copy(totalScore = -999999.0) })
+        assertTrue(second.first().totalScore >= first.first().totalScore)
     }
 
 }

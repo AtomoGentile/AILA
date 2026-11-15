@@ -32,12 +32,15 @@ fun SeatMapProposalsScreen(
     seatsPerDesk: Int = SeatMapOptimizer.SEATS_PER_DESK_PAIR,
     isBusy: Boolean = false,
     generationCompleted: Int = 0,
+    generationSummary: String? = null,
     canRewind: Boolean = false,
     onRewind: () -> Unit = {}
 ) {
     var previewId by remember { mutableStateOf<String?>(null) }
     var showRewindConfirm by remember { mutableStateOf(false) }
     var showAnalysis by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
+    LaunchedEffect(proposals) { previewId = proposals.firstOrNull()?.id }
     val selected = proposals.firstOrNull { it.id == previewId } ?: proposals.firstOrNull()
     val cells = remember(selected?.assignments) { deskGridCells(selected?.assignments.orEmpty()) }
     val bestId = proposals.maxByOrNull { it.totalScore }?.id
@@ -50,10 +53,20 @@ fun SeatMapProposalsScreen(
         ) {
             Text("${proposals.size} proposte · ${retainedProposalIds.size} conservate",
                 style = MaterialTheme.typography.labelMedium, color = AppTheme.TextMuted)
-            TextButton(onClick = onRegenerate, enabled = !isBusy) {
-                AppIcons.Refresh(modifier = Modifier.size(18.dp), color = AppTheme.PrimaryBlue)
-                Spacer(Modifier.width(6.dp))
-                Text("Rigenera", color = AppTheme.PrimaryBlue)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onRegenerate, enabled = !isBusy) {
+                    AppIcons.Refresh(modifier = Modifier.size(18.dp), color = AppTheme.PrimaryBlue)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Migliora", color = AppTheme.PrimaryBlue)
+                }
+                if (canRewind) Box {
+                    TextButton(onClick = { showMenu = true }, enabled = !isBusy,
+                        modifier = Modifier.semantics { contentDescription = "Altre azioni" }) { Text("•••", color = AppTheme.TextMuted) }
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(text = { Text("Scarta le proposte non conservate") },
+                            onClick = { showMenu = false; showRewindConfirm = true })
+                    }
+                }
             }
         }
         if (isBusy) {
@@ -61,6 +74,9 @@ fun SeatMapProposalsScreen(
                 SeatMapGenerationProgress(generationCompleted)
             }
         }
+        if (!isBusy && generationSummary != null) Text(generationSummary,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -68,20 +84,21 @@ fun SeatMapProposalsScreen(
             proposals.forEachIndexed { index, proposal ->
                 val active = selected?.id == proposal.id
                 AilaCard(
-                    modifier = Modifier.width(132.dp).semantics { this.selected = active },
+                    modifier = Modifier.width(116.dp).semantics { this.selected = active },
                     containerColor = if (active) AppTheme.TintBlue else AppTheme.CardSurface,
                     onClick = { previewId = proposal.id }
                 ) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Proposta ${index + 1}", style = MaterialTheme.typography.labelLarge,
-                            color = if (active) AppTheme.PrimaryBlue else AppTheme.TextDark)
-                        Text(proposal.satisfaction?.let { "${it.percentage.toInt()}% soddisfazione" } ?: "Nessun voto utile",
-                            style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
-                        Text(when {
-                            proposal.id in retainedProposalIds -> "Conservata"
-                            proposal.id == bestId -> "Consigliata"
-                            else -> "Alternativa"
-                        }, style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
+                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Proposta ${index + 1}", style = MaterialTheme.typography.labelMedium, color = AppTheme.TextDark)
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(proposal.satisfaction?.let { "${kotlin.math.round(it.percentage * 10) / 10}%" } ?: "N/D",
+                                style = MaterialTheme.typography.titleMedium, color = AppTheme.TextDark)
+                            val retained = proposal.id in retainedProposalIds
+                            if (retained || proposal.id == bestId) Text(if (retained) "★" else "✓",
+                                style = MaterialTheme.typography.labelLarge, color = AppTheme.PrimaryBlue,
+                                modifier = Modifier.semantics { contentDescription = if (retained) "Conservata" else "Consigliata" })
+                        }
                     }
                 }
             }
@@ -137,12 +154,7 @@ fun SeatMapProposalsScreen(
                         }
                     }
                 }
-                if (canRewind) fullRow {
-                    TextButton(onClick = { showRewindConfirm = true }, enabled = !isBusy,
-                        modifier = Modifier.fillMaxWidth()) {
-                        Text("Scarta le proposte non conservate", color = AppTheme.TextMuted)
-                    }
-                }
+
             }
             // Shared AILA surface follows Expressive/Glass and keeps the actions reachable.
             AilaCard(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) {

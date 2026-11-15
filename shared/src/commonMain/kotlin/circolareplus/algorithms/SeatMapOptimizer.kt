@@ -838,7 +838,8 @@ object SeatMapOptimizer {
         disciplinePairs: Set<Pair<String, String>> = emptySet(),
         // Banchi personalizzati (file con posti diversi, coppie e trii insieme): se presenti
         // sostituiscono la disposizione automatica a 3 banchi per fila.
-        slots: List<DeskSlot>? = null
+        slots: List<DeskSlot>? = null,
+        initialLayout: List<DeskAssignment>? = null
     ): List<DeskAssignment> {
         require(seatsPerDesk == SEATS_PER_DESK_PAIR || seatsPerDesk == SEATS_PER_DESK_TRIO) {
             "seatsPerDesk deve essere $SEATS_PER_DESK_PAIR (coppia) o $SEATS_PER_DESK_TRIO (trio), ricevuto $seatsPerDesk"
@@ -853,7 +854,15 @@ object SeatMapOptimizer {
         fun score(layout: List<DeskAssignment>) =
             scoreLayout(layout, profiles, ratings, socialPreferences, history, weights, isSmallClass, disciplinePairs).total
 
-        var current = if (slots != null) buildInitialLayoutFromSlots(students, constraintPreferences, random, slots)
+        val incumbent = initialLayout?.filter { it.seats > 0 }?.takeIf { layout ->
+            val ids = layout.flatMap { deskOccupantIds(it) }
+            ids.size == students.size && ids.toSet() == students.map { it.id }.toSet() &&
+                layout.all { deskOccupantIds(it).size <= it.seats && !hasForbiddenPairAtDesk(it, constraintPreferences) } &&
+                (slots == null || layout.map { Triple(it.row, it.column, it.seats) }.toSet() ==
+                    slots.map { Triple(it.row, it.column, it.seats) }.toSet()) &&
+                rowRotationViolations(layout, profiles, history).isEmpty()
+        }
+        var current = incumbent ?: if (slots != null) buildInitialLayoutFromSlots(students, constraintPreferences, random, slots)
         else buildInitialLayout(students, constraintPreferences, random, seatsPerDesk)
         val rowCount = ((slots?.maxOfOrNull { it.row } ?: current.maxOf { it.row }) + 1)
         val allowedRows = students.associate { student ->
