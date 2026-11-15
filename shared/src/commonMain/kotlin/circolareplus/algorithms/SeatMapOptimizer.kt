@@ -662,6 +662,7 @@ object SeatMapOptimizer {
     }
 
     /** Un banco della disposizione richiesta dal Rappresentante: dove sta e quanti posti ha. */
+    @Serializable
     data class DeskSlot(val row: Int, val column: Int, val seats: Int)
 
     /**

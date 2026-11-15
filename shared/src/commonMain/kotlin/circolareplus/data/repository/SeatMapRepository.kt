@@ -28,7 +28,7 @@ import kotlinx.serialization.json.decodeFromJsonElement
  */
 class SeatMapRepository(private val api: ApiClient? = null) {
     companion object {
-        const val GENERATION_SEARCH_COUNT = 50
+        const val GENERATION_SEARCH_COUNT = 200
     }
 
 
@@ -150,7 +150,7 @@ class SeatMapRepository(private val api: ApiClient? = null) {
 
     /**
      * Genera fino a 3 proposte d'aula eseguendo l'ottimizzatore a ricerca locale (hill-climbing con
-     * accettazione probabilistica, vincolo hard sulle coppie -2/-2) con 50 seed distinti, selezionando i risultati migliori entro il 5%
+     * accettazione probabilistica, vincolo hard sulle coppie -2/-2) con 200 seed distinti, selezionando i risultati migliori entro il 5%
      * del punteggio complessivo massimo trovato.
      */
     suspend fun generateThreeProposals(
@@ -195,6 +195,10 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                 slots = slots
             )
             val assignments = if (customDeskSlots != null) SeatMapOptimizer.withVacantDesks(generated, customDeskSlots) else generated
+            check(customDeskSlots.orEmpty().filter { it.seats == 0 }.all { slot ->
+                assignments.none { it.row == slot.row && it.column == slot.column &&
+                    listOfNotNull(it.studentAId, it.studentBId, it.studentCId).isNotEmpty() }
+            }) { "Una posizione riservata libera risulta occupata. Ricalcola le proposte." }
             val assignedIds = assignments.flatMap { listOfNotNull(it.studentAId, it.studentBId, it.studentCId) }
             check(assignedIds.size == students.size && assignedIds.toSet().size == assignedIds.size &&
                 assignedIds.toSet() == students.map { it.id }.toSet()) {

@@ -44,7 +44,7 @@ class SeatMapStudentCountTest {
         val progress = mutableListOf<Pair<Int, Int>>()
         val proposals = SeatMapRepository().generateThreeProposals(students, emptyMap(), emptyMap(), emptyMap(), history,
             onProgress = { completed, total -> progress.add(completed to total) })
-        assertEquals((0..50).map { it to 50 }, progress)
+        assertEquals((0..200).map { it to 200 }, progress)
         assertTrue(proposals.size in 1..3)
         assertEquals(proposals.sortedByDescending { it.totalScore }, proposals)
         val best = proposals.first().totalScore
@@ -58,4 +58,22 @@ class SeatMapStudentCountTest {
         }
         assertEquals(before, history)
     }
+    @Test fun reservedDeskRemainsEmptyAndEveryUsableSeatIsFilled() = runTest {
+        val students = (0 until 22).map { User(id = "s$it", firstName = "S", lastName = "$it", username = "s$it") }
+        val slots = (0 until 4).flatMap { row -> (0 until 3).map { col ->
+            SeatMapOptimizer.DeskSlot(row, col, if (row == 3 && col == 1) 0 else 2)
+        } }
+        val proposals = SeatMapRepository().generateThreeProposals(students, emptyMap(), emptyMap(), emptyMap(), emptyList(),
+            customDeskSlots = slots)
+        proposals.forEach { proposal ->
+            val reserved = proposal.assignments.single { it.row == 3 && it.column == 1 }
+            assertEquals(0, reserved.seats)
+            assertTrue(occupants(listOf(reserved)).isEmpty())
+            assertTrue(proposal.assignments.filter { it.seats > 0 }.all {
+                it.studentAId != null && it.studentBId != null
+            })
+            assertEquals(students.map { it.id }.toSet(), occupants(proposal.assignments).toSet())
+        }
+    }
+
 }

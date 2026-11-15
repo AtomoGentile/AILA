@@ -1260,6 +1260,7 @@ fun MainAppShell(
         showProposals: Boolean
     ) {
         lastRequestedSeatsPerDesk = draft.seatsPerDesk
+        lastRequestedDeskSlots = draft.requestedDeskSlots.orEmpty()
         seatMapOptimizerProfiles = draft.profiles
         seatMapOptimizerRatings = draft.ratings
         seatMapOptimizerDisciplinePairs = draft.disciplinePairs
@@ -3697,7 +3698,14 @@ fun MainAppShell(
                                                         // la bozza, le proposte e gli input dell'ottimizzatore tornano
                                                         // com'erano. Per generare mappe nuove prima si usa "Riavvolgi".
                                                         val draft = savedSeatMapDraft
-                                                        if (draft != null && draft.proposals.isNotEmpty()) {
+                                                        val requestedSlots = customDeskSlots ?: rowSeats.takeIf { it.isNotEmpty() }?.let {
+                                                            SeatMapOptimizer.fullDeskSlots(it, seatsPerDesk)
+                                                        }
+                                                        val sameConfiguration = draft?.let {
+                                                            it.weights == weights && it.seatsPerDesk == seatsPerDesk &&
+                                                                it.requestedDeskSlots == requestedSlots
+                                                        } == true
+                                                        if (draft != null && draft.proposals.isNotEmpty() && sameConfiguration) {
                                                             isGeneratingProposals = true
                                                             try {
                                                                 // Una bozza conserva gli input di calcolo, mai un'autorità
@@ -3800,7 +3808,10 @@ fun MainAppShell(
                                                             // non deve impedire il flusso: se proprio non si puo' scrivere,
                                                             // le proposte restano quelle di sempre (in memoria, volatile).
                                                             val draftData = circolareplus.data.local.SeatMapProposalsDraft(
-                                                                proposals = computed,
+                                                                requestedDeskSlots = requestedSlots,
+                                                                retainedProposalIds = draft?.retainedProposalIds.orEmpty(),
+                                                                proposals = (draft?.proposals.orEmpty().filter { it.id in draft?.retainedProposalIds.orEmpty() } + computed)
+                                                                    .sortedByDescending { it.totalScore },
                                                                 seatsPerDesk = seatsPerDesk,
                                                                 profiles = profiles,
                                                                 ratings = ratingsMap,
@@ -3810,6 +3821,7 @@ fun MainAppShell(
                                                                 weights = weights,
                                                                 isSmallClass = seatMapOptimizerIsSmallClass
                                                             )
+                                                            proposalOptions = draftData.proposals
                                                             updateSeatMapDraft(draftData)
                                                         } catch (e: Exception) {
                                                             seatMapActionError = "Impossibile calcolare le proposte: ${e.message}"
@@ -5253,7 +5265,7 @@ fun MainAppShell(
                     }
                     Column(modifier = Modifier.fillMaxSize()) {
                         ScreenBackBar(
-                            title = "Proposte di disposizione",
+                            title = "Proposte",
                             onBackClick = { proposalOptions = emptyList() }
                         )
                         SeatMapProposalsScreen(
@@ -5281,7 +5293,7 @@ fun MainAppShell(
                                                     listOfNotNull(it.studentAId, it.studentBId, it.studentCId)
                                                 }.toSet() == expectedIds
                                             }) { "La classe è cambiata: rimuovi le mappe conservate prima di rigenerare." }
-                                            val slots = draft.proposals.firstOrNull()?.assignments?.map {
+                                            val slots = draft.requestedDeskSlots ?: draft.proposals.firstOrNull()?.assignments?.map {
                                                 SeatMapOptimizer.DeskSlot(it.row, it.column, it.seats)
                                             }
                                             val latestHistory = AppContainer.seatMapRepository.getHistoryForOptimizer()
