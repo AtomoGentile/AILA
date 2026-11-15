@@ -12,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
 import circolareplus.algorithms.SeatMapOptimizer
@@ -20,7 +21,7 @@ import circolareplus.algorithms.SeatMapProposal
 import circolareplus.design.*
 import circolareplus.domain.model.User
 
-/** One map at a time; proposal navigation and analysis never hide the map behind large cards. */
+/** Map-first comparison; controls follow the map instead of leaving an empty action dock. */
 @Composable
 fun SeatMapProposalsScreen(
     proposals: List<SeatMapProposal>,
@@ -44,6 +45,7 @@ fun SeatMapProposalsScreen(
     val selected = proposals.firstOrNull { it.id == previewId } ?: proposals.firstOrNull()
     val cells = remember(selected?.assignments) { deskGridCells(selected?.assignments.orEmpty()) }
     val bestId = proposals.maxByOrNull { it.totalScore }?.id
+    val retainedCount = proposals.count { it.id in retainedProposalIds }
 
     Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
         Row(
@@ -51,7 +53,7 @@ fun SeatMapProposalsScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("${proposals.size} proposte · ${retainedProposalIds.size} conservate",
+            Text(if (proposals.size == 1) "1 proposta" else "${proposals.size} proposte",
                 style = MaterialTheme.typography.labelMedium, color = AppTheme.TextMuted)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onRegenerate, enabled = !isBusy) {
@@ -60,8 +62,10 @@ fun SeatMapProposalsScreen(
                     Text("Migliora", color = AppTheme.PrimaryBlue)
                 }
                 if (canRewind) Box {
-                    TextButton(onClick = { showMenu = true }, enabled = !isBusy,
-                        modifier = Modifier.semantics { contentDescription = "Altre azioni" }) { Text("•••", color = AppTheme.TextMuted) }
+                    IconButton(onClick = { showMenu = true }, enabled = !isBusy,
+                        modifier = Modifier.semantics { contentDescription = "Altre azioni" }) {
+                        Text("•••", color = AppTheme.TextMuted)
+                    }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                         DropdownMenuItem(text = { Text("Scarta le proposte non conservate") },
                             onClick = { showMenu = false; showRewindConfirm = true })
@@ -69,110 +73,138 @@ fun SeatMapProposalsScreen(
                 }
             }
         }
-        if (isBusy) {
-            Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                SeatMapGenerationProgress(generationCompleted)
-            }
+        if (isBusy) Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            SeatMapGenerationProgress(generationCompleted)
         }
-        if (!isBusy && generationSummary != null) Text(generationSummary,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
-        Row(
+        // A single proposal needs no navigation tile or empty horizontal carousel.
+        if (proposals.size > 1) Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             proposals.forEachIndexed { index, proposal ->
                 val active = selected?.id == proposal.id
                 AilaCard(
-                    modifier = Modifier.width(116.dp).semantics { this.selected = active },
+                    modifier = Modifier.widthIn(min = 90.dp).semantics {
+                        this.selected = active
+                        contentDescription = "Proposta ${index + 1}"
+                    },
                     containerColor = if (active) AppTheme.TintBlue else AppTheme.CardSurface,
                     onClick = { previewId = proposal.id }
                 ) {
-                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Proposta ${index + 1}", style = MaterialTheme.typography.labelMedium, color = AppTheme.TextDark)
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(proposal.satisfaction?.let { "${kotlin.math.round(it.percentage * 10) / 10}%" } ?: "N/D",
-                                style = MaterialTheme.typography.titleMedium, color = AppTheme.TextDark)
-                            val retained = proposal.id in retainedProposalIds
-                            if (retained || proposal.id == bestId) Text(if (retained) "★" else "✓",
-                                style = MaterialTheme.typography.labelLarge, color = AppTheme.PrimaryBlue,
-                                modifier = Modifier.semantics { contentDescription = if (retained) "Conservata" else "Consigliata" })
-                        }
+                    Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("${index + 1} · " + proposal.satisfaction?.let { percentLabel(it.percentage) }.orEmpty(),
+                            style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
+                        if (proposal.id in retainedProposalIds) AppIcons.Star(
+                            modifier = Modifier.size(14.dp).semantics { contentDescription = "Conservata" },
+                            color = AppTheme.PrimaryBlue)
                     }
                 }
             }
         }
         if (selected != null) {
+            val retained = selected.id in retainedProposalIds
+            val studentCount = selected.assignments.flatMap {
+                listOfNotNull(it.studentAId, it.studentBId, it.studentCId)
+            }.toSet().size
             LazyVerticalGrid(
                 columns = GridCells.Fixed(cells.first.coerceAtLeast(1)),
                 modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 fullRow {
-                    Box(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                            .background(AppTheme.HeroGradient).padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("LAVAGNA E CATTEDRA", style = MaterialTheme.typography.labelSmall,
-                            color = AppTheme.OnHeroPrimary)
+                    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
+                            Text(if (proposals.size == 1) "Disposizione" else "Disposizione ${proposals.indexOf(selected) + 1}",
+                                style = MaterialTheme.typography.titleMedium, color = AppTheme.TextDark)
+                            Text("$studentCount studenti" + when {
+                                retained -> " · Conservata"
+                                selected.id == bestId -> " · Consigliata"
+                                else -> ""
+                            }, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(selected.satisfaction?.let { percentLabel(it.percentage) } ?: "—",
+                                style = MaterialTheme.typography.headlineMedium, color = AppTheme.TextDark)
+                            Text("Soddisfazione", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
+                        }
+                    }
+                }
+                if (!isBusy && generationSummary != null) fullRow {
+                    Text(generationSummary, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted,
+                        modifier = Modifier.padding(bottom = 4.dp))
+                }
+                fullRow {
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        HorizontalDivider(Modifier.weight(1f), color = AppTheme.Hairline)
+                        Text("Lavagna e cattedra", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
+                        HorizontalDivider(Modifier.weight(1f), color = AppTheme.Hairline)
                     }
                 }
                 itemsIndexed(cells.second, key = { index, _ -> "${selected.id}-$index" }) { _, cell ->
+                    val itemModifier = if (AppTheme.reduceMotion) Modifier else Modifier.animateItem()
                     if (cell == null) Spacer(Modifier)
                     else if (cell.value.isVacantDesk) {
-                        Box(Modifier.fillMaxWidth().heightIn(min = 64.dp), contentAlignment = Alignment.Center) {
-                            Text("F${cell.value.row + 1}C${cell.value.column + 1}\nLibero",
+                        Box(itemModifier.fillMaxWidth().heightIn(min = 62.dp), contentAlignment = Alignment.Center) {
+                            Text("F${cell.value.row + 1}C${cell.value.column + 1}\nSpazio libero",
                                 style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
                         }
-                    } else SeatMapDeskCard(cell.value, studentsMap, showThirdSeat = cell.value.hasThirdSeat)
+                    } else SeatMapDeskCard(cell.value, studentsMap, showThirdSeat = cell.value.hasThirdSeat,
+                        modifier = itemModifier, showSeatNumbers = false)
                 }
                 fullRow {
-                    AilaCard {
+                    // Actions stay adjacent to the map, including on tall phone screens.
+                    Row(Modifier.fillMaxWidth().padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { onToggleRetain(selected) }, enabled = !isBusy) {
+                            AppIcons.Star(modifier = Modifier.size(19.dp), color = AppTheme.PrimaryBlue, filled = retained)
+                            Spacer(Modifier.width(6.dp))
+                            Text(if (retained) "Conservata" else "Conserva", color = AppTheme.PrimaryBlue)
+                        }
+                        Box(Modifier.weight(1f)) {
+                            AilaPrimaryButton(text = "Modifica", onClick = { onSelect(selected) },
+                                fillMaxWidth = true, compact = true, enabled = !isBusy)
+                        }
+                    }
+                }
+                fullRow {
+                    Column {
                         TextButton(onClick = { showAnalysis = !showAnalysis }, modifier = Modifier.fillMaxWidth()) {
-                            Text(if (showAnalysis) "Chiudi analisi" else "Analisi della proposta",
-                                color = AppTheme.PrimaryBlue)
+                            Text(if (showAnalysis) "Chiudi analisi" else "Analisi della proposta", color = AppTheme.TextMuted)
+                            Spacer(Modifier.width(6.dp))
+                            AppIcons.ChevronRight(modifier = Modifier.size(16.dp).rotate(if (showAnalysis) 270f else 90f),
+                                color = AppTheme.TextMuted)
                         }
                         AnimatedVisibility(showAnalysis) {
-                            Column(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(satisfactionLabel(selected.satisfaction, selected.assignments),
-                                    style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
-                                Text("Punteggio complessivo · ${selected.totalScore.toInt()}",
-                                    style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
-                                Row(Modifier.fillMaxWidth()) {
-                                    StatChip("Sociale", selected.socialScore.toInt(), Modifier.weight(1f))
-                                    StatChip("Didattica", selected.didacticScore.toInt(), Modifier.weight(1f))
-                                    StatChip("Disciplina", selected.disciplinePenalty.toInt(), Modifier.weight(1f))
+                            AilaCard {
+                                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(satisfactionLabel(selected.satisfaction, selected.assignments),
+                                        style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+                                    Text("Punteggio complessivo · ${selected.totalScore.toInt()}",
+                                        style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
+                                    Row(Modifier.fillMaxWidth()) {
+                                        StatChip("Sociale", selected.socialScore.toInt(), Modifier.weight(1f))
+                                        StatChip("Didattica", selected.didacticScore.toInt(), Modifier.weight(1f))
+                                        StatChip("Disciplina", selected.disciplinePenalty.toInt(), Modifier.weight(1f))
+                                    }
+                                    Text("La soddisfazione considera i voti utili. La proposta consigliata bilancia tutti i criteri scelti.",
+                                        style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+                                    if (retainedCount > 0) Text(
+                                        if (retainedCount == 1) "1 proposta conservata fino alla pubblicazione."
+                                        else "$retainedCount proposte conservate fino alla pubblicazione.",
+                                        style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
                                 }
-                                Text("La soddisfazione considera i voti utili. La proposta consigliata bilancia tutti i criteri scelti.",
-                                    style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
                             }
                         }
                     }
                 }
-
             }
-            // Shared AILA surface follows Expressive/Glass and keeps the actions reachable.
-            AilaCard(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) {
-                Row(Modifier.fillMaxWidth().padding(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    val retained = selected.id in retainedProposalIds
-                    FilterChip(selected = retained, enabled = !isBusy, onClick = { onToggleRetain(selected) },
-                        label = { Text(if (retained) "Conservata" else "Conserva") })
-                    Box(Modifier.weight(1f)) {
-                        AilaPrimaryButton(text = "Modifica", onClick = { onSelect(selected) },
-                            fillMaxWidth = true, compact = true, enabled = !isBusy)
-                    }
-                }
-            }
-        } else {
-            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Text("Nessuna proposta disponibile", color = AppTheme.TextMuted)
-            }
+        } else Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Text("Nessuna proposta disponibile", color = AppTheme.TextMuted)
         }
     }
     if (showRewindConfirm) AilaConfirmDialog(
@@ -183,6 +215,9 @@ fun SeatMapProposalsScreen(
         confirmLabel = "Scarta"
     )
 }
+
+private fun percentLabel(value: Double): String =
+    "${kotlin.math.round(value * 10) / 10}%".replace('.', ',')
 
 /** Testo della soddisfazione: media dei singoli studenti in base ai compagni di banco che hanno
  * davvero, con quanti siedono con qualcuno che hanno votato in negativo; oppure l'avviso che nessuno

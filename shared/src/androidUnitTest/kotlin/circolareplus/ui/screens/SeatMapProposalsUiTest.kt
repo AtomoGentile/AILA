@@ -27,7 +27,10 @@ class SeatMapProposalsUiTest {
     @Test fun expressiveMapIsVisibleImmediatelyAndSelectionOpensTheRightProposal() = verify(UiStyle.EXPRESSIVE)
     @Test fun glassMapIsVisibleImmediatelyAndSelectionOpensTheRightProposal() = verify(UiStyle.GLASS)
 
-    private fun verify(style: UiStyle) {
+    @Test fun singleExpressiveProposalHasNoRedundantSelectorAndKeepsActionsNearMap() = verify(UiStyle.EXPRESSIVE, 1)
+    @Test fun singleGlassProposalHasNoRedundantSelectorAndKeepsActionsNearMap() = verify(UiStyle.GLASS, 1)
+
+    private fun verify(style: UiStyle, count: Int = 3) {
         AppTheme.uiStyle = style
         AppTheme.isDarkMode = true
         AppTheme.reduceMotion = true
@@ -41,7 +44,7 @@ class SeatMapProposalsUiTest {
                 if (row == 3 && col == 1) DeskAssignment(row, col, null, null, seats = 0)
                 else DeskAssignment(row, col, "s${next++}", "s${next++}")
             } }
-            val proposals = (1..3).map { i -> SeatMapProposal(
+            val proposals = (1..count).map { i -> SeatMapProposal(
                 id = "p$i", assignments = layout, totalScore = (100 - i).toDouble(),
                 satisfaction = SeatMapOptimizer.VoteSatisfaction(80.0, 22, 0), socialScore = 40.0,
                 disciplinePenalty = 0.0, didacticScore = 10.0, heightPenalty = 0.0,
@@ -49,11 +52,22 @@ class SeatMapProposalsUiTest {
             ) }
             var chosen: String? = null
             activity.get().setContent {
-                AilaTheme { SeatMapProposalsScreen(proposals, students.associateBy { it.id }, { chosen = it.id }) }
+                AilaTheme { SeatMapProposalsScreen(proposals, students.associateBy { it.id }, { chosen = it.id },
+                    retainedProposalIds = if (count == 1) setOf("p1") else emptySet(),
+                    generationSummary = if (count == 1) "500 ricerche · miglior risultato confermato." else null,
+                    canRewind = true) }
             }
             compose.mainClock.advanceTimeBy(1000)
             compose.onNodeWithText("Nome0", substring = true, useUnmergedTree = true).assertIsDisplayed()
             compose.onNodeWithText("Modifica").assertIsDisplayed()
+            if (count == 1) {
+                compose.onNodeWithText("1 proposta").assertIsDisplayed()
+                compose.onNodeWithContentDescription("Proposta 1", useUnmergedTree = true).assertDoesNotExist()
+                val mapBottom = compose.onNodeWithText("Nome21", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.bottom
+                val actionTop = compose.onNodeWithText("Modifica").fetchSemanticsNode().boundsInRoot.top
+                // No empty weighted spacer may separate the map from its primary action.
+                kotlin.test.assertTrue(actionTop - mapBottom < 240f)
+            }
             compose.onNodeWithText("Punteggio complessivo", substring = true).assertDoesNotExist()
             compose.waitForIdle()
             compose.runOnIdle {
@@ -61,12 +75,12 @@ class SeatMapProposalsUiTest {
                 val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
                 view.draw(Canvas(bitmap))
                 val dir = File("build/reports/tests/ui-screenshots").apply { mkdirs() }
-                File(dir, "seat-proposals-${style.key}.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                File(dir, "seat-proposals-${style.key}${if (count == 1) "-single" else ""}.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
                 bitmap.recycle()
             }
-            compose.onNodeWithText("Proposta 2").performClick()
+            if (count > 1) compose.onNodeWithContentDescription("Proposta 2").performClick()
             compose.onNodeWithText("Modifica").performClick()
-            compose.runOnIdle { assertEquals("p2", chosen) }
+            compose.runOnIdle { assertEquals(if (count > 1) "p2" else "p1", chosen) }
         } finally {
             activity.pause().stop().destroy()
             AppTheme.uiStyle = UiStyle.AUTO

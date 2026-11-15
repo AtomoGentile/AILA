@@ -5315,7 +5315,7 @@ fun MainAppShell(
                                             val newBest = generated.maxOfOrNull { it.totalScore }
                                             seatMapSearchSummary = if (oldBest != null && newBest != null && latestHistory == draft.history) {
                                                 if (newBest > oldBest) "Punteggio migliore: ${newBest.toInt()} (+${(newBest - oldBest).toInt()})"
-                                                else if (newBest == oldBest) "Nessun miglioramento nelle 500 ricerche. Mantenuto il miglior risultato valido."
+                                                else if (newBest == oldBest) "500 ricerche · miglior risultato confermato."
                                                 else "Punteggio ricalcolato con i vincoli attuali: ${newBest.toInt()}"
                                             } else null
                                             fun layoutKey(proposal: SeatMapProposal) = proposal.assignments
