@@ -1213,6 +1213,7 @@ fun MainAppShell(
     // drag&drop secondo la scelta del Rappresentante. Vuoto = layout automatico (nessun surplus).
     var lastRequestedDeskSlots by remember { mutableStateOf<List<SeatMapOptimizer.DeskSlot>>(emptyList()) }
     var isGeneratingProposals by remember { mutableStateOf(false) }
+    var seatMapSearchesCompleted by remember { mutableStateOf(0) }
     var seatMapActionError by remember { mutableStateOf<String?>(null) }
     var isExportingSeatMapPdf by remember { mutableStateOf(false) }
     // Disposizione in editing manuale (dopo aver scelto una delle 3 proposte) e copia originale
@@ -3641,6 +3642,7 @@ fun MainAppShell(
                                                 },
                                                 isExportingPdf = isExportingSeatMapPdf,
                                                 isGeneratingProposals = isGeneratingProposals,
+                                                generationCompleted = seatMapSearchesCompleted,
                                                 onExportPdf = {
                                                     coroutineScope.launch {
                                                         isExportingSeatMapPdf = true
@@ -3718,6 +3720,7 @@ fun MainAppShell(
                                                             }
                                                         }
                                                         isGeneratingProposals = true
+                                                        seatMapSearchesCompleted = 0
                                                         lastRequestedSeatsPerDesk = seatsPerDesk
                                                         // Griglia COMPLETA scelta (v1.1.6, layout personalizzato):
                                                         // serve all'editor per materializzare i banchi vuoti in
@@ -3781,7 +3784,10 @@ fun MainAppShell(
                                                                     seatsPerDesk = seatsPerDesk,
                                                                     disciplinePairs = disciplinePairs,
                                                                     rowSeats = rowSeats,
-                                                                    customDeskSlots = customDeskSlots
+                                                                    customDeskSlots = customDeskSlots,
+                                                                    onProgress = { completed, _ ->
+                                                                        withContext(Dispatchers.Main) { seatMapSearchesCompleted = completed }
+                                                                    }
                                                                 )
                                                             }
                                                             // La pagina delle proposte si apre dal pulsante "Calcola":
@@ -5265,6 +5271,7 @@ fun MainAppShell(
                                 savedSeatMapDraft?.let { draft ->
                                     coroutineScope.launch {
                                         isGeneratingProposals = true
+                                        seatMapSearchesCompleted = 0
                                         try {
                                             val students = seatMapGenerationStudents.toList()
                                             val expectedIds = students.map { it.id }.toSet()
@@ -5284,7 +5291,10 @@ fun MainAppShell(
                                                     ratings = draft.ratings, socialPreferences = draft.socialPreferences,
                                                     history = latestHistory, weights = draft.weights,
                                                     seatsPerDesk = draft.seatsPerDesk,
-                                                    disciplinePairs = draft.disciplinePairs, customDeskSlots = slots
+                                                    disciplinePairs = draft.disciplinePairs, customDeskSlots = slots,
+                                                    onProgress = { completed, _ ->
+                                                        withContext(Dispatchers.Main) { seatMapSearchesCompleted = completed }
+                                                    }
                                                 )
                                             }
                                             val combined = (retained + generated).sortedByDescending { it.totalScore }
@@ -5301,6 +5311,7 @@ fun MainAppShell(
                             },
                             seatsPerDesk = lastRequestedSeatsPerDesk,
                             isBusy = isGeneratingProposals,
+                            generationCompleted = seatMapSearchesCompleted,
                             // Riavvolgibile solo se c'e' una bozza salvata: le proposte vive di questa
                             // sessione non ancora salvata cambiano di nuovo al prossimo "Calcola".
                             canRewind = savedSeatMapDraft != null,

@@ -4,6 +4,7 @@ import circolareplus.domain.model.SocialPreferenceScore
 import circolareplus.domain.model.User
 import circolareplus.data.repository.SeatMapRepository
 import circolareplus.ui.screens.satisfactionLabel
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -36,11 +37,14 @@ class SeatMapStudentCountTest {
     }
 
     @Test
-    fun allThreeGeneratedProposalsContainEveryStudentExactlyOnceAndLeaveHistoryUnchanged() {
+    fun allThreeGeneratedProposalsContainEveryStudentExactlyOnceAndLeaveHistoryUnchanged() = runTest {
         val students = (0 until 22).map { User(id = "s$it", firstName = "Studente", lastName = "$it", username = "s$it") }
         val history = listOf(SeatMapHistoryRecord(1, emptySet(), emptyMap(), "2020-01-01 00:00:00"))
         val before = history.toList()
-        val proposals = SeatMapRepository().generateThreeProposals(students, emptyMap(), emptyMap(), emptyMap(), history)
+        val progress = mutableListOf<Pair<Int, Int>>()
+        val proposals = SeatMapRepository().generateThreeProposals(students, emptyMap(), emptyMap(), emptyMap(), history,
+            onProgress = { completed, total -> progress.add(completed to total) })
+        assertEquals((0..50).map { it to 50 }, progress)
         assertTrue(proposals.size in 1..3)
         assertEquals(proposals.sortedByDescending { it.totalScore }, proposals)
         val best = proposals.first().totalScore

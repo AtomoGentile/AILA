@@ -51,6 +51,7 @@ fun SeatMapProposalsScreen(
     // terzo occupante (classe piccola, coppie vietate che spezzano i trii).
     seatsPerDesk: Int = SeatMapOptimizer.SEATS_PER_DESK_PAIR,
     isBusy: Boolean = false,
+    generationCompleted: Int = 0,
     /**
      * "Riavvolgi": butta via le proposte calcolate (e la bozza salvata sul telefono) come se non
      * fossero mai state create. Pesa solo su chi ha una bozza in sospeso: senza, sarebbe un
@@ -95,6 +96,10 @@ fun SeatMapProposalsScreen(
                         color = AppTheme.TextMuted
                     )
                     Spacer(Modifier.height(12.dp))
+                    if (isBusy) {
+                        SeatMapGenerationProgress(generationCompleted)
+                        Spacer(Modifier.height(12.dp))
+                    }
                     AilaPrimaryButton(
                         text = if (isBusy) "Calcolo in corso…" else "Rigenera proposte",
                         onClick = onRegenerate, enabled = !isBusy, compact = true

@@ -82,7 +82,8 @@ fun SeatMapScreen(
     onExportPdf: () -> Unit = {},
     loadPublishedHistory: suspend () -> List<PublishedSeatMap> = { emptyList() },
     /** Proposte in calcolo: il pulsante mostra l'attesa e non si puo' ripremere. */
-    isGeneratingProposals: Boolean = false
+    isGeneratingProposals: Boolean = false,
+    generationCompleted: Int = 0
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var showHistory by remember { mutableStateOf(false) }
@@ -454,8 +455,12 @@ fun SeatMapScreen(
 
                     Spacer(modifier = Modifier.height(AppTheme.Space16))
 
+                    if (isGeneratingProposals) {
+                        SeatMapGenerationProgress(generationCompleted)
+                        Spacer(Modifier.height(AppTheme.Space12))
+                    }
                     AilaPrimaryButton(
-                        text = if (isGeneratingProposals) "Calcolo in corso…" else "Calcola 3 proposte",
+                        text = if (isGeneratingProposals) "Ricerca in corso…" else "Cerca le migliori proposte",
                         enabled = !isGeneratingProposals && layoutOk,
                         // Mentre calcola: la forma che cambia (Material) o i puntini (Glass),
                         // invece di un pulsante che non reagisce per qualche secondo.

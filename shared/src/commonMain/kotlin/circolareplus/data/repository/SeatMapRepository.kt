@@ -13,6 +13,7 @@ import circolareplus.data.remote.dto.CreateSeatMapDummyRequestDto
 import circolareplus.data.remote.dto.CreatedSeatMapDummyResponseDto
 import circolareplus.data.remote.dto.toDomain
 import circolareplus.domain.model.*
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,6 +27,10 @@ import kotlinx.serialization.json.decodeFromJsonElement
  * di verità condivisa da tutta la classe.
  */
 class SeatMapRepository(private val api: ApiClient? = null) {
+    companion object {
+        const val GENERATION_SEARCH_COUNT = 50
+    }
+
 
     private val _isPreferencesWindowOpen = MutableStateFlow(false)
     val isPreferencesWindowOpen: StateFlow<Boolean> = _isPreferencesWindowOpen.asStateFlow()
@@ -145,10 +150,10 @@ class SeatMapRepository(private val api: ApiClient? = null) {
 
     /**
      * Genera fino a 3 proposte d'aula eseguendo l'ottimizzatore a ricerca locale (hill-climbing con
-     * accettazione probabilistica, vincolo hard sulle coppie -2/-2) con 12 seed distinti, selezionando i risultati migliori entro il 5%
+     * accettazione probabilistica, vincolo hard sulle coppie -2/-2) con 50 seed distinti, selezionando i risultati migliori entro il 5%
      * del punteggio complessivo massimo trovato.
      */
-    fun generateThreeProposals(
+    suspend fun generateThreeProposals(
         students: List<User>,
         profiles: Map<String, StudentProfile>,
         ratings: Map<String, RepresentativeRating>,
@@ -161,7 +166,8 @@ class SeatMapRepository(private val api: ApiClient? = null) {
         disciplinePairs: Set<Pair<String, String>> = emptySet(),
         // Posti di ogni fila (da davanti a dietro), es. [7, 8, 7]. Vuoto = disposizione automatica.
         rowSeats: List<Int> = emptyList(),
-        customDeskSlots: List<SeatMapOptimizer.DeskSlot>? = null
+        customDeskSlots: List<SeatMapOptimizer.DeskSlot>? = null,
+        onProgress: suspend (completed: Int, total: Int) -> Unit = { _, _ -> }
     ): List<SeatMapProposal> {
         val slots = customDeskSlots?.filter { it.seats > 0 }
             ?: if (rowSeats.isEmpty()) null else SeatMapOptimizer.buildDeskSlots(rowSeats, seatsPerDesk, students.size)
@@ -169,7 +175,11 @@ class SeatMapRepository(private val api: ApiClient? = null) {
         val isSmallClass = students.size < 22
         val baseSeed = kotlin.random.Random.nextLong()
 
-        val proposals = (1..12).map { i ->
+        onProgress(0, GENERATION_SEARCH_COUNT)
+        val proposals = (1..GENERATION_SEARCH_COUNT).map { i ->
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            // A real suspension lets the browser render progress between CPU-bound searches.
+            kotlinx.coroutines.delay(1)
             val seed = baseSeed + i
             val generated = SeatMapOptimizer.optimize(
                 students = students,
@@ -201,7 +211,7 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                 disciplinePairs = disciplinePairs
             )
 
-            SeatMapProposal(
+            val proposal = SeatMapProposal(
                 id = "proposal_${baseSeed}_$i",
                 assignments = assignments,
                 totalScore = breakdown.total,
@@ -215,6 +225,8 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                 priorityBonus = breakdown.priorityBonus,
                 columnNoisePenalty = breakdown.columnNoisePenalty
             )
+            onProgress(i, GENERATION_SEARCH_COUNT)
+            proposal
         }
 
         // Multi-start: prioritize the weighted objective, not social satisfaction alone.
