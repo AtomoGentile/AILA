@@ -872,8 +872,8 @@ object SeatMapOptimizer {
         val constraintPreferences = socialPreferences.toMutableMap()
         recentCompanionPairs(history).forEach { constraintPreferences[it] = SocialPreferenceScore.STRONG_REJECTION }
         val random = Random(seed)
-        fun score(layout: List<DeskAssignment>) =
-            scoreLayout(layout, profiles, ratings, socialPreferences, history, weights, isSmallClass, disciplinePairs).total
+        val evaluator = PreparedScoreEvaluator(profiles, ratings, socialPreferences, history, weights, isSmallClass, disciplinePairs)
+        fun score(layout: List<DeskAssignment>) = evaluator.total(layout)
 
         val incumbent = initialLayout?.filter { it.seats > 0 }?.takeIf { layout ->
             val ids = layout.flatMap { deskOccupantIds(it) }
@@ -984,6 +984,124 @@ object SeatMapOptimizer {
             }
             if (!improved) break
         }
+        return best
+    }
+
+    /** Cache desk contributions, but recompute column interactions and the final weighted sum.
+     * Integer-valued components are summed BEFORE weighting, exactly like scoreLayout: no
+     * floating-point deltas that could turn a true tie into a different primary score. */
+    internal class PreparedScoreEvaluator(
+        private val profiles: Map<String, StudentProfile>,
+        private val ratings: Map<String, RepresentativeRating>,
+        private val preferences: Map<Pair<String, String>, SocialPreferenceScore>,
+        private val history: List<SeatMapHistoryRecord>,
+        private val weights: OptimizerWeights,
+        private val smallClass: Boolean,
+        private val disciplinePairs: Set<Pair<String, String>>
+    ) {
+        private data class DeskValue(val score: ScoreBreakdown, val height: Int?, val behavior: Int?)
+        private val cache = mutableMapOf<DeskAssignment, DeskValue>()
+
+        fun total(layout: List<DeskAssignment>): Double {
+            val values = layout.map { desk ->
+                // Seat order within a desk has no effect on any objective component.
+                val ids = deskOccupantIds(desk).sorted()
+                val key = desk.copy(studentAId = ids.getOrNull(0), studentBId = ids.getOrNull(1),
+                    studentCId = ids.getOrNull(2))
+                cache.getOrPut(key) { DeskValue(
+                    scoreLayout(listOf(key), profiles, ratings, preferences, history, weights, smallClass, disciplinePairs),
+                    deskAvgHeight(key, profiles), deskAvgBehavior(key, ratings)) }
+            }
+            val indices = layout.indices.associateBy { layout[it].row to layout[it].column }
+            var height = 0.0
+            var noise = 0.0
+            layout.forEachIndexed { i, desk ->
+                val front = indices[desk.row - 1 to desk.column] ?: return@forEachIndexed
+                val a = values[front]
+                val b = values[i]
+                if (a.height != null && b.height != null) height += calculateHeightPenalty(a.height, b.height)
+                if (a.behavior != null && b.behavior != null) noise -= calculateColumnNoisePenalty(a.behavior, b.behavior)
+            }
+            val scores = values.map { it.score }
+            return scores.sumOf { it.social } * weights.wSocial +
+                scores.sumOf { it.discipline } * weights.wDiscipline +
+                scores.sumOf { it.didactic } * weights.wDidactic -
+                scores.sumOf { it.memoryPenalty } - height - scores.sumOf { it.burnoutPenalty } - noise +
+                scores.sumOf { it.priorityBonus }
+        }
+    }
+
+    /** Bounded large-neighborhood repair. All other desks stay fixed. Enumerates combinations,
+     * not permutations of equivalent seats; prunes forbidden pairs and row violations before
+     * scoring. Complete for up to three full trios within the default leaf/node budgets.
+     * Returns the incumbent if interrupted by the work budget, never a worse solution. */
+    internal fun improveDeskNeighborhood(
+        layout: List<DeskAssignment>, deskIndices: List<Int>,
+        profiles: Map<String, StudentProfile>, ratings: Map<String, RepresentativeRating>,
+        preferences: Map<Pair<String, String>, SocialPreferenceScore>, history: List<SeatMapHistoryRecord>,
+        weights: OptimizerWeights, isSmallClass: Boolean,
+        disciplinePairs: Set<Pair<String, String>> = emptySet(), maxCandidates: Int = 3000
+    ): List<DeskAssignment> {
+        require(deskIndices.distinct().size == deskIndices.size && deskIndices.size in 2..3)
+        require(deskIndices.all { it in layout.indices && layout[it].seats in 1..3 })
+        if (maxCandidates <= 0) return layout
+        val constraints = preferences.toMutableMap()
+        recentCompanionPairs(history).forEach { constraints[it] = SocialPreferenceScore.STRONG_REJECTION }
+        val rows = (layout.maxOfOrNull { it.row } ?: 0) + 1
+        val ids = deskIndices.flatMap { index ->
+            val desk = layout[index]
+            deskOccupantIds(desk) + List(desk.seats - deskOccupantIds(desk).size) { null }
+        }.sortedWith(compareBy<String?> { it == null }.thenBy { it })
+        val allowed = ids.filterNotNull().associateWith { allowedRowsForStudent(it, profiles, history, rows) }
+        val evaluator = PreparedScoreEvaluator(profiles, ratings, preferences, history, weights, isSmallClass, disciplinePairs)
+        var best = layout
+        var bestScore = evaluator.total(layout)
+        var bestSatisfaction = voteSatisfaction(layout, preferences)
+        val working = layout.toMutableList()
+        var leaves = 0
+        var nodes = 0
+        val maxNodes = maxCandidates.toLong() * 20
+        fun visit(depth: Int, remaining: List<String?>) {
+            if (leaves >= maxCandidates || ++nodes > maxNodes) return
+            if (depth == deskIndices.size) {
+                leaves++
+                val score = evaluator.total(working)
+                if (score < bestScore) return
+                val satisfaction = voteSatisfaction(working, preferences)
+                if (SeatMapRanking.compare(score, satisfaction, bestScore, bestSatisfaction) > 0) {
+                    best = working.toList()
+                    bestScore = score
+                    bestSatisfaction = satisfaction
+                }
+                return
+            }
+            val index = deskIndices[depth]
+            val desk = layout[index]
+            val selected = mutableListOf<Int>()
+            fun choose(start: Int) {
+                if (leaves >= maxCandidates || ++nodes > maxNodes) return
+                if (selected.size == desk.seats) {
+                    val occupants = selected.map { remaining[it] }
+                    working[index] = desk.copy(studentAId = occupants.getOrNull(0),
+                        studentBId = occupants.getOrNull(1), studentCId = occupants.getOrNull(2))
+                    val used = selected.toSet()
+                    visit(depth + 1, remaining.filterIndexed { i, _ -> i !in used })
+                    return
+                }
+                val last = remaining.size - (desk.seats - selected.size)
+                for (i in start..last) {
+                    val id = remaining[i]
+                    if (i > start && id == remaining[i - 1]) continue // interchangeable vacancies
+                    if (id != null && (desk.row !in allowed.getValue(id) ||
+                        selected.any { previous -> remaining[previous]?.let { isForbiddenPair(id, it, constraints) } == true })) continue
+                    selected.add(i)
+                    choose(i + 1)
+                    selected.removeAt(selected.lastIndex)
+                }
+            }
+            choose(0)
+        }
+        visit(0, ids)
         return best
     }
 

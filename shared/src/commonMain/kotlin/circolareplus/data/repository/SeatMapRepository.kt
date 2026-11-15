@@ -200,6 +200,10 @@ class SeatMapRepository(private val api: ApiClient? = null) {
         }.minWithOrNull(SeatMapRanking.bestFirst)
         var incumbent = incumbentProposal?.assignments
         onProgress(0, GENERATION_SEARCH_COUNT)
+        // Visit different three-desk neighborhoods instead of repeatedly repairing the same one.
+        val neighborhoodOrder = mutableListOf<List<Int>>()
+        var neighborhoodCursor = 0
+        var neighborhoodGeometry: List<Triple<Int, Int, Int>>? = null
         val proposals = mutableListOf<SeatMapProposal>()
         for (i in 1..GENERATION_SEARCH_COUNT) {
             if (proposals.isNotEmpty() && shouldStop()) break
@@ -207,7 +211,7 @@ class SeatMapRepository(private val api: ApiClient? = null) {
             // A real suspension lets the browser render progress between CPU-bound searches.
             kotlinx.coroutines.delay(1)
             val seed = baseSeed + i
-            val generated = SeatMapOptimizer.optimize(
+            var generated = SeatMapOptimizer.optimize(
                 students = students,
                 profiles = profiles,
                 ratings = ratings,
@@ -222,6 +226,35 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                 // Alternate fresh starts with refinement of the best layout found so far.
                 initialLayout = if (i % 2 == 1) incumbent else null
             )
+            val geometry = generated.map { Triple(it.row, it.column, it.seats) }
+            if (geometry != neighborhoodGeometry) {
+                neighborhoodGeometry = geometry
+                neighborhoodOrder.clear()
+                neighborhoodCursor = 0
+                val usable = generated.indices.filter { generated[it].seats > 0 }
+                if (usable.size == 2) neighborhoodOrder.add(usable)
+                for (a in usable.indices) for (b in a + 1 until usable.size) for (c in b + 1 until usable.size)
+                    neighborhoodOrder.add(listOf(usable[a], usable[b], usable[c]))
+                neighborhoodOrder.shuffle(kotlin.random.Random(baseSeed))
+            }
+            // Keep early results fast; spend extra work periodically on the best map, rather
+            // than repairing weak random starts. Reserved positions are not part of this pool.
+            if (i % 8 == 0 && neighborhoodOrder.isNotEmpty()) {
+                val origin = incumbent?.filter { it.seats > 0 } ?: generated
+                val indices = neighborhoodOrder[neighborhoodCursor++ % neighborhoodOrder.size]
+                // Auto-generated geometry can vary with forbidden pairs: only reuse matching grids.
+                val matchingGeometry = origin.map { Triple(it.row, it.column, it.seats) } ==
+                    generated.map { Triple(it.row, it.column, it.seats) }
+                if (matchingGeometry) {
+                    val repaired = SeatMapOptimizer.improveDeskNeighborhood(origin, indices,
+                        profiles, ratings, socialPreferences, history, weights, isSmallClass, disciplinePairs)
+                    fun total(map: List<circolareplus.algorithms.DeskAssignment>) =
+                        SeatMapOptimizer.scoreLayout(map, profiles, ratings, socialPreferences, history,
+                            weights, isSmallClass, disciplinePairs).total
+                    if (SeatMapRanking.compare(total(repaired), SeatMapOptimizer.voteSatisfaction(repaired, socialPreferences),
+                        total(generated), SeatMapOptimizer.voteSatisfaction(generated, socialPreferences)) > 0) generated = repaired
+                }
+            }
             val assignments = if (customDeskSlots != null) SeatMapOptimizer.withVacantDesks(generated, customDeskSlots) else generated
             check(customDeskSlots.orEmpty().filter { it.seats == 0 }.all { slot ->
                 assignments.none { it.row == slot.row && it.column == slot.column &&
