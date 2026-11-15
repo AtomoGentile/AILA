@@ -5318,7 +5318,13 @@ fun MainAppShell(
                                                 else if (newBest == oldBest) "Nessun miglioramento nelle 500 ricerche. Mantenuto il miglior risultato valido."
                                                 else "Punteggio ricalcolato con i vincoli attuali: ${newBest.toInt()}"
                                             } else null
-                                            val combined = (retained + generated).sortedByDescending { it.totalScore }
+                                            fun layoutKey(proposal: SeatMapProposal) = proposal.assignments
+                                                .sortedWith(compareBy({ it.row }, { it.column }))
+                                                .map { Triple(it.row, it.column, it.seats to
+                                                    listOfNotNull(it.studentAId, it.studentBId, it.studentCId).sorted()) }
+                                            val retainedKeys = retained.map { layoutKey(it) }.toSet()
+                                            val combined = (retained + generated.filter { layoutKey(it) !in retainedKeys })
+                                                .sortedByDescending { it.totalScore }
                                             proposalOptions = combined
                                             seatMapOptimizerHistory = latestHistory
                                             updateSeatMapDraft(draft.copy(proposals = combined, history = latestHistory))
