@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 15311)
+Total output lines: 1436
+
 package circolareplus.design
 
 import androidx.compose.animation.animateColorAsState
@@ -110,6 +113,10 @@ fun AilaScreenHeader(
         ) {
             if (showBrand) {
                 AilaBrandMark(size = 44.dp)
+                if (AppTheme.isNothing) {
+                    Spacer(modifier = Modifier.width(AppTheme.Space8))
+                    NothingGlyphMark(size = 28.dp)
+                }
                 Spacer(modifier = Modifier.width(AppTheme.Space12))
             }
             Column(modifier = Modifier.weight(1f)) {
@@ -667,37 +674,7 @@ private fun Modifier.ailaButtonMinHeight(large: Boolean, compact: Boolean) =
 /**
  * Testo cliccabile usato come link ("Salta", "Scegli un altro modello"): almeno 44dp di altezza
  * con il testo centrato. Come per i pulsanti, prima l'altezza la dava l'interlinea di 24sp
- * ereditata da Material; con la scala tipografica un link da 13sp sarebbe alto 18dp più il padding.
- * Va messo dopo `clickable`, così tutta l'area alta 44dp risponde al tocco.
- */
-fun Modifier.ailaTextTouchTarget() = heightIn(min = 44.dp).wrapContentHeight()
-
-/** Pulsante secondario: stesso ingombro del primario ma solo contorno. */
-@Composable
-fun AilaSecondaryButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    compact: Boolean = false,
-    large: Boolean = false,
-    icon: (@Composable (Color) -> Unit)? = null
-) {
-    val shape = RoundedCornerShape(AppTheme.ButtonCornerRadius)
-    Box(
-        modifier = modifier
-            .ailaButtonMinHeight(large, compact)
-            .then(
-                if (AppTheme.isGlass) Modifier.ailaGlassSurface(shape)
-                else Modifier.clip(shape).background(AppTheme.SurfaceWhite).border(1.dp, AppTheme.FieldOutline, shape)
-            )
-            .ailaGlassPressable(tint = AppTheme.PrimaryBlue) { onClick() }
-            .padding(
-                horizontal = if (large) AppTheme.Space20 else if (compact) AppTheme.Space12 else AppTheme.Space16,
-                vertical = if (compact) 8.dp else 11.dp
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+ * ereditata da Material; con la scala tipografica u…311 tokens truncated…lignment = Alignment.CenterVertically) {
             if (icon != null) {
                 icon(AppTheme.TextDark)
                 Spacer(modifier = Modifier.width(6.dp))
