@@ -47,6 +47,23 @@ class CalendarDuplicatesTest {
     }
 
     @Test
+    fun unaSolaMateriaInComuneNonRendeDueImpegniDuplicati() {
+        val events = listOf(event("e1", "Fisica: Interrogazione sulla termodinamica", "2026-11-17"))
+        assertNull(
+            CalendarDuplicates.findExisting(
+                deadline("1° allenamento Campionati di Fisica e consegna autorizzazione", "2026-11-17"),
+                events
+            )
+        )
+    }
+
+    @Test
+    fun riconosceVariantiMorfologicheQuandoCondividonoDueParole() {
+        val events = listOf(event("e1", "Festa di sport", "2026-09-13"))
+        assertEquals("e1", CalendarDuplicates.findExisting(deadline("Adesioni Festa sportiva", "2026-09-13"), events)?.id)
+    }
+
+    @Test
     fun calendarioVuotoNonHaDoppioni() {
         assertNull(CalendarDuplicates.findExisting(deadline("Festa di sport", "2026-09-13"), emptyList()))
     }

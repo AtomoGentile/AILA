@@ -23,7 +23,7 @@ async function call(path='/api/aca/brief',body?:unknown,user='u'){
  const response=await worker.fetch(new Request('https://test'+path,{method:body===undefined?'GET':'POST',headers:{Authorization:'Bearer '+tokens[user],'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)}),env,ctx);
  return {status:response.status,json:await response.json() as any};
 }
-function event(id:string,recipients:string|null=null){db.prepare("INSERT INTO calendar_events(id,title,event_date,category,class_id,is_for_all,visible_to_user_ids_json) VALUES (?,?,'2026-11-06','VERIFICA','C1',1,?)").run(id,id,recipients);}
+function event(id:string,recipients:string|null=null,startTime:string|null=null){db.prepare("INSERT INTO calendar_events(id,title,event_date,start_time,category,class_id,is_for_all,visible_to_user_ids_json) VALUES (?,?,'2026-11-06',?,'VERIFICA','C1',1,?)").run(id,id,startTime,recipients);}
 function ranking(id:string,audience:string|null=null){db.prepare("INSERT INTO ranking_polls(id,class_id,question,created_at,audience_json) VALUES (?,'C1',?,'2026-11-06 07:00:00',?)").run(id,id,audience);}
 function thread(){
  db.exec("INSERT INTO forum_threads(id,class_id,author_id,title) VALUES ('t','C1','peer','Aiuto con i limiti'); INSERT INTO forum_participants(thread_id,user_id,public_key,ordinal,anonymous) VALUES ('t','u','alias-u',1,1); INSERT INTO forum_subscriptions(thread_id,user_id,mode) VALUES ('t','u','REPLIES')");
@@ -36,6 +36,10 @@ describe('AILA brief',()=>{
   const result=await call();expect(result.status).toBe(200);
   expect(new Set(result.json.items.map((i:any)=>i.kind))).toEqual(new Set(['EVENT','RANKING_POLL','FORUM','PROPOSAL']));
   expect(result.json.items.find((i:any)=>i.kind==='FORUM').message).not.toContain('Testo della risposta');expect(run).not.toHaveBeenCalled();
+ });
+ it('omits today calendar events whose scheduled time has passed in Italy',async()=>{
+  event('done-this-morning',null,'08:00');event('starts-now',null,'09:00');event('later-today',null,'10:00');event('all-day',null,null);
+  expect(new Set((await call()).json.items.map((i:any)=>i.sourceId))).toEqual(new Set(['starts-now','later-today','all-day']));
  });
  it('respects class and personal event recipients',async()=>{
   event('mine','["u"]');event('peer-event','["peer"]');ranking('not-mine','["peer"]');

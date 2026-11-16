@@ -30,14 +30,16 @@ export function selectBriefItems(items:Candidate[],dismissed:Set<string>,limit=N
 /** Reads existing authorized facts only: never runs a model or spends an AI quota. */
 export async function briefCandidates(env:Env,classId:string,userId:string,now=new Date()):Promise<Candidate[]>{
  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome'}).format(now);
+ const localTime=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Rome',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(now);
  const after=(days:number)=>new Date(Date.parse(`${today}T00:00:00Z`)+days*86400000).toISOString().slice(0,10);
  const timestamp=now.toISOString();
  const pollResults=`(EXISTS(SELECT 1 FROM interrogation_calculations r WHERE r.grid_id=g.id) OR EXISTS(
    SELECT 1 FROM interrogation_assignments a JOIN interrogation_slots s ON s.id=a.slot_id WHERE s.grid_id=g.id))`;
  const [events,circulars,polls,rankings,replies,proposals,roster,seatmaps,seatPreferences]=await Promise.all([
-  env.DB.prepare(`SELECT e.id,e.title,e.event_date,e.category,e.notes,e.poll_grid_id,e.visible_to_user_ids_json FROM calendar_events e WHERE e.class_id=? AND e.event_date BETWEEN ? AND ?
+  env.DB.prepare(`SELECT e.id,e.title,e.event_date,e.category,e.notes,e.poll_grid_id,e.visible_to_user_ids_json FROM calendar_events e WHERE e.class_id=? AND date(e.event_date) BETWEEN ? AND ?
+   AND (date(e.event_date)>? OR e.start_time IS NULL OR time(e.start_time)>=time(?))
    AND ${studyAudience('e',false)} AND NOT EXISTS(SELECT 1 FROM aca_nudge_dismissals d WHERE d.user_id=? AND d.event_id=e.id AND d.event_date=e.event_date)
-   ORDER BY e.event_date,e.id`).bind(classId,today,after(7),userId,userId,userId,userId).all<{id:string;title:string;event_date:string;category:string;notes:string|null;poll_grid_id:string|null;visible_to_user_ids_json:string|null}>(),
+   ORDER BY e.event_date,e.id`).bind(classId,today,after(7),today,localTime,userId,userId,userId,userId).all<{id:string;title:string;event_date:string;category:string;notes:string|null;poll_grid_id:string|null;visible_to_user_ids_json:string|null}>(),
   env.DB.prepare(`SELECT c.number,c.title,c.publish_date,a.badge,a.per_class_json FROM circulars c
    JOIN circular_ai_analysis a ON a.circular_number=c.number WHERE a.is_fallback=0 AND a.tier>0
    AND NOT EXISTS(SELECT 1 FROM aca_brief_circular_reads seen WHERE seen.user_id=? AND seen.class_id=? AND seen.circular_number=c.number)
