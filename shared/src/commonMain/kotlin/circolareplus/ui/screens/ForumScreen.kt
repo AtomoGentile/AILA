@@ -96,6 +96,12 @@ fun ForumScreen(
   threadId!=null&&pendingAttachments.size<5->launchWork{activity(AssistantAgentPhase.READING);pendingAttachments=pendingAttachments+AppContainer.acaRepository.upload(file,threadId,persistLocal=false)}
   else->error="Apri una discussione e allega al massimo 5 file per risposta."
  }}
+ val closeCreation:(()->Unit)={if(!busy){
+  creating=false
+  val abandoned=createAttachments
+  createAttachments=emptyList()
+  scope.launch{abandoned.forEach{item->try{AppContainer.acaRepository.removeAttachment(item.id)}catch(_:Exception){}}}
+ }}
  val pickFile=rememberContentPicker({error=it},addFile)
  val recorder=rememberVoiceRecorder({recording=it},{error=it},addFile)
  fun askAi(request:ForumAiRequestDto){launchWork{
@@ -253,7 +259,7 @@ fun ForumScreen(
   title=createTitle,question=createBody,anonymous=anonymous,accepted=rulesAccepted,busy=busy,error=error,
   attachments=createAttachments,onPickAttachment=pickFile,onRemoveAttachment={item->createAttachments=createAttachments.filterNot{it.id==item.id};scope.launch{try{AppContainer.acaRepository.removeAttachment(item.id)}catch(_:Exception){}}},
   onTitle={createTitle=it},onQuestion={createBody=it},onAnonymous={anonymous=it},onAccepted={rulesAccepted=it},
-  onRules={showRules=true},onClose={if(!busy){creating=false;val abandoned=createAttachments;createAttachments=emptyList();scope.launch{abandoned.forEach{try{AppContainer.acaRepository.removeAttachment(it.id)}catch(_:Exception){}}}},onPublish={launchWork{
+  onRules={showRules=true},onClose=closeCreation,onPublish={launchWork{
    val created=repo.create(createTitle,createBody,anonymous,createAttachments.map{it.id});creating=false;createTitle="";createBody="";createAttachments=emptyList();threadId=created.thread.id
   }})
  if(showRules)AlertDialog(onDismissRequest={showRules=false},title={Text("Revisione tra pere")},text={Column(Modifier.verticalScroll(rememberScrollState())){
