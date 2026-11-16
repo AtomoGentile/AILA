@@ -100,8 +100,9 @@ fun AilaIconControl(onClick: () -> Unit, modifier: Modifier = Modifier, enabled:
     else {
         val source = interactionSource ?: remember { MutableInteractionSource() }
         Box(modifier.defaultMinSize(minWidth = 44.dp,minHeight = 44.dp).clip(CircleShape)
+            .background(colors?.containerColor ?: Color.Transparent)
             .nothingPressFeedback(source).clickable(interactionSource = source, indication = null, enabled = enabled, role = Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
-            CompositionLocalProvider(LocalContentColor provides if(enabled) AppTheme.TextDark else AppTheme.TextMuted, content = content)
+            CompositionLocalProvider(LocalContentColor provides if(enabled) colors?.contentColor ?: AppTheme.TextDark else AppTheme.TextMuted, content = content)
         }
     }
 }
@@ -196,4 +197,12 @@ fun AilaAlertDialog(onDismissRequest: () -> Unit,confirmButton: @Composable () -
             }
         }
     }
+}
+
+@Composable
+fun AilaCircularProgress(modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.primary,
+    strokeWidth: Dp = 4.dp, trackColor: Color = Color.Transparent,
+    strokeCap: androidx.compose.ui.graphics.StrokeCap = androidx.compose.ui.graphics.StrokeCap.Round) {
+    if (!AppTheme.isNothing) CircularProgressIndicator(modifier = modifier,color = color,strokeWidth = strokeWidth,trackColor = trackColor,strokeCap = strokeCap)
+    else NothingMatrixLoader(modifier.size(24.dp).semantics { progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate },color)
 }

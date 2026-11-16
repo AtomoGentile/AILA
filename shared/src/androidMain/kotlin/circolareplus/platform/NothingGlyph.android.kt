@@ -100,7 +100,8 @@ private class AndroidNothingGlyph(private val context: Context) : NothingGlyphCo
         return runCatching {
             if (!session) { gm.openSession(); session = true }
             val builder = gm.glyphFrameBuilder
-            when (zone) {
+            val supportedZone = if (targetDevice == Glyph.DEVICE_25111 || targetDevice == Glyph.DEVICE_25131) 1 else zone
+            when (supportedZone) {
                 1 -> builder.buildChannelA()
                 2 -> builder.buildChannelB()
                 3 -> builder.buildChannelC()

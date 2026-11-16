@@ -53,7 +53,7 @@ fun ContentPreviewScreen(
         AilaBackBar("Documento", onBackClick=onBack)
         Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement=Arrangement.spacedBy(16.dp)) {
             Text(name, style=MaterialTheme.typography.titleLarge, color=AppTheme.TextDark)
-            if(loading) CircularProgressIndicator()
+            if(loading) circolareplus.design.AilaCircularProgress()
             error?.let { Text(it,color=AppTheme.TintRedInk) }
             file?.let { original ->
                 circolareplus.design.AilaOutlinedButton(onClick={scope.launch {

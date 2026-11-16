@@ -74,7 +74,7 @@ internal fun PollCalendarSyncDialog(
                     }
                     AilaIconButton(contentDescription = "Ricarica calendario", enabled = !loading && !busy, onClick = { message = null; refresh++ }) { tint -> AppIcons.Refresh(color = tint) }
                 }
-                if (loading) Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                if (loading) Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { circolareplus.design.AilaCircularProgress() }
                 else LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(AppTheme.Space16), verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
                     item {
                         Text("Le date pubblicate del sondaggio aggiorneranno gli eventi già collegati. Seleziona anche le vecchie date da sostituire: quelle non selezionate resteranno presenti.", color = AppTheme.TextMuted)

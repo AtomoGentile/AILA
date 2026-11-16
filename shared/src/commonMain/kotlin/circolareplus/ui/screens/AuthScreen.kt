@@ -492,7 +492,7 @@ fun AuthScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         if (isLoading) {
-                            CircularProgressIndicator(
+                            circolareplus.design.AilaCircularProgress(
                                 modifier = Modifier.size(20.dp),
                                 color = AppTheme.TextMuted,
                                 strokeWidth = 2.dp
@@ -501,7 +501,7 @@ fun AuthScreen(
                             Text(
                                 text = if (isRegisterMode) "Completa la registrazione" else "Accedi",
                                 style = MaterialTheme.typography.titleSmall,
-                                color = Color.White
+                                color = if(AppTheme.isNothing) AppTheme.BackgroundLight else Color.White
                             )
                         }
                     }
@@ -739,7 +739,7 @@ private fun ClassPicker(
                         text = option.label,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isSelected) Color.White else AppTheme.TextMuted,
+                        color = if (isSelected && AppTheme.isNothing) AppTheme.BackgroundLight else if (isSelected) Color.White else AppTheme.TextMuted,
                         modifier = Modifier
                             .clip(RoundedCornerShape(AppTheme.ButtonCornerRadius))
                             .then(

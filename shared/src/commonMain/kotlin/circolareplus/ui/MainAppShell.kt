@@ -7340,20 +7340,20 @@ private fun EventCreationOptionCard(
                 .background(if (highlighted) Color.White.copy(alpha = 0.2f) else AppTheme.TintViolet),
             contentAlignment = Alignment.Center
         ) {
-            icon(if (highlighted) Color.White else AppTheme.TintVioletInk)
+            icon(if (highlighted && AppTheme.isNothing) AppTheme.BackgroundLight else if (highlighted) Color.White else AppTheme.TintVioletInk)
         }
         Spacer(modifier = Modifier.height(AppTheme.Space12))
         Text(
             text = title,
             style = MaterialTheme.typography.titleSmall,
-            color = if (highlighted) Color.White else AppTheme.TextDark
+            color = if (highlighted && AppTheme.isNothing) AppTheme.BackgroundLight else if (highlighted) Color.White else AppTheme.TextDark
         )
         Spacer(modifier = Modifier.height(AppTheme.Space4))
         Text(
             text = subtitle,
             style = MaterialTheme.typography.bodySmall,
             // Sulla card piena del primario: il testo secondario "su gradiente" del tema.
-            color = if (highlighted) AppTheme.OnGradientSecondary else AppTheme.TextMuted
+            color = if(highlighted && AppTheme.isNothing) AppTheme.BackgroundLight.copy(alpha=.8f) else if (highlighted) AppTheme.OnGradientSecondary else AppTheme.TextMuted
         )
     }
 }

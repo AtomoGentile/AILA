@@ -175,6 +175,35 @@ class NothingUiRegressionTest {
         compose.runOnIdle { kotlin.test.assertTrue(confirmed) }
     }
 
+    @Test fun nothingCalendarAndTimetableKeepTheirSelectedDay() {
+        val event = circolareplus.domain.model.CalendarEvent("physics","Fisica: energia e quantità di moto","2026-11-17",category=circolareplus.domain.model.CalendarEventCategory.INTERROGAZIONE)
+        activity.get().setContent { AilaTheme { CalendarScreen(events=listOf(event),classLabel="4CSA",focusDateIso="2026-11-17") } }
+        compose.mainClock.advanceTimeBy(600)
+        compose.onNodeWithText(event.title).assertIsDisplayed()
+        screenshot("nothing-calendar-light")
+        compose.runOnIdle { AppTheme.isDarkMode=true }
+        screenshot("nothing-calendar-dark")
+        compose.onNodeWithContentDescription("Apri orario della classe").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(800)
+        compose.onNodeWithContentDescription("Torna al calendario").assertIsDisplayed()
+        screenshot("nothing-timetable-dark")
+    }
+
+    @Test fun nothingAssistantComposerCanSendALegibleDraft() {
+        var sent = ""
+        activity.get().setContent { AilaTheme {
+            AssistantChatScreen(messages=listOf(circolareplus.ai.assistant.AssistantMessage("a1",circolareplus.ai.assistant.AssistantAuthor.ASSISTANT,"Rivediamo energia cinetica e quantità di moto.")),
+                isThinking=false,conversations=emptyList(),onSend={sent=it},onBackClick={},onClearChat={},onOpenConversation={},onDeleteConversation={},onOpenSource={})
+        } }
+        compose.mainClock.advanceTimeBy(800)
+        compose.onNode(hasSetTextAction()).performTextInput("Prepara un riepilogo di fisica")
+        screenshot("nothing-assistant-light")
+        compose.runOnIdle { AppTheme.isDarkMode=true }
+        screenshot("nothing-assistant-dark")
+        compose.onNodeWithContentDescription("Invia").performClick()
+        compose.runOnIdle { assertEquals("Prepara un riepilogo di fisica",sent) }
+    }
+
     private fun screenshot(name: String) {
         compose.mainClock.advanceTimeBy(500)
         compose.waitForIdle()

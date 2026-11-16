@@ -5,6 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -15,7 +16,7 @@ import kotlin.math.cos
 /** Small living light source; the symbol itself stays legible and still. */
 @Composable
 internal fun AcaNeuralMark(thinking: Boolean, modifier: Modifier = Modifier) {
-    if (AppTheme.isNothing) { NothingMatrixLoader(modifier, AppTheme.TextDark); return }
+    if (AppTheme.isNothing) { NothingMatrixLoader(modifier.size(42.dp), AppTheme.TextDark); return }
     val reduced = AppTheme.reduceMotion
     val phase = if(reduced) null else rememberInfiniteTransition(label="aca neural mark").animateFloat(
         0f, 6.2831855f, infiniteRepeatable(tween(if(thinking) 2400 else 4600,easing=LinearEasing)),label="aca neural orbit")

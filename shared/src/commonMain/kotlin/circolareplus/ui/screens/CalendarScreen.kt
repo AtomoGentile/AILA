@@ -691,7 +691,7 @@ private fun DayCell(
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Medium,
                 color = when {
-                    isSelected -> androidx.compose.ui.graphics.lerp(Color.White, AppTheme.AccentCyan, progress)
+                    isSelected -> androidx.compose.ui.graphics.lerp(if(AppTheme.isNothing) AppTheme.OnSelection else Color.White, AppTheme.AccentCyan, progress)
                     isToday -> AppTheme.PrimaryBlue
                     else -> AppTheme.TextDark
                 }

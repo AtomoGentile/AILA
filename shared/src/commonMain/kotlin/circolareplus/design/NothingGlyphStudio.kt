@@ -54,18 +54,33 @@ fun NothingFocusWidget(modifier: Modifier = Modifier) {
         .padding(horizontal = 14.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("FOCUS", style = MaterialTheme.typography.labelMedium, color = GlyphMuted, modifier = Modifier.weight(1f))
+            Column(Modifier.weight(1f)) {
+                Text("FOCUS", style = MaterialTheme.typography.labelMedium, color = GlyphMuted)
+                Text(prefs.signature.ifBlank { "Il tuo tempo" }, style = MaterialTheme.typography.labelSmall, color = GlyphMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             Box(Modifier.size(44.dp).clip(CircleShape).background(Color(0xFF2A2A2A))
                 .clickable(role = Role.Button) { studio = true }
                 .semantics { contentDescription = "Personalizza Glyph" }, contentAlignment = Alignment.Center) {
                 AppIcons.Sliders(Modifier.size(18.dp), GlyphPaper)
             }
         }
-        NothingGlyphArt(Modifier.size(92.dp), progress = focus.fraction(now), signal = signal + NothingExperience.completedSessions)
-        Text(formatFocusTime(focus.remaining(now)), style = MaterialTheme.typography.headlineSmall.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Normal),
-            color = GlyphPaper, maxLines = 1)
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val largeText = androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.15f
+            val readout: @Composable () -> Unit = {
+                Text(formatFocusTime(focus.remaining(now)), style = MaterialTheme.typography.headlineSmall.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Normal),
+                    color = GlyphPaper, maxLines = 1)
+            }
+            if (maxWidth < 124.dp || largeText) {
+                Column(Modifier.fillMaxWidth(),horizontalAlignment = Alignment.CenterHorizontally,verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    NothingGlyphArt(Modifier.size(36.dp),progress=focus.fraction(now),signal=signal+NothingExperience.completedSessions)
+                    readout()
+                }
+            } else Row(Modifier.fillMaxWidth(),horizontalArrangement = Arrangement.spacedBy(8.dp,Alignment.CenterHorizontally),verticalAlignment = Alignment.CenterVertically) {
+                NothingGlyphArt(Modifier.size(36.dp),progress=focus.fraction(now),signal=signal+NothingExperience.completedSessions)
+                readout()
+            }
+        }
         if (focus.completed) Text("Sessione conclusa", style = MaterialTheme.typography.bodySmall, color = GlyphMuted)
-        else Text(prefs.signature.ifBlank { "Il tuo tempo" }, style = MaterialTheme.typography.labelSmall, color = GlyphMuted, maxLines = 1)
         Box(Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(CircleShape).background(GlyphPaper)
             .clickable(role = Role.Button) {
                 hardware.stop()
@@ -102,6 +117,7 @@ fun NothingGlyphSettingsSection(modifier: Modifier = Modifier) {
     if (open) NothingGlyphStudio { open = false }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun NothingGlyphStudio(onDismiss: () -> Unit) {
     val p = NothingExperience.preferences

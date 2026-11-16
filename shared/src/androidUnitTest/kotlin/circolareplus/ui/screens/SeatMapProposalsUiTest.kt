@@ -30,6 +30,9 @@ class SeatMapProposalsUiTest {
     @Test fun singleExpressiveProposalHasNoRedundantSelectorAndKeepsActionsNearMap() = verify(UiStyle.EXPRESSIVE, 1)
     @Test fun singleGlassProposalHasNoRedundantSelectorAndKeepsActionsNearMap() = verify(UiStyle.GLASS, 1)
 
+    @Test fun nothingMapUsesReadableNamesAndKeepsProposalSelectionWorking() = verify(UiStyle.NOTHING)
+    @Test fun nothingSingleMapKeepsActionsNearTheMap() = verify(UiStyle.NOTHING, 1)
+
     private fun verify(style: UiStyle, count: Int = 3) {
         AppTheme.uiStyle = style
         AppTheme.isDarkMode = true

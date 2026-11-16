@@ -245,7 +245,7 @@ fun CircularDetailScreen(
                         Spacer(modifier = Modifier.height(AppTheme.Space8))
                         if (isClassifying) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                CircularProgressIndicator(
+                                circolareplus.design.AilaCircularProgress(
                                     modifier = Modifier.size(14.dp),
                                     strokeWidth = 2.dp,
                                     color = AppTheme.PrimaryBlue
@@ -407,7 +407,7 @@ fun CircularDetailScreen(
                             modifier = Modifier.fillMaxWidth().padding(vertical = AppTheme.Space48),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            CircularProgressIndicator(color = AppTheme.PrimaryBlue)
+                            circolareplus.design.AilaCircularProgress(color = AppTheme.PrimaryBlue)
                             Spacer(modifier = Modifier.height(AppTheme.Space16))
                             Text(
                                 text = "Preparazione del documento…",

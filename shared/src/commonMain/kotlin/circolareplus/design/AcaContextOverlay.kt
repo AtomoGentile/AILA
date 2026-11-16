@@ -248,7 +248,7 @@ fun AcaContextOverlay(
                     if(recording) AppTheme.TintRed else if(canSend || (!expanded && !thinking && !transcribing)) AppTheme.PrimaryBlue else sendFill,
                     RoundedCornerShape(24.dp)
                 ).semantics{contentDescription=when { recording -> "Ferma e trascrivi vocale"; canSend -> "Invia ad AILA"; else -> "Registra un vocale per ACA" }}) {
-                    if(thinking||transcribing)CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp,color=muted)
+                    if(thinking||transcribing)circolareplus.design.AilaCircularProgress(Modifier.size(20.dp),strokeWidth=2.dp,color=muted)
                     else if(recording) Box(Modifier.size(18.dp).background(Color.White,RoundedCornerShape(4.dp)))
                     else if(canSend) AppIcons.ArrowUp(Modifier.size(25.dp),if(AppTheme.isNothing && dark) AppTheme.BackgroundLight else Color.White)
                     else AcaMic(if(AppTheme.isNothing && dark && !expanded) AppTheme.BackgroundLight else if(!expanded) Color.White else AppTheme.TextDark)

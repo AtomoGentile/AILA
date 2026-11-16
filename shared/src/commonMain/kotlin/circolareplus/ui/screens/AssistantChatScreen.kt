@@ -539,8 +539,8 @@ private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
             modifier = Modifier
                 .size(22.dp)
                 .ailaSelectionPop(enabled)
-                .graphicsLayer { rotationZ = if (glass) 0f else 90f },
-            color = lerp(AppTheme.TextFaint, Color.White, on)
+                .graphicsLayer { rotationZ = if (glass || AppTheme.isNothing) 0f else 90f },
+            color = lerp(AppTheme.TextFaint, if(AppTheme.isNothing) AppTheme.BackgroundLight else Color.White, on)
         )
     }
 }

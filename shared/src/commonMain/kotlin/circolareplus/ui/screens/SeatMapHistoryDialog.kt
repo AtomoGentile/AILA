@@ -121,7 +121,7 @@ fun SeatMapHistoryDialog(
                 val entry = selected
                 when {
                     loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = AppTheme.PrimaryBlue)
+                        circolareplus.design.AilaCircularProgress(color = AppTheme.PrimaryBlue)
                     }
                     error != null -> Column(
                         Modifier.fillMaxWidth().padding(AppTheme.Space24),

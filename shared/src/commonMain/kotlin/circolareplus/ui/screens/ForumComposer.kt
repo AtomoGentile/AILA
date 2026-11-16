@@ -120,7 +120,7 @@ internal fun ForumNewQuestionSheet(title: String, question: String, anonymous: B
                     contentColor = AppTheme.PrimaryBlue, disabledContainerColor = Color.Transparent,
                     disabledContentColor = AppTheme.TextFaint) else ButtonDefaults.buttonColors(),
                 shape=RoundedCornerShape(20.dp),contentPadding=PaddingValues(16.dp)) {
-                if(busy) { CircularProgressIndicator(Modifier.size(18.dp),strokeWidth=2.dp);Spacer(Modifier.width(8.dp)) }
+                if(busy) { circolareplus.design.AilaCircularProgress(Modifier.size(18.dp),strokeWidth=2.dp);Spacer(Modifier.width(8.dp)) }
                 Text(if(busy) "Pubblicazione…" else "Pubblica nella classe")
             }
         }

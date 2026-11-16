@@ -118,7 +118,7 @@ private fun ailaColorScheme() = if (AppTheme.isNothing) {
 )
 
 private fun ailaShapes() = Shapes(
-    extraSmall = RoundedCornerShape(8.dp),
+    extraSmall = RoundedCornerShape(if(AppTheme.isNothing) 16.dp else 8.dp),
     small = RoundedCornerShape(AppTheme.SmallElementRadius),
     medium = RoundedCornerShape(AppTheme.ButtonCornerRadius),
     large = RoundedCornerShape(AppTheme.CardCornerRadius),

@@ -49,7 +49,7 @@ class NothingExperienceTest {
             for(dark in listOf(false,true)) {
                 AppTheme.isDarkMode=dark
                 for((ink,paper) in listOf(AppTheme.TextDark to AppTheme.BackgroundLight,
-                    AppTheme.TextMuted to AppTheme.CardSurface,AppTheme.OnSelection to AppTheme.SelectionContainer,
+                    AppTheme.TextMuted to AppTheme.CardSurface,AppTheme.TextFaint to AppTheme.CardSurface,AppTheme.OnSelection to AppTheme.SelectionContainer,
                     AppTheme.BackgroundLight to AppTheme.TextDark)) {
                     assertTrue(contrast(ink,paper)>=4.5,"Contrast ${contrast(ink,paper)} dark=$dark")
                 }

@@ -97,7 +97,7 @@ internal fun PollAssignmentPreviewDialog(
                     AilaIconButton(contentDescription = "Aggiorna confronto", enabled = !loading && !busy, onClick = { actionError = null; refresh++ }) { tint -> AppIcons.Refresh(color = tint) }
                 }
                 when {
-                    loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AppTheme.PrimaryBlue) }
+                    loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { circolareplus.design.AilaCircularProgress(color = AppTheme.PrimaryBlue) }
                     error != null -> Column(Modifier.padding(AppTheme.Space24), verticalArrangement = Arrangement.spacedBy(AppTheme.Space16)) {
                         Text(error.orEmpty(), color = AppTheme.TintRedInk)
                         AilaPrimaryButton(text = "Riprova", onClick = { refresh++ })

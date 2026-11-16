@@ -176,7 +176,7 @@ object AppTheme {
     val SurfaceWhite get() = if (isNothing) Color(if(isDarkMode) 0xFF171717 else 0xFFFFFFFF) else style(Color(0xFFFFFFFF), Color(0xFF1C1C1E), Color(0xFFFFFFFF), Color(0xFF1D2026))
     val TextDark get() = if (isNothing) Color(if(isDarkMode) 0xFFF5F5F3 else 0xFF111111) else style(Color(0xFF0B0D12), Color(0xFFFFFFFF), Color(0xFF1A1C22), Color(0xFFE2E2E9))
     val TextMuted get() = if (isNothing) Color(if(isDarkMode) 0xFFAAAAAA else 0xFF666666) else style(Color(0xFF5F6470), Color(0x99EBEBF5), Color(0xFF44474F), Color(0xFFC4C6D0))
-    val TextFaint get() = if (isNothing) Color(if(isDarkMode) 0xFF777777 else 0xFF888888) else style(Color(0xFF8E929C), Color(0x66EBEBF5), Color(0xFF74777F), Color(0xFF8E9099))
+    val TextFaint get() = if (isNothing) Color(if(isDarkMode) 0xFF94948E else 0xFF6E6E68) else style(Color(0xFF8E929C), Color(0x66EBEBF5), Color(0xFF74777F), Color(0xFF8E9099))
     // Material: le righe divisorie hanno il colore dello sfondo, cosi' dentro le card tonali
     // diventano "stacchi" fra righe separate, come le liste segmentate di Android 16.
     val Hairline get() = if (isNothing) Color(if(isDarkMode) 0xFF343434 else 0xFFE1E1DE) else style(Color(0x1F0B1B45), Color(0x99545458), Color(0xFFF9F9FF), Color(0xFF111318))

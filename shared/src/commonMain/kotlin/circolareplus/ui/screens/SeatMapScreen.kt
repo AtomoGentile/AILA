@@ -623,7 +623,7 @@ fun SeatMapScreen(
 @Composable
 private fun MySeatPill(active: Boolean, onClick: () -> Unit) {
     val ink by animateColorAsState(
-        if (active) Color.White else AppTheme.TintBlueInk, circolareplus.design.ailaColorSpec(), label = "mySeatInk"
+        if (active && AppTheme.isNothing) AppTheme.BackgroundLight else if (active) Color.White else AppTheme.TintBlueInk, circolareplus.design.ailaColorSpec(), label = "mySeatInk"
     )
     val fill by animateFloatAsState(if (active) 1f else 0f, circolareplus.design.ailaMoveSpec(220), label = "mySeatFill")
     Row(

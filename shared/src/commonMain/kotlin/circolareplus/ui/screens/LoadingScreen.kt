@@ -193,7 +193,7 @@ fun AilaLoadingScreen(
                 // 32 e non 24 (prima 28, fuori griglia): l'attesa è un gruppo a parte rispetto
                 // al marchio, e il distacco più ampio lo dice.
                 Spacer(modifier = Modifier.height(AppTheme.Space32))
-                CircularProgressIndicator(
+                circolareplus.design.AilaCircularProgress(
                     modifier = Modifier.size(22.dp),
                     color = Color.White,
                     strokeWidth = 2.dp
