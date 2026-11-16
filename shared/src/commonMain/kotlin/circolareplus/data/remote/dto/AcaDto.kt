@@ -18,7 +18,8 @@ import kotlinx.serialization.Serializable
 @Serializable enum class AilaBriefKind { EVENT, CIRCULAR, POLL, RANKING_POLL, FORUM, PROPOSAL, SEATMAP }
 @Serializable data class AilaBriefItemDto(
  val id:String,val revision:String,val kind:AilaBriefKind,val sourceId:String,val title:String,
- val message:String,val actionLabel:String,val date:String?=null,val canPlanStudy:Boolean=false,val isResult:Boolean=false
+ val message:String,val actionLabel:String,val date:String?=null,val canPlanStudy:Boolean=false,val isResult:Boolean=false,
+ val isActive:Boolean=true
 )
 @Serializable data class AilaBriefResponseDto(val items:List<AilaBriefItemDto> = emptyList())
 @Serializable data class AilaBriefDismissDto(val revision:String,val seen:Boolean=false)

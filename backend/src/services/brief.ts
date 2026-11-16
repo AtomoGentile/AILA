@@ -1,20 +1,20 @@
 import type {Env} from '../types';
 import {noteAudienceIncludes} from './noteAudience';
 import {studyAudience} from './studyAudience';
-import {circularBadgeForClass,isRelevantCircular} from './classAnalysis';
+import {circularBadgeForClass,isBriefVisibleCircular} from './classAnalysis';
 
 export type BriefKind='EVENT'|'CIRCULAR'|'POLL'|'RANKING_POLL'|'FORUM'|'PROPOSAL'|'SEATMAP';
 export interface BriefItem {
  id:string;revision:string;kind:BriefKind;sourceId:string;title:string;message:string;
- actionLabel:string;date:string|null;canPlanStudy:boolean;isResult:boolean;
+ actionLabel:string;date:string|null;canPlanStudy:boolean;isResult:boolean;isActive:boolean;
 }
 interface Candidate extends BriefItem {priority:number;sortKey:string;}
 const short=(text:string,max=220)=>text.replace(/\s+/g,' ').trim().slice(0,max);
-async function candidate(kind:BriefKind,sourceId:string,title:string,message:string,actionLabel:string,date:string|null,priority:number,version:string,canPlanStudy=false,isResult=false):Promise<Candidate>{
- const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([kind,sourceId,title,message,actionLabel,date,version,canPlanStudy,isResult])));
+async function candidate(kind:BriefKind,sourceId:string,title:string,message:string,actionLabel:string,date:string|null,priority:number,version:string,canPlanStudy=false,isResult=false,isActive=true):Promise<Candidate>{
+ const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([kind,sourceId,title,message,actionLabel,date,version,canPlanStudy,isResult,isActive])));
  const revision=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
  const sortKey=version.match(/\d{4}-\d\d-\d\d(?:T| \d\d:\d\d:\d\d)/)?.[0]??version.match(/\d{1,10}/)?.[0]?.padStart(10,'0')??version;
- return {id:`${kind}:${sourceId}`,revision,kind,sourceId,title:short(title,240),message:short(message),actionLabel,date,canPlanStudy,isResult,priority,sortKey};
+ return {id:`${kind}:${sourceId}`,revision,kind,sourceId,title:short(title,240),message:short(message),actionLabel,date,canPlanStudy,isResult,isActive,priority,sortKey};
 }
 const group=(kind:BriefKind)=>kind==='RANKING_POLL'?'POLL':kind;
 const order=(a:Candidate,b:Candidate)=>b.priority-a.priority||b.sortKey.localeCompare(a.sortKey)||a.id.localeCompare(b.id);
@@ -79,8 +79,10 @@ export async function briefCandidates(env:Env,classId:string,userId:string,now=n
   const days=Math.round((Date.parse(e.event_date)-Date.parse(today))/86400000);
   pending.push(candidate('EVENT',e.id,e.title,days===0?'È un tuo impegno di oggi.':days===1?'È un tuo impegno di domani.':`È un tuo impegno tra ${days} giorni.`,'Apri il calendario',e.event_date,120-days*10,e.event_date,['VERIFICA','INTERROGAZIONE'].includes(e.category)));}
  for(const c of circulars.results){
-  if(isRelevantCircular(circularBadgeForClass(c.badge,c.per_class_json,classId)))
-   pending.push(candidate('CIRCULAR',String(c.number),c.title,'','',null,100,String(c.number)));}
+  const badge=circularBadgeForClass(c.badge,c.per_class_json,classId);
+  if(isBriefVisibleCircular(badge)){
+   const message=badge==='POTENTIAL'?'Potenziale · nessuna notifica':badge==='NOT_RELEVANT'?'Non pertinente · nessuna notifica':'';
+   pending.push(candidate('CIRCULAR',String(c.number),c.title,message,'Apri la circolare',null,100,String(c.number),false,false,badge==='RELEVANT'));}}
  for(const p of polls.results){const result=!!p.has_results;
   pending.push(candidate('POLL',p.id,p.subject,result?'Le date delle interrogazioni sono pronte.':p.submitted?'Hai già inviato le tue preferenze. Il sondaggio è ancora aperto.':'Questo sondaggio è aperto: puoi inviare le tue preferenze.',
    result?'Vedi i risultati':p.submitted?'Apri il sondaggio':'Compila il sondaggio',result?null:p.closes_at?.slice(0,10)??null,result?97:96,`${p.created_at}|${p.result_version??''}`,false,result));}

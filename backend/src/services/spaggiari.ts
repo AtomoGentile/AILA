@@ -6,7 +6,7 @@
 import { forgetPdfFailures, markServerSummaryPlanned } from './summarizer';
 import type { CircularAttachment, Env } from '../types';
 import { notifyClass } from './fcm';
-import { circularBadgeForClass, isRelevantCircular } from './classAnalysis';
+import { circularBadgeForClass, isNotificationEligibleCircular } from './classAnalysis';
 
 interface ScrapedAttachment {
   label: string;
@@ -249,7 +249,7 @@ export async function notifySummarizedCirculars(env: Env): Promise<void> {
   const delivered = new Set(deliveries.results.map(d=>`${d.class_id}|${d.circular_number}`));
   try {
     for (const cls of classes.results) {
-      const circulars = pending.results.filter(c=>isRelevantCircular(circularBadgeForClass(c.badge,c.per_class_json,cls.id)) && !delivered.has(`${cls.id}|${c.number}`));
+      const circulars = pending.results.filter(c=>isNotificationEligibleCircular(circularBadgeForClass(c.badge,c.per_class_json,cls.id)) && !delivered.has(`${cls.id}|${c.number}`));
       if (!circulars.length) continue;
       const newest = circulars[0];
       const title = circulars.length===1 ? 'Nuova Circolare' : `${circulars.length} nuove circolari`;

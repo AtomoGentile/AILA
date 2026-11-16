@@ -106,9 +106,13 @@ export function resolveForClass(
   };
 }
 
-/** Only these classifications may produce a circular notification or Brief entry. */
-export function isRelevantCircular(badge:string):boolean {
-  return badge === 'RELEVANT' || badge === 'POTENTIAL';
+/** Only mandatory or directly relevant circulars create notifications. */
+export function isNotificationEligibleCircular(badge:string):boolean {
+  return badge === 'RELEVANT';
+}
+/** Unread AI-classified circulars stay discoverable in the Brief, including inactive ones. */
+export function isBriefVisibleCircular(badge:string):boolean {
+  return badge === 'RELEVANT' || badge === 'POTENTIAL' || badge === 'NOT_RELEVANT';
 }
 export function circularBadgeForClass(badge:string,perClassJson:string|null,classId:string):string {
   return resolveForClass({badge,summary:'',deadlines:[],perClass:parsePerClass(perClassJson)},classId).badge;
