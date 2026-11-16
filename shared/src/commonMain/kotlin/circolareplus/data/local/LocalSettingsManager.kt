@@ -789,6 +789,8 @@ class LocalSettingsManager(
  */
 @Serializable
 data class SeatMapProposalsDraft(
+    val requestedDeskSlots: List<SeatMapOptimizer.DeskSlot>? = null,
+    val retainedProposalIds: Set<String> = emptySet(),
     /** Le tre proposte, nello stesso ordine mostrato dalla schermata (prima la "MIGLIORE"). */
     val proposals: List<SeatMapProposal> = emptyList(),
     /** Modalita' richiesta per l'ultima generazione: etichetta "banchi da due/tre" in UI. */

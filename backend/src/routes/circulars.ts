@@ -6,7 +6,7 @@ import { aiPreferences } from '../services/aiRouter';
 import { Hono } from 'hono';
 import type { CircularAttachment, Env, JWTPayload } from '../types';
 import { authMiddleware, resolveClassId } from '../auth';
-import { parsePerClass, resolveForClass, circularBadgeForClass, isRelevantCircular } from '../services/classAnalysis';
+import { parsePerClass, resolveForClass, circularBadgeForClass, isNotificationEligibleCircular } from '../services/classAnalysis';
 import {
   BACKFILL_WINDOW,
   MAX_ATTEMPTS,
@@ -82,7 +82,7 @@ circulars.get('/', authMiddleware(), async (c) => {
       attachments: parseAttachments(row.attachments_json),
       createdAt: row.created_at,
       summaryReady: row.summary_ready === 1,
-      notificationEligible: row.badge!==null && isRelevantCircular(circularBadgeForClass(row.badge,row.per_class_json,classId)),
+      notificationEligible: row.badge!==null && isNotificationEligibleCircular(circularBadgeForClass(row.badge,row.per_class_json,classId)),
     })),
     total: total?.count ?? 0,
     limit,
@@ -153,7 +153,7 @@ circulars.get('/newer', authMiddleware(), async (c) => {
   ).bind(after).all<{ number: number; title: string; publish_date: string;badge:string;per_class_json:string|null }>();
 
   return c.json({
-    circulars: rows.results.filter(row=>isRelevantCircular(circularBadgeForClass(row.badge,row.per_class_json,classId))).slice(0,50).map((row) => ({
+    circulars: rows.results.filter(row=>isNotificationEligibleCircular(circularBadgeForClass(row.badge,row.per_class_json,classId))).slice(0,50).map((row) => ({
       number: row.number,
       title: row.title,
       publishDate: row.publish_date,

@@ -28,14 +28,20 @@ forum.get('/',async c=>{
 });
 forum.post('/',async c=>{
  const user=c.get('jwtPayload');const classId=await resolveClassId(c);
- const body=await c.req.json<{title?:unknown;body?:unknown;anonymous?:boolean;forumConsent?:boolean}>();
+ const body=await c.req.json<{title?:unknown;body?:unknown;anonymous?:boolean;forumConsent?:boolean;attachmentIds?:string[]}>();
  const title=clean(body.title,180);const text=clean(body.body,12000);
- if(!title||!text)return c.json({error:'Titolo (180 caratteri) e domanda (12000 caratteri) sono obbligatori'},400);
+ const attachments=Array.isArray(body.attachmentIds)?[...new Set(body.attachmentIds)]:[];
+ if(!title||(!text&&!attachments.length)||attachments.length>5)return c.json({error:'Titolo obbligatorio, testo o allegati richiesti (massimo 5 file)'},400);
  if(body.forumConsent!==true)return c.json({error:'Conferma le regole del forum e l’informativa prima di pubblicare'},403);
+ for(const id of attachments){
+  if(!await c.env.DB.prepare(`SELECT id FROM content_attachments WHERE id=? AND class_id=? AND uploaded_by=? AND thread_id IS NULL AND proposal_id IS NULL AND post_id IS NULL AND deleted_at IS NULL AND expires_at>?`)
+   .bind(id,classId,user.sub,new Date().toISOString()).first())return c.json({error:'Allegato non valido o scaduto'},400);
+ }
  await reserveForumWrite(c.env,user.sub,'FORUM_THREADS',20);
  const id=newUUID();await c.env.DB.batch([
   c.env.DB.prepare('INSERT INTO forum_threads(id,class_id,author_id,title) VALUES (?,?,?,?)').bind(id,classId,user.sub,title),
-  c.env.DB.prepare('INSERT INTO forum_posts(id,thread_id,author_id,body) VALUES (?,?,?,?)').bind(id,id,user.sub,text)
+  c.env.DB.prepare('INSERT INTO forum_posts(id,thread_id,author_id,body) VALUES (?,?,?,?)').bind(id,id,user.sub,text??''),
+  ...attachments.map(a=>c.env.DB.prepare('UPDATE content_attachments SET thread_id=?,post_id=? WHERE id=? AND uploaded_by=? AND thread_id IS NULL AND proposal_id IS NULL AND post_id IS NULL').bind(id,id,a,user.sub))
  ]);
  await joinForumThread(c.env,id,user.sub,body.anonymous===true);
  return c.json(await forumSnapshot(c.env,classId,user.sub,id),201);

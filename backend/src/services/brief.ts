@@ -1,20 +1,20 @@
 import type {Env} from '../types';
 import {noteAudienceIncludes} from './noteAudience';
 import {studyAudience} from './studyAudience';
-import {circularBadgeForClass,isRelevantCircular} from './classAnalysis';
+import {circularBadgeForClass,isBriefVisibleCircular} from './classAnalysis';
 
 export type BriefKind='EVENT'|'CIRCULAR'|'POLL'|'RANKING_POLL'|'FORUM'|'PROPOSAL'|'SEATMAP';
 export interface BriefItem {
  id:string;revision:string;kind:BriefKind;sourceId:string;title:string;message:string;
- actionLabel:string;date:string|null;canPlanStudy:boolean;isResult:boolean;
+ actionLabel:string;date:string|null;canPlanStudy:boolean;isResult:boolean;isActive:boolean;
 }
 interface Candidate extends BriefItem {priority:number;sortKey:string;}
 const short=(text:string,max=220)=>text.replace(/\s+/g,' ').trim().slice(0,max);
-async function candidate(kind:BriefKind,sourceId:string,title:string,message:string,actionLabel:string,date:string|null,priority:number,version:string,canPlanStudy=false,isResult=false):Promise<Candidate>{
- const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([kind,sourceId,title,message,actionLabel,date,version,canPlanStudy,isResult])));
+async function candidate(kind:BriefKind,sourceId:string,title:string,message:string,actionLabel:string,date:string|null,priority:number,version:string,canPlanStudy=false,isResult=false,isActive=true):Promise<Candidate>{
+ const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([kind,sourceId,title,message,actionLabel,date,version,canPlanStudy,isResult,isActive])));
  const revision=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
  const sortKey=version.match(/\d{4}-\d\d-\d\d(?:T| \d\d:\d\d:\d\d)/)?.[0]??version.match(/\d{1,10}/)?.[0]?.padStart(10,'0')??version;
- return {id:`${kind}:${sourceId}`,revision,kind,sourceId,title:short(title,240),message:short(message),actionLabel,date,canPlanStudy,isResult,priority,sortKey};
+ return {id:`${kind}:${sourceId}`,revision,kind,sourceId,title:short(title,240),message:short(message),actionLabel,date,canPlanStudy,isResult,isActive,priority,sortKey};
 }
 const group=(kind:BriefKind)=>kind==='RANKING_POLL'?'POLL':kind;
 const order=(a:Candidate,b:Candidate)=>b.priority-a.priority||b.sortKey.localeCompare(a.sortKey)||a.id.localeCompare(b.id);
@@ -30,14 +30,16 @@ export function selectBriefItems(items:Candidate[],dismissed:Set<string>,limit=N
 /** Reads existing authorized facts only: never runs a model or spends an AI quota. */
 export async function briefCandidates(env:Env,classId:string,userId:string,now=new Date()):Promise<Candidate[]>{
  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome'}).format(now);
+ const localTime=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Rome',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(now);
  const after=(days:number)=>new Date(Date.parse(`${today}T00:00:00Z`)+days*86400000).toISOString().slice(0,10);
  const timestamp=now.toISOString();
  const pollResults=`(EXISTS(SELECT 1 FROM interrogation_calculations r WHERE r.grid_id=g.id) OR EXISTS(
    SELECT 1 FROM interrogation_assignments a JOIN interrogation_slots s ON s.id=a.slot_id WHERE s.grid_id=g.id))`;
  const [events,circulars,polls,rankings,replies,proposals,roster,seatmaps,seatPreferences]=await Promise.all([
-  env.DB.prepare(`SELECT e.id,e.title,e.event_date,e.category,e.notes,e.poll_grid_id,e.visible_to_user_ids_json FROM calendar_events e WHERE e.class_id=? AND e.event_date BETWEEN ? AND ?
+  env.DB.prepare(`SELECT e.id,e.title,e.event_date,e.category,e.notes,e.poll_grid_id,e.visible_to_user_ids_json FROM calendar_events e WHERE e.class_id=? AND date(e.event_date) BETWEEN ? AND ?
+   AND (date(e.event_date)>? OR e.start_time IS NULL OR time(e.start_time)>=time(?))
    AND ${studyAudience('e',false)} AND NOT EXISTS(SELECT 1 FROM aca_nudge_dismissals d WHERE d.user_id=? AND d.event_id=e.id AND d.event_date=e.event_date)
-   ORDER BY e.event_date,e.id`).bind(classId,today,after(7),userId,userId,userId,userId).all<{id:string;title:string;event_date:string;category:string;notes:string|null;poll_grid_id:string|null;visible_to_user_ids_json:string|null}>(),
+   ORDER BY e.event_date,e.id`).bind(classId,today,after(7),today,localTime,userId,userId,userId,userId).all<{id:string;title:string;event_date:string;category:string;notes:string|null;poll_grid_id:string|null;visible_to_user_ids_json:string|null}>(),
   env.DB.prepare(`SELECT c.number,c.title,c.publish_date,a.badge,a.per_class_json FROM circulars c
    JOIN circular_ai_analysis a ON a.circular_number=c.number WHERE a.is_fallback=0 AND a.tier>0
    AND NOT EXISTS(SELECT 1 FROM aca_brief_circular_reads seen WHERE seen.user_id=? AND seen.class_id=? AND seen.circular_number=c.number)
@@ -77,8 +79,10 @@ export async function briefCandidates(env:Env,classId:string,userId:string,now=n
   const days=Math.round((Date.parse(e.event_date)-Date.parse(today))/86400000);
   pending.push(candidate('EVENT',e.id,e.title,days===0?'È un tuo impegno di oggi.':days===1?'È un tuo impegno di domani.':`È un tuo impegno tra ${days} giorni.`,'Apri il calendario',e.event_date,120-days*10,e.event_date,['VERIFICA','INTERROGAZIONE'].includes(e.category)));}
  for(const c of circulars.results){
-  if(isRelevantCircular(circularBadgeForClass(c.badge,c.per_class_json,classId)))
-   pending.push(candidate('CIRCULAR',String(c.number),c.title,'','',null,100,String(c.number)));}
+  const badge=circularBadgeForClass(c.badge,c.per_class_json,classId);
+  if(isBriefVisibleCircular(badge)){
+   const message=badge==='POTENTIAL'?'Potenziale · nessuna notifica':badge==='NOT_RELEVANT'?'Non pertinente · nessuna notifica':'';
+   pending.push(candidate('CIRCULAR',String(c.number),c.title,message,'Apri la circolare',null,100,String(c.number),false,false,badge==='RELEVANT'));}}
  for(const p of polls.results){const result=!!p.has_results;
   pending.push(candidate('POLL',p.id,p.subject,result?'Le date delle interrogazioni sono pronte.':p.submitted?'Hai già inviato le tue preferenze. Il sondaggio è ancora aperto.':'Questo sondaggio è aperto: puoi inviare le tue preferenze.',
    result?'Vedi i risultati':p.submitted?'Apri il sondaggio':'Compila il sondaggio',result?null:p.closes_at?.slice(0,10)??null,result?97:96,`${p.created_at}|${p.result_version??''}`,false,result));}

@@ -61,6 +61,8 @@ internal fun ForumEmptyState(title: String = "La prima domanda può essere la tu
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ForumNewQuestionSheet(title: String, question: String, anonymous: Boolean, accepted: Boolean, busy: Boolean, error: String?,
+    attachments: List<circolareplus.data.remote.dto.ContentAttachmentDto>, onPickAttachment: () -> Unit,
+    onRemoveAttachment: (circolareplus.data.remote.dto.ContentAttachmentDto) -> Unit,
     onTitle: (String) -> Unit, onQuestion: (String) -> Unit, onAnonymous: (Boolean) -> Unit, onAccepted: (Boolean) -> Unit,
     onRules: () -> Unit, onClose: () -> Unit, onPublish: () -> Unit) {
     AilaBottomSheet(onDismissRequest = { if(!busy) onClose() }) {
@@ -84,6 +86,13 @@ internal fun ForumNewQuestionSheet(title: String, question: String, anonymous: B
                 }
                 Text(if(anonymous) "Alla classe apparirai come OP. L’identità scelta resterà fissa in questa discussione." else "La classe vedrà il tuo nome. L’identità scelta resterà fissa in questa discussione.",style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
             }
+            OutlinedButton(onClick=onPickAttachment,enabled=!busy&&attachments.size<5,modifier=Modifier.fillMaxWidth()) { Text(if(attachments.isEmpty())"Aggiungi allegati" else "Aggiungi allegati (${attachments.size}/5)") }
+            attachments.forEach { item ->
+                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                    Text(item.fileName,Modifier.weight(1f),style=MaterialTheme.typography.bodySmall,color=AppTheme.TextDark,maxLines=1)
+                    TextButton(onClick={onRemoveAttachment(item)},enabled=!busy){Text("Rimuovi")}
+                }
+            }
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(0.dp)) {
                 Row(
                     Modifier.fillMaxWidth().heightIn(min = 48.dp)
@@ -103,9 +112,9 @@ internal fun ForumNewQuestionSheet(title: String, question: String, anonymous: B
                 }
             }
             error?.let { Text(it,color=AppTheme.TintRedInk,style=MaterialTheme.typography.bodySmall) }
-            Button(onClick=onPublish,enabled=!busy&&accepted&&title.trim().length in 1..180&&question.trim().length in 1..12000,
+            Button(onClick=onPublish,enabled=!busy&&accepted&&title.trim().length in 1..180&&(question.trim().length in 1..12000||attachments.isNotEmpty()),
                 modifier=Modifier.fillMaxWidth().then(if (AppTheme.isGlass) Modifier.ailaGlassSurface(RoundedCornerShape(20.dp),
-                    tint = if (!busy && accepted && title.trim().length in 1..180 && question.trim().length in 1..12000)
+                    tint = if (!busy && accepted && title.trim().length in 1..180 && (question.trim().length in 1..12000||attachments.isNotEmpty()))
                         AppTheme.PrimaryBlue.copy(alpha = .18f) else null) else Modifier),
                 colors = if (AppTheme.isGlass) ButtonDefaults.buttonColors(containerColor = Color.Transparent,
                     contentColor = AppTheme.PrimaryBlue, disabledContainerColor = Color.Transparent,

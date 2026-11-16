@@ -56,6 +56,7 @@ fun ForumScreen(
  var reportReason by remember{mutableStateOf("")};var reports by remember{mutableStateOf<List<ForumReportDto>?>(null)}
  var summary by remember{mutableStateOf<AcaAiResultDto?>(null)};var consentRequest by remember{mutableStateOf<ForumAiRequestDto?>(null)}
  var pendingAttachments by remember{mutableStateOf<List<ContentAttachmentDto>>(emptyList())};var recording by remember{mutableStateOf(false)}
+ var createAttachments by remember{mutableStateOf<List<ContentAttachmentDto>>(emptyList())}
  suspend fun refresh(older:Boolean=false){
   val id=threadId
   if(id==null){val result=repo.list(filter=threadFilter);if(result.threads!=threads)threads=result.threads;moreThreads=result.hasMore;return}
@@ -89,9 +90,18 @@ fun ForumScreen(
    finally{automaticPhase=null}
   }
  }
- val addFile:(IncomingContent)->Unit={file->if(threadId!=null&&pendingAttachments.size<5)launchWork{
-  activity(AssistantAgentPhase.READING);pendingAttachments=pendingAttachments+AppContainer.acaRepository.upload(file,threadId,persistLocal=false)
- }else error="Apri una discussione e allega al massimo 5 file per risposta."}
+ val addFile:(IncomingContent)->Unit={file->when{
+  creating&&createAttachments.size<5->launchWork{activity(AssistantAgentPhase.READING);createAttachments=createAttachments+AppContainer.acaRepository.upload(file,persistLocal=false)}
+  creating->error="Puoi allegare al massimo 5 file alla domanda."
+  threadId!=null&&pendingAttachments.size<5->launchWork{activity(AssistantAgentPhase.READING);pendingAttachments=pendingAttachments+AppContainer.acaRepository.upload(file,threadId,persistLocal=false)}
+  else->error="Apri una discussione e allega al massimo 5 file per risposta."
+ }}
+ val closeCreation:(()->Unit)={if(!busy){
+  creating=false
+  val abandoned=createAttachments
+  createAttachments=emptyList()
+  scope.launch{abandoned.forEach{item->try{AppContainer.acaRepository.removeAttachment(item.id)}catch(_:Exception){}}}
+ }}
  val pickFile=rememberContentPicker({error=it},addFile)
  val recorder=rememberVoiceRecorder({recording=it},{error=it},addFile)
  fun askAi(request:ForumAiRequestDto){launchWork{
@@ -247,9 +257,10 @@ fun ForumScreen(
  }
  if(creating) ForumNewQuestionSheet(
   title=createTitle,question=createBody,anonymous=anonymous,accepted=rulesAccepted,busy=busy,error=error,
+  attachments=createAttachments,onPickAttachment=pickFile,onRemoveAttachment={item->createAttachments=createAttachments.filterNot{it.id==item.id};scope.launch{try{AppContainer.acaRepository.removeAttachment(item.id)}catch(_:Exception){}}},
   onTitle={createTitle=it},onQuestion={createBody=it},onAnonymous={anonymous=it},onAccepted={rulesAccepted=it},
-  onRules={showRules=true},onClose={if(!busy)creating=false},onPublish={launchWork{
-   val created=repo.create(createTitle,createBody,anonymous);creating=false;createTitle="";createBody="";threadId=created.thread.id
+  onRules={showRules=true},onClose=closeCreation,onPublish={launchWork{
+   val created=repo.create(createTitle,createBody,anonymous,createAttachments.map{it.id});creating=false;createTitle="";createBody="";createAttachments=emptyList();threadId=created.thread.id
   }})
  if(showRules)AlertDialog(onDismissRequest={showRules=false},title={Text("Revisione tra pere")},text={Column(Modifier.verticalScroll(rememberScrollState())){
   Text("Le discussioni sono visibili alla tua classe e restano disponibili nel tempo. Scegli nome reale o pseudonimo al primo intervento: l’identità resta fissa in quella discussione. Non pubblicare dati personali o contenuti offensivi. Puoi segnalare gli abusi; i moderatori possono rimuovere i contenuti.")
@@ -292,7 +303,7 @@ fun ForumScreen(
   }}){Text("Consenti e continua")}},dismissButton={TextButton(onClick={consentRequest=null}){Text("Annulla")}})}
 }
 
-@Composable private fun LocalForumAttachment(item:ContentAttachmentDto,enabled:Boolean,onOpen:()->Unit){
+@Composable internal fun LocalForumAttachment(item:ContentAttachmentDto,enabled:Boolean,onOpen:()->Unit){
  val revision=AppContainer.localContents.revision
  var local by remember(item.id){mutableStateOf<circolareplus.data.repository.LocalContentEntry?>(null)}
  LaunchedEffect(item.id,revision){try{local=AppContainer.localContents.findByRemote(item.id)}catch(e:CancellationException){throw e}catch(_:Exception){}}

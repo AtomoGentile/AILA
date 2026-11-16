@@ -148,6 +148,7 @@ data class Proposal(
     val identityRevealed: Boolean = false,
     /** Stato dell'ultima richiesta di svelamento (PENDING/APPROVED/REJECTED), solo per chi la gestisce. */
     val unlockRequestStatus: String? = null,
+    val attachments: List<circolareplus.data.remote.dto.ContentAttachmentDto> = emptyList(),
     val createdAt: String
 )
 

@@ -18,7 +18,8 @@ import kotlinx.serialization.Serializable
 @Serializable enum class AilaBriefKind { EVENT, CIRCULAR, POLL, RANKING_POLL, FORUM, PROPOSAL, SEATMAP }
 @Serializable data class AilaBriefItemDto(
  val id:String,val revision:String,val kind:AilaBriefKind,val sourceId:String,val title:String,
- val message:String,val actionLabel:String,val date:String?=null,val canPlanStudy:Boolean=false,val isResult:Boolean=false
+ val message:String,val actionLabel:String,val date:String?=null,val canPlanStudy:Boolean=false,val isResult:Boolean=false,
+ val isActive:Boolean=true
 )
 @Serializable data class AilaBriefResponseDto(val items:List<AilaBriefItemDto> = emptyList())
 @Serializable data class AilaBriefDismissDto(val revision:String,val seen:Boolean=false)
@@ -39,7 +40,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class ForumSnapshotDto(val thread:ForumThreadDto,val participants:List<ForumParticipantDto> = emptyList(),
  val posts:List<ForumPostDto> = emptyList(),val hasMore:Boolean=false,val nextBefore:String?=null,val notificationMode:String="REPLIES",val myIdentity:ForumParticipantDto?=null)
 @Serializable data class ForumWriteDto(val id:String,val invokePerabot:Boolean=false)
-@Serializable data class ForumCreateRequestDto(val title:String,val body:String,val anonymous:Boolean,val forumConsent:Boolean)
+@Serializable data class ForumCreateRequestDto(val title:String,val body:String,val anonymous:Boolean,val forumConsent:Boolean,val attachmentIds:List<String> = emptyList())
 @Serializable data class ForumReplyRequestDto(val body:String,val anonymous:Boolean,val parentId:String?=null,val mentions:List<String> = emptyList(),
  val attachmentIds:List<String> = emptyList(),val forumConsent:Boolean)
 @Serializable data class ForumStateRequestDto(val resolved:Boolean,val featuredPostId:String?)
