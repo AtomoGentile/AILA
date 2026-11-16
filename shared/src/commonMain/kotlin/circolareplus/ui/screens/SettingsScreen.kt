@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 21900)
-Total output lines: 1459
-
 package circolareplus.ui.screens
 
 import androidx.compose.material3.AlertDialog
@@ -490,7 +487,424 @@ fun SettingsScreen(
                                 )
                             }
                         )
-                        HorizontalDivider(color = AppTheme.Hairline, modifier = Modifier.padding(sta…6900 tokens truncated…nloadTotalBytes
+                        HorizontalDivider(color = AppTheme.Hairline, modifier = Modifier.padding(start = 72.dp))
+                        AilaListRow(
+                            title = "Notifiche di sistema",
+                            subtitle = "Mostra notifiche nel pannello del dispositivo",
+                            tint = AppTheme.TintBlue,
+                            icon = { AppIcons.Bell(modifier = Modifier.size(19.dp), color = AppTheme.TintBlueInk) },
+                            trailing = {
+                                AilaSwitch(
+                                    checked = systemNotificationsEnabled,
+                                    onCheckedChange = { onToggleSystemNotifications(it) }
+                                )
+                            }
+                        )
+                    }
+            
+                }
+            }
+            if (isRepresentative) add {
+                Column {
+                    AilaSectionTitle(text = "Mappa posti", modifier = Modifier.ailaAppear(3))
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    AilaCard {
+                        AilaListRow(
+                            title = "Gestione fantocci",
+                            subtitle = "Mostra il menu per aggiungere o rimuovere fantocci nella Mappa Posti",
+                            tint = AppTheme.TintBlue,
+                            icon = { AppIcons.People(modifier = Modifier.size(19.dp), color = AppTheme.TintBlueInk) },
+                            trailing = {
+                                AilaSwitch(
+                                    checked = seatMapDummiesMenuEnabled,
+                                    onCheckedChange = onSeatMapDummiesMenuChange
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+            }
+            if(aiOnly){
+            add { AiPreferencesControls() }
+            // Il provider va scelto sempre qui, anche su dispositivi senza AI locale: prima
+            // la scelta compariva solo nel riquadro AI locale (o in fondo alla schermata PWA).
+            add {
+                Column {
+                    AilaSectionTitle(text = "Provider AI", modifier = Modifier.ailaAppear(4))
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    AilaCard(modifier = Modifier.ailaAppear(5)) {
+                        Column(modifier = Modifier.padding(AppTheme.Space16)) {
+                            val localCanBeSelected = showLocalAiSection && localAiUnavailableReason == null
+                            val providerLabels = buildList {
+                                add("AILA")
+                                add("API")
+                                if (localCanBeSelected) add("Locale")
+                            }
+                            AilaSegmentedTabs(
+                                labels = providerLabels,
+                                selectedIndex = when (selectedAiProvider) {
+                                    "GOOGLE_AI_STUDIO", "COMPATIBLE_API" -> 1
+                                    "ON_DEVICE" -> if (localCanBeSelected) 2 else 0
+                                    else -> 0
+                                },
+                                onSelect = { index ->
+                                    selectedAiProvider = when (index) {
+                                        1 -> if (compatibleFormat == "GOOGLE") "GOOGLE_AI_STUDIO" else "COMPATIBLE_API"
+                                        2 -> "ON_DEVICE"
+                                        else -> "AILA_CLOUD"
+                                    }
+                                    onAiProviderChange(selectedAiProvider)
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            Text(
+                                text = when (selectedAiProvider) {
+                                    "AILA_CLOUD" -> "AILA è incluso: la chat usa il servizio dell'app, senza chiave personale."
+                                    "COMPATIBLE_API" -> "Configura formato, endpoint, modello e chiave nella sezione Chiavi AI."
+                                    "ON_DEVICE" -> "L'AI locale gira su questo dispositivo."
+                                    else -> "Google AI usa la chiave personale qui sotto."
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Normal,
+                                color = AppTheme.TextMuted
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Una sola sezione "API" con selettore a tre opzioni (OpenAI, Anthropic, Google)
+            add {
+                Column {
+                    AilaSectionTitle(text = "API", modifier = Modifier.ailaAppear(4))
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    AilaCard(modifier = Modifier.ailaAppear(5)) {
+                        Column(modifier = Modifier.padding(AppTheme.Space16)) {
+                            Text(
+                                text = "Scegli il formato del tuo servizio. La chiave e le richieste restano su questo dispositivo.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppTheme.TextMuted
+                            )
+                            Spacer(modifier = Modifier.height(AppTheme.Space12))
+                            Text("Formato API", style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
+                            Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            val apiFormats = listOf("OpenAI", "Anthropic", "Google")
+                            val selectedFormatIndex = when (compatibleFormat) {
+                                "ANTHROPIC" -> 1
+                                "GOOGLE" -> 2
+                                else -> 0
+                            }
+                            AilaSegmentedTabs(
+                                labels = apiFormats,
+                                selectedIndex = selectedFormatIndex,
+                                onSelect = { index ->
+                                    compatibleFormat = when (index) {
+                                        1 -> "ANTHROPIC"
+                                        2 -> "GOOGLE"
+                                        else -> "OPENAI"
+                                    }
+                                    compatibleStatus = null
+                                    onCompatibleAiFormatChange(compatibleFormat)
+                                    onAiProviderChange(if (compatibleFormat == "GOOGLE") "GOOGLE_AI_STUDIO" else "COMPATIBLE_API")
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(AppTheme.Space12))
+                            val endpointPlaceholder = when (compatibleFormat) {
+                                "ANTHROPIC" -> "https://api.anthropic.com/v1"
+                                "GOOGLE" -> "https://generativelanguage.googleapis.com"
+                                else -> "https://api.openai.com/v1"
+                            }
+                            if (compatibleFormat != "GOOGLE") {
+                                OutlinedTextField(
+                                    value = compatibleBaseUrl,
+                                    onValueChange = { compatibleBaseUrl = it; compatibleStatus = null },
+                                    label = { Text("Endpoint base") },
+                                    placeholder = { Text(endpointPlaceholder) },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
+                                    shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
+                                    colors = ailaFieldColors(),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            } else {
+                                Text(
+                                    "Google AI Studio usa solo la chiave personale, senza endpoint o modello.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = AppTheme.TextMuted
+                                )
+                                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            }
+                            val modelPlaceholder = when (compatibleFormat) {
+                                "ANTHROPIC" -> "claude-3-5-sonnet-20241022"
+                                "GOOGLE" -> "gemini-4-hydrogen"
+                                else -> "gpt-4o-mini"
+                            }
+                            if (compatibleFormat != "GOOGLE") {
+                                OutlinedTextField(
+                                    value = compatibleModel,
+                                    onValueChange = { compatibleModel = it; compatibleStatus = null },
+                                    label = { Text("Modello") },
+                                    placeholder = { Text(modelPlaceholder) },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
+                                    shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
+                                    colors = ailaFieldColors(),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                            }
+                            var isApiKeyVisible by remember { mutableStateOf(false) }
+                            OutlinedTextField(
+                                value = compatibleApiKey,
+                                onValueChange = { compatibleApiKey = it; compatibleStatus = null },
+                                label = { Text("Chiave API") },
+                                singleLine = true,
+                                visualTransformation = if (isApiKeyVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                                trailingIcon = {
+                                    val iconLabel = if (isApiKeyVisible) "Nascondi chiave" else "Mostra chiave"
+                                    AilaIconButton(
+                                        contentDescription = iconLabel,
+                                        onClick = { isApiKeyVisible = !isApiKeyVisible }
+                                    ) { tint ->
+                                        if (isApiKeyVisible) AppIcons.EyeOff(modifier = Modifier.size(19.dp), color = tint)
+                                        else AppIcons.Eye(modifier = Modifier.size(19.dp), color = tint)
+                                    }
+                                },
+                                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
+                                shape = RoundedCornerShape(AppTheme.SmallElementRadius + 2.dp),
+                                colors = ailaFieldColors(),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            compatibleStatus?.let {
+                                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                                Text(it, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+                            }
+                            Spacer(modifier = Modifier.height(AppTheme.Space12))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                AilaSecondaryButton(
+                                    text = if (isTestingCompatible) "Provo…" else "Prova",
+                                    onClick = {
+                                        if (!isTestingCompatible) {
+                                            isTestingCompatible = true
+                                            scope.launch {
+                                                compatibleStatus = onTestCompatibleAi(
+                                                    compatibleFormat, compatibleBaseUrl.trim(),
+                                                    compatibleModel.trim(), compatibleApiKey.trim()
+                                                )
+                                                isTestingCompatible = false
+                                            }
+                                        }
+                                    }
+                                )
+                                Spacer(modifier = Modifier.weight(1f))
+                                AilaPrimaryButton(
+                                    text = "Salva",
+                                    onClick = {
+                                        onSaveCompatibleAiSettings(
+                                            compatibleFormat,
+                                            compatibleBaseUrl.trim(),
+                                            compatibleModel.trim(),
+                                            compatibleApiKey.trim()
+                                        )
+                                        if (compatibleFormat == "GOOGLE") {
+                                            onSaveApiKey(compatibleApiKey.trim())
+                                        }
+                                        compatibleStatus = "Configurazione salvata su questo dispositivo."
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            // --- AI locale sul telefono -------------------------------------------------
+            // Nascosta dove non potrà mai funzionare (iPhone con iOS < 26 o non idoneo).
+            if (showLocalAiSection) add {
+                Column {
+                    AilaSectionTitle(text = "AI locale (sul telefono)", modifier = Modifier.ailaAppear(6))
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    AilaCard(modifier = Modifier.ailaAppear(7)) {
+                        Column(modifier = Modifier.padding(AppTheme.Space16)) {
+                            if (localAiUnavailableReason != null) {
+                                // Su iPhone (e sugli emulatori non ARM) non c'è motore di inferenza:
+                                // si dice perché, invece di mostrare un pulsante che non farebbe nulla.
+                                Text(
+                                    text = "Non disponibile su questo dispositivo",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = AppTheme.TextDark
+                                )
+                                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                                Text(
+                                    text = localAiUnavailableReason,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = AppTheme.TextMuted
+                                )
+                            } else {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("Usa l'AI sul dispositivo", style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
+                                        Text(
+                                            "Consente l'AI locale come provider o come ripiego.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = AppTheme.TextMuted
+                                        )
+                                    }
+                                    AilaSwitch(checked = localAiEnabled, onCheckedChange = onLocalAiEnabledChange)
+                                }
+                                Spacer(modifier = Modifier.height(AppTheme.Space12))
+                                if (selectedAiProvider == "AILA_CLOUD") {
+                                    Text(
+                                        text = "La chat di AILA Assistant gira sul servizio incluso " +
+                                            "dell'app (Gemma 4 26B A4B via il Worker di AILA): nessuna " +
+                                            "chiave da configurare. La quota giornaliera la conta " +
+                                            "Cloudflare e si rinnova a mezzanotte UTC; finita la " +
+                                            "quota, la chat prova in automatico con la chiave qui " +
+                                            "sotto o con l'AI locale.",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Normal,
+                                        color = AppTheme.TextMuted
+                                    )
+                                    Spacer(modifier = Modifier.height(AppTheme.Space4))
+                                }
+                                if (selectedAiProvider == "ON_DEVICE") {
+                                    Text(
+                                        text = "L'AI sul telefono e' in beta: su molti telefoni e' " +
+                                            "lenta. I riassunti delle circolari arrivano comunque " +
+                                            "dal server appena pronti e fermano l'analisi sul telefono.",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Normal,
+                                        color = AppTheme.TextMuted
+                                    )
+                                    Spacer(modifier = Modifier.height(AppTheme.Space4))
+                                }
+                                Text(
+                                    text = if (localAiEnabled) "Se il provider principale non risponde, l'app può provare con l'AI locale."
+                                        else "L'AI locale è disattivata; l'app userà solo provider cloud.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Normal,
+                                    color = AppTheme.TextFaint
+                                )
+
+                                Spacer(modifier = Modifier.height(AppTheme.Space16))
+                                HorizontalDivider(color = AppTheme.Hairline)
+                                Spacer(modifier = Modifier.height(AppTheme.Space16))
+
+                                Text(
+                                    text = "Modello",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = AppTheme.TextDark
+                                )
+                                // Memoria e fascia servono a scegliere fra modelli da scaricare: con
+                                // i soli modelli di sistema (oggi iOS, solo Apple Intelligence) la riga
+                                // non dice nulla di utile. Ricompare da sola quando MLX tornera' nel
+                                // catalogo iOS (LocalAiModels.ios.kt).
+                                if (localModels.any { !it.isSystemModel }) {
+                                    Spacer(modifier = Modifier.height(AppTheme.Space4))
+                                    Text(
+                                        text = if (deviceRamMb > 0) {
+                                            "Memoria rilevata: ${formatRam(deviceRamMb)} — fascia " +
+                                                deviceTierForRam(deviceRamMb).label
+                                        } else {
+                                            "Memoria del dispositivo non rilevata."
+                                        },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Normal,
+                                        color = AppTheme.TextFaint
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(AppTheme.Space12))
+
+                                // Stesso elenco su entrambe le piattaforme. Su iOS il catalogo contiene solo
+                                // Apple Intelligence (modello di sistema, nessun download), su Android i modelli
+                                // scaricabili piu' AICore: la UI non deve distinguere, lo fa il catalogo.
+                                // --- Android: elenco di modelli scaricabili ---
+                                // Solo il modello scelto, con la possibilità di aprire l'elenco
+                                // completo: mostrare cinque schede tutte insieme renderebbe la
+                                // pagina illeggibile, e nella pratica si sceglie una volta sola.
+                                modelsRevision // rilegge lo stato su disco dopo download/eliminazione
+                                androidx.compose.animation.AnimatedContent(
+                                    targetState = showAllModels,
+                                    transitionSpec = {
+                                        (androidx.compose.animation.fadeIn(circolareplus.design.ailaFadeSpec(220)) +
+                                            androidx.compose.animation.expandVertically(circolareplus.design.ailaNavigationSpring()) +
+                                            androidx.compose.animation.slideInVertically(circolareplus.design.ailaMoveSpec(220)) { it / 5 }) togetherWith
+                                            (androidx.compose.animation.fadeOut(circolareplus.design.ailaFadeSpec(120)) +
+                                                androidx.compose.animation.shrinkVertically(circolareplus.design.ailaNavigationSpring()) +
+                                                androidx.compose.animation.slideOutVertically(circolareplus.design.ailaMoveSpec(160)) { -it / 6 }) using
+                                            androidx.compose.animation.SizeTransform(clip = false)
+                                    },
+                                    label = "localModelList"
+                                ) { expanded ->
+                                    Column {
+                                        (if (expanded) localModels else listOfNotNull(activeModel)).forEach { model ->
+                                            LocalModelRow(
+                                                model = model,
+                                                isSelected = model.id == activeModel?.id,
+                                                isInstalled = isInstalledCached(model),
+                                                isRecommended = model.id == localModels.firstOrNull()?.id,
+                                                fits = model.fitsComfortablyIn(deviceRamMb),
+                                                supportsActions = model.supportsActions,
+                                                onClick = {
+                                                    if (model.id != activeModel?.id) {
+                                                        selectedModelIdState = model.id
+                                                        onSelectLocalModel(model)
+                                                        downloadStatus = null
+                                                        downloadedBytes = 0L
+                                                        downloadTotalBytes = 0L
+                                                    }
+                                                    showAllModels = false
+                                                }
+                                            )
+                                            Spacer(modifier = Modifier.height(AppTheme.Space8))
+                                        }
+                                    }
+                                }
+
+                                if (orphanModelBytes > 0 && !orphansCleared) {
+                                    Spacer(modifier = Modifier.height(AppTheme.Space8))
+                                    Text(
+                                        text = "Ci sono ${formatBytes(orphanModelBytes)} di modelli " +
+                                            "non piu' usati. Libera spazio",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = AppTheme.TintRedInk,
+                                        modifier = Modifier
+                                            .clickable {
+                                                val freed = onDeleteOrphanModels()
+                                                orphansCleared = true
+                                                downloadStatus = "Liberati ${formatBytes(freed)}."
+                                            }
+                                            .ailaTextTouchTarget()
+                                    )
+                                }
+
+                                if (localModels.size > 1) {
+                                    Text(
+                                        text = if (showAllModels) "Chiudi l'elenco" else "Scegli un altro modello",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = AppTheme.PrimaryBlue,
+                                        modifier = Modifier
+                                            .clickable { showAllModels = !showAllModels }
+                                            .ailaTextTouchTarget()
+                                    )
+                                }
+
+                                if (isDownloading) {
+                                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                                    DownloadProgressBar(
+                                        downloadedBytes = downloadedBytes,
+                                        totalBytes = downloadTotalBytes
                                     )
                                 }
 
