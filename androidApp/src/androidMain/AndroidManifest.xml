@@ -6,7 +6,7 @@
          override il manifest merger rifiuterebbe la build. E' sicuro perche' AiCoreEngine esce
          subito sotto API 31, prima di toccare qualunque classe di ML Kit: sui telefoni piu'
          vecchi il tier AICore resta semplicemente "non disponibile". -->
-    <uses-sdk tools:overrideLibrary="com.google.mlkit.genai.prompt,com.google.mlkit.genai.common" />
+    <uses-sdk tools:overrideLibrary="com.google.mlkit.genai.prompt,com.google.mlkit.genai.common,com.nothing.thirdparty" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="com.nothing.ketchum.permission.ENABLE" />
     <queries><package android:name="com.nothing.thirdparty" /></queries>

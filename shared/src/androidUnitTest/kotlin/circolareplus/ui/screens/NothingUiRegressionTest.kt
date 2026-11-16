@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -89,7 +90,7 @@ class NothingUiRegressionTest {
             android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
         activity.get().setContent {
             AilaTheme {
-                Column(Modifier.fillMaxSize()) {
+                Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
                     AilaScreenHeader("Calendario", "Le scadenze della classe")
                     Column(Modifier.padding(20.dp)) {
                         NothingGlyphWidget()
