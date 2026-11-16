@@ -47,7 +47,8 @@ fun SeatMapDeskCard(
     studentsMap: Map<String, User>,
     showThirdSeat: Boolean,
     modifier: Modifier = Modifier,
-    focusedStudentId: String? = null
+    focusedStudentId: String? = null,
+    showSeatNumbers: Boolean = true
 ) {
     val seatIds = if (showThirdSeat) {
         listOf(desk.studentAId, desk.studentBId, desk.studentCId)
@@ -148,7 +149,9 @@ fun SeatMapDeskCard(
                 SeatRow(
                     number = index + 1,
                     name = studentId?.let { studentsMap[it]?.firstName },
-                    isFocused = studentId != null && studentId == focusedStudentId
+                    surname = studentId?.let { studentsMap[it]?.lastName },
+                    isFocused = studentId != null && studentId == focusedStudentId,
+                    showNumber = showSeatNumbers
                 )
             }
         }
@@ -156,12 +159,12 @@ fun SeatMapDeskCard(
 }
 
 @Composable
-private fun SeatRow(number: Int, name: String?, isFocused: Boolean) {
+private fun SeatRow(number: Int, name: String?, isFocused: Boolean, showNumber: Boolean = true, surname: String? = null) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         // Almeno 15dp e non fisso: col testo di sistema ingrandito il numero usciva dal cerchio.
         // Material: numero del posto in un cerchio primario pieno (vuoto = solo contorno).
         val expressive = !AppTheme.isGlass
-        Box(
+        if (showNumber) Box(
             modifier = Modifier
                 .sizeIn(minWidth = if (expressive) 17.dp else 15.dp, minHeight = if (expressive) 17.dp else 15.dp)
                 .clip(CircleShape)
@@ -186,14 +189,23 @@ private fun SeatRow(number: Int, name: String?, isFocused: Boolean) {
                 }
             )
         }
-        Spacer(modifier = Modifier.width(5.dp))
-        Text(
-            text = name ?: "Vuoto",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Normal,
-            color = if (name == null) AppTheme.TextFaint else AppTheme.TextDark,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        if (showNumber) Spacer(modifier = Modifier.width(5.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = name ?: "Vuoto",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Normal,
+                color = if (name == null) AppTheme.TextFaint else AppTheme.TextDark,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (!surname.isNullOrBlank()) Text(
+                text = surname,
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTheme.TextMuted,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }

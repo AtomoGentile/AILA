@@ -13,6 +13,7 @@ import circolareplus.data.remote.dto.CreateSeatMapDummyRequestDto
 import circolareplus.data.remote.dto.CreatedSeatMapDummyResponseDto
 import circolareplus.data.remote.dto.toDomain
 import circolareplus.domain.model.*
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,6 +27,10 @@ import kotlinx.serialization.json.decodeFromJsonElement
  * di verità condivisa da tutta la classe.
  */
 class SeatMapRepository(private val api: ApiClient? = null) {
+    companion object {
+        const val GENERATION_SEARCH_COUNT = 2000
+    }
+
 
     private val _isPreferencesWindowOpen = MutableStateFlow(false)
     val isPreferencesWindowOpen: StateFlow<Boolean> = _isPreferencesWindowOpen.asStateFlow()
@@ -82,6 +87,10 @@ class SeatMapRepository(private val api: ApiClient? = null) {
 
     /** Solo Rappresentante: pubblica la disposizione scelta e la aggiunge allo storico condiviso. */
     suspend fun publish(assignments: List<DeskAssignment>): SuccessDto {
+        val latestHistory = getHistoryForOptimizer()
+        require(SeatMapOptimizer.recentCompanionViolations(assignments, latestHistory).isEmpty()) {
+            "Alcuni compagni sono già stati insieme negli ultimi tre mesi. Separa queste coppie prima di pubblicare."
+        }
         val layoutJson = apiJson.encodeToString(assignments)
         val layoutElement = apiJson.parseToJsonElement(layoutJson)
         return requireApi().post("/api/seat-map/publish", PublishSeatMapRequestDto(layoutElement))
@@ -140,11 +149,11 @@ class SeatMapRepository(private val api: ApiClient? = null) {
         requireApi().delete("/api/seat-map/dummies/$id")
 
     /**
-     * Genera le 3 proposte d'aula eseguendo l'ottimizzatore a ricerca locale (hill-climbing con
-     * accettazione probabilistica, vincolo hard sulle coppie -2/-2) con 3 seed distinti, per dare
-     * varietà al Rappresentante pur partendo da punti di partenza diversi.
+     * Genera fino a 3 proposte d'aula eseguendo l'ottimizzatore a ricerca locale (hill-climbing con
+     * accettazione probabilistica, vincolo hard sulle coppie -2/-2) con 2000 seed distinti, selezionando i risultati migliori entro il 5%
+     * del punteggio complessivo massimo trovato.
      */
-    fun generateThreeProposals(
+    suspend fun generateThreeProposals(
         students: List<User>,
         profiles: Map<String, StudentProfile>,
         ratings: Map<String, RepresentativeRating>,
@@ -157,7 +166,11 @@ class SeatMapRepository(private val api: ApiClient? = null) {
         disciplinePairs: Set<Pair<String, String>> = emptySet(),
         // Posti di ogni fila (da davanti a dietro), es. [7, 8, 7]. Vuoto = disposizione automatica.
         rowSeats: List<Int> = emptyList(),
-        customDeskSlots: List<SeatMapOptimizer.DeskSlot>? = null
+        customDeskSlots: List<SeatMapOptimizer.DeskSlot>? = null,
+        onProgress: suspend (completed: Int, total: Int) -> Unit = { _, _ -> },
+        previousProposals: List<SeatMapProposal> = emptyList(),
+        onBest: suspend (SeatMapProposal) -> Unit = {},
+        shouldStop: () -> Boolean = { false }
     ): List<SeatMapProposal> {
         val slots = customDeskSlots?.filter { it.seats > 0 }
             ?: if (rowSeats.isEmpty()) null else SeatMapOptimizer.buildDeskSlots(rowSeats, seatsPerDesk, students.size)
@@ -165,9 +178,40 @@ class SeatMapRepository(private val api: ApiClient? = null) {
         val isSmallClass = students.size < 22
         val baseSeed = kotlin.random.Random.nextLong()
 
-        val proposals = (1..3).map { i ->
+        // Re-evaluate old layouts under the CURRENT inputs; never trust their saved scores.
+        val expectedIds = students.map { it.id }.toSet()
+        val expectedSlots = slots?.map { Triple(it.row, it.column, it.seats) }?.toSet()
+        val reusable = previousProposals.filter { proposal ->
+            val ids = proposal.assignments.flatMap { listOfNotNull(it.studentAId, it.studentBId, it.studentCId) }
+            ids.size == students.size && ids.toSet() == expectedIds &&
+                (expectedSlots == null || proposal.assignments.filter { it.seats > 0 }
+                    .map { Triple(it.row, it.column, it.seats) }.toSet() == expectedSlots) &&
+                SeatMapOptimizer.rowRotationViolations(proposal.assignments.filter { it.seats > 0 }, profiles, history).isEmpty() &&
+                SeatMapOptimizer.recentCompanionViolations(proposal.assignments, history).isEmpty() &&
+                !SeatMapOptimizer.scoreLayout(proposal.assignments, profiles, ratings, socialPreferences,
+                    history, weights, isSmallClass, disciplinePairs).hasForbiddenPair
+        }
+        var incumbentProposal = reusable.map { proposal ->
+            proposal.copy(
+                totalScore = SeatMapOptimizer.scoreLayout(proposal.assignments, profiles, ratings,
+                    socialPreferences, history, weights, isSmallClass, disciplinePairs).total,
+                satisfaction = SeatMapOptimizer.voteSatisfaction(proposal.assignments, socialPreferences)
+            )
+        }.minWithOrNull(SeatMapRanking.bestFirst)
+        var incumbent = incumbentProposal?.assignments
+        onProgress(0, GENERATION_SEARCH_COUNT)
+        // Visit different three-desk neighborhoods instead of repeatedly repairing the same one.
+        val neighborhoodOrder = mutableListOf<List<Int>>()
+        var neighborhoodCursor = 0
+        var neighborhoodGeometry: List<Triple<Int, Int, Int>>? = null
+        val proposals = mutableListOf<SeatMapProposal>()
+        for (i in 1..GENERATION_SEARCH_COUNT) {
+            if (proposals.isNotEmpty() && shouldStop()) break
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            // A real suspension lets the browser render progress between CPU-bound searches.
+            kotlinx.coroutines.delay(1)
             val seed = baseSeed + i
-            val generated = SeatMapOptimizer.optimize(
+            var generated = SeatMapOptimizer.optimize(
                 students = students,
                 profiles = profiles,
                 ratings = ratings,
@@ -178,9 +222,44 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                 seed = seed,
                 seatsPerDesk = seatsPerDesk,
                 disciplinePairs = disciplinePairs,
-                slots = slots
+                slots = slots,
+                // Alternate fresh starts with refinement of the best layout found so far.
+                initialLayout = if (i % 2 == 1) incumbent else null
             )
+            val geometry = generated.map { Triple(it.row, it.column, it.seats) }
+            if (geometry != neighborhoodGeometry) {
+                neighborhoodGeometry = geometry
+                neighborhoodOrder.clear()
+                neighborhoodCursor = 0
+                val usable = generated.indices.filter { generated[it].seats > 0 }
+                if (usable.size == 2) neighborhoodOrder.add(usable)
+                for (a in usable.indices) for (b in a + 1 until usable.size) for (c in b + 1 until usable.size)
+                    neighborhoodOrder.add(listOf(usable[a], usable[b], usable[c]))
+                neighborhoodOrder.shuffle(kotlin.random.Random(baseSeed))
+            }
+            // Keep early results fast; spend extra work periodically on the best map, rather
+            // than repairing weak random starts. Reserved positions are not part of this pool.
+            if (i % 8 == 0 && neighborhoodOrder.isNotEmpty()) {
+                val origin = incumbent?.filter { it.seats > 0 } ?: generated
+                val indices = neighborhoodOrder[neighborhoodCursor++ % neighborhoodOrder.size]
+                // Auto-generated geometry can vary with forbidden pairs: only reuse matching grids.
+                val matchingGeometry = origin.map { Triple(it.row, it.column, it.seats) } ==
+                    generated.map { Triple(it.row, it.column, it.seats) }
+                if (matchingGeometry) {
+                    val repaired = SeatMapOptimizer.improveDeskNeighborhood(origin, indices,
+                        profiles, ratings, socialPreferences, history, weights, isSmallClass, disciplinePairs)
+                    fun total(map: List<circolareplus.algorithms.DeskAssignment>) =
+                        SeatMapOptimizer.scoreLayout(map, profiles, ratings, socialPreferences, history,
+                            weights, isSmallClass, disciplinePairs).total
+                    if (SeatMapRanking.compare(total(repaired), SeatMapOptimizer.voteSatisfaction(repaired, socialPreferences),
+                        total(generated), SeatMapOptimizer.voteSatisfaction(generated, socialPreferences)) > 0) generated = repaired
+                }
+            }
             val assignments = if (customDeskSlots != null) SeatMapOptimizer.withVacantDesks(generated, customDeskSlots) else generated
+            check(customDeskSlots.orEmpty().filter { it.seats == 0 }.all { slot ->
+                assignments.none { it.row == slot.row && it.column == slot.column &&
+                    listOfNotNull(it.studentAId, it.studentBId, it.studentCId).isNotEmpty() }
+            }) { "Una posizione riservata libera risulta occupata. Ricalcola le proposte." }
             val assignedIds = assignments.flatMap { listOfNotNull(it.studentAId, it.studentBId, it.studentCId) }
             check(assignedIds.size == students.size && assignedIds.toSet().size == assignedIds.size &&
                 assignedIds.toSet() == students.map { it.id }.toSet()) {
@@ -197,8 +276,8 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                 disciplinePairs = disciplinePairs
             )
 
-            SeatMapProposal(
-                id = "proposal_$i",
+            val proposal = SeatMapProposal(
+                id = "proposal_${baseSeed}_$i",
                 assignments = assignments,
                 totalScore = breakdown.total,
                 satisfaction = SeatMapOptimizer.voteSatisfaction(assignments, socialPreferences),
@@ -211,20 +290,24 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                 priorityBonus = breakdown.priorityBonus,
                 columnNoisePenalty = breakdown.columnNoisePenalty
             )
+            if (incumbentProposal?.let { SeatMapRanking.compare(proposal, it) > 0 } != false) {
+                incumbent = proposal.assignments
+                incumbentProposal = proposal
+                onBest(proposal)
+            }
+            proposals.add(proposal)
+            onProgress(i, GENERATION_SEARCH_COUNT)
         }
 
-        // Ordine allineato a quello che la UI mostra: la proposta in testa (index 0) prende il
-        // badge "MIGLIORE", e la % che l'utente vede e confronta è la soddisfazione media
-        // (satisfaction.percentage), non il totalScore dell'ottimizzatore (che include anche
-        // penalità invisibili in UI: memoria, altezza, burnout, chiasso di colonna). Ordinare
-        // solo per totalScore poteva quindi mettere "MIGLIORE" su una proposta con soddisfazione
-        // più bassa (es. 69% in testa davanti a 71%). Regola: prima soddisfazione più alta, a
-        // parità di soddisfazione vince il totalScore. Nessun voto espresso (satisfaction null)
-        // va in fondo: senza misura non può dichiararsi "MIGLIORE". Non cambia la matematica
-        // dell'ottimizzatore né l'uso del totalScore altrove (es. rendiconto/scorciatoie).
-        return proposals.sortedWith(
-            compareByDescending<SeatMapProposal> { it.satisfaction?.percentage ?: Double.NEGATIVE_INFINITY }
-                .thenByDescending { it.totalScore }
-        )
+        // Multi-start: prioritize the weighted objective, not social satisfaction alone.
+        // Do not force diversity at the expense of quality; return fewer alternatives if needed.
+        val ranked = proposals.sortedWith(SeatMapRanking.bestFirst).distinctBy { proposal ->
+            proposal.assignments.sortedWith(compareBy({ it.row }, { it.column })).map {
+                Triple(it.row, it.column, listOfNotNull(it.studentAId, it.studentBId, it.studentCId).sorted())
+            }
+        }
+        val best = ranked.firstOrNull()?.totalScore ?: return emptyList()
+        val tolerance = maxOf(kotlin.math.abs(best) * 0.05, 1.0)
+        return ranked.filter { it.totalScore >= best - tolerance }.take(3)
     }
 }

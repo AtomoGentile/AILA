@@ -23,7 +23,7 @@ async function call(path='/api/aca/brief',body?:unknown,user='u'){
  const response=await worker.fetch(new Request('https://test'+path,{method:body===undefined?'GET':'POST',headers:{Authorization:'Bearer '+tokens[user],'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)}),env,ctx);
  return {status:response.status,json:await response.json() as any};
 }
-function event(id:string,recipients:string|null=null){db.prepare("INSERT INTO calendar_events(id,title,event_date,category,class_id,is_for_all,visible_to_user_ids_json) VALUES (?,?,'2026-11-06','VERIFICA','C1',1,?)").run(id,id,recipients);}
+function event(id:string,recipients:string|null=null,startTime:string|null=null){db.prepare("INSERT INTO calendar_events(id,title,event_date,start_time,category,class_id,is_for_all,visible_to_user_ids_json) VALUES (?,?,'2026-11-06',?,'VERIFICA','C1',1,?)").run(id,id,startTime,recipients);}
 function ranking(id:string,audience:string|null=null){db.prepare("INSERT INTO ranking_polls(id,class_id,question,created_at,audience_json) VALUES (?,'C1',?,'2026-11-06 07:00:00',?)").run(id,id,audience);}
 function thread(){
  db.exec("INSERT INTO forum_threads(id,class_id,author_id,title) VALUES ('t','C1','peer','Aiuto con i limiti'); INSERT INTO forum_participants(thread_id,user_id,public_key,ordinal,anonymous) VALUES ('t','u','alias-u',1,1); INSERT INTO forum_subscriptions(thread_id,user_id,mode) VALUES ('t','u','REPLIES')");
@@ -36,6 +36,10 @@ describe('AILA brief',()=>{
   const result=await call();expect(result.status).toBe(200);
   expect(new Set(result.json.items.map((i:any)=>i.kind))).toEqual(new Set(['EVENT','RANKING_POLL','FORUM','PROPOSAL']));
   expect(result.json.items.find((i:any)=>i.kind==='FORUM').message).not.toContain('Testo della risposta');expect(run).not.toHaveBeenCalled();
+ });
+ it('omits today calendar events whose scheduled time has passed in Italy',async()=>{
+  event('done-this-morning',null,'08:00');event('starts-now',null,'09:00');event('later-today',null,'10:00');event('all-day',null,null);
+  expect(new Set((await call()).json.items.map((i:any)=>i.sourceId))).toEqual(new Set(['starts-now','later-today','all-day']));
  });
  it('respects class and personal event recipients',async()=>{
   event('mine','["u"]');event('peer-event','["peer"]');ranking('not-mine','["peer"]');
@@ -54,7 +58,9 @@ describe('AILA brief',()=>{
    db.prepare("INSERT INTO circulars(number,title,publish_date,r2_pdf_key) VALUES (?,?,'2026-11-06',?)").run(n,`Circolare ${n}`,`${n}.pdf`);
    db.prepare("INSERT INTO circular_ai_analysis(circular_number,badge,summary,per_class_json,is_fallback) VALUES (?,'RELEVANT','Riguarda la classe',?,?)").run(n,per,fallback);
   }
-  expect((await call()).json.items.map((i:any)=>i.sourceId)).toEqual(['1']);
+  const items=(await call()).json.items;
+  expect(items.filter((i:any)=>i.kind==='CIRCULAR').map((i:any)=>i.sourceId)).toEqual(['2','1']);
+  expect(items.find((i:any)=>i.sourceId==='2')).toMatchObject({message:'Non pertinente · nessuna notifica',isActive:false});
  });
  it('includes open and completed polls, including answered ones, while respecting the audience',async()=>{
   for(const id of ['open','submitted','expired','draft','not-mine','calculated'])db.prepare("INSERT INTO interrogation_grids(id,subject,is_published,class_id,created_at) VALUES (?,?,1,'C1','2026-11-06 06:00:00')").run(id,id);
@@ -97,18 +103,20 @@ describe('AILA brief',()=>{
   for(let i=0;i<4;i++)event(`e${i}`);ranking('rank');
   const items=selectBriefItems(await briefCandidates(env,'C1','u'),new Set(),4);expect(items).toHaveLength(4);expect(items.some(i=>i.kind==='RANKING_POLL')).toBe(true);
  });
- it('shows every unseen relevant or potential circular, with no summary, and acknowledges a section visit per account',async()=>{
+ it('shows all unseen circular classifications as active or inactive and acknowledges a section visit per account',async()=>{
   for(let n=10;n<19;n++){
    db.prepare("INSERT INTO circulars(number,title,publish_date,r2_pdf_key) VALUES (?,?,'2025-01-01',?)").run(n,`Titolo ${n}`,`${n}.pdf`);
    db.prepare("INSERT INTO circular_ai_analysis(circular_number,badge,summary) VALUES (?,?,'Riassunto da non mostrare')").run(n,n===18?'NOT_RELEVANT':n%2?'POTENTIAL':'RELEVANT');
   }
   event('keep');
   let items=(await call()).json.items;
-  expect(items.filter((i:any)=>i.kind==='CIRCULAR')).toHaveLength(8);
-  expect(items.find((i:any)=>i.sourceId==='10')).toMatchObject({title:'Titolo 10',message:'',actionLabel:'',date:null});
+  expect(items.filter((i:any)=>i.kind==='CIRCULAR')).toHaveLength(9);
+  expect(items.find((i:any)=>i.sourceId==='10')).toMatchObject({title:'Titolo 10',message:'',isActive:true,actionLabel:'Apri la circolare',date:null});
+  expect(items.find((i:any)=>i.sourceId==='11')).toMatchObject({message:'Potenziale · nessuna notifica',isActive:false});
+  expect(items.find((i:any)=>i.sourceId==='18')).toMatchObject({message:'Non pertinente · nessuna notifica',isActive:false});
   expect((await call('/api/aca/brief/circulars/seen',{})).status).toBe(200);
   expect((await call()).json.items.map((i:any)=>i.sourceId)).toEqual(['keep']);
-  expect((await call('/api/aca/brief',undefined,'peer')).json.items.filter((i:any)=>i.kind==='CIRCULAR')).toHaveLength(8);
+  expect((await call('/api/aca/brief',undefined,'peer')).json.items.filter((i:any)=>i.kind==='CIRCULAR')).toHaveLength(9);
   db.exec("INSERT INTO circulars(number,title,publish_date,r2_pdf_key) VALUES (19,'Nuova','2026-11-06','19.pdf'); INSERT INTO circular_ai_analysis(circular_number,badge,summary) VALUES (19,'POTENTIAL','Nuova analisi')");
   items=(await call()).json.items;expect(items.some((i:any)=>i.sourceId==='19')).toBe(true);
   const sql=readFileSync(new URL('../migrations/031_brief_sources.sql',import.meta.url),'utf8');db.exec(sql);db.exec(sql);
@@ -116,13 +124,13 @@ describe('AILA brief',()=>{
  it('uses the same class filter for foreground and background circular notifications',async()=>{
   for(let n=1;n<=55;n++){
    db.prepare("INSERT INTO circulars(number,title,publish_date,r2_pdf_key) VALUES (?,?,'2026-11-06',?)").run(n,`Titolo ${n}`,`${n}.pdf`);
-   db.prepare("INSERT INTO circular_ai_analysis(circular_number,badge,summary,tier,per_class_json) VALUES (?,'RELEVANT','Riassunto',2,?)").run(n,JSON.stringify({C1:{badge:n===55?'POTENTIAL':'NOT_RELEVANT',note:''},C2:{badge:'NOT_RELEVANT',note:''}}));
+   db.prepare("INSERT INTO circular_ai_analysis(circular_number,badge,summary,tier,per_class_json) VALUES (?,'RELEVANT','Riassunto',2,?)").run(n,JSON.stringify({C1:{badge:n===55?'POTENTIAL':n===54?'RELEVANT':'NOT_RELEVANT',note:''},C2:{badge:'NOT_RELEVANT',note:''}}));
   }
   const newer=(await call('/api/circulars/newer?after=0')).json.circulars;
-  expect(newer.map((c:any)=>c.number)).toEqual([55]);
+  expect(newer.map((c:any)=>c.number)).toEqual([54]);
   expect((await call('/api/circulars/newer?after=0',undefined,'other')).json.circulars).toEqual([]);
   const list=(await call('/api/circulars?limit=100')).json.circulars;
-  expect(list.filter((c:any)=>c.notificationEligible).map((c:any)=>c.number)).toEqual([55]);
+  expect(list.filter((c:any)=>c.notificationEligible).map((c:any)=>c.number)).toEqual([54]);
  });
  it('includes closed ranking results, current seats and preferences, and public new discussions',async()=>{
   ranking('closed');db.exec("UPDATE ranking_polls SET is_closed=1 WHERE id='closed'; INSERT INTO seat_map_history(id,map_index,layout_json,class_id) VALUES ('map',1,'[]','C1'),('other-map',1,'[]','C2'); UPDATE classes SET preferences_open=1 WHERE id='C1'; INSERT INTO forum_threads(id,class_id,author_id,title) VALUES ('news','C1','peer','Discussione nuova'); INSERT INTO forum_posts(id,thread_id,author_id,body) VALUES ('news','news','peer','Testo privato non nel Brief')");

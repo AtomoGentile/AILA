@@ -111,7 +111,7 @@ class ForumRepository(private val api:ApiClient) {
  suspend fun analyzeCalendarProposals(id:String):List<ForumCalendarProposalDto> = api.post<Map<String,String>,ForumCalendarProposalsDto>("/api/forum/$id/calendar-proposals/analyze",emptyMap()).proposals
  suspend fun list(offset:Int=0,filter:String="ALL"):ForumListDto=api.get("/api/forum?offset=$offset&filter=${filter.encodeURLParameter()}",offlineCopy=false)
  suspend fun thread(id:String,before:String?=null):ForumSnapshotDto=api.get("/api/forum/$id"+(before?.let{"?before=${it.encodeURLParameter()}"}?:""),offlineCopy=false)
- suspend fun create(title:String,body:String,anonymous:Boolean):ForumSnapshotDto=api.post("/api/forum",ForumCreateRequestDto(title,body,anonymous,true))
+ suspend fun create(title:String,body:String,anonymous:Boolean,attachments:List<String> = emptyList()):ForumSnapshotDto=api.post("/api/forum",ForumCreateRequestDto(title,body,anonymous,true,attachments))
  suspend fun reply(id:String,body:String,anonymous:Boolean,parentId:String?,mentions:List<String>,attachments:List<String>):ForumWriteDto=
   api.post("/api/forum/$id/posts",ForumReplyRequestDto(body,anonymous,parentId,mentions,attachments,true))
  suspend fun subscribe(id:String,mode:String){api.put<Map<String,String>,SuccessDto>("/api/forum/$id/subscription",mapOf("mode" to mode))}

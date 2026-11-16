@@ -20,9 +20,9 @@ internal object CalendarDuplicates {
     /**
      * L'evento del calendario che corrisponde a [deadline], o `null` se non c'e'.
      *
-     * Serve lo stesso giorno **e** un titolo che si assomigli: uguale, uno contenuto nell'altro, o
-     * almeno una parola significativa in comune. La sola data non basta — due cose diverse nello
-     * stesso giorno esistono, e nasconderne una dietro l'altra sarebbe l'errore opposto.
+     * Serve lo stesso giorno **e** un titolo che si assomigli: uguale, una frase di almeno due
+     * parole significative contenuta nell'altro titolo, o almeno due parole significative in
+     * comune. Una materia o un tema generico da solo non identifica lo stesso impegno.
      */
     fun findExisting(deadline: ExtractedDeadline, events: List<CalendarEvent>): CalendarEvent? {
         val sameDay = events.filter { it.date.take(10) == deadline.dueDate }
@@ -32,10 +32,33 @@ internal object CalendarDuplicates {
         val wantedWords = significantWords(wanted)
         return sameDay.firstOrNull { event ->
             val other = AssistantContext.normalize(event.title).trim()
+            val otherWords = significantWords(other)
             wanted == other ||
-                (wanted.isNotEmpty() && other.isNotEmpty() && (wanted.contains(other) || other.contains(wanted))) ||
-                wantedWords.intersect(significantWords(other)).isNotEmpty()
+                (wanted.isNotEmpty() && other.isNotEmpty() &&
+                    (otherWords.size >= MIN_MATCHING_WORDS && wanted.contains(other) ||
+                        wantedWords.size >= MIN_MATCHING_WORDS && other.contains(wanted))) ||
+                matchingWordCount(wantedWords, otherWords) >= MIN_MATCHING_WORDS
         }
+    }
+
+    private const val MIN_MATCHING_WORDS = 2
+
+    /** Counts distinct word pairs so one generic word cannot match several variants at once. */
+    private fun matchingWordCount(left: Set<String>, right: Set<String>): Int {
+        val unmatched = right.toMutableSet()
+        var matches = 0
+        for (word in left) {
+            val match = unmatched.firstOrNull { candidate ->
+                word == candidate ||
+                    (minOf(word.length, candidate.length) >= MIN_SIGNIFICANT_WORD_CHARS &&
+                        (word.startsWith(candidate) || candidate.startsWith(word)))
+            }
+            if (match != null) {
+                matches++
+                unmatched.remove(match)
+            }
+        }
+        return matches
     }
 
     private fun significantWords(normalizedTitle: String): Set<String> =

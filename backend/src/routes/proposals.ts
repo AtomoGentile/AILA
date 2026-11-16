@@ -10,6 +10,7 @@ import { authMiddleware, requireRole, newUUID, resolveClassId } from '../auth';
 import { notifyClass, notifyUser } from '../services/fcm';
 import { inBackground } from '../services/background';
 import { fullName } from '../names';
+import { contentJson, type ContentRow } from '../services/content';
 
 // Quorum per svelare l'autore di una proposta o di un commento anonimi (specifica v3.0, sez. 3.3).
 const QUORUM_REPRESENTATIVES = 2;
@@ -127,6 +128,10 @@ proposals.get('/', async (c) => {
     my_vote: number | null;
   }>();
 
+  const proposalIds=rows.results.map(p=>p.id);
+  const attachmentRows=proposalIds.length?await c.env.DB.prepare(`SELECT * FROM content_attachments WHERE class_id=? AND proposal_id IN (${proposalIds.map(()=>'?').join(',')}) AND deleted_at IS NULL ORDER BY created_at,id`).bind(await resolveClassId(c),...proposalIds).all<ContentRow>():{results:[] as ContentRow[]};
+  const attachmentsByProposal=new Map<string,ReturnType<typeof contentJson>[]>();
+  for(const item of attachmentRows.results){const list=attachmentsByProposal.get(item.proposal_id!)??[];list.push(contentJson(item));attachmentsByProposal.set(item.proposal_id!,list);}
   return c.json({
     proposals: rows.results.map((p) => {
       // L'autore (id + nome) lo vede chi non è anonimo, l'autore stesso e chi ha firmato uno
@@ -160,6 +165,7 @@ proposals.get('/', async (c) => {
         commentCount: p.comment_count,
         myVote: p.my_vote ?? null,
         createdAt: p.created_at,
+        attachments: attachmentsByProposal.get(p.id)??[],
       };
     }),
   });
@@ -175,6 +181,7 @@ proposals.post('/', async (c) => {
     description: string;
     category?: string;
     isAnonymous?: boolean;
+    attachmentIds?: string[];
   }>();
 
   const { title, description, category = 'GENERALE', isAnonymous = false } = body;
@@ -191,9 +198,16 @@ proposals.post('/', async (c) => {
 
   const id = newUUID();
   const classId = await resolveClassId(c);
+  const attachmentIds=Array.isArray(body.attachmentIds)?[...new Set(body.attachmentIds)]:[];
+  if(attachmentIds.length>5)return c.json({error:'Puoi allegare al massimo 5 file'},400);
+  for(const attachmentId of attachmentIds){
+    if(!await c.env.DB.prepare(`SELECT id FROM content_attachments WHERE id=? AND class_id=? AND uploaded_by=? AND thread_id IS NULL AND proposal_id IS NULL AND post_id IS NULL AND deleted_at IS NULL AND expires_at>?`)
+      .bind(attachmentId,classId,payload.sub,new Date().toISOString()).first())return c.json({error:'Allegato non valido o scaduto'},400);
+  }
   await c.env.DB.prepare(
     'INSERT INTO proposals (id, author_id, is_anonymous, title, description, category, class_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
   ).bind(id, payload.sub, isAnonymous ? 1 : 0, title, description, category, classId).run();
+  if(attachmentIds.length)await c.env.DB.batch(attachmentIds.map(attachmentId=>c.env.DB.prepare(`UPDATE content_attachments SET proposal_id=? WHERE id=? AND class_id=? AND uploaded_by=? AND proposal_id IS NULL AND thread_id IS NULL AND post_id IS NULL`).bind(id,attachmentId,classId,payload.sub)));
 
   // Notify users who have board notifications enabled
   inBackground(c, notifyClass(c.env, 'Nuova Proposta in Bacheca', title, { action: 'new_proposal', proposal_id: id }, classId));

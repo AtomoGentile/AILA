@@ -33,10 +33,10 @@ class ProposalsRepository(private val api: ApiClient) {
         return response.proposals.map { it.toDomain() }
     }
 
-    suspend fun createProposal(title: String, description: String, category: String, isAnonymous: Boolean) {
+    suspend fun createProposal(title: String, description: String, category: String, isAnonymous: Boolean, attachmentIds: List<String> = emptyList()) {
         api.post<CreateProposalRequestDto, SuccessDto>(
             "/api/proposals",
-            CreateProposalRequestDto(title, description, category, isAnonymous)
+            CreateProposalRequestDto(title, description, category, isAnonymous, attachmentIds)
         )
     }
 
@@ -159,6 +159,7 @@ private fun ProposalDto.toDomain(): Proposal = Proposal(
     // Il campo JSON si chiama ancora modifiedByRep per non rompere le app già installate;
     // il server lo valorizza a true per qualunque modifica, non solo per quelle del Rappresentante.
     isEdited = modifiedByRep,
+    attachments = attachments,
     createdAt = createdAt
 )
 

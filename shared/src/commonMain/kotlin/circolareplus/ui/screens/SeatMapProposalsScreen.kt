@@ -1,347 +1,230 @@
 package circolareplus.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyGridScope
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import circolareplus.algorithms.SeatMapOptimizer
 import circolareplus.algorithms.DeskAssignment
 import circolareplus.algorithms.SeatMapProposal
-import circolareplus.design.AilaCard
-import circolareplus.design.AilaConfirmDialog
-import circolareplus.design.AilaPrimaryButton
-import circolareplus.design.AilaSegmentedTabs
-import circolareplus.design.AppIcons
-import circolareplus.design.AppTheme
-import circolareplus.design.ailaPressable
+import circolareplus.design.*
 import circolareplus.domain.model.User
 
-/**
- * Confronto delle proposte calcolate dall'algoritmo.
- *
- * Prima erano tre righe in una finestra, ognuna con il solo "Scegli": non c'era modo di guardare
- * le mappe, e scegliere una proposta scartava le altre — quindi si sceglieva senza aver visto
- * niente. Ora ogni proposta ha l'occhio, che mostra la sua mappa sotto le schede senza
- * selezionarla, e un selettore 1/2/3 per passare da una mappa all'altra. Le proposte restano
- * tutte disponibili finché non se ne sceglie una (o si esce).
- */
+/** Map-first comparison; controls follow the map instead of leaving an empty action dock. */
 @Composable
 fun SeatMapProposalsScreen(
     proposals: List<SeatMapProposal>,
     studentsMap: Map<String, User>,
     onSelect: (SeatMapProposal) -> Unit,
-    // Modalità richiesta dall'utente per QUESTA generazione (coppia o trio): decide l'etichetta e
-    // se disegnare il terzo posto, invece di dedurlo dai soli dati (proposal.assignments.any { it.studentCId != null }),
-    // che darebbe "banchi da due" anche in modalità trio quando nessun banco arriva ad avere un
-    // terzo occupante (classe piccola, coppie vietate che spezzano i trii).
+    retainedProposalIds: Set<String> = emptySet(),
+    onToggleRetain: (SeatMapProposal) -> Unit = {},
+    onRegenerate: () -> Unit = {},
     seatsPerDesk: Int = SeatMapOptimizer.SEATS_PER_DESK_PAIR,
     isBusy: Boolean = false,
-    /**
-     * "Riavvolgi": butta via le proposte calcolate (e la bozza salvata sul telefono) come se non
-     * fossero mai state create. Pesa solo su chi ha una bozza in sospeso: senza, sarebbe un
-     * tasto che non fa nulla da nascondere.
-     */
+    generationCompleted: Int = 0,
+    onUseCurrentResult: () -> Unit = {},
+    generationSummary: String? = null,
     canRewind: Boolean = false,
     onRewind: () -> Unit = {}
 ) {
-    // Indice della proposta di cui si sta guardando la mappa; null = nessuna anteprima aperta.
-    var previewIndex by remember { mutableStateOf<Int?>(null) }
-    // Conferma del tasto "Riavvolgi": le bozze spariscono davvero, meglio un passo in piu'.
+    val rankedProposals = remember(proposals) {
+        proposals.sortedWith(circolareplus.algorithms.SeatMapRanking.bestFirst)
+    }
+    var previewId by remember { mutableStateOf<String?>(null) }
     var showRewindConfirm by remember { mutableStateOf(false) }
-    val safePreview = previewIndex?.takeIf { it in proposals.indices }
+    var showAnalysis by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
+    LaunchedEffect(rankedProposals) { previewId = rankedProposals.firstOrNull()?.id }
+    val selected = rankedProposals.firstOrNull { it.id == previewId } ?: rankedProposals.firstOrNull()
+    val cells = remember(selected?.assignments) { deskGridCells(selected?.assignments.orEmpty()) }
+    val bestId = rankedProposals.firstOrNull()?.id
+    val retainedCount = rankedProposals.count { it.id in retainedProposalIds }
 
-    val previewCells = remember(safePreview, proposals) {
-        safePreview?.let { deskGridCells(proposals[it].assignments) } ?: (3 to emptyList())
-    }
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(previewCells.first),
-        horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12),
-        verticalArrangement = Arrangement.spacedBy(AppTheme.Space12),
-        contentPadding = PaddingValues(
-            start = AppTheme.Space16,
-            end = AppTheme.Space16,
-            top = AppTheme.Space16,
-            bottom = AppTheme.Space32
-        ),
-        modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight)
-    ) {
-        fullRow {
-            Row(verticalAlignment = Alignment.Top) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Scegli la disposizione",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = AppTheme.TextDark
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "Tocca l'occhio per guardare la mappa di una proposta senza sceglierla: " +
-                            "le altre restano disponibili. Dopo la scelta potrai ancora modificare i posti.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppTheme.TextMuted
-                    )
-                    Spacer(modifier = Modifier.height(AppTheme.Space8))
-                    Text(
-                        text = "La media considera chi ha espresso preferenze non neutre e siede con almeno un compagno. " +
-                            "Il totale degli studenti in mappa è indicato separatamente.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppTheme.TextMuted
-                    )
-                }
-                // Riavvolgi: fuori dalle proposte salvate senza pubblicarle, come se non fossero
-                // mai esistite. Stesso stile dell'occhio delle schede (piastrella 44dp).
-                if (canRewind && proposals.isNotEmpty()) {
-                    Spacer(modifier = Modifier.width(AppTheme.Space8))
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                            .background(AppTheme.TintSlate)
-                            .ailaPressable(pressedScale = 0.92f) { showRewindConfirm = true }
-                            .semantics {
-                                contentDescription = "Riavvolgi: elimina le proposte salvate"
-                                role = Role.Button
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        AppIcons.Refresh(
-                            modifier = Modifier.size(20.dp),
-                            color = AppTheme.TextMuted
-                        )
-                    }
-                }
-            }
-        }
-
-        proposals.forEachIndexed { index, proposal ->
-            fullRow {
-                ProposalCard(
-                    number = index + 1,
-                    proposal = proposal,
-                    isBest = index == 0,
-                    isPreviewed = safePreview == index,
-                    isBusy = isBusy,
-                    onToggleView = { previewIndex = if (safePreview == index) null else index },
-                    onSelect = { onSelect(proposal) }
-                )
-            }
-        }
-
-        if (safePreview != null) {
-            val proposal = proposals[safePreview]
-            val trioCount = proposal.assignments.count { it.hasThirdSeat }
-            val deskKind = when {
-                trioCount == 0 -> "banchi da due"
-                trioCount == proposal.assignments.size -> "banchi da tre"
-                else -> "$trioCount trii e ${proposal.assignments.size - trioCount} coppie"
-            }
-
-            fullRow {
-                Column {
-                    Text(
-                        text = "Anteprima",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = AppTheme.TextDark
-                    )
-                    Spacer(modifier = Modifier.height(AppTheme.Space8))
-                    // Il menu per passare da una mappa all'altra: 1, 2, 3.
-                    AilaSegmentedTabs(
-                        labels = proposals.indices.map { (it + 1).toString() },
-                        selectedIndex = safePreview,
-                        onSelect = { previewIndex = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        key = safePreview
-                    )
-                    Spacer(modifier = Modifier.height(AppTheme.Space8))
-                    Text(
-                        text = "Proposta ${safePreview + 1} • " +
-                            (proposal.satisfaction?.let { "${it.percentage.toInt()}% soddisfazione" } ?: "nessun voto") +
-                            " • " + deskKind,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppTheme.TextMuted
-                    )
-                }
-            }
-
-            fullRow {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                        .background(AppTheme.HeroGradient)
-                        .padding(vertical = AppTheme.Space12),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "LAVAGNA & CATTEDRA",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = AppTheme.OnHeroPrimary
-                    )
-                }
-            }
-
-            itemsIndexed(
-                items = previewCells.second,
-                key = { index, _ -> "$safePreview-$index" }
-            ) { _, cell ->
-                if (cell != null) {
-                    if (cell.value.isVacantDesk) {
-                        // v1.1.6: stesso trattamento della mappa pubblicata — il banco vuoto
-                        // dell'anteprima non si vede (buco bianco) ma resta al suo posto in
-                        // griglia per non spostare le coppie delle proposte.
-                        VacantDeskBlankSlot(desk = cell.value)
-                    } else {
-                        SeatMapDeskCard(desk = cell.value, studentsMap = studentsMap, showThirdSeat = cell.value.hasThirdSeat)
-                    }
-                } else {
-                    Spacer(modifier = Modifier)
-                }
-            }
-
-            fullRow {
-                AilaPrimaryButton(
-                    text = "Scegli la proposta ${safePreview + 1}",
-                    onClick = { onSelect(proposal) },
-                    fillMaxWidth = true,
-                    enabled = !isBusy
-                )
-            }
-        }
-    }
-
-    // Conferma del riavvolgimento: le mappe generate spariscono davvero, con tutto il resto
-    // della bozza, e non e' una cosa da fare per sbaglio.
-    if (showRewindConfirm) {
-        AilaConfirmDialog(
-            title = "Riavvolgere le proposte?",
-            message = "Eliminare le bozze attuali? Le mappe generate verranno perse come se non " +
-                "fossero mai state create.",
-            onDismiss = { showRewindConfirm = false },
-            onConfirm = {
-                showRewindConfirm = false
-                onRewind()
-            },
-            confirmLabel = "Riavvolgi"
-        )
-    }
-}
-
-@Composable
-private fun ProposalCard(
-    number: Int,
-    proposal: SeatMapProposal,
-    isBest: Boolean,
-    isPreviewed: Boolean,
-    isBusy: Boolean,
-    onToggleView: () -> Unit,
-    onSelect: () -> Unit
-) {
-    val percent = proposal.satisfaction?.percentage?.toInt()?.coerceIn(0, 100)
-
-    AilaCard {
-        Column(modifier = Modifier.padding(AppTheme.Space12)) {
+    Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(if (rankedProposals.size == 1) "1 proposta" else "${rankedProposals.size} proposte",
+                style = MaterialTheme.typography.labelMedium, color = AppTheme.TextMuted)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "Proposta $number",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = AppTheme.TextDark
-                        )
-                        if (isBest) {
-                            Spacer(modifier = Modifier.width(AppTheme.Space8))
-                            Text(
-                                text = "MIGLIORE",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = AppTheme.TintGreenInk,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(50))
-                                    .background(AppTheme.TintGreen)
-                                    .padding(horizontal = 7.dp, vertical = 2.dp)
-                            )
+                TextButton(onClick = onRegenerate, enabled = !isBusy) {
+                    AppIcons.Refresh(modifier = Modifier.size(18.dp), color = AppTheme.PrimaryBlue)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Migliora", color = AppTheme.PrimaryBlue)
+                }
+                if (canRewind) Box {
+                    IconButton(onClick = { showMenu = true }, enabled = !isBusy,
+                        modifier = Modifier.semantics { contentDescription = "Altre azioni" }) {
+                        Text("•••", color = AppTheme.TextMuted)
+                    }
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(text = { Text("Scarta le proposte non conservate") },
+                            onClick = { showMenu = false; showRewindConfirm = true })
+                    }
+                }
+            }
+        }
+        if (isBusy) Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            Column {
+                SeatMapGenerationProgress(generationCompleted)
+                TextButton(onClick = onUseCurrentResult) { Text("Usa questo risultato") }
+            }
+        }
+        // A single proposal needs no navigation tile or empty horizontal carousel.
+        if (rankedProposals.size > 1) Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            rankedProposals.forEachIndexed { index, proposal ->
+                val active = selected?.id == proposal.id
+                AilaCard(
+                    modifier = Modifier.widthIn(min = 90.dp).semantics {
+                        this.selected = active
+                        contentDescription = "Proposta ${index + 1}"
+                    },
+                    containerColor = if (active) AppTheme.TintBlue else AppTheme.CardSurface,
+                    onClick = { previewId = proposal.id }
+                ) {
+                    Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("${index + 1} · " + proposal.satisfaction?.let { percentLabel(it.percentage) }.orEmpty(),
+                            style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
+                        if (proposal.id in retainedProposalIds) AppIcons.Star(
+                            modifier = Modifier.size(14.dp).semantics { contentDescription = "Conservata" },
+                            color = AppTheme.PrimaryBlue)
+                    }
+                }
+            }
+        }
+        if (selected != null) {
+            val retained = selected.id in retainedProposalIds
+            val studentCount = selected.assignments.flatMap {
+                listOfNotNull(it.studentAId, it.studentBId, it.studentCId)
+            }.toSet().size
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(cells.first.coerceAtLeast(1)),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                fullRow {
+                    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
+                            Text(if (rankedProposals.size == 1) "Disposizione" else "Disposizione ${rankedProposals.indexOf(selected) + 1}",
+                                style = MaterialTheme.typography.titleMedium, color = AppTheme.TextDark)
+                            Text("$studentCount studenti" + when {
+                                retained -> " · Conservata"
+                                selected.id == bestId -> " · Consigliata"
+                                else -> ""
+                            }, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(selected.satisfaction?.let { percentLabel(it.percentage) } ?: "—",
+                                style = MaterialTheme.typography.headlineMedium, color = AppTheme.TextDark)
+                            Text("Soddisfazione", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
                         }
                     }
-                    Text(
-                        text = satisfactionLabel(proposal.satisfaction, proposal.assignments),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppTheme.TextMuted
-                    )
                 }
-
-                // L'occhio: guarda la mappa senza scegliere. Pieno quando l'anteprima è aperta.
-                // 44dp di tocco e un nome che segue lo stato: il colore pieno si vede soltanto,
-                // il lettore di schermo deve sapere se il tocco apre o chiude l'anteprima.
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                        .background(if (isPreviewed) AppTheme.PrimaryBlue else AppTheme.TintSlate)
-                        .ailaPressable(pressedScale = 0.92f) { onToggleView() }
-                        .semantics {
-                            contentDescription = if (isPreviewed) "Chiudi anteprima" else "Mostra anteprima"
-                            role = Role.Button
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    AppIcons.Eye(
-                        modifier = Modifier.size(20.dp),
-                        color = if (isPreviewed) Color.White else AppTheme.TextMuted
-                    )
+                if (!isBusy && generationSummary != null) fullRow {
+                    Text(generationSummary, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted,
+                        modifier = Modifier.padding(bottom = 4.dp))
                 }
-                Spacer(modifier = Modifier.width(AppTheme.Space8))
-                AilaPrimaryButton(text = "Scegli", onClick = onSelect, compact = true, enabled = !isBusy)
-            }
-
-            Spacer(modifier = Modifier.height(AppTheme.Space8))
-
-            // Barra della soddisfazione: a colpo d'occhio, senza leggere le percentuali. Senza
-            // voti espressi non c'è niente da misurare, quindi niente barra.
-            if (percent != null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(AppTheme.TintSlate)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(percent / 100f)
-                            .fillMaxHeight()
-                            .clip(RoundedCornerShape(50))
-                            .background(AppTheme.PrimaryBlue)
-                    )
+                fullRow {
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        HorizontalDivider(Modifier.weight(1f), color = AppTheme.Hairline)
+                        Text("Lavagna e cattedra", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
+                        HorizontalDivider(Modifier.weight(1f), color = AppTheme.Hairline)
+                    }
                 }
-
-                Spacer(modifier = Modifier.height(AppTheme.Space8))
+                itemsIndexed(cells.second, key = { index, _ -> "${selected.id}-$index" }) { _, cell ->
+                    val itemModifier = if (AppTheme.reduceMotion) Modifier else Modifier.animateItem()
+                    if (cell == null) Spacer(Modifier)
+                    else if (cell.value.isVacantDesk) {
+                        Box(itemModifier.fillMaxWidth().heightIn(min = 62.dp), contentAlignment = Alignment.Center) {
+                            Text("F${cell.value.row + 1}C${cell.value.column + 1}\nSpazio libero",
+                                style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
+                        }
+                    } else SeatMapDeskCard(cell.value, studentsMap, showThirdSeat = cell.value.hasThirdSeat,
+                        modifier = itemModifier, showSeatNumbers = false)
+                }
+                fullRow {
+                    // Actions stay adjacent to the map, including on tall phone screens.
+                    Row(Modifier.fillMaxWidth().padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { onToggleRetain(selected) }, enabled = !isBusy) {
+                            AppIcons.Star(modifier = Modifier.size(19.dp), color = AppTheme.PrimaryBlue, filled = retained)
+                            Spacer(Modifier.width(6.dp))
+                            Text(if (retained) "Conservata" else "Conserva", color = AppTheme.PrimaryBlue)
+                        }
+                        Box(Modifier.weight(1f)) {
+                            AilaPrimaryButton(text = "Modifica", onClick = { onSelect(selected) },
+                                fillMaxWidth = true, compact = true, enabled = !isBusy)
+                        }
+                    }
+                }
+                fullRow {
+                    Column {
+                        TextButton(onClick = { showAnalysis = !showAnalysis }, modifier = Modifier.fillMaxWidth()) {
+                            Text(if (showAnalysis) "Chiudi analisi" else "Analisi della proposta", color = AppTheme.TextMuted)
+                            Spacer(Modifier.width(6.dp))
+                            AppIcons.ChevronRight(modifier = Modifier.size(16.dp).rotate(if (showAnalysis) 270f else 90f),
+                                color = AppTheme.TextMuted)
+                        }
+                        AnimatedVisibility(showAnalysis) {
+                            AilaCard {
+                                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(satisfactionLabel(selected.satisfaction, selected.assignments),
+                                        style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+                                    Text("Punteggio complessivo · ${selected.totalScore.toInt()}",
+                                        style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
+                                    Row(Modifier.fillMaxWidth()) {
+                                        StatChip("Sociale", selected.socialScore.toInt(), Modifier.weight(1f))
+                                        StatChip("Didattica", selected.didacticScore.toInt(), Modifier.weight(1f))
+                                        StatChip("Disciplina", selected.disciplinePenalty.toInt(), Modifier.weight(1f))
+                                    }
+                                    Text("La soddisfazione considera i voti utili. A pari punteggio: prima meno studenti a disagio, poi soddisfazione più alta.",
+                                        style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+                                    if (retainedCount > 0) Text(
+                                        if (retainedCount == 1) "1 proposta conservata fino alla pubblicazione."
+                                        else "$retainedCount proposte conservate fino alla pubblicazione.",
+                                        style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+                                }
+                            }
+                        }
+                    }
+                }
             }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
-                StatChip("Sociale", proposal.socialScore.toInt(), Modifier.weight(1f))
-                StatChip("Didattica", proposal.didacticScore.toInt(), Modifier.weight(1f))
-                StatChip("Disciplina", proposal.disciplinePenalty.toInt(), Modifier.weight(1f))
-            }
+        } else Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Text("Nessuna proposta disponibile", color = AppTheme.TextMuted)
         }
     }
+    if (showRewindConfirm) AilaConfirmDialog(
+        title = "Scartare le proposte?",
+        message = "Le mappe conservate resteranno disponibili fino alla pubblicazione.",
+        onDismiss = { showRewindConfirm = false },
+        onConfirm = { showRewindConfirm = false; onRewind() },
+        confirmLabel = "Scarta"
+    )
 }
+
+private fun percentLabel(value: Double): String =
+    "${kotlin.math.round(value * 10) / 10}%".replace('.', ',')
 
 /** Testo della soddisfazione: media dei singoli studenti in base ai compagni di banco che hanno
  * davvero, con quanti siedono con qualcuno che hanno votato in negativo; oppure l'avviso che nessuno
@@ -360,9 +243,7 @@ internal fun satisfactionLabel(satisfaction: SeatMapOptimizer.VoteSatisfaction?,
 internal fun StatChip(label: String, value: Int, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-            .background(AppTheme.TintSlate)
-            .padding(vertical = AppTheme.Space8),
+            .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(

@@ -77,7 +77,7 @@ internal fun AilaBriefCard(
                 val subjectColor = if (subjectColorsEnabled && item.kind == AilaBriefKind.EVENT) {
                     SubjectColors.choiceForSubject(item.title, subjectColorOverrides)
                 } else null
-                val tint = subjectColor?.let {
+                val tint = if (item.kind == AilaBriefKind.CIRCULAR && !item.isActive) AppTheme.TextMuted else subjectColor?.let {
                     if (it.key == "white") if (dark) Color.White else Color(0xFF667085) else it.color
                 } ?: if (AppTheme.isNothing) AppTheme.TextDark else when(item.kind) {
                     AilaBriefKind.EVENT, AilaBriefKind.CIRCULAR -> AppTheme.PrimaryBlue
@@ -137,7 +137,7 @@ internal fun AilaBriefCard(
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(label, color = tint, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                            Text(item.title, color = primaryText, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(item.title, color = if (item.kind == AilaBriefKind.CIRCULAR && !item.isActive) soft else primaryText, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
                     }
                     if(item.kind != AilaBriefKind.EVENT) Text(item.message, color = soft, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)

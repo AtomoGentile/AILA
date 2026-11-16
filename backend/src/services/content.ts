@@ -2,7 +2,7 @@ import type { Env } from '../types';
 import { HTTPException } from 'hono/http-exception';
 
 export interface ContentRow {
- id:string;class_id:string;uploaded_by:string|null;thread_id:string|null;post_id:string|null;
+ id:string;class_id:string;uploaded_by:string|null;thread_id:string|null;post_id:string|null;proposal_id:string|null;
  file_name:string;mime:string;byte_size:number;r2_key:string;extracted_text:string;
  transcript:string|null;transcript_generated_at:string|null;duration_seconds:number|null;
  expires_at:string;deleted_at:string|null;created_at:string;
@@ -15,6 +15,9 @@ export async function authorizedContent(env:Env,classId:string,userId:string,id:
   if(!thread)throw new HTTPException(404,{message:'Allegato non trovato'});
   if(!item.post_id&&item.uploaded_by!==userId)throw new HTTPException(404,{message:'Allegato non trovato'});
   if(item.post_id&&!await env.DB.prepare('SELECT id FROM forum_posts WHERE id=? AND hidden=0').bind(item.post_id).first())throw new HTTPException(404,{message:'Allegato non trovato'});
+ }else if(item.proposal_id){
+  const proposal=await env.DB.prepare('SELECT id FROM proposals WHERE id=? AND class_id=?').bind(item.proposal_id,classId).first();
+  if(!proposal)throw new HTTPException(404,{message:'Allegato non trovato'});
  }else if(item.uploaded_by!==userId)throw new HTTPException(404,{message:'Allegato non trovato'});
  return item;
 }
@@ -23,7 +26,8 @@ export function contentJson(item:ContentRow){const expired=!!item.deleted_at||it
  durationSeconds:item.duration_seconds,transcript:expired?null:item.transcript,transcriptGeneratedAt:expired?null:item.transcript_generated_at};}
 export async function cleanupContent(env:Env){
  const rows=await env.DB.prepare(`SELECT * FROM content_attachments WHERE deleted_at IS NULL AND
- (expires_at<=? OR uploaded_by IS NULL OR (thread_id IS NOT NULL AND post_id IS NULL AND created_at<datetime('now','-1 day'))) LIMIT 100`)
+ (expires_at<=? OR uploaded_by IS NULL OR (thread_id IS NOT NULL AND post_id IS NULL AND created_at<datetime('now','-1 day')) OR
+ (thread_id IS NULL AND proposal_id IS NULL AND created_at<datetime('now','-1 day'))) LIMIT 100`)
  .bind(new Date().toISOString()).all<ContentRow>();
  for(const item of rows.results){
   await env.CIRCULARS_BUCKET.delete(item.r2_key);

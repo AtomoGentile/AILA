@@ -11,6 +11,27 @@ import kotlin.test.assertTrue
 import kotlin.test.assertFailsWith
 
 class SeatMapOptimizerTest {
+    @Test fun refinementStartsFromTheProvidedValidMap() {
+        val students = listOf("a", "b", "c", "d").map {
+            User(id = it, firstName = it, lastName = "", username = it)
+        }
+        val layout = listOf(DeskAssignment(0, 0, "a", "d"), DeskAssignment(0, 1, "b", "c"))
+        val result = SeatMapOptimizer.optimize(students, emptyMap(), emptyMap(), emptyMap(), emptyList(),
+            OptimizerWeights(), true, seed = 101L, maxIterations = 0, initialLayout = layout)
+        assertEquals(layout, result)
+    }
+
+    @Test fun refinementRejectsAnIncumbentThatViolatesCurrentHistory() {
+        val students = listOf("a", "b", "c", "d").map {
+            User(id = it, firstName = it, lastName = "", username = it)
+        }
+        val layout = listOf(DeskAssignment(0, 0, "a", "d"), DeskAssignment(0, 1, "b", "c"))
+        val history = listOf(SeatMapHistoryRecord(1, setOf("a" to "d"), emptyMap(), circolareplus.util.today().toIso()))
+        val result = SeatMapOptimizer.optimize(students, emptyMap(), emptyMap(), emptyMap(), history,
+            OptimizerWeights(), true, seed = 101L, maxIterations = 0, initialLayout = layout)
+        assertTrue(SeatMapOptimizer.recentCompanionViolations(result, history).isEmpty())
+    }
+
 
     @Test
     fun fourRowsRotateThroughOtherRowsBeforeReturningInFourthMonth() {

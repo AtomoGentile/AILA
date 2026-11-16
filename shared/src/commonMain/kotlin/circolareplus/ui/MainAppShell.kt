@@ -55,6 +55,7 @@ import circolareplus.data.remote.ConnectivityState
 import circolareplus.data.remote.dto.PollDetailDto
 import circolareplus.data.remote.dto.CreatePollSlotRequestDto
 import circolareplus.data.remote.dto.RatingEntryDto
+import circolareplus.data.remote.dto.ContentAttachmentDto
 import circolareplus.data.repository.CircularsRepository
 import circolareplus.data.repository.SessionRestore
 import circolareplus.design.ailaNoTouchWhile
@@ -116,6 +117,8 @@ import circolareplus.domain.model.UnlockRequest
 import circolareplus.domain.model.User
 import circolareplus.domain.model.UserRole
 import circolareplus.platform.currentTimeMillis
+import circolareplus.platform.IncomingContent
+import circolareplus.platform.rememberContentPicker
 import circolareplus.push.currentPushPlatform
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -1213,6 +1216,9 @@ fun MainAppShell(
     // drag&drop secondo la scelta del Rappresentante. Vuoto = layout automatico (nessun surplus).
     var lastRequestedDeskSlots by remember { mutableStateOf<List<SeatMapOptimizer.DeskSlot>>(emptyList()) }
     var isGeneratingProposals by remember { mutableStateOf(false) }
+    var seatMapSearchesCompleted by remember { mutableStateOf(0) }
+    var stopSeatMapSearch by remember { mutableStateOf(false) }
+    var seatMapSearchSummary by remember { mutableStateOf<String?>(null) }
     var seatMapActionError by remember { mutableStateOf<String?>(null) }
     var isExportingSeatMapPdf by remember { mutableStateOf(false) }
     // Disposizione in editing manuale (dopo aver scelto una delle 3 proposte) e copia originale
@@ -1259,6 +1265,7 @@ fun MainAppShell(
         showProposals: Boolean
     ) {
         lastRequestedSeatsPerDesk = draft.seatsPerDesk
+        lastRequestedDeskSlots = draft.requestedDeskSlots.orEmpty()
         seatMapOptimizerProfiles = draft.profiles
         seatMapOptimizerRatings = draft.ratings
         seatMapOptimizerDisciplinePairs = draft.disciplinePairs
@@ -2620,10 +2627,10 @@ fun MainAppShell(
                 refreshAfterSheetClose?.invoke()
                 refreshAfterSheetClose = null
             },
-            onConfirm = { title, description, category, isAnonymous ->
+            onConfirm = { title, description, category, isAnonymous, attachments ->
                 coroutineScope.launch {
                     try {
-                        AppContainer.proposalsRepository.createProposal(title, description, category, isAnonymous)
+                        AppContainer.proposalsRepository.createProposal(title, description, category, isAnonymous, attachments)
                         closeAddProposalRequested = true
                         refreshAfterSheetClose = { reloadProposals() }
                     } catch (e: Exception) {
@@ -3641,6 +3648,7 @@ fun MainAppShell(
                                                 },
                                                 isExportingPdf = isExportingSeatMapPdf,
                                                 isGeneratingProposals = isGeneratingProposals,
+                                                generationCompleted = seatMapSearchesCompleted,
                                                 onExportPdf = {
                                                     coroutineScope.launch {
                                                         isExportingSeatMapPdf = true
@@ -3695,7 +3703,14 @@ fun MainAppShell(
                                                         // la bozza, le proposte e gli input dell'ottimizzatore tornano
                                                         // com'erano. Per generare mappe nuove prima si usa "Riavvolgi".
                                                         val draft = savedSeatMapDraft
-                                                        if (draft != null && draft.proposals.isNotEmpty()) {
+                                                        val requestedSlots = customDeskSlots ?: rowSeats.takeIf { it.isNotEmpty() }?.let {
+                                                            SeatMapOptimizer.fullDeskSlots(it, seatsPerDesk)
+                                                        }
+                                                        val sameConfiguration = draft?.let {
+                                                            it.weights == weights && it.seatsPerDesk == seatsPerDesk &&
+                                                                it.requestedDeskSlots == requestedSlots
+                                                        } == true
+                                                        if (draft != null && draft.proposals.isNotEmpty() && sameConfiguration) {
                                                             isGeneratingProposals = true
                                                             try {
                                                                 // Una bozza conserva gli input di calcolo, mai un'autorità
@@ -3718,6 +3733,8 @@ fun MainAppShell(
                                                             }
                                                         }
                                                         isGeneratingProposals = true
+                                                        seatMapSearchesCompleted = 0
+                                                        stopSeatMapSearch = false
                                                         lastRequestedSeatsPerDesk = seatsPerDesk
                                                         // Griglia COMPLETA scelta (v1.1.6, layout personalizzato):
                                                         // serve all'editor per materializzare i banchi vuoti in
@@ -3781,7 +3798,14 @@ fun MainAppShell(
                                                                     seatsPerDesk = seatsPerDesk,
                                                                     disciplinePairs = disciplinePairs,
                                                                     rowSeats = rowSeats,
-                                                                    customDeskSlots = customDeskSlots
+                                                                    customDeskSlots = customDeskSlots,
+                                                                    shouldStop = { stopSeatMapSearch },
+                                                                    onBest = { best ->
+                                                                        withContext(Dispatchers.Main) { proposalOptions = listOf(best) }
+                                                                    },
+                                                                    onProgress = { completed, _ ->
+                                                                        withContext(Dispatchers.Main) { seatMapSearchesCompleted = completed }
+                                                                    }
                                                                 )
                                                             }
                                                             // La pagina delle proposte si apre dal pulsante "Calcola":
@@ -3794,7 +3818,10 @@ fun MainAppShell(
                                                             // non deve impedire il flusso: se proprio non si puo' scrivere,
                                                             // le proposte restano quelle di sempre (in memoria, volatile).
                                                             val draftData = circolareplus.data.local.SeatMapProposalsDraft(
-                                                                proposals = computed,
+                                                                requestedDeskSlots = requestedSlots,
+                                                                retainedProposalIds = draft?.retainedProposalIds.orEmpty(),
+                                                                proposals = (draft?.proposals.orEmpty().filter { it.id in draft?.retainedProposalIds.orEmpty() } + computed)
+                                                                    .sortedWith(circolareplus.algorithms.SeatMapRanking.bestFirst),
                                                                 seatsPerDesk = seatsPerDesk,
                                                                 profiles = profiles,
                                                                 ratings = ratingsMap,
@@ -3804,6 +3831,7 @@ fun MainAppShell(
                                                                 weights = weights,
                                                                 isSmallClass = seatMapOptimizerIsSmallClass
                                                             )
+                                                            proposalOptions = draftData.proposals
                                                             updateSeatMapDraft(draftData)
                                                         } catch (e: Exception) {
                                                             seatMapActionError = "Impossibile calcolare le proposte: ${e.message}"
@@ -4002,6 +4030,7 @@ fun MainAppShell(
                                                     }
                                                 },
                                                 onCreateProposalClick = { showAddProposalDialog = true },
+                                                onOpenAttachment = { remoteContent = it; localContent = null },
                                                 onLoadComments = { proposalId ->
                                                     AppContainer.proposalsRepository.listComments(proposalId)
                                                 },
@@ -5247,21 +5276,108 @@ fun MainAppShell(
                     }
                     Column(modifier = Modifier.fillMaxSize()) {
                         ScreenBackBar(
-                            title = "Proposte di disposizione",
+                            title = "Proposte",
                             onBackClick = { proposalOptions = emptyList() }
                         )
                         SeatMapProposalsScreen(
                             proposals = proposalOptions,
                             studentsMap = proposalsStudentsMap,
+                            retainedProposalIds = savedSeatMapDraft?.retainedProposalIds.orEmpty(),
+                            onToggleRetain = { proposal ->
+                                savedSeatMapDraft?.let { draft ->
+                                    val ids = draft.retainedProposalIds
+                                    updateSeatMapDraft(draft.copy(retainedProposalIds =
+                                        if (proposal.id in ids) ids - proposal.id else ids + proposal.id))
+                                }
+                            },
+                            onRegenerate = {
+                                savedSeatMapDraft?.let { draft ->
+                                    coroutineScope.launch {
+                                        isGeneratingProposals = true
+                                        seatMapSearchesCompleted = 0
+                                        stopSeatMapSearch = false
+                                        try {
+                                            val students = seatMapGenerationStudents.toList()
+                                            val expectedIds = students.map { it.id }.toSet()
+                                            val retained = draft.proposals.filter { it.id in draft.retainedProposalIds }
+                                            check(retained.all { proposal ->
+                                                proposal.assignments.flatMap {
+                                                    listOfNotNull(it.studentAId, it.studentBId, it.studentCId)
+                                                }.toSet() == expectedIds
+                                            }) { "La classe è cambiata: rimuovi le mappe conservate prima di rigenerare." }
+                                            val slots = draft.requestedDeskSlots ?: draft.proposals.firstOrNull()?.assignments?.map {
+                                                SeatMapOptimizer.DeskSlot(it.row, it.column, it.seats)
+                                            }
+                                            val latestHistory = AppContainer.seatMapRepository.getHistoryForOptimizer()
+                                            val generated = withContext(Dispatchers.Default) {
+                                                AppContainer.seatMapRepository.generateThreeProposals(
+                                                    students = students, profiles = draft.profiles,
+                                                    ratings = draft.ratings, socialPreferences = draft.socialPreferences,
+                                                    history = latestHistory, weights = draft.weights,
+                                                    seatsPerDesk = draft.seatsPerDesk,
+                                                    disciplinePairs = draft.disciplinePairs, customDeskSlots = slots,
+                                                    previousProposals = draft.proposals,
+                                                    shouldStop = { stopSeatMapSearch },
+                                                    onBest = { best ->
+                                                        withContext(Dispatchers.Main) {
+                                                            val kept = savedSeatMapDraft?.proposals.orEmpty()
+                                                                .filter { it.id in draft.retainedProposalIds }
+                                                            proposalOptions = (kept + best).distinctBy { it.id }
+                                                                .sortedWith(circolareplus.algorithms.SeatMapRanking.bestFirst)
+                                                        }
+                                                    },
+                                                    onProgress = { completed, _ ->
+                                                        withContext(Dispatchers.Main) { seatMapSearchesCompleted = completed }
+                                                    }
+                                                )
+                                            }
+                                            val ranking = circolareplus.algorithms.SeatMapRanking
+                                            val oldBest = draft.proposals.minWithOrNull(ranking.bestFirst)
+                                            val newBest = generated.minWithOrNull(ranking.bestFirst)
+                                            seatMapSearchSummary = if (oldBest != null && newBest != null && latestHistory == draft.history) {
+                                                when {
+                                                    newBest.totalScore > oldBest.totalScore -> "Punteggio migliore: ${newBest.totalScore.toInt()} (+${(newBest.totalScore - oldBest.totalScore).toInt()})"
+                                                    ranking.compare(newBest, oldBest) > 0 -> {
+                                                        if (newBest.satisfaction?.uncomfortableStudents != oldBest.satisfaction?.uncomfortableStudents)
+                                                            "Stesso punteggio · meno studenti a disagio."
+                                                        else "Stesso punteggio · soddisfazione migliorata."
+                                                    }
+                                                    ranking.compare(newBest, oldBest) == 0 -> "${seatMapSearchesCompleted} ricerche · miglior risultato confermato."
+                                                    else -> "Punteggio ricalcolato con i vincoli attuali: ${newBest.totalScore.toInt()}"
+                                                }
+                                            } else null
+                                            fun layoutKey(proposal: SeatMapProposal) = proposal.assignments
+                                                .sortedWith(compareBy({ it.row }, { it.column }))
+                                                .map { Triple(it.row, it.column, it.seats to
+                                                    listOfNotNull(it.studentAId, it.studentBId, it.studentCId).sorted()) }
+                                            val retainedKeys = retained.map { layoutKey(it) }.toSet()
+                                            val combined = (retained + generated.filter { layoutKey(it) !in retainedKeys })
+                                                .sortedWith(circolareplus.algorithms.SeatMapRanking.bestFirst)
+                                            proposalOptions = combined
+                                            seatMapOptimizerHistory = latestHistory
+                                            updateSeatMapDraft(draft.copy(proposals = combined, history = latestHistory))
+                                        } catch (e: Exception) {
+                                            seatMapActionError = "Impossibile rigenerare: ${e.message}"
+                                        } finally {
+                                            isGeneratingProposals = false
+                                        }
+                                    }
+                                }
+                            },
                             seatsPerDesk = lastRequestedSeatsPerDesk,
                             isBusy = isGeneratingProposals,
+                            generationCompleted = seatMapSearchesCompleted,
+                            onUseCurrentResult = { stopSeatMapSearch = true },
+                            generationSummary = seatMapSearchSummary,
                             // Riavvolgibile solo se c'e' una bozza salvata: le proposte vive di questa
                             // sessione non ancora salvata cambiano di nuovo al prossimo "Calcola".
                             canRewind = savedSeatMapDraft != null,
                             // Riavvolgi: le bozze spariscono sul telefono e in memoria, come se non
                             // fossero mai state create. Il prossimo "Calcola" riparte da zero.
                             onRewind = {
-                                updateSeatMapDraft(null)
+                                val draft = savedSeatMapDraft
+                                val retained = draft?.proposals.orEmpty().filter { it.id in draft?.retainedProposalIds.orEmpty() }
+                                updateSeatMapDraft(if (retained.isEmpty()) null else draft?.copy(proposals = retained))
                                 proposalOptions = emptyList()
                                 seatMapOptimizerProfiles = emptyMap()
                                 seatMapOptimizerRatings = emptyMap()
@@ -7616,16 +7732,35 @@ private fun CreateRankingPollDialog(
 @Composable
 private fun AddProposalDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String, String, String, Boolean) -> Unit,
+    onConfirm: (String, String, String, Boolean, List<String>) -> Unit,
     closeRequested: Boolean = false
 ) {
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var isAnonymous by remember { mutableStateOf(false) }
+    var attachments by remember { mutableStateOf<List<ContentAttachmentDto>>(emptyList()) }
+    var uploadError by remember { mutableStateOf<String?>(null) }
+    var uploading by remember { mutableStateOf(false) }
+    var submitted by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val pickAttachment = rememberContentPicker({ uploadError = it }) { file: IncomingContent ->
+        if (attachments.size >= 5) uploadError = "Puoi allegare al massimo 5 file."
+        else scope.launch {
+            uploading = true; uploadError = null
+            try { attachments = attachments + AppContainer.acaRepository.upload(file, persistLocal = false) }
+            catch (e: Exception) { uploadError = e.message ?: "Caricamento non riuscito" }
+            finally { uploading = false }
+        }
+    }
 
     circolareplus.design.AilaOriginSheet(
         originKey = "proposalCreateSheet",
-        onDismiss = onDismiss,
+        onDismiss = {
+            if (!submitted && attachments.isNotEmpty()) scope.launch {
+                attachments.forEach { try { AppContainer.acaRepository.removeAttachment(it.id) } catch (_: Exception) {} }
+            }
+            onDismiss()
+        },
         closeRequested = closeRequested,
         // Il "+" della Bacheca sta in basso a destra: il foglio sale dal fondo.
         fromBottom = true
@@ -7659,6 +7794,19 @@ private fun AddProposalDialog(
                 shape = RoundedCornerShape(AppTheme.SmallElementRadius),
                 modifier = Modifier.fillMaxWidth().ailaSheetReveal(1)
             )
+            Spacer(modifier = Modifier.height(AppTheme.Space8))
+            OutlinedButton(
+                onClick = pickAttachment,
+                enabled = !uploading && attachments.size < 5,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text(if (uploading) "Caricamento…" else "Aggiungi allegati${if (attachments.isEmpty()) "" else " (${attachments.size}/5)"}") }
+            attachments.forEach { item ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(item.fileName, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted, maxLines = 1)
+                    TextButton(onClick = { attachments = attachments.filterNot { it.id == item.id }; scope.launch { try { AppContainer.acaRepository.removeAttachment(item.id) } catch (_: Exception) {} } }, enabled = !uploading) { Text("Rimuovi") }
+                }
+            }
+            uploadError?.let { Text(it, color = AppTheme.TintRedInk, style = MaterialTheme.typography.bodySmall) }
             Spacer(modifier = Modifier.height(AppTheme.Space12))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -7687,7 +7835,8 @@ private fun AddProposalDialog(
                     text = "Pubblica",
                     onClick = {
                         if (title.isNotBlank() && description.isNotBlank()) {
-                            onConfirm(title.trim(), description.trim(), "GENERALE", isAnonymous)
+                            submitted = true
+                            onConfirm(title.trim(), description.trim(), "GENERALE", isAnonymous, attachments.map { it.id })
                         }
                     },
                     enabled = title.isNotBlank() && description.isNotBlank(),
