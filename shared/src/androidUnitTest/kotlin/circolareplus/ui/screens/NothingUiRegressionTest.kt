@@ -131,6 +131,13 @@ class NothingUiRegressionTest {
             kotlin.test.assertTrue(saved.contains("ORBIT"))
         }
         screenshot("nothing-glyph-studio")
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithText("Prova").performClick()
+        repeat(8) { frame ->
+            compose.mainClock.advanceTimeBy(80)
+            screenshot("nothing-glyph-motion-${frame.toString().padStart(2,'0')}",settle=false)
+        }
+        compose.mainClock.autoAdvance = true
         compose.onNodeWithContentDescription("Chiudi Glyph Studio").performClick()
         compose.mainClock.advanceTimeBy(400)
         compose.onNodeWithText("15:00").assertIsDisplayed()
@@ -152,6 +159,9 @@ class NothingUiRegressionTest {
             }
         }
         compose.onNodeWithText(title).assertIsDisplayed()
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        compose.onNodeWithText(title).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        compose.runOnIdle { kotlin.test.assertFalse(layouts.single().hasVisualOverflow) }
         screenshot("nothing-brief-large-text-light")
         compose.runOnIdle { AppTheme.isDarkMode = true }
         screenshot("nothing-brief-large-text-dark")
@@ -204,8 +214,8 @@ class NothingUiRegressionTest {
         compose.runOnIdle { assertEquals("Prepara un riepilogo di fisica",sent) }
     }
 
-    private fun screenshot(name: String) {
-        compose.mainClock.advanceTimeBy(500)
+    private fun screenshot(name: String, settle: Boolean = true) {
+        if (settle) compose.mainClock.advanceTimeBy(500)
         compose.waitForIdle()
         compose.runOnIdle {
             val view = activity.get().window.decorView

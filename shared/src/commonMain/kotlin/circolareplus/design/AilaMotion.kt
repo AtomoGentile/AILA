@@ -119,6 +119,8 @@ internal fun visibleXInRoot(x: Float): Float =
  */
 @Composable
 fun Modifier.ailaBreathe(): Modifier {
+    if (AppTheme.isNothing) return this
+
     // Riduci movimento: logo fermo. Il ritorno anticipato toglie anche il ciclo, non solo la scala.
     if (AppTheme.reduceMotion) return this
     var expanded by remember { mutableStateOf(false) }
@@ -481,14 +483,14 @@ fun Modifier.ailaSheetReveal(index: Int): Modifier {
 fun Modifier.ailaBubbleEnter(enabled: Boolean, fromEnd: Boolean): Modifier {
     val reduce = AppTheme.reduceMotion
     val progress = remember { Animatable(if (enabled) 0f else 1f) }
-    if (enabled) LaunchedEffect(Unit) { progress.animateTo(1f, ailaSpatialSpring()) }
+    if (enabled) LaunchedEffect(Unit) { progress.animateTo(1f, if(AppTheme.isNothing) tween(180) else ailaSpatialSpring()) }
     if (!enabled) return this
     return graphicsLayer {
         val p = progress.value
         alpha = (p * 2f).coerceIn(0f, 1f)
         if (!reduce) {
-            translationY = (1f - p) * 28.dp.toPx()
-            val s = 0.88f + 0.12f * p
+            translationY = (1f - p) * (if(AppTheme.isNothing) 6.dp else 28.dp).toPx()
+            val s = if(AppTheme.isNothing) 1f else 0.88f + 0.12f * p
             scaleX = s
             scaleY = s
             transformOrigin = androidx.compose.ui.graphics.TransformOrigin(if (fromEnd) 1f else 0f, 1f)
@@ -502,6 +504,7 @@ fun Modifier.ailaBubbleEnter(enabled: Boolean, fromEnd: Boolean): Modifier {
  */
 fun ailaRevealEnter(): EnterTransition =
     if (AppTheme.reduceMotion) fadeIn(tween(durationMillis = REDUCED_FADE_MS))
+    else if(AppTheme.isNothing) fadeIn(tween(160)) + androidx.compose.animation.expandVertically(tween(180))
     else fadeIn(spring(stiffness = Spring.StiffnessMediumLow)) +
         androidx.compose.animation.expandVertically(ailaSpatialSpring(), expandFrom = androidx.compose.ui.Alignment.Top)
 

@@ -69,17 +69,22 @@ object NothingExperience {
 
     fun restore(json: String, write: (String) -> Unit) {
         val saved = runCatching { codec.decodeFromString<NothingSavedState>(json) }.getOrDefault(NothingSavedState())
-        preferences = saved.preferences.copy(previewBrightness = saved.preferences.previewBrightness.coerceIn(.25f, 1f), focusMinutes = saved.preferences.focusMinutes.coerceIn(1, 90), signature = saved.preferences.signature.take(8))
+        preferences = saved.preferences.copy(previewBrightness = saved.preferences.previewBrightness.coerceIn(.25f, 1f), focusMinutes = saved.preferences.focusMinutes.coerceIn(1, 90), signature = cleanSignature(saved.preferences.signature))
         val total = saved.focus.totalSeconds.coerceIn(60, 5400)
         focus = saved.focus.copy(totalSeconds = total, pausedSeconds = saved.focus.pausedSeconds.coerceIn(0,total))
         refreshClock()
         completedSessions = saved.completedSessions.coerceAtLeast(0)
         writer = write
     }
+    private fun cleanSignature(value: String): String {
+        val cut = value.filter { it >= ' ' && it != '\u007f' }.take(8)
+        val last = cut.lastOrNull()
+        return if(last != null && last in '\uD800'..'\uDBFF') cut.dropLast(1) else cut
+    }
     private fun save() { writer?.invoke(codec.encodeToString(NothingSavedState(preferences, focus, completedSessions))) }
     fun configure(value: NothingPreferences) {
         val durationChanged = value.focusMinutes != preferences.focusMinutes
-        preferences = value.copy(previewBrightness = value.previewBrightness.coerceIn(.25f, 1f), focusMinutes = value.focusMinutes.coerceIn(1, 90), signature = value.signature.take(8))
+        preferences = value.copy(previewBrightness = value.previewBrightness.coerceIn(.25f, 1f), focusMinutes = value.focusMinutes.coerceIn(1, 90), signature = cleanSignature(value.signature))
         if (durationChanged && !focus.running) focus = NothingFocusSession.fresh(preferences.focusMinutes)
         save()
     }

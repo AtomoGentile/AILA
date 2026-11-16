@@ -81,6 +81,8 @@ fun NothingHomePanel(
     onSearch: () -> Unit, onGita: () -> Unit, onCirculars: () -> Unit,
     onCalendar: () -> Unit, onBoard: () -> Unit, onSeatMap: () -> Unit
 ) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    val compactFocus = (maxWidth - 52.dp) / 2 - 28.dp < 124.dp
     Column(Modifier.fillMaxWidth()
         .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
         .padding(20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -107,13 +109,14 @@ fun NothingHomePanel(
                     color = AppTheme.TextDark)
                 Text(ITALIAN_MONTHS[date.month].uppercase(), style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
             }
-            if (NothingExperience.preferences.showFocusWidget) NothingGlyphWidget(Modifier.weight(1f))
+            if (NothingExperience.preferences.showFocusWidget) NothingGlyphWidget(Modifier.weight(1f), compactFocus)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             NothingQuickTile("Circolari", "01", onCirculars, Modifier.weight(1f)) { AppIcons.Document(Modifier.size(24.dp), AppTheme.TextDark) }
             NothingQuickTile("Bacheca", "02", onBoard, Modifier.weight(1f)) { AppIcons.ChatBubble(Modifier.size(24.dp), AppTheme.TextDark) }
             NothingQuickTile("Posti", "03", onSeatMap, Modifier.weight(1f)) { AppIcons.Chair(Modifier.size(24.dp), AppTheme.TextDark) }
         }
+    }
     }
 }
 
@@ -130,7 +133,7 @@ private fun NothingQuickTile(label: String, index: String, onClick: () -> Unit, 
 }
 
 @Composable
-fun NothingGlyphWidget(modifier: Modifier = Modifier) = NothingFocusWidget(modifier)
+fun NothingGlyphWidget(modifier: Modifier = Modifier, compact: Boolean = false) = NothingFocusWidget(modifier, compact)
 
 /** Bounded, static matrix when motion is disabled; only loaders animate repeatedly. */
 @Composable

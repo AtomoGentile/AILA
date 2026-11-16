@@ -141,7 +141,7 @@ internal fun AilaBriefCard(
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(label, color = if (AppTheme.isNothing) AppTheme.TextMuted else tint, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                            Text(item.title, color = if (item.kind == AilaBriefKind.CIRCULAR && !item.isActive) soft else primaryText, style = MaterialTheme.typography.titleMedium, maxLines = if (AppTheme.isNothing) 4 else 2, overflow = TextOverflow.Ellipsis)
+                            Text(item.title, color = if (item.kind == AilaBriefKind.CIRCULAR && !item.isActive) soft else primaryText, style = MaterialTheme.typography.titleMedium, maxLines = if (AppTheme.isNothing) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis)
                         }
                     }
                     if(item.kind != AilaBriefKind.EVENT) Text(item.message, color = soft, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)

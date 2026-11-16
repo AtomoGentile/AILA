@@ -42,7 +42,7 @@ private val GlyphMuted = Color(0xFFC2C2BA)
 private val GlyphPanel = Color(0xFF181818)
 
 @Composable
-fun NothingFocusWidget(modifier: Modifier = Modifier) {
+fun NothingFocusWidget(modifier: Modifier = Modifier, compact: Boolean = false) {
     val prefs = NothingExperience.preferences
     val focus = NothingExperience.focus
     val hardware = LocalNothingGlyph.current
@@ -64,13 +64,13 @@ fun NothingFocusWidget(modifier: Modifier = Modifier) {
                 AppIcons.Sliders(Modifier.size(18.dp), GlyphPaper)
             }
         }
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
+        Box(Modifier.fillMaxWidth()) {
             val largeText = androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.15f
             val readout: @Composable () -> Unit = {
                 Text(formatFocusTime(focus.remaining(now)), style = MaterialTheme.typography.headlineSmall.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Normal),
                     color = GlyphPaper, maxLines = 1)
             }
-            if (maxWidth < 124.dp || largeText) {
+            if (compact || largeText) {
                 Column(Modifier.fillMaxWidth(),horizontalAlignment = Alignment.CenterHorizontally,verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     NothingGlyphArt(Modifier.size(36.dp),progress=focus.fraction(now),signal=signal+NothingExperience.completedSessions)
                     readout()
@@ -130,8 +130,8 @@ fun NothingGlyphStudio(onDismiss: () -> Unit) {
         onDispose { previewJob?.cancel(); NothingGlyphPreview.active = false; hardware.stop() }
     }
     AilaBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        Column(Modifier.fillMaxWidth().fillMaxHeight()
+            .padding(horizontal = 20.dp).padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Glyph Studio", style = MaterialTheme.typography.headlineSmall, color = AppTheme.TextDark)
@@ -139,10 +139,10 @@ fun NothingGlyphStudio(onDismiss: () -> Unit) {
                 }
                 AilaIconButton("Chiudi Glyph Studio", onDismiss) { AppIcons.Close(Modifier.size(18.dp), it) }
             }
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(GlyphPanel).padding(20.dp),
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(GlyphPanel).padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                 AnimatedContent(p.face, transitionSpec = { fadeIn(tween(if(AppTheme.reduceMotion) 0 else 180)) togetherWith fadeOut(tween(if(AppTheme.reduceMotion) 0 else 120)) }, label = "glyphFace") { face ->
-                    NothingGlyphArt(Modifier.size(104.dp), face = face, signal = signal)
+                    NothingGlyphArt(Modifier.size(84.dp), face = face, signal = signal)
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(p.signature.ifBlank { "AILA" }, style = MaterialTheme.typography.titleMedium, color = GlyphPaper, maxLines = 2)
@@ -150,6 +150,7 @@ fun NothingGlyphStudio(onDismiss: () -> Unit) {
                     Text(if (hardware.ownerLabel != null) "Nothing Insider" else "Anteprima", style = MaterialTheme.typography.labelSmall, color = GlyphMuted)
                 }
             }
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             AilaSectionTitle("Disegno")
             GlyphFace.entries.chunked(2).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -186,6 +187,7 @@ fun NothingGlyphStudio(onDismiss: () -> Unit) {
                 NothingPreferenceRow("Luci posteriori", "Avanzamento dove supportato e segnale di fine sessione.", p.rearLights,
                     enabled = hardware.ready) { update(p.copy(rearLights = it)); if(!it) hardware.stop() }
                 Text("Le luci restano attive solo con AILA in primo piano. Il timer continua anche cambiando schermata.", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+            }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 AilaSecondaryButton("Prova", {
