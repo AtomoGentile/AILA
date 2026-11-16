@@ -6,6 +6,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -37,14 +39,23 @@ fun NothingGlyphMark(
             drawLine(if (lit) on else off, a, b, stroke, StrokeCap.Round)
         }
         fun arc(cx: Float, cy: Float, r: Float, start: Float, sweep: Float, steps: Int) {
-            repeat(steps) { i ->
-                val a = (start + sweep*i/steps)*PI.toFloat()/180f
-                val b = (start + sweep*(i+1)/steps)*PI.toFloat()/180f
-                segment(point(cx+r*cos(a),cy+r*sin(a)),point(cx+r*cos(b),cy+r*sin(b)), i.toFloat()/steps < progress)
+            fun trace(fraction: Float): Path = Path().apply {
+                val end = (steps * fraction.coerceIn(0f, 1f)).toInt()
+                for (i in 0..end) {
+                    val a = (start + sweep*i/steps)*PI.toFloat()/180f
+                    val p = point(cx+r*cos(a), cy+r*sin(a))
+                    if (i == 0) moveTo(p.x,p.y) else lineTo(p.x,p.y)
+                }
+            }
+            drawPath(trace(1f), off, style = Stroke(stroke, cap = StrokeCap.Round))
+            if (active && progress > 0f) {
+                val path = trace(progress)
+                drawPath(path, Color.White.copy(alpha = .08f), style = Stroke(stroke*2.8f, cap = StrokeCap.Round))
+                drawPath(path, on, style = Stroke(stroke, cap = StrokeCap.Round))
             }
         }
         // Camera halo and rear charging coil; separated tracks rather than a generic cross.
-        arc(.25f,.22f,.12f,45f,270f,24)
+        arc(.22f,.17f,.10f,45f,270f,24)
         arc(.50f,.49f,.25f,48f,264f,44)
         segment(point(.74f,.17f), point(.85f,.28f), progress > .5f)
         segment(point(.50f,.78f), point(.50f,.93f), progress > .15f)

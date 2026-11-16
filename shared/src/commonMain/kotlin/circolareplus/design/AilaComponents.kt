@@ -1354,7 +1354,7 @@ fun AilaFab(
     val glass = AppTheme.isGlass
     val corner by animateFloatAsState(
         targetValue = when {
-            glass -> 50f
+            AppTheme.isNothing || glass -> 50f
             pressed -> 20f
             else -> 30f
         },
@@ -1362,16 +1362,16 @@ fun AilaFab(
         label = "fabCorner"
     )
     val shape = RoundedCornerShape(percent = corner.toInt())
-    val ink = if (glass) Color.White else AppTheme.TintBlueInk
+    val ink = if (AppTheme.isNothing) AppTheme.BackgroundLight else if (glass) Color.White else AppTheme.TintBlueInk
     Box(
         modifier = modifier
             .size(56.dp)
             // Material: il foglio "Nuova proposta" nasce da qui e ci rientra (container transform).
             .then(if (glass && !transformInGlass) Modifier else Modifier.ailaTransformOrigin(17.dp, buttonColor = AppTheme.TintBlue))
             .then(if (glass) Modifier.ailaPressScale(interactionSource, 0.9f) else Modifier)
-            .shadow(if (glass) 8.dp else 6.dp, shape, ambientColor = Color.Black.copy(alpha = 0.12f), spotColor = Color.Black.copy(alpha = 0.18f))
+            .shadow(if (AppTheme.isNothing) 0.dp else if (glass) 8.dp else 6.dp, shape, ambientColor = Color.Black.copy(alpha = 0.12f), spotColor = Color.Black.copy(alpha = 0.18f))
             .clip(shape)
-            .background(if (glass) AppTheme.PrimaryGradient else SolidColor(AppTheme.TintBlue))
+            .background(if (AppTheme.isNothing || glass) AppTheme.PrimaryGradient else SolidColor(AppTheme.TintBlue))
             .clickable(interactionSource = interactionSource, indication = null) { onClick() }
             .semantics {
                 this.contentDescription = contentDescription
@@ -1400,6 +1400,7 @@ val LocalProfileEntry = androidx.compose.runtime.compositionLocalOf<AilaProfileE
 fun AilaProfileButton(entry: AilaProfileEntry, modifier: Modifier = Modifier, onHero: Boolean = false) {
     val interactionSource = remember { MutableInteractionSource() }
     val avatarFill = when {
+        AppTheme.isNothing -> AppTheme.TextDark
         onHero -> AppTheme.AccentDeep
         AppTheme.accent != AilaAccent.BLUE -> AppTheme.AccentContainer
         AppTheme.isDarkMode -> Color(0xFF34457A)
@@ -1432,6 +1433,7 @@ fun AilaProfileButton(entry: AilaProfileEntry, modifier: Modifier = Modifier, on
             text = entry.initials,
             style = MaterialTheme.typography.titleSmall,
             color = when {
+                AppTheme.isNothing -> AppTheme.BackgroundLight
                 AppTheme.isGlass -> AppTheme.TextDark
                 onHero || AppTheme.isDarkMode -> Color.White
                 else -> AppTheme.OnAccentContainer

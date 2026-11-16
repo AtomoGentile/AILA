@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -53,8 +54,10 @@ class NothingUiRegressionTest {
         var destination = ""
         activity.get().setContent {
             AilaTheme {
+                CompositionLocalProvider(LocalProfileEntry provides AilaProfileEntry("SB") {}) {
                 HomeScreen(studentFirstName = "Simone", onNavigateToCalendar = { destination = "calendar" },
                     onNavigateToCirculars = { destination = "circulars" })
+                }
             }
         }
         compose.onNodeWithText("SIMONE", ignoreCase = true).assertIsDisplayed()
