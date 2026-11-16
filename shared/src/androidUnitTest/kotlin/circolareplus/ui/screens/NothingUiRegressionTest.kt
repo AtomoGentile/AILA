@@ -218,7 +218,10 @@ class NothingUiRegressionTest {
         if (settle) compose.mainClock.advanceTimeBy(500)
         compose.waitForIdle()
         compose.runOnIdle {
-            val view = activity.get().window.decorView
+            // Compose dialogs have their own Android window; drawing only the Activity
+            // would silently capture the dimmed background instead of the actual sheet.
+            val dialog = org.robolectric.shadows.ShadowDialog.getLatestDialog()?.takeIf { it.isShowing }
+            val view = dialog?.window?.decorView ?: activity.get().window.decorView
             val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
             view.draw(Canvas(bitmap))
             val folder = File(System.getProperty("aila.ui.screenshots") ?: "build/ui-screenshots").apply { mkdirs() }
