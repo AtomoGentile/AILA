@@ -20,6 +20,7 @@ data class ProposalDto(
     val downVotes: Int = 0,
     val commentCount: Int = 0,
     val myVote: Int? = null,
+    val attachments: List<ContentAttachmentDto> = emptyList(),
     val createdAt: String
 )
 
@@ -31,7 +32,8 @@ data class CreateProposalRequestDto(
     val title: String,
     val description: String,
     val category: String = "GENERALE",
-    val isAnonymous: Boolean = false
+    val isAnonymous: Boolean = false,
+    val attachmentIds: List<String> = emptyList()
 )
 
 @Serializable

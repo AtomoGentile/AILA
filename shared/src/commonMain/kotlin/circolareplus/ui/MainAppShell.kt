@@ -55,6 +55,7 @@ import circolareplus.data.remote.ConnectivityState
 import circolareplus.data.remote.dto.PollDetailDto
 import circolareplus.data.remote.dto.CreatePollSlotRequestDto
 import circolareplus.data.remote.dto.RatingEntryDto
+import circolareplus.data.remote.dto.ContentAttachmentDto
 import circolareplus.data.repository.CircularsRepository
 import circolareplus.data.repository.SessionRestore
 import circolareplus.design.ailaNoTouchWhile
@@ -116,6 +117,8 @@ import circolareplus.domain.model.UnlockRequest
 import circolareplus.domain.model.User
 import circolareplus.domain.model.UserRole
 import circolareplus.platform.currentTimeMillis
+import circolareplus.platform.IncomingContent
+import circolareplus.platform.rememberContentPicker
 import circolareplus.push.currentPushPlatform
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -2624,10 +2627,10 @@ fun MainAppShell(
                 refreshAfterSheetClose?.invoke()
                 refreshAfterSheetClose = null
             },
-            onConfirm = { title, description, category, isAnonymous ->
+            onConfirm = { title, description, category, isAnonymous, attachments ->
                 coroutineScope.launch {
                     try {
-                        AppContainer.proposalsRepository.createProposal(title, description, category, isAnonymous)
+                        AppContainer.proposalsRepository.createProposal(title, description, category, isAnonymous, attachments)
                         closeAddProposalRequested = true
                         refreshAfterSheetClose = { reloadProposals() }
                     } catch (e: Exception) {
@@ -4027,6 +4030,7 @@ fun MainAppShell(
                                                     }
                                                 },
                                                 onCreateProposalClick = { showAddProposalDialog = true },
+                                                onOpenAttachment = { remoteContent = it; localContent = null },
                                                 onLoadComments = { proposalId ->
                                                     AppContainer.proposalsRepository.listComments(proposalId)
                                                 },
@@ -7728,16 +7732,35 @@ private fun CreateRankingPollDialog(
 @Composable
 private fun AddProposalDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String, String, String, Boolean) -> Unit,
+    onConfirm: (String, String, String, Boolean, List<String>) -> Unit,
     closeRequested: Boolean = false
 ) {
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var isAnonymous by remember { mutableStateOf(false) }
+    var attachments by remember { mutableStateOf<List<ContentAttachmentDto>>(emptyList()) }
+    var uploadError by remember { mutableStateOf<String?>(null) }
+    var uploading by remember { mutableStateOf(false) }
+    var submitted by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val pickAttachment = rememberContentPicker({ uploadError = it }) { file: IncomingContent ->
+        if (attachments.size >= 5) uploadError = "Puoi allegare al massimo 5 file."
+        else scope.launch {
+            uploading = true; uploadError = null
+            try { attachments = attachments + AppContainer.acaRepository.upload(file, persistLocal = false) }
+            catch (e: Exception) { uploadError = e.message ?: "Caricamento non riuscito" }
+            finally { uploading = false }
+        }
+    }
 
     circolareplus.design.AilaOriginSheet(
         originKey = "proposalCreateSheet",
-        onDismiss = onDismiss,
+        onDismiss = {
+            if (!submitted && attachments.isNotEmpty()) scope.launch {
+                attachments.forEach { try { AppContainer.acaRepository.removeAttachment(it.id) } catch (_: Exception) {} }
+            }
+            onDismiss()
+        },
         closeRequested = closeRequested,
         // Il "+" della Bacheca sta in basso a destra: il foglio sale dal fondo.
         fromBottom = true
@@ -7771,6 +7794,19 @@ private fun AddProposalDialog(
                 shape = RoundedCornerShape(AppTheme.SmallElementRadius),
                 modifier = Modifier.fillMaxWidth().ailaSheetReveal(1)
             )
+            Spacer(modifier = Modifier.height(AppTheme.Space8))
+            OutlinedButton(
+                onClick = pickAttachment,
+                enabled = !uploading && attachments.size < 5,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text(if (uploading) "Caricamento…" else "Aggiungi allegati${if (attachments.isEmpty()) "" else " (${attachments.size}/5)"}") }
+            attachments.forEach { item ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(item.fileName, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted, maxLines = 1)
+                    TextButton(onClick = { attachments = attachments.filterNot { it.id == item.id }; scope.launch { try { AppContainer.acaRepository.removeAttachment(item.id) } catch (_: Exception) {} } }, enabled = !uploading) { Text("Rimuovi") }
+                }
+            }
+            uploadError?.let { Text(it, color = AppTheme.TintRedInk, style = MaterialTheme.typography.bodySmall) }
             Spacer(modifier = Modifier.height(AppTheme.Space12))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -7799,7 +7835,8 @@ private fun AddProposalDialog(
                     text = "Pubblica",
                     onClick = {
                         if (title.isNotBlank() && description.isNotBlank()) {
-                            onConfirm(title.trim(), description.trim(), "GENERALE", isAnonymous)
+                            submitted = true
+                            onConfirm(title.trim(), description.trim(), "GENERALE", isAnonymous, attachments.map { it.id })
                         }
                     },
                     enabled = title.isNotBlank() && description.isNotBlank(),

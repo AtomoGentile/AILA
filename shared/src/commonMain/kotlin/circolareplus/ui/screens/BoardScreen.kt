@@ -55,6 +55,7 @@ fun BoardScreen(
     onVote: (String, Int) -> Unit = { _, _ -> },
     onChangeStatus: (String, ProposalStatus, ProposalOutcome?) -> Unit = { _, _, _ -> },
     onCreateProposalClick: () -> Unit = {},
+    onOpenAttachment: (circolareplus.data.remote.dto.ContentAttachmentDto) -> Unit = {},
     onLoadComments: suspend (String) -> List<ProposalComment> = { emptyList() },
     onAddComment: suspend (String, String, Boolean) -> Unit = { _, _, _ -> },
     onDelete: (String) -> Unit = {},
@@ -137,6 +138,7 @@ fun BoardScreen(
                 canModerateIdentity = canModerateIdentity,
                 onVote = onVote,
                 onEdit = onEdit,
+                onOpenAttachment = onOpenAttachment,
                 onChangeStatus = onChangeStatus,
                 onLoadComments = onLoadComments,
                 onAddComment = onAddComment,
@@ -226,6 +228,7 @@ fun ProposalCardItem(
     onAddComment: suspend (String, String, Boolean) -> Unit = { _, _, _ -> },
     onDelete: (String) -> Unit = {},
     onEdit: (String, String, String) -> Unit = { _, _, _ -> },
+    onOpenAttachment: (circolareplus.data.remote.dto.ContentAttachmentDto) -> Unit = {},
     onRequestUnlock: suspend (String, String?, String) -> Unit = { _, _, _ -> }
 ) {
     var isExpanded by remember { mutableStateOf(false) }
@@ -393,6 +396,10 @@ fun ProposalCardItem(
                 style = MaterialTheme.typography.bodyLarge,
                 color = AppTheme.TextMuted
             )
+            proposal.attachments.forEach { attachment ->
+                Spacer(Modifier.height(AppTheme.Space8))
+                LocalForumAttachment(attachment, enabled = true) { onOpenAttachment(attachment) }
+            }
 
             // Svelamento dell'autore anonimo: lo chiedono i tre ruoli che poi lo firmano.
             if (canModerateIdentity && proposal.isAnonymous && !proposal.identityRevealed) {

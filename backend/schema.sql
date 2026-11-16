@@ -695,6 +695,7 @@ CREATE TABLE IF NOT EXISTS content_attachments (
  id TEXT PRIMARY KEY, class_id TEXT NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
  uploaded_by TEXT REFERENCES users(id) ON DELETE SET NULL,
  thread_id TEXT REFERENCES forum_threads(id) ON DELETE CASCADE,
+ proposal_id TEXT REFERENCES proposals(id) ON DELETE SET NULL,
  post_id TEXT REFERENCES forum_posts(id) ON DELETE SET NULL,
  file_name TEXT NOT NULL, mime TEXT NOT NULL, byte_size INTEGER NOT NULL,
  r2_key TEXT NOT NULL UNIQUE, extracted_text TEXT NOT NULL DEFAULT '',
@@ -703,6 +704,7 @@ CREATE TABLE IF NOT EXISTS content_attachments (
 );
 CREATE INDEX IF NOT EXISTS idx_content_attachment_expiry ON content_attachments(expires_at) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_content_attachment_thread ON content_attachments(thread_id,post_id);
+CREATE INDEX IF NOT EXISTS idx_content_attachment_proposal ON content_attachments(proposal_id) WHERE proposal_id IS NOT NULL;
 CREATE TABLE IF NOT EXISTS ai_preferences (
  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
  ai_enabled INTEGER NOT NULL DEFAULT 0, aca_enabled INTEGER NOT NULL DEFAULT 0, hold_to_open INTEGER NOT NULL DEFAULT 1,

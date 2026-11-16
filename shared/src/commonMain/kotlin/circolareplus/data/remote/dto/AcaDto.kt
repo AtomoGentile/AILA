@@ -39,7 +39,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class ForumSnapshotDto(val thread:ForumThreadDto,val participants:List<ForumParticipantDto> = emptyList(),
  val posts:List<ForumPostDto> = emptyList(),val hasMore:Boolean=false,val nextBefore:String?=null,val notificationMode:String="REPLIES",val myIdentity:ForumParticipantDto?=null)
 @Serializable data class ForumWriteDto(val id:String,val invokePerabot:Boolean=false)
-@Serializable data class ForumCreateRequestDto(val title:String,val body:String,val anonymous:Boolean,val forumConsent:Boolean)
+@Serializable data class ForumCreateRequestDto(val title:String,val body:String,val anonymous:Boolean,val forumConsent:Boolean,val attachmentIds:List<String> = emptyList())
 @Serializable data class ForumReplyRequestDto(val body:String,val anonymous:Boolean,val parentId:String?=null,val mentions:List<String> = emptyList(),
  val attachmentIds:List<String> = emptyList(),val forumConsent:Boolean)
 @Serializable data class ForumStateRequestDto(val resolved:Boolean,val featuredPostId:String?)
