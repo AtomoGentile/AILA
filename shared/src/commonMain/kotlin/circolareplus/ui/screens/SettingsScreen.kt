@@ -250,7 +250,7 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.height(AppTheme.Space8))
                             val styles = circolareplus.design.UiStyle.entries
-                            AilaSegmentedTabs(
+                            circolareplus.design.AilaFilterBar(
                                 labels = styles.map { it.label },
                                 selectedIndex = styles.indexOf(uiStyle),
                                 onSelect = { index -> onUiStyleChange(styles[index]) },
@@ -266,28 +266,19 @@ fun SettingsScreen(
                                     circolareplus.design.UiStyle.EXPRESSIVE ->
                                         "Colori pieni, forme che si deformano al tocco e movimenti vivaci, come Android."
                                     circolareplus.design.UiStyle.NOTHING ->
-                                        "Bianco e nero, dettagli rossi, caratteri tecnici e circuiti Glyph. Pensato per chi ama Nothing."
+                                        "Titoli a punti, widget monocromatici, controlli circolari e dettagli rossi. Una UI dedicata, ispirata a Nothing OS."
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = AppTheme.TextMuted
                             )
                             if (uiStyle == circolareplus.design.UiStyle.NOTHING) {
                                 Spacer(modifier = Modifier.height(AppTheme.Space12))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
-                                        .background(if (isDarkMode) androidx.compose.ui.graphics.Color(0xFF090909) else androidx.compose.ui.graphics.Color(0xFFF0F0ED))
-                                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    NothingGlyphMark(size = 36.dp)
-                                    Spacer(Modifier.width(12.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text("GLYPH INTERFACE", style = MaterialTheme.typography.labelMedium, color = AppTheme.TextDark)
-                                        Text("Un piccolo segnale, sempre acceso.", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
-                                    }
-                                    Text("●", color = AppTheme.PrimaryBlue, style = MaterialTheme.typography.titleMedium)
-                                }
+                                circolareplus.design.NothingGlyphWidget(Modifier.fillMaxWidth())
+                                Spacer(Modifier.height(8.dp))
+                                Text("Glyph Lab · Tocca il retro per la sequenza luminosa. Sui Nothing compatibili con Android 16 o successivo si accendono anche le luci del telefono; gli altri dispositivi mostrano l’anteprima.",
+                                    style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
                             }
+                            if (uiStyle != circolareplus.design.UiStyle.NOTHING) {
                             Spacer(modifier = Modifier.height(AppTheme.Space16))
                             Text(
                                 text = "Colore principale",
@@ -306,6 +297,11 @@ fun SettingsScreen(
                             Text("Gradienti e introduzioni delle sezioni.",style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
                             Spacer(Modifier.height(8.dp))
                             AccentPicker(selected=tertiaryAccent,onSelect=onTertiaryAccentChange,label="Terziario")
+                            } else {
+                                Spacer(Modifier.height(12.dp))
+                                Text("Palette Nothing: bianco, nero e rosso. I colori personali tornano disponibili cambiando stile.",
+                                    style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+                            }
 
                         }
                     }

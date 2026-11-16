@@ -46,7 +46,16 @@ fun AilaProgressBar(
         animationSpec = spring(dampingRatio = 1f, stiffness = 200f),
         label = "ailaProgress"
     )
-    if (AppTheme.isGlass) {
+    if (AppTheme.isNothing) {
+        Canvas(modifier.fillMaxWidth().height(8.dp)) {
+            val count = (size.width / 8.dp.toPx()).toInt().coerceAtLeast(1)
+            val step = size.width / count
+            repeat(count) { i ->
+                drawCircle(if ((i + 1f) / count <= animated.value) color else AppTheme.FieldOutline,
+                    2.dp.toPx(), Offset(step * (i + .5f), size.height / 2))
+            }
+        }
+    } else if (AppTheme.isGlass) {
         GlassProgressBar(progress = { animated.value }, color = color, modifier = modifier)
     } else {
         WavyProgressBar(progress = { animated.value }, color = color, trackColor = trackColor, modifier = modifier)

@@ -36,6 +36,10 @@ fun AilaMorphingLoader(
     color: Color = AppTheme.PrimaryBlue,
     modifier: Modifier = Modifier
 ) {
+    if (AppTheme.isNothing) {
+        NothingMatrixLoader(modifier.size(size), color)
+        return
+    }
     // (lobi, profondita') delle sagome, nell'ordine in cui si susseguono.
     val shapes = remember {
         listOf(

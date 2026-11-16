@@ -378,6 +378,11 @@ private fun HomeHeroPanel(
     onNavigateToBoard: () -> Unit,
     onNavigateToSeatMap: () -> Unit
 ) {
+    if (AppTheme.isNothing) {
+        circolareplus.design.NothingHomePanel(studentFirstName, onNavigateToSearch, onNavigateToGita,
+            onNavigateToCirculars, onNavigateToCalendar, onNavigateToBoard, onNavigateToSeatMap)
+        return
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -482,7 +487,7 @@ private fun EventRow(event: CalendarEvent, onClick: () -> Unit) {
             // un filo per stare al centro della forma.
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.offset(y = if (AppTheme.isGlass) 0.dp else 3.dp)
+                modifier = Modifier.offset(y = if (AppTheme.isGlass || AppTheme.isNothing) 0.dp else 3.dp)
             ) {
                 Text(text = day, style = MaterialTheme.typography.titleSmall, color = AppTheme.TintBlueInk)
                 // Material: il mese sale un poco (verso il giorno), il giorno resta dov'e'.
@@ -492,7 +497,7 @@ private fun EventRow(event: CalendarEvent, onClick: () -> Unit) {
                     color = AppTheme.TintBlueInk,
                     // -2 e non piu' -5.5: con la scala tipografica le due righe sono gia' piu'
                     // vicine (prima ciascuna era alta 24sp per l'interlinea ereditata).
-                    modifier = Modifier.offset(y = if (AppTheme.isGlass) 0.dp else (-2).dp)
+                    modifier = Modifier.offset(y = if (AppTheme.isGlass || AppTheme.isNothing) 0.dp else (-2).dp)
                 )
             }
         }

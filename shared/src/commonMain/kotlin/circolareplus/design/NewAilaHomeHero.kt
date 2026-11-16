@@ -22,7 +22,7 @@ import circolareplus.data.remote.dto.AcaExperienceDto
 @Composable fun NewAilaHomeHero(experience:AcaExperienceDto,onOpenAca:()->Unit,onOpenForum:()->Unit,modifier:Modifier=Modifier){
  val uri=LocalUriHandler.current
  Box(modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp))
-  .background(Brush.linearGradient(listOf(Color(0xFF10172C),AppTheme.AccentDeep,Color(0xFF17203B))))) {
+  .background(if (AppTheme.isNothing) androidx.compose.ui.graphics.SolidColor(Color(0xFF181818)) else Brush.linearGradient(listOf(Color(0xFF10172C),AppTheme.AccentDeep,Color(0xFF17203B))))) {
   Canvas(Modifier.matchParentSize()){
    val center=Offset(size.width*.9f,size.height*.18f)
    listOf(.32f,.49f,.67f).forEachIndexed{i,f->drawCircle(AppTheme.PrimaryBlue.copy(alpha=.18f-i*.035f),size.width*f,center,style=Stroke(1.dp.toPx()))}

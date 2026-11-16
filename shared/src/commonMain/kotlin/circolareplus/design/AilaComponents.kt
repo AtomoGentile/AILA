@@ -96,6 +96,10 @@ fun AilaScreenHeader(
     showBrand: Boolean = true,
     action: (@Composable () -> Unit)? = null
 ) {
+    if (AppTheme.isNothing) {
+        NothingScreenHeader(title, subtitle, modifier, action)
+        return
+    }
     Column(modifier = modifier.fillMaxWidth().background(AppTheme.BackgroundLight)) {
         Row(
             modifier = Modifier
@@ -451,7 +455,7 @@ fun AilaCard(
                         .ailaPressable(pressedScale = 0.985f) { onClick() }
                 } else Modifier
             )
-            .then(if (glass) Modifier.ailaGlassSurface(shape, tint = glassTint) else Modifier),
+            .then(if (glass) Modifier.ailaGlassSurface(shape, tint = glassTint) else if (AppTheme.isNothing) Modifier.border(1.dp, AppTheme.CardBorder, shape) else Modifier),
         content = content
     )
 }
@@ -469,7 +473,7 @@ fun AilaIconTile(
     Box(
         modifier = modifier
             .size(size)
-            .clip(if (AppTheme.isGlass) RoundedCornerShape(size / 3) else ailaCookieShape(9, 0.09f))
+            .clip(if (AppTheme.isNothing) CircleShape else if (AppTheme.isGlass) RoundedCornerShape(size / 3) else ailaCookieShape(9, 0.09f))
             .background(tint),
         contentAlignment = Alignment.Center
     ) {
@@ -580,7 +584,7 @@ fun AilaPrimaryButton(
             ),
         contentAlignment = Alignment.Center
     ) {
-        val contentColor = if (enabled) Color.White else AppTheme.TextFaint
+        val contentColor = if (enabled && AppTheme.isNothing) AppTheme.BackgroundLight else if (enabled) Color.White else AppTheme.TextFaint
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (icon != null) {
                 icon(contentColor)
@@ -606,7 +610,7 @@ fun AilaPrimaryButton(
 fun ailaMorphShape(interactionSource: MutableInteractionSource, pressedPercent: Int = 22): RoundedCornerShape {
     val pressed by interactionSource.collectIsPressedAsState()
     val percent by animateFloatAsState(
-        targetValue = if (pressed && !AppTheme.isGlass) pressedPercent.toFloat() else 50f,
+        targetValue = if (pressed && !AppTheme.isGlass && !AppTheme.isNothing) pressedPercent.toFloat() else 50f,
         animationSpec = if (pressed) spring(stiffness = 1400f) else spring(dampingRatio = 0.5f, stiffness = 600f),
         label = "ailaMorphShape"
     )
@@ -623,7 +627,7 @@ fun ailaMorphShape(interactionSource: MutableInteractionSource, pressedPercent: 
 fun Modifier.ailaMorphClip(interactionSource: MutableInteractionSource, pressedPercent: Int = 22): Modifier {
     val pressed by interactionSource.collectIsPressedAsState()
     val percent = remember { Animatable(50f) }
-    val squash = pressed && !AppTheme.isGlass
+    val squash = pressed && !AppTheme.isGlass && !AppTheme.isNothing
     LaunchedEffect(squash) {
         if (squash) percent.animateTo(pressedPercent.toFloat(), spring(stiffness = 1400f))
         else percent.animateTo(50f, spring(dampingRatio = 0.5f, stiffness = 600f))
@@ -872,9 +876,9 @@ fun AilaSectionTitle(
         // primario). Glass: titolo di sezione in grassetto, come iOS.
         Text(
             text = text,
-            style = if (AppTheme.isGlass) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
-            fontWeight = if (AppTheme.isGlass) FontWeight.Bold else FontWeight.SemiBold,
-            color = if (AppTheme.isGlass) AppTheme.TextDark else AppTheme.PrimaryBlue,
+            style = if (AppTheme.isNothing || AppTheme.isGlass) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
+            fontWeight = if (AppTheme.isNothing) FontWeight.Normal else if (AppTheme.isGlass) FontWeight.Bold else FontWeight.SemiBold,
+            color = if (AppTheme.isNothing || AppTheme.isGlass) AppTheme.TextDark else AppTheme.PrimaryBlue,
             modifier = if (AppTheme.isGlass) Modifier else Modifier.padding(start = 4.dp)
         )
         if (actionText != null && onActionClick != null) {
@@ -896,7 +900,7 @@ private fun StateBadge(brush: Brush, icon: @Composable () -> Unit) {
         // Material: forma "sunny" a 12 lobi piena; Glass: cerchio sfumato.
         modifier = Modifier
             .size(if (AppTheme.isGlass) 84.dp else 96.dp)
-            .clip(if (AppTheme.isGlass) CircleShape else ailaCookieShape(12, 0.1f))
+            .clip(if (AppTheme.isGlass || AppTheme.isNothing) CircleShape else ailaCookieShape(12, 0.1f))
             .background(if (AppTheme.isGlass) brush else SolidColor(AppTheme.TintBlue)),
         contentAlignment = Alignment.Center
     ) {
@@ -1069,6 +1073,7 @@ fun AilaIconButton(
         icon(
             when {
                 !enabled -> AppTheme.TextFaint
+                primary && AppTheme.isNothing -> AppTheme.BackgroundLight
                 primary -> Color.White
                 else -> AppTheme.TextDark
             }
@@ -1258,11 +1263,11 @@ fun AilaSwitch(
             enabled = enabled,
             modifier = modifier,
             thumbContent = if (checked) {
-                { AppIcons.Check(modifier = Modifier.size(12.dp), color = AppTheme.PrimaryBlue) }
+                { AppIcons.Check(modifier = Modifier.size(12.dp), color = if (AppTheme.isNothing) AppTheme.TextDark else AppTheme.PrimaryBlue) }
             } else null,
             colors = androidx.compose.material3.SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = AppTheme.PrimaryBlue,
+                checkedThumbColor = if (AppTheme.isNothing) AppTheme.BackgroundLight else Color.White,
+                checkedTrackColor = if (AppTheme.isNothing) AppTheme.TextDark else AppTheme.PrimaryBlue,
                 uncheckedThumbColor = AppTheme.TextMuted,
                 uncheckedTrackColor = AppTheme.TrackFill,
                 uncheckedBorderColor = AppTheme.TextMuted

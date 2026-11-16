@@ -1,0 +1,115 @@
+package circolareplus.platform
+
+import android.app.Activity
+import android.app.Application
+import android.content.ComponentName
+import android.content.Context
+import android.content.ContextWrapper
+import android.os.Build
+import android.os.Bundle
+import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
+import com.nothing.ketchum.Common
+import com.nothing.ketchum.Glyph
+import com.nothing.ketchum.GlyphManager
+import kotlinx.coroutines.delay
+
+/** Foreground only. Each pulse is bounded; pause and disposal release the hardware session. */
+@Composable
+actual fun rememberNothingGlyph(): NothingGlyphConnection {
+    val context = LocalContext.current
+    val owner = Build.MANUFACTURER.equals("Nothing", true) || Build.BRAND.equals("Nothing", true)
+    if (!owner) return PreviewNothingGlyph
+    val connection = remember(context) { AndroidNothingGlyph(context) }
+    DisposableEffect(connection) {
+        connection.connect()
+        val application = context.applicationContext as Application
+        var host: Context? = context
+        while (host is ContextWrapper && host !is Activity) host = host.baseContext
+        val hostActivity = host as? Activity
+        val observer = object : Application.ActivityLifecycleCallbacks {
+            override fun onActivityPaused(activity: Activity) { if (activity == hostActivity) connection.stop() }
+            override fun onActivityDestroyed(activity: Activity) { if (activity == hostActivity) connection.stop() }
+            override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit
+            override fun onActivityStarted(activity: Activity) = Unit
+            override fun onActivityResumed(activity: Activity) = Unit
+            override fun onActivityStopped(activity: Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: Activity, state: Bundle) = Unit
+        }
+        application.registerActivityLifecycleCallbacks(observer)
+        onDispose {
+            application.unregisterActivityLifecycleCallbacks(observer)
+            connection.dispose()
+        }
+    }
+    LaunchedEffect(connection) { delay(3000); connection.connectionTimeout() }
+    return connection
+}
+
+private class AndroidNothingGlyph(private val context: Context) : NothingGlyphConnection {
+    override val ownerLabel = Build.MODEL
+    override var ready by mutableStateOf(false)
+        private set
+    override var status by mutableStateOf("Collegamento al Glyph…")
+        private set
+    private var manager: GlyphManager? = null
+    private var session = false
+    private var disposed = false
+
+    fun connect() {
+        // Older Nothing OS versions require a vendor API key; do not pretend that a test key works.
+        if (Build.VERSION.SDK_INT < 36) { status = "Le luci richiedono Nothing OS con Android 16 o successivo"; return }
+        val device = when {
+            Common.is20111() -> Glyph.DEVICE_20111
+            Common.is22111() -> Glyph.DEVICE_22111
+            Common.is23111() -> Glyph.DEVICE_23111
+            Common.is23113() -> Glyph.DEVICE_23113
+            Common.is24111() -> Glyph.DEVICE_24111
+            Common.is25111() -> Glyph.DEVICE_25111
+            Common.is25131() -> Glyph.DEVICE_25131
+            else -> null
+        }
+        if (device == null) { status = "Anteprima disponibile; luci non supportate su questo modello"; return }
+        runCatching {
+            val gm = GlyphManager.getInstance(context.applicationContext)
+            manager = gm
+            gm.init(object : GlyphManager.Callback {
+                override fun onServiceConnected(name: ComponentName) {
+                    if (disposed) return
+                    ready = runCatching { gm.register(device) }.getOrDefault(false)
+                    status = if (ready) "Luci posteriori collegate" else "Il sistema non ha autorizzato il Glyph"
+                }
+                override fun onServiceDisconnected(name: ComponentName) {
+                    session = false; ready = false
+                    status = "Glyph disconnesso"
+                }
+            })
+        }.onFailure { status = "Glyph non disponibile"; ready = false }
+    }
+
+    fun connectionTimeout() { if (!ready && status == "Collegamento al Glyph…") status = "Servizio Glyph non disponibile" }
+
+    override fun pulse(): Boolean {
+        val gm = manager ?: return false
+        if (!ready || disposed) return false
+        return runCatching {
+            if (!session) { gm.openSession(); session = true }
+            val frame = gm.glyphFrameBuilder.buildChannelA().buildChannelB().buildChannelC()
+                .buildPeriod(1200).buildCycles(1).buildInterval(0).build()
+            gm.animate(frame)
+            true
+        }.getOrElse { stop(); ready = false; status = "Il sistema non ha avviato le luci"; false }
+    }
+
+    override fun stop() {
+        manager?.let { gm ->
+            if (session) {
+                runCatching { gm.turnOff() }
+                runCatching { gm.closeSession() }
+            }
+        }
+        session = false
+    }
+
+    fun dispose() { disposed = true; stop(); manager?.let { runCatching { it.unInit() } }; manager = null; ready = false }
+}

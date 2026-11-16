@@ -7904,6 +7904,18 @@ private fun FloatingTabBar(
     dragPosition: androidx.compose.runtime.State<Float?>,
     hazeState: dev.chrisbanes.haze.HazeState? = null
 ) {
+    if (AppTheme.isNothing) {
+        Row(Modifier.fillMaxWidth().padding(bottom = circolareplus.design.tabBarSystemInset())
+            .padding(horizontal = 16.dp, vertical = 12.dp).height(70.dp)
+            .clip(RoundedCornerShape(28.dp)).background(AppTheme.SurfaceWhite)
+            .border(1.dp, AppTheme.Hairline, RoundedCornerShape(28.dp)).padding(horizontal = 6.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            MainTab.entries.forEach { tab ->
+                NothingTabItem(tab, tab == selectedTab, { onSelect(tab) }, Modifier.weight(1f))
+            }
+        }
+        return
+    }
     val shape = RoundedCornerShape(32.dp)
     Box(
         modifier = Modifier
@@ -8014,6 +8026,14 @@ private fun FloatingTabRail(
     hazeState: dev.chrisbanes.haze.HazeState?,
     modifier: Modifier = Modifier
 ) {
+    if (AppTheme.isNothing) {
+        Column(modifier.padding(start = 12.dp).width(80.dp).clip(RoundedCornerShape(28.dp))
+            .background(AppTheme.SurfaceWhite).border(1.dp, AppTheme.Hairline, RoundedCornerShape(28.dp))
+            .padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            MainTab.entries.forEach { tab -> NothingTabItem(tab, tab == selectedTab, { onSelect(tab) }) }
+        }
+        return
+    }
     Column(
         modifier = modifier
             .padding(start = AppTheme.Space12)
@@ -8355,6 +8375,35 @@ private fun RowScope.GlassTabBarContent(selectedTab: MainTab, onSelect: (MainTab
                     )
                 }
             }
+        }
+    }
+}
+
+/** Fixed circular controls and a red recording dot, independent of Material's stretching tabs. */
+@Composable
+private fun NothingTabItem(tab: MainTab, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val ink = if (selected) AppTheme.BackgroundLight else AppTheme.TextMuted
+    Column(modifier.heightIn(min = 64.dp).clickable(onClick = onClick).semantics {
+        contentDescription = tab.title
+        role = Role.Tab
+        this.selected = selected
+    }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        Box(Modifier.size(34.dp).clip(androidx.compose.foundation.shape.CircleShape)
+            .background(if (selected) AppTheme.TextDark else Color.Transparent), contentAlignment = Alignment.Center) {
+            val m = Modifier.size(20.dp)
+            when (tab) {
+                MainTab.HOME -> AppIcons.Home(m, ink)
+                MainTab.CALENDAR -> AppIcons.Calendar(m, ink)
+                MainTab.CLASS -> AppIcons.Document(m, ink)
+                MainTab.SEATMAP -> AppIcons.Chair(m, ink)
+                MainTab.POLLS -> AppIcons.Poll(m, ink)
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            if (selected) Box(Modifier.size(4.dp).background(AppTheme.PrimaryBlue, androidx.compose.foundation.shape.CircleShape))
+            Text(when (tab) { MainTab.CALENDAR -> "Agenda"; MainTab.SEATMAP -> "Posti"; else -> tab.title },
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 14.sp),
+                color = AppTheme.TextDark, maxLines = 1)
         }
     }
 }

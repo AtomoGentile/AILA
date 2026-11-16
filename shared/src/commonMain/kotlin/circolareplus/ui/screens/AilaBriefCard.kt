@@ -42,7 +42,7 @@ internal fun AilaBriefCard(
     val primaryText = AppTheme.TextDark
     val soft = AppTheme.TextMuted
     val panelShape = RoundedCornerShape(32.dp)
-    val panelColors = if(dark) listOf(Color(0xFF10172C), AppTheme.AccentDeep, Color(0xFF17203B))
+    val panelColors = if (AppTheme.isNothing) listOf(AppTheme.SurfaceWhite, AppTheme.SurfaceWhite) else if(dark) listOf(Color(0xFF10172C), AppTheme.AccentDeep, Color(0xFF17203B))
         else listOf(Color(0xFFF9FAFF), Color(0xFFE8EDF7), Color(0xFFF3F5FC))
     val panelSurface = if(glass) Modifier.ailaGlassSurface(
         panelShape
@@ -50,7 +50,7 @@ internal fun AilaBriefCard(
         .background(Brush.linearGradient(panelColors))
         .border(1.dp, if(dark) Color.White.copy(alpha=.12f) else Color(0xFF27324B).copy(alpha=.12f), panelShape)
     Box(modifier.fillMaxWidth().then(panelSurface)) {
-        Canvas(Modifier.matchParentSize()) {
+        if (!AppTheme.isNothing) Canvas(Modifier.matchParentSize()) {
             val center = Offset(size.width * .96f, size.height * .04f)
             listOf(.33f, .57f, .82f).forEachIndexed { i, scale ->
                 drawCircle(soft.copy(alpha = .12f - i * .025f), size.width * scale, center, style = Stroke(1.dp.toPx()))
@@ -59,7 +59,7 @@ internal fun AilaBriefCard(
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("AILA Brief", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, color = primaryText)
+                    Text("AILA Brief", style = if (AppTheme.isNothing) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineSmall, fontWeight = if (AppTheme.isNothing) FontWeight.Normal else FontWeight.SemiBold, color = primaryText)
                     Text("Quello che conta per te, adesso.",
                         style = MaterialTheme.typography.bodyMedium, color = soft)
                 }
@@ -79,7 +79,7 @@ internal fun AilaBriefCard(
                 } else null
                 val tint = subjectColor?.let {
                     if (it.key == "white") if (dark) Color.White else Color(0xFF667085) else it.color
-                } ?: when(item.kind) {
+                } ?: if (AppTheme.isNothing) AppTheme.TextDark else when(item.kind) {
                     AilaBriefKind.EVENT, AilaBriefKind.CIRCULAR -> AppTheme.PrimaryBlue
                     AilaBriefKind.POLL, AilaBriefKind.RANKING_POLL -> if(dark) Color(0xFFC9B9FF) else Color(0xFF6D28D9)
                     AilaBriefKind.FORUM -> if(dark) Color(0xFFA0D5FF) else Color(0xFF0369A1)

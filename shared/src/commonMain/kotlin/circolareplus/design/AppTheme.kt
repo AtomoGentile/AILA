@@ -106,13 +106,13 @@ object AppTheme {
     var accent by mutableStateOf(AilaAccent.Default)
     var secondaryAccent by mutableStateOf(AilaAccent.VIOLET)
     var tertiaryAccent by mutableStateOf(AilaAccent.TEAL)
-    val SecondaryContainer get() = Color(if(isDarkMode) secondaryAccent.containerDark else secondaryAccent.containerLight)
-    val OnSecondaryContainer get() = Color(if(isDarkMode) secondaryAccent.onContainerDark else secondaryAccent.onContainerLight)
+    val SecondaryContainer get() = if (isNothing) TrackFill else Color(if(isDarkMode) secondaryAccent.containerDark else secondaryAccent.containerLight)
+    val OnSecondaryContainer get() = if (isNothing) TextDark else Color(if(isDarkMode) secondaryAccent.onContainerDark else secondaryAccent.onContainerLight)
 
     /** Primario, container e toni profondi del colore scelto (vedi [AilaAccent]). */
-    val AccentContainer get() = if (isNothing && accent == AilaAccent.BLUE) Color(if(isDarkMode) 0xFF45121C else 0xFFFFE1E5) else Color(if (isDarkMode) accent.containerDark else accent.containerLight)
-    val OnAccentContainer get() = if (isNothing && accent == AilaAccent.BLUE) Color(if(isDarkMode) 0xFFFFD9DE else 0xFF650018) else Color(if (isDarkMode) accent.onContainerDark else accent.onContainerLight)
-    val AccentDeep get() = Color(if (isDarkMode) accent.deepDark else accent.deepLight)
+    val AccentContainer get() = if (isNothing) TrackFill else Color(if (isDarkMode) accent.containerDark else accent.containerLight)
+    val OnAccentContainer get() = if (isNothing) TextDark else Color(if (isDarkMode) accent.onContainerDark else accent.onContainerLight)
+    val AccentDeep get() = if (isNothing) Color(0xFF171717) else Color(if (isDarkMode) accent.deepDark else accent.deepLight)
 
     /** true = Liquid Glass, false = Material Expressive (con AUTO decide la piattaforma). */
     val isGlass: Boolean
@@ -133,7 +133,7 @@ object AppTheme {
     // --- Dimensioni e raggi ------------------------------------------------------------------
     // Glass: angoli ampi e "continui" come le card di iOS. Expressive: la scala di forme di M3E,
     // card "extra large" (28) ed elementi piccoli a 16.
-    val CardCornerRadius: Dp get() = if (isNothing) 16.dp else if (isGlass) 24.dp else 28.dp
+    val CardCornerRadius: Dp get() = if (isNothing) 24.dp else if (isGlass) 24.dp else 28.dp
     /** Capsula in entrambi gli stili (in Expressive si deforma alla pressione, vedi i pulsanti). */
     val ButtonCornerRadius: Dp get() = 100.dp
     val SmallElementRadius: Dp get() = if (isNothing) 10.dp else if (isGlass) 14.dp else 16.dp
@@ -158,13 +158,13 @@ object AppTheme {
     // --- Colori brand -------------------------------------------------------------------------
     // Expressive usa il "tono 40" del blu AILA (piu' profondo, come i primari di Material) in
     // chiaro; in scuro resta il blu luminoso, che regge il testo bianco sopra.
-    val PrimaryBlue get() = if (isNothing && accent == AilaAccent.BLUE) Color(0xFFE51B3E) else if (accent == AilaAccent.BLUE) {
+    val PrimaryBlue get() = if (isNothing) Color(if (isDarkMode) 0xFFFF5264 else 0xFFBA1735) else if (accent == AilaAccent.BLUE) {
         style(Color(0xFF3B82F6), Color(0xFF0A84FF), Color(0xFF2F5BD3), Color(0xFF5A8CFF))
     } else {
         Color(if (isDarkMode) accent.primaryDark else accent.primaryLight)
     }
-    val SecondaryIndigo get() = Color(if(isDarkMode) secondaryAccent.primaryDark else secondaryAccent.primaryLight)
-    val AccentCyan get() = Color(if(isDarkMode) tertiaryAccent.primaryDark else tertiaryAccent.primaryLight)
+    val SecondaryIndigo get() = if (isNothing) TextDark else Color(if(isDarkMode) secondaryAccent.primaryDark else secondaryAccent.primaryLight)
+    val AccentCyan get() = if (isNothing) TextMuted else Color(if(isDarkMode) tertiaryAccent.primaryDark else tertiaryAccent.primaryLight)
 
     // --- Superfici e testo -------------------------------------------------------------------
     // Glass: sfondo grigio-azzurro chiaro (nero quasi puro in scuro, come iOS), testi dai toni di
@@ -200,21 +200,20 @@ object AppTheme {
      * control di iOS. Expressive: il "secondary container" di Material, pieno.
      */
     val SelectionFill: Brush
-        get() = SolidColor(if (isNothing) PrimaryBlue else if (!isGlass && accent != AilaAccent.BLUE) AccentContainer
+        get() = SolidColor(if (isNothing) TextDark else if (!isGlass && accent != AilaAccent.BLUE) AccentContainer
             else style(Color(0xBFFFFFFF), Color(0x47FFFFFF), Color(0xFFD9E2FF), Color(0xFF34457A)))
-    val OnSelection get() = if (isNothing) Color.White else if (!isGlass && accent != AilaAccent.BLUE) OnAccentContainer
+    val OnSelection get() = if (isNothing) BackgroundLight else if (!isGlass && accent != AilaAccent.BLUE) OnAccentContainer
         else style(Color(0xFF0B0D12), Color(0xFFFFFFFF), Color(0xFF0B1B45), Color(0xFFDCE3FF))
     /** Fondo del binario su cui scorre la selezione. */
     val TrackFill get() = if (isNothing) Color(if(isDarkMode) 0xFF242424 else 0xFFE6E6E3) else style(Color(0x01FFFFFF), Color.White.copy(alpha = 0.002f), Color(0xFFE6E8F3), Color(0xFF282B32))
 
     // --- Gradienti ----------------------------------------------------------------------------
-    val HeroGradientTop get() = if (isDarkMode) Color(0xFF141C3A) else Color(0xFF1B2E7A)
-    val HeroGradientMid get() = if (isDarkMode) Color(0xFF23408F) else Color(0xFF2F5BD8)
-    val HeroGradientBottom get() = if (isDarkMode) Color(0xFF4B3AA8) else Color(0xFF7B4FE3)
+    val HeroGradientTop get() = if (isNothing) Color(0xFF171717) else if (isDarkMode) Color(0xFF141C3A) else Color(0xFF1B2E7A)
+    val HeroGradientMid get() = if (isNothing) Color(0xFF171717) else if (isDarkMode) Color(0xFF23408F) else Color(0xFF2F5BD8)
+    val HeroGradientBottom get() = if (isNothing) Color(0xFF171717) else if (isDarkMode) Color(0xFF4B3AA8) else Color(0xFF7B4FE3)
     val HeroGradient: Brush
         get() = if (isNothing) {
-            if (isDarkMode) Brush.linearGradient(listOf(Color(0xFF151515), Color(0xFF252020)))
-            else Brush.linearGradient(listOf(Color(0xFF262626), Color(0xFF3A2227)))
+            SolidColor(Color(0xFF171717))
         } else if (isGlass) {
             // Vetro chiaro, non un pannello colorato: il colore lo da' lo sfondo dietro. Il
             // gradiente blu-viola pieno faceva l'app "giocattolo".
@@ -238,6 +237,7 @@ object AppTheme {
     /** Riempimento dei pulsanti primari: nel mockup non sono blu piatto ma sfumati. */
     val PrimaryGradient: Brush
         get() = when {
+            isNothing -> SolidColor(TextDark)
             // Material Expressive: il colore primario e' pieno, non sfumato.
             !isGlass -> SolidColor(PrimaryBlue)
             // Glass: tinta piena e piatta come i pulsanti "prominent" di iOS 26. Il gradiente
@@ -262,17 +262,17 @@ object AppTheme {
         else style(Color(0xFFE8F0FF), Color(0xFF1B2A4A), Color(0xFFDCE3FF), Color(0xFF223A7A))
     val TintBlueInk get() = if (isNothing) OnAccentContainer else if (accent != AilaAccent.BLUE) OnAccentContainer
         else style(Color(0xFF1E40AF), Color(0xFF93C5FD), Color(0xFF0B1B45), Color(0xFFDCE3FF))
-    val TintViolet get() = if (isDarkMode) Color(0xFF261F4A) else Color(0xFFF5F3FF)
-    val TintVioletInk get() = if (isDarkMode) Color(0xFFC4B5FD) else Color(0xFF5B21B6)
-    val TintAmber get() = if (isDarkMode) Color(0xFF352A16) else Color(0xFFFFFBEB)
-    val TintAmberInk get() = if (isDarkMode) Color(0xFFFCD34D) else Color(0xFF92400E)
-    val TintGreen get() = if (isDarkMode) Color(0xFF13301F) else Color(0xFFF0FDF4)
-    val TintGreenInk get() = if (isDarkMode) Color(0xFF86EFAC) else Color(0xFF166534)
+    val TintViolet get() = if (isNothing) TrackFill else if (isDarkMode) Color(0xFF261F4A) else Color(0xFFF5F3FF)
+    val TintVioletInk get() = if (isNothing) TextDark else if (isDarkMode) Color(0xFFC4B5FD) else Color(0xFF5B21B6)
+    val TintAmber get() = if (isNothing) TrackFill else if (isDarkMode) Color(0xFF352A16) else Color(0xFFFFFBEB)
+    val TintAmberInk get() = if (isNothing) TextDark else if (isDarkMode) Color(0xFFFCD34D) else Color(0xFF92400E)
+    val TintGreen get() = if (isNothing) TrackFill else if (isDarkMode) Color(0xFF13301F) else Color(0xFFF0FDF4)
+    val TintGreenInk get() = if (isNothing) TextDark else if (isDarkMode) Color(0xFF86EFAC) else Color(0xFF166534)
     val TintRed get() = if (isDarkMode) Color(0xFF351A1D) else Color(0xFFFEF2F2)
     val TintRedInk get() = if (isDarkMode) Color(0xFFFCA5A5) else Color(0xFF991B1B)
     // Glass: velo bianco smerigliato (i riempimenti neutri di iOS sopra uno sfondo colorato).
-    val TintSlate get() = style(Color(0x03FFFFFF), Color(0x01FFFFFF), Color(0xFFE6E8F3), Color(0xFF282B32))
-    val TintSlateInk get() = if (isDarkMode) Color(0xFFCBD5E1) else Color(0xFF475569)
+    val TintSlate get() = if (isNothing) TrackFill else style(Color(0x03FFFFFF), Color(0x01FFFFFF), Color(0xFFE6E8F3), Color(0xFF282B32))
+    val TintSlateInk get() = if (isNothing) TextDark else if (isDarkMode) Color(0xFFCBD5E1) else Color(0xFF475569)
 
     // --- Badge e indicatori --------------------------------------------------------------------
     val BadgeRelevantGreen = Color(0xFF10B981)     // "Ti riguarda"
@@ -301,13 +301,13 @@ object AppTheme {
 
     // --- Superfici che erano scritte nelle schermate ------------------------------------------
     /** Pavimento sotto i banchi della mappa posti (Material "surface container"). */
-    val DeskFloor get() = if (isDarkMode) Color(0xFF22252C) else Color(0xFFECEEF8)
+    val DeskFloor get() = if (isNothing) TrackFill else if (isDarkMode) Color(0xFF22252C) else Color(0xFFECEEF8)
     /** Banco evidenziato nella mappa posti. */
     val DeskFocused get() = if (isDarkMode) Color(0xFF5C4200) else Color(0xFFFFDDB3)
     /** Riquadro pieno piu' marcato (Material "surface container highest"). */
-    val SurfaceContainerHighest get() = if (isDarkMode) Color(0xFF2E3138) else Color(0xFFE1E3EE)
+    val SurfaceContainerHighest get() = if (isNothing) TrackFill else if (isDarkMode) Color(0xFF2E3138) else Color(0xFFE1E3EE)
     /** Riempimento della voce scelta in Material: lo stesso di [SelectionFill], come colore. */
-    val SelectionContainer get() = if (accent != AilaAccent.BLUE) AccentContainer
+    val SelectionContainer get() = if (isNothing) TextDark else if (accent != AilaAccent.BLUE) AccentContainer
         else if (isDarkMode) Color(0xFF34457A) else Color(0xFFD9E2FF)
     /** Riempimento della voce scelta in Liquid Glass sopra un binario. */
     val GlassSelectionTint get() = if (isDarkMode) Color(0x33FFFFFF) else Color(0x1A767680)

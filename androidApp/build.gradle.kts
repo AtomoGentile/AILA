@@ -65,6 +65,7 @@ kotlin {
         val androidMain by getting {
             dependencies {
                 implementation(project(":shared"))
+                implementation(files("libs/nothing-glyph-sdk-2.0.aar"))
                 implementation(compose.foundation)
                 implementation(compose.material3)
                 implementation(compose.ui)

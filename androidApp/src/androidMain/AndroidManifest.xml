@@ -8,6 +8,8 @@
          vecchi il tier AICore resta semplicemente "non disponibile". -->
     <uses-sdk tools:overrideLibrary="com.google.mlkit.genai.prompt,com.google.mlkit.genai.common" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="com.nothing.ketchum.permission.ENABLE" />
+    <queries><package android:name="com.nothing.thirdparty" /></queries>
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Aggiornamento dall'app: scarica l'APK dell'ultima release di GitHub e apre l'installazione
@@ -38,6 +40,8 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <!-- Android 16+ removes the vendor-key requirement; older OS versions use preview only. -->
+        <meta-data android:name="NothingKey" android:value="aila" />
 
         <!-- Valori di riserva per le notifiche che FCM mostra da solo, senza passare da
              CircolareMessagingService (payload con blocco "notification"): senza, FCM usa

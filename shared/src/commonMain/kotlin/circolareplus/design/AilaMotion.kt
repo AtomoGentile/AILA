@@ -301,6 +301,7 @@ fun <T> ailaNavigationSpring(): SpringSpec<T> =
 /** Molla "viva" per indicatori, selezioni e comparse. */
 fun <T> ailaSpatialSpring(): SpringSpec<T> =
     if (AppTheme.reduceMotion) reducedMotionSpring()
+    else if (AppTheme.isNothing) spring(dampingRatio = 1f, stiffness = 1000f)
     else if (AppTheme.isGlass) spring(dampingRatio = 0.78f, stiffness = 380f)
     else spring(dampingRatio = 0.6f, stiffness = 800f)
 

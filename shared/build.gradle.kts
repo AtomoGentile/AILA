@@ -66,6 +66,8 @@ kotlin {
         }
         val androidMain by getting {
             dependencies {
+                // Compile against the SDK; the application packages the full AAR with its resources.
+                compileOnly(files("libs/nothing-glyph-sdk-2.0.jar"))
                 implementation(compose.ui)
                 implementation(libs.kotlinx.coroutines.core)
                 // Per PlatformBackHandler.android.kt (androidx.activity.compose.BackHandler):

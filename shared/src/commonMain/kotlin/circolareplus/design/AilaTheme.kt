@@ -13,6 +13,9 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import circolareplus.generated.resources.Res
+import circolareplus.generated.resources.aila_dot
+import org.jetbrains.compose.resources.Font
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -132,18 +135,21 @@ private fun ailaTextStyle(size: Int, lineHeight: Int, weight: FontWeight) = Text
     lineHeightStyle = AilaLineHeightStyle
 )
 
-private fun ailaTypography() = Typography(
+@Composable
+private fun ailaTypography(): Typography {
+    val dot = if (AppTheme.isNothing) FontFamily(Font(Res.font.aila_dot)) else FontFamily.Default
+    return Typography(
     // Numeri grandi (voti, conteggi, codici): "large title" di iOS.
-    displaySmall = ailaTextStyle(34, 41, FontWeight.Bold),
+    displaySmall = ailaTextStyle(34, 41, if (AppTheme.isNothing) FontWeight.Normal else FontWeight.Bold).copy(fontFamily = dot),
     // Titolo della schermata (AilaScreenHeader). In Material/Expressive più sottile e un filo più
     // piccolo, come gli "headline" di Android; in Glass il grassetto del large title di iOS.
-    headlineMedium = if (AppTheme.isNothing) ailaTextStyle(26, 32, FontWeight.Bold).copy(fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
+    headlineMedium = if (AppTheme.isNothing) ailaTextStyle(30, 36, FontWeight.Normal).copy(fontFamily = dot, letterSpacing = (-0.5).sp)
     else if (AppTheme.isGlass) ailaTextStyle(28, 34, FontWeight.Bold)
     else ailaTextStyle(26, 32, FontWeight.Medium),
     // Titoli di dialoghi, barre di navigazione e numeri medi.
-    titleLarge = if(AppTheme.isNothing) ailaTextStyle(19, 24, FontWeight.Bold).copy(fontFamily = FontFamily.Monospace, letterSpacing = 0.25.sp) else ailaTextStyle(20, 25, FontWeight.Bold),
+    titleLarge = if(AppTheme.isNothing) ailaTextStyle(24, 30, FontWeight.Normal).copy(fontFamily = dot, letterSpacing = (-0.3).sp) else ailaTextStyle(20, 25, FontWeight.Bold),
     // Titoli di sezione, stati vuoti e d'errore.
-    titleMedium = if(AppTheme.isNothing) ailaTextStyle(16, 21, FontWeight.Bold).copy(fontFamily = FontFamily.Monospace, letterSpacing = 0.2.sp) else ailaTextStyle(17, 22, FontWeight.Bold),
+    titleMedium = if(AppTheme.isNothing) ailaTextStyle(20, 26, FontWeight.Normal).copy(fontFamily = dot, letterSpacing = (-0.3).sp) else ailaTextStyle(17, 22, FontWeight.Bold),
     // Titolo di una riga o di una card, testo dei pulsanti grandi.
     titleSmall = ailaTextStyle(15, 20, FontWeight.Bold),
     // Testo lungo (messaggi dei dialoghi, circolari): interlinea più comoda per leggere.
@@ -154,13 +160,14 @@ private fun ailaTypography() = Typography(
     // Note, date, testo secondario.
     bodySmall = ailaTextStyle(12, 16, FontWeight.Normal),
     // Pulsanti, chip, schede: è lo stile che Material usa da sé per il testo dei pulsanti.
-    labelLarge = ailaTextStyle(13, 18, FontWeight.Bold),
+    labelLarge = ailaTextStyle(13, 18, FontWeight.Bold).let { if (AppTheme.isNothing) it.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Normal) else it },
     // Etichette piccole in grassetto (badge, metadati in evidenza).
     labelMedium = if(AppTheme.isNothing) ailaTextStyle(11, 15, FontWeight.Bold).copy(fontFamily = FontFamily.Monospace, letterSpacing = 0.3.sp) else ailaTextStyle(12, 16, FontWeight.Bold),
     // Il minimo leggibile: badge stretti, didascalie. Sotto gli 11sp solo le etichette dei banchi
     // nella mappa posti, dove lo spazio è fisso.
     labelSmall = ailaTextStyle(11, 14, FontWeight.Bold)
 )
+}
 
 /**
  * Eccezione alla scala: etichette dentro i banchi della mappa posti ("F1C2", "Banco F1C2").
