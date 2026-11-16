@@ -189,28 +189,28 @@ fun SettingsScreen(
     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
     if (showBetaProgram) {
         val enabled = circolareplus.update.AppUpdateManager.betaProgramEnabled
-        AlertDialog(onDismissRequest = { showBetaProgram = false },
+        circolareplus.design.AilaAlertDialog(onDismissRequest = { showBetaProgram = false },
             title = { Text("Programma beta") },
             text = { Text(if (enabled) "Ricevi le beta e le versioni stabili più recenti. Puoi tornare al canale stabile; la versione installata rimane fino a un aggiornamento più recente." else "Iscriviti per ricevere anche le versioni beta. Potrebbero contenere errori. L’installazione degli aggiornamenti richiede sempre la tua conferma.") },
-            confirmButton = { TextButton(onClick = {
+            confirmButton = { circolareplus.design.AilaTextButton(onClick = {
                 circolareplus.update.AppUpdateManager.setBetaProgram(!enabled)
                 showBetaProgram = false
             }) { Text(if (enabled) "Esci dalla beta" else "Iscriviti alla beta") } },
-            dismissButton = { TextButton(onClick = { showBetaProgram = false }) { Text("Annulla") } })
+            dismissButton = { circolareplus.design.AilaTextButton(onClick = { showBetaProgram = false }) { Text("Annulla") } })
     }
     if (showPwaBetaDialog) {
-        AlertDialog(
+        circolareplus.design.AilaAlertDialog(
             onDismissRequest = { showPwaBetaDialog = false },
             title = { Text("Anteprima beta PWA") },
             text = { Text("Apri AILA sul canale beta in una pagina separata. L’indirizzo stabile resta disponibile; le beta possono contenere errori.") },
             confirmButton = {
-                TextButton(onClick = {
+                circolareplus.design.AilaTextButton(onClick = {
                     showPwaBetaDialog = false
                     uriHandler.openUri("https://beta.aila-scuola.pages.dev")
                 }) { Text("Apri beta") }
             },
             dismissButton = {
-                TextButton(onClick = { showPwaBetaDialog = false }) { Text("Annulla") }
+                circolareplus.design.AilaTextButton(onClick = { showPwaBetaDialog = false }) { Text("Annulla") }
             }
         )
     }
@@ -266,16 +266,16 @@ fun SettingsScreen(
                                     circolareplus.design.UiStyle.EXPRESSIVE ->
                                         "Colori pieni, forme che si deformano al tocco e movimenti vivaci, come Android."
                                     circolareplus.design.UiStyle.NOTHING ->
-                                        "Titoli a punti, widget monocromatici, controlli circolari e dettagli rossi. Una UI dedicata, ispirata a Nothing OS."
+                                        "Superfici monocromatiche, testi leggibili, movimenti essenziali e timer Glyph personalizzabile."
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = AppTheme.TextMuted
                             )
                             if (uiStyle == circolareplus.design.UiStyle.NOTHING) {
                                 Spacer(modifier = Modifier.height(AppTheme.Space12))
-                                circolareplus.design.NothingGlyphWidget(Modifier.fillMaxWidth())
+                                circolareplus.design.NothingGlyphSettingsSection(Modifier.fillMaxWidth())
                                 Spacer(Modifier.height(8.dp))
-                                Text("Glyph Lab · Tocca il retro per la sequenza luminosa. Sui Nothing compatibili con Android 16 o successivo si accendono anche le luci del telefono; gli altri dispositivi mostrano l’anteprima.",
+                                Text("Personalizza il timer, il disegno e il ritmo del Glyph. Le preferenze restano salvate su questo dispositivo.",
                                     style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
                             }
                             if (uiStyle != circolareplus.design.UiStyle.NOTHING) {

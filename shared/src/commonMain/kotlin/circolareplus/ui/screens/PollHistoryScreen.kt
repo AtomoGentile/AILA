@@ -150,7 +150,7 @@ fun PollHistoryScreen(
                             }
                             // 44dp e un nome: a 36dp senza descrizione era un cestino muto e
                             // difficile da centrare. Il nome dice anche quale sondaggio si elimina.
-                            if (canManage) IconButton(
+                            if (canManage) circolareplus.design.AilaIconControl(
                                 onClick = { pendingDeleteId = poll.id },
                                 modifier = Modifier
                                     .size(44.dp)
@@ -166,7 +166,7 @@ fun PollHistoryScreen(
                                 color = AppTheme.TextMuted, style = MaterialTheme.typography.bodySmall)
                         }
                         Spacer(modifier = Modifier.height(AppTheme.Space12))
-                        TextButton(
+                        circolareplus.design.AilaTextButton(
                             onClick = { onToggleResults(poll.id) },
                             modifier = Modifier.fillMaxWidth()
                         ) {

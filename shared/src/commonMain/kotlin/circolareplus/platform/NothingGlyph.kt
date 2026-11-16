@@ -7,7 +7,9 @@ interface NothingGlyphConnection {
     val ownerLabel: String?
     val ready: Boolean
     val status: String
-    fun pulse(): Boolean
+    val supportsProgress: Boolean
+    fun pulse(zone: Int = 0, periodMillis: Int = 1200): Boolean
+    fun showProgress(fraction: Float): Boolean
     fun stop()
 }
 
@@ -18,6 +20,10 @@ internal object PreviewNothingGlyph : NothingGlyphConnection {
     override val ownerLabel: String? = null
     override val ready = false
     override val status = "Anteprima sullo schermo"
-    override fun pulse() = false
+    override val supportsProgress = false
+    override fun pulse(zone: Int, periodMillis: Int) = false
+    override fun showProgress(fraction: Float) = false
     override fun stop() = Unit
 }
+
+val LocalNothingGlyph = androidx.compose.runtime.staticCompositionLocalOf<NothingGlyphConnection> { PreviewNothingGlyph }

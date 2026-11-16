@@ -101,7 +101,7 @@ fun SocialPreferencesVotingScreen(
 
         Spacer(modifier = Modifier.height(AppTheme.Space12))
 
-        TextButton(onClick = { showHistory = true }) { Text("Dove eravamo seduti: mappe precedenti") }
+        circolareplus.design.AilaTextButton(onClick = { showHistory = true }) { Text("Dove eravamo seduti: mappe precedenti") }
         historyError?.let { Text(it, color = AppTheme.TextMuted) }
         currentUserId?.let { id ->
             val positions = pastPositions(id)

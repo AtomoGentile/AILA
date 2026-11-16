@@ -42,7 +42,7 @@ internal fun PollAssignmentPreviewDialog(
     var confirmation by remember(pollId) { mutableStateOf<PollAssignmentPreviewDto?>(null) }
     var restoring by remember(pollId) { mutableStateOf(false) }
     confirmation?.let { data ->
-        AlertDialog(
+        circolareplus.design.AilaAlertDialog(
             onDismissRequest = { confirmation = null },
             title = { Text(if (restoring) "Ripristinare il calendario precedente?" else "Pubblicare il calendario rivisto?") },
             text = { Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
@@ -57,7 +57,7 @@ internal fun PollAssignmentPreviewDialog(
                     }
                 }
             } },
-            confirmButton = { TextButton(onClick = {
+            confirmButton = { circolareplus.design.AilaTextButton(onClick = {
                 confirmation = null
                 busy = true
                 actionError = null
@@ -72,7 +72,7 @@ internal fun PollAssignmentPreviewDialog(
                     } finally { busy = false }
                 }
             }) { Text(if (restoring) "Ripristina" else "Pubblica") } },
-            dismissButton = { TextButton(onClick = { confirmation = null }) { Text("Annulla") } }
+            dismissButton = { circolareplus.design.AilaTextButton(onClick = { confirmation = null }) { Text("Annulla") } }
         )
     }
     LaunchedEffect(pollId, refresh) {
@@ -171,7 +171,7 @@ internal fun PollAssignmentPreviewDialog(
                             item {
                                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                     Text(if (onlyChanges) "Date che cambierebbero" else "Tutti gli studenti", modifier = Modifier.weight(1f), color = AppTheme.TextDark)
-                                    TextButton(onClick = { onlyChanges = !onlyChanges }) { Text(if (onlyChanges) "Mostra tutti" else "Solo cambiamenti") }
+                                    circolareplus.design.AilaTextButton(onClick = { onlyChanges = !onlyChanges }) { Text(if (onlyChanges) "Mostra tutti" else "Solo cambiamenti") }
                                 }
                             }
                             if (shown.isEmpty()) item { Text("Nessuna data cambierebbe con questa simulazione.", color = AppTheme.TextMuted) }

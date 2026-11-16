@@ -15,6 +15,7 @@ import kotlin.math.cos
 /** Small living light source; the symbol itself stays legible and still. */
 @Composable
 internal fun AcaNeuralMark(thinking: Boolean, modifier: Modifier = Modifier) {
+    if (AppTheme.isNothing) { NothingMatrixLoader(modifier, AppTheme.TextDark); return }
     val reduced = AppTheme.reduceMotion
     val phase = if(reduced) null else rememberInfiniteTransition(label="aca neural mark").animateFloat(
         0f, 6.2831855f, infiniteRepeatable(tween(if(thinking) 2400 else 4600,easing=LinearEasing)),label="aca neural orbit")

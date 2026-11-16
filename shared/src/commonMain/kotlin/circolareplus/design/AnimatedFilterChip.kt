@@ -93,7 +93,7 @@ fun AnimatedFilterChip(
     // Animazione colore del testo
     val textColor by animateColorAsState(
         targetValue = if (isSelected) {
-            activeTextColor ?: if (drawSelectionBackground) Color.White else AppTheme.OnSelection
+            if (AppTheme.isNothing) AppTheme.OnSelection else activeTextColor ?: if (drawSelectionBackground) Color.White else AppTheme.OnSelection
         } else inactiveTextColor,
         animationSpec = tween(durationMillis = 200),
         label = "chipTextColor"
@@ -101,7 +101,7 @@ fun AnimatedFilterChip(
 
     // Animazione scale al click per un effetto feedback vivo
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.94f else if (isSelected) 1.02f else 1.0f,
+        targetValue = if (AppTheme.isNothing || AppTheme.reduceMotion) 1f else if (isPressed) 0.94f else if (isSelected) 1.02f else 1.0f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
         label = "chipScale"
     )

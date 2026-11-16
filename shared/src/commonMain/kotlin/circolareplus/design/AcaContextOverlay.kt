@@ -102,10 +102,10 @@ fun AcaContextOverlay(
     val composerRadius=48.dp-20.dp*composerExpansion
     val composerShape = RoundedCornerShape(composerRadius)
     // Opaque ink surfaces keep text from the page underneath out of the controls.
-    val surface = if(dark) listOf(Color(0xFF08090E), Color(0xFF0B0C13), Color(0xFF161827))
+    val surface = if(AppTheme.isNothing) listOf(AppTheme.SurfaceWhite,AppTheme.SurfaceWhite) else if(dark) listOf(Color(0xFF08090E), Color(0xFF0B0C13), Color(0xFF161827))
         else listOf(Color(0xFFF7F9FF), Color(0xFFECF0FA))
-    val insetFill = if(dark) Color(0xFF151B27) else Color(0xFFE3E9F5)
-    val muted = if(dark) Color(0xFFA5AFC2) else AppTheme.TextMuted
+    val insetFill = if(AppTheme.isNothing) AppTheme.TrackFill else if(dark) Color(0xFF151B27) else Color(0xFFE3E9F5)
+    val muted = if(AppTheme.isNothing) AppTheme.TextMuted else if(dark) Color(0xFFA5AFC2) else AppTheme.TextMuted
     val edge = if(dark) Color.White.copy(alpha = .085f) else Color.White.copy(alpha = .85f)
     val canSend = question.isNotBlank() && !thinking && !recording && !transcribing
     var answerPresented by remember(answer) { mutableStateOf(false) }
@@ -190,7 +190,7 @@ fun AcaContextOverlay(
                 .drawBehind {
                     if (rainbowAlpha > 0f) {
                         val stroke = (1.5f + dragProgress * 3f).dp.toPx()
-                        val colors = listOf(
+                        val colors = if(AppTheme.isNothing) listOf(AppTheme.PrimaryBlue,AppTheme.PrimaryBlue) else listOf(
                             AppTheme.PrimaryBlue.copy(alpha = (.72f + dragProgress * .28f) * rainbowAlpha),
                             AilaAssistantViolet.copy(alpha = (.68f + dragProgress * .27f) * rainbowAlpha),
                             AilaAssistantTeal.copy(alpha = (.68f + dragProgress * .27f) * rainbowAlpha),
@@ -218,14 +218,14 @@ fun AcaContextOverlay(
                 AppIcons.Document(Modifier.size(17.dp),AppTheme.PrimaryBlue)
                 Spacer(Modifier.width(8.dp))
                 Text("Schermata allegata",Modifier.weight(1f),style=MaterialTheme.typography.labelMedium,color=AppTheme.TextDark)
-                IconButton(onClick={attachedScreen=false},modifier=Modifier.size(32.dp).semantics{contentDescription="Rimuovi schermata"}){AppIcons.Close(Modifier.size(15.dp),muted)}
+                circolareplus.design.AilaIconControl(onClick={attachedScreen=false},modifier=Modifier.size(32.dp).semantics{contentDescription="Rimuovi schermata"}){AppIcons.Close(Modifier.size(15.dp),muted)}
             }
             attachedFiles.forEach { file ->
                 Row(Modifier.fillMaxWidth().background(insetFill,RoundedCornerShape(14.dp)).padding(start=12.dp,end=4.dp), verticalAlignment=Alignment.CenterVertically) {
                     AppIcons.Document(Modifier.size(17.dp),AppTheme.PrimaryBlue)
                     Spacer(Modifier.width(8.dp))
                     Text(file.name,Modifier.weight(1f),style=MaterialTheme.typography.labelMedium,color=AppTheme.TextDark,maxLines=2)
-                    IconButton(onClick={onRemoveAttachedFile(file.localId)},enabled=isInteractive&&!thinking,modifier=Modifier.size(40.dp).semantics{contentDescription="Rimuovi ${file.name}"}) { AppIcons.Close(Modifier.size(15.dp),muted) }
+                    circolareplus.design.AilaIconControl(onClick={onRemoveAttachedFile(file.localId)},enabled=isInteractive&&!thinking,modifier=Modifier.size(40.dp).semantics{contentDescription="Rimuovi ${file.name}"}) { AppIcons.Close(Modifier.size(15.dp),muted) }
                 }
             }
             if(recording || transcribing || voiceError != null) Row(Modifier.fillMaxWidth().background(insetFill,RoundedCornerShape(16.dp)).padding(horizontal=12.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
@@ -237,8 +237,8 @@ fun AcaContextOverlay(
                 textStyle=MaterialTheme.typography.titleMedium,
                 colors=TextFieldDefaults.colors(focusedContainerColor=Color.Transparent,unfocusedContainerColor=Color.Transparent,focusedTextColor=AppTheme.TextDark,unfocusedTextColor=AppTheme.TextDark,focusedIndicatorColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent,focusedPlaceholderColor=muted,unfocusedPlaceholderColor=muted))
 
-                IconButton(onClick={keyboard?.hide();attachmentMenu=true},enabled=isInteractive&&!thinking&&!recording&&!transcribing,modifier=Modifier.size(48.dp).background(if(dark) Color(0xFF252A35) else Color(0xFFE3E9F5),CircleShape).semantics{contentDescription="Aggiungi allegato"}) { AppIcons.Plus(Modifier.size(28.dp),AppTheme.TextDark) }
-                IconButton(onClick={
+                circolareplus.design.AilaIconControl(onClick={keyboard?.hide();attachmentMenu=true},enabled=isInteractive&&!thinking&&!recording&&!transcribing,modifier=Modifier.size(48.dp).background(if(dark) Color(0xFF252A35) else Color(0xFFE3E9F5),CircleShape).semantics{contentDescription="Aggiungi allegato"}) { AppIcons.Plus(Modifier.size(28.dp),AppTheme.TextDark) }
+                circolareplus.design.AilaIconControl(onClick={
                     when {
                         recording -> recorder.stop()
                         canSend -> submit()
@@ -250,8 +250,8 @@ fun AcaContextOverlay(
                 ).semantics{contentDescription=when { recording -> "Ferma e trascrivi vocale"; canSend -> "Invia ad AILA"; else -> "Registra un vocale per ACA" }}) {
                     if(thinking||transcribing)CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp,color=muted)
                     else if(recording) Box(Modifier.size(18.dp).background(Color.White,RoundedCornerShape(4.dp)))
-                    else if(canSend) AppIcons.ArrowUp(Modifier.size(25.dp),Color.White)
-                    else AcaMic(if(!expanded) Color.White else AppTheme.TextDark)
+                    else if(canSend) AppIcons.ArrowUp(Modifier.size(25.dp),if(AppTheme.isNothing && dark) AppTheme.BackgroundLight else Color.White)
+                    else AcaMic(if(AppTheme.isNothing && dark && !expanded) AppTheme.BackgroundLight else if(!expanded) Color.White else AppTheme.TextDark)
                 }
             }) { measurables, constraints ->
                 val w=constraints.maxWidth

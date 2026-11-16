@@ -35,13 +35,13 @@ import circolareplus.data.remote.dto.AcaExperienceDto
    Text(experience.title,style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.SemiBold,color=Color.White)
    Text("Un assistente che conosce il contesto. Una classe che si aiuta.",style=MaterialTheme.typography.bodyLarge,color=Color(0xFFD3DDF7))
    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
-    Button(onClick=onOpenAca,colors=ButtonDefaults.buttonColors(containerColor=Color.White,contentColor=Color(0xFF17203B))){Text("Scopri ACA")}
-    TextButton(onClick=onOpenForum,colors=ButtonDefaults.textButtonColors(contentColor=Color.White)){Text("Revisione tra pere")}
+    circolareplus.design.AilaActionButton(onClick=onOpenAca,colors=ButtonDefaults.buttonColors(containerColor=Color.White,contentColor=Color(0xFF17203B))){Text("Scopri ACA")}
+    circolareplus.design.AilaTextButton(onClick=onOpenForum,colors=ButtonDefaults.textButtonColors(contentColor=Color.White)){Text("Revisione tra pere")}
    }
    val policy = circolareplus.ai.AcaPolicyState.preferences
    if(policy.aiEnabled && policy.acaEnabled && policy.holdToOpen)
     Text("Tieni premuto per 2 secondi in un’area libera per aprire ACA.",style=MaterialTheme.typography.bodySmall,color=Color(0xFFD3DDF7))
-   experience.videoUrl?.let{url->TextButton(onClick={uri.openUri(url)},colors=ButtonDefaults.textButtonColors(contentColor=Color(0xFFD8DFFF))){Text("▶  Guarda il video")}}
+   experience.videoUrl?.let{url->circolareplus.design.AilaTextButton(onClick={uri.openUri(url)},colors=ButtonDefaults.textButtonColors(contentColor=Color(0xFFD8DFFF))){Text("▶  Guarda il video")}}
   }
  }
 }

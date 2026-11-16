@@ -91,7 +91,7 @@ internal fun SubjectColorSettingsSection(
                     }
                     if (index != SubjectColors.subjects.lastIndex) HorizontalDivider(color = AppTheme.Hairline)
                 }
-                TextButton(onClick = { SubjectColors.subjects.forEach { onColorChange(it.key, null) } }) {
+                circolareplus.design.AilaTextButton(onClick = { SubjectColors.subjects.forEach { onColorChange(it.key, null) } }) {
                     Text("Ripristina colori predefiniti", color = AppTheme.PrimaryBlue)
                 }
             }
@@ -100,7 +100,7 @@ internal fun SubjectColorSettingsSection(
 
     choosingSubject?.let { subject ->
         val current = overrides[subject.key] ?: subject.defaultColor
-        AlertDialog(
+        circolareplus.design.AilaAlertDialog(
             onDismissRequest = { choosingSubject = null },
             title = { Text("Colore · ${subject.label}") },
             text = {
@@ -125,11 +125,11 @@ internal fun SubjectColorSettingsSection(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { onColorChange(subject.key, null); choosingSubject = null }) {
+                circolareplus.design.AilaTextButton(onClick = { onColorChange(subject.key, null); choosingSubject = null }) {
                     Text("Predefinito")
                 }
             },
-            dismissButton = { TextButton(onClick = { choosingSubject = null }) { Text("Chiudi") } }
+            dismissButton = { circolareplus.design.AilaTextButton(onClick = { choosingSubject = null }) { Text("Chiudi") } }
         )
     }
 }

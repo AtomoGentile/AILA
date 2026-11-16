@@ -818,7 +818,7 @@ fun AilaConfirmDialog(
     val dialogShape = RoundedCornerShape(AppTheme.CardCornerRadius)
     // Larga quasi quanto lo schermo e con testo e pulsanti "da pollice": la versione precedente
     // (280dp, titolo 17sp, pulsanti da 12sp) sembrava un'etichetta e i pulsanti si mancavano.
-    androidx.compose.material3.AlertDialog(
+    AilaAlertDialog(
         onDismissRequest = dismiss,
         // Larga quasi quanto lo schermo sul telefono, non oltre MaxDialogWidth su tablet/iPad.
         modifier = Modifier
@@ -1254,6 +1254,7 @@ fun AilaSwitch(
     modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
+    if (AppTheme.isNothing) { NothingToggle(checked,onCheckedChange,modifier,enabled); return }
     // Material Expressive: l'interruttore di Material 3, con il pallino che cresce da acceso e la
     // spunta dentro. La "goccia" elastica qui sotto resta per Liquid Glass.
     if (!AppTheme.isGlass) {

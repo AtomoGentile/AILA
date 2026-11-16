@@ -341,6 +341,10 @@ class LocalSettingsManager(
         set(value) = settings.putBoolean(KEY_DARK_MODE, value)
 
     /** Stile grafico: "auto", "glass" o "expressive" (vedi circolareplus.design.UiStyle). */
+    var nothingExperienceJson: String
+        get() = settings.getString("nothing_experience_v1", "{}")
+        set(value) { settings.putString("nothing_experience_v1", value) }
+
     var uiStyleKey: String
         get() = settings.getString(KEY_UI_STYLE, "auto")
         set(value) = settings.putString(KEY_UI_STYLE, value)

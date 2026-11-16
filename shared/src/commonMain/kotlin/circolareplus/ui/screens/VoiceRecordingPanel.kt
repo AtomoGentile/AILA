@@ -32,8 +32,8 @@ internal fun VoiceRecordingPanel(onStop: () -> Unit, onCancel: () -> Unit) {
             Text("${seconds/60}:${(seconds%60).toString().padStart(2,'0')}",style=MaterialTheme.typography.titleMedium,color=AppTheme.TintRedInk)
         }
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-            TextButton(onClick=onCancel,modifier=Modifier.weight(1f)){Text("Annulla")}
-            Button(onClick=onStop,modifier=Modifier.weight(1f),shape=RoundedCornerShape(16.dp)) {
+            circolareplus.design.AilaTextButton(onClick=onCancel,modifier=Modifier.weight(1f)){Text("Annulla")}
+            circolareplus.design.AilaActionButton(onClick=onStop,modifier=Modifier.weight(1f),shape=RoundedCornerShape(16.dp)) {
                 Box(Modifier.size(12.dp).background(MaterialTheme.colorScheme.onPrimary,RoundedCornerShape(3.dp)))
                 Spacer(Modifier.width(8.dp));Text("Termina")
             }

@@ -415,7 +415,7 @@ fun AuthScreen(
                         exit = circolareplus.design.ailaCollapseExit()
                     ) {
                         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                            TextButton(onClick = { showResetDialog = true }) {
+                            circolareplus.design.AilaTextButton(onClick = { showResetDialog = true }) {
                                 Text("Password dimenticata?", style = MaterialTheme.typography.bodyMedium, color = AppTheme.PrimaryBlue)
                             }
                         }
@@ -560,7 +560,7 @@ private fun ResetPasswordDialog(
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    AlertDialog(
+    circolareplus.design.AilaAlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         containerColor = AppTheme.SurfaceWhite,
         shape = RoundedCornerShape(AppTheme.CardCornerRadius),
@@ -602,7 +602,7 @@ private fun ResetPasswordDialog(
             }
         },
         confirmButton = {
-            TextButton(
+            circolareplus.design.AilaTextButton(
                 enabled = !busy,
                 onClick = {
                     error = null
@@ -629,7 +629,7 @@ private fun ResetPasswordDialog(
             ) { Text(if (busy) "Attendi…" else "Reimposta ed entra") }
         },
         dismissButton = {
-            TextButton(enabled = !busy, onClick = onDismiss) { Text("Annulla") }
+            circolareplus.design.AilaTextButton(enabled = !busy, onClick = onDismiss) { Text("Annulla") }
         }
     )
 }
@@ -693,7 +693,7 @@ private fun HeightPicker(
             )
         }
 
-        Slider(
+        circolareplus.design.AilaSlider(
             value = heightCm.toFloat(),
             onValueChange = { raw ->
                 val rounded = (kotlin.math.round(raw / 5f) * 5).toInt()

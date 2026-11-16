@@ -164,7 +164,7 @@ internal fun TimetableTimeline(
             Text("Orario di base · possibili variazioni nelle comunicazioni scolastiche. Le ore indicate non sono fasce dell’orologio.",
                 style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted,
                 modifier = Modifier.padding(top = 8.dp))
-            TextButton(onClick = { uri.openUri(SchoolTimetable.SOURCE_URL) }) { Text("Apri orario ufficiale", color = AppTheme.AccentCyan) }
+            circolareplus.design.AilaTextButton(onClick = { uri.openUri(SchoolTimetable.SOURCE_URL) }) { Text("Apri orario ufficiale", color = AppTheme.AccentCyan) }
         }
     }
 }

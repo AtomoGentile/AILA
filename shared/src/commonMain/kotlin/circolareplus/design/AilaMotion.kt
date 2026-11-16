@@ -67,7 +67,13 @@ import kotlinx.coroutines.delay
  * movimento fra le schermate lo danno le transizioni, non i singoli elementi.
  */
 @Suppress("UNUSED_PARAMETER")
-fun Modifier.ailaAppear(index: Int = 0, enabled: Boolean = true): Modifier = this
+@Composable
+fun Modifier.ailaAppear(index: Int = 0, enabled: Boolean = true): Modifier {
+    if (!AppTheme.isNothing || !enabled || AppTheme.reduceMotion) return this
+    val reveal = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { reveal.animateTo(1f, tween(180, delayMillis = index.coerceIn(0,3)*24)) }
+    return graphicsLayer { alpha = reveal.value; translationY = (1f-reveal.value)*6.dp.toPx() }
+}
 
 /**
  * Una schermata che si sta chiudendo smette di prendere i tocchi, cosi' i pulsanti sotto
@@ -159,7 +165,7 @@ fun Modifier.ailaPressable(
     // che basta a dire "toccato" senza far muovere niente.
     val scale = animateFloatAsState(
         targetValue = if (isPressed && enabled && !AppTheme.reduceMotion) pressedScale else 1f,
-        animationSpec = spring(
+        animationSpec = if (AppTheme.isNothing) tween(120) else spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessHigh
         ),
@@ -202,6 +208,8 @@ fun Modifier.ailaGlassPressable(
     onClick: () -> Unit
 ): Modifier {
     val interactionSource = remember { MutableInteractionSource() }
+    if (AppTheme.isNothing) return this.nothingPressFeedback(interactionSource)
+        .clickable(interactionSource = interactionSource, indication = null, enabled = enabled, onClick = onClick)
     return this
         .clickable(
             interactionSource = interactionSource,
@@ -295,6 +303,7 @@ private fun <T> reducedMotionSpring(): SpringSpec<T> =
 /** Molla del push/pop fra schermate. */
 fun <T> ailaNavigationSpring(): SpringSpec<T> =
     if (AppTheme.reduceMotion) reducedMotionSpring()
+    else if (AppTheme.isNothing) spring(dampingRatio = 1f, stiffness = 1100f)
     else if (AppTheme.isGlass) spring(dampingRatio = 1f, stiffness = 520f)
     else spring(dampingRatio = 0.9f, stiffness = 850f)
 
@@ -322,6 +331,13 @@ fun AnimatedContentTransitionScope<*>.ailaPushTransition(forward: Boolean): Cont
                 fadeOut(tween(durationMillis = 40, delayMillis = REDUCED_FADE_MS))
         } else {
             EnterTransition.None togetherWith fadeOut(tween(durationMillis = REDUCED_FADE_MS))
+        }
+    } else if (AppTheme.isNothing) {
+        if (forward) {
+            (fadeIn(tween(180)) + slideInHorizontally(tween(220)) { it / 18 }) togetherWith
+                fadeOut(tween(30, delayMillis = 200))
+        } else {
+            fadeIn(tween(100)) togetherWith (fadeOut(tween(160)) + slideOutHorizontally(tween(180)) { it / 18 })
         }
     } else if (AppTheme.isGlass && AppTheme.liteEffects) {
         // Web: solo scorrimenti. Una schermata con opacita' < 1 va disegnata prima in un livello a
@@ -372,7 +388,9 @@ fun AnimatedContentTransitionScope<*>.ailaPushTransition(forward: Boolean): Cont
  */
 fun AnimatedContentTransitionScope<*>.ailaTabTransition(): ContentTransform =
     // Riduci movimento: la dissolvenza rapida di Glass vale per entrambi gli stili (niente crescita).
-    if (AppTheme.isGlass || AppTheme.reduceMotion) {
+    if (AppTheme.isNothing && !AppTheme.reduceMotion) {
+        (fadeIn(tween(160)) + androidx.compose.animation.slideInVertically(tween(200)) { it / 70 }) togetherWith fadeOut(tween(80))
+    } else if (AppTheme.isGlass || AppTheme.reduceMotion) {
         fadeIn(tween(durationMillis = 140)) togetherWith fadeOut(tween(durationMillis = 90))
     } else {
         materialFadeThroughEnter() togetherWith materialFadeThroughExit()
@@ -381,6 +399,7 @@ fun AnimatedContentTransitionScope<*>.ailaTabTransition(): ContentTransform =
 /** Material "fade through": ingresso (dissolvenza + leggera crescita, dopo l'uscita). */
 fun materialFadeThroughEnter(): EnterTransition =
     if (AppTheme.reduceMotion) fadeIn(tween(durationMillis = REDUCED_FADE_MS))
+    else if (AppTheme.isNothing) fadeIn(tween(160)) + androidx.compose.animation.slideInVertically(tween(180)) { it / 70 }
     else fadeIn(tween(durationMillis = 210, delayMillis = 70)) +
         scaleIn(tween(durationMillis = 210, delayMillis = 70), initialScale = 0.94f)
 
@@ -553,6 +572,7 @@ private object AilaUnlockMemory {
  */
 @Composable
 fun Modifier.ailaUnlock(): Modifier {
+    if (AppTheme.isNothing) return this
     // Riduci movimento: niente ingrandimento con rimbalzo, l'app e' subito ferma al suo posto. Lo
     // sblocco si segna comunque come fatto: se l'impostazione si spegnesse dopo, non deve partire a
     // meta' sessione (il contenuto sparirebbe e ricomparirebbe).
@@ -589,6 +609,7 @@ fun Modifier.ailaUnlock(): Modifier {
  */
 @Composable
 fun Modifier.ailaSelectionPop(selected: Boolean): Modifier {
+    if (AppTheme.isNothing) return this
     val scale = remember { Animatable(1f) }
     val wasSelected = remember { arrayOf(selected) }
     LaunchedEffect(selected) {
@@ -1118,7 +1139,7 @@ fun <T> ailaMoveSpec(
  * selezionati). Con "Riduci movimento" niente rimbalzo.
  */
 fun <T> ailaBouncySpring(): SpringSpec<T> =
-    if (AppTheme.reduceMotion) reducedMotionSpring()
+    if (AppTheme.reduceMotion || AppTheme.isNothing) reducedMotionSpring()
     else spring(dampingRatio = 0.75f, stiffness = 450f)
 
 /** Comparsa di un blocco che si apre sotto (campi facoltativi, dettagli): dissolvenza + apertura. */

@@ -282,9 +282,9 @@ private fun DrawScope.drawAilaMark(g: AilaMarkGeometry, brush: Brush?, sparkleCo
  * sfumatura) si passa un `SolidColor` al parametro `brush`, che e' la versione monocromatica
  * prevista dalle linee guida del logo.
  */
-val AilaAssistantViolet = Color(0xFF8B5CF6)
-val AilaAssistantBlue = Color(0xFF3B82F6)
-val AilaAssistantTeal = Color(0xFF14B8A6)
+val AilaAssistantViolet get() = if (AppTheme.isNothing) AppTheme.TextDark else Color(0xFF8B5CF6)
+val AilaAssistantBlue get() = if (AppTheme.isNothing) AppTheme.TextDark else Color(0xFF3B82F6)
+val AilaAssistantTeal get() = if (AppTheme.isNothing) AppTheme.TextDark else Color(0xFF14B8A6)
 
 val AilaAssistantBrush: Brush get() = if (AppTheme.isNothing) androidx.compose.ui.graphics.SolidColor(AppTheme.PrimaryBlue) else Brush.linearGradient(
     listOf(AilaAssistantViolet, AilaAssistantBlue, AilaAssistantBlue, AilaAssistantTeal)

@@ -56,7 +56,7 @@ fun ContentPreviewScreen(
             if(loading) CircularProgressIndicator()
             error?.let { Text(it,color=AppTheme.TintRedInk) }
             file?.let { original ->
-                OutlinedButton(onClick={scope.launch {
+                circolareplus.design.AilaOutlinedButton(onClick={scope.launch {
                     try { openContentFile(original.bytes,original.fileName,original.mime) }
                     catch(e: CancellationException) { throw e }
                     catch(e: Exception) { error=e.message }

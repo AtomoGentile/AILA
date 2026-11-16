@@ -166,7 +166,7 @@ internal fun GitaUpdateCard(update: GitaUpdate, canEdit: Boolean, busy: Boolean,
                 }
                 if (canEdit) Box {
                     val ink = AppTheme.TextMuted
-                    IconButton(onClick = { menu = true }, enabled = !busy, modifier = Modifier.semantics { contentDescription = "Gestisci aggiornamento" }) {
+                    circolareplus.design.AilaIconControl(onClick = { menu = true }, enabled = !busy, modifier = Modifier.semantics { contentDescription = "Gestisci aggiornamento" }) {
                         Canvas(Modifier.size(20.dp)) {
                             repeat(3) { drawCircle(ink, 1.8.dp.toPx(), Offset(size.width * (.2f + .3f * it), size.height * .5f)) }
                         }
@@ -181,13 +181,13 @@ internal fun GitaUpdateCard(update: GitaUpdate, canEdit: Boolean, busy: Boolean,
             Text(update.body, style = MaterialTheme.typography.bodyLarge, color = AppTheme.TextMuted,
                 maxLines = if (expanded) Int.MAX_VALUE else 4, overflow = TextOverflow.Ellipsis,
                 onTextLayout = { if (!expanded) overflowing = it.hasVisualOverflow })
-            if (overflowing || expanded) TextButton(onClick = { expanded = !expanded }, contentPadding = PaddingValues(0.dp)) {
+            if (overflowing || expanded) circolareplus.design.AilaTextButton(onClick = { expanded = !expanded }, contentPadding = PaddingValues(0.dp)) {
                 Text(if (expanded) "Mostra meno" else "Leggi tutto")
             }
         }
     }
-    if (deleting) AlertDialog(onDismissRequest = { deleting = false }, title = { Text("Eliminare l’aggiornamento?") },
+    if (deleting) circolareplus.design.AilaAlertDialog(onDismissRequest = { deleting = false }, title = { Text("Eliminare l’aggiornamento?") },
         text = { Text(update.title) },
-        confirmButton = { TextButton(onClick = { deleting = false; onDelete(update) }, enabled = !busy) { Text("Elimina") } },
-        dismissButton = { TextButton(onClick = { deleting = false }) { Text("Annulla") } })
+        confirmButton = { circolareplus.design.AilaTextButton(onClick = { deleting = false; onDelete(update) }, enabled = !busy) { Text("Elimina") } },
+        dismissButton = { circolareplus.design.AilaTextButton(onClick = { deleting = false }) { Text("Annulla") } })
 }

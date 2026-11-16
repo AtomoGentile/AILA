@@ -144,10 +144,10 @@ private fun NotificationCard(entry: NotificationLogEntry, onClick: () -> Unit) {
  */
 @Composable
 private fun NotificationDetailDialog(entry: NotificationLogEntry, onDismiss: () -> Unit) {
-    AlertDialog(
+    circolareplus.design.AilaAlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = onDismiss) {
+            circolareplus.design.AilaTextButton(onClick = onDismiss) {
                 Text("Chiudi", fontWeight = FontWeight.Bold, color = AppTheme.PrimaryBlue)
             }
         },

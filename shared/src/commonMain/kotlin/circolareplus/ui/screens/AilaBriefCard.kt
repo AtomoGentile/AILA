@@ -68,7 +68,7 @@ internal fun AilaBriefCard(
             if(loading && relevant.isEmpty()) Text("Preparo il tuo riepilogo…", color = soft, style = MaterialTheme.typography.bodyMedium)
             if(error != null) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(error, Modifier.weight(1f), color = soft, style = MaterialTheme.typography.bodySmall)
-                TextButton(onClick = onRefresh, colors = ButtonDefaults.textButtonColors(contentColor = primaryText)) { Text("Riprova") }
+                circolareplus.design.AilaTextButton(onClick = onRefresh, colors = ButtonDefaults.textButtonColors(contentColor = primaryText)) { Text("Riprova") }
             }
             if(relevant.isEmpty() && !loading && error == null) {
                 Text("Sei in pari. Qui troverai novità, risposte e cose da fare per te.", color = soft, style = MaterialTheme.typography.bodyMedium)
@@ -96,14 +96,14 @@ internal fun AilaBriefCard(
                 }
                 val itemShape = RoundedCornerShape(24.dp)
                 val fillAlpha = if (dark) .17f else .10f
-                val itemFillBrush = if (subjectColor?.key == "rainbow") {
+                val itemFillBrush = if (AppTheme.isNothing) Brush.horizontalGradient(listOf(AppTheme.CardSurface, AppTheme.CardSurface)) else if (subjectColor?.key == "rainbow") {
                     Brush.horizontalGradient(subjectColor.colors.map { it.copy(alpha = fillAlpha) })
                 } else if (subjectColor?.key == "white") {
                     Brush.horizontalGradient(listOf(Color.White.copy(alpha = if (dark) .18f else .72f), Color.White.copy(alpha = if (dark) .10f else .50f)))
                 } else {
                     Brush.horizontalGradient(listOf(tint.copy(alpha = fillAlpha), tint.copy(alpha = fillAlpha * .55f)))
                 }
-                val iconFillBrush = if (subjectColor?.key == "rainbow") {
+                val iconFillBrush = if (AppTheme.isNothing) Brush.horizontalGradient(listOf(AppTheme.TrackFill, AppTheme.TrackFill)) else if (subjectColor?.key == "rainbow") {
                     Brush.horizontalGradient(subjectColor.colors.map { it.copy(alpha = if (dark) .34f else .23f) })
                 } else if (subjectColor?.key == "white") {
                     Brush.horizontalGradient(listOf(Color.White.copy(alpha = if (dark) .32f else .95f), Color.White.copy(alpha = if (dark) .22f else .82f)))
@@ -112,7 +112,7 @@ internal fun AilaBriefCard(
                 }
                 val itemBorderColor = if (subjectColor?.key == "white") AppTheme.TextMuted.copy(alpha = .62f)
                     else tint.copy(alpha = if (dark) .42f else .28f)
-                val itemBorderBrush = if (subjectColor?.key == "rainbow") {
+                val itemBorderBrush = if (AppTheme.isNothing) Brush.horizontalGradient(listOf(AppTheme.Hairline, AppTheme.Hairline)) else if (subjectColor?.key == "rainbow") {
                     Brush.horizontalGradient(subjectColor.colors.map { it.copy(alpha = if (dark) .68f else .52f) })
                 } else Brush.horizontalGradient(listOf(itemBorderColor, itemBorderColor))
                 Row(Modifier.fillMaxWidth().clip(itemShape)
@@ -122,28 +122,32 @@ internal fun AilaBriefCard(
                     verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (AppTheme.isNothing && subjectColor != null) {
+                            Box(Modifier.width(3.dp).height(36.dp).background(subjectColor.color, RoundedCornerShape(2.dp)))
+                            Spacer(Modifier.width(10.dp))
+                        }
                         Box(
                             Modifier.size(36.dp).background(iconFillBrush, RoundedCornerShape(12.dp)),
                             contentAlignment = Alignment.Center
                         ) {
                             when(item.kind) {
-                                AilaBriefKind.SEATMAP -> AppIcons.Chair(Modifier.size(20.dp), if (subjectColor?.key == "white") AppTheme.TextDark else tint)
-                                AilaBriefKind.EVENT -> AppIcons.Calendar(Modifier.size(20.dp), if (subjectColor?.key == "white") AppTheme.TextDark else tint)
-                                AilaBriefKind.CIRCULAR -> AppIcons.Document(Modifier.size(20.dp), tint)
-                                AilaBriefKind.POLL, AilaBriefKind.RANKING_POLL -> AppIcons.Poll(Modifier.size(20.dp), tint)
-                                AilaBriefKind.FORUM, AilaBriefKind.PROPOSAL -> AppIcons.ChatBubble(Modifier.size(20.dp), tint)
+                                AilaBriefKind.SEATMAP -> AppIcons.Chair(Modifier.size(20.dp), if (AppTheme.isNothing || subjectColor?.key == "white") AppTheme.TextDark else tint)
+                                AilaBriefKind.EVENT -> AppIcons.Calendar(Modifier.size(20.dp), if (AppTheme.isNothing || subjectColor?.key == "white") AppTheme.TextDark else tint)
+                                AilaBriefKind.CIRCULAR -> AppIcons.Document(Modifier.size(20.dp), if (AppTheme.isNothing) AppTheme.TextDark else tint)
+                                AilaBriefKind.POLL, AilaBriefKind.RANKING_POLL -> AppIcons.Poll(Modifier.size(20.dp), if (AppTheme.isNothing) AppTheme.TextDark else tint)
+                                AilaBriefKind.FORUM, AilaBriefKind.PROPOSAL -> AppIcons.ChatBubble(Modifier.size(20.dp), if (AppTheme.isNothing) AppTheme.TextDark else tint)
                             }
                         }
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(label, color = tint, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                            Text(item.title, color = if (item.kind == AilaBriefKind.CIRCULAR && !item.isActive) soft else primaryText, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(label, color = if (AppTheme.isNothing) AppTheme.TextMuted else tint, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            Text(item.title, color = if (item.kind == AilaBriefKind.CIRCULAR && !item.isActive) soft else primaryText, style = MaterialTheme.typography.titleMedium, maxLines = if (AppTheme.isNothing) 4 else 2, overflow = TextOverflow.Ellipsis)
                         }
                     }
                     if(item.kind != AilaBriefKind.EVENT) Text(item.message, color = soft, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                     Spacer(Modifier.width(4.dp))
-                    IconButton(onClick = { onDismiss(item) }, modifier = Modifier.size(32.dp).semantics { contentDescription = "Non ora: ${item.title}" }) {
+                    circolareplus.design.AilaIconControl(onClick = { onDismiss(item) }, modifier = Modifier.size(if (AppTheme.isNothing) 44.dp else 32.dp).semantics { contentDescription = "Non ora: ${item.title}" }) {
                         AppIcons.Close(Modifier.size(17.dp), soft)
                     }
                 }

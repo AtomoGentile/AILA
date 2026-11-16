@@ -36,7 +36,30 @@ import androidx.compose.foundation.layout.fillMaxSize
  *
  * Da qui in avanti si imposta una volta sola qui e vale ovunque.
  */
-private fun ailaColorScheme() = if (AppTheme.isDarkMode) darkColorScheme(
+private fun ailaColorScheme() = if (AppTheme.isNothing) {
+    val dark = AppTheme.isDarkMode
+    val ink = AppTheme.TextDark
+    val paper = AppTheme.BackgroundLight
+    val panel = AppTheme.SurfaceWhite
+    val neutral = AppTheme.TrackFill
+    val base = if (dark) darkColorScheme() else lightColorScheme()
+    base.copy(
+        primary = ink, onPrimary = paper, primaryContainer = neutral, onPrimaryContainer = ink,
+        inversePrimary = paper, secondary = ink, onSecondary = paper,
+        secondaryContainer = neutral, onSecondaryContainer = ink,
+        tertiary = ink, onTertiary = paper, tertiaryContainer = neutral, onTertiaryContainer = ink,
+        background = paper, onBackground = ink, surface = panel, onSurface = ink,
+        surfaceVariant = neutral, onSurfaceVariant = AppTheme.TextMuted,
+        surfaceTint = Color.Transparent, outline = AppTheme.FieldOutline, outlineVariant = AppTheme.Hairline,
+        inverseSurface = ink, inverseOnSurface = paper,
+        surfaceDim = paper, surfaceBright = panel, surfaceContainerLowest = paper,
+        surfaceContainerLow = panel, surfaceContainer = panel,
+        surfaceContainerHigh = neutral, surfaceContainerHighest = neutral,
+        error = AppTheme.PrimaryBlue, onError = if (dark) Color.Black else Color.White,
+        errorContainer = AppTheme.TintRed, onErrorContainer = AppTheme.TintRedInk,
+        scrim = Color.Black
+    )
+} else if (AppTheme.isDarkMode) darkColorScheme(
     primary = AppTheme.PrimaryBlue,
     onPrimary = Color.White,
     primaryContainer = AppTheme.TintBlue,
@@ -137,7 +160,24 @@ private fun ailaTextStyle(size: Int, lineHeight: Int, weight: FontWeight) = Text
 
 @Composable
 private fun ailaTypography(): Typography {
-    val dot = if (AppTheme.isNothing) FontFamily(Font(Res.font.aila_dot)) else FontFamily.Default
+    if (AppTheme.isNothing) return Typography(
+        displayLarge = ailaTextStyle(56, 64, FontWeight.Normal),
+        displayMedium = ailaTextStyle(44, 52, FontWeight.Normal),
+        displaySmall = ailaTextStyle(34, 42, FontWeight.Normal),
+        headlineLarge = ailaTextStyle(32, 40, FontWeight.Normal),
+        headlineMedium = ailaTextStyle(28, 36, FontWeight.Normal),
+        headlineSmall = ailaTextStyle(24, 32, FontWeight.Medium),
+        titleLarge = ailaTextStyle(22, 30, FontWeight.Medium),
+        titleMedium = ailaTextStyle(17, 24, FontWeight.Medium),
+        titleSmall = ailaTextStyle(15, 22, FontWeight.Medium),
+        bodyLarge = ailaTextStyle(15, 23, FontWeight.Normal),
+        bodyMedium = ailaTextStyle(14, 21, FontWeight.Normal),
+        bodySmall = ailaTextStyle(12, 18, FontWeight.Normal),
+        labelLarge = ailaTextStyle(13, 19, FontWeight.Medium),
+        labelMedium = ailaTextStyle(12, 17, FontWeight.Medium).copy(fontFamily = FontFamily.Monospace),
+        labelSmall = ailaTextStyle(11, 16, FontWeight.Medium)
+    )
+    val dot = FontFamily.Default
     return Typography(
     // Numeri grandi (voti, conteggi, codici): "large title" di iOS.
     displaySmall = ailaTextStyle(34, 41, if (AppTheme.isNothing) FontWeight.Normal else FontWeight.Bold).copy(fontFamily = dot),
@@ -214,6 +254,12 @@ fun AilaTheme(content: @Composable () -> Unit) {
                     androidx.compose.foundation.LocalIndication provides AilaGlassHighlight,
                     content = content
                 )
+            } else if (AppTheme.isNothing) {
+                val glyph = circolareplus.platform.rememberNothingGlyph()
+                androidx.compose.runtime.CompositionLocalProvider(circolareplus.platform.LocalNothingGlyph provides glyph, androidx.compose.foundation.LocalIndication provides AilaGlassHighlight) {
+                    NothingFocusRuntime()
+                    content()
+                }
             } else {
                 content()
             }

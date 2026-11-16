@@ -182,6 +182,11 @@ fun MainAppShell(
     initialUser: User? = null,
     initialProfile: StudentProfile? = null
 ) {
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        circolareplus.design.NothingExperience.restore(AppContainer.settings.nothingExperienceJson) {
+            AppContainer.settings.nothingExperienceJson = it
+        }
+    }
     var currentUser by remember { mutableStateOf<User?>(initialUser) }
     var currentProfile by remember { mutableStateOf<StudentProfile?>(initialProfile) }
     val aiPolicy = circolareplus.ai.AcaPolicyState.preferences
@@ -2706,7 +2711,7 @@ fun MainAppShell(
     circolareplus.update.AppUpdateHost()
 
     if (seatMapActionError != null) {
-        AlertDialog(
+        circolareplus.design.AilaAlertDialog(
             onDismissRequest = { seatMapActionError = null },
             // Stessa superficie e forma dei dialoghi del design system (AilaConfirmDialog).
             containerColor = AppTheme.SurfaceWhite,
@@ -2714,21 +2719,21 @@ fun MainAppShell(
             title = { Text("Attenzione") },
             text = { Text(seatMapActionError ?: "") },
             confirmButton = {
-                TextButton(onClick = { seatMapActionError = null }) { Text("Ho capito") }
+                circolareplus.design.AilaTextButton(onClick = { seatMapActionError = null }) { Text("Ho capito") }
             }
         )
     }
     if (seatMapInfoMessage != null) {
         // Avviso buono della gestione della mappa (es. "storico eliminato"): stessa forma
         // del dialogo errori, senza il titolo d'allarme.
-        AlertDialog(
+        circolareplus.design.AilaAlertDialog(
             onDismissRequest = { seatMapInfoMessage = null },
             containerColor = AppTheme.SurfaceWhite,
             shape = RoundedCornerShape(AppTheme.CardCornerRadius),
             title = { Text("Fatto") },
             text = { Text(seatMapInfoMessage ?: "") },
             confirmButton = {
-                TextButton(onClick = { seatMapInfoMessage = null }) { Text("Ho capito") }
+                circolareplus.design.AilaTextButton(onClick = { seatMapInfoMessage = null }) { Text("Ho capito") }
             }
         )
     }
@@ -3234,7 +3239,7 @@ fun MainAppShell(
                     useRail -> WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                     // 64 di pillola piu' il margine Space12 sopra e sotto (vedi FloatingTabBar): se
                     // cambia uno dei due va cambiato anche qui.
-                    else -> 64.dp + AppTheme.Space12 * 2 + circolareplus.design.tabBarSystemInset()
+                    else -> (if(AppTheme.isNothing) 72.dp else 64.dp) + AppTheme.Space12 * 2 + circolareplus.design.tabBarSystemInset()
                 }
                 // Tastiera aperta = il suo inset in basso e' > 0. (`isImeVisible` esiste solo su
                 // Android: su iOS non compilava.)
@@ -6585,7 +6590,7 @@ internal fun AddCalendarEventDialog(
                     if (aiClockTime.isNotBlank() && fromHour == null) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text("Orario: $aiClockTime", Modifier.weight(1f), color = AppTheme.TextDark)
-                            TextButton(onClick = { aiClockTime = "" }) { Text("Rimuovi orario") }
+                            circolareplus.design.AilaTextButton(onClick = { aiClockTime = "" }) { Text("Rimuovi orario") }
                         }
                     }
                     Row(
@@ -7224,7 +7229,7 @@ private fun EditCalendarEventDialog(
         catch(e: Exception) { rosterError = "Impossibile caricare i destinatari. Riapri la modifica per riprovare." }
         finally { loadingPeople = false }
     }
-    AlertDialog(
+    circolareplus.design.AilaAlertDialog(
         onDismissRequest = { if (!isSaving) onDismiss() },
         title = { Text("Modifica evento") },
         text = {
@@ -7233,7 +7238,7 @@ private fun EditCalendarEventDialog(
                 OutlinedTextField(date, { date = it }, label = { Text("Data (AAAA-MM-GG)") }, singleLine = true, enabled = !isSaving)
                 OutlinedTextField(time, { time = it }, label = { Text("Ora o ora di lezione") }, singleLine = true, enabled = !isSaving)
                 Box {
-                    OutlinedButton(enabled = !isSaving, onClick = { categoryMenu = true }) { Text(eventCategoryLabel(category)) }
+                    circolareplus.design.AilaOutlinedButton(enabled = !isSaving, onClick = { categoryMenu = true }) { Text(eventCategoryLabel(category)) }
                     DropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
                         CalendarEventCategory.entries.forEach { option ->
                             DropdownMenuItem(text = { Text(eventCategoryLabel(option)) }, onClick = { category = option; categoryMenu = false })
@@ -7251,7 +7256,7 @@ private fun EditCalendarEventDialog(
                     rosterError?.let { Text(it, color = AppTheme.TintRedInk) }
                     people.forEach { person ->
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = person.id in recipients, enabled = !isSaving,
+                            circolareplus.design.AilaCheckbox(checked = person.id in recipients, enabled = !isSaving,
                                 onCheckedChange = { checked -> recipients = if(checked) recipients + person.id else recipients - person.id })
                             Text("${person.firstName} ${person.lastName}", color = AppTheme.TextDark)
                         }
@@ -7262,9 +7267,9 @@ private fun EditCalendarEventDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(title.trim(), date.trim(), time.trim().ifBlank { null }, category, notes.trim().ifBlank { null }, forAll, if(forAll) null else recipients) }, enabled = !isSaving && (forAll || (recipients.isNotEmpty() && !loadingPeople && rosterError == null)) && title.isNotBlank() && date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) { Text(if (isSaving) "Salvataggio…" else "Salva") }
+            circolareplus.design.AilaTextButton(onClick = { onSave(title.trim(), date.trim(), time.trim().ifBlank { null }, category, notes.trim().ifBlank { null }, forAll, if(forAll) null else recipients) }, enabled = !isSaving && (forAll || (recipients.isNotEmpty() && !loadingPeople && rosterError == null)) && title.isNotBlank() && date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) { Text(if (isSaving) "Salvataggio…" else "Salva") }
         },
-        dismissButton = { TextButton(enabled = !isSaving, onClick = onDismiss) { Text("Annulla") } }
+        dismissButton = { circolareplus.design.AilaTextButton(enabled = !isSaving, onClick = onDismiss) { Text("Annulla") } }
     )
 }
 
@@ -7795,7 +7800,7 @@ private fun AddProposalDialog(
                 modifier = Modifier.fillMaxWidth().ailaSheetReveal(1)
             )
             Spacer(modifier = Modifier.height(AppTheme.Space8))
-            OutlinedButton(
+            circolareplus.design.AilaOutlinedButton(
                 onClick = pickAttachment,
                 enabled = !uploading && attachments.size < 5,
                 modifier = Modifier.fillMaxWidth()
@@ -7803,7 +7808,7 @@ private fun AddProposalDialog(
             attachments.forEach { item ->
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(item.fileName, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted, maxLines = 1)
-                    TextButton(onClick = { attachments = attachments.filterNot { it.id == item.id }; scope.launch { try { AppContainer.acaRepository.removeAttachment(item.id) } catch (_: Exception) {} } }, enabled = !uploading) { Text("Rimuovi") }
+                    circolareplus.design.AilaTextButton(onClick = { attachments = attachments.filterNot { it.id == item.id }; scope.launch { try { AppContainer.acaRepository.removeAttachment(item.id) } catch (_: Exception) {} } }, enabled = !uploading) { Text("Rimuovi") }
                 }
             }
             uploadError?.let { Text(it, color = AppTheme.TintRedInk, style = MaterialTheme.typography.bodySmall) }
@@ -8055,7 +8060,7 @@ private fun FloatingTabBar(
 ) {
     if (AppTheme.isNothing) {
         Row(Modifier.fillMaxWidth().padding(bottom = circolareplus.design.tabBarSystemInset())
-            .padding(horizontal = 16.dp, vertical = 12.dp).height(70.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp).height(72.dp)
             .clip(RoundedCornerShape(28.dp)).background(AppTheme.SurfaceWhite)
             .border(1.dp, AppTheme.Hairline, RoundedCornerShape(28.dp)).padding(horizontal = 6.dp),
             verticalAlignment = Alignment.CenterVertically) {
@@ -8531,14 +8536,17 @@ private fun RowScope.GlassTabBarContent(selectedTab: MainTab, onSelect: (MainTab
 /** Fixed circular controls and a red recording dot, independent of Material's stretching tabs. */
 @Composable
 private fun NothingTabItem(tab: MainTab, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val ink = if (selected) AppTheme.BackgroundLight else AppTheme.TextMuted
+    val ink by androidx.compose.animation.animateColorAsState(if (selected) AppTheme.BackgroundLight else AppTheme.TextMuted,
+        animationSpec = androidx.compose.animation.core.tween(if(AppTheme.reduceMotion) 0 else 140), label = "nothingTabInk")
+    val fill by androidx.compose.animation.animateColorAsState(if (selected) AppTheme.TextDark else Color.Transparent,
+        animationSpec = androidx.compose.animation.core.tween(if(AppTheme.reduceMotion) 0 else 180), label = "nothingTabFill")
     Column(modifier.heightIn(min = 64.dp).clickable(onClick = onClick).semantics {
         contentDescription = tab.title
         role = Role.Tab
         this.selected = selected
     }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Box(Modifier.size(34.dp).clip(androidx.compose.foundation.shape.CircleShape)
-            .background(if (selected) AppTheme.TextDark else Color.Transparent), contentAlignment = Alignment.Center) {
+            .background(fill), contentAlignment = Alignment.Center) {
             val m = Modifier.size(20.dp)
             when (tab) {
                 MainTab.HOME -> AppIcons.Home(m, ink)
@@ -8551,7 +8559,7 @@ private fun NothingTabItem(tab: MainTab, selected: Boolean, onClick: () -> Unit,
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             if (selected) Box(Modifier.size(4.dp).background(AppTheme.PrimaryBlue, androidx.compose.foundation.shape.CircleShape))
             Text(when (tab) { MainTab.CALENDAR -> "Agenda"; MainTab.SEATMAP -> "Posti"; else -> tab.title },
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 14.sp),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, lineHeight = 16.sp),
                 color = AppTheme.TextDark, maxLines = 1)
         }
     }

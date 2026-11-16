@@ -72,7 +72,7 @@ private fun AppUpdateDialog() {
         else -> "Aggiornamento disponibile"
     }
 
-    AlertDialog(
+    circolareplus.design.AilaAlertDialog(
         onDismissRequest = dismiss,
         modifier = Modifier
             .ailaDialogMotion(closer)

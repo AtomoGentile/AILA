@@ -60,13 +60,13 @@ fun SeatMapProposalsScreen(
             Text(if (rankedProposals.size == 1) "1 proposta" else "${rankedProposals.size} proposte",
                 style = MaterialTheme.typography.labelMedium, color = AppTheme.TextMuted)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onRegenerate, enabled = !isBusy) {
+                circolareplus.design.AilaTextButton(onClick = onRegenerate, enabled = !isBusy) {
                     AppIcons.Refresh(modifier = Modifier.size(18.dp), color = AppTheme.PrimaryBlue)
                     Spacer(Modifier.width(6.dp))
                     Text("Migliora", color = AppTheme.PrimaryBlue)
                 }
                 if (canRewind) Box {
-                    IconButton(onClick = { showMenu = true }, enabled = !isBusy,
+                    circolareplus.design.AilaIconControl(onClick = { showMenu = true }, enabled = !isBusy,
                         modifier = Modifier.semantics { contentDescription = "Altre azioni" }) {
                         Text("•••", color = AppTheme.TextMuted)
                     }
@@ -80,7 +80,7 @@ fun SeatMapProposalsScreen(
         if (isBusy) Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
             Column {
                 SeatMapGenerationProgress(generationCompleted)
-                TextButton(onClick = onUseCurrentResult) { Text("Usa questo risultato") }
+                circolareplus.design.AilaTextButton(onClick = onUseCurrentResult) { Text("Usa questo risultato") }
             }
         }
         // A single proposal needs no navigation tile or empty horizontal carousel.
@@ -167,7 +167,7 @@ fun SeatMapProposalsScreen(
                     // Actions stay adjacent to the map, including on tall phone screens.
                     Row(Modifier.fillMaxWidth().padding(top = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { onToggleRetain(selected) }, enabled = !isBusy) {
+                        circolareplus.design.AilaTextButton(onClick = { onToggleRetain(selected) }, enabled = !isBusy) {
                             AppIcons.Star(modifier = Modifier.size(19.dp), color = AppTheme.PrimaryBlue, filled = retained)
                             Spacer(Modifier.width(6.dp))
                             Text(if (retained) "Conservata" else "Conserva", color = AppTheme.PrimaryBlue)
@@ -180,7 +180,7 @@ fun SeatMapProposalsScreen(
                 }
                 fullRow {
                     Column {
-                        TextButton(onClick = { showAnalysis = !showAnalysis }, modifier = Modifier.fillMaxWidth()) {
+                        circolareplus.design.AilaTextButton(onClick = { showAnalysis = !showAnalysis }, modifier = Modifier.fillMaxWidth()) {
                             Text(if (showAnalysis) "Chiudi analisi" else "Analisi della proposta", color = AppTheme.TextMuted)
                             Spacer(Modifier.width(6.dp))
                             AppIcons.ChevronRight(modifier = Modifier.size(16.dp).rotate(if (showAnalysis) 270f else 90f),

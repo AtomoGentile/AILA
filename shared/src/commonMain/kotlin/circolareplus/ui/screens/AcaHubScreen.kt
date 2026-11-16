@@ -31,20 +31,20 @@ fun AcaHubScreen(onBack:()->Unit,onOpenAssistant:()->Unit,onOpenForum:()->Unit,o
     Column{Text("Il contesto diventa un aiuto.",style=MaterialTheme.typography.headlineSmall,color=AppTheme.TextDark)
      Text("Chiedi, approfondisci e prepara le azioni da confermare.",color=AppTheme.TextMuted)}
    }
-   Button(onClick=onOpenAssistant,modifier=Modifier.fillMaxWidth()){Text("Parla con AILA")}
-   OutlinedButton(onClick=onOpenForum,modifier=Modifier.fillMaxWidth()){Text("Revisione tra pere")}
-   OutlinedButton(onClick=onOpenLocalFiles,modifier=Modifier.fillMaxWidth()){Text("File sul dispositivo")}
-   OutlinedButton(onClick=picker,modifier=Modifier.fillMaxWidth()){Text("Chiedi su un documento, un’immagine o un audio")}
-   OutlinedButton(onClick={if(recording)recorder.stop()else recorder.start()},modifier=Modifier.fillMaxWidth()){
+   circolareplus.design.AilaActionButton(onClick=onOpenAssistant,modifier=Modifier.fillMaxWidth()){Text("Parla con AILA")}
+   circolareplus.design.AilaOutlinedButton(onClick=onOpenForum,modifier=Modifier.fillMaxWidth()){Text("Revisione tra pere")}
+   circolareplus.design.AilaOutlinedButton(onClick=onOpenLocalFiles,modifier=Modifier.fillMaxWidth()){Text("File sul dispositivo")}
+   circolareplus.design.AilaOutlinedButton(onClick=picker,modifier=Modifier.fillMaxWidth()){Text("Chiedi su un documento, un’immagine o un audio")}
+   circolareplus.design.AilaOutlinedButton(onClick={if(recording)recorder.stop()else recorder.start()},modifier=Modifier.fillMaxWidth()){
     Text(if(recording)"Termina registrazione"else"Registra un vocale")
    }
-   if(recording)TextButton(onClick=recorder.cancel){Text("Annulla registrazione")}
-   OutlinedButton(onClick=onStudyPlan,modifier=Modifier.fillMaxWidth()){Text("Prepara un piano di studio")}
+   if(recording)circolareplus.design.AilaTextButton(onClick=recorder.cancel){Text("Annulla registrazione")}
+   circolareplus.design.AilaOutlinedButton(onClick=onStudyPlan,modifier=Modifier.fillMaxWidth()){Text("Prepara un piano di studio")}
    error?.let{Text(it,color=AppTheme.TintRedInk)}
    HorizontalDivider(color=AppTheme.Hairline)
    Text("L’aiuto che scegli tu",style=MaterialTheme.typography.titleLarge,color=AppTheme.TextDark)
    Text("AI e ACA sono opzionali. Nella sezione AI delle impostazioni puoi attivarle, scegliere i servizi e leggere l’informativa privacy.",color=AppTheme.TextMuted)
-   OutlinedButton(onClick=onOpenAiSettings,modifier=Modifier.fillMaxWidth()){Text("Apri impostazioni AI")}
+   circolareplus.design.AilaOutlinedButton(onClick=onOpenAiSettings,modifier=Modifier.fillMaxWidth()){Text("Apri impostazioni AI")}
    Text("Sul server: 90 giorni fino a 3 MB, 7 giorni oltre. Le copie sul dispositivo restano fino alla cancellazione manuale. Discussioni e messaggi rimangono. Gli eventi si creano, modificano o eliminano solo dopo la tua conferma.",style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
   }
  }

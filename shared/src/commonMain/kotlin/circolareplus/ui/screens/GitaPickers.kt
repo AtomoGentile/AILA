@@ -101,7 +101,7 @@ internal fun GitaTripPickerSheet(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (selected) AppTheme.OnSelection else AppTheme.TextMuted)
                         }
-                        RadioButton(selected = selected, onClick = null, colors = RadioButtonDefaults.colors(
+                        circolareplus.design.AilaRadioButton(selected = selected, onClick = null, colors = RadioButtonDefaults.colors(
                             selectedColor = AppTheme.OnSelection, unselectedColor = AppTheme.TextFaint))
                     }
                 }

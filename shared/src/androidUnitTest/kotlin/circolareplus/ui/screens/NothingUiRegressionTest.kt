@@ -37,12 +37,16 @@ class NothingUiRegressionTest {
     @Before fun setup() {
         AppTheme.uiStyle = UiStyle.NOTHING
         AppTheme.isDarkMode = false
+        NothingExperience.restore("{}") {}
         activity = Robolectric.buildActivity(ComponentActivity::class.java)
         activity.get().setTheme(android.R.style.Theme_Material_NoActionBar)
         activity.setup()
     }
     @After fun teardown() {
+        android.provider.Settings.Global.putFloat(activity.get().contentResolver,
+            android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
         activity.pause().stop().destroy()
+        NothingExperience.restore("{}") {}
         AppTheme.uiStyle = UiStyle.AUTO
         AppTheme.isDarkMode = true
         AppTheme.accent = AilaAccent.Default
@@ -65,11 +69,10 @@ class NothingUiRegressionTest {
         compose.runOnIdle { assertEquals("calendar", destination) }
         compose.onNodeWithText("Circolari", useUnmergedTree = true).assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals("circulars", destination) }
-        compose.onNodeWithContentDescription("Glyph AILA", useUnmergedTree = true).assertIsDisplayed()
-        compose.onNode(hasClickAction() and hasAnyDescendant(hasContentDescription("Glyph AILA")), useUnmergedTree = true)
-            .performClick()
-        compose.mainClock.advanceTimeBy(1800)
-        compose.onNodeWithText("HELLO, NOTHING.").assertIsDisplayed()
+        compose.onNodeWithText("25:00").assertIsDisplayed()
+        compose.onNodeWithText("Avvia").performClick()
+        compose.onNodeWithText("Pausa").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Riprendi").assertIsDisplayed()
         screenshot("nothing-home-light")
         compose.runOnIdle { AppTheme.isDarkMode = true }
         screenshot("nothing-home-dark")
@@ -110,6 +113,66 @@ class NothingUiRegressionTest {
         screenshot("nothing-components-dark")
         android.provider.Settings.Global.putFloat(activity.get().contentResolver,
             android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
+    }
+
+    @Test fun glyphStudioChangesAreSavedAndTimerCanBeReset() {
+        var saved = ""
+        NothingExperience.restore("{}") { saved = it }
+        activity.get().setContent { AilaTheme { HomeScreen(studentFirstName = "Simone") } }
+        compose.onNodeWithContentDescription("Personalizza Glyph").performClick()
+        compose.mainClock.advanceTimeBy(400)
+        compose.onNodeWithText("Orbita").performScrollTo().performClick()
+        compose.onNodeWithText("15 min").performScrollTo().performClick()
+        compose.onNode(hasSetTextAction()).performScrollTo().performTextReplacement("STUDIO")
+        compose.runOnIdle {
+            assertEquals(GlyphFace.ORBIT,NothingExperience.preferences.face)
+            assertEquals(15,NothingExperience.preferences.focusMinutes)
+            assertEquals("STUDIO",NothingExperience.preferences.signature)
+            kotlin.test.assertTrue(saved.contains("ORBIT"))
+        }
+        screenshot("nothing-glyph-studio")
+        compose.onNodeWithContentDescription("Chiudi Glyph Studio").performClick()
+        compose.mainClock.advanceTimeBy(400)
+        compose.onNodeWithText("15:00").assertIsDisplayed()
+        compose.onNodeWithText("STUDIO").assertIsDisplayed()
+    }
+
+    @Test @Config(qualifiers = "w360dp-h800dp-xxhdpi")
+    fun longBriefTitlesAndColoredSubjectsRemainReadableWithLargerText() {
+        val title = "Fisica · interrogazione su energia e quantità di moto"
+        val item = circolareplus.data.remote.dto.AilaBriefItemDto("f1","r1",circolareplus.data.remote.dto.AilaBriefKind.EVENT,"e1",title,"","Apri",date="2026-11-18")
+        activity.get().setContent {
+            AilaTheme {
+                val density = androidx.compose.ui.platform.LocalDensity.current
+                CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density,1.3f)) {
+                    Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight).padding(16.dp)) {
+                        AilaBriefCard(listOf(item),{},{},{},subjectColorsEnabled=true)
+                    }
+                }
+            }
+        }
+        compose.onNodeWithText(title).assertIsDisplayed()
+        screenshot("nothing-brief-large-text-light")
+        compose.runOnIdle { AppTheme.isDarkMode = true }
+        screenshot("nothing-brief-large-text-dark")
+    }
+
+    @Test fun nothingDialogAndInputCanBeReadAndConfirmed() {
+        var confirmed = false
+        activity.get().setContent {
+            AilaTheme {
+                AilaAlertDialog(onDismissRequest={},title={ androidx.compose.material3.Text("Conferma modifica") },
+                    text={ androidx.compose.material3.Text("L’orario sarà aggiornato per tutta la classe.") },
+                    confirmButton={ AilaTextButton({confirmed=true}) { androidx.compose.material3.Text("Conferma") } },
+                    dismissButton={ AilaTextButton({}) { androidx.compose.material3.Text("Annulla") } })
+            }
+        }
+        compose.onNodeWithText("Conferma modifica").assertIsDisplayed()
+        screenshot("nothing-dialog-light")
+        compose.runOnIdle { AppTheme.isDarkMode = true }
+        screenshot("nothing-dialog-dark")
+        compose.onNodeWithText("Conferma").performClick()
+        compose.runOnIdle { kotlin.test.assertTrue(confirmed) }
     }
 
     private fun screenshot(name: String) {

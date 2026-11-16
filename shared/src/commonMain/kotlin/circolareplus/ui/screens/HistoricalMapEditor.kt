@@ -42,27 +42,27 @@ internal fun HistoricalMapEditor(initial: List<DeskAssignment>, studentsMap: Map
                                 repeat(desk.seats) { seat ->
                                     val id = occupant(desk, seat)
                                     val student = studentsMap[id]
-                                    TextButton(enabled = !busy, onClick = { selected = index to seat }) {
+                                    circolareplus.design.AilaTextButton(enabled = !busy, onClick = { selected = index to seat }) {
                                         Text(student?.let { "${it.firstName} ${it.lastName}" } ?: id?.let { "Studente non più registrato" } ?: "Posto vuoto")
                                     }
                                 }
                                 Row {
-                                    TextButton(enabled = !busy, onClick = { desks = desks.mapIndexed { i, d -> if (i == index) d.copy(seats = 3) else d } }) { Text("Terzo posto") }
-                                    TextButton(enabled = !busy, onClick = { desks = desks.filterIndexed { i, _ -> i != index } }) { Text("Rimuovi banco") }
+                                    circolareplus.design.AilaTextButton(enabled = !busy, onClick = { desks = desks.mapIndexed { i, d -> if (i == index) d.copy(seats = 3) else d } }) { Text("Terzo posto") }
+                                    circolareplus.design.AilaTextButton(enabled = !busy, onClick = { desks = desks.filterIndexed { i, _ -> i != index } }) { Text("Rimuovi banco") }
                                 }
                             }
                         }
                     }
                     item {
-                        TextButton(enabled = !busy, onClick = {
+                        circolareplus.design.AilaTextButton(enabled = !busy, onClick = {
                             val next = (desks.maxOfOrNull { it.row * 3 + it.column } ?: -1) + 1
                             desks = desks + DeskAssignment(next / 3, next % 3, null, null)
                         }) { Text("Aggiungi banco") }
                     }
                 }
                 Row {
-                    TextButton(enabled = !busy, onClick = onDismiss) { Text("Annulla") }
-                    Button(enabled = !busy && desks.isNotEmpty() && (!isNew || Regex("\\d{4}-\\d{2}-\\d{2}").matches(date)), onClick = {
+                    circolareplus.design.AilaTextButton(enabled = !busy, onClick = onDismiss) { Text("Annulla") }
+                    circolareplus.design.AilaActionButton(enabled = !busy && desks.isNotEmpty() && (!isNew || Regex("\\d{4}-\\d{2}-\\d{2}").matches(date)), onClick = {
                         busy = true
                         scope.launch {
                             try { onSave(desks, if (isNew) "${date}T12:00:00Z" else "")
@@ -75,13 +75,13 @@ internal fun HistoricalMapEditor(initial: List<DeskAssignment>, studentsMap: Map
             }
         }
         selected?.let { (index, seat) ->
-            AlertDialog(onDismissRequest = { selected = null }, title = { Text("Scegli studente") }, text = {
+            circolareplus.design.AilaAlertDialog(onDismissRequest = { selected = null }, title = { Text("Scegli studente") }, text = {
                 LazyColumn {
-                    item { TextButton(onClick = { desks = desks.mapIndexed { i, d -> if (i == index) assign(d, seat, null) else d }; selected = null }) { Text("Posto vuoto") } }
+                    item { circolareplus.design.AilaTextButton(onClick = { desks = desks.mapIndexed { i, d -> if (i == index) assign(d, seat, null) else d }; selected = null }) { Text("Posto vuoto") } }
                     val students = studentsMap.values.sortedWith(compareBy({ it.lastName }, { it.firstName }))
                     items(students.size) { studentIndex ->
                         val student = students[studentIndex]
-                        TextButton(onClick = {
+                        circolareplus.design.AilaTextButton(onClick = {
                             val previous = occupant(desks[index], seat)
                             desks = desks.mapIndexed { i, d ->
                                 var changed = d
@@ -93,7 +93,7 @@ internal fun HistoricalMapEditor(initial: List<DeskAssignment>, studentsMap: Map
                         }) { Text("${student.firstName} ${student.lastName}") }
                     }
                 }
-            }, confirmButton = { TextButton(onClick = { selected = null }) { Text("Chiudi") } })
+            }, confirmButton = { circolareplus.design.AilaTextButton(onClick = { selected = null }) { Text("Chiudi") } })
         }
     }
 }

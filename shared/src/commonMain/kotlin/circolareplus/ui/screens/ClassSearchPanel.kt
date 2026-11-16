@@ -63,7 +63,7 @@ internal fun ClassSearchPanel(onOpen: (ClassSearchHitDto)->Unit) {
                 !valid -> item { Text("Cerca per numero o titolo di circolare, proposta o contenuto delle discussioni.",style=MaterialTheme.typography.bodyMedium,color=AppTheme.TextMuted) }
                 error!=null -> item { Column {
                     Text(error.orEmpty(),color=AppTheme.TextMuted)
-                    TextButton(onClick={retry++}) {Text("Riprova")}
+                    circolareplus.design.AilaTextButton(onClick={retry++}) {Text("Riprova")}
                 } }
                 !loading && completedQuery==trimmed && visible.isEmpty() -> item {
                     Text("Nessun risultato per “$trimmed” in questa categoria.",color=AppTheme.TextMuted,style=MaterialTheme.typography.bodyMedium)

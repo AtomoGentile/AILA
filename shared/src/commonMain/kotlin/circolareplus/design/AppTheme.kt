@@ -136,7 +136,7 @@ object AppTheme {
     val CardCornerRadius: Dp get() = if (isNothing) 24.dp else if (isGlass) 24.dp else 28.dp
     /** Capsula in entrambi gli stili (in Expressive si deforma alla pressione, vedi i pulsanti). */
     val ButtonCornerRadius: Dp get() = 100.dp
-    val SmallElementRadius: Dp get() = if (isNothing) 10.dp else if (isGlass) 14.dp else 16.dp
+    val SmallElementRadius: Dp get() = if (isNothing) 14.dp else if (isGlass) 14.dp else 16.dp
 
     /**
      * Nessuna ombra Material in entrambi gli stili: in Glass sotto una superficie traslucida si
@@ -158,7 +158,7 @@ object AppTheme {
     // --- Colori brand -------------------------------------------------------------------------
     // Expressive usa il "tono 40" del blu AILA (piu' profondo, come i primari di Material) in
     // chiaro; in scuro resta il blu luminoso, che regge il testo bianco sopra.
-    val PrimaryBlue get() = if (isNothing) Color(if (isDarkMode) 0xFFFF5264 else 0xFFBA1735) else if (accent == AilaAccent.BLUE) {
+    val PrimaryBlue get() = if (isNothing) Color(if (isDarkMode) 0xFFFF544A else 0xFFCE2027) else if (accent == AilaAccent.BLUE) {
         style(Color(0xFF3B82F6), Color(0xFF0A84FF), Color(0xFF2F5BD3), Color(0xFF5A8CFF))
     } else {
         Color(if (isDarkMode) accent.primaryDark else accent.primaryLight)

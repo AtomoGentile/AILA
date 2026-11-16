@@ -67,6 +67,13 @@ fun AilaAssistantHalo(
     active: Boolean = false,
     intro: Boolean = false
 ) {
+    if (AppTheme.isNothing) {
+        Box(modifier.size(size * 1.35f), contentAlignment = Alignment.Center) {
+            if (active) NothingMatrixLoader(Modifier.size(size * .6f), AppTheme.TextDark)
+            else AilaAssistantMark(size = size * .55f, brush = androidx.compose.ui.graphics.SolidColor(AppTheme.TextDark))
+        }
+        return
+    }
     // Sul web l'alone resta fermo, come con "Riduci movimento": rotazione e respiro sono due
     // animazioni infinite, cioe' un disegno a 60 fotogrammi al secondo finche' la pagina e' aperta.
     val reduce = AppTheme.reduceMotion || AppTheme.liteEffects
@@ -175,6 +182,8 @@ fun AilaAssistantHalo(
  */
 @Composable
 fun Modifier.ailaAssistantAurora(shape: Shape = RoundedCornerShape(AppTheme.CardCornerRadius)): Modifier {
+    if (AppTheme.isNothing) return this.background(Color(0xFF181818))
+
     val reduce = AppTheme.reduceMotion || AppTheme.liteEffects
     val glass = AppTheme.isGlass
     val transition = if (reduce) null else rememberInfiniteTransition(label = "assistantAurora")
@@ -237,6 +246,8 @@ fun Modifier.ailaTopicSurface(shape: Shape, tint: Color, ink: Color): Modifier =
  */
 @Composable
 fun Modifier.ailaFocusRing(focused: Boolean, shape: Shape): Modifier {
+    if (AppTheme.isNothing) return if (focused) this.border(1.5.dp, AppTheme.PrimaryBlue, shape) else this
+
     val progress by animateFloatAsState(
         targetValue = if (focused) 1f else 0f,
         animationSpec = ailaFadeSpec(AilaDuration.Standard),

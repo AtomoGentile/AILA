@@ -22,6 +22,12 @@ import kotlin.math.sin
 
 /** Diffuse light follows the edges, with broader clouds around the lower corners. */
 @Composable fun AilaAcaIndicator(active: Boolean) {
+    if (AppTheme.isNothing) {
+        if (active) androidx.compose.foundation.Canvas(androidx.compose.ui.Modifier.fillMaxSize()) {
+            drawRect(AppTheme.PrimaryBlue.copy(alpha = .55f), style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
+        }
+        return
+    }
     val reduced = AppTheme.reduceMotion
     val opacity = animateFloatAsState(
         if(active) 1f else 0f,

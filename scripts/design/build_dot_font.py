@@ -48,9 +48,14 @@ def glyph(rows, accent=False):
                     (pen.moveTo if i == 0 else pen.lineTo)(point)
                 pen.closePath()
     if accent:
-        for cx in [260,380]:
-            pen.moveTo((cx-30, 925)); pen.lineTo((cx-30, 985))
-            pen.lineTo((cx+30, 985)); pen.lineTo((cx+30, 925)); pen.closePath()
+        # Two circular dots make a grave/acute accent, rather than the old ambiguous bars.
+        dots = [(260, 980), (380, 900)] if accent in 'àèìòùÀÈÌÒÙ' else [(260, 900), (380, 980)]
+        for cx, cy in dots:
+            for i in range(16):
+                a = -2*math.pi*i/16
+                point = (round(cx+30*math.cos(a)), round(cy+30*math.sin(a)))
+                (pen.moveTo if i == 0 else pen.lineTo)(point)
+            pen.closePath()
     return pen.glyph()
 
 def main():
@@ -62,7 +67,7 @@ def main():
         rows = ROWS.get(base, ROWS['?'])
         name = f'uni{code:04X}'
         cmap[code] = name
-        glyphs[name] = glyph(rows, accent=ch in 'àèéìòùÀÈÉÌÒÙ')
+        glyphs[name] = glyph(rows, accent=ch if ch in 'àèéìòùÀÈÉÌÒÙ' else None)
         metrics[name] = (640,37)
     fb = FontBuilder(1000, isTTF=True)
     fb.setupGlyphOrder(list(glyphs)); fb.setupCharacterMap(cmap); fb.setupGlyf(glyphs)

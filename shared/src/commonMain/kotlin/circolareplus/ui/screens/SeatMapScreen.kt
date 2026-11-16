@@ -320,7 +320,7 @@ fun SeatMapScreen(
                             color = AppTheme.TextDark,
                             modifier = Modifier.weight(1f)
                         )
-                        TextButton(onClick={adminExpanded=!adminExpanded},modifier=Modifier.widthIn(min=1.dp),contentPadding=PaddingValues(horizontal=0.dp,vertical=8.dp)) { Text(if(adminExpanded) "Chiudi" else "Opzioni") }
+                        circolareplus.design.AilaTextButton(onClick={adminExpanded=!adminExpanded},modifier=Modifier.widthIn(min=1.dp),contentPadding=PaddingValues(horizontal=0.dp,vertical=8.dp)) { Text(if(adminExpanded) "Chiudi" else "Opzioni") }
                     }
 
                     Spacer(modifier = Modifier.height(AppTheme.Space8))
@@ -924,7 +924,7 @@ private fun WeightSlider(
             )
         }
         Text(text = help, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Normal, color = AppTheme.TextMuted)
-        Slider(
+        circolareplus.design.AilaSlider(
             value = value,
             onValueChange = onValueChange,
             valueRange = 0.5f..1.5f,

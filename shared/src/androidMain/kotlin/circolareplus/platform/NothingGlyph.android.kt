@@ -28,11 +28,11 @@ actual fun rememberNothingGlyph(): NothingGlyphConnection {
         while (host is ContextWrapper && host !is Activity) host = host.baseContext
         val hostActivity = host as? Activity
         val observer = object : Application.ActivityLifecycleCallbacks {
-            override fun onActivityPaused(activity: Activity) { if (activity == hostActivity) connection.stop() }
-            override fun onActivityDestroyed(activity: Activity) { if (activity == hostActivity) connection.stop() }
+            override fun onActivityPaused(activity: Activity) { if (activity == hostActivity) connection.setForeground(false) }
+            override fun onActivityDestroyed(activity: Activity) { if (activity == hostActivity) connection.setForeground(false) }
             override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit
             override fun onActivityStarted(activity: Activity) = Unit
-            override fun onActivityResumed(activity: Activity) = Unit
+            override fun onActivityResumed(activity: Activity) { if (activity == hostActivity) connection.setForeground(true) }
             override fun onActivityStopped(activity: Activity) = Unit
             override fun onActivitySaveInstanceState(activity: Activity, state: Bundle) = Unit
         }
@@ -55,6 +55,10 @@ private class AndroidNothingGlyph(private val context: Context) : NothingGlyphCo
     private var manager: GlyphManager? = null
     private var session = false
     private var disposed = false
+    private var foreground = true
+    private var targetDevice: String? = null
+    override val supportsProgress get() = targetDevice in setOf(Glyph.DEVICE_20111, Glyph.DEVICE_22111, Glyph.DEVICE_23111, Glyph.DEVICE_23113, Glyph.DEVICE_24111)
+    fun setForeground(value: Boolean) { foreground = value; if (!value) stop() }
 
     fun connect() {
         // Older Nothing OS versions require a vendor API key; do not pretend that a test key works.
@@ -70,6 +74,7 @@ private class AndroidNothingGlyph(private val context: Context) : NothingGlyphCo
             else -> null
         }
         if (device == null) { status = "Anteprima disponibile; luci non supportate su questo modello"; return }
+        targetDevice = device
         runCatching {
             val gm = GlyphManager.getInstance(context.applicationContext)
             manager = gm
@@ -89,16 +94,34 @@ private class AndroidNothingGlyph(private val context: Context) : NothingGlyphCo
 
     fun connectionTimeout() { if (!ready && status == "Collegamento al Glyph…") status = "Servizio Glyph non disponibile" }
 
-    override fun pulse(): Boolean {
+    override fun pulse(zone: Int, periodMillis: Int): Boolean {
         val gm = manager ?: return false
-        if (!ready || disposed) return false
+        if (!ready || disposed || !foreground) return false
         return runCatching {
             if (!session) { gm.openSession(); session = true }
-            val frame = gm.glyphFrameBuilder.buildChannelA().buildChannelB().buildChannelC()
-                .buildPeriod(1200).buildCycles(1).buildInterval(0).build()
+            val builder = gm.glyphFrameBuilder
+            when (zone) {
+                1 -> builder.buildChannelA()
+                2 -> builder.buildChannelB()
+                3 -> builder.buildChannelC()
+                else -> builder.buildChannelA().buildChannelB().buildChannelC()
+            }
+            val frame = builder.buildPeriod(periodMillis.coerceIn(800, 2400)).buildCycles(1).buildInterval(0).build()
             gm.animate(frame)
             true
         }.getOrElse { stop(); ready = false; status = "Il sistema non ha avviato le luci"; false }
+    }
+
+    override fun showProgress(fraction: Float): Boolean {
+        val gm = manager ?: return false
+        if (!ready || disposed || !foreground || !supportsProgress) return false
+        return runCatching {
+            if (!session) { gm.openSession(); session = true }
+            val builder = gm.glyphFrameBuilder
+            if (targetDevice == Glyph.DEVICE_20111) builder.buildChannelD() else builder.buildChannelC()
+            gm.displayProgress(builder.build(), (fraction.coerceIn(0f, 1f) * 100).toInt())
+            true
+        }.getOrElse { stop(); false }
     }
 
     override fun stop() {

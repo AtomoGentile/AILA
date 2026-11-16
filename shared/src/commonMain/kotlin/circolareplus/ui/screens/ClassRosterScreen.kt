@@ -193,7 +193,7 @@ private fun ClassCodeRow() {
                 else circolareplus.design.AppIcons.Eye(modifier = Modifier.size(19.dp), color = tint)
             }
         }
-        TextButton(enabled = code != null && !busy, onClick = { confirmRegenerate = true }) {
+        circolareplus.design.AilaTextButton(enabled = code != null && !busy, onClick = { confirmRegenerate = true }) {
             Text(if (busy) "…" else "Rigenera", color = AppTheme.TintBlueInk)
         }
     }
@@ -330,7 +330,7 @@ private fun ResetCodeButton(entry: RatingEntryDto) {
     var confirm by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    TextButton(enabled = !busy, onClick = { confirm = true }) {
+    circolareplus.design.AilaTextButton(enabled = !busy, onClick = { confirm = true }) {
         Text(if (busy) "Genero il codice…" else "Password dimenticata? Genera un codice", style = MaterialTheme.typography.bodyMedium)
     }
     error?.let { Text(text = it, style = MaterialTheme.typography.bodySmall, color = AppTheme.TintRedInk) }
@@ -363,7 +363,7 @@ private fun ResetCodeButton(entry: RatingEntryDto) {
     }
 
     result?.let { reset ->
-        AlertDialog(
+        circolareplus.design.AilaAlertDialog(
             onDismissRequest = { result = null },
             // Stessa superficie e forma dei dialoghi del design system (AilaConfirmDialog).
             containerColor = AppTheme.SurfaceWhite,
@@ -380,7 +380,7 @@ private fun ResetCodeButton(entry: RatingEntryDto) {
                     )
                 }
             },
-            confirmButton = { TextButton(onClick = { result = null }) { Text("Fatto") } }
+            confirmButton = { circolareplus.design.AilaTextButton(onClick = { result = null }) { Text("Fatto") } }
         )
     }
 }
@@ -551,7 +551,7 @@ private fun HeightCorrectionDialog(
         mutableStateOf(((entry.heightCm ?: 170) / 5 * 5).coerceIn(140, 210))
     }
 
-    AlertDialog(
+    circolareplus.design.AilaAlertDialog(
         onDismissRequest = onDismiss,
         // Stessa superficie e forma dei dialoghi del design system (AilaConfirmDialog).
         containerColor = AppTheme.SurfaceWhite,
@@ -571,7 +571,7 @@ private fun HeightCorrectionDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(
+                    circolareplus.design.AilaIconControl(
                         onClick = { height = (height - 5).coerceAtLeast(140) },
                         enabled = height > 140,
                         modifier = Modifier
@@ -589,7 +589,7 @@ private fun HeightCorrectionDialog(
                         style = MaterialTheme.typography.headlineSmall,
                         color = AppTheme.TextDark
                     )
-                    IconButton(
+                    circolareplus.design.AilaIconControl(
                         onClick = { height = (height + 5).coerceAtMost(210) },
                         enabled = height < 210,
                         modifier = Modifier
@@ -612,7 +612,7 @@ private fun HeightCorrectionDialog(
             }
         },
         confirmButton = {
-            TextButton(
+            circolareplus.design.AilaTextButton(
                 enabled = height != entry.heightCm,
                 onClick = { onConfirm(height) }
             ) {
@@ -620,7 +620,7 @@ private fun HeightCorrectionDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Annulla") }
+            circolareplus.design.AilaTextButton(onClick = onDismiss) { Text("Annulla") }
         }
     )
 }
@@ -635,7 +635,7 @@ private fun RatingStepper(label: String, value: Int, onValueChange: (Int) -> Uni
     ) {
         Text(text = label, style = MaterialTheme.typography.bodyLarge, color = AppTheme.TextMuted)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(
+            circolareplus.design.AilaIconControl(
                 onClick = { onValueChange(value - 1) },
                 enabled = value > 1,
                 modifier = Modifier.size(44.dp).semantics { contentDescription = "$label: diminuisci" }
@@ -652,7 +652,7 @@ private fun RatingStepper(label: String, value: Int, onValueChange: (Int) -> Uni
                 color = AppTheme.TextDark,
                 modifier = Modifier.padding(horizontal = AppTheme.Space8)
             )
-            IconButton(
+            circolareplus.design.AilaIconControl(
                 onClick = { onValueChange(value + 1) },
                 enabled = value < 5,
                 modifier = Modifier.size(44.dp).semantics { contentDescription = "$label: aumenta" }
@@ -751,7 +751,7 @@ private fun AddDisciplinePairDialog(
     val selected = remember { mutableStateListOf<String>() }
     var durationIndex by remember { mutableStateOf(0) }
 
-    AlertDialog(
+    circolareplus.design.AilaAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = AppTheme.SurfaceWhite,
         shape = RoundedCornerShape(AppTheme.CardCornerRadius),
@@ -811,7 +811,7 @@ private fun AddDisciplinePairDialog(
             }
         },
         confirmButton = {
-            TextButton(
+            circolareplus.design.AilaTextButton(
                 enabled = selected.size == 2,
                 onClick = { onConfirm(selected[0], selected[1], PAIR_DURATIONS[durationIndex].second) }
             ) {
@@ -819,7 +819,7 @@ private fun AddDisciplinePairDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Annulla") }
+            circolareplus.design.AilaTextButton(onClick = onDismiss) { Text("Annulla") }
         }
     )
 }

@@ -32,10 +32,10 @@ internal fun ForumIntroduction(busy: Boolean, onCreate: () -> Unit, onRules: () 
         }
         Text(description, style = MaterialTheme.typography.bodyLarge, color = AppTheme.TextMuted)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = onCreate, enabled = !busy, modifier = Modifier.weight(1f), shape = RoundedCornerShape(18.dp)) {
+            circolareplus.design.AilaActionButton(onClick = onCreate, enabled = !busy, modifier = Modifier.weight(1f), shape = RoundedCornerShape(18.dp)) {
                 AppIcons.Plus(Modifier.size(18.dp), MaterialTheme.colorScheme.onPrimary); Spacer(Modifier.width(6.dp)); Text(createLabel)
             }
-            TextButton(onClick = onRules) { Text("Come funziona") }
+            circolareplus.design.AilaTextButton(onClick = onRules) { Text("Come funziona") }
         }
     }
 }
@@ -72,7 +72,7 @@ internal fun ForumNewQuestionSheet(title: String, question: String, anonymous: B
                     Text("Nuova domanda", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, color = AppTheme.TextDark)
                     Text("Apri una conversazione con la tua classe.", style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
                 }
-                IconButton(onClick = onClose, enabled = !busy, modifier = Modifier.semantics { contentDescription = "Chiudi nuova domanda" }) { AppIcons.Close(Modifier.size(20.dp), AppTheme.TextMuted) }
+                circolareplus.design.AilaIconControl(onClick = onClose, enabled = !busy, modifier = Modifier.semantics { contentDescription = "Chiudi nuova domanda" }) { AppIcons.Close(Modifier.size(20.dp), AppTheme.TextMuted) }
             }
             OutlinedTextField(title,onTitle,modifier=Modifier.fillMaxWidth(),label={Text("Di cosa vuoi parlare?")},placeholder={Text("Es. Un dubbio sugli esercizi di matematica")},maxLines=2,enabled=!busy,
                 shape=RoundedCornerShape(20.dp),colors=ailaFieldColors(),isError=title.length>180,supportingText={Text("${title.length}/180")})
@@ -86,11 +86,11 @@ internal fun ForumNewQuestionSheet(title: String, question: String, anonymous: B
                 }
                 Text(if(anonymous) "Alla classe apparirai come OP. L’identità scelta resterà fissa in questa discussione." else "La classe vedrà il tuo nome. L’identità scelta resterà fissa in questa discussione.",style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
             }
-            OutlinedButton(onClick=onPickAttachment,enabled=!busy&&attachments.size<5,modifier=Modifier.fillMaxWidth()) { Text(if(attachments.isEmpty())"Aggiungi allegati" else "Aggiungi allegati (${attachments.size}/5)") }
+            circolareplus.design.AilaOutlinedButton(onClick=onPickAttachment,enabled=!busy&&attachments.size<5,modifier=Modifier.fillMaxWidth()) { Text(if(attachments.isEmpty())"Aggiungi allegati" else "Aggiungi allegati (${attachments.size}/5)") }
             attachments.forEach { item ->
                 Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                     Text(item.fileName,Modifier.weight(1f),style=MaterialTheme.typography.bodySmall,color=AppTheme.TextDark,maxLines=1)
-                    TextButton(onClick={onRemoveAttachment(item)},enabled=!busy){Text("Rimuovi")}
+                    circolareplus.design.AilaTextButton(onClick={onRemoveAttachment(item)},enabled=!busy){Text("Rimuovi")}
                 }
             }
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(0.dp)) {
@@ -100,19 +100,19 @@ internal fun ForumNewQuestionSheet(title: String, question: String, anonymous: B
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Checkbox(accepted, onCheckedChange = null, enabled = !busy, modifier = Modifier.size(24.dp),
+                    circolareplus.design.AilaCheckbox(accepted, onCheckedChange = null, enabled = !busy, modifier = Modifier.size(24.dp),
                         colors = CheckboxDefaults.colors(checkedColor = AppTheme.PrimaryBlue, uncheckedColor = AppTheme.TextMuted))
                     Text("Accetto le regole e l’informativa", Modifier.weight(1f),
                         style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextDark)
                 }
-                TextButton(onClick = onRules, modifier = Modifier.padding(start = 36.dp),
+                circolareplus.design.AilaTextButton(onClick = onRules, modifier = Modifier.padding(start = 36.dp),
                     contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
                     colors = ButtonDefaults.textButtonColors(contentColor = AppTheme.PrimaryBlue)) {
                     Text("Leggi regole e informativa")
                 }
             }
             error?.let { Text(it,color=AppTheme.TintRedInk,style=MaterialTheme.typography.bodySmall) }
-            Button(onClick=onPublish,enabled=!busy&&accepted&&title.trim().length in 1..180&&(question.trim().length in 1..12000||attachments.isNotEmpty()),
+            circolareplus.design.AilaActionButton(onClick=onPublish,enabled=!busy&&accepted&&title.trim().length in 1..180&&(question.trim().length in 1..12000||attachments.isNotEmpty()),
                 modifier=Modifier.fillMaxWidth().then(if (AppTheme.isGlass) Modifier.ailaGlassSurface(RoundedCornerShape(20.dp),
                     tint = if (!busy && accepted && title.trim().length in 1..180 && (question.trim().length in 1..12000||attachments.isNotEmpty()))
                         AppTheme.PrimaryBlue.copy(alpha = .18f) else null) else Modifier),

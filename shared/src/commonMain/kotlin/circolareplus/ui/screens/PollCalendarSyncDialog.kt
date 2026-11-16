@@ -44,9 +44,9 @@ internal fun PollCalendarSyncDialog(
         } finally { loading = false }
     }
     if (confirm) preview?.let { data ->
-        AlertDialog(onDismissRequest = { confirm = false }, title = { Text("Aggiornare il calendario?") },
+        circolareplus.design.AilaAlertDialog(onDismissRequest = { confirm = false }, title = { Text("Aggiornare il calendario?") },
             text = { Text("Saranno aggiornate ${data.dates.size} date del sondaggio e sostituiti ${selected.size} vecchi eventi selezionati. Gli altri eventi resteranno nel calendario. Assegnazioni e bonus non cambiano.") },
-            confirmButton = { TextButton(onClick = {
+            confirmButton = { circolareplus.design.AilaTextButton(onClick = {
                 confirm = false
                 busy = true
                 error = null
@@ -60,7 +60,7 @@ internal fun PollCalendarSyncDialog(
                     } finally { busy = false }
                 }
             }) { Text("Aggiorna calendario") } },
-            dismissButton = { TextButton(onClick = { confirm = false }) { Text("Annulla") } })
+            dismissButton = { circolareplus.design.AilaTextButton(onClick = { confirm = false }) { Text("Annulla") } })
     }
     Dialog(onDismissRequest = { if (!busy) onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(color = AppTheme.BackgroundLight, modifier = Modifier.fillMaxSize()) {
@@ -93,7 +93,7 @@ internal fun PollCalendarSyncDialog(
                         if (data.previousEvents.isEmpty()) item { Text("Nessuna vecchia data da selezionare. Gli eventi collegati (${data.linkedCount}) saranno aggiornati senza duplicarli.", color = AppTheme.TextMuted) }
                         items(data.previousEvents, key = { it.id }) { event ->
                             AilaCard { Row(Modifier.padding(AppTheme.Space12).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Checkbox(checked = event.id in selected, enabled = !busy,
+                                circolareplus.design.AilaCheckbox(checked = event.id in selected, enabled = !busy,
                                     onCheckedChange = { checked -> selected = if (checked) selected + event.id else selected - event.id })
                                 Column(Modifier.weight(1f)) {
                                     Text("${formatDayMonth(event.date)} ${event.date.take(4)}" + (event.startTime?.let { " · $it" } ?: ""), color = AppTheme.TextDark)

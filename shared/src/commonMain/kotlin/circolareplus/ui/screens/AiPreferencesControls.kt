@@ -64,7 +64,7 @@ import kotlinx.coroutines.sync.withLock
    AiControlRow("Consenti provider esterni","Vale per le API personali e per un eventuale servizio avanzato. Le credenziali non vengono condivise con la classe.",p.externalConsent,p.aiEnabled){save(p.copy(externalConsent=it))}
   }}
   AilaCard{Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
-   TextButton(onClick={privacy=!privacy}){Text(if(privacy)"Chiudi informativa AI e privacy"else"Informativa AI e privacy")}
+   circolareplus.design.AilaTextButton(onClick={privacy=!privacy}){Text(if(privacy)"Chiudi informativa AI e privacy"else"Informativa AI e privacy")}
    if(privacy){
     Text("AI e ACA sono opzionali. I servizi disattivati non avviano elaborazioni sul dispositivo o nel cloud. Disattivare una funzione non elimina gli eventi già confermati o i messaggi già pubblicati. I lettori autorizzati possono usare la propria AI sui messaggi condivisi; le proposte automatiche sono un’opzione separata, inizialmente disattivata.",color=AppTheme.TextMuted)
     Text("Le richieste cloud includono solo il contesto autorizzato necessario: messaggi, testi, file o dati AILA pertinenti. Valutazioni dei compagni e preferenze sociali sono escluse dal pianificatore ACA. Un cambio di provider richiede i relativi consensi: non vengono inviati silenziosamente contenuti più sensibili a un altro servizio.",color=AppTheme.TextMuted)

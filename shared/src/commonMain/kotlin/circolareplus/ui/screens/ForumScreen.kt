@@ -112,13 +112,13 @@ fun ForumScreen(
   val result=repo.ai(threadId?:return@launchWork,request.question,request.publish,request.replyToId)
   if(request.publish)refresh()else summary=result
  }}
- confirmingProposal?.let{proposal->AlertDialog(
+ confirmingProposal?.let{proposal->circolareplus.design.AilaAlertDialog(
   onDismissRequest={confirmingProposal=null},title={Text("Aggiungere al calendario della classe?")},
   text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
    proposal.plan.actions.forEach{event->Text("${event.title}\n${event.date}${event.time?.let{" · $it"}.orEmpty()} · ${event.category}\n${event.notes.orEmpty()}")}
    Text("Visibile a tutta la classe. La prima conferma salva gli eventi e aggiorna la proposta per tutti.")
   }},
-  confirmButton={TextButton(enabled=!busy,onClick={confirmingProposal=null;launchWork{
+  confirmButton={circolareplus.design.AilaTextButton(enabled=!busy,onClick={confirmingProposal=null;launchWork{
    activity(AssistantAgentPhase.EXECUTING)
    try{val operation=AppContainer.acaRepository.previewShared(proposal)
     AppContainer.acaRepository.confirm(operation.id,operation.digest)
@@ -128,7 +128,7 @@ fun ForumScreen(
    }
    onCalendarChanged();refresh()
   }}){Text("Conferma per la classe")}},
-  dismissButton={TextButton(onClick={confirmingProposal=null}){Text("Annulla")}}
+  dismissButton={circolareplus.design.AilaTextButton(onClick={confirmingProposal=null}){Text("Annulla")}}
  )}
  LaunchedEffect(snapshot?.posts,focusPostId){
   onContextChange(snapshot?.let{snap->"Discussione: ${snap.thread.title}\n"+snap.posts.filter{!it.hidden}.takeLast(30).joinToString("\n"){"${it.author.label}: ${it.body}"}.take(6000)}.orEmpty())
@@ -165,7 +165,7 @@ fun ForumScreen(
        if(t.needsResolution)Text("Sei ancora qui? Puoi indicare se la domanda è risolta.",color=AppTheme.PrimaryBlue,style=MaterialTheme.typography.bodySmall)
       }
      }}
-     if(moreThreads)item{TextButton(onClick={launchWork{val next=repo.list(threads.size,filter=threadFilter);threads=(threads+next.threads).distinctBy{it.id};moreThreads=next.hasMore}}){Text("Altre discussioni")}}
+     if(moreThreads)item{circolareplus.design.AilaTextButton(onClick={launchWork{val next=repo.list(threads.size,filter=threadFilter);threads=(threads+next.threads).distinctBy{it.id};moreThreads=next.hasMore}}){Text("Altre discussioni")}}
     }
    }
   }else{
@@ -181,11 +181,11 @@ fun ForumScreen(
       Text(snap.thread.title,style=MaterialTheme.typography.titleLarge,color=AppTheme.TextDark)
       Text(if(snap.thread.resolved)"Risolta · puoi continuare a consultare e aggiungere risposte"else"Discussione aperta",color=AppTheme.TextMuted)
       if(snap.thread.needsResolution)Text("Sei ancora qui? Se hai trovato la risposta, puoi segnare la discussione come risolta.",color=AppTheme.PrimaryBlue)
-      Row{TextButton(onClick={askAi(ForumAiRequestDto())},enabled=!busy){Text("Riassumi")}
-       if(snap.thread.isAuthor||isModerator)TextButton(onClick={launchWork{repo.state(snap.thread.id,!snap.thread.resolved,snap.thread.featuredPostId);refresh()}},enabled=!busy){Text(if(snap.thread.resolved)"Riapri"else"Segna risolta")}
-       if(isModerator)TextButton(onClick={launchWork{reports=repo.reports(snap.thread.id)}},enabled=!busy){Text("Segnalazioni")}
+      Row{circolareplus.design.AilaTextButton(onClick={askAi(ForumAiRequestDto())},enabled=!busy){Text("Riassumi")}
+       if(snap.thread.isAuthor||isModerator)circolareplus.design.AilaTextButton(onClick={launchWork{repo.state(snap.thread.id,!snap.thread.resolved,snap.thread.featuredPostId);refresh()}},enabled=!busy){Text(if(snap.thread.resolved)"Riapri"else"Segna risolta")}
+       if(isModerator)circolareplus.design.AilaTextButton(onClick={launchWork{reports=repo.reports(snap.thread.id)}},enabled=!busy){Text("Segnalazioni")}
       }
-      if(focusPostId!=null)TextButton(onClick={focusPostId=null}){Text("Tutta la discussione")}
+      if(focusPostId!=null)circolareplus.design.AilaTextButton(onClick={focusPostId=null}){Text("Tutta la discussione")}
      }
      if(focusPostId==null){
       if(automaticPhase!=null)item{Text("ACA cerca impegni nella conversazione…",color=AppTheme.PrimaryBlue)}
@@ -197,21 +197,21 @@ fun ForumScreen(
          event.notes?.let{Text(it,color=AppTheme.TextMuted)}
         }
         Text("Proposta AI dalla conversazione · ${proposal.provider} · verifica date e dettagli nelle fonti.",style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
-        TextButton(onClick={focusPostId=proposal.sourcePostIds.firstOrNull{it!=snap.thread.id}?:snap.thread.id}){Text("Mostra i messaggi di origine")}
+        circolareplus.design.AilaTextButton(onClick={focusPostId=proposal.sourcePostIds.firstOrNull{it!=snap.thread.id}?:snap.thread.id}){Text("Mostra i messaggi di origine")}
         if(proposal.status=="PENDING"){
-         Button(onClick={confirmingProposal=proposal},enabled=!busy&&policy.allows("CALENDAR")){Text("Aggiungi al calendario")}
+         circolareplus.design.AilaActionButton(onClick={confirmingProposal=proposal},enabled=!busy&&policy.allows("CALENDAR")){Text("Aggiungi al calendario")}
          if(!policy.allows("CALENDAR"))Text("Per confermare, attiva ACA e il servizio Calendario nelle impostazioni AI. Non serve una chiave personale.",style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
         }
        }}
       }}
       proposalError?.let{message->item{Text(message,color=AppTheme.TextMuted,style=MaterialTheme.typography.bodySmall)}}
      }
-     if(snap.hasMore)item{TextButton(onClick={launchWork{refresh(true)}},enabled=!busy){Text("Carica messaggi precedenti")}}
+     if(snap.hasMore)item{circolareplus.design.AilaTextButton(onClick={launchWork{refresh(true)}},enabled=!busy){Text("Carica messaggi precedenti")}}
      items(visible,key={it.id}){post->
       AilaCard{
        Column(Modifier.fillMaxWidth().combinedClickable(onClick={if(post.id!=snap.thread.id)focusPostId=post.id},onLongClick={menuPost=post}).padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
         Row(verticalAlignment=Alignment.CenterVertically){Text(post.author.label+(if(post.author.isMe)" · tu"else""),Modifier.weight(1f),style=MaterialTheme.typography.labelLarge,color=AppTheme.PrimaryBlue)
-         TextButton(onClick={menuPost=post}){Text("•••")}}
+         circolareplus.design.AilaTextButton(onClick={menuPost=post}){Text("•••")}}
         if(post.id==snap.thread.featuredPostId)Text("Risposta in evidenza",color=AppTheme.PrimaryBlue,style=MaterialTheme.typography.labelSmall)
         var shown=post.body
         post.mentions.filter{it.isMe}.forEach{shown=shown.replace("@${it.label}","@Tu")}
@@ -219,22 +219,22 @@ fun ForumScreen(
         if(post.isAi)Text("Assistenza AI · ${post.generatedAt.orEmpty()} · ${post.provider.orEmpty()}",style=MaterialTheme.typography.labelSmall,color=AppTheme.TextMuted)
         post.attachments.forEach{a->LocalForumAttachment(a,!busy){onOpenAttachment(a)}}
         val replies=snap.posts.count{it.parentId==post.id}
-        Row{TextButton(onClick={replyTo=post;focusPostId=if(post.id==snap.thread.id)null else post.id},enabled=!busy&&!post.hidden){Text("Rispondi")}
-         if(post.id!=snap.thread.id&&replies>0)TextButton(onClick={focusPostId=post.id}){Text("$replies risposte →")}}
+        Row{circolareplus.design.AilaTextButton(onClick={replyTo=post;focusPostId=if(post.id==snap.thread.id)null else post.id},enabled=!busy&&!post.hidden){Text("Rispondi")}
+         if(post.id!=snap.thread.id&&replies>0)circolareplus.design.AilaTextButton(onClick={focusPostId=post.id}){Text("$replies risposte →")}}
        }
       }
      }
     }
     Column(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){
-     replyTo?.let{p->Row(verticalAlignment=Alignment.CenterVertically){Text("Riprendi: ${p.author.label}",Modifier.weight(1f),color=AppTheme.TextMuted);TextButton(onClick={replyTo=null}){Text("Annulla")}}}
-     if(pendingAttachments.isNotEmpty())Column{pendingAttachments.forEach{a->Row(verticalAlignment=Alignment.CenterVertically){Text(a.fileName,Modifier.weight(1f),color=AppTheme.TextMuted);TextButton(onClick={pendingAttachments=pendingAttachments.filterNot{it.id==a.id};scope.launch{try{AppContainer.acaRepository.removeAttachment(a.id)}catch(_:Exception){}}}){Text("Rimuovi")}}}}
+     replyTo?.let{p->Row(verticalAlignment=Alignment.CenterVertically){Text("Riprendi: ${p.author.label}",Modifier.weight(1f),color=AppTheme.TextMuted);circolareplus.design.AilaTextButton(onClick={replyTo=null}){Text("Annulla")}}}
+     if(pendingAttachments.isNotEmpty())Column{pendingAttachments.forEach{a->Row(verticalAlignment=Alignment.CenterVertically){Text(a.fileName,Modifier.weight(1f),color=AppTheme.TextMuted);circolareplus.design.AilaTextButton(onClick={pendingAttachments=pendingAttachments.filterNot{it.id==a.id};scope.launch{try{AppContainer.acaRepository.removeAttachment(a.id)}catch(_:Exception){}}}){Text("Rimuovi")}}}}
      OutlinedTextField(body,{body=it},modifier=Modifier.fillMaxWidth(),maxLines=4,placeholder={Text("Rispondi · richiama @perabot per chiedere ad AILA")},enabled=!busy)
      Row(verticalAlignment=Alignment.CenterVertically){
-      TextButton(onClick=pickFile,enabled=!busy&&pendingAttachments.size<5){Text("Allega")}
-      TextButton(onClick={if(recording)recorder.stop()else recorder.start()},enabled=!busy){Text(if(recording)"Termina"else"Vocale")}
-      TextButton(onClick={mentionsDialog=true},enabled=!busy){Text("@")}
+      circolareplus.design.AilaTextButton(onClick=pickFile,enabled=!busy&&pendingAttachments.size<5){Text("Allega")}
+      circolareplus.design.AilaTextButton(onClick={if(recording)recorder.stop()else recorder.start()},enabled=!busy){Text(if(recording)"Termina"else"Vocale")}
+      circolareplus.design.AilaTextButton(onClick={mentionsDialog=true},enabled=!busy){Text("@")}
       Spacer(Modifier.weight(1f))
-      Button(enabled=!busy&&rulesAccepted&&(body.isNotBlank()||pendingAttachments.isNotEmpty()),onClick={
+      circolareplus.design.AilaActionButton(enabled=!busy&&rulesAccepted&&(body.isNotBlank()||pendingAttachments.isNotEmpty()),onClick={
        val text=body;val parent=replyTo?.id?:focusPostId?:snap.thread.id
        val mentions=snap.participants.filter{text.contains("@${it.label}")}.map{it.key}
        launchWork{
@@ -247,10 +247,10 @@ fun ForumScreen(
        }
       }){Text("Invia")}
      }
-     if(recording)TextButton(onClick=recorder.cancel){Text("Annulla registrazione")}
-     if(snap.myIdentity==null)Row(verticalAlignment=Alignment.CenterVertically){Checkbox(anonymous,{anonymous=it});Text("Partecipa in forma anonima",color=AppTheme.TextMuted)}
+     if(recording)circolareplus.design.AilaTextButton(onClick=recorder.cancel){Text("Annulla registrazione")}
+     if(snap.myIdentity==null)Row(verticalAlignment=Alignment.CenterVertically){circolareplus.design.AilaCheckbox(anonymous,{anonymous=it});Text("Partecipa in forma anonima",color=AppTheme.TextMuted)}
      else Text("Identità in questa discussione: ${snap.myIdentity.label}. Rimarrà la stessa.",style=MaterialTheme.typography.labelSmall,color=AppTheme.TextMuted)
-     if(!rulesAccepted)Row(verticalAlignment=Alignment.CenterVertically){Checkbox(rulesAccepted,{rulesAccepted=it});TextButton(onClick={showRules=true}){Text("Accetto le regole del forum e l’informativa")}}
+     if(!rulesAccepted)Row(verticalAlignment=Alignment.CenterVertically){circolareplus.design.AilaCheckbox(rulesAccepted,{rulesAccepted=it});circolareplus.design.AilaTextButton(onClick={showRules=true}){Text("Accetto le regole del forum e l’informativa")}}
     }
    }
   }
@@ -262,52 +262,52 @@ fun ForumScreen(
   onRules={showRules=true},onClose=closeCreation,onPublish={launchWork{
    val created=repo.create(createTitle,createBody,anonymous,createAttachments.map{it.id});creating=false;createTitle="";createBody="";createAttachments=emptyList();threadId=created.thread.id
   }})
- if(showRules)AlertDialog(onDismissRequest={showRules=false},title={Text("Revisione tra pere")},text={Column(Modifier.verticalScroll(rememberScrollState())){
+ if(showRules)circolareplus.design.AilaAlertDialog(onDismissRequest={showRules=false},title={Text("Revisione tra pere")},text={Column(Modifier.verticalScroll(rememberScrollState())){
   Text("Le discussioni sono visibili alla tua classe e restano disponibili nel tempo. Scegli nome reale o pseudonimo al primo intervento: l’identità resta fissa in quella discussione. Non pubblicare dati personali o contenuti offensivi. Puoi segnalare gli abusi; i moderatori possono rimuovere i contenuti.")
   Spacer(Modifier.height(12.dp));Text("Puoi richiamare @perabot o chiedere un riassunto esplicitamente. I messaggi condivisi possono essere analizzati anche da altri lettori autorizzati che attivano le proposte automatiche: le proposte sono visibili alla classe e nessun evento viene aggiunto senza conferma. Disattivare la tua AI non impedisce l’analisi dei messaggi già condivisi da parte degli altri lettori. Le risposte AI sono assistenza e possono contenere errori. L’elaborazione cloud richiede il consenso in Impostazioni → AI. Sul server: 90 giorni fino a 3 MB; oltre: 7 giorni. Le copie sul dispositivo restano fino alla cancellazione manuale. Gli audio durano al massimo 10 minuti. La scadenza degli allegati non elimina i messaggi.")
- }},confirmButton={TextButton(onClick={rulesAccepted=true;showRules=false}){Text("Ho letto e accetto")}})
- if(notificationDialog)AlertDialog(onDismissRequest={notificationDialog=false},title={Text("Notifiche di questa discussione")},text={Column{
+ }},confirmButton={circolareplus.design.AilaTextButton(onClick={rulesAccepted=true;showRules=false}){Text("Ho letto e accetto")}})
+ if(notificationDialog)circolareplus.design.AilaAlertDialog(onDismissRequest={notificationDialog=false},title={Text("Notifiche di questa discussione")},text={Column{
   listOf("REPLIES" to "Solo risposte a me","ALL" to "Tutte le risposte","NONE" to "Nessuna notifica").forEach{(value,label)->
-   Row(verticalAlignment=Alignment.CenterVertically){RadioButton(snapshot?.notificationMode==value,onClick={launchWork{repo.subscribe(threadId!!,value);refresh();notificationDialog=false}});Text(label,color=AppTheme.TextDark)}
+   Row(verticalAlignment=Alignment.CenterVertically){circolareplus.design.AilaRadioButton(snapshot?.notificationMode==value,onClick={launchWork{repo.subscribe(threadId!!,value);refresh();notificationDialog=false}});Text(label,color=AppTheme.TextDark)}
   }
- }},confirmButton={TextButton(onClick={notificationDialog=false}){Text("Chiudi")}})
- if(mentionsDialog)AlertDialog(onDismissRequest={mentionsDialog=false},title={Text("Menziona una persona")},text={Column(Modifier.verticalScroll(rememberScrollState())){
-  TextButton(onClick={body+=" @perabot ";mentionsDialog=false}){Text("@perabot · AILA")}
-  snapshot?.participants?.forEach{p->TextButton(onClick={body+=" @${p.label} ";mentionsDialog=false}){Text(if(p.isMe)"@Tu"else"@${p.label}")}}
- }},confirmButton={TextButton(onClick={mentionsDialog=false}){Text("Chiudi")}})
- menuPost?.let{p->AlertDialog(onDismissRequest={menuPost=null},title={Text(p.author.label)},text={Column{
-  TextButton(onClick={replyTo=p;focusPostId=if(p.id==threadId)null else p.id;menuPost=null}){Text("Riprendi")}
-  TextButton(onClick={menuPost=null;onPrepareCalendar(p.body)}){Text("Prepara eventi da questo messaggio")}
-  if(snapshot?.thread?.isAuthor==true||isModerator)TextButton(onClick={menuPost=null;launchWork{val s=snapshot!!;repo.state(s.thread.id,s.thread.resolved,if(s.thread.featuredPostId==p.id)null else p.id);refresh()}}){Text(if(snapshot?.thread?.featuredPostId==p.id)"Togli dall’evidenza"else"Risposta in evidenza")}
-  TextButton(onClick={reportPost=p;reportReason="";menuPost=null}){Text("Segnala")}
-  if(isModerator)TextButton(onClick={menuPost=null;launchWork{repo.moderate(threadId!!,p.id,!p.hidden);refresh()}}){Text(if(p.hidden)"Ripristina messaggio"else"Rimuovi dalla discussione")}
- }},confirmButton={TextButton(onClick={menuPost=null}){Text("Chiudi")}})}
- reportPost?.let{p->AlertDialog(onDismissRequest={reportPost=null},title={Text("Segnala un contenuto")},text={OutlinedTextField(reportReason,{reportReason=it},label={Text("Motivo")},maxLines=5)},
-  confirmButton={TextButton(enabled=reportReason.isNotBlank(),onClick={reportPost=null;launchWork{repo.report(threadId!!,p.id,reportReason)}}){Text("Invia segnalazione")}},dismissButton={TextButton(onClick={reportPost=null}){Text("Annulla")}})}
- reports?.let{items->AlertDialog(onDismissRequest={reports=null},title={Text("Segnalazioni")},text={Column(Modifier.verticalScroll(rememberScrollState())){
+ }},confirmButton={circolareplus.design.AilaTextButton(onClick={notificationDialog=false}){Text("Chiudi")}})
+ if(mentionsDialog)circolareplus.design.AilaAlertDialog(onDismissRequest={mentionsDialog=false},title={Text("Menziona una persona")},text={Column(Modifier.verticalScroll(rememberScrollState())){
+  circolareplus.design.AilaTextButton(onClick={body+=" @perabot ";mentionsDialog=false}){Text("@perabot · AILA")}
+  snapshot?.participants?.forEach{p->circolareplus.design.AilaTextButton(onClick={body+=" @${p.label} ";mentionsDialog=false}){Text(if(p.isMe)"@Tu"else"@${p.label}")}}
+ }},confirmButton={circolareplus.design.AilaTextButton(onClick={mentionsDialog=false}){Text("Chiudi")}})
+ menuPost?.let{p->circolareplus.design.AilaAlertDialog(onDismissRequest={menuPost=null},title={Text(p.author.label)},text={Column{
+  circolareplus.design.AilaTextButton(onClick={replyTo=p;focusPostId=if(p.id==threadId)null else p.id;menuPost=null}){Text("Riprendi")}
+  circolareplus.design.AilaTextButton(onClick={menuPost=null;onPrepareCalendar(p.body)}){Text("Prepara eventi da questo messaggio")}
+  if(snapshot?.thread?.isAuthor==true||isModerator)circolareplus.design.AilaTextButton(onClick={menuPost=null;launchWork{val s=snapshot!!;repo.state(s.thread.id,s.thread.resolved,if(s.thread.featuredPostId==p.id)null else p.id);refresh()}}){Text(if(snapshot?.thread?.featuredPostId==p.id)"Togli dall’evidenza"else"Risposta in evidenza")}
+  circolareplus.design.AilaTextButton(onClick={reportPost=p;reportReason="";menuPost=null}){Text("Segnala")}
+  if(isModerator)circolareplus.design.AilaTextButton(onClick={menuPost=null;launchWork{repo.moderate(threadId!!,p.id,!p.hidden);refresh()}}){Text(if(p.hidden)"Ripristina messaggio"else"Rimuovi dalla discussione")}
+ }},confirmButton={circolareplus.design.AilaTextButton(onClick={menuPost=null}){Text("Chiudi")}})}
+ reportPost?.let{p->circolareplus.design.AilaAlertDialog(onDismissRequest={reportPost=null},title={Text("Segnala un contenuto")},text={OutlinedTextField(reportReason,{reportReason=it},label={Text("Motivo")},maxLines=5)},
+  confirmButton={circolareplus.design.AilaTextButton(enabled=reportReason.isNotBlank(),onClick={reportPost=null;launchWork{repo.report(threadId!!,p.id,reportReason)}}){Text("Invia segnalazione")}},dismissButton={circolareplus.design.AilaTextButton(onClick={reportPost=null}){Text("Annulla")}})}
+ reports?.let{items->circolareplus.design.AilaAlertDialog(onDismissRequest={reports=null},title={Text("Segnalazioni")},text={Column(Modifier.verticalScroll(rememberScrollState())){
   if(items.isEmpty())Text("Nessuna segnalazione.")
   items.forEach{r->Text("${r.status} · ${r.reason}",color=AppTheme.TextDark)
-   if(r.status=="OPEN")TextButton(onClick={reports=null;launchWork{repo.moderate(threadId!!,r.postId,true,r.id);refresh()}}){Text("Rimuovi e chiudi segnalazione")}}
- }},confirmButton={TextButton(onClick={reports=null}){Text("Chiudi")}})}
- summary?.let{r->AlertDialog(onDismissRequest={summary=null},title={Text("Riassunto generato da AILA")},text={Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)){
+   if(r.status=="OPEN")circolareplus.design.AilaTextButton(onClick={reports=null;launchWork{repo.moderate(threadId!!,r.postId,true,r.id);refresh()}}){Text("Rimuovi e chiudi segnalazione")}}
+ }},confirmButton={circolareplus.design.AilaTextButton(onClick={reports=null}){Text("Chiudi")}})}
+ summary?.let{r->circolareplus.design.AilaAlertDialog(onDismissRequest={summary=null},title={Text("Riassunto generato da AILA")},text={Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)){
   Text("${r.provider} · ${r.generatedAt}",style=MaterialTheme.typography.labelSmall)
   SelectionContainer{Text(r.text)}
   Text("Torna ai messaggi originali:",style=MaterialTheme.typography.labelLarge)
-  r.sources.take(20).forEach{s->TextButton(onClick={focusPostId=s.postId;summary=null}){Text(s.label)}}
- }},confirmButton={TextButton(onClick={summary=null}){Text("Chiudi")}})}
- consentRequest?.let{request->AlertDialog(onDismissRequest={consentRequest=null},title={Text("Attivare AILA per questa discussione?")},
+  r.sources.take(20).forEach{s->circolareplus.design.AilaTextButton(onClick={focusPostId=s.postId;summary=null}){Text(s.label)}}
+ }},confirmButton={circolareplus.design.AilaTextButton(onClick={summary=null}){Text("Chiudi")}})}
+ consentRequest?.let{request->circolareplus.design.AilaAlertDialog(onDismissRequest={consentRequest=null},title={Text("Attivare AILA per questa discussione?")},
   text={Text("Il servizio cloud elaborerà i messaggi visibili alla classe e le fonti AILA autorizzate. ${if(request.publish)"La risposta di Perabot sarà pubblicata nella discussione."else"Il riassunto sarà visibile solo a te."} Nessun evento verrà modificato automaticamente.")},
-  confirmButton={TextButton(onClick={consentRequest=null;launchWork{
+  confirmButton={circolareplus.design.AilaTextButton(onClick={consentRequest=null;launchWork{
    val p=AppContainer.acaRepository.preferences().preferences;AppContainer.acaRepository.savePreferences(p.copy(cloudConsent=true));activity(AssistantAgentPhase.WRITING)
    val result=repo.ai(threadId!!,request.question,request.publish,request.replyToId);if(request.publish)refresh()else summary=result
-  }}){Text("Consenti e continua")}},dismissButton={TextButton(onClick={consentRequest=null}){Text("Annulla")}})}
+  }}){Text("Consenti e continua")}},dismissButton={circolareplus.design.AilaTextButton(onClick={consentRequest=null}){Text("Annulla")}})}
 }
 
 @Composable internal fun LocalForumAttachment(item:ContentAttachmentDto,enabled:Boolean,onOpen:()->Unit){
  val revision=AppContainer.localContents.revision
  var local by remember(item.id){mutableStateOf<circolareplus.data.repository.LocalContentEntry?>(null)}
  LaunchedEffect(item.id,revision){try{local=AppContainer.localContents.findByRemote(item.id)}catch(e:CancellationException){throw e}catch(_:Exception){}}
- OutlinedButton(onClick=onOpen,enabled=enabled&&(!item.isExpired()||local!=null),modifier=Modifier.fillMaxWidth()){
+ circolareplus.design.AilaOutlinedButton(onClick=onOpen,enabled=enabled&&(!item.isExpired()||local!=null),modifier=Modifier.fillMaxWidth()){
   Text(when{local!=null->"${local!!.fileName} · Sul dispositivo";item.isExpired()->"Copia sul server scaduta";else->"${if(item.mime.startsWith("audio/"))"Audio"else"Allegato"}: ${item.fileName}"})
  }
 }

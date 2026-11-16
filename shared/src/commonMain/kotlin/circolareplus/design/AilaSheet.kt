@@ -72,6 +72,7 @@ fun AilaBottomSheet(
     faded: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    if (AppTheme.isNothing) { NothingSheet(onDismissRequest, content); return }
     if (!AppTheme.isGlass) {
         ModalBottomSheet(
             onDismissRequest = onDismissRequest,

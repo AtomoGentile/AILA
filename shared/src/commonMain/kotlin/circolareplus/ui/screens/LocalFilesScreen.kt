@@ -53,7 +53,7 @@ fun LocalFilePreferencesControls(onOpenFiles: () -> Unit) {
             }
             Switch(preferences.automaticDownload, onCheckedChange = null, enabled = loaded && !saving)
         }
-        OutlinedButton(onClick = onOpenFiles, modifier = Modifier.fillMaxWidth()) { Text("Gestisci i file sul dispositivo") }
+        circolareplus.design.AilaOutlinedButton(onClick = onOpenFiles, modifier = Modifier.fillMaxWidth()) { Text("Gestisci i file sul dispositivo") }
         if (saving) LinearProgressIndicator(Modifier.fillMaxWidth())
         error?.let { Text(it, color = AppTheme.TintRedInk, style = MaterialTheme.typography.bodySmall) }
     }
@@ -93,7 +93,7 @@ fun LocalFilesScreen(onBack: () -> Unit, onOpen: (IncomingContent) -> Unit) {
                 Text("${files.size} file · ${files.sumOf { it.bytes } / 1024} KB", style = MaterialTheme.typography.titleMedium, color = AppTheme.TextDark)
                 Text("Nessuna scadenza automatica. La cancellazione qui riguarda solo la copia di questo dispositivo, non quella sul server. Le copie restano separate per account.", color = AppTheme.TextMuted)
                 Text("Disinstallare l’app o cancellare i dati del sito può rimuovere l’archivio. Nel browser la conservazione dipende anche dallo spazio disponibile e dalle impostazioni del sito.", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
-                if (files.isNotEmpty()) TextButton(onClick = { deletingAll = true }, enabled = !busy) { Text("Elimina tutte le copie locali") }
+                if (files.isNotEmpty()) circolareplus.design.AilaTextButton(onClick = { deletingAll = true }, enabled = !busy) { Text("Elimina tutte le copie locali") }
             }
             if (files.isEmpty()) item { Text("I file che importi, apri o scarichi compariranno qui.", color = AppTheme.TextMuted) }
             items(files, key = { it.id }) { file ->
@@ -102,8 +102,8 @@ fun LocalFilesScreen(onBack: () -> Unit, onOpen: (IncomingContent) -> Unit) {
                         Text(file.fileName, style = MaterialTheme.typography.titleMedium, color = AppTheme.TextDark)
                         Text("${file.mime} · ${file.bytes / 1024} KB · Copia locale", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            OutlinedButton(onClick = { work { onOpen(repo.read(file)) } }, enabled = !busy) { Text("Apri") }
-                            TextButton(onClick = { deleting = file }, enabled = !busy) { Text("Elimina dal dispositivo") }
+                            circolareplus.design.AilaOutlinedButton(onClick = { work { onOpen(repo.read(file)) } }, enabled = !busy) { Text("Apri") }
+                            circolareplus.design.AilaTextButton(onClick = { deleting = file }, enabled = !busy) { Text("Elimina dal dispositivo") }
                         }
                     }
                 }
@@ -111,14 +111,14 @@ fun LocalFilesScreen(onBack: () -> Unit, onOpen: (IncomingContent) -> Unit) {
             error?.let { item { Text(it, color = AppTheme.TintRedInk) } }
         }
     }
-    if (deleting != null || deletingAll) AlertDialog(
+    if (deleting != null || deletingAll) circolareplus.design.AilaAlertDialog(
         onDismissRequest = { deleting = null; deletingAll = false },
         title = { Text(if (deletingAll) "Eliminare tutte le copie locali?" else "Eliminare la copia locale?") },
         text = { Text("${deleting?.fileName.orEmpty()}\nLa copia sul server resta fino alla sua scadenza. Se è già scaduta, il file non potrà essere scaricato di nuovo. Il download automatico non ripristinerà questa copia.") },
-        confirmButton = { TextButton(onClick = {
+        confirmButton = { circolareplus.design.AilaTextButton(onClick = {
             val item = deleting; val all = deletingAll; deleting = null; deletingAll = false
             work { if (all) repo.removeAll() else if (item != null) repo.remove(item) }
         }) { Text("Elimina dal dispositivo") } },
-        dismissButton = { TextButton(onClick = { deleting = null; deletingAll = false }) { Text("Annulla") } }
+        dismissButton = { circolareplus.design.AilaTextButton(onClick = { deleting = null; deletingAll = false }) { Text("Annulla") } }
     )
 }

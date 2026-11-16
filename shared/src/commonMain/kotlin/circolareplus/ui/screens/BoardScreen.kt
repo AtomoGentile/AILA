@@ -73,9 +73,9 @@ fun BoardScreen(
         }
     }
     var showHelp by remember { mutableStateOf(false) }
-    if(showHelp) AlertDialog(onDismissRequest={showHelp=false}, title={Text("La bacheca della classe")},
+    if(showHelp) circolareplus.design.AilaAlertDialog(onDismissRequest={showHelp=false}, title={Text("La bacheca della classe")},
         text={Text("Proponi un’idea per la classe: i compagni possono votarla e commentarla. Segui lo stato della proposta, da nuova a chiusa, e il suo esito. Puoi scegliere se pubblicare con il tuo nome o in forma anonima.")},
-        confirmButton={TextButton(onClick={showHelp=false}){Text("Ho capito")}})
+        confirmButton={circolareplus.design.AilaTextButton(onClick={showHelp=false}){Text("Ho capito")}})
 
     Box(modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
     Column(
@@ -363,7 +363,7 @@ fun ProposalCardItem(
                     // centrare col pollice, e uno stava attaccato all'altro (matita e cestino).
                     if (canEdit) {
                         // Nome per lo screen reader: l'icona da sola non dice cosa fa il pulsante.
-                        IconButton(
+                        circolareplus.design.AilaIconControl(
                             onClick = { showEditDialog = true },
                             modifier = Modifier.size(44.dp).semantics { contentDescription = "Modifica proposta" }
                         ) {
@@ -371,7 +371,7 @@ fun ProposalCardItem(
                         }
                     }
                     if (canDelete) {
-                        IconButton(
+                        circolareplus.design.AilaIconControl(
                             onClick = { showDeleteConfirm = true },
                             modifier = Modifier.size(44.dp).semantics { contentDescription = "Elimina proposta" }
                         ) {
@@ -805,7 +805,7 @@ private fun UnlockRequestDialog(
     val isValid = reason.trim().length >= 10
 
     val closer = rememberAilaDialogCloser()
-    AlertDialog(
+    circolareplus.design.AilaAlertDialog(
         onDismissRequest = { if (!isSending) closer.close(onDismiss) },
         // Larga quasi quanto lo schermo sul telefono, non oltre MaxDialogWidth su tablet/iPad.
         modifier = Modifier
@@ -897,7 +897,7 @@ private fun EditProposalDialog(
     val isValid = title.isNotBlank() && description.isNotBlank()
 
     val closer = rememberAilaDialogCloser()
-    AlertDialog(
+    circolareplus.design.AilaAlertDialog(
         onDismissRequest = { closer.close(onDismiss) },
         modifier = Modifier.ailaDialogMotion(closer),
         // Stessa superficie e forma dei dialoghi del design system (AilaConfirmDialog).
@@ -935,13 +935,13 @@ private fun EditProposalDialog(
             }
         },
         confirmButton = {
-            TextButton(
+            circolareplus.design.AilaTextButton(
                 enabled = isChanged && isValid,
                 onClick = { closer.close { onConfirm(title.trim(), description.trim()) } }
             ) { Text("Salva") }
         },
         dismissButton = {
-            TextButton(onClick = { closer.close(onDismiss) }) { Text("Annulla") }
+            circolareplus.design.AilaTextButton(onClick = { closer.close(onDismiss) }) { Text("Annulla") }
         }
     )
 }

@@ -102,8 +102,8 @@ fun SeatMapHistoryDialog(
                         color = AppTheme.TextDark,
                         modifier = Modifier.weight(1f)
                     )
-                    if (canManage) TextButton(onClick = { creating = true; editing = true }, enabled = !loading && !deleting) { Text("Aggiungi") }
-                    if (selected != null && canManage) TextButton(onClick = { creating = false; editing = true }, enabled = !deleting) { Text("Modifica") }
+                    if (canManage) circolareplus.design.AilaTextButton(onClick = { creating = true; editing = true }, enabled = !loading && !deleting) { Text("Aggiungi") }
+                    if (selected != null && canManage) circolareplus.design.AilaTextButton(onClick = { creating = false; editing = true }, enabled = !deleting) { Text("Modifica") }
                     if (selected == null) AilaIconButton(
                         contentDescription = "Aggiorna storico", enabled = !loading && !deleting,
                         onClick = { refresh++ }
@@ -182,7 +182,7 @@ fun SeatMapHistoryDialog(
                                     Column(Modifier.padding(AppTheme.Space12)) {
                                         val desk = history.flatMap { it.assignments }.first { oldId in listOfNotNull(it.studentAId, it.studentBId, it.studentCId) }
                                         Text("Studente non più registrato · fila ${desk.row + 1}, banco ${desk.column + 1}", color = AppTheme.TextMuted)
-                                        TextButton(onClick = { relinkId = oldId }) { Text("Collega allo studente registrato di nuovo") }
+                                        circolareplus.design.AilaTextButton(onClick = { relinkId = oldId }) { Text("Collega allo studente registrato di nuovo") }
                                     }
                                 }
                             }
@@ -238,12 +238,12 @@ fun SeatMapHistoryDialog(
             }
         )
         relinkId?.let { previousId ->
-            AlertDialog(onDismissRequest = { relinkId = null }, title = { Text("Collega account ricreato") },
+            circolareplus.design.AilaAlertDialog(onDismissRequest = { relinkId = null }, title = { Text("Collega account ricreato") },
                 text = {
                     LazyColumn {
                         actionError?.let { message -> item { Text(message, color = AppTheme.TintRedInk) } }
                         items(studentsMap.values.filter { it.username.isNotBlank() }, key = { it.id }) { student ->
-                            TextButton(enabled = !deleting, onClick = {
+                            circolareplus.design.AilaTextButton(enabled = !deleting, onClick = {
                                 deleting = true
                                 scope.launch {
                                     try {
@@ -258,7 +258,7 @@ fun SeatMapHistoryDialog(
                             }) { Text("${student.firstName} ${student.lastName}") }
                         }
                     }
-                }, confirmButton = { TextButton(onClick = { relinkId = null }) { Text("Chiudi") } })
+                }, confirmButton = { circolareplus.design.AilaTextButton(onClick = { relinkId = null }) { Text("Chiudi") } })
         }
         pendingDelete?.let { map ->
             AilaConfirmDialog(
