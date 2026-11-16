@@ -24,7 +24,7 @@ fun NothingGlyphMark(
 ) {
     Canvas(modifier.size(size).semantics { contentDescription = "Glyph AILA" }) {
         val s = this.size.minDimension
-        val c = Offset(size.width / 2f, size.height / 2f)
+        val c = Offset(this.size.width / 2f, this.size.height / 2f)
         val line = (s * .065f).coerceAtLeast(1.5.dp.toPx())
         val led = if (AppTheme.isDarkMode) Color(0xFF777777) else Color(0xFFB8B8B4)
         // Anello centrale interrotto, come un circuito inciso nel retro di un dispositivo.
