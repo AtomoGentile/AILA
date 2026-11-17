@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -71,6 +72,8 @@ class NothingUiRegressionTest {
         compose.runOnIdle { assertEquals("calendar", destination) }
         compose.onNodeWithText("Circolari", useUnmergedTree = true).assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals("circulars", destination) }
+        compose.onNodeWithText("Apri radar").assertIsDisplayed()
+        compose.onNodeWithText("Focus", useUnmergedTree = true).performClick()
         compose.onNodeWithText("25:00").assertIsDisplayed()
         compose.onNodeWithText("Avvia").performClick()
         compose.onNodeWithText("Pausa").assertIsDisplayed().performClick()
@@ -78,6 +81,56 @@ class NothingUiRegressionTest {
         screenshot("nothing-home-light")
         compose.runOnIdle { AppTheme.isDarkMode = true }
         screenshot("nothing-home-dark")
+    }
+
+    @Test fun radarShowsRealCategoriesAndOpensTheSelectedEntry() {
+        var opened = ""
+        val entries = listOf(
+            GlyphRadarEntry("e1", GlyphChannel.CALENDAR, "Fisica · energia", "Oggi alle 10:00", true) { opened = "e1" },
+            GlyphRadarEntry("c1", GlyphChannel.CIRCULARS, "Assemblea d’istituto", "Apri circolare") { opened = "c1" },
+            GlyphRadarEntry("p1", GlyphChannel.CLASS, "Sondaggio gita", "Vota") { opened = "p1" })
+        activity.get().setContent { AilaTheme {
+            Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight).padding(20.dp)) {
+                NothingRadarWidget(GlyphRadarData(entries), Modifier.fillMaxSize())
+            }
+        } }
+        compose.onNodeWithContentDescription("Apri Radar: 3 voci, 1 oggi").assertIsDisplayed()
+        screenshot("nothing-radar-light")
+        compose.runOnIdle { AppTheme.isDarkMode = true }
+        screenshot("nothing-radar-dark")
+        compose.onNodeWithText("Apri radar").performClick()
+        compose.onNodeWithText("Sondaggio gita").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals("p1", opened); assertEquals(0, NothingExperience.completedSessions) }
+        compose.onNodeWithText("Apri radar").performClick()
+        compose.onNodeWithText("Assemblea d’istituto").performScrollTo().assertIsDisplayed()
+        screenshot("nothing-radar-inbox")
+    }
+
+    @Test fun briefActionsExpandDismissAndPlanWithTheActualEventContext() {
+        val event = circolareplus.data.remote.dto.AilaBriefItemDto("e1", "r1", circolareplus.data.remote.dto.AilaBriefKind.EVENT,
+            "physics", "Fisica · energia e quantità di moto", "", "Apri evento", date = "2026-11-18", canPlanStudy = true)
+        val extras = (2..4).map { event.copy(id="e$it", sourceId="c$it", kind=circolareplus.data.remote.dto.AilaBriefKind.CIRCULAR,
+            title="Circolare $it", actionLabel="Leggi circolare", canPlanStudy=false) }
+        var dismissed = ""
+        var prompt = ""
+        var opened = ""
+        activity.get().setContent { AilaTheme {
+            Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight).verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(16.dp)) {
+                AilaBriefCard(listOf(event)+extras, { dismissed=it.id }, { opened=it.id }, { prompt=it })
+            }
+        } }
+        compose.onNodeWithText("Brief.").assertIsDisplayed()
+        screenshot("nothing-brief-feed-light")
+        compose.onNodeWithText("Apri evento").performScrollTo().performClick()
+        compose.onNodeWithText("Pianifica studio").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals("e1",opened); kotlin.test.assertTrue(prompt.contains(event.title)); kotlin.test.assertTrue(prompt.contains("2026-11-18")) }
+        compose.onNodeWithText("Tutte le 4 voci").performScrollTo().performClick()
+        compose.onNodeWithText("Circolare 4").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("Non ora: Circolare 4").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals("e4",dismissed); assertEquals(0,NothingExperience.completedSessions) }
+        compose.runOnIdle { AppTheme.isDarkMode=true }
+        compose.onNodeWithText("Brief.").performScrollTo()
+        screenshot("nothing-brief-feed-dark")
     }
 
     @Test fun personalAccentsDoNotLeakIntoNothingAndAreRestoredOnExit() {
@@ -142,6 +195,7 @@ class NothingUiRegressionTest {
         compose.mainClock.autoAdvance = true
         compose.onNodeWithContentDescription("Chiudi Glyph Studio").performClick()
         compose.mainClock.advanceTimeBy(400)
+        compose.onNodeWithText("Focus", useUnmergedTree = true).performClick()
         compose.onNodeWithText("15:00").assertIsDisplayed()
         compose.onNodeWithText("STUDIO").assertIsDisplayed()
     }

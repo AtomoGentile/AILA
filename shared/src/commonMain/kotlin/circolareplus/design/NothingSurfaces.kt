@@ -138,7 +138,10 @@ private fun NothingQuickTile(label: String, symbol: NothingSymbol, onClick: () -
 }
 
 @Composable
-fun NothingGlyphWidget(modifier: Modifier = Modifier, compact: Boolean = false) = NothingFocusWidget(modifier, compact)
+fun NothingGlyphWidget(modifier: Modifier = Modifier, compact: Boolean = false) {
+    val radar = LocalGlyphRadar.current
+    if (radar == null) NothingFocusWidget(modifier, compact) else NothingRadarWidget(radar, modifier)
+}
 
 /** Bounded, static matrix when motion is disabled; only loaders animate repeatedly. */
 @Composable

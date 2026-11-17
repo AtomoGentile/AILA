@@ -56,6 +56,27 @@ class NothingExperienceTest {
             }
         } finally { AppTheme.uiStyle=previousStyle;AppTheme.isDarkMode=previousDark }
     }
+    @Test fun radarDeduplicatesAndPrioritizesTodayAndRespectsDisabledChannels() {
+        val later = GlyphRadarEntry("later", GlyphChannel.CALENDAR, "Domani", "", false) {}
+        val today = GlyphRadarEntry("today", GlyphChannel.CALENDAR, "Oggi", "", true) {}
+        val circular = GlyphRadarEntry("c1", GlyphChannel.CIRCULARS, "Circolare", "") {}
+        val poll = GlyphRadarEntry("p1", GlyphChannel.CLASS, "Voto", "") {}
+        assertEquals(listOf("today", "later", "c1", "p1"), radarEntries(listOf(later,circular,today,today,poll),NothingPreferences()).map { it.key })
+        assertEquals(listOf(poll),radarEntries(listOf(later,circular,today,poll),NothingPreferences(radarEvents=false,radarCirculars=false)))
+        assertTrue(radarEntries(listOf(later,circular,poll),NothingPreferences(radarEvents=false,radarCirculars=false,radarClass=false)).isEmpty())
+    }
+    @Test fun radarChoicesSurviveRestoreAndOldSettingsRetainDefaultChannels() {
+        var saved=""
+        NothingExperience.restore("{}") { saved=it }
+        NothingExperience.configure(NothingPreferences(radarEvents=false,radarClass=false))
+        NothingExperience.restore(saved) {}
+        assertFalse(NothingExperience.preferences.radarEvents)
+        assertTrue(NothingExperience.preferences.radarCirculars)
+        assertFalse(NothingExperience.preferences.radarClass)
+        NothingExperience.restore("{}") {}
+        assertTrue(NothingExperience.preferences.radarEvents)
+        assertTrue(NothingExperience.preferences.radarClass)
+    }
     private fun contrast(a:Color,b:Color):Float {
         val x=a.luminance();val y=b.luminance()
         return (maxOf(x,y)+.05f)/(minOf(x,y)+.05f)

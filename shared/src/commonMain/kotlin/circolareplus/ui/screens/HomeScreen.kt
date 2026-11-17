@@ -121,6 +121,23 @@ fun HomeScreen(
             .background(AppTheme.BackgroundLight)
             .verticalScroll(scrollState)
     ) {
+        val briefAllowed = circolareplus.ai.AcaPolicyState.preferences.let {
+            it.aiEnabled && it.acaEnabled && it.nudgesEnabled && "NOW_NUDGE" in it.services
+        }
+        val radarEntries = buildList {
+            upcomingEvents(calendarEvents, Int.MAX_VALUE).forEach { event ->
+                add(circolareplus.design.GlyphRadarEntry("event:${event.id}",
+                    circolareplus.design.GlyphChannel.CALENDAR, event.title,
+                    "${event.date}${event.time?.let { " · $it" }.orEmpty()}", event.date == today().toIso()) { onEventClick(event) })
+            }
+            if (briefAllowed) briefItems.filter { it.kind != circolareplus.data.remote.dto.AilaBriefKind.EVENT && it.isActive }.forEach { item ->
+                add(circolareplus.design.GlyphRadarEntry("brief:${item.id}:${item.revision}",
+                    if(item.kind == circolareplus.data.remote.dto.AilaBriefKind.CIRCULAR) circolareplus.design.GlyphChannel.CIRCULARS
+                    else circolareplus.design.GlyphChannel.CLASS, item.title, item.actionLabel, false) { onOpenBrief(item) })
+            }
+        }
+        androidx.compose.runtime.CompositionLocalProvider(circolareplus.design.LocalGlyphRadar provides circolareplus.design.GlyphRadarData(
+            radarEntries, isEventsLoading || (briefAllowed && briefLoading), briefError.takeIf { briefAllowed }, onNavigateToCalendar)) {
         HomeHeroPanel(
             studentFirstName = studentFirstName,
             onNavigateToGita = onNavigateToGita,
@@ -131,7 +148,8 @@ fun HomeScreen(
             onNavigateToSeatMap = onNavigateToSeatMap
         )
 
-        if (circolareplus.ai.AcaPolicyState.preferences.let { it.aiEnabled && it.acaEnabled && it.nudgesEnabled && "NOW_NUDGE" in it.services }) {
+        }
+        if (briefAllowed) {
             AilaBriefCard(briefItems, onDismissBrief, onOpenBrief, onPlanStudy, briefLoading, briefError, onRefreshBrief,
                 Modifier.padding(horizontal = AppTheme.Space16).padding(top = 18.dp, bottom = 4.dp),
                 subjectColorsRevision = subjectColorsRevision,

@@ -23,7 +23,10 @@ data class NothingPreferences(
     val dotDisplay: Boolean = true,
     val haptics: Boolean = true,
     val rearLights: Boolean = false,
-    val showFocusWidget: Boolean = true
+    val showFocusWidget: Boolean = true,
+    val radarEvents: Boolean = true,
+    val radarCirculars: Boolean = true,
+    val radarClass: Boolean = true
 )
 
 /** The deadline, rather than a decrementing counter, survives navigation and process death. */

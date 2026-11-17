@@ -127,7 +127,7 @@ fun NothingGlyphStudio(onDismiss: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Glyph Studio", style = MaterialTheme.typography.headlineSmall, color = AppTheme.TextDark)
-                    Text("Un segnale che segue il tuo tempo.", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+                    Text("Scegli cosa merita la tua attenzione.", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
                 }
                 AilaIconButton("Chiudi Glyph Studio", onDismiss) { AppIcons.Close(Modifier.size(18.dp), it) }
             }
@@ -143,7 +143,12 @@ fun NothingGlyphStudio(onDismiss: () -> Unit) {
                 }
             }
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            AilaSectionTitle("Disegno")
+            AilaSectionTitle("Radar")
+            Text("Le tre tracce contano gli eventi futuri e le novità del Brief. Tocca il radar per aprire le voci. Un nuovo elemento può accendere le luci, con AILA in primo piano.", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+            NothingPreferenceRow("Calendario", "Eventi futuri destinati a te; oggi in evidenza.", p.radarEvents) { update(p.copy(radarEvents = it)) }
+            NothingPreferenceRow("Circolari", "Circolari attive presenti nel Brief.", p.radarCirculars) { update(p.copy(radarCirculars = it)) }
+            NothingPreferenceRow("Classe", "Sondaggi, risposte, bacheca e posti dal Brief.", p.radarClass) { update(p.copy(radarClass = it)) }
+            AilaSectionTitle("Disegno del Focus")
             GlyphFace.entries.chunked(2).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     row.forEach { face ->
@@ -170,13 +175,13 @@ fun NothingGlyphStudio(onDismiss: () -> Unit) {
             OutlinedTextField(value = p.signature, onValueChange = { update(p.copy(signature = it.take(8))) },
                 label = { Text("Firma del Glyph") }, supportingText = { Text("Fino a 8 caratteri, mostrati sotto il timer.") },
                 singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = ailaFieldColors())
-            NothingPreferenceRow("Caratteri a punti", "Solo nel saluto e nella data della Home.", p.dotDisplay) { update(p.copy(dotDisplay = it)) }
-            NothingPreferenceRow("Widget nella Home", "Mostra il timer accanto alla data.", p.showFocusWidget) { update(p.copy(showFocusWidget = it)) }
+            NothingPreferenceRow("Caratteri a punti", "Titoli e strumenti; il testo dei contenuti resta leggibile.", p.dotDisplay) { update(p.copy(dotDisplay = it)) }
+            NothingPreferenceRow("Widget nella Home", "Mostra Radar e Focus accanto alla data.", p.showFocusWidget) { update(p.copy(showFocusWidget = it)) }
             NothingPreferenceRow("Feedback tattile", "Un segnale all’avvio e a fine sessione.", p.haptics) { update(p.copy(haptics = it)) }
             if (hardware.ownerLabel != null) {
                 AilaSectionTitle("Nothing Insider")
                 Text(hardware.status, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
-                NothingPreferenceRow("Luci posteriori", "Avanzamento dove supportato e segnale di fine sessione.", p.rearLights,
+                NothingPreferenceRow("Luci posteriori", "Nuove voci del Radar e fine Focus; avanzamento dove supportato.", p.rearLights,
                     enabled = hardware.ready) { update(p.copy(rearLights = it)); if(!it) hardware.stop() }
                 Text("Le luci restano attive solo con AILA in primo piano. Il timer continua anche cambiando schermata.", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
             }

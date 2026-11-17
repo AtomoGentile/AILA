@@ -35,6 +35,11 @@ internal fun AilaBriefCard(
     subjectColorsEnabled: Boolean = false,
     subjectColorOverrides: Map<String, String> = emptyMap()
 ) {
+    if (AppTheme.isNothing) {
+        NothingBriefCard(items, onDismiss, onOpen, onStudy, loading, error, onRefresh,
+            modifier, subjectColorsEnabled, subjectColorOverrides)
+        return
+    }
     val relevant = items
     val visible = relevant.take(3)
     val dark = AppTheme.isDarkMode
