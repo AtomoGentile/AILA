@@ -167,6 +167,15 @@ fun AilaBackBar(
     modifier: Modifier = Modifier,
     action: (@Composable () -> Unit)? = null
 ) {
+    if(AppTheme.isNothing) {
+        Row(modifier.fillMaxWidth().background(AppTheme.BackgroundLight).padding(NothingSpacing.Edge),
+            verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(NothingSpacing.Item)) {
+            AilaIconButton("Indietro",onBackClick) {AppIcons.ChevronLeft(Modifier.size(19.dp),it)}
+            Text(title,Modifier.weight(1f),style=nothingDisplayStyle(22,30),color=AppTheme.TextDark,maxLines=2,overflow=TextOverflow.Ellipsis)
+            action?.invoke()
+        }
+        return
+    }
     Column(modifier = modifier.fillMaxWidth().background(AppTheme.BackgroundLight)) {
         Row(
             modifier = Modifier
@@ -930,6 +939,16 @@ fun AilaEmptyState(
         AppIcons.Document(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue)
     }
 ) {
+    if(AppTheme.isNothing) {
+        Column(modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(AppTheme.CardSurface).padding(24.dp),
+            verticalArrangement=Arrangement.spacedBy(NothingSpacing.Content)) {
+            Box(Modifier.size(44.dp).clip(CircleShape).background(AppTheme.TrackFill),contentAlignment=Alignment.Center) { icon() }
+            Text(title,style=nothingDisplayStyle(24,34),color=AppTheme.TextDark)
+            message?.let {Text(it,style=MaterialTheme.typography.bodyMedium,color=AppTheme.TextMuted)}
+            if(actionLabel != null && onAction != null) AilaPrimaryButton(text=actionLabel,onClick=onAction)
+        }
+        return
+    }
     Column(
         modifier = modifier
             .fillMaxWidth()

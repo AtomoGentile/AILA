@@ -17,7 +17,6 @@ fun NothingContentLead(title: String, description: String, symbol: NothingSymbol
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(NothingSpacing.Content)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(NothingSpacing.Item)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(NothingSpacing.Inline)) {
-                Text("AILA / CLASSE", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
                 Text(title, style = nothingDisplayStyle(28, 38), color = AppTheme.TextDark)
             }
             Box(Modifier.size(52.dp).background(AppTheme.TextDark, CircleShape), contentAlignment = Alignment.Center) {

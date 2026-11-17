@@ -1,5 +1,7 @@
 package circolareplus.ui.screens
 
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -587,6 +589,40 @@ fun SlotRowItem(
     onSelectVote: (InterrogationVoteType) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    if(AppTheme.isNothing) {
+        Column(modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(AppTheme.CardSurface).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            val date = parseIsoDate(slot.dateLabel)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                if(date != null) Text(date.day.toString().padStart(2,'0'), style = circolareplus.design.nothingDisplayStyle(32,42), color = AppTheme.TextDark)
+                Column(Modifier.weight(1f)) {
+                    Text(if(date != null) "${ITALIAN_MONTHS[date.month]} ${date.year}" else slot.dateLabel, style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
+                    Text("${slot.capacity} ${if(slot.capacity == 1) "posto" else "posti"}${if(slot.isMandatory) " · data fissata" else ""}", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+                }
+            }
+            val choices = listOf(
+                Triple(InterrogationVoteType.GREEN,"Ci sto",AppTheme.PollGreen),
+                Triple(InterrogationVoteType.YELLOW,"Indifferente",AppTheme.PollYellow),
+                Triple(InterrogationVoteType.LIGHT_RED,"Meglio di no",AppTheme.PollLightRed),
+                Triple(InterrogationVoteType.DARK_RED,"Impossibile",AppTheme.PollDarkRed))
+            choices.chunked(2).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    row.forEach { (vote,label,tint) ->
+                        val chosen = slot.currentVote == vote
+                        val canSelect = enabled && (vote != InterrogationVoteType.DARK_RED || chosen || darkRedLeft > 0)
+                        Row(Modifier.weight(1f).heightIn(min=48.dp).clip(RoundedCornerShape(20.dp))
+                            .background(if(chosen) AppTheme.TextDark else AppTheme.TrackFill)
+                            .clickable(enabled=canSelect,role=androidx.compose.ui.semantics.Role.RadioButton) {onSelectVote(vote)}
+                            .semantics { selected=chosen }.padding(12.dp), verticalAlignment=Alignment.CenterVertically,
+                            horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            Box(Modifier.size(6.dp).background(if(canSelect)tint else AppTheme.TextMuted,CircleShape))
+                            Text(label,Modifier.weight(1f),style=MaterialTheme.typography.labelMedium,color=if(!canSelect)AppTheme.TextMuted else if(chosen)AppTheme.BackgroundLight else AppTheme.TextDark)
+                        }
+                    }
+                }
+            }
+        }
+        return
+    }
     AilaCard(modifier = modifier) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(AppTheme.Space12),

@@ -198,6 +198,7 @@ class NothingUiRegressionTest {
     @Test fun nothingBoardPereAndPollUseTheSameSurfaceAndControlLanguage() {
         var scene by androidx.compose.runtime.mutableStateOf(0)
         var created=false
+        var vote:circolareplus.algorithms.InterrogationVoteType?=null
         val proposal=circolareplus.domain.model.Proposal("p1",authorName="Anonimo",isAnonymous=true,title="Spazio per lo studio in classe",description="Una proposta per organizzare meglio i materiali condivisi.",category="Didattica",createdAt="2026-11-17")
         activity.get().setContent { AilaTheme {
             when(scene) {
@@ -207,7 +208,7 @@ class NothingUiRegressionTest {
                     androidx.compose.foundation.layout.Spacer(Modifier.padding(8.dp))
                     ForumEmptyState()
                 }
-                else -> PollsScreen("Fisica",listOf(SlotUiItem("s1","18 novembre","Fisica",4)),0,onCastVote={_,_->})
+                else -> PollsScreen("Fisica",listOf(SlotUiItem("s1","2026-11-18","Fisica",4)),0,onCastVote={_,v->vote=v})
             }
         } }
         compose.onNodeWithText(proposal.title).assertIsDisplayed()
@@ -223,6 +224,8 @@ class NothingUiRegressionTest {
         screenshot("nothing-poll-dark")
         compose.runOnIdle { AppTheme.isDarkMode=false }
         screenshot("nothing-poll-light")
+        compose.onNode(hasText("Ci sto") and hasClickAction()).performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(circolareplus.algorithms.InterrogationVoteType.GREEN,vote) }
     }
 
     @Test fun personalAccentsDoNotLeakIntoNothingAndAreRestoredOnExit() {
