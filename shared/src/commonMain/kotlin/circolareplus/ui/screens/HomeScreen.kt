@@ -108,6 +108,16 @@ fun HomeScreen(
         if (wide) circulars.sortedByDescending { it.number }.take(5) else emptyList()
     }
 
+    if(AppTheme.isNothing) {
+        NothingHomeScreen(studentFirstName,nextEvents,latestCircular,
+            circolareplus.ai.AcaPolicyState.preferences.let {it.aiEnabled && it.acaEnabled && it.nudgesEnabled && "NOW_NUDGE" in it.services},
+            briefItems,briefLoading,briefError,onRefreshBrief,onOpenBrief,onDismissBrief,onPlanStudy,
+            subjectColorsEnabled,subjectColorOverrides,NothingHomeActions(onNavigateToSearch,onNavigateToGita,onNavigateToCirculars,onNavigateToCalendar,
+                onNavigateToBoard,onOpenForum,onNavigateToPolls,onNavigateToSeatMap,onEventClick,onNavigateToCircularDetail),
+            isEventsLoading,isCircularsLoading)
+        return
+    }
+
     // Circolare più recente in evidenza. Tipo esplicito sulla callback: un lambda scritto dentro
     // un "if" come argomento nullable è ambiguo da leggere e da inferire.
     val openLatestCircular: (() -> Unit)? =
@@ -126,20 +136,6 @@ fun HomeScreen(
         val briefAllowed = circolareplus.ai.AcaPolicyState.preferences.let {
             it.aiEnabled && it.acaEnabled && it.nudgesEnabled && "NOW_NUDGE" in it.services
         }
-        val radarEntries = buildList {
-            upcomingEvents(calendarEvents, Int.MAX_VALUE).forEach { event ->
-                add(circolareplus.design.GlyphRadarEntry("event:${event.id}",
-                    circolareplus.design.GlyphChannel.CALENDAR, event.title,
-                    "${event.date}${event.time?.let { " · $it" }.orEmpty()}", parseIsoDate(event.date.take(10).trim()) == today()) { onEventClick(event) })
-            }
-            if (briefAllowed) briefItems.filter { it.kind != circolareplus.data.remote.dto.AilaBriefKind.EVENT && it.isActive }.forEach { item ->
-                add(circolareplus.design.GlyphRadarEntry("brief:${item.id}:${item.revision}",
-                    if(item.kind == circolareplus.data.remote.dto.AilaBriefKind.CIRCULAR) circolareplus.design.GlyphChannel.CIRCULARS
-                    else circolareplus.design.GlyphChannel.CLASS, item.title, item.actionLabel, false) { onOpenBrief(item) })
-            }
-        }
-        androidx.compose.runtime.CompositionLocalProvider(circolareplus.design.LocalGlyphRadar provides circolareplus.design.GlyphRadarData(
-            radarEntries, isEventsLoading || (briefAllowed && briefLoading), briefError.takeIf { briefAllowed }, onNavigateToCalendar)) {
         HomeHeroPanel(
             studentFirstName = studentFirstName,
             onNavigateToGita = onNavigateToGita,
@@ -150,7 +146,6 @@ fun HomeScreen(
             onNavigateToSeatMap = onNavigateToSeatMap
         )
 
-        }
         if (briefAllowed) {
             AilaBriefCard(briefItems, onDismissBrief, onOpenBrief, onPlanStudy, briefLoading, briefError, onRefreshBrief,
                 Modifier.padding(horizontal = homeGutter).padding(top = if(AppTheme.isNothing) circolareplus.design.NothingSpacing.Section else 18.dp, bottom = if(AppTheme.isNothing) 0.dp else 4.dp),
@@ -398,11 +393,6 @@ private fun HomeHeroPanel(
     onNavigateToBoard: () -> Unit,
     onNavigateToSeatMap: () -> Unit
 ) {
-    if (AppTheme.isNothing) {
-        circolareplus.design.NothingHomePanel(studentFirstName, onNavigateToSearch, onNavigateToGita,
-            onNavigateToCirculars, onNavigateToCalendar, onNavigateToBoard, onNavigateToSeatMap)
-        return
-    }
     Column(
         modifier = Modifier
             .fillMaxWidth()

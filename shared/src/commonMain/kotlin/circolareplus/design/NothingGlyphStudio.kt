@@ -161,12 +161,6 @@ fun NothingGlyphStudio(onDismiss: () -> Unit) {
                 }
             } else Text("La configurazione delle luci di notifica è disponibile sui telefoni Nothing. Le forme sotto sono anteprime sullo schermo.", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
             notice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextDark) }
-            AilaSectionTitle("Radar nella Home")
-            NothingPreferenceRow("Mostra il Radar", "Sostituisce il pannello degli avvisi con il riepilogo di calendario e Brief.", p.radarHome) { update(p.copy(radarHome=it)) }
-            Text("Le tre tracce contano gli eventi futuri e le novità del Brief. Tocca il radar per aprire le voci. Un nuovo elemento può accendere le luci, con AILA in primo piano.", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
-            NothingPreferenceRow("Calendario", "Eventi futuri destinati a te; oggi in evidenza.", p.radarEvents) { update(p.copy(radarEvents = it)) }
-            NothingPreferenceRow("Circolari", "Circolari attive presenti nel Brief.", p.radarCirculars) { update(p.copy(radarCirculars = it)) }
-            NothingPreferenceRow("Classe", "Sondaggi, risposte, bacheca e posti dal Brief.", p.radarClass) { update(p.copy(radarClass = it)) }
             if(hardware.barSegments == 0) {
             AilaSectionTitle("Disegno del Focus")
             GlyphFace.entries.chunked(2).forEach { row ->
@@ -200,7 +194,7 @@ fun NothingGlyphStudio(onDismiss: () -> Unit) {
                 label = { Text("Firma del Glyph") }, supportingText = { Text("Fino a 8 caratteri, mostrati sotto il timer.") },
                 singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = ailaFieldColors())
             NothingPreferenceRow("Caratteri a punti", "Titoli e strumenti; il testo dei contenuti resta leggibile.", p.dotDisplay) { update(p.copy(dotDisplay = it)) }
-            NothingPreferenceRow("Widget nella Home", "Mostra Glyph e Focus accanto alla data.", p.showFocusWidget) { update(p.copy(showFocusWidget = it)) }
+            NothingPreferenceRow("Widget nella Home", "Mostra i comandi Glyph e Focus nella Home.", p.showFocusWidget) { update(p.copy(showFocusWidget = it)) }
             NothingPreferenceRow("Feedback tattile", "Un segnale all’avvio e a fine sessione.", p.haptics) { update(p.copy(haptics = it)) }
             if (hardware.ownerLabel != null) {
                 AilaSectionTitle("Nothing Insider")

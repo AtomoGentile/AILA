@@ -4109,6 +4109,11 @@ fun MainAppShell(
                                 showPollHistory = false
                             }
                             Column(modifier = Modifier.fillMaxSize()) {
+                                if(AppTheme.isNothing) {
+                                    circolareplus.ui.screens.NothingPollNavigation(pollsSection,showPollHistory,
+                                        {pollsSection=it},{showPollHistory=!showPollHistory},
+                                        if(isRepresentative) ({if(pollsSection==1)showCreateRankingPollDialog=true else showCreatePollDialog=true}) else null)
+                                } else {
                                 circolareplus.design.AilaScreenHeader(title = "Sondaggi")
                                 val showPollIntro = showPollHistory || pollsSection == 1 || currentPoll == null
                                 if(showPollIntro) circolareplus.ui.screens.SectionFeatureCard(
@@ -4151,6 +4156,7 @@ fun MainAppShell(
                                         modifier = Modifier.weight(1f),
                                         key = pollsSection
                                     )
+                                }
                                 }
                                 if (pollsSection == 1) {
                                     LoadableContent(

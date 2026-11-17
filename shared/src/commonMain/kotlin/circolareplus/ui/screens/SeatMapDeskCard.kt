@@ -50,6 +50,10 @@ fun SeatMapDeskCard(
     focusedStudentId: String? = null,
     showSeatNumbers: Boolean = true
 ) {
+    if(AppTheme.isNothing) {
+        NothingDeskCard(desk,studentsMap,showThirdSeat,focusedStudentId,showSeatNumbers,modifier)
+        return
+    }
     val seatIds = if (showThirdSeat) {
         listOf(desk.studentAId, desk.studentBId, desk.studentCId)
     } else {

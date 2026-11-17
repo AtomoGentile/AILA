@@ -37,6 +37,10 @@ internal fun SectionFeatureCard(title:String, description:String, modifier:Modif
 
 @Composable
 internal fun SectionEmptyCard(title:String, description:String, modifier:Modifier=Modifier, icon:@Composable ()->Unit) {
+    if(AppTheme.isNothing) {
+        AilaEmptyState(title,description,modifier,icon=icon)
+        return
+    }
     Column(modifier.fillMaxWidth().communitySurface(RoundedCornerShape(28.dp)).padding(24.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(12.dp)) {
         Box(Modifier.size(60.dp).background(MaterialTheme.colorScheme.secondaryContainer,RoundedCornerShape(22.dp)),contentAlignment=Alignment.Center){icon()}
         Text(title,style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold,color=AppTheme.TextDark,textAlign=TextAlign.Center)

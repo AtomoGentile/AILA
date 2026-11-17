@@ -125,7 +125,7 @@ fun SeatMapScreen(
     }
     // I banchi sono gli ultimi elementi della griglia: l'indice assoluto si ricava dal totale.
     fun scrollToDesk(deskIndex: Int) {
-        if (deskIndex < 0) return
+        if (deskIndex < 0 || AppTheme.isNothing) return
         coroutineScope.launch {
             val total = gridState.layoutInfo.totalItemsCount
             val cellIndex = deskCells.indexOfFirst { it?.index == deskIndex }.coerceAtLeast(0)
@@ -206,7 +206,7 @@ fun SeatMapScreen(
                 })
             }
         }
-        Column(modifier = Modifier.fillMaxWidth().padding(AppTheme.Space16)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(if(AppTheme.isNothing)20.dp else AppTheme.Space16)) {
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = {
@@ -312,7 +312,8 @@ fun SeatMapScreen(
         val adminPanel: @Composable () -> Unit = {
                 // animateContentSize: quando arriva il conteggio dei voti il pannello cresce
                 // morbido invece di spingere giu' la mappa di scatto.
-                Column(modifier = Modifier.fillMaxWidth().animateContentSize().padding(AppTheme.Space16)) {
+                Column(modifier = Modifier.fillMaxWidth().animateContentSize().padding(if(AppTheme.isNothing)0.dp else AppTheme.Space16)) {
+                    if(!AppTheme.isNothing) {
                     Row(Modifier.fillMaxWidth(),verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "Gestione aula",
@@ -323,6 +324,7 @@ fun SeatMapScreen(
                         circolareplus.design.AilaTextButton(onClick={adminExpanded=!adminExpanded},modifier=Modifier.widthIn(min=1.dp),contentPadding=PaddingValues(horizontal=0.dp,vertical=8.dp)) { Text(if(adminExpanded) "Chiudi" else "Opzioni") }
                     }
 
+                    }
                     Spacer(modifier = Modifier.height(AppTheme.Space8))
 
                     Row(
@@ -507,6 +509,10 @@ fun SeatMapScreen(
                 }
             }
         }
+        if(AppTheme.isNothing) {
+            NothingSeatMapContent(assignments,studentsMap,highlightedId,isRepresentative,isGeneratingProposals,
+                {adminExpanded=true},searchBlock,adminPanel,Modifier.weight(1f))
+        } else {
         // Tablet e iPad larghi: ricerca e pannello del Rappresentante in una colonna a sinistra,
         // la mappa dell'aula a destra, sempre in vista mentre si regolano i pesi o si cerca.
         val wide = circolareplus.design.LocalWideLayout.current
@@ -609,6 +615,7 @@ fun SeatMapScreen(
                     Spacer(modifier = Modifier)
                 }
             }
+        }
         }
         }
     }

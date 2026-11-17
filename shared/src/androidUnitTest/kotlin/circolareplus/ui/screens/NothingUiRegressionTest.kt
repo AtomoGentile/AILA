@@ -69,24 +69,89 @@ class NothingUiRegressionTest {
                 }
             }
         }
-        compose.onNodeWithText("SIMONE", ignoreCase = true).assertIsDisplayed()
+        compose.onNodeWithText("Ciao, Simone", ignoreCase = true).assertIsDisplayed()
         compose.onNodeWithText("OGGI").assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals("calendar", destination) }
         compose.onNodeWithText("Circolari", useUnmergedTree = true).assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals("circulars", destination) }
-        compose.onNodeWithText("Configura avvisi").assertIsDisplayed()
-        screenshot("nothing-home-radar-light")
-        compose.runOnIdle { AppTheme.isDarkMode = true }
-        screenshot("nothing-home-radar-dark")
-        compose.runOnIdle { AppTheme.isDarkMode = false }
-        compose.onNodeWithText("Focus", useUnmergedTree = true).performClick()
+        compose.onAllNodesWithText("Fisica · energia").assertCountEquals(1)
+        compose.onNodeWithContentDescription("Anteprima Glyph Bar a 6 segmenti").assertDoesNotExist()
+        screenshot("nothing-home-light")
+        compose.runOnIdle {AppTheme.isDarkMode=true}
+        screenshot("nothing-home-dark")
+        compose.onNodeWithText("Focus", useUnmergedTree=true).performScrollTo().performClick()
         compose.onNodeWithText("25:00").assertIsDisplayed()
         compose.onNodeWithText("Avvia").performClick()
         compose.onNodeWithText("Pausa").assertIsDisplayed().performClick()
         compose.onNodeWithText("Riprendi").assertIsDisplayed()
-        screenshot("nothing-home-light")
-        compose.runOnIdle { AppTheme.isDarkMode = true }
-        screenshot("nothing-home-dark")
+        screenshot("nothing-home-focus-panel")
+        compose.onNodeWithContentDescription("Chiudi Focus").performClick()
+        compose.onNodeWithText("Ciao, Simone").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun publishedMapPrioritizesTheClassroomAndKeepsNamesAndManagementAccessible() {
+        val students=(0 until 22).map {circolareplus.domain.model.User(id="s$it",firstName="Nome$it",lastName="Cognome completo $it",username="s$it")}.associateBy {it.id}
+        val desks=(0 until 11).map {circolareplus.algorithms.DeskAssignment(it/3,it%3,"s${it*2}","s${it*2+1}")}
+        activity.get().setContent { AilaTheme {
+            SeatMapScreen("s20",true,desks,students,false)
+        } }
+        compose.onNodeWithText("Preferenze sociali").assertDoesNotExist()
+        compose.onNodeWithText("Leggi nomi").assertIsDisplayed()
+        screenshot("nothing-seat-map-light")
+        compose.runOnIdle {AppTheme.isDarkMode=true}
+        screenshot("nothing-seat-map-dark")
+        compose.onNodeWithText("Il mio posto").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Dettaglio banco F4C2").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Nome20 Cognome completo 20").assertIsDisplayed()
+        screenshot("nothing-seat-detail")
+        compose.onNodeWithContentDescription("Chiudi dettaglio banco").performClick()
+        compose.onNodeWithText("Leggi nomi").performClick()
+        compose.onNodeWithText("Vista aula").assertIsDisplayed()
+        compose.onNodeWithText("Gestione").performClick()
+        compose.onNodeWithText("Preferenze sociali").assertExists()
+        screenshot("nothing-seat-management")
+        compose.onNodeWithContentDescription("Chiudi gestione aula").performClick()
+        compose.onNodeWithText("Preferenze sociali").assertDoesNotExist()
+        compose.onNodeWithText("Vista aula").assertIsDisplayed()
+    }
+
+    @Test fun pollRequiresEveryDateAndLocksVotingWhenClosed() {
+        var slots by androidx.compose.runtime.mutableStateOf(listOf(SlotUiItem("a","2026-11-18","Fisica",4),SlotUiItem("b","2026-11-19","Fisica",4)))
+        var sent=0
+        var expired by androidx.compose.runtime.mutableStateOf(false)
+        activity.get().setContent { AilaTheme {
+            Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
+                NothingPollNavigation(0,false,{},{},null)
+                PollsScreen("Fisica",slots,0,isExpired=expired,onCastVote={id,v->slots=slots.map {if(it.slotId==id)it.copy(currentVote=v)else it}},onSubmit={sent++})
+            }
+        } }
+        compose.onNodeWithText("Come votare").performClick()
+        compose.onNodeWithText("Ho capito").performClick()
+        compose.onNodeWithText("Invia le mie scelte").performScrollTo().assertIsNotEnabled()
+        compose.onAllNodes(hasText("Ci sto") and hasClickAction())[0].performScrollTo().performClick()
+        compose.onNodeWithText("Invia le mie scelte").performScrollTo().assertIsNotEnabled()
+        compose.onAllNodes(hasText("Ci sto") and hasClickAction())[1].performScrollTo().performClick()
+        compose.onNodeWithText("Invia le mie scelte").performScrollTo().assertIsEnabled().performClick()
+        compose.runOnIdle {assertEquals(1,sent);expired=true}
+        compose.onNodeWithText("Invia le mie scelte").assertDoesNotExist()
+        compose.onAllNodes(hasText("Ci sto") and hasClickAction())[0].performScrollTo().assertIsNotEnabled()
+    }
+
+    @Test fun homeDestinationsRemainAccessibleWithLargeText() {
+        var destination=""
+        activity.get().setContent { AilaTheme {
+            CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(3f,1.3f)) {
+                HomeScreen(studentFirstName="Alessandro",onNavigateToCirculars={destination="Circolari"},onNavigateToCalendar={destination="Calendario"},
+                    onNavigateToBoard={destination="Bacheca"},onOpenForum={destination="Pere"},onNavigateToPolls={destination="Sondaggi"},onNavigateToSeatMap={destination="Posti"})
+            }
+        } }
+        listOf("Circolari","Calendario","Bacheca","Pere","Sondaggi","Posti").forEach {label->
+            compose.onNodeWithText(label,useUnmergedTree=true).performScrollTo().assertIsDisplayed().performClick()
+            compose.runOnIdle {assertEquals(label,destination)}
+        }
+        compose.onNodeWithText("Ciao, Alessandro").performScrollTo()
+        screenshot("nothing-home-large-text")
     }
 
     @Test fun radarShowsRealCategoriesAndOpensTheSelectedEntry() {
@@ -299,7 +364,7 @@ class NothingUiRegressionTest {
         var saved = ""
         NothingExperience.restore("{}") { saved = it }
         activity.get().setContent { AilaTheme { HomeScreen(studentFirstName = "Simone") } }
-        compose.onNodeWithContentDescription("Personalizza Glyph").performClick()
+        compose.onNodeWithContentDescription("Personalizza Glyph").performScrollTo().performClick()
         compose.mainClock.advanceTimeBy(400)
         compose.onNodeWithText("Orbita").performScrollTo().performClick()
         compose.onNodeWithText("15 min").performScrollTo().performClick()
@@ -320,7 +385,7 @@ class NothingUiRegressionTest {
         compose.mainClock.autoAdvance = true
         compose.onNodeWithContentDescription("Chiudi Glyph Studio").performClick()
         compose.mainClock.advanceTimeBy(400)
-        compose.onNodeWithText("Focus", useUnmergedTree = true).performClick()
+        compose.onNodeWithText("Focus", useUnmergedTree = true).performScrollTo().performClick()
         compose.onNodeWithText("15:00").assertIsDisplayed()
         compose.onNodeWithText("STUDIO").assertIsDisplayed()
     }

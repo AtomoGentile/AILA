@@ -125,6 +125,12 @@ fun PollsScreen(
             }
         )
     }
+    if(AppTheme.isNothing) {
+        NothingPollContent(subjectName,slots,sacrificeBonus,usesGlobalAssignment,isSubmitted,submittedCount,totalStudents,
+            closesAtLabel,isExpired,isSubmitting,canVote,isRepresentative,onCastVote,onSubmit,onReopen,
+            {pendingAction="close"},{pendingAction="delete"})
+        return
+    }
     val darkRedCount = slots.count { it.currentVote == InterrogationVoteType.DARK_RED }
     val votedCount = slots.count { it.currentVote != null }
     val progress = if (slots.isEmpty()) 0f else votedCount.toFloat() / slots.size
