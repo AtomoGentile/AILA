@@ -876,7 +876,7 @@ fun AilaSectionTitle(
         // primario). Glass: titolo di sezione in grassetto, come iOS.
         Text(
             text = text,
-            style = if (AppTheme.isNothing || AppTheme.isGlass) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
+            style = if (AppTheme.isNothing) nothingDisplayStyle(20, 28) else if (AppTheme.isGlass) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
             fontWeight = if (AppTheme.isNothing) FontWeight.Normal else if (AppTheme.isGlass) FontWeight.Bold else FontWeight.SemiBold,
             color = if (AppTheme.isNothing || AppTheme.isGlass) AppTheme.TextDark else AppTheme.PrimaryBlue,
             modifier = if (AppTheme.isGlass) Modifier else Modifier.padding(start = 4.dp)

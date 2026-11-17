@@ -64,24 +64,16 @@ fun NothingFocusWidget(modifier: Modifier = Modifier, compact: Boolean = false) 
                 AppIcons.Sliders(Modifier.size(18.dp), GlyphPaper)
             }
         }
-        Box(Modifier.fillMaxWidth()) {
-            val largeText = androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.15f
-            val readout: @Composable () -> Unit = {
-                Text(formatFocusTime(focus.remaining(now)), style = MaterialTheme.typography.headlineSmall.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Normal),
-                    color = GlyphPaper, maxLines = 1)
-            }
-            if (compact || largeText) {
-                Column(Modifier.fillMaxWidth(),horizontalAlignment = Alignment.CenterHorizontally,verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    NothingGlyphArt(Modifier.size(36.dp),progress=focus.fraction(now),signal=signal+NothingExperience.completedSessions)
-                    readout()
-                }
-            } else Row(Modifier.fillMaxWidth(),horizontalArrangement = Arrangement.spacedBy(8.dp,Alignment.CenterHorizontally),verticalAlignment = Alignment.CenterVertically) {
-                NothingGlyphArt(Modifier.size(36.dp),progress=focus.fraction(now),signal=signal+NothingExperience.completedSessions)
-                readout()
-            }
+        Box(Modifier.fillMaxWidth().aspectRatio(1f), contentAlignment = Alignment.Center) {
+            NothingDial(Modifier.fillMaxSize(), progress = focus.fraction(now), ink = GlyphPaper,
+                track = Color(0xFF393939), accent = AppTheme.PrimaryBlue)
+            NothingGlyphArt(Modifier.fillMaxSize().padding(32.dp),progress=focus.fraction(now),signal=signal+NothingExperience.completedSessions)
         }
+        Text(formatFocusTime(focus.remaining(now)), style = nothingDisplayStyle(if (compact || androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.15f) 22 else 28, 36),
+            color = GlyphPaper, maxLines = 1)
+
         if (focus.completed) Text("Sessione conclusa", style = MaterialTheme.typography.bodySmall, color = GlyphMuted)
-        Box(Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(CircleShape).background(GlyphPaper)
+        Box(Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(CircleShape).background(AppTheme.PrimaryBlue)
             .clickable(role = Role.Button) {
                 hardware.stop()
                 NothingExperience.toggleFocus(currentTimeMillis())
@@ -89,7 +81,7 @@ fun NothingFocusWidget(modifier: Modifier = Modifier, compact: Boolean = false) 
                 if (prefs.haptics) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             }, contentAlignment = Alignment.Center) {
             Text(when { focus.running -> "Pausa"; focus.completed -> "Ancora"; focus.started -> "Riprendi"; else -> "Avvia" },
-                style = MaterialTheme.typography.labelLarge, color = Color(0xFF111111))
+                style = MaterialTheme.typography.labelLarge, color = if(AppTheme.isDarkMode) Color.Black else Color.White)
         }
     }
     if (studio) NothingGlyphStudio { studio = false }

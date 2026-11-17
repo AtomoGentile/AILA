@@ -53,13 +53,13 @@ fun NothingScreenHeader(
 ) {
     Column(modifier.fillMaxWidth().background(AppTheme.BackgroundLight).padding(20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Text("AILA", style = MaterialTheme.typography.labelMedium, color = AppTheme.TextMuted,
+            Text("AILA / NOTHING", style = MaterialTheme.typography.labelMedium, color = AppTheme.TextMuted,
                 modifier = Modifier.weight(1f))
             action?.invoke()
             LocalProfileEntry.current?.let { Spacer(Modifier.width(8.dp)); AilaProfileButton(it) }
         }
         Spacer(Modifier.height(18.dp))
-        Text(title, style = MaterialTheme.typography.headlineMedium, color = AppTheme.TextDark,
+        Text(title, style = nothingDisplayStyle(32, 42), color = AppTheme.TextDark,
             maxLines = 2, overflow = TextOverflow.Ellipsis)
         if (subtitle != null) {
             Spacer(Modifier.height(6.dp))
@@ -87,7 +87,7 @@ fun NothingHomePanel(
         .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
         .padding(20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("AILA", style = MaterialTheme.typography.labelMedium,
+            Text("AILA / NOTHING", style = MaterialTheme.typography.labelMedium,
                 color = AppTheme.TextMuted, modifier = Modifier.weight(1f))
             AilaIconButton("Cerca", onSearch) { AppIcons.Search(Modifier.size(20.dp), AppTheme.TextDark) }
             AilaIconButton("Gita", onGita) { AppIcons.Bus(Modifier.size(20.dp), AppTheme.TextDark) }
@@ -95,40 +95,45 @@ fun NothingHomePanel(
         }
         Column {
             Text("Ciao,", style = MaterialTheme.typography.bodyLarge, color = AppTheme.TextMuted)
-            Text(studentFirstName, style = nothingDisplayStyle(36, 44),
+            Text(studentFirstName, style = nothingDisplayStyle(44, 54),
                 color = AppTheme.TextDark, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             val date = today()
-            Column(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(24.dp))
-                .background(AppTheme.SurfaceWhite).border(1.dp, AppTheme.Hairline, RoundedCornerShape(24.dp))
+            Column(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(28.dp))
+                .background(AppTheme.TextDark)
                 .clickable(role = Role.Button, onClickLabel = "Apri calendario", onClick = onCalendar)
-                .padding(18.dp), verticalArrangement = Arrangement.SpaceBetween) {
-                Text("OGGI", style = MaterialTheme.typography.labelMedium, color = AppTheme.TextMuted)
-                Text(date.day.toString().padStart(2, '0'), style = nothingDisplayStyle(64, 76),
-                    color = AppTheme.TextDark)
-                Text(ITALIAN_MONTHS[date.month].uppercase(), style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
+                .padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceBetween) {
+                Text("OGGI", style = MaterialTheme.typography.labelMedium, color = AppTheme.BackgroundLight)
+                Box(Modifier.fillMaxWidth().aspectRatio(1f), contentAlignment = Alignment.Center) {
+                    NothingDial(Modifier.fillMaxSize(), ink = AppTheme.BackgroundLight,
+                        track = AppTheme.TextMuted, accent = AppTheme.PrimaryBlue)
+                    Text(date.day.toString().padStart(2, '0'), style = nothingDisplayStyle(52, 66),
+                        color = AppTheme.BackgroundLight)
+                }
+                Text(ITALIAN_MONTHS[date.month].uppercase(), style = MaterialTheme.typography.labelSmall, color = AppTheme.BackgroundLight)
             }
             if (NothingExperience.preferences.showFocusWidget) NothingGlyphWidget(Modifier.weight(1f), compactFocus)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            NothingQuickTile("Circolari", "01", onCirculars, Modifier.weight(1f)) { AppIcons.Document(Modifier.size(24.dp), AppTheme.TextDark) }
-            NothingQuickTile("Bacheca", "02", onBoard, Modifier.weight(1f)) { AppIcons.ChatBubble(Modifier.size(24.dp), AppTheme.TextDark) }
-            NothingQuickTile("Posti", "03", onSeatMap, Modifier.weight(1f)) { AppIcons.Chair(Modifier.size(24.dp), AppTheme.TextDark) }
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            NothingQuickTile("Circolari", NothingSymbol.DOCUMENT, onCirculars, Modifier.weight(1f))
+            NothingQuickTile("Bacheca", NothingSymbol.CHAT, onBoard, Modifier.weight(1f))
+            NothingQuickTile("Posti", NothingSymbol.SEAT, onSeatMap, Modifier.weight(1f))
         }
     }
     }
 }
 
 @Composable
-private fun NothingQuickTile(label: String, index: String, onClick: () -> Unit, modifier: Modifier, icon: @Composable () -> Unit) {
-    Column(modifier.clip(RoundedCornerShape(22.dp)).background(AppTheme.TrackFill)
-        .clickable(role = Role.Button, onClick = onClick).padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            icon()
-
+private fun NothingQuickTile(label: String, symbol: NothingSymbol, onClick: () -> Unit, modifier: Modifier) {
+    Column(modifier.clickable(role = Role.Button, onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(CircleShape).background(AppTheme.TrackFill)
+            .nothingGrid(AppTheme.TextFaint.copy(alpha = .14f)),contentAlignment = Alignment.Center) {
+            NothingDotIcon(symbol,Modifier.fillMaxSize().padding(20.dp))
         }
-        Text(label, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextDark, maxLines = 1)
+        Text(label, style = MaterialTheme.typography.labelMedium, color = AppTheme.TextDark, maxLines = 1)
     }
 }
 

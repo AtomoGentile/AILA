@@ -8547,14 +8547,14 @@ private fun NothingTabItem(tab: MainTab, selected: Boolean, onClick: () -> Unit,
     }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Box(Modifier.size(34.dp).clip(androidx.compose.foundation.shape.CircleShape)
             .background(fill), contentAlignment = Alignment.Center) {
-            val m = Modifier.size(20.dp)
-            when (tab) {
-                MainTab.HOME -> AppIcons.Home(m, ink)
-                MainTab.CALENDAR -> AppIcons.Calendar(m, ink)
-                MainTab.CLASS -> AppIcons.Document(m, ink)
-                MainTab.SEATMAP -> AppIcons.Chair(m, ink)
-                MainTab.POLLS -> AppIcons.Poll(m, ink)
+            val symbol = when (tab) {
+                MainTab.HOME -> circolareplus.design.NothingSymbol.HOME
+                MainTab.CALENDAR -> circolareplus.design.NothingSymbol.CALENDAR
+                MainTab.CLASS -> circolareplus.design.NothingSymbol.DOCUMENT
+                MainTab.SEATMAP -> circolareplus.design.NothingSymbol.SEAT
+                MainTab.POLLS -> circolareplus.design.NothingSymbol.POLL
             }
+            circolareplus.design.NothingDotIcon(symbol, Modifier.size(28.dp), ink)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             if (selected) Box(Modifier.size(4.dp).background(AppTheme.PrimaryBlue, androidx.compose.foundation.shape.CircleShape))
