@@ -70,7 +70,14 @@ fun AilaTextButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: 
     interactionSource: MutableInteractionSource? = null, content: @Composable RowScope.() -> Unit) {
     if (!AppTheme.isNothing) {
         TextButton(onClick=onClick,modifier=modifier,enabled=enabled,shape=shape,colors=colors ?: ButtonDefaults.textButtonColors(),elevation=elevation,border=border,contentPadding=contentPadding,interactionSource=interactionSource,content=content)
-    } else NothingButtonSurface(onClick,modifier,enabled,false,Color.Transparent,colors?.contentColor ?: AppTheme.TextDark,contentPadding,interactionSource,content)
+    } else {
+        val command=LocalNothingConfirmButton.current
+        NothingButtonSurface(onClick,if(command)modifier.fillMaxWidth() else modifier,enabled,command,
+            Color.Transparent,colors?.contentColor ?: AppTheme.TextDark,contentPadding,interactionSource) {
+            if(command) { Box(Modifier.size(5.dp).background(AppTheme.PrimaryBlue,CircleShape));Spacer(Modifier.width(10.dp)) }
+            content()
+        }
+    }
 }
 
 @Composable
@@ -186,7 +193,7 @@ fun AilaAlertDialog(onDismissRequest: () -> Unit,confirmButton: @Composable () -
     if(!AppTheme.isNothing) AlertDialog(onDismissRequest,confirmButton,modifier,dismissButton,icon,title,text,shape,containerColor,iconContentColor,titleContentColor,textContentColor,tonalElevation,properties)
     else NothingPanelDialog(onDismissRequest,modifier,properties,title,icon,actions = {
         Column(Modifier.fillMaxWidth(),horizontalAlignment=Alignment.End,verticalArrangement=Arrangement.spacedBy(4.dp)) {
-            confirmButton()
+            CompositionLocalProvider(LocalNothingConfirmButton provides true) { confirmButton() }
             dismissButton?.invoke()
         }
     },body=text)

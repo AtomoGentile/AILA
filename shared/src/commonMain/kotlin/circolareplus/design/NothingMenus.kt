@@ -23,6 +23,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.Role
@@ -32,6 +33,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.*
 import circolareplus.util.*
+
+internal val LocalNothingConfirmButton = staticCompositionLocalOf { false }
 
 @Composable
 internal fun NothingMenuRail(modifier: Modifier = Modifier) {
@@ -51,7 +54,7 @@ internal fun NothingPanelDialog(onDismiss: () -> Unit, modifier: Modifier = Modi
     LaunchedEffect(Unit) { reveal.animateTo(1f,tween(if(AppTheme.reduceMotion)0 else 160)) }
     Dialog(onDismiss, properties = properties) {
         BoxWithConstraints(Modifier.fillMaxWidth().imePadding()) {
-            Column(modifier.widthIn(max = 440.dp).fillMaxWidth().heightIn(max = (maxHeight-32.dp).coerceAtLeast(120.dp))
+            Column(modifier.align(Alignment.Center).widthIn(max = 440.dp).fillMaxWidth().heightIn(max = (maxHeight-32.dp).coerceAtLeast(120.dp))
                 .graphicsLayer { alpha=reveal.value;translationY=if(AppTheme.reduceMotion)0f else (1f-reveal.value)*12.dp.toPx() }
                 .clip(RoundedCornerShape(28.dp)).background(AppTheme.SurfaceWhite)
                 .border(1.dp,AppTheme.FieldOutline,RoundedCornerShape(28.dp)).padding(20.dp),
@@ -161,8 +164,13 @@ internal fun NothingDatePicker(state:DatePickerState,onDismiss:()->Unit,confirmL
                     AilaIconControl(onClick={val (y,m)=previousMonth(month.year,month.month);showMonth(y,m)},enabled=month.year>state.yearRange.first || month.month>1,modifier=Modifier.semantics { contentDescription="Mese precedente" }) {
                         AppIcons.ChevronLeft(Modifier.size(18.dp),AppTheme.TextDark)
                     }
-                    Text("${ITALIAN_MONTHS[month.month]} ${month.year}",style=MaterialTheme.typography.titleMedium,
-                        modifier=Modifier.weight(1f).clip(CircleShape).clickable(role=Role.Button,onClickLabel="Scegli anno"){years=!years}.padding(8.dp),color=AppTheme.TextDark)
+                    Row(Modifier.weight(1f).clip(CircleShape)
+                        .clickable(role=Role.Button){years=!years}.semantics { contentDescription="Scegli anno" }.padding(8.dp),
+                        verticalAlignment=Alignment.CenterVertically) {
+                        Text("${ITALIAN_MONTHS[month.month]} ${month.year}",style=MaterialTheme.typography.titleMedium,
+                            modifier=Modifier.weight(1f),color=AppTheme.TextDark)
+                        AppIcons.ChevronRight(Modifier.size(14.dp).rotate(90f),AppTheme.TextMuted)
+                    }
                     AilaIconControl(onClick={val (y,m)=nextMonth(month.year,month.month);showMonth(y,m)},enabled=month.year<state.yearRange.last || month.month<12,modifier=Modifier.semantics { contentDescription="Mese successivo" }) {
                         AppIcons.ChevronRight(Modifier.size(18.dp),AppTheme.TextDark)
                     }

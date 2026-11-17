@@ -267,6 +267,11 @@ class NothingUiRegressionTest {
         screenshot("nothing-date-menu-light")
         compose.runOnIdle { AppTheme.isDarkMode=true }
         screenshot("nothing-date-menu-dark")
+        compose.onNodeWithContentDescription("Scegli anno").performClick()
+        compose.onNodeWithText("2027").assertIsDisplayed()
+        screenshot("nothing-year-menu-dark")
+        compose.onNodeWithText("2027").performClick()
+        compose.onNodeWithText("Novembre 2027").assertIsDisplayed()
         compose.onNodeWithText("Conferma data").performClick()
         compose.runOnIdle { assertEquals(initial+2*86400000L,selected) }
     }
