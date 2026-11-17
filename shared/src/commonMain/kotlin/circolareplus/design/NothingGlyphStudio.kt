@@ -69,7 +69,7 @@ fun NothingFocusWidget(modifier: Modifier = Modifier, compact: Boolean = false) 
                 track = Color(0xFF393939), accent = AppTheme.PrimaryBlue)
             NothingGlyphArt(Modifier.fillMaxSize().padding(32.dp),progress=focus.fraction(now),signal=signal+NothingExperience.completedSessions)
         }
-        Text(formatFocusTime(focus.remaining(now)), style = nothingDisplayStyle(if (compact || androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.15f) 22 else 28, 36),
+        Text(formatFocusTime(focus.remaining(now)), style = MaterialTheme.typography.headlineMedium.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Normal),
             color = GlyphPaper, maxLines = 1)
 
         if (focus.completed) Text("Sessione conclusa", style = MaterialTheme.typography.bodySmall, color = GlyphMuted)
