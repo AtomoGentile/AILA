@@ -39,7 +39,7 @@ internal fun NothingBriefCard(
     val mono = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace)
     Column(modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(AppTheme.SurfaceWhite)
         .animateContentSize(tween(if(AppTheme.reduceMotion) 0 else 180)), verticalArrangement = Arrangement.spacedBy(0.dp)) {
-        Column(Modifier.fillMaxWidth().background(AppTheme.TextDark).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(Modifier.fillMaxWidth().background(AppTheme.TextDark).padding(NothingSpacing.Edge), verticalArrangement = Arrangement.spacedBy(NothingSpacing.Item)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Box(Modifier.size(8.dp).background(AppTheme.PrimaryBlue, CircleShape))
                 Text("AILA / PERSONALE", Modifier.weight(1f), color = AppTheme.BackgroundLight, style = mono)
@@ -48,7 +48,7 @@ internal fun NothingBriefCard(
             Text("Brief.", style = nothingDisplayStyle(38, 48), color = AppTheme.BackgroundLight)
             Text("Le tue prossime mosse.", color = AppTheme.BackgroundLight, style = MaterialTheme.typography.bodyMedium)
         }
-        Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
+        Column(Modifier.padding(horizontal = NothingSpacing.Edge), verticalArrangement = Arrangement.spacedBy(0.dp)) {
             if(loading) Text("Aggiornamento in corso…", Modifier.padding(vertical = 20.dp), color = AppTheme.TextMuted)
             if(error != null) {
                 Text(error, Modifier.padding(top = 20.dp), color = AppTheme.TextMuted, style = MaterialTheme.typography.bodyMedium)
@@ -66,8 +66,8 @@ internal fun NothingBriefCard(
             }
             visible.forEachIndexed { index, item ->
                 key(item.id) {
-                    Column(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(top = NothingSpacing.Item, bottom = NothingSpacing.Item), verticalArrangement = Arrangement.spacedBy(NothingSpacing.Inline)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(NothingSpacing.Inline)) {
                             Text((index+1).toString().padStart(2,'0'), color = AppTheme.TextDark, style = nothingDisplayStyle(22,30))
                             Text(nothingBriefLabel(item), Modifier.weight(1f), color = AppTheme.TextMuted, style = mono)
                             if(subjectColorsEnabled && item.kind == AilaBriefKind.EVENT) {
@@ -85,13 +85,13 @@ internal fun NothingBriefCard(
                                 color = AppTheme.TextMuted, style = MaterialTheme.typography.bodyMedium, maxLines = 4, overflow = TextOverflow.Ellipsis)
                         }
                         // Actions wrap on narrow displays and with large system fonts.
-                        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            AilaTextButton(onClick = { onOpen(item) }) {
+                        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(NothingSpacing.Section), verticalArrangement = Arrangement.spacedBy(NothingSpacing.Inline)) {
+                            AilaTextButton(onClick = { onOpen(item) }, contentPadding = PaddingValues(vertical = NothingSpacing.Inline)) {
                                 Text(item.actionLabel.ifBlank { "Apri" }, color = AppTheme.TextDark)
                                 Spacer(Modifier.width(10.dp))
                                 AppIcons.ChevronRight(Modifier.size(16.dp), AppTheme.TextDark)
                             }
-                            if(item.canPlanStudy && item.kind == AilaBriefKind.EVENT) AilaTextButton(onClick = { onStudy("Prepara un piano di studio per ${item.title}${item.date?.let { ", in programma il $it" }.orEmpty()}. Usa i miei impegni reali e non creare eventi senza conferma.") }) {
+                            if(item.canPlanStudy && item.kind == AilaBriefKind.EVENT) AilaTextButton(onClick = { onStudy("Prepara un piano di studio per ${item.title}${item.date?.let { ", in programma il $it" }.orEmpty()}. Usa i miei impegni reali e non creare eventi senza conferma.") }, contentPadding = PaddingValues(vertical = NothingSpacing.Inline)) {
                                 Text("Pianifica studio", color = AppTheme.TextDark)
                             }
                         }
@@ -102,7 +102,7 @@ internal fun NothingBriefCard(
             if(entries.size > 3) AilaTextButton(onClick = { expanded = !expanded }, modifier = Modifier.fillMaxWidth()) {
                 Text(if(expanded) "Mostra meno" else "Tutte le ${entries.size} voci", color = AppTheme.TextDark)
             }
-            if(entries.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            if(entries.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(vertical = NothingSpacing.Content), verticalAlignment = Alignment.CenterVertically) {
                 repeat(9) { dot ->
                     Box(Modifier.padding(end = 4.dp).size(3.dp).background(if(dot == 0) AppTheme.PrimaryBlue else AppTheme.TextFaint, CircleShape))
                 }

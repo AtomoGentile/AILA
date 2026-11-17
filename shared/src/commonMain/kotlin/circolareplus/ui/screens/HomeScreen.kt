@@ -90,6 +90,8 @@ fun HomeScreen(
     subjectColorOverrides: Map<String, String> = emptyMap()
 ) {
     val scrollState = rememberScrollState()
+    val homeGutter = if(AppTheme.isNothing) circolareplus.design.NothingSpacing.Edge else AppTheme.Space16
+    val sectionGap = if(AppTheme.isNothing) circolareplus.design.NothingSpacing.Section else AppTheme.Space20
 
     // Circolare più recente (numero più alto): mostrata in evidenza, se ce n'è almeno una.
     val latestCircular = circulars.maxByOrNull { it.number } ?: circulars.maxByOrNull { it.number }
@@ -151,7 +153,7 @@ fun HomeScreen(
         }
         if (briefAllowed) {
             AilaBriefCard(briefItems, onDismissBrief, onOpenBrief, onPlanStudy, briefLoading, briefError, onRefreshBrief,
-                Modifier.padding(horizontal = AppTheme.Space16).padding(top = 18.dp, bottom = 4.dp),
+                Modifier.padding(horizontal = homeGutter).padding(top = if(AppTheme.isNothing) circolareplus.design.NothingSpacing.Section else 18.dp, bottom = if(AppTheme.isNothing) 0.dp else 4.dp),
                 subjectColorsRevision = subjectColorsRevision,
                 subjectColorsEnabled = subjectColorsEnabled,
                 subjectColorOverrides = subjectColorOverrides)
@@ -218,8 +220,8 @@ fun HomeScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = AppTheme.Space16)
-                    .padding(top = AppTheme.Space20, bottom = bottomPadding),
+                    .padding(horizontal = homeGutter)
+                    .padding(top = sectionGap, bottom = bottomPadding),
                 verticalArrangement = Arrangement.spacedBy(AppTheme.Space24)
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space20)) {
@@ -278,8 +280,8 @@ fun HomeScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = AppTheme.Space16)
-                    .padding(top = AppTheme.Space20, bottom = AppTheme.Space24)
+                    .padding(horizontal = homeGutter)
+                    .padding(top = sectionGap, bottom = AppTheme.Space24)
             ) {
                 latestSection()
                 Spacer(modifier = Modifier.height(AppTheme.Space24))
@@ -288,7 +290,7 @@ fun HomeScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = AppTheme.Space16)
+                    .padding(horizontal = homeGutter)
                     .padding(bottom = bottomPadding)
             ) {
                 shortcutsSection()

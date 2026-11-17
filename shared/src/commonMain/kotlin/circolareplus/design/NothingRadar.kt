@@ -75,8 +75,8 @@ fun NothingRadarWidget(data: GlyphRadarData, modifier: Modifier = Modifier) {
             } finally { hardware.stop() }
         }
     }
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(NothingSpacing.Inline)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(NothingSpacing.Inline)) {
             listOf("Radar", "Focus").forEachIndexed { index, label ->
                 val selected = focus == (index == 1)
                 Box(Modifier.weight(1f).heightIn(min = 44.dp).clip(CircleShape)
@@ -92,7 +92,7 @@ fun NothingRadarWidget(data: GlyphRadarData, modifier: Modifier = Modifier) {
             fadeIn(tween(if(AppTheme.reduceMotion) 0 else 160)) togetherWith fadeOut(tween(if(AppTheme.reduceMotion) 0 else 100))
         }, label = "glyphInstrument") { timer ->
             if(timer) NothingFocusWidget(Modifier.fillMaxWidth()) else {
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Color(0xFF181818)).padding(12.dp),
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Color(0xFF181818)).padding(NothingSpacing.Content),
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text("GLYPH / 03", Modifier.weight(1f), color = muted, style = MaterialTheme.typography.labelSmall)
@@ -127,7 +127,7 @@ fun NothingRadarWidget(data: GlyphRadarData, modifier: Modifier = Modifier) {
     }
     if(studio) NothingGlyphStudio { studio = false }
     if(inbox) AilaBottomSheet(onDismissRequest = { inbox = false }) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(NothingSpacing.Edge), verticalArrangement = Arrangement.spacedBy(NothingSpacing.Content)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Radar", Modifier.weight(1f), color = AppTheme.TextDark, style = nothingDisplayStyle(30, 40))
                 AilaIconButton("Chiudi Radar", { inbox = false }) { AppIcons.Close(Modifier.size(18.dp), it) }
@@ -142,7 +142,7 @@ fun NothingRadarWidget(data: GlyphRadarData, modifier: Modifier = Modifier) {
                     color = AppTheme.TextMuted, style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace))
                 group.forEach { entry ->
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(AppTheme.TrackFill)
-                        .clickable(role = Role.Button) { inbox = false; entry.onOpen() }.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        .clickable(role = Role.Button) { inbox = false; entry.onOpen() }.padding(16.dp), verticalArrangement = Arrangement.spacedBy(NothingSpacing.Inline)) {
                         Text(entry.title, color = AppTheme.TextDark, style = MaterialTheme.typography.titleMedium)
                         Text((if(entry.urgent) "OGGI · " else "") + entry.detail, color = AppTheme.TextMuted, style = MaterialTheme.typography.bodySmall)
                     }

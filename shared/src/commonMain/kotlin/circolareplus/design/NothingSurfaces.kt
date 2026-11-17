@@ -85,8 +85,8 @@ fun NothingHomePanel(
     val compactFocus = (maxWidth - 52.dp) / 2 - 28.dp < 124.dp
     Column(Modifier.fillMaxWidth()
         .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
-        .padding(20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        .padding(horizontal = NothingSpacing.Edge).padding(top = NothingSpacing.Edge), verticalArrangement = Arrangement.spacedBy(NothingSpacing.Section)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(NothingSpacing.Inline)) {
             Text("AILA / NOTHING", style = MaterialTheme.typography.labelMedium,
                 color = AppTheme.TextMuted, modifier = Modifier.weight(1f))
             AilaIconButton("Cerca", onSearch) { AppIcons.Search(Modifier.size(20.dp), AppTheme.TextDark) }
@@ -100,10 +100,14 @@ fun NothingHomePanel(
         }
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             val date = today()
-            Column(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(28.dp))
+            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(NothingSpacing.Inline)) {
+                Box(Modifier.fillMaxWidth().heightIn(min = NothingSpacing.Control), contentAlignment = Alignment.Center) {
+                    Text("CALENDARIO", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
+                }
+            Column(Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(24.dp))
                 .background(AppTheme.TextDark)
                 .clickable(role = Role.Button, onClickLabel = "Apri calendario", onClick = onCalendar)
-                .padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                .padding(NothingSpacing.Content), horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceBetween) {
                 Text("OGGI", style = MaterialTheme.typography.labelMedium, color = AppTheme.BackgroundLight)
                 Box(Modifier.fillMaxWidth().aspectRatio(1f), contentAlignment = Alignment.Center) {
@@ -114,9 +118,10 @@ fun NothingHomePanel(
                 }
                 Text(ITALIAN_MONTHS[date.month].uppercase(), style = MaterialTheme.typography.labelSmall, color = AppTheme.BackgroundLight)
             }
+            }
             if (NothingExperience.preferences.showFocusWidget) NothingGlyphWidget(Modifier.weight(1f), compactFocus)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(NothingSpacing.Item)) {
             NothingQuickTile("Circolari", NothingSymbol.DOCUMENT, onCirculars, Modifier.weight(1f))
             NothingQuickTile("Bacheca", NothingSymbol.CHAT, onBoard, Modifier.weight(1f))
             NothingQuickTile("Posti", NothingSymbol.SEAT, onSeatMap, Modifier.weight(1f))

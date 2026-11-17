@@ -57,7 +57,7 @@ internal fun NothingPanelDialog(onDismiss: () -> Unit, modifier: Modifier = Modi
             Column(modifier.align(Alignment.Center).widthIn(max = 440.dp).fillMaxWidth().heightIn(max = (maxHeight-32.dp).coerceAtLeast(120.dp))
                 .graphicsLayer { alpha=reveal.value;translationY=if(AppTheme.reduceMotion)0f else (1f-reveal.value)*12.dp.toPx() }
                 .clip(RoundedCornerShape(28.dp)).background(AppTheme.SurfaceWhite)
-                .border(1.dp,AppTheme.FieldOutline,RoundedCornerShape(28.dp)).padding(20.dp),
+                .border(1.dp,AppTheme.FieldOutline,RoundedCornerShape(28.dp)).padding(NothingSpacing.Edge),
                 verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 NothingMenuRail()
                 val type=MaterialTheme.typography
@@ -84,8 +84,8 @@ fun NothingChoiceRow(label: String, selected: Boolean, onClick: () -> Unit,
     Row(modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
         .background(if(selected) AppTheme.TextDark else AppTheme.TrackFill)
         .selectable(selected,enabled=enabled,role=Role.RadioButton,onClick=onClick)
-        .heightIn(min=56.dp).padding(horizontal=16.dp,vertical=14.dp),
-        verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)) {
+        .heightIn(min=56.dp).padding(horizontal=NothingSpacing.Content,vertical=NothingSpacing.Content),
+        verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(NothingSpacing.Item)) {
         Canvas(Modifier.size(16.dp)) {
             repeat(4) { i -> drawCircle(if(selected) AppTheme.PrimaryBlue else AppTheme.TextMuted,
                 1.8.dp.toPx(),Offset(size.width*(if(i%2==0).25f else .75f),size.height*(if(i<2).25f else .75f))) }
@@ -119,7 +119,7 @@ fun AilaDropdownMenu(expanded:Boolean,onDismissRequest:()->Unit,modifier:Modifie
                 exit=fadeOut(tween(if(AppTheme.reduceMotion)0 else 100))) {
                 Column(modifier.widthIn(min=224.dp,max=320.dp).clip(RoundedCornerShape(20.dp))
                     .background(AppTheme.SurfaceWhite).border(1.dp,AppTheme.FieldOutline,RoundedCornerShape(20.dp)).padding(8.dp)) {
-                    NothingMenuRail(Modifier.padding(start=12.dp,top=6.dp,bottom=8.dp))
+                    NothingMenuRail(Modifier.padding(start=NothingSpacing.Item,top=NothingSpacing.Inline,bottom=NothingSpacing.Inline))
                     Column(Modifier.heightIn(max=360.dp).verticalScroll(rememberScrollState()),content=content)
                 }
             }

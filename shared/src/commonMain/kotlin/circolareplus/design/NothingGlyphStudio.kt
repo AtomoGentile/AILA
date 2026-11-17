@@ -51,8 +51,8 @@ fun NothingFocusWidget(modifier: Modifier = Modifier, compact: Boolean = false) 
     var studio by remember { mutableStateOf(false) }
     var signal by remember { mutableIntStateOf(0) }
     Column(modifier.clip(RoundedCornerShape(24.dp)).background(GlyphPanel)
-        .padding(horizontal = 14.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        .padding(NothingSpacing.Content), horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(NothingSpacing.Inline)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("FOCUS", style = MaterialTheme.typography.labelMedium, color = GlyphMuted)
@@ -123,7 +123,7 @@ fun NothingGlyphStudio(onDismiss: () -> Unit) {
     }
     AilaBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().fillMaxHeight()
-            .padding(horizontal = 20.dp).padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            .padding(horizontal = NothingSpacing.Edge).padding(bottom = NothingSpacing.Edge), verticalArrangement = Arrangement.spacedBy(NothingSpacing.Item)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Glyph Studio", style = MaterialTheme.typography.headlineSmall, color = AppTheme.TextDark)
@@ -136,13 +136,13 @@ fun NothingGlyphStudio(onDismiss: () -> Unit) {
                 AnimatedContent(p.face, transitionSpec = { fadeIn(tween(if(AppTheme.reduceMotion) 0 else 180)) togetherWith fadeOut(tween(if(AppTheme.reduceMotion) 0 else 120)) }, label = "glyphFace") { face ->
                     NothingGlyphArt(Modifier.size(84.dp), face = face, signal = signal)
                 }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(NothingSpacing.Inline)) {
                     Text(p.signature.ifBlank { "AILA" }, style = MaterialTheme.typography.titleMedium, color = GlyphPaper, maxLines = 2)
                     Text("${p.focusMinutes} minuti di concentrazione", style = MaterialTheme.typography.bodySmall, color = GlyphMuted)
                     Text(if (hardware.ownerLabel != null) "Nothing Insider" else "Anteprima", style = MaterialTheme.typography.labelSmall, color = GlyphMuted)
                 }
             }
-            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(NothingSpacing.Content)) {
             AilaSectionTitle("Radar")
             Text("Le tre tracce contano gli eventi futuri e le novità del Brief. Tocca il radar per aprire le voci. Un nuovo elemento può accendere le luci, con AILA in primo piano.", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
             NothingPreferenceRow("Calendario", "Eventi futuri destinati a te; oggi in evidenza.", p.radarEvents) { update(p.copy(radarEvents = it)) }
@@ -150,13 +150,13 @@ fun NothingGlyphStudio(onDismiss: () -> Unit) {
             NothingPreferenceRow("Classe", "Sondaggi, risposte, bacheca e posti dal Brief.", p.radarClass) { update(p.copy(radarClass = it)) }
             AilaSectionTitle("Disegno del Focus")
             GlyphFace.entries.chunked(2).forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(NothingSpacing.Item)) {
                     row.forEach { face ->
                         Row(Modifier.weight(1f).heightIn(min = 64.dp).clip(RoundedCornerShape(18.dp))
                             .background(if(p.face == face) AppTheme.TextDark else AppTheme.TrackFill)
                             .clickable(role = Role.RadioButton) { update(p.copy(face = face)); signal++ }
                             .semantics { selected = p.face == face }.padding(14.dp), verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            horizontalArrangement = Arrangement.spacedBy(NothingSpacing.Item)) {
                             Box(Modifier.size(8.dp).background(if(p.face == face) AppTheme.PrimaryBlue else AppTheme.TextMuted,CircleShape))
                             Text(face.label, style = MaterialTheme.typography.labelLarge, color = if(p.face == face) AppTheme.BackgroundLight else AppTheme.TextDark)
                         }
@@ -186,7 +186,7 @@ fun NothingGlyphStudio(onDismiss: () -> Unit) {
                 Text("Le luci restano attive solo con AILA in primo piano. Il timer continua anche cambiando schermata.", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
             }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(NothingSpacing.Item)) {
                 AilaSecondaryButton("Prova", {
                     signal++
                     previewJob?.cancel()
@@ -209,7 +209,7 @@ fun NothingGlyphStudio(onDismiss: () -> Unit) {
 
 @Composable
 private fun NothingPreferenceRow(title: String, subtitle: String, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(NothingSpacing.Content)) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleSmall, color = AppTheme.TextDark)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
