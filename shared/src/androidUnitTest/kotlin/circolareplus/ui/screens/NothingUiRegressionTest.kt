@@ -186,7 +186,7 @@ class NothingUiRegressionTest {
     }
 
     @Test fun homeBriefUsesOneOverviewAndRetainsTheNextEventWhenTheFeedIsEmpty() {
-        val event=circolareplus.domain.model.CalendarEvent("e1","Fisica · energia",circolareplus.util.today().toIso())
+        val event=circolareplus.domain.model.CalendarEvent("e1","Fisica · energia",circolareplus.util.today().toIso(),category=circolareplus.domain.model.CalendarEventCategory.INTERROGAZIONE)
         val item=circolareplus.data.remote.dto.AilaBriefItemDto("e1","r1",circolareplus.data.remote.dto.AilaBriefKind.EVENT,"e1",event.title,"","Apri evento",date=event.date,canPlanStudy=true)
         var feed by androidx.compose.runtime.mutableStateOf(listOf(item))
         var opened=""
