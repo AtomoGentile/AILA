@@ -26,6 +26,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import circolareplus.design.*
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -113,8 +116,8 @@ fun RankingPollsScreen(
         key = { poll -> poll.id },
         modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight),
         contentPadding = PaddingValues(
-            start = AppTheme.Space16,
-            end = AppTheme.Space16,
+            start = if(AppTheme.isNothing)20.dp else AppTheme.Space16,
+            end = if(AppTheme.isNothing)20.dp else AppTheme.Space16,
             top = AppTheme.Space16,
             bottom = AppTheme.Space16 + circolareplus.design.LocalBottomBarPadding.current
         )
@@ -152,8 +155,38 @@ private fun RankingPollCard(
     var isEditing by remember(poll.id, poll.myRanking) { mutableStateOf(poll.myRanking == null) }
     val canEdit = !poll.isClosed && isEditing && poll.isTarget
 
+    if(AppTheme.isNothing) {
+        var manage by remember {mutableStateOf(false)}
+        Column(modifier.fillMaxWidth().padding(vertical=8.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+            Row(verticalAlignment=Alignment.CenterVertically) {
+                Text(poll.question,Modifier.weight(1f),style=MaterialTheme.typography.titleLarge,color=AppTheme.TextDark)
+                if(isRepresentative) Box {
+                    AilaIconButton("Gestisci classifica",{manage=true}) {AppIcons.Sliders(Modifier.size(18.dp),it)}
+                    AilaDropdownMenu(manage,{manage=false}) {
+                        if(!poll.isClosed) AilaDropdownMenuItem({Text("Chiudi sondaggio")},{manage=false;onClose()})
+                        AilaDropdownMenuItem({Text("Elimina sondaggio")},{manage=false;onDelete()})
+                    }
+                }
+            }
+            Text((if(poll.isClosed) "CHIUSO" else if(poll.myRanking!=null) "CLASSIFICA INVIATA" else "APERTO")+" · ${poll.voterCount}"+(if(totalStudents>0)" / $totalStudents risposte" else " risposte"),style=MaterialTheme.typography.labelSmall,color=AppTheme.TextMuted)
+            if(!poll.isTarget) Text("Questo sondaggio non è rivolto a te.",style=MaterialTheme.typography.bodyMedium,color=AppTheme.TextMuted)
+            if(canEdit) {
+                Text("Metti in cima la tua prima scelta. Trascina le righe o usa le frecce.",style=MaterialTheme.typography.bodyMedium,color=AppTheme.TextMuted)
+                DraggableRankingList(draft,labels,!isSubmitting,{draft=it})
+                AilaPrimaryButton(if(isSubmitting)"Invio…" else "Invia la mia classifica",{onSubmit(draft)},enabled=!isSubmitting,fillMaxWidth=true)
+                if(poll.myRanking!=null) AilaTextButton({draft=poll.myRanking ?: draft;isEditing=false}) {Text("Annulla modifiche")}
+            } else {
+                poll.results?.let {RankingResults(it,poll.maxPoints,poll.myRanking?.firstOrNull())}
+                    ?: Text("Risultati non disponibili.",style=MaterialTheme.typography.bodyMedium,color=AppTheme.TextMuted)
+                if(!poll.isClosed && poll.myRanking!=null && poll.isTarget) AilaSecondaryButton("Modifica la mia classifica",{isEditing=true},modifier=Modifier.fillMaxWidth())
+            }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(AppTheme.Hairline))
+        }
+        return
+    }
+
     AilaCard(modifier = modifier) {
-        Column(modifier = Modifier.padding(AppTheme.Space16).animateContentSize()) {
+        Column(modifier = Modifier.padding(AppTheme.Space16).then(if(AppTheme.isNothing) Modifier else Modifier.animateContentSize())) {
             Row(verticalAlignment = Alignment.Top) {
                 Text(
                     text = poll.question,
@@ -384,9 +417,9 @@ private fun DraggableRankingList(
                         .graphicsLayer {
                             if (isDragged) {
                                 translationY = dragOffset
-                                scaleX = 1.02f
-                                scaleY = 1.02f
-                                shadowElevation = 8.dp.toPx()
+                                scaleX = if(AppTheme.isNothing)1f else 1.02f
+                                scaleY = if(AppTheme.isNothing)1f else 1.02f
+                                shadowElevation = if(AppTheme.isNothing)0f else 8.dp.toPx()
                                 shape = RoundedCornerShape(AppTheme.SmallElementRadius)
                                 clip = true
                             }
@@ -415,7 +448,7 @@ private fun RankingDraftRow(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-            .background(if (isDragged) AppTheme.TintBlue else AppTheme.TintSlate)
+            .background(if(AppTheme.isNothing) {if(isDragged)AppTheme.TrackFill else AppTheme.CardSurface} else if (isDragged) AppTheme.TintBlue else AppTheme.TintSlate)
             .padding(end = AppTheme.Space4, top = AppTheme.Space4, bottom = AppTheme.Space4),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -446,7 +479,8 @@ private fun RankingDraftRow(
 private fun MoveButton(up: Boolean, enabled: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .size(40.dp)
+            .size(if(AppTheme.isNothing)44.dp else 40.dp)
+            .semantics {contentDescription=if(up)"Sposta su" else "Sposta giù"}
             .clip(CircleShape)
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center

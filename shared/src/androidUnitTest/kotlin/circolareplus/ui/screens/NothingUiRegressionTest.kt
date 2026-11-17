@@ -154,6 +154,34 @@ class NothingUiRegressionTest {
         screenshot("nothing-home-large-text")
     }
 
+    @Test fun rankingPollKeepsReorderingSubmissionAndHistoryNavigationWorking() {
+        var history by androidx.compose.runtime.mutableStateOf(false)
+        var section by androidx.compose.runtime.mutableStateOf(1)
+        var order=listOf<String>()
+        val poll=circolareplus.data.remote.dto.RankingPollDto("r1","Dove andiamo in gita?",false,"2026-11-17",listOf(
+            circolareplus.data.remote.dto.RankingPollOptionDto("a","Museo della scienza"),
+            circolareplus.data.remote.dto.RankingPollOptionDto("b","Osservatorio astronomico"),
+            circolareplus.data.remote.dto.RankingPollOptionDto("c","Teatro")))
+        activity.get().setContent { AilaTheme {
+            Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
+                NothingPollNavigation(section,history,{section=it},{history=!history},null)
+                RankingPollsScreen(listOf(poll),totalStudents=22,isRepresentative=true,submittingPollId=null,
+                    onSubmitRanking={_,ids->order=ids},onClosePoll={},onDeletePoll={},onCreatePoll={})
+            }
+        } }
+        compose.onAllNodesWithContentDescription("Sposta giù")[0].performClick()
+        screenshot("nothing-ranking-light")
+        compose.onNodeWithText("Invia la mia classifica").performScrollTo().performClick()
+        compose.runOnIdle {assertEquals(listOf("b","a","c"),order);AppTheme.isDarkMode=true}
+        screenshot("nothing-ranking-dark")
+        compose.onNodeWithContentDescription("Apri storico sondaggi").performClick()
+        compose.onNodeWithText("Storico sondaggi").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Torna ai sondaggi in corso").performClick()
+        compose.runOnIdle {kotlin.test.assertFalse(history)}
+        compose.onNodeWithText("Interrogazioni").performClick()
+        compose.runOnIdle {assertEquals(0,section)}
+    }
+
     @Test fun radarShowsRealCategoriesAndOpensTheSelectedEntry() {
         var opened = ""
         val entries = listOf(
