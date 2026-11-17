@@ -39,7 +39,9 @@ fun Modifier.nothingPressFeedback(source: MutableInteractionSource): Modifier {
     val pressed by source.collectIsPressedAsState()
     val opacity by animateFloatAsState(if (pressed) .76f else 1f,
         animationSpec = tween(if (AppTheme.reduceMotion) 0 else if(pressed) 70 else 150), label = "nothingPress")
-    return graphicsLayer { alpha = opacity }
+    val scale by animateFloatAsState(if(pressed) .98f else 1f,
+        animationSpec = tween(if(AppTheme.reduceMotion) 0 else 150), label = "nothingPressScale")
+    return graphicsLayer { alpha = opacity; scaleX = scale; scaleY = scale }
 }
 
 @Composable
@@ -49,7 +51,7 @@ private fun NothingButtonSurface(
     content: @Composable RowScope.() -> Unit
 ) {
     val interactions = source ?: remember { MutableInteractionSource() }
-    val shape = RoundedCornerShape(16.dp)
+    val shape = CircleShape
     Box(modifier.defaultMinSize(minWidth = 48.dp, minHeight = 44.dp).clip(shape)
         .background(fill).then(if(outlined) Modifier.border(1.dp,AppTheme.FieldOutline,shape) else Modifier)
         .nothingPressFeedback(interactions)

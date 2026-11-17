@@ -121,10 +121,12 @@ fun NothingHomePanel(
             }
             if (NothingExperience.preferences.showFocusWidget) NothingGlyphWidget(Modifier.weight(1f), compactFocus)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(NothingSpacing.Item)) {
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(NothingSpacing.Item)) {
             NothingQuickTile("Circolari", NothingSymbol.DOCUMENT, onCirculars, Modifier.weight(1f))
-            NothingQuickTile("Bacheca", NothingSymbol.CHAT, onBoard, Modifier.weight(1f))
-            NothingQuickTile("Posti", NothingSymbol.SEAT, onSeatMap, Modifier.weight(1f))
+            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(NothingSpacing.Item)) {
+                NothingCommandTile("Bacheca", NothingSymbol.CHAT, onBoard, Modifier.weight(1f))
+                NothingCommandTile("Posti", NothingSymbol.SEAT, onSeatMap, Modifier.weight(1f))
+            }
         }
     }
     }
@@ -134,11 +136,21 @@ fun NothingHomePanel(
 private fun NothingQuickTile(label: String, symbol: NothingSymbol, onClick: () -> Unit, modifier: Modifier) {
     Column(modifier.clickable(role = Role.Button, onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(CircleShape).background(AppTheme.TrackFill)
-            .nothingGrid(AppTheme.TextFaint.copy(alpha = .14f)),contentAlignment = Alignment.Center) {
-            NothingDotIcon(symbol,Modifier.fillMaxSize().padding(20.dp))
+        Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(CircleShape).background(AppTheme.TextDark),contentAlignment = Alignment.Center) {
+            NothingDotIcon(symbol,Modifier.fillMaxSize().padding(32.dp), AppTheme.BackgroundLight)
         }
         Text(label, style = MaterialTheme.typography.labelMedium, color = AppTheme.TextDark, maxLines = 1)
+    }
+}
+
+@Composable
+private fun NothingCommandTile(label: String, symbol: NothingSymbol, onClick: () -> Unit, modifier: Modifier) {
+    Row(modifier.fillMaxWidth().heightIn(min = 64.dp).clip(RoundedCornerShape(24.dp))
+        .background(AppTheme.TrackFill).clickable(role = Role.Button, onClick = onClick)
+        .padding(NothingSpacing.Item), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(NothingSpacing.Item)) {
+        NothingDotIcon(symbol, Modifier.size(28.dp))
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
     }
 }
 

@@ -173,9 +173,9 @@ private fun ailaTypography(): Typography {
         bodyLarge = ailaTextStyle(15, 23, FontWeight.Normal),
         bodyMedium = ailaTextStyle(14, 21, FontWeight.Normal),
         bodySmall = ailaTextStyle(12, 18, FontWeight.Normal),
-        labelLarge = ailaTextStyle(13, 19, FontWeight.Medium),
+        labelLarge = ailaTextStyle(13, 19, FontWeight.Normal).copy(fontFamily = FontFamily.Monospace, letterSpacing = .2.sp),
         labelMedium = ailaTextStyle(12, 17, FontWeight.Medium).copy(fontFamily = FontFamily.Monospace),
-        labelSmall = ailaTextStyle(11, 16, FontWeight.Medium)
+        labelSmall = ailaTextStyle(11, 16, FontWeight.Normal).copy(fontFamily = FontFamily.Monospace)
     )
     val dot = FontFamily.Default
     return Typography(
