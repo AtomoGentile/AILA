@@ -38,7 +38,7 @@ fun NothingSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> U
         closing = true
         scope.launch { progress.animateTo(0f,tween(if(AppTheme.reduceMotion) 0 else 160)); onDismiss() }
     }
-    Dialog(onDismissRequest = { close() }, properties = DialogProperties(usePlatformDefaultWidth = false,decorFitsSystemWindows = false)) {
+    Dialog(onDismissRequest = { close() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
             Box(Modifier.fillMaxSize().graphicsLayer { alpha = progress.value }.background(Color.Black.copy(alpha = .5f))
                 .clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) { close() })
