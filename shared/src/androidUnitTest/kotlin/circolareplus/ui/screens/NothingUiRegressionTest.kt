@@ -126,6 +126,9 @@ class NothingUiRegressionTest {
                 PollsScreen("Fisica",slots,0,isExpired=expired,onCastVote={id,v->slots=slots.map {if(it.slotId==id)it.copy(currentVote=v)else it}},onSubmit={sent++})
             }
         } }
+        screenshot("nothing-poll-flow-light")
+        compose.runOnIdle {AppTheme.isDarkMode=true}
+        screenshot("nothing-poll-flow-dark")
         compose.onNodeWithText("Come votare").performClick()
         compose.onNodeWithText("Ho capito").performClick()
         compose.onNodeWithText("Invia le mie scelte").performScrollTo().assertIsNotEnabled()
@@ -180,6 +183,28 @@ class NothingUiRegressionTest {
         compose.runOnIdle {kotlin.test.assertFalse(history)}
         compose.onNodeWithText("Interrogazioni").performClick()
         compose.runOnIdle {assertEquals(0,section)}
+    }
+
+    @Test fun homeBriefUsesOneOverviewAndRetainsTheNextEventWhenTheFeedIsEmpty() {
+        val event=circolareplus.domain.model.CalendarEvent("e1","Fisica · energia",circolareplus.util.today().toIso())
+        val item=circolareplus.data.remote.dto.AilaBriefItemDto("e1","r1",circolareplus.data.remote.dto.AilaBriefKind.EVENT,"e1",event.title,"","Apri evento",date=event.date,canPlanStudy=true)
+        var feed by androidx.compose.runtime.mutableStateOf(listOf(item))
+        var opened=""
+        var planned=""
+        activity.get().setContent { AilaTheme {
+            NothingHomeScreen("Simone",listOf(event),null,true,feed,false,null,{}, {opened=it.id},{feed=emptyList()}, {planned=it},false,emptyMap(),
+                NothingHomeActions({},{},{},{},{},{},{},{},{opened=it.id},{}),false,false)
+        } }
+        compose.onAllNodesWithText(event.title).assertCountEquals(1)
+        screenshot("nothing-home-brief")
+        compose.onNodeWithText("Apri Brief").performClick()
+        compose.onNodeWithText("Pianifica studio").performScrollTo().performClick()
+        compose.runOnIdle {kotlin.test.assertTrue(planned.contains(event.title))}
+        compose.onNodeWithContentDescription("Non ora: ${event.title}").performClick()
+        compose.onAllNodesWithText(event.title).assertCountEquals(1)
+        compose.onNodeWithText("PROSSIMO IMPEGNO").assertIsDisplayed()
+        compose.onNodeWithText(event.title).performClick()
+        compose.runOnIdle {assertEquals(event.id,opened)}
     }
 
     @Test fun radarShowsRealCategoriesAndOpensTheSelectedEntry() {

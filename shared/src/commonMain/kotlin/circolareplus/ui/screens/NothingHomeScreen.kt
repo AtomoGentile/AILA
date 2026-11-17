@@ -82,7 +82,15 @@ internal fun NothingHomeScreen(
                         Text(briefError,color=AppTheme.TextMuted,style=MaterialTheme.typography.bodyMedium)
                         AilaTextButton(onRefreshBrief) {Text("Riprova")}
                     }
-                    briefItems.isEmpty() -> Text("Sei in pari.",color=AppTheme.TextMuted,style=MaterialTheme.typography.bodyMedium)
+                    briefItems.isEmpty() -> {
+                        val event=events.firstOrNull()
+                        if(event==null) Text("Sei in pari.",color=AppTheme.TextMuted,style=MaterialTheme.typography.bodyMedium)
+                        else Column(Modifier.fillMaxWidth().clickable(role=Role.Button) {actions.openEvent(event)}.padding(vertical=8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                            Text("PROSSIMO IMPEGNO",style=MaterialTheme.typography.labelSmall,color=AppTheme.TextMuted)
+                            Text(event.title,style=MaterialTheme.typography.titleMedium,color=AppTheme.TextDark)
+                            Text(circolareplus.util.formatItalianDateWithWeekday(event.date),style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
+                        }
+                    }
                 }
                 briefItems.take(2).forEachIndexed { index,item ->
                     if(index>0) Box(Modifier.fillMaxWidth().height(1.dp).background(AppTheme.Hairline))
