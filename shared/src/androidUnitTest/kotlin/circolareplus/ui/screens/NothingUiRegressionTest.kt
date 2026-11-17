@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -212,6 +214,72 @@ class NothingUiRegressionTest {
         screenshot("nothing-assistant-dark")
         compose.onNodeWithContentDescription("Invia").performClick()
         compose.runOnIdle { assertEquals("Prepara un riepilogo di fisica",sent) }
+    }
+
+    @Test fun nothingOptionMenuShowsAndSavesTheSelectedLessonHour() {
+        var chosen = -1
+        activity.get().setContent { AilaTheme {
+            EventFormOptionsSheet("Ora iniziale",(1..6).map { "${it}ª ora" },1,{}, { chosen=it })
+        } }
+        compose.onNodeWithText("2ª ora").assertIsSelected()
+        screenshot("nothing-options-light")
+        compose.runOnIdle { AppTheme.isDarkMode=true }
+        screenshot("nothing-options-dark")
+        compose.onNodeWithText("4ª ora").performClick()
+        compose.runOnIdle { assertEquals(3,chosen) }
+    }
+
+    @Test fun nothingOriginMenuClosesOnceAndRestoresTheNavigationBar() {
+        var closed=0
+        var bar=true
+        activity.get().setContent { AilaTheme {
+            CompositionLocalProvider(LocalFloatingTabBarVisibility provides { bar=it }) {
+                var opened by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(true) }
+                var requested by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+                if(opened) AilaOriginSheet("nothing-test",{closed++;opened=false},closeRequested=requested) {
+                    Column(Modifier.padding(20.dp)) {
+                        androidx.compose.material3.Text("Nuovo evento",style=androidx.compose.material3.MaterialTheme.typography.titleLarge)
+                        AilaPrimaryButton("Salva",{requested=true})
+                    }
+                }
+            }
+        } }
+        compose.runOnIdle { kotlin.test.assertFalse(bar) }
+        screenshot("nothing-origin-menu")
+        compose.onNodeWithText("Salva").performClick()
+        compose.mainClock.advanceTimeBy(400)
+        compose.runOnIdle { assertEquals(1,closed);kotlin.test.assertTrue(bar) }
+    }
+
+    @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+    @Test fun nothingDateMenuRespectsDisabledDatesAndConfirmsSelection() {
+        val initial=circolareplus.util.daysBetween(circolareplus.util.CivilDate(1970,1,1),circolareplus.util.CivilDate(2026,11,16))*86400000L
+        var selected:Long?=null
+        activity.get().setContent { AilaTheme {
+            val state=androidx.compose.material3.rememberDatePickerState(initialSelectedDateMillis=initial,
+                initialDisplayedMonthMillis=initial,yearRange=2026..2027,selectableDates=object:androidx.compose.material3.SelectableDates {
+                    override fun isSelectableDate(utcTimeMillis:Long)=utcTimeMillis!=initial+86400000L
+                })
+            AilaDatePickerDialog(state,{},"Conferma data") { selected=state.selectedDateMillis }
+        } }
+        compose.onNodeWithContentDescription("17 Novembre 2026").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("18 Novembre 2026").performClick().assertIsSelected()
+        screenshot("nothing-date-menu-light")
+        compose.runOnIdle { AppTheme.isDarkMode=true }
+        screenshot("nothing-date-menu-dark")
+        compose.onNodeWithText("Conferma data").performClick()
+        compose.runOnIdle { assertEquals(initial+2*86400000L,selected) }
+    }
+
+    @Test fun nothingOverflowMenuInvokesItsCommand() {
+        var invoked=false
+        activity.get().setContent { AilaTheme {
+            androidx.compose.foundation.layout.Box {
+                AilaDropdownMenu(true,{}) { AilaDropdownMenuItem(text={androidx.compose.material3.Text("Conserva proposta")},onClick={invoked=true}) }
+            }
+        } }
+        compose.onNodeWithText("Conserva proposta").assertIsDisplayed().performClick()
+        compose.runOnIdle { kotlin.test.assertTrue(invoked) }
     }
 
     private fun screenshot(name: String, settle: Boolean = true) {

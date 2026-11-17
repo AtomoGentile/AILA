@@ -477,7 +477,7 @@ private fun ChangePasswordDialog(onDismiss: () -> Unit) {
         )
     }
 
-    androidx.compose.material3.AlertDialog(
+    circolareplus.design.AilaAlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         containerColor = AppTheme.SurfaceWhite,
         shape = RoundedCornerShape(AppTheme.CardCornerRadius),
@@ -580,7 +580,7 @@ private fun NameChangeDialog(
         }
     }
 
-    androidx.compose.material3.AlertDialog(
+    circolareplus.design.AilaAlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         containerColor = AppTheme.SurfaceWhite,
         shape = RoundedCornerShape(AppTheme.CardCornerRadius),
@@ -745,7 +745,7 @@ private fun DeleteAccountDialog(
     var isDeleting by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    androidx.compose.material3.AlertDialog(
+    circolareplus.design.AilaAlertDialog(
         onDismissRequest = { if (!isDeleting) onDismiss() },
         containerColor = AppTheme.SurfaceWhite,
         shape = RoundedCornerShape(AppTheme.CardCornerRadius),

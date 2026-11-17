@@ -5676,7 +5676,7 @@ fun MainAppShell(
             }
         }
         circolareplus.platform.IncomingContentInbox.error?.let { message ->
-            androidx.compose.material3.AlertDialog(
+            circolareplus.design.AilaAlertDialog(
                 onDismissRequest = { circolareplus.platform.IncomingContentInbox.clear() },
                 title = { Text("Contenuto non disponibile") }, text = { Text(message) },
                 confirmButton = { androidx.compose.material3.TextButton(onClick = { circolareplus.platform.IncomingContentInbox.clear() }) { Text("Chiudi") } }
@@ -7239,9 +7239,9 @@ private fun EditCalendarEventDialog(
                 OutlinedTextField(time, { time = it }, label = { Text("Ora o ora di lezione") }, singleLine = true, enabled = !isSaving)
                 Box {
                     circolareplus.design.AilaOutlinedButton(enabled = !isSaving, onClick = { categoryMenu = true }) { Text(eventCategoryLabel(category)) }
-                    DropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
+                    circolareplus.design.AilaDropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
                         CalendarEventCategory.entries.forEach { option ->
-                            DropdownMenuItem(text = { Text(eventCategoryLabel(option)) }, onClick = { category = option; categoryMenu = false })
+                            circolareplus.design.AilaDropdownMenuItem(text = { Text(eventCategoryLabel(option)) }, onClick = { category = option; categoryMenu = false })
                         }
                     }
                 }
@@ -7311,6 +7311,20 @@ private fun EventCreationOptionCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    if (AppTheme.isNothing) {
+        val ink = if (highlighted) AppTheme.BackgroundLight else AppTheme.TextDark
+        Column(modifier.clip(RoundedCornerShape(24.dp)).background(if(highlighted)AppTheme.TextDark else AppTheme.TrackFill)
+            .clickable(role=Role.Button,onClick=onClick).padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            circolareplus.design.NothingDotIcon(if(highlighted)circolareplus.design.NothingSymbol.CHAT else circolareplus.design.NothingSymbol.DOCUMENT,
+                Modifier.size(42.dp),ink)
+            Text(title,style=MaterialTheme.typography.titleMedium,color=ink)
+            Text(subtitle,style=MaterialTheme.typography.bodySmall,color=ink.copy(alpha=.8f))
+            Box(Modifier.size(32.dp).clip(CircleShape).background(AppTheme.PrimaryBlue),contentAlignment=Alignment.Center) {
+                AppIcons.ChevronRight(Modifier.size(16.dp),if(AppTheme.isDarkMode)Color.Black else Color.White)
+            }
+        }
+        return
+    }
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(AppTheme.CardCornerRadius))

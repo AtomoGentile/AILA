@@ -131,6 +131,9 @@ internal fun EventFormOptionsSheet(
             Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState()).selectableGroup(),
                 verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 options.forEachIndexed { index, option ->
+                    if (AppTheme.isNothing) {
+                        circolareplus.design.NothingChoiceRow(option,index==selectedIndex,{ onDismiss(); onSelect(index) })
+                    } else {
                     Row(
                         Modifier.fillMaxWidth().clip(EventFormShape)
                             .background(if (index == selectedIndex) AppTheme.TintBlue else AppTheme.FieldSurface)
@@ -141,6 +144,7 @@ internal fun EventFormOptionsSheet(
                     ) {
                         Text(option, style = MaterialTheme.typography.bodyLarge, color = AppTheme.TextDark, modifier = Modifier.weight(1f))
                         if (index == selectedIndex) AppIcons.Check(Modifier.size(18.dp), color = AppTheme.PrimaryBlue)
+                    }
                     }
                 }
             }

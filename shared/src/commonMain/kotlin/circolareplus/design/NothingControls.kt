@@ -184,19 +184,12 @@ fun AilaAlertDialog(onDismissRequest: () -> Unit,confirmButton: @Composable () -
     titleContentColor: Color = AlertDialogDefaults.titleContentColor,textContentColor: Color = AlertDialogDefaults.textContentColor,
     tonalElevation: Dp = 0.dp,properties: DialogProperties = DialogProperties()) {
     if(!AppTheme.isNothing) AlertDialog(onDismissRequest,confirmButton,modifier,dismissButton,icon,title,text,shape,containerColor,iconContentColor,titleContentColor,textContentColor,tonalElevation,properties)
-    else Dialog(onDismissRequest,properties = properties) {
-        Column(modifier.widthIn(max = 440.dp).fillMaxWidth().clip(RoundedCornerShape(24.dp))
-            .background(AppTheme.SurfaceWhite).border(1.dp,AppTheme.Hairline,RoundedCornerShape(24.dp)).padding(24.dp),verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            CompositionLocalProvider(LocalContentColor provides AppTheme.TextDark) {
-                icon?.invoke()
-                if(title != null) ProvideTextStyle(MaterialTheme.typography.titleLarge,content = title)
-                if(text != null) ProvideTextStyle(MaterialTheme.typography.bodyLarge,content = text)
-                Row(Modifier.fillMaxWidth(),horizontalArrangement = Arrangement.spacedBy(8.dp,Alignment.End),verticalAlignment = Alignment.CenterVertically) {
-                    dismissButton?.invoke();confirmButton()
-                }
-            }
+    else NothingPanelDialog(onDismissRequest,modifier,properties,title,icon,actions = {
+        Column(Modifier.fillMaxWidth(),horizontalAlignment=Alignment.End,verticalArrangement=Arrangement.spacedBy(4.dp)) {
+            confirmButton()
+            dismissButton?.invoke()
         }
-    }
+    },body=text)
 }
 
 @Composable

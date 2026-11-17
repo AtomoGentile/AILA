@@ -72,7 +72,7 @@ fun AilaBottomSheet(
     faded: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    if (AppTheme.isNothing) { NothingSheet(onDismissRequest, content); return }
+    if (AppTheme.isNothing) { NothingSheet(onDismissRequest, faded = faded) { content() }; return }
     if (!AppTheme.isGlass) {
         ModalBottomSheet(
             onDismissRequest = onDismissRequest,
@@ -183,6 +183,10 @@ fun AilaTopSheet(
     onClosed: () -> Unit,
     content: @Composable ColumnScope.(requestClose: () -> Unit) -> Unit
 ) {
+    if (AppTheme.isNothing) {
+        NothingSheet(onClosed) { requestClose -> content(requestClose) }
+        return
+    }
     val progress = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val closing = remember { mutableStateOf(false) }
@@ -345,6 +349,7 @@ fun AilaDatePickerDialog(
     confirmLabel: String,
     onConfirm: () -> Unit
 ) {
+    if (AppTheme.isNothing) { NothingDatePicker(state,onDismiss,confirmLabel,onConfirm); return }
     val glass = AppTheme.isGlass
     if (glass) {
         androidx.compose.runtime.DisposableEffect(Unit) {
@@ -429,6 +434,10 @@ fun AilaOriginSheet(
     useOrigin: Boolean = true,
     content: @Composable ColumnScope.(close: () -> Unit) -> Unit
 ) {
+    if (AppTheme.isNothing) {
+        NothingSheet(onDismiss, closeRequested, faded) { close -> content(close) }
+        return
+    }
     if (AppTheme.isGlass) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         val scope = rememberCoroutineScope()

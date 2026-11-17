@@ -70,8 +70,8 @@ fun SeatMapProposalsScreen(
                         modifier = Modifier.semantics { contentDescription = "Altre azioni" }) {
                         Text("•••", color = AppTheme.TextMuted)
                     }
-                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                        DropdownMenuItem(text = { Text("Scarta le proposte non conservate") },
+                    circolareplus.design.AilaDropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        circolareplus.design.AilaDropdownMenuItem(text = { Text("Scarta le proposte non conservate") },
                             onClick = { showMenu = false; showRewindConfirm = true })
                     }
                 }

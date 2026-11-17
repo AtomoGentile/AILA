@@ -432,7 +432,7 @@ fun AssistantChatScreen(
             }
         }
     }
-    if(fileSources) androidx.compose.material3.AlertDialog(
+    if(fileSources) circolareplus.design.AilaAlertDialog(
         onDismissRequest = { fileSources = false },
         title = { Text("File e foto") },
         text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

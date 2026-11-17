@@ -171,8 +171,8 @@ internal fun GitaUpdateCard(update: GitaUpdate, canEdit: Boolean, busy: Boolean,
                             repeat(3) { drawCircle(ink, 1.8.dp.toPx(), Offset(size.width * (.2f + .3f * it), size.height * .5f)) }
                         }
                     }
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        DropdownMenuItem(text = { Text("Elimina aggiornamento", color = AppTheme.TintRedInk) },
+                    circolareplus.design.AilaDropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        circolareplus.design.AilaDropdownMenuItem(text = { Text("Elimina aggiornamento", color = AppTheme.TintRedInk) },
                             onClick = { menu = false; deleting = true })
                     }
                 }
