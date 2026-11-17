@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package circolareplus.ui.screens
 
 import androidx.compose.foundation.background
@@ -92,7 +94,7 @@ internal fun NothingHomeScreen(
                                     Box(Modifier.size(6.dp).background(color.color,CircleShape))
                                 }
                             }
-                            Text(when(item.kind) { AilaBriefKind.EVENT -> item.date ?: "CALENDARIO"; AilaBriefKind.CIRCULAR -> "CIRCOLARE N. ${item.sourceId}"; else -> item.actionLabel.uppercase() },
+                            Text(when(item.kind) { AilaBriefKind.EVENT -> item.date?.let {circolareplus.util.formatItalianDateWithWeekday(it)} ?: "CALENDARIO"; AilaBriefKind.CIRCULAR -> "CIRCOLARE N. ${item.sourceId}"; else -> item.actionLabel.uppercase() },
                                 style=MaterialTheme.typography.labelSmall,color=AppTheme.TextMuted)
                             Text(item.title,style=MaterialTheme.typography.titleMedium,color=AppTheme.TextDark)
                         }
@@ -108,7 +110,7 @@ internal fun NothingHomeScreen(
                 if(event != null) Column(Modifier.fillMaxWidth().clickable(role=Role.Button) {actions.openEvent(event)}.padding(vertical=8.dp),
                     verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     Text(event.title,style=MaterialTheme.typography.titleMedium,color=AppTheme.TextDark)
-                    Text("${event.date}${event.time?.let {" · $it"}.orEmpty()}",style=MaterialTheme.typography.labelSmall,color=AppTheme.TextMuted)
+                    Text("${circolareplus.util.formatItalianDateWithWeekday(event.date)}${event.time?.let {" · $it"}.orEmpty()}",style=MaterialTheme.typography.labelSmall,color=AppTheme.TextMuted)
                 } else Text(if(eventsLoading) "Caricamento…" else "Nessun impegno in programma.",color=AppTheme.TextMuted,style=MaterialTheme.typography.bodyMedium)
             }
         }
