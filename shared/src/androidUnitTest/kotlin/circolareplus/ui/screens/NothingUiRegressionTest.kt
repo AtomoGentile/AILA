@@ -74,7 +74,7 @@ class NothingUiRegressionTest {
         compose.runOnIdle { assertEquals("calendar", destination) }
         compose.onNodeWithText("Circolari", useUnmergedTree = true).assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals("circulars", destination) }
-        compose.onNodeWithText("Apri radar").assertIsDisplayed()
+        compose.onNodeWithText("Configura avvisi").assertIsDisplayed()
         screenshot("nothing-home-radar-light")
         compose.runOnIdle { AppTheme.isDarkMode = true }
         screenshot("nothing-home-radar-dark")
@@ -175,6 +175,54 @@ class NothingUiRegressionTest {
         compose.runOnIdle { NothingExperience.configure(NothingExperience.preferences.copy(radarClass=true)) }
         compose.waitForIdle()
         compose.runOnIdle { assertEquals(listOf(3), zones) }
+    }
+
+    @Test fun nothingCircularsHaveARealListAndKeepFilteringAndDocumentNavigation() {
+        val circ=circolareplus.domain.model.Circular(143,"Assemblea d’istituto e organizzazione delle attività","17.11.2026","143.pdf")
+        val classification=circolareplus.domain.model.CircularAiClassification(143,circolareplus.domain.model.CircularRelevanceBadge.RELEVANT,"L’assemblea riguarda tutte le classi. Leggi le indicazioni per partecipare.")
+        var opened=0
+        activity.get().setContent { AilaTheme {
+            CircularsScreen(listOf(circ),mapOf(143 to classification),{opened=it.number},aiEnabled=true)
+        } }
+        compose.onNodeWithText(circ.title).assertIsDisplayed()
+        screenshot("nothing-circulars-light")
+        compose.runOnIdle { AppTheme.isDarkMode=true }
+        screenshot("nothing-circulars-dark")
+        compose.onNodeWithText("Altre").performClick()
+        compose.onNodeWithText("Nessun risultato").assertIsDisplayed()
+        compose.onNodeWithText("Per te").performClick()
+        compose.onNodeWithText("Apri documento").performClick()
+        compose.runOnIdle { assertEquals(143,opened) }
+    }
+
+    @Test fun nothingBoardPereAndPollUseTheSameSurfaceAndControlLanguage() {
+        var scene by androidx.compose.runtime.mutableStateOf(0)
+        var created=false
+        val proposal=circolareplus.domain.model.Proposal("p1",authorName="Anonimo",isAnonymous=true,title="Spazio per lo studio in classe",description="Una proposta per organizzare meglio i materiali condivisi.",category="Didattica",createdAt="2026-11-17")
+        activity.get().setContent { AilaTheme {
+            when(scene) {
+                0 -> BoardScreen(listOf(proposal),onCreateProposalClick={created=true})
+                1 -> Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight).verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(20.dp)) {
+                    ForumIntroduction(false,{created=true},{})
+                    androidx.compose.foundation.layout.Spacer(Modifier.padding(8.dp))
+                    ForumEmptyState()
+                }
+                else -> PollsScreen("Fisica",listOf(SlotUiItem("s1","18 novembre","Fisica",4)),0,onCastVote={_,_->})
+            }
+        } }
+        compose.onNodeWithText(proposal.title).assertIsDisplayed()
+        screenshot("nothing-board-light")
+        compose.onNodeWithText("Nuova proposta").performClick()
+        compose.runOnIdle { kotlin.test.assertTrue(created);scene=1 }
+        compose.onNodeWithText("Revisione tra pere").assertIsDisplayed()
+        screenshot("nothing-pere-light")
+        compose.runOnIdle { AppTheme.isDarkMode=true }
+        screenshot("nothing-pere-dark")
+        compose.runOnIdle { scene=2 }
+        compose.onNodeWithText("Scegli le date che vanno bene per te.").assertIsDisplayed()
+        screenshot("nothing-poll-dark")
+        compose.runOnIdle { AppTheme.isDarkMode=false }
+        screenshot("nothing-poll-light")
     }
 
     @Test fun personalAccentsDoNotLeakIntoNothingAndAreRestoredOnExit() {

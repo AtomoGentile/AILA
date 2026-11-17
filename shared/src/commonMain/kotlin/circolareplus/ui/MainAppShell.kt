@@ -3872,10 +3872,12 @@ fun MainAppShell(
                                         .fillMaxWidth()
                                         .background(AppTheme.BackgroundLight)
                                 ) {
-                                    Row(Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16).padding(top = AppTheme.Space16, bottom = AppTheme.Space12), verticalAlignment = Alignment.CenterVertically) {
-                                        circolareplus.design.AilaBrandMark(size = 40.dp)
-                                        Spacer(Modifier.width(12.dp))
-                                        Text("Classe", Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall, color = AppTheme.TextDark, maxLines=1, overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                    Row(Modifier.fillMaxWidth().padding(horizontal = if(AppTheme.isNothing) 20.dp else AppTheme.Space16).padding(top = AppTheme.Space16, bottom = AppTheme.Space12), verticalAlignment = Alignment.CenterVertically) {
+                                        if(!AppTheme.isNothing) {
+                                            circolareplus.design.AilaBrandMark(size = 40.dp)
+                                            Spacer(Modifier.width(12.dp))
+                                        }
+                                        Text(if(AppTheme.isNothing) "AILA / NOTHING" else "Classe", Modifier.weight(1f), style = if(AppTheme.isNothing) MaterialTheme.typography.labelMedium else MaterialTheme.typography.headlineSmall, color = if(AppTheme.isNothing) AppTheme.TextMuted else AppTheme.TextDark, maxLines=1, overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                                         Spacer(Modifier.width(AppTheme.Space8))
                                         circolareplus.design.AilaIconButton(
                                             contentDescription=if(isClassSearchOpen) "Chiudi ricerca della classe" else "Cerca nella classe",
@@ -3906,7 +3908,7 @@ fun MainAppShell(
                                             labels = ClassSection.entries.map { it.title },
                                             selectedIndex = classSection.ordinal,
                                             onSelect = { classSection = ClassSection.entries[it] },
-                                            modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16).padding(bottom = AppTheme.Space12)
+                                            modifier = Modifier.fillMaxWidth().padding(horizontal = if(AppTheme.isNothing) 20.dp else AppTheme.Space16).padding(bottom = AppTheme.Space12)
                                         )
                                     }
                                 }

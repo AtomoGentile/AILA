@@ -77,6 +77,26 @@ class NothingExperienceTest {
         assertTrue(NothingExperience.preferences.radarEvents)
         assertTrue(NothingExperience.preferences.radarClass)
     }
+    @Test fun phone4aProgressClearsSegmentsFromTheTopWithoutOutOfBoundsIndices() {
+        assertEquals(listOf(5,4,3,2,1,0),nothingBarChannels(1f,6))
+        assertEquals(listOf(5,4,3),nothingBarChannels(.5f,6))
+        assertEquals(listOf(5),nothingBarChannels(.01f,6))
+        assertTrue(nothingBarChannels(0f,6).isEmpty())
+        assertTrue(nothingBarChannels(Float.NaN,6).isEmpty())
+        assertTrue(nothingBarChannels(1f,0).isEmpty())
+        assertEquals(listOf(3,2,1,0),nothingBarChannels(2f,4))
+    }
+    @Test fun notificationGroupsRouteRankingAndUnknownTypesAndPreferencesDoNotResetActiveFocus() {
+        assertEquals(NothingNotificationGroup.POLLS,NothingNotificationGroup.fromCategory("ranking_polls"))
+        assertEquals(NothingNotificationGroup.CLASS,NothingNotificationGroup.fromCategory("seatmap"))
+        NothingExperience.restore("{}") {}
+        NothingExperience.toggleFocus(1000)
+        val deadline=NothingExperience.focus.deadlineMillis
+        assertTrue(NothingExperience.readPreferences("{\"preferences\":{\"systemNotifications\":true}}").systemNotifications)
+        assertEquals(deadline,NothingExperience.focus.deadlineMillis)
+        assertFalse(NothingExperience.readPreferences("broken").systemNotifications)
+        NothingExperience.restore("{}") {}
+    }
     private fun contrast(a:Color,b:Color):Float {
         val x=a.luminance();val y=b.luminance()
         return (maxOf(x,y)+.05f)/(minOf(x,y)+.05f)

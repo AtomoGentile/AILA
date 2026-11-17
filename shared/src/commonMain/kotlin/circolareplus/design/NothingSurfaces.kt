@@ -157,7 +157,9 @@ private fun NothingCommandTile(label: String, symbol: NothingSymbol, onClick: ()
 @Composable
 fun NothingGlyphWidget(modifier: Modifier = Modifier, compact: Boolean = false) {
     val radar = LocalGlyphRadar.current
-    if (radar == null) NothingFocusWidget(modifier, compact) else NothingRadarWidget(radar, modifier)
+    if (radar == null) NothingFocusWidget(modifier, compact)
+    else if(NothingExperience.preferences.radarHome) NothingRadarWidget(radar, modifier)
+    else NothingAlertsWidget(modifier)
 }
 
 /** Bounded, static matrix when motion is disabled; only loaders animate repeatedly. */

@@ -55,9 +55,13 @@ fun CircularsScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(AppTheme.BackgroundLight)
-            .padding(horizontal = AppTheme.Space16)
+            .padding(horizontal = if(AppTheme.isNothing) 20.dp else AppTheme.Space16)
             .padding(top = AppTheme.Space8)
     ) {
+        if(AppTheme.isNothing) {
+            circolareplus.design.NothingContentLead("Circolari", "Documenti della scuola, ordinati dal più recente.", circolareplus.design.NothingSymbol.DOCUMENT)
+            Spacer(Modifier.height(16.dp))
+        }
         // Niente titolo ne' riga "Aggiornato da Spaggiari": l'intestazione la da' gia' il selettore
         // Circolari/Bacheca in cima, e lo spazio serve per leggere.
 
@@ -141,6 +145,35 @@ fun CircularListItem(
     isAnalyzing: Boolean = false,
     aiEnabled: Boolean = true
 ) {
+    if(AppTheme.isNothing) {
+        Column(modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(AppTheme.CardSurface)
+            .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick).padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("N. ${circular.number}", Modifier.weight(1f), style = circolareplus.design.nothingDisplayStyle(24,32), color = AppTheme.TextDark)
+                Text(circular.publishDate, style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
+            }
+            Text(circular.title, style = MaterialTheme.typography.titleMedium, color = AppTheme.TextDark)
+            if(aiEnabled) Text(when {
+                isAnalyzing -> "ANALISI IN CORSO"
+                classification?.badge == CircularRelevanceBadge.RELEVANT -> "PER TE"
+                classification?.badge == CircularRelevanceBadge.POTENTIAL -> "POTENZIALE INTERESSE"
+                classification?.badge == CircularRelevanceBadge.NOT_RELEVANT -> "NON SEMBRA RIGUARDARTI"
+                else -> "DA CLASSIFICARE"
+            }, style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
+            classification?.personalSummary?.let { summary ->
+                Box(Modifier.fillMaxWidth().height(1.dp).background(AppTheme.Hairline))
+                Text("IN BREVE / AILA", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
+                Text(summary, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextDark,
+                    maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Apri documento", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
+                AppIcons.ChevronRight(Modifier.size(18.dp), AppTheme.TextDark)
+            }
+        }
+        return
+    }
     // Pallino con la tinta, testo con l'inchiostro leggibile (vedi AppTheme.Badge*Ink).
     val (badgeColor, badgeInk, badgeText) = when (classification?.badge) {
         CircularRelevanceBadge.RELEVANT -> Triple(AppTheme.BadgeRelevantGreen, AppTheme.BadgeRelevantInk, "Ti riguarda")

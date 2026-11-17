@@ -57,7 +57,11 @@ private class AndroidNothingGlyph(private val context: Context) : NothingGlyphCo
     private var disposed = false
     private var foreground = true
     private var targetDevice: String? = null
-    override val supportsProgress get() = targetDevice in setOf(Glyph.DEVICE_20111, Glyph.DEVICE_22111, Glyph.DEVICE_23111, Glyph.DEVICE_23113, Glyph.DEVICE_24111)
+    override val notificationSettingsAvailable = true
+    override val barSegments get() = when(targetDevice) { Glyph.DEVICE_25111 -> 6; Glyph.DEVICE_25131 -> 4; else -> 0 }
+    override fun openNotificationSettings(group: circolareplus.design.NothingNotificationGroup) = NothingNotificationChannels.open(context, group)
+    override fun testNotification(group: circolareplus.design.NothingNotificationGroup) = NothingNotificationChannels.test(context, group)
+    override val supportsProgress get() = barSegments > 0 || targetDevice in setOf(Glyph.DEVICE_20111, Glyph.DEVICE_22111, Glyph.DEVICE_23111, Glyph.DEVICE_23113, Glyph.DEVICE_24111)
     fun setForeground(value: Boolean) { foreground = value; if (!value) stop() }
 
     fun connect() {
@@ -119,6 +123,15 @@ private class AndroidNothingGlyph(private val context: Context) : NothingGlyphCo
         return runCatching {
             if (!session) { gm.openSession(); session = true }
             val builder = gm.glyphFrameBuilder
+            if (barSegments > 0) {
+                val channels = circolareplus.design.nothingBarChannels(fraction, barSegments)
+                if(channels.isEmpty()) gm.turnOff() else {
+                    // Official 4a A1..A6 indices run from top (0) to bottom (5).
+                    channels.forEach { builder.buildChannel(it) }
+                    gm.toggle(builder.build())
+                }
+                return@runCatching true
+            }
             if (targetDevice == Glyph.DEVICE_20111) builder.buildChannelD() else builder.buildChannelC()
             gm.displayProgress(builder.build(), (fraction.coerceIn(0f, 1f) * 100).toInt())
             true

@@ -81,7 +81,7 @@ fun BoardScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = AppTheme.Space16)
+            .padding(horizontal = if(AppTheme.isNothing) 20.dp else AppTheme.Space16)
             .padding(top = AppTheme.Space16)
     ) {
         ForumIntroduction(false, onCreateProposalClick, {showHelp=true}, title="Bacheca",

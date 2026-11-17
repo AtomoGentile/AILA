@@ -428,6 +428,12 @@ fun AilaCard(
     transformKey: Any? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    if(AppTheme.isNothing) {
+        val shape = RoundedCornerShape(24.dp)
+        Column(modifier.fillMaxWidth().clip(shape).background(containerColor)
+            .then(if(onClick != null) Modifier.ailaPressable(pressedScale = .985f) { onClick() } else Modifier), content = content)
+        return
+    }
     // Glass: vetro traslucido (riflesso in alto, filo di luce sul bordo) sopra lo sfondo a
     // macchie di colore; le card colorate diventano vetro tinto. Expressive: superficie tonale
     // piena, senza bordo ne' ombra (vedi AppTheme.CardSurface).

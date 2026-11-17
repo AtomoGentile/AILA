@@ -8,6 +8,10 @@ interface NothingGlyphConnection {
     val ready: Boolean
     val status: String
     val supportsProgress: Boolean
+    val notificationSettingsAvailable: Boolean get() = false
+    val barSegments: Int get() = 0
+    fun openNotificationSettings(group: circolareplus.design.NothingNotificationGroup): Boolean = false
+    fun testNotification(group: circolareplus.design.NothingNotificationGroup): Boolean = false
     fun pulse(zone: Int = 0, periodMillis: Int = 1200): Boolean
     fun showProgress(fraction: Float): Boolean
     fun stop()

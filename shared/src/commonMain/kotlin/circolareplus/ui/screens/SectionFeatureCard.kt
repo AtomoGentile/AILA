@@ -46,7 +46,8 @@ internal fun SectionEmptyCard(title:String, description:String, modifier:Modifie
 
 /** Liquid Glass keeps its optical surface; tonal gradients belong to Material. */
 internal fun Modifier.communitySurface(shape:Shape,tint:Color?=null):Modifier =
-    if(AppTheme.isGlass) ailaGlassSurface(shape,tint=when {
+    if(AppTheme.isNothing) background(AppTheme.CardSurface,shape).border(1.dp,AppTheme.Hairline,shape)
+    else if(AppTheme.isGlass) ailaGlassSurface(shape,tint=when {
         tint != null -> tint.copy(alpha=if(AppTheme.isDarkMode) .12f else .09f)
         AppTheme.isDarkMode -> Color.White.copy(alpha=.055f)
         else -> Color.White.copy(alpha=.52f)

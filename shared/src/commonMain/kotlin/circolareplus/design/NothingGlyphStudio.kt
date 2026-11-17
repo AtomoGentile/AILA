@@ -67,7 +67,8 @@ fun NothingFocusWidget(modifier: Modifier = Modifier, compact: Boolean = false) 
         Box(Modifier.fillMaxWidth().aspectRatio(1f), contentAlignment = Alignment.Center) {
             NothingDial(Modifier.fillMaxSize(), progress = focus.fraction(now), ink = GlyphPaper,
                 track = Color(0xFF393939), accent = AppTheme.PrimaryBlue)
-            NothingGlyphArt(Modifier.fillMaxSize().padding(32.dp),progress=focus.fraction(now),signal=signal+NothingExperience.completedSessions)
+            if(hardware.barSegments > 0) NothingBarPreview(Modifier.fillMaxSize().padding(vertical=12.dp), focus.fraction(now), hardware.barSegments)
+            else NothingGlyphArt(Modifier.fillMaxSize().padding(32.dp),progress=focus.fraction(now),signal=signal+NothingExperience.completedSessions)
         }
         Text(formatFocusTime(focus.remaining(now)), style = MaterialTheme.typography.headlineMedium.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Normal),
             color = GlyphPaper, maxLines = 1)
@@ -109,12 +110,13 @@ fun NothingGlyphSettingsSection(modifier: Modifier = Modifier) {
     if (open) NothingGlyphStudio { open = false }
 }
 
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun NothingGlyphStudio(onDismiss: () -> Unit) {
     val p = NothingExperience.preferences
     val hardware = LocalNothingGlyph.current
     val scope = rememberCoroutineScope()
+    var notice by remember { mutableStateOf<String?>(null) }
     var signal by remember { mutableIntStateOf(0) }
     var previewJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     fun update(value: NothingPreferences) = NothingExperience.configure(value)
@@ -143,7 +145,23 @@ fun NothingGlyphStudio(onDismiss: () -> Unit) {
                 }
             }
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(NothingSpacing.Content)) {
-            AilaSectionTitle("Radar")
+            AilaSectionTitle("Avvisi sul retro")
+            Text("Le notifiche reali arrivano anche con AILA chiusa. Su Nothing OS scegli un suono Glyph per ogni categoria; per gli avvisi persistenti usa le notifiche essenziali del telefono.", style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
+            if(hardware.notificationSettingsAvailable) {
+                NothingPreferenceRow("Categorie Glyph", "Separa circolari, bacheca, pere, sondaggi, calendario e classe nelle impostazioni del telefono.", p.systemNotifications) { update(p.copy(systemNotifications = it)) }
+                if(p.systemNotifications) NothingNotificationGroup.entries.forEach { group ->
+                    Column(verticalArrangement = Arrangement.spacedBy(NothingSpacing.Inline)) {
+                        Text(group.label, style = MaterialTheme.typography.titleSmall, color = AppTheme.TextDark)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(NothingSpacing.Item), verticalArrangement = Arrangement.spacedBy(NothingSpacing.Inline)) {
+                            AilaSecondaryButton("Configura ${group.label}", { if(!hardware.openNotificationSettings(group)) notice = "Impossibile aprire le impostazioni del telefono." })
+                            AilaTextButton({ notice = if(hardware.testNotification(group)) "Avviso inviato. Blocca lo schermo per verificare il Glyph; il suono Nothing e le luci si scelgono nelle impostazioni del telefono." else "Avviso non inviato: controlla il permesso notifiche e che la categoria sia attiva." }) { Text("Prova ${group.label}") }
+                        }
+                    }
+                }
+            } else Text("La configurazione delle luci di notifica è disponibile sui telefoni Nothing. Le forme sotto sono anteprime sullo schermo.", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+            notice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextDark) }
+            AilaSectionTitle("Radar nella Home")
+            NothingPreferenceRow("Mostra il Radar", "Sostituisce il pannello degli avvisi con il riepilogo di calendario e Brief.", p.radarHome) { update(p.copy(radarHome=it)) }
             Text("Le tre tracce contano gli eventi futuri e le novità del Brief. Tocca il radar per aprire le voci. Un nuovo elemento può accendere le luci, con AILA in primo piano.", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
             NothingPreferenceRow("Calendario", "Eventi futuri destinati a te; oggi in evidenza.", p.radarEvents) { update(p.copy(radarEvents = it)) }
             NothingPreferenceRow("Circolari", "Circolari attive presenti nel Brief.", p.radarCirculars) { update(p.copy(radarCirculars = it)) }
@@ -181,7 +199,7 @@ fun NothingGlyphStudio(onDismiss: () -> Unit) {
             if (hardware.ownerLabel != null) {
                 AilaSectionTitle("Nothing Insider")
                 Text(hardware.status, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
-                NothingPreferenceRow("Luci posteriori", "Nuove voci del Radar e fine Focus; avanzamento dove supportato.", p.rearLights,
+                NothingPreferenceRow("Luci del Focus", "Fine Focus e avanzamento sulla barra, con AILA aperta.", p.rearLights,
                     enabled = hardware.ready) { update(p.copy(rearLights = it)); if(!it) hardware.stop() }
                 Text("Le luci restano attive solo con AILA in primo piano. Il timer continua anche cambiando schermata.", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
             }

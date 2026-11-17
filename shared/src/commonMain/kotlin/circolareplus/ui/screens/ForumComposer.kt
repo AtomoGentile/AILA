@@ -20,10 +20,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import circolareplus.design.*
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun ForumIntroduction(busy: Boolean, onCreate: () -> Unit, onRules: () -> Unit,
     title: String = "Revisione tra pere", description: String = "Un posto per chiedere, capire e dare una mano ai compagni.",
     createLabel: String = "Nuova domanda") {
+    if(AppTheme.isNothing) {
+        NothingContentLead(title, description, NothingSymbol.CHAT) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                AilaActionButton(onClick = onCreate, enabled = !busy) { Text(createLabel) }
+                AilaTextButton(onClick = onRules) { Text("Come funziona") }
+            }
+        }
+        return
+    }
     Column(Modifier.fillMaxWidth().communitySurface(RoundedCornerShape(28.dp),MaterialTheme.colorScheme.tertiary).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.tertiary.copy(alpha = .18f), RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) { AppIcons.ChatBubble(Modifier.size(24.dp), MaterialTheme.colorScheme.tertiary) }

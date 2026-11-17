@@ -163,7 +163,7 @@ fun PollsScreen(
                 Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment=Alignment.CenterVertically) {
                         Text("Come scegliere le date",Modifier.weight(1f),style=MaterialTheme.typography.titleSmall,color=androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer)
-                        androidx.compose.material3.TextButton(onClick={showPollHelp=!showPollHelp}){Text(if(showPollHelp) "Chiudi" else "Dettagli")}
+                        circolareplus.design.AilaTextButton(onClick={showPollHelp=!showPollHelp}){Text(if(showPollHelp) "Chiudi" else "Dettagli")}
                     }
                     VoteLegend(darkRedLeft=MAX_DARK_RED-darkRedCount)
                     androidx.compose.animation.AnimatedVisibility(showPollHelp) {
@@ -328,6 +328,20 @@ private fun PollProgressHeader(
     closesAtLabel: String? = null,
     isExpired: Boolean = false
 ) {
+    if(AppTheme.isNothing) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            circolareplus.design.NothingContentLead(subjectName, if(isSubmitted) "Scelte inviate" else "Scegli le date che vanno bene per te.", circolareplus.design.NothingSymbol.POLL)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text("$votedCount / $total", style = circolareplus.design.nothingDisplayStyle(28,38), color = AppTheme.TextDark)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    circolareplus.design.AilaProgressBar(progress)
+                    Text(if(totalStudents > 0) "$submittedCount di $totalStudents compagni hanno inviato" else "Date valutate", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
+                }
+            }
+            if(isExpired || closesAtLabel != null) Text(if(isExpired) "TEMPO SCADUTO" else "ENTRO IL $closesAtLabel", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
+        }
+        return
+    }
     val animatedProgress by animateFloatAsState(
         targetValue = progress.coerceIn(0f, 1f),
         animationSpec = ailaMoveSpec(AilaDuration.Slow),

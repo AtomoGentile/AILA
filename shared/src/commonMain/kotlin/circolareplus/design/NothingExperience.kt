@@ -26,7 +26,9 @@ data class NothingPreferences(
     val showFocusWidget: Boolean = true,
     val radarEvents: Boolean = true,
     val radarCirculars: Boolean = true,
-    val radarClass: Boolean = true
+    val radarClass: Boolean = true,
+    val systemNotifications: Boolean = false,
+    val radarHome: Boolean = false
 )
 
 /** The deadline, rather than a decrementing counter, survives navigation and process death. */
@@ -69,6 +71,10 @@ object NothingExperience {
         private set
     fun refreshClock() { nowMillis = circolareplus.platform.currentTimeMillis() }
     private var writer: ((String) -> Unit)? = null
+
+    fun readPreferences(json: String): NothingPreferences = runCatching {
+        codec.decodeFromString<NothingSavedState>(json).preferences
+    }.getOrDefault(NothingPreferences())
 
     fun restore(json: String, write: (String) -> Unit) {
         val saved = runCatching { codec.decodeFromString<NothingSavedState>(json) }.getOrDefault(NothingSavedState())

@@ -141,7 +141,7 @@ fun ForumScreen(
    action={if(threadId!=null)AilaIconButton("Preferenze della discussione",{notificationDialog=true}){tint->AppIcons.Bell(color=tint)}})
   error?.let{Text(it,Modifier.padding(16.dp),color=AppTheme.TintRedInk)}
   if(threadId==null){
-   Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal=16.dp).padding(top=16.dp)) {
+   Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal=if(AppTheme.isNothing)20.dp else 16.dp).padding(top=16.dp)) {
     ForumIntroduction(busy, onCreate = { creating = true }, onRules = { showRules = true })
     Spacer(Modifier.height(12.dp))
     val filters=listOf("ALL","OPEN","RESOLVED","MINE")
