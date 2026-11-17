@@ -133,6 +133,44 @@ class NothingUiRegressionTest {
         screenshot("nothing-brief-feed-dark")
     }
 
+    @Test fun radarSignalsOnlyNewEnabledEntriesAndStopsThePhysicalCue() {
+        val zones = mutableListOf<Int>()
+        var stops = 0
+        val hardware = object : circolareplus.platform.NothingGlyphConnection {
+            override val ownerLabel = "Nothing test"
+            override val ready = true
+            override val status = "Test"
+            override val supportsProgress = true
+            override fun pulse(zone: Int, periodMillis: Int): Boolean { zones += zone; return true }
+            override fun showProgress(fraction: Float) = true
+            override fun stop() { stops++ }
+        }
+        val first = GlyphRadarEntry("first", GlyphChannel.CALENDAR, "Fisica", "") {}
+        var entries by androidx.compose.runtime.mutableStateOf(listOf(first))
+        NothingExperience.configure(NothingPreferences(rearLights=true))
+        activity.get().setContent { AilaTheme {
+            CompositionLocalProvider(circolareplus.platform.LocalNothingGlyph provides hardware) {
+                NothingRadarWidget(GlyphRadarData(entries))
+            }
+        } }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(emptyList<Int>(),zones) }
+        compose.runOnIdle { entries = entries + GlyphRadarEntry("new", GlyphChannel.CLASS, "Sondaggio", "") {} }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(listOf(3), zones) }
+        compose.mainClock.advanceTimeBy(1500)
+        compose.waitForIdle()
+        compose.runOnIdle { kotlin.test.assertTrue(stops > 0) }
+        compose.runOnIdle { NothingExperience.configure(NothingExperience.preferences.copy(radarClass=false)) }
+        compose.waitForIdle()
+        compose.runOnIdle { entries = entries + GlyphRadarEntry("muted", GlyphChannel.CLASS, "Risultato", "") {} }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(listOf(3), zones) }
+        compose.runOnIdle { NothingExperience.configure(NothingExperience.preferences.copy(radarClass=true)) }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(listOf(3), zones) }
+    }
+
     @Test fun personalAccentsDoNotLeakIntoNothingAndAreRestoredOnExit() {
         AppTheme.accent = AilaAccent.GREEN
         AppTheme.secondaryAccent = AilaAccent.VIOLET

@@ -128,7 +128,7 @@ fun HomeScreen(
             upcomingEvents(calendarEvents, Int.MAX_VALUE).forEach { event ->
                 add(circolareplus.design.GlyphRadarEntry("event:${event.id}",
                     circolareplus.design.GlyphChannel.CALENDAR, event.title,
-                    "${event.date}${event.time?.let { " · $it" }.orEmpty()}", event.date == today().toIso()) { onEventClick(event) })
+                    "${event.date}${event.time?.let { " · $it" }.orEmpty()}", parseIsoDate(event.date.take(10).trim()) == today()) { onEventClick(event) })
             }
             if (briefAllowed) briefItems.filter { it.kind != circolareplus.data.remote.dto.AilaBriefKind.EVENT && it.isActive }.forEach { item ->
                 add(circolareplus.design.GlyphRadarEntry("brief:${item.id}:${item.revision}",

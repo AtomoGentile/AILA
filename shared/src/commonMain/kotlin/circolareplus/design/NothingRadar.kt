@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import circolareplus.platform.LocalNothingGlyph
@@ -46,6 +47,7 @@ internal fun radarEntries(entries: List<GlyphRadarEntry>, prefs: NothingPreferen
         GlyphChannel.CLASS -> prefs.radarClass
     } }.sortedWith(compareByDescending<GlyphRadarEntry> { it.urgent }.thenBy { it.channel.ordinal })
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun NothingRadarWidget(data: GlyphRadarData, modifier: Modifier = Modifier) {
     val p = NothingExperience.preferences
@@ -68,7 +70,7 @@ fun NothingRadarWidget(data: GlyphRadarData, modifier: Modifier = Modifier) {
         val fresh = entries.firstOrNull { previous != null && it.key !in previous }
         if (fresh != null && p.rearLights && !focusRunning && !NothingGlyphPreview.active) {
             try {
-                hardware.pulse(fresh.channel.ordinal, p.rhythm.periodMillis)
+                hardware.pulse(fresh.channel.ordinal + 1, p.rhythm.periodMillis)
                 delay(p.rhythm.periodMillis + 100L)
             } finally { hardware.stop() }
         }
@@ -79,7 +81,8 @@ fun NothingRadarWidget(data: GlyphRadarData, modifier: Modifier = Modifier) {
                 val selected = focus == (index == 1)
                 Box(Modifier.weight(1f).heightIn(min = 44.dp).clip(CircleShape)
                     .background(if(selected) AppTheme.TextDark else AppTheme.TrackFill)
-                    .clickable(role = Role.Tab) { focus = index == 1 }, contentAlignment = Alignment.Center) {
+                    .clickable(role = Role.Tab) { focus = index == 1 }
+                    .semantics { this.selected = selected }, contentAlignment = Alignment.Center) {
                     Text(label, color = if(selected) AppTheme.BackgroundLight else AppTheme.TextDark,
                         style = MaterialTheme.typography.labelMedium)
                 }
