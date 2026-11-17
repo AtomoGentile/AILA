@@ -17,7 +17,7 @@ import kotlin.test.*
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk=[35],manifest=Config.NONE)
 class NothingNotificationChannelsTest {
-    private val context get() = RuntimeEnvironment.getApplication<Application>()
+    private val context get() = RuntimeEnvironment.getApplication()
     @Test fun splitChannelsPreserveBlockedLegacyAndUserEdits() {
         val manager=context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(NotificationChannel("aila_notifications","AILA",NotificationManager.IMPORTANCE_NONE))

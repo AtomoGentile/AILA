@@ -228,6 +228,36 @@ class NothingUiRegressionTest {
         compose.runOnIdle { assertEquals(circolareplus.algorithms.InterrogationVoteType.GREEN,vote) }
     }
 
+    @Test fun phone4aStudioOpensRealCategorySettingsAndOffersAnExplicitTest() {
+        var configured:NothingNotificationGroup?=null
+        var tested:NothingNotificationGroup?=null
+        val hardware=object:circolareplus.platform.NothingGlyphConnection {
+            override val ownerLabel="Phone (4a)"
+            override val ready=true
+            override val status="Connessione di test"
+            override val supportsProgress=true
+            override val notificationSettingsAvailable=true
+            override val barSegments=6
+            override fun pulse(zone:Int,periodMillis:Int)=true
+            override fun showProgress(fraction:Float)=true
+            override fun stop()=Unit
+            override fun openNotificationSettings(group:NothingNotificationGroup):Boolean {configured=group;return true}
+            override fun testNotification(group:NothingNotificationGroup):Boolean {tested=group;return true}
+        }
+        NothingExperience.configure(NothingPreferences(systemNotifications=true))
+        activity.get().setContent { AilaTheme {
+            CompositionLocalProvider(circolareplus.platform.LocalNothingGlyph provides hardware) {
+                NothingGlyphStudio {}
+            }
+        } }
+        compose.onNodeWithContentDescription("Anteprima Glyph Bar a 6 segmenti").assertIsDisplayed()
+        compose.onNodeWithText("Configura Circolari").performScrollTo().performClick()
+        compose.runOnIdle {assertEquals(NothingNotificationGroup.CIRCULARS,configured)}
+        screenshot("nothing-glyph-notifications-4a")
+        compose.onNodeWithText("Prova Pere").performScrollTo().performClick()
+        compose.runOnIdle {assertEquals(NothingNotificationGroup.FORUM,tested)}
+    }
+
     @Test fun personalAccentsDoNotLeakIntoNothingAndAreRestoredOnExit() {
         AppTheme.accent = AilaAccent.GREEN
         AppTheme.secondaryAccent = AilaAccent.VIOLET

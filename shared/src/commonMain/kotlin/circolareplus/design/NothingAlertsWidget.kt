@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.dp
 /** Six controllable segments documented for Phone (4a). This is explicitly an on-screen preview. */
 @Composable
 internal fun NothingBarPreview(modifier: Modifier, fraction: Float = 1f, segments: Int = 6) {
-    val paper = Color(0xFFF6F5EF)
+    val paper = Color(0xFFF6F5EF).copy(alpha=NothingExperience.preferences.previewBrightness)
     Canvas(modifier.semantics { contentDescription = "Anteprima Glyph Bar a $segments segmenti" }) {
         val count = kotlin.math.ceil(fraction.coerceIn(0f,1f)*segments).toInt()
         val gap = size.height*.025f

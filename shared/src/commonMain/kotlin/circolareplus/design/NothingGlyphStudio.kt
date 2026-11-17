@@ -136,7 +136,8 @@ fun NothingGlyphStudio(onDismiss: () -> Unit) {
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(GlyphPanel).padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                 AnimatedContent(p.face, transitionSpec = { fadeIn(tween(if(AppTheme.reduceMotion) 0 else 180)) togetherWith fadeOut(tween(if(AppTheme.reduceMotion) 0 else 120)) }, label = "glyphFace") { face ->
-                    NothingGlyphArt(Modifier.size(84.dp), face = face, signal = signal)
+                    if(hardware.barSegments > 0) NothingBarPreview(Modifier.size(84.dp), segments=hardware.barSegments)
+                    else NothingGlyphArt(Modifier.size(84.dp), face = face, signal = signal)
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(NothingSpacing.Inline)) {
                     Text(p.signature.ifBlank { "AILA" }, style = MaterialTheme.typography.titleMedium, color = GlyphPaper, maxLines = 2)
@@ -166,6 +167,7 @@ fun NothingGlyphStudio(onDismiss: () -> Unit) {
             NothingPreferenceRow("Calendario", "Eventi futuri destinati a te; oggi in evidenza.", p.radarEvents) { update(p.copy(radarEvents = it)) }
             NothingPreferenceRow("Circolari", "Circolari attive presenti nel Brief.", p.radarCirculars) { update(p.copy(radarCirculars = it)) }
             NothingPreferenceRow("Classe", "Sondaggi, risposte, bacheca e posti dal Brief.", p.radarClass) { update(p.copy(radarClass = it)) }
+            if(hardware.barSegments == 0) {
             AilaSectionTitle("Disegno del Focus")
             GlyphFace.entries.chunked(2).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(NothingSpacing.Item)) {
@@ -181,6 +183,10 @@ fun NothingGlyphStudio(onDismiss: () -> Unit) {
                     }
                 }
             }
+            } else {
+                AilaSectionTitle("Glyph Bar")
+                Text("${hardware.barSegments} segmenti per il tempo rimanente. Le notifiche usano il pattern del suono scelto in Nothing OS.", style=MaterialTheme.typography.bodySmall, color=AppTheme.TextMuted)
+            }
             Text("Ritmo", style = MaterialTheme.typography.titleSmall, color = AppTheme.TextDark)
             AilaFilterBar(GlyphRhythm.entries.map { it.label }, GlyphRhythm.entries.indexOf(p.rhythm),
                 { update(p.copy(rhythm = GlyphRhythm.entries[it])); signal++ })
@@ -194,14 +200,14 @@ fun NothingGlyphStudio(onDismiss: () -> Unit) {
                 label = { Text("Firma del Glyph") }, supportingText = { Text("Fino a 8 caratteri, mostrati sotto il timer.") },
                 singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = ailaFieldColors())
             NothingPreferenceRow("Caratteri a punti", "Titoli e strumenti; il testo dei contenuti resta leggibile.", p.dotDisplay) { update(p.copy(dotDisplay = it)) }
-            NothingPreferenceRow("Widget nella Home", "Mostra Radar e Focus accanto alla data.", p.showFocusWidget) { update(p.copy(showFocusWidget = it)) }
+            NothingPreferenceRow("Widget nella Home", "Mostra Glyph e Focus accanto alla data.", p.showFocusWidget) { update(p.copy(showFocusWidget = it)) }
             NothingPreferenceRow("Feedback tattile", "Un segnale all’avvio e a fine sessione.", p.haptics) { update(p.copy(haptics = it)) }
             if (hardware.ownerLabel != null) {
                 AilaSectionTitle("Nothing Insider")
                 Text(hardware.status, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
                 NothingPreferenceRow("Luci del Focus", "Fine Focus e avanzamento sulla barra, con AILA aperta.", p.rearLights,
                     enabled = hardware.ready) { update(p.copy(rearLights = it)); if(!it) hardware.stop() }
-                Text("Le luci restano attive solo con AILA in primo piano. Il timer continua anche cambiando schermata.", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+                Text("Focus: controllo diretto con AILA in primo piano. Notifiche: gestione del telefono anche ad app chiusa.", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
             }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(NothingSpacing.Item)) {
