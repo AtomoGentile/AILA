@@ -62,7 +62,9 @@ class NothingUiRegressionTest {
         activity.get().setContent {
             AilaTheme {
                 CompositionLocalProvider(LocalProfileEntry provides AilaProfileEntry("SB") {}) {
-                HomeScreen(studentFirstName = "Simone", onNavigateToCalendar = { destination = "calendar" },
+                HomeScreen(studentFirstName = "Simone", calendarEvents = listOf(circolareplus.domain.model.CalendarEvent(
+                    "today", "Fisica · energia", circolareplus.util.today().toIso(),
+                    category=circolareplus.domain.model.CalendarEventCategory.INTERROGAZIONE)), onNavigateToCalendar = { destination = "calendar" },
                     onNavigateToCirculars = { destination = "circulars" })
                 }
             }
@@ -73,6 +75,10 @@ class NothingUiRegressionTest {
         compose.onNodeWithText("Circolari", useUnmergedTree = true).assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals("circulars", destination) }
         compose.onNodeWithText("Apri radar").assertIsDisplayed()
+        screenshot("nothing-home-radar-light")
+        compose.runOnIdle { AppTheme.isDarkMode = true }
+        screenshot("nothing-home-radar-dark")
+        compose.runOnIdle { AppTheme.isDarkMode = false }
         compose.onNodeWithText("Focus", useUnmergedTree = true).performClick()
         compose.onNodeWithText("25:00").assertIsDisplayed()
         compose.onNodeWithText("Avvia").performClick()

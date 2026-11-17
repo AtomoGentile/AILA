@@ -96,15 +96,19 @@ fun NothingRadarWidget(data: GlyphRadarData, modifier: Modifier = Modifier) {
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text("GLYPH / 03", Modifier.weight(1f), color = muted, style = MaterialTheme.typography.labelSmall)
-                        AilaIconButton("Personalizza Glyph", { studio = true }) { AppIcons.Sliders(Modifier.size(18.dp), paper) }
+                        Box(Modifier.size(44.dp).clip(CircleShape).background(Color(0xFF2A2A2A))
+                            .clickable(role = Role.Button) { studio = true }
+                            .semantics { contentDescription = "Personalizza Glyph" }, contentAlignment = Alignment.Center) {
+                            AppIcons.Sliders(Modifier.size(18.dp), paper)
+                        }
                     }
                     Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(CircleShape)
                         .clickable(role = Role.Button) { inbox = true }
                         .semantics { contentDescription = "Apri Radar: ${entries.size} voci, ${entries.count { it.urgent }} oggi" },
                         contentAlignment = Alignment.Center) {
                         NothingRadarTracks(entries, Modifier.fillMaxSize(), paper)
-                        Text(if(data.loading) "…" else entries.size.toString().padStart(2,'0'),
-                            style = nothingDisplayStyle(32, 42), color = paper)
+                        Text(if(data.loading) "…" else if(entries.size > 999) "999+" else entries.size.toString().padStart(2,'0'),
+                            style = nothingDisplayStyle(if(entries.size < 100) 32 else if(entries.size < 1000) 24 else 18, 42), color = paper)
                     }
                     Text(when {
                         data.loading -> "Aggiornamento…"
@@ -128,7 +132,7 @@ fun NothingRadarWidget(data: GlyphRadarData, modifier: Modifier = Modifier) {
                 Text("Radar", Modifier.weight(1f), color = AppTheme.TextDark, style = nothingDisplayStyle(30, 40))
                 AilaIconButton("Chiudi Radar", { inbox = false }) { AppIcons.Close(Modifier.size(18.dp), it) }
             }
-            Text("Tracce dall’esterno: calendario, circolari, classe. Il rosso indica un evento di oggi.", color = AppTheme.TextMuted, style = MaterialTheme.typography.bodyMedium)
+            Text("Dall’esterno al centro: calendario, circolari e classe. Ogni segmento è una voce, fino a 12 per traccia. Il rosso indica gli eventi di oggi.", color = AppTheme.TextMuted, style = MaterialTheme.typography.bodyMedium)
             if(data.loading) Text("Aggiornamento in corso…", color = AppTheme.TextMuted)
             if(data.error != null) Text("Il Brief non è disponibile. Le voci del calendario restano consultabili.", color = AppTheme.TextMuted)
             GlyphChannel.entries.forEach { channel ->
