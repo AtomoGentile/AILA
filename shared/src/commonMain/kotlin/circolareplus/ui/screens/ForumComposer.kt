@@ -54,6 +54,13 @@ internal fun ForumIntroduction(busy: Boolean, onCreate: () -> Unit, onRules: () 
 internal fun ForumEmptyState(title: String = "La prima domanda può essere la tua",
     description: String = "Un dubbio sui compiti o un passaggio da spiegare? Inizia una conversazione: le risposte resteranno qui per tutta la classe.",
     privacyLabel: String = "Puoi partecipare con uno pseudonimo.") {
+    if(AppTheme.isNothing) {
+        Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            AilaEmptyState(title, description, icon={ NothingDotIcon(NothingSymbol.CHAT,Modifier.size(28.dp)) })
+            Text(privacyLabel,Modifier.padding(horizontal=20.dp),style=MaterialTheme.typography.labelSmall,color=AppTheme.TextMuted)
+        }
+        return
+    }
     Column(Modifier.fillMaxWidth().communitySurface(RoundedCornerShape(26.dp)).padding(horizontal = 24.dp, vertical = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         AppIcons.People(Modifier.size(38.dp), MaterialTheme.colorScheme.secondary)

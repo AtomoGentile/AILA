@@ -317,7 +317,7 @@ fun ProposalCardItem(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                            .background(statusColor.copy(alpha = 0.15f))
+                            .background(if(AppTheme.isNothing) AppTheme.TrackFill else statusColor.copy(alpha = 0.15f))
                             .padding(horizontal = AppTheme.Space8, vertical = AppTheme.Space4)
                     ) {
                         Text(

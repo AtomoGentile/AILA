@@ -1,5 +1,10 @@
 package circolareplus.design
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -55,7 +60,8 @@ internal fun NothingAlertsWidget(modifier: Modifier = Modifier) {
                 }
             }
         }
-        if(focus) NothingFocusWidget(Modifier.fillMaxWidth()) else Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
+        AnimatedContent(focus,transitionSpec={fadeIn(tween(if(AppTheme.reduceMotion)0 else 160)) togetherWith fadeOut(tween(if(AppTheme.reduceMotion)0 else 100))},label="glyphMode") { timer ->
+        if(timer) NothingFocusWidget(Modifier.fillMaxWidth()) else Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
             .background(Color(0xFF181818)).padding(NothingSpacing.Content), horizontalAlignment=Alignment.CenterHorizontally,
             verticalArrangement=Arrangement.spacedBy(NothingSpacing.Item)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically) {
@@ -69,6 +75,7 @@ internal fun NothingAlertsWidget(modifier: Modifier = Modifier) {
                 .clickable(role=Role.Button) {studio=true}.padding(horizontal=8.dp,vertical=8.dp),contentAlignment=Alignment.Center) {
                 Text("Configura avvisi",style=MaterialTheme.typography.labelMedium,color=Color(0xFF181818))
             }
+        }
         }
     }
     if(studio) NothingGlyphStudio {studio=false}

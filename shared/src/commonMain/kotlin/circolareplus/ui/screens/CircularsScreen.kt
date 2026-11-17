@@ -56,7 +56,7 @@ fun CircularsScreen(
             .fillMaxSize()
             .background(AppTheme.BackgroundLight)
             .padding(horizontal = if(AppTheme.isNothing) 20.dp else AppTheme.Space16)
-            .padding(top = AppTheme.Space8)
+            .padding(top = if(AppTheme.isNothing) 16.dp else AppTheme.Space8)
     ) {
         if(AppTheme.isNothing) {
             circolareplus.design.NothingContentLead("Circolari", "Documenti della scuola, ordinati dal più recente.", circolareplus.design.NothingSymbol.DOCUMENT)

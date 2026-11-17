@@ -1124,6 +1124,17 @@ fun AilaIconAction(
     enabled: Boolean = true,
     icon: @Composable (Color) -> Unit
 ) {
+    if(AppTheme.isNothing) {
+        val source=remember { MutableInteractionSource() }
+        val foreground=if(!enabled)AppTheme.TextMuted else if(selected)AppTheme.BackgroundLight else AppTheme.TextDark
+        Row(modifier.heightIn(min=44.dp).clip(CircleShape).background(if(selected)AppTheme.TextDark else AppTheme.TrackFill)
+            .nothingPressFeedback(source).clickable(interactionSource=source,indication=null,enabled=enabled,onClick=onClick)
+            .padding(horizontal=16.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+            icon(foreground)
+            Text(label,style=MaterialTheme.typography.labelLarge,color=foreground)
+        }
+        return
+    }
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
