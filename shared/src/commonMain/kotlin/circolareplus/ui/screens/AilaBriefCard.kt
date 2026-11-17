@@ -115,6 +115,29 @@ internal fun AilaBriefCard(
                 val itemBorderBrush = if (AppTheme.isNothing) Brush.horizontalGradient(listOf(AppTheme.Hairline, AppTheme.Hairline)) else if (subjectColor?.key == "rainbow") {
                     Brush.horizontalGradient(subjectColor.colors.map { it.copy(alpha = if (dark) .68f else .52f) })
                 } else Brush.horizontalGradient(listOf(itemBorderColor, itemBorderColor))
+                if (AppTheme.isNothing) {
+                    Column(Modifier.fillMaxWidth().clip(itemShape)
+                        .background(itemFillBrush, itemShape).border(1.dp, itemBorderBrush, itemShape)
+                        .clickable(role = Role.Button) { onOpen(item) }.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            if (subjectColor != null) {
+                                Box(Modifier.width(3.dp).height(22.dp).background(subjectColor.color, RoundedCornerShape(2.dp)))
+                                Spacer(Modifier.width(10.dp))
+                            }
+                            Text(label, Modifier.weight(1f), color = AppTheme.TextMuted,
+                                style = MaterialTheme.typography.labelMedium)
+                            circolareplus.design.AilaIconControl(onClick = { onDismiss(item) },
+                                modifier = Modifier.size(44.dp).semantics { contentDescription = "Non ora: ${item.title}" }) {
+                                AppIcons.Close(Modifier.size(17.dp), soft)
+                            }
+                        }
+                        Text(item.title, color = if (item.kind == AilaBriefKind.CIRCULAR && !item.isActive) soft else primaryText,
+                            style = MaterialTheme.typography.titleMedium)
+                        if (item.kind != AilaBriefKind.EVENT) Text(item.message, color = soft,
+                            style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    }
+                } else {
                 Row(Modifier.fillMaxWidth().clip(itemShape)
                     .background(itemFillBrush, itemShape)
                     .border(1.dp, itemBorderBrush, itemShape)
@@ -150,6 +173,7 @@ internal fun AilaBriefCard(
                     circolareplus.design.AilaIconControl(onClick = { onDismiss(item) }, modifier = Modifier.size(if (AppTheme.isNothing) 44.dp else 32.dp).semantics { contentDescription = "Non ora: ${item.title}" }) {
                         AppIcons.Close(Modifier.size(17.dp), soft)
                     }
+                }
                 }
             }
         }
