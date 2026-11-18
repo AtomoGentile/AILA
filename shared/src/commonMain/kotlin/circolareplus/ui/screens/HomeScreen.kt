@@ -44,6 +44,7 @@ import circolareplus.util.nowMinutesOfDay
 import circolareplus.util.parseIsoDate
 import circolareplus.util.parseTimeToMinutes
 import circolareplus.util.today
+import circolareplus.util.plusDays
 import circolareplus.domain.model.CalendarEvent
 import circolareplus.domain.model.Circular
 
@@ -102,6 +103,11 @@ fun HomeScreen(
     // e' gia' passata non e' piu' "prossimo".
     // Tablet e iPad larghi: c'e' spazio per piu' eventi e per le ultime circolari, invece di
     // lasciare meta' schermo vuoto sotto le tre righe del telefono.
+    val todayDate = today()
+    val lastBriefDate = todayDate.plusDays(7).toIso()
+    val briefConflicts = remember(calendarEvents, todayDate) {
+        calendarConflicts(calendarEvents).filter { it.date in todayDate.toIso()..lastBriefDate }
+    }
     val wide = circolareplus.design.LocalWideLayout.current
     val nextEvents = remember(calendarEvents, wide) { upcomingEvents(calendarEvents, limit = if (wide) 6 else 3) }
     val recentCirculars = remember(circulars, wide, aiEnabled) {
@@ -114,7 +120,7 @@ fun HomeScreen(
             briefItems,briefLoading,briefError,onRefreshBrief,onOpenBrief,onDismissBrief,onPlanStudy,
             subjectColorsEnabled,subjectColorOverrides,NothingHomeActions(onNavigateToSearch,onNavigateToGita,onNavigateToCirculars,onNavigateToCalendar,
                 onNavigateToBoard,onOpenForum,onNavigateToPolls,onNavigateToSeatMap,onEventClick,onNavigateToCircularDetail),
-            isEventsLoading,isCircularsLoading)
+            isEventsLoading,isCircularsLoading, briefConflicts)
         return
     }
 
@@ -151,7 +157,8 @@ fun HomeScreen(
                 Modifier.padding(horizontal = homeGutter).padding(top = if(AppTheme.isNothing) circolareplus.design.NothingSpacing.Section else 18.dp, bottom = if(AppTheme.isNothing) 0.dp else 4.dp),
                 subjectColorsRevision = subjectColorsRevision,
                 subjectColorsEnabled = subjectColorsEnabled,
-                subjectColorOverrides = subjectColorOverrides)
+                subjectColorOverrides = subjectColorOverrides,
+                conflicts = briefConflicts, onOpenConflict = { onEventClick(it.first) })
         }
 
         val latestSection: @Composable () -> Unit = {

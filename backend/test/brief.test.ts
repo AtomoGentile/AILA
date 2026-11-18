@@ -103,7 +103,7 @@ describe('AILA brief',()=>{
   for(let i=0;i<4;i++)event(`e${i}`);ranking('rank');
   const items=selectBriefItems(await briefCandidates(env,'C1','u'),new Set(),4);expect(items).toHaveLength(4);expect(items.some(i=>i.kind==='RANKING_POLL')).toBe(true);
  });
- it('shows all unseen circular classifications as active or inactive and acknowledges a section visit per account',async()=>{
+ it('shows all unseen circular classifications as active or inactive and acknowledges only the circular opened by that account',async()=>{
   for(let n=10;n<19;n++){
    db.prepare("INSERT INTO circulars(number,title,publish_date,r2_pdf_key) VALUES (?,?,'2025-01-01',?)").run(n,`Titolo ${n}`,`${n}.pdf`);
    db.prepare("INSERT INTO circular_ai_analysis(circular_number,badge,summary) VALUES (?,?,'Riassunto da non mostrare')").run(n,n===18?'NOT_RELEVANT':n%2?'POTENTIAL':'RELEVANT');
@@ -115,11 +115,22 @@ describe('AILA brief',()=>{
   expect(items.find((i:any)=>i.sourceId==='11')).toMatchObject({message:'Potenziale · nessuna notifica',isActive:false});
   expect(items.find((i:any)=>i.sourceId==='18')).toMatchObject({message:'Non pertinente · nessuna notifica',isActive:false});
   expect((await call('/api/aca/brief/circulars/seen',{})).status).toBe(200);
-  expect((await call()).json.items.map((i:any)=>i.sourceId)).toEqual(['keep']);
+  expect((await call()).json.items.filter((i:any)=>i.kind==='CIRCULAR')).toHaveLength(9);
+  expect((await call('/api/aca/brief/circulars/18/seen',{})).status).toBe(200);
+  expect((await call()).json.items.filter((i:any)=>i.kind==='CIRCULAR')).toHaveLength(8);
+  expect((await call()).json.items.some((i:any)=>i.sourceId==='18')).toBe(false);
   expect((await call('/api/aca/brief',undefined,'peer')).json.items.filter((i:any)=>i.kind==='CIRCULAR')).toHaveLength(9);
   db.exec("INSERT INTO circulars(number,title,publish_date,r2_pdf_key) VALUES (19,'Nuova','2026-11-06','19.pdf'); INSERT INTO circular_ai_analysis(circular_number,badge,summary) VALUES (19,'POTENTIAL','Nuova analisi')");
   items=(await call()).json.items;expect(items.some((i:any)=>i.sourceId==='19')).toBe(true);
   const sql=readFileSync(new URL('../migrations/031_brief_sources.sql',import.meta.url),'utf8');db.exec(sql);db.exec(sql);
+ });
+ it('shows a recent circular before analysis and keeps it read once analysis is ready',async()=>{
+  db.exec("INSERT INTO circulars(number,title,publish_date,r2_pdf_key) VALUES (20,'Nuova','2026-11-06','20.pdf'),(21,'Vecchia','2026-10-01','21.pdf')");
+  expect((await call()).json.items).toEqual([expect.objectContaining({sourceId:'20',message:'Da leggere',isActive:false})]);
+  expect((await call('/api/aca/brief/circulars/20/seen',{})).status).toBe(200);
+  db.exec("INSERT INTO circular_ai_analysis(circular_number,badge,summary) VALUES (20,'RELEVANT','Analisi')");
+  expect((await call()).json.items).toEqual([]);
+  expect((await call('/api/aca/brief',undefined,'peer')).json.items).toEqual([expect.objectContaining({sourceId:'20',isActive:true})]);
  });
  it('uses the same class filter for foreground and background circular notifications',async()=>{
   for(let n=1;n<=55;n++){

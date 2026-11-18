@@ -31,7 +31,8 @@ internal fun NothingBriefCard(
     items: List<AilaBriefItemDto>, onDismiss: (AilaBriefItemDto) -> Unit,
     onOpen: (AilaBriefItemDto) -> Unit, onStudy: (String) -> Unit,
     loading: Boolean, error: String?, onRefresh: () -> Unit, modifier: Modifier,
-    subjectColorsEnabled: Boolean, subjectColorOverrides: Map<String, String>
+    subjectColorsEnabled: Boolean, subjectColorOverrides: Map<String, String>,
+    conflicts: List<CalendarConflict>, onOpenConflict: (CalendarConflict) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     val entries = items.distinctBy { it.id }
@@ -54,7 +55,10 @@ internal fun NothingBriefCard(
                 Text(error, Modifier.padding(top = 20.dp), color = AppTheme.TextMuted, style = MaterialTheme.typography.bodyMedium)
                 AilaTextButton(onClick = onRefresh) { Text("Riprova") }
             }
-            if(entries.isEmpty() && !loading && error == null) {
+            conflicts.forEach { conflict ->
+                CalendarConflictNotice(conflict, includeDate = true, onClick = { onOpenConflict(conflict) })
+            }
+            if(conflicts.isEmpty() && entries.isEmpty() && !loading && error == null) {
                 Row(Modifier.fillMaxWidth().padding(vertical = 24.dp), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text("00", color = AppTheme.TextDark, style = nothingDisplayStyle(36,46))

@@ -41,9 +41,10 @@ export async function briefCandidates(env:Env,classId:string,userId:string,now=n
    AND ${studyAudience('e',false)} AND NOT EXISTS(SELECT 1 FROM aca_nudge_dismissals d WHERE d.user_id=? AND d.event_id=e.id AND d.event_date=e.event_date)
    ORDER BY e.event_date,e.id`).bind(classId,today,after(7),today,localTime,userId,userId,userId,userId).all<{id:string;title:string;event_date:string;category:string;notes:string|null;poll_grid_id:string|null;visible_to_user_ids_json:string|null}>(),
   env.DB.prepare(`SELECT c.number,c.title,c.publish_date,a.badge,a.per_class_json FROM circulars c
-   JOIN circular_ai_analysis a ON a.circular_number=c.number WHERE a.is_fallback=0 AND a.tier>0
+   LEFT JOIN circular_ai_analysis a ON a.circular_number=c.number
+   WHERE ((a.is_fallback=0 AND a.tier>0) OR (a.circular_number IS NULL AND date(c.publish_date) BETWEEN ? AND ?))
    AND NOT EXISTS(SELECT 1 FROM aca_brief_circular_reads seen WHERE seen.user_id=? AND seen.class_id=? AND seen.circular_number=c.number)
-   ORDER BY c.number DESC`).bind(userId,classId).all<{number:number;title:string;publish_date:string;badge:string;per_class_json:string|null}>(),
+   ORDER BY c.number DESC`).bind(after(-7),today,userId,classId).all<{number:number;title:string;publish_date:string;badge:string|null;per_class_json:string|null}>(),
   env.DB.prepare(`SELECT g.id,g.subject,g.closes_at,g.created_at,${pollResults} AS has_results,
    EXISTS(SELECT 1 FROM interrogation_submissions sub WHERE sub.grid_id=g.id AND sub.student_id=?) AS submitted,
    (SELECT GROUP_CONCAT(a.id||':'||a.slot_id) FROM interrogation_assignments a JOIN interrogation_slots s ON s.id=a.slot_id WHERE s.grid_id=g.id) AS result_version
@@ -79,6 +80,10 @@ export async function briefCandidates(env:Env,classId:string,userId:string,now=n
   const days=Math.round((Date.parse(e.event_date)-Date.parse(today))/86400000);
   pending.push(candidate('EVENT',e.id,e.title,days===0?'È un tuo impegno di oggi.':days===1?'È un tuo impegno di domani.':`È un tuo impegno tra ${days} giorni.`,'Apri il calendario',e.event_date,120-days*10,e.event_date,['VERIFICA','INTERROGAZIONE'].includes(e.category)));}
  for(const c of circulars.results){
+  if(c.badge===null){
+   pending.push(candidate('CIRCULAR',String(c.number),c.title,'Da leggere','Apri la circolare',null,100,String(c.number),false,false,false));
+   continue;
+  }
   const badge=circularBadgeForClass(c.badge,c.per_class_json,classId);
   if(isBriefVisibleCircular(badge)){
    const message=badge==='POTENTIAL'?'Potenziale · nessuna notifica':badge==='NOT_RELEVANT'?'Non pertinente · nessuna notifica':'';

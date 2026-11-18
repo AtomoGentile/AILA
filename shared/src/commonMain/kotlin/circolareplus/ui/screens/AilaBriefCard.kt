@@ -33,11 +33,13 @@ internal fun AilaBriefCard(
     loading: Boolean = false, error: String? = null, onRefresh: () -> Unit = {}, modifier: Modifier = Modifier,
     subjectColorsRevision: Int = 0,
     subjectColorsEnabled: Boolean = false,
-    subjectColorOverrides: Map<String, String> = emptyMap()
+    subjectColorOverrides: Map<String, String> = emptyMap(),
+    conflicts: List<CalendarConflict> = emptyList(),
+    onOpenConflict: (CalendarConflict) -> Unit = {}
 ) {
     if (AppTheme.isNothing) {
         NothingBriefCard(items, onDismiss, onOpen, onStudy, loading, error, onRefresh,
-            modifier, subjectColorsEnabled, subjectColorOverrides)
+            modifier, subjectColorsEnabled, subjectColorOverrides, conflicts, onOpenConflict)
         return
     }
     val relevant = items
@@ -75,7 +77,10 @@ internal fun AilaBriefCard(
                 Text(error, Modifier.weight(1f), color = soft, style = MaterialTheme.typography.bodySmall)
                 circolareplus.design.AilaTextButton(onClick = onRefresh, colors = ButtonDefaults.textButtonColors(contentColor = primaryText)) { Text("Riprova") }
             }
-            if(relevant.isEmpty() && !loading && error == null) {
+            conflicts.forEach { conflict ->
+                CalendarConflictNotice(conflict, includeDate = true, onClick = { onOpenConflict(conflict) })
+            }
+            if(conflicts.isEmpty() && relevant.isEmpty() && !loading && error == null) {
                 Text("Sei in pari. Qui troverai novità, risposte e cose da fare per te.", color = soft, style = MaterialTheme.typography.bodyMedium)
             }
             visible.forEach { item ->

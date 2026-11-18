@@ -128,6 +128,7 @@ fun CalendarScreen(
     val consumedFreshIds = remember { mutableSetOf<String>() }
 
     val selectedEvents = eventsByDay[selectedDay].orEmpty()
+    val conflicts = remember(events) { calendarConflicts(events).groupBy { it.date } }
     // Arrivando da un evento della Home si apre il suo mese con quel giorno selezionato.
     LaunchedEffect(focusDateIso) {
         val focus = focusDateIso?.let { circolareplus.util.parseIsoDate(it) } ?: return@LaunchedEffect
@@ -330,6 +331,10 @@ fun CalendarScreen(
                     circolareplus.design.ailaNavigationSpring()
                 )
             ) {
+                conflicts[selectedDateIso].orEmpty().forEach { conflict ->
+                    CalendarConflictNotice(conflict)
+                    Spacer(Modifier.height(AppTheme.Space12))
+                }
                 if (selectedEvents.isEmpty()) {
                     AilaCard(modifier = Modifier.ailaAppear(3)) {
                         AilaEmptyState(

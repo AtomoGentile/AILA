@@ -2051,6 +2051,35 @@ fun MainAppShell(
         }
     }
 
+    val openCircularNumber = (selectedCircularForDetail ?: paneCircular)?.number
+    LaunchedEffect(user.id, openCircularNumber) {
+        val number = openCircularNumber ?: return@LaunchedEffect
+        val item = briefItems.firstOrNull {
+            it.kind == circolareplus.data.remote.dto.AilaBriefKind.CIRCULAR && it.sourceId == number.toString()
+        }
+        try {
+            AppContainer.acaRepository.markBriefCircularSeen(number)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: circolareplus.data.remote.ApiException) {
+            // Le beta possono usare il Worker stabile durante il passaggio al nuovo endpoint.
+            if (e.statusCode != 404 || item == null) return@LaunchedEffect
+            try {
+                AppContainer.acaRepository.dismissBrief(item, seen = true)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                return@LaunchedEffect
+            }
+        } catch (_: Exception) {
+            return@LaunchedEffect
+        }
+        if (currentUser?.id == user.id) {
+            briefItems = briefItems.filterNot { it.kind == circolareplus.data.remote.dto.AilaBriefKind.CIRCULAR && it.sourceId == number.toString() }
+            briefRefreshTrigger++
+        }
+    }
+
     // Il dettaglio di una circolare deve sapere cosa c'e' gia' in calendario, altrimenti propone
     // come "da aggiungere" scadenze che ci sono gia' (evento doppio). Il calendario si caricava
     // solo aprendo la sua tab, e dopo un'aggiunta non si ricaricava se si era altrove: si rilegge
@@ -3045,24 +3074,6 @@ fun MainAppShell(
     val twoPane = useRail && maxWidth >= circolareplus.design.TwoPaneMinWidth
     // Circolari e dettaglio affiancati: solo nella sezione Circolari della tab Classe.
     val circularsPane = twoPane && classSection == ClassSection.CIRCULARS && !isClassSearchOpen
-    // A section visit acknowledges every circular already available, across devices.
-    LaunchedEffect(selectedTab,classSection,shellRoute,user.id,isClassSearchOpen,
-        circolareplus.platform.AppForeground.isForeground,circulars.filter { it.summaryReady }.map { it.number }) {
-        if(selectedTab == MainTab.CLASS && classSection == ClassSection.CIRCULARS &&
-            shellRoute == ShellRoute.TABS && !isClassSearchOpen && circolareplus.platform.AppForeground.isForeground) {
-            val owner=user.id
-            coroutineScope.launch {
-                try {
-                    AppContainer.acaRepository.markBriefCircularsSeen()
-                    if(currentUser?.id == owner) {
-                        briefItems=briefItems.filterNot { it.kind == circolareplus.data.remote.dto.AilaBriefKind.CIRCULAR }
-                        briefRefreshTrigger++
-                    }
-                } catch(e: CancellationException) { throw e }
-                catch(_: Exception) { /* Retry on the next section visit or list refresh. */ }
-            }
-        }
-    }
     // Una visita alla sezione segna come viste le notifiche di sondaggi o posti presenti in quel momento.
     LaunchedEffect(selectedTab,shellRoute,isClassSearchOpen,user.id,circolareplus.platform.AppForeground.isForeground) {
         if(shellRoute != ShellRoute.TABS || isClassSearchOpen || !circolareplus.platform.AppForeground.isForeground) return@LaunchedEffect

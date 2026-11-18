@@ -71,11 +71,14 @@ aca.get('/brief',async c=>{
  if(!p.aiEnabled||!p.acaEnabled||!p.nudgesEnabled||!p.services.includes('NOW_NUDGE'))return c.json({items:[]});
  return c.json({items:await loadBrief(c.env,await resolveClassId(c),user.sub)});
 });
-aca.post('/brief/circulars/seen',async c=>{
+// Older clients sent this when opening the list, without opening any document.
+aca.post('/brief/circulars/seen',c=>c.json({success:true}));
+aca.post('/brief/circulars/:number/seen',async c=>{
+ const number=Number(c.req.param('number'));
+ if(!Number.isSafeInteger(number)||number<1)return c.json({error:'Numero di circolare non valido'},400);
  const user=c.get('jwtPayload');const classId=await resolveClassId(c);
  await c.env.DB.prepare(`INSERT OR IGNORE INTO aca_brief_circular_reads(user_id,class_id,circular_number)
-  SELECT ?,?,c.number FROM circulars c JOIN circular_ai_analysis a ON a.circular_number=c.number
-  WHERE a.is_fallback=0 AND a.tier>0`).bind(user.sub,classId).run();
+  SELECT ?,?,number FROM circulars WHERE number=?`).bind(user.sub,classId,number).run();
  return c.json({success:true});
 });
 const markBriefKindsSeen=async(c:Context<{Bindings:Env;Variables:{jwtPayload:JWTPayload}}>,kinds:BriefKind[])=>{

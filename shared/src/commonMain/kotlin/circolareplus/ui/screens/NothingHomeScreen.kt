@@ -42,12 +42,17 @@ internal fun NothingHomeScreen(
     briefError: String?, onRefreshBrief: () -> Unit, onOpenBrief: (AilaBriefItemDto) -> Unit,
     onDismissBrief: (AilaBriefItemDto) -> Unit, onPlanStudy: (String) -> Unit,
     subjectColorsEnabled: Boolean, subjectColorOverrides: Map<String,String>, actions: NothingHomeActions,
-    eventsLoading: Boolean, circularsLoading: Boolean
+    eventsLoading: Boolean, circularsLoading: Boolean,
+    conflicts: List<CalendarConflict> = emptyList()
 ) {
     var studio by remember { mutableStateOf(false) }
     var focus by remember { mutableStateOf(false) }
     var allBrief by remember { mutableStateOf(false) }
     val date = today()
+    val firstCircular = briefItems.firstOrNull { it.kind == AilaBriefKind.CIRCULAR }
+    val previewItems = briefItems.take(2).let { leading ->
+        if (firstCircular != null && firstCircular !in leading) leading.take(1) + firstCircular else leading
+    }
     Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight)
         .verticalScroll(rememberScrollState())
         .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
@@ -74,7 +79,10 @@ internal fun NothingHomeScreen(
                 verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment=Alignment.CenterVertically) {
                     Text("Per te",Modifier.weight(1f),style=nothingDisplayStyle(24,32),color=AppTheme.TextDark)
-                    if(briefItems.isNotEmpty()) AilaTextButton({allBrief=true}) {Text(if(briefItems.size>2) "Tutte (${briefItems.size})" else "Apri Brief")}
+                    if(briefItems.isNotEmpty() || conflicts.isNotEmpty()) AilaTextButton({allBrief=true}) {Text(if(briefItems.size>2) "Tutte (${briefItems.size})" else "Apri Brief")}
+                }
+                conflicts.take(2).forEach { conflict ->
+                    CalendarConflictNotice(conflict, includeDate = true, onClick = { actions.openEvent(conflict.first) })
                 }
                 when {
                     briefLoading && briefItems.isEmpty() -> Text("Aggiornamento…",color=AppTheme.TextMuted)
@@ -82,7 +90,7 @@ internal fun NothingHomeScreen(
                         Text(briefError,color=AppTheme.TextMuted,style=MaterialTheme.typography.bodyMedium)
                         AilaTextButton(onRefreshBrief) {Text("Riprova")}
                     }
-                    briefItems.isEmpty() -> {
+                    briefItems.isEmpty() && conflicts.isEmpty() -> {
                         val event=events.firstOrNull()
                         if(event==null) Text("Sei in pari.",color=AppTheme.TextMuted,style=MaterialTheme.typography.bodyMedium)
                         else Column(Modifier.fillMaxWidth().clickable(role=Role.Button) {actions.openEvent(event)}.padding(vertical=8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -92,7 +100,7 @@ internal fun NothingHomeScreen(
                         }
                     }
                 }
-                briefItems.take(2).forEachIndexed { index,item ->
+                previewItems.forEachIndexed { index,item ->
                     if(index>0) Box(Modifier.fillMaxWidth().height(1.dp).background(AppTheme.Hairline))
                     Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                         Column(Modifier.weight(1f).clickable(role=Role.Button) {onOpenBrief(item)}.padding(vertical=8.dp),
@@ -171,7 +179,8 @@ internal fun NothingHomeScreen(
             }
             AilaBriefCard(briefItems,onDismissBrief,{allBrief=false;onOpenBrief(it)},
                 {allBrief=false;onPlanStudy(it)},briefLoading,briefError,onRefreshBrief,
-                subjectColorsEnabled=subjectColorsEnabled,subjectColorOverrides=subjectColorOverrides)
+                subjectColorsEnabled=subjectColorsEnabled,subjectColorOverrides=subjectColorOverrides,
+                conflicts=conflicts,onOpenConflict={allBrief=false;actions.openEvent(it.first)})
         }
     }
 }
