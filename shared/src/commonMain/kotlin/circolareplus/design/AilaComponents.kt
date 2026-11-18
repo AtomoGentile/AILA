@@ -248,14 +248,6 @@ fun AilaSegmentedTabs(
     // invece di restare alto quanto i tab.
     var rowHeightPx by remember { mutableStateOf(0) }
     val density = androidx.compose.ui.platform.LocalDensity.current
-    // La pillola si muove subito (stato locale); la schermata cambia contenuto un paio di
-    // fotogrammi dopo. Prima le due cose partivano nello stesso fotogramma: costruire la sezione
-    // nuova (es. Storico dei sondaggi) rubava il primo fotogramma all'animazione e la pillola
-    // "saltava" — il microscatto alla selezione.
-    var visualIndex by remember { mutableStateOf(selectedIndex) }
-    LaunchedEffect(selectedIndex) { visualIndex = selectedIndex }
-    val selectScope = androidx.compose.runtime.rememberCoroutineScope()
-
     // Capsula in entrambi gli stili. Glass: binario grigio traslucido e selezione bianca in
     // rilievo con testo scuro (segmented control di iOS). Expressive: binario tonale e selezione
     // "secondary container", con la molla piu' vivace di Material.
@@ -276,8 +268,8 @@ fun AilaSegmentedTabs(
     ) {
         val segmentWidth = maxWidth / labels.size
         val indicatorOffset = animateDpAsState(
-            targetValue = segmentWidth * visualIndex,
-            animationSpec = ailaSpatialSpring(),
+            targetValue = segmentWidth * selectedIndex,
+            animationSpec = if (AppTheme.isGlass) ailaNavigationSpring() else ailaSpatialSpring(),
             label = "segmentedIndicatorOffset"
         )
 
@@ -303,7 +295,7 @@ fun AilaSegmentedTabs(
                 .onSizeChanged { rowHeightPx = it.height }
         ) {
             labels.forEachIndexed { index, label ->
-                val isSelected = index == visualIndex
+                val isSelected = index == selectedIndex
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -311,14 +303,7 @@ fun AilaSegmentedTabs(
                             interactionSource = interactionSources[index],
                             indication = null
                         ) {
-                            if (index != visualIndex) {
-                                visualIndex = index
-                                selectScope.launch {
-                                    androidx.compose.runtime.withFrameNanos { }
-                                    androidx.compose.runtime.withFrameNanos { }
-                                    onSelect(index)
-                                }
-                            }
+                            if (!isSelected) onSelect(index)
                         }
                         // 44dp come bersaglio di tocco: prima l'altezza veniva dall'interlinea di
                         // 24sp ereditata da Material, che la scala tipografica non ha più.

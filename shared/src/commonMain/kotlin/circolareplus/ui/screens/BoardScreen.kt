@@ -85,7 +85,7 @@ fun BoardScreen(
             .padding(top = AppTheme.Space16)
     ) {
         ForumIntroduction(false, onCreateProposalClick, {showHelp=true}, title="Bacheca",
-            description="Le idee della classe, uno spazio per proporle e farle crescere insieme.", createLabel="Nuova proposta")
+            description="Fai una proposta oppure vota e commenta quelle dei compagni.", createLabel="Nuova proposta")
         Spacer(Modifier.height(12.dp))
         val statusFilterOptions = remember { listOf<ProposalStatus?>(null, ProposalStatus.NUOVA, ProposalStatus.IN_ANALISI, ProposalStatus.CHIUSA) }
         val statusFilterLabels = remember { listOf("Tutte", "Nuove", "In analisi", "Chiuse") }
@@ -117,9 +117,9 @@ fun BoardScreen(
         }
         val emptyState: @Composable () -> Unit = {
             ForumEmptyState(
-                title = if(proposals.isEmpty()) "La prossima idea può essere la tua" else "Nessuna proposta qui",
-                description = if(proposals.isEmpty()) "Un’iniziativa, un miglioramento o qualcosa da decidere insieme? Condividi la tua proposta e ascolta la classe."
-                    else "Non ci sono proposte in questo stato. Prova un altro filtro.",
+                title = if(proposals.isEmpty()) "Nessuna proposta" else "Nessuna proposta con questo filtro",
+                description = if(proposals.isEmpty()) "Tocca «Nuova proposta» per aggiungerne una."
+                    else "Scegli un altro stato per vedere le proposte.",
                 privacyLabel = "Puoi proporre anche in forma anonima."
             )
         }

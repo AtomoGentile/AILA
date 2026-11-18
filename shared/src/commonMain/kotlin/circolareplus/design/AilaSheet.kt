@@ -360,7 +360,7 @@ fun AilaDatePickerDialog(
             onDispose { AilaSheetBackdrop.openSheets-- }
         }
     }
-    val shape = RoundedCornerShape(if (glass) 32.dp else 28.dp)
+    val shape = RoundedCornerShape(AppTheme.CardCornerRadius)
     // Colori espliciti per ogni elemento: su iOS (vetro) i giorni, gli anni e i pulsanti prendevano
     // il colore dal tema Material, che non segue il chiaro/scuro dell'app, e restavano bianchi su
     // vetro chiaro (o scuri su scuro): il calendario non si leggeva.

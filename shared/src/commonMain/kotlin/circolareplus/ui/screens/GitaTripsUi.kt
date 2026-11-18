@@ -43,7 +43,7 @@ internal fun GitaTripHeader(
     Box {
         Row(
             modifier = Modifier.fillMaxWidth()
-                .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                .clip(AppTheme.PickerShape)
                 .clickable(enabled = enabled && selectable, role = Role.Button) { expanded = true }
                 .semantics {
                     contentDescription = if (selectable)

@@ -81,7 +81,7 @@ internal fun NothingPanelDialog(onDismiss: () -> Unit, modifier: Modifier = Modi
 fun NothingChoiceRow(label: String, selected: Boolean, onClick: () -> Unit,
     modifier: Modifier = Modifier, enabled: Boolean = true) {
     val ink = if(selected) AppTheme.BackgroundLight else AppTheme.TextDark
-    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+    Row(modifier.fillMaxWidth().clip(AppTheme.PickerShape)
         .background(if(selected) AppTheme.TextDark else AppTheme.TrackFill)
         .selectable(selected,enabled=enabled,role=Role.RadioButton,onClick=onClick)
         .heightIn(min=56.dp).padding(horizontal=NothingSpacing.Content,vertical=NothingSpacing.Content),
@@ -164,7 +164,7 @@ internal fun NothingDatePicker(state:DatePickerState,onDismiss:()->Unit,confirmL
                     AilaIconControl(onClick={val (y,m)=previousMonth(month.year,month.month);showMonth(y,m)},enabled=month.year>state.yearRange.first || month.month>1,modifier=Modifier.semantics { contentDescription="Mese precedente" }) {
                         AppIcons.ChevronLeft(Modifier.size(18.dp),AppTheme.TextDark)
                     }
-                    Row(Modifier.weight(1f).clip(CircleShape)
+                    Row(Modifier.weight(1f).clip(AppTheme.PickerShape)
                         .clickable(role=Role.Button){years=!years}.semantics { contentDescription="Scegli anno" }.padding(8.dp),
                         verticalAlignment=Alignment.CenterVertically) {
                         Text("${ITALIAN_MONTHS[month.month]} ${month.year}",style=MaterialTheme.typography.titleMedium,
@@ -180,7 +180,7 @@ internal fun NothingDatePicker(state:DatePickerState,onDismiss:()->Unit,confirmL
                     val scroll=rememberLazyListState(((month.year-state.yearRange.first)/3-2).coerceAtLeast(0))
                     LazyColumn(Modifier.height(280.dp),state=scroll,verticalArrangement=Arrangement.spacedBy(6.dp)) {
                         items(rows) { row -> Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) { row.forEach { year ->
-                            Box(Modifier.weight(1f).height(48.dp).clip(CircleShape)
+                            Box(Modifier.weight(1f).height(48.dp).clip(AppTheme.PickerShape)
                                 .background(if(month.year==year)AppTheme.TextDark else AppTheme.TrackFill)
                                 .selectable(month.year==year,enabled=state.selectableDates.isSelectableYear(year),role=Role.RadioButton){showMonth(year,month.month)},contentAlignment=Alignment.Center) {
                                 Text("$year",color=if(month.year==year)AppTheme.BackgroundLight else AppTheme.TextDark)
@@ -200,7 +200,7 @@ internal fun NothingDatePicker(state:DatePickerState,onDismiss:()->Unit,confirmL
                             val valid=day in 1..count
                             val selected=valid && date==chosen
                             val enabled=valid && state.selectableDates.isSelectableYear(month.year) && state.selectableDates.isSelectableDate(millis(date))
-                            Box(Modifier.weight(1f).aspectRatio(1f).padding(2.dp).clip(CircleShape)
+                            Box(Modifier.weight(1f).aspectRatio(1f).padding(2.dp).clip(AppTheme.PickerShape)
                                 .background(if(selected)AppTheme.TextDark else androidx.compose.ui.graphics.Color.Transparent)
                                 .then(if(valid)Modifier.selectable(selected,enabled,Role.RadioButton){state.selectedDateMillis=millis(date)}
                                     .semantics { contentDescription="$day ${ITALIAN_MONTHS[month.month]} ${month.year}" } else Modifier),contentAlignment=Alignment.Center) {

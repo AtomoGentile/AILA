@@ -68,7 +68,7 @@ internal fun GitaTripPickerSheet(
             GitaPickerHeading("Scegli la gita", "${trips.size} gite della classe", !closing) { close() }
             if (trips.size > 6) AilaPillTextField(
                 value = query, onValueChange = { query = it }, placeholder = "Cerca una gita…",
-                singleLine = true, modifier = Modifier.fillMaxWidth(),
+                shape = AppTheme.PickerShape, singleLine = true, modifier = Modifier.fillMaxWidth(),
                 leadingIcon = { AppIcons.Search(Modifier.size(18.dp), color = AppTheme.TextMuted) }
             )
             LazyColumn(state = listState, modifier = Modifier.weight(1f, fill = false).selectableGroup(),
@@ -81,7 +81,7 @@ internal fun GitaTripPickerSheet(
                     val trip = indexed.value
                     val selected = trip.id == activeId
                     Row(
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                        modifier = Modifier.fillMaxWidth().clip(AppTheme.PickerShape)
                             .background(if (selected) AppTheme.SelectionContainer else AppTheme.CardSurface)
                             .selectable(selected = selected, enabled = !closing, role = Role.RadioButton,
                                 onClick = { close(trip.id) })

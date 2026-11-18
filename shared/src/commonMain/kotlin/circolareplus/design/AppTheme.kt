@@ -1,5 +1,6 @@
 package circolareplus.design
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -137,6 +138,7 @@ object AppTheme {
     /** Capsula in entrambi gli stili (in Expressive si deforma alla pressione, vedi i pulsanti). */
     val ButtonCornerRadius: Dp get() = 100.dp
     val SmallElementRadius: Dp get() = if (isNothing) 14.dp else if (isGlass) 14.dp else 16.dp
+    internal val PickerShape get() = RoundedCornerShape(SmallElementRadius)
 
     /**
      * Nessuna ombra Material in entrambi gli stili: in Glass sotto una superficie traslucida si

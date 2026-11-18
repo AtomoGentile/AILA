@@ -83,7 +83,7 @@ internal fun PollNavigation(
             verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)
         ) {
             val title = "Storico sondaggi"
-            val description = "Risultati delle interrogazioni e classifiche dei sondaggi conclusi."
+            val description = "Consulta assegnazioni e classifiche."
             if (AppTheme.isNothing) {
                 NothingContentLead(title, description, NothingSymbol.POLL)
             } else {
@@ -114,6 +114,22 @@ internal fun PollNavigation(
             }
         )
     }
+    SectionFeatureCard(
+        title = "Come si vota",
+        description = if (section == 0) {
+            "Indica in quali date puoi essere interrogato."
+        } else {
+            "Metti le opzioni in ordine, dalla tua preferita all’ultima."
+        },
+        modifier = Modifier.padding(horizontal = horizontalPadding).padding(bottom = AppTheme.Space12),
+        icon = {
+            if (AppTheme.isNothing) {
+                circolareplus.design.NothingDotIcon(NothingSymbol.POLL, Modifier.size(24.dp))
+            } else {
+                AppIcons.Poll(Modifier.size(24.dp), MaterialTheme.colorScheme.tertiary)
+            }
+        }
+    )
     AilaSegmentedTabs(
         labels = sections,
         selectedIndex = section,

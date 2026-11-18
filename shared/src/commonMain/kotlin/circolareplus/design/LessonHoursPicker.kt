@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,7 +37,7 @@ fun LessonHoursPicker(
     ) {
         listOf(ClassSchedule.SHORT_DAY, ClassSchedule.LONG_DAY).forEach { hours ->
             val isSelected = selected == hours
-            val shape = RoundedCornerShape(AppTheme.SmallElementRadius)
+            val shape = AppTheme.PickerShape
             Box(
                 modifier = Modifier
                     .weight(1f)

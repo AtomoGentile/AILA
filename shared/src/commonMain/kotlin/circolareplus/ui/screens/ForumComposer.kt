@@ -23,7 +23,7 @@ import circolareplus.design.*
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun ForumIntroduction(busy: Boolean, onCreate: () -> Unit, onRules: () -> Unit,
-    title: String = "Revisione tra pere", description: String = "Un posto per chiedere, capire e dare una mano ai compagni.",
+    title: String = "Revisione tra pere", description: String = "Fai una domanda sui compiti o rispondi a un compagno.",
     createLabel: String = "Nuova domanda") {
     if(AppTheme.isNothing) {
         NothingContentLead(title, description, NothingSymbol.CHAT) {
@@ -51,8 +51,8 @@ internal fun ForumIntroduction(busy: Boolean, onCreate: () -> Unit, onRules: () 
 }
 
 @Composable
-internal fun ForumEmptyState(title: String = "La prima domanda può essere la tua",
-    description: String = "Un dubbio sui compiti o un passaggio da spiegare? Inizia una conversazione: le risposte resteranno qui per tutta la classe.",
+internal fun ForumEmptyState(title: String = "Nessuna domanda",
+    description: String = "Tocca «Nuova domanda» per scrivere alla classe.",
     privacyLabel: String = "Puoi partecipare con uno pseudonimo.") {
     if(AppTheme.isNothing) {
         Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {

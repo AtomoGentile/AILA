@@ -741,7 +741,7 @@ private fun ClassPicker(
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                         color = if (isSelected && AppTheme.isNothing) AppTheme.BackgroundLight else if (isSelected) Color.White else AppTheme.TextMuted,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(AppTheme.ButtonCornerRadius))
+                            .clip(AppTheme.PickerShape)
                             .then(
                                 if (isSelected) Modifier.background(AppTheme.PrimaryGradient)
                                 else Modifier.background(AppTheme.TintSlate)

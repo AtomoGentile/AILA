@@ -556,7 +556,7 @@ fun SeatMapScreen(
         fullRow {
             SectionFeatureCard(
                 title="La tua aula",
-                description=if(assignments.isEmpty()) "La disposizione della classe comparirà qui. Nel frattempo puoi seguire la raccolta delle preferenze." else "Cerca un compagno o trova il tuo posto. Puoi esportare e consultare le disposizioni precedenti dall’intestazione.",
+                description=if(assignments.isEmpty()) "Prima di assegnare i posti si raccolgono le preferenze." else "Cerca un compagno o trova il tuo posto. Nell’intestazione trovi lo storico e l’esportazione.",
                 badge=if(isPreferencesOpen) "Preferenze aperte" else if(assignments.isNotEmpty()) "${assignments.size} banchi · disposizione pubblicata" else "In attesa della disposizione",
                 icon={AppIcons.Chair(Modifier.size(24.dp),MaterialTheme.colorScheme.tertiary)}
             )
@@ -589,8 +589,8 @@ fun SeatMapScreen(
         if (assignments.isEmpty()) {
             fullRow {
                 SectionEmptyCard(
-                    title="L’aula prende forma qui",
-                    description=if(isRepresentative) "Raccogli le preferenze della classe, poi confronta le proposte e pubblica la disposizione." else "La mappa sarà disponibile quando il Rappresentante pubblicherà i posti.",
+                    title="Nessuna mappa pubblicata",
+                    description=if(isRepresentative) "Apri Gestione per raccogliere le preferenze o pubblicare i posti." else "Il rappresentante non ha ancora pubblicato i posti.",
                     icon={AppIcons.Chair(Modifier.size(28.dp),MaterialTheme.colorScheme.onSecondaryContainer)}
                 )
             }

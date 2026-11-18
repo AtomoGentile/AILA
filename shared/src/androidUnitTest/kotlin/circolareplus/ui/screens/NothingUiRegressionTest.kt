@@ -149,14 +149,23 @@ class NothingUiRegressionTest {
         screenshot("nothing-poll-flow-dark")
         compose.onNodeWithText("Come votare").performClick()
         compose.onNodeWithText("Ho capito").performClick()
-        compose.onNodeWithText("Invia le mie scelte").performScrollTo().assertIsNotEnabled()
-        compose.onAllNodes(hasText("Ci sto") and hasClickAction())[0].performScrollTo().performClick()
-        compose.onNodeWithText("Invia le mie scelte").performScrollTo().assertIsNotEnabled()
-        compose.onAllNodes(hasText("Ci sto") and hasClickAction())[1].performScrollTo().performClick()
-        compose.onNodeWithText("Invia le mie scelte").performScrollTo().assertIsEnabled().performClick()
+        val dates = compose.onNode(hasScrollToIndexAction())
+        val yes = hasText("Ci sto") and hasClickAction()
+        fun scrollToSubmit(): SemanticsNodeInteraction {
+            dates.performScrollToNode(hasText("Invia le mie scelte"))
+            return compose.onNodeWithText("Invia le mie scelte")
+        }
+        scrollToSubmit().assertIsNotEnabled()
+        dates.performScrollToKey("a")
+        compose.onAllNodes(yes).onFirst().performScrollTo().performClick()
+        scrollToSubmit().assertIsNotEnabled()
+        dates.performScrollToKey("b")
+        compose.onNode(yes and isNotSelected()).performScrollTo().performClick()
+        scrollToSubmit().assertIsEnabled().performClick()
         compose.runOnIdle {assertEquals(1,sent);expired=true}
         compose.onNodeWithText("Invia le mie scelte").assertDoesNotExist()
-        compose.onAllNodes(hasText("Ci sto") and hasClickAction())[0].performScrollTo().assertIsNotEnabled()
+        dates.performScrollToKey("a")
+        compose.onAllNodes(yes).onFirst().performScrollTo().assertIsNotEnabled()
     }
 
     @Test fun homeDestinationsRemainAccessibleWithLargeText() {
@@ -220,12 +229,15 @@ class NothingUiRegressionTest {
                 section = 0
             }
             compose.onNodeWithText("In corso").assertDoesNotExist()
+            compose.onNodeWithText("Come si vota").assertIsDisplayed()
+            compose.onNodeWithText("Indica in quali date puoi essere interrogato.").assertIsDisplayed()
             compose.onNodeWithContentDescription("Apri storico sondaggi").performClick()
             compose.onNodeWithText("Storico sondaggi").assertIsDisplayed()
             compose.onNodeWithText("Ordinamento").performClick()
             compose.runOnIdle { assertEquals(1, section) }
             compose.onNodeWithContentDescription("Torna ai sondaggi in corso").performClick()
             compose.onNodeWithText("Sondaggi").assertIsDisplayed()
+            compose.onNodeWithText("Metti le opzioni in ordine, dalla tua preferita all’ultima.").assertIsDisplayed()
             compose.runOnIdle { assertEquals(1, section) }
         }
     }

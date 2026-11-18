@@ -7,7 +7,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -30,9 +29,6 @@ import circolareplus.data.TimetableLesson
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
 import circolareplus.design.ailaFieldColors
-
-/** Shared metrics keep text inputs and selectors aligned, including their labels. */
-internal val EventFormShape = RoundedCornerShape(16.dp)
 
 @Composable
 internal fun EventFormField(label: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
@@ -60,7 +56,7 @@ internal fun EventFormTextField(
             placeholder = { Text(placeholder) },
             textStyle = MaterialTheme.typography.bodyLarge,
             singleLine = singleLine, minLines = if (singleLine) 1 else 2, maxLines = if (singleLine) 1 else 4,
-            shape = EventFormShape, colors = ailaFieldColors(),
+            shape = AppTheme.PickerShape, colors = ailaFieldColors(),
             keyboardOptions = keyboardOptions, keyboardActions = keyboardActions,
             modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).semantics { contentDescription = label }.then(inputModifier)
         )
@@ -79,9 +75,9 @@ internal fun EventFormValueRow(
 ) {
     EventFormField(label, modifier) {
         Row(
-            Modifier.fillMaxWidth().clip(EventFormShape)
+            Modifier.fillMaxWidth().clip(AppTheme.PickerShape)
                 .background(AppTheme.FieldSurface)
-                .border(1.dp, AppTheme.FieldOutline, EventFormShape)
+                .border(1.dp, AppTheme.FieldOutline, AppTheme.PickerShape)
                 .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
                 .heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -135,7 +131,7 @@ internal fun EventFormOptionsSheet(
                         circolareplus.design.NothingChoiceRow(option,index==selectedIndex,{ onDismiss(); onSelect(index) })
                     } else {
                     Row(
-                        Modifier.fillMaxWidth().clip(EventFormShape)
+                        Modifier.fillMaxWidth().clip(AppTheme.PickerShape)
                             .background(if (index == selectedIndex) AppTheme.TintBlue else AppTheme.FieldSurface)
                             .selectable(selected = index == selectedIndex, role = Role.RadioButton, onClick = { onDismiss(); onSelect(index) })
                             .heightIn(min = 52.dp).padding(horizontal = 16.dp, vertical = 12.dp),
@@ -187,8 +183,8 @@ internal fun EventSubjectAutocomplete(
         }
         if (focused && matches.isNotEmpty()) {
             Column(
-                Modifier.fillMaxWidth().padding(top = 4.dp).clip(RoundedCornerShape(16.dp))
-                    .background(AppTheme.FieldSurface).border(1.dp, AppTheme.FieldOutline, RoundedCornerShape(16.dp))
+                Modifier.fillMaxWidth().padding(top = 4.dp).clip(AppTheme.PickerShape)
+                    .background(AppTheme.FieldSurface).border(1.dp, AppTheme.FieldOutline, AppTheme.PickerShape)
                     .heightIn(max = 192.dp).verticalScroll(rememberScrollState())
             ) {
                 Text("LEZIONI DEL GIORNO", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted,

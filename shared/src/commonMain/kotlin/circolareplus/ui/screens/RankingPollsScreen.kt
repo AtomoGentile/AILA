@@ -102,8 +102,8 @@ fun RankingPollsScreen(
 
     if(polls.isEmpty()) {
         SectionEmptyCard(
-            title=if(showingHistory) "Le classifiche resteranno qui" else "Qual è la tua prima scelta?",
-            description=if(showingHistory) "Quando un sondaggio si conclude, puoi ritrovare qui il risultato della classe." else if(isRepresentative) "Crea il sondaggio dal pulsante in alto: i compagni potranno ordinare le proposte." else "Quando si apre un sondaggio potrai mettere le proposte nell’ordine che preferisci.",
+            title=if(showingHistory) "Nessuna classifica" else "Nessun sondaggio aperto",
+            description=if(showingHistory) "Le classifiche si vedono dopo la chiusura del voto." else if(isRepresentative) "Tocca + per aprire un sondaggio." else "Le classifiche passate sono nello storico.",
             modifier=Modifier.padding(16.dp),
             icon={AppIcons.Poll(Modifier.size(28.dp),MaterialTheme.colorScheme.onSecondaryContainer)}
         )
