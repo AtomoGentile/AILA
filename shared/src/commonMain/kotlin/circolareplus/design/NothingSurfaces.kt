@@ -74,14 +74,6 @@ fun NothingScreenHeader(
     }
 }
 
-@Composable
-fun NothingGlyphWidget(modifier: Modifier = Modifier, compact: Boolean = false) {
-    val radar = LocalGlyphRadar.current
-    if (radar == null) NothingFocusWidget(modifier, compact)
-    else if(NothingExperience.preferences.radarHome) NothingRadarWidget(radar, modifier)
-    else NothingAlertsWidget(modifier)
-}
-
 /** Bounded, static matrix when motion is disabled; only loaders animate repeatedly. */
 @Composable
 fun NothingMatrixLoader(modifier: Modifier = Modifier, color: Color = AppTheme.TextDark) {

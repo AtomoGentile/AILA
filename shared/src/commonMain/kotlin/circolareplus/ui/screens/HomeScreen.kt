@@ -89,7 +89,8 @@ fun HomeScreen(
     subjectColorsRevision: Int = 0,
     subjectColorsEnabled: Boolean = false,
     subjectColorOverrides: Map<String, String> = emptyMap(),
-    onOpenGlyphEvent: (CalendarEvent) -> Unit = onEventClick
+    calendarUnavailable: Boolean = false,
+    homeVisible: Boolean = true
 ) {
     val scrollState = rememberScrollState()
     val homeGutter = if(AppTheme.isNothing) circolareplus.design.NothingSpacing.Edge else AppTheme.Space16
@@ -106,8 +107,9 @@ fun HomeScreen(
     // lasciare meta' schermo vuoto sotto le tre righe del telefono.
     val todayDate = today()
     val lastBriefDate = todayDate.plusDays(7).toIso()
-    val briefConflicts = remember(calendarEvents, todayDate) {
-        calendarConflicts(calendarEvents).filter { it.date in todayDate.toIso()..lastBriefDate }
+    val allConflicts = remember(calendarEvents) { calendarConflicts(calendarEvents) }
+    val briefConflicts = remember(allConflicts, todayDate) {
+        allConflicts.filter { it.date in todayDate.toIso()..lastBriefDate }
     }
     val wide = circolareplus.design.LocalWideLayout.current
     val nextEvents = remember(calendarEvents, wide) { upcomingEvents(calendarEvents, limit = if (wide) 6 else 3) }
@@ -121,7 +123,7 @@ fun HomeScreen(
             briefItems,briefLoading,briefError,onRefreshBrief,onOpenBrief,onDismissBrief,onPlanStudy,
             subjectColorsEnabled,subjectColorOverrides,NothingHomeActions(onNavigateToSearch,onNavigateToGita,onNavigateToCirculars,onNavigateToCalendar,
                 onNavigateToBoard,onOpenForum,onNavigateToPolls,onNavigateToSeatMap,onEventClick,onNavigateToCircularDetail),
-            isEventsLoading,isCircularsLoading, briefConflicts, glyphEvents = calendarEvents, onOpenGlyphEvent = onOpenGlyphEvent)
+            isEventsLoading,isCircularsLoading, briefConflicts, calendarUnavailable, homeVisible, glyphConflicts = allConflicts)
         return
     }
 

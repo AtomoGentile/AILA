@@ -5,7 +5,6 @@ package circolareplus.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -29,18 +28,15 @@ import circolareplus.design.*
 @Composable
 internal fun NothingSeatMapContent(assignments: List<DeskAssignment>, studentsMap: Map<String,User>,
     focusedStudentId: String?, representative: Boolean, generating: Boolean,
-    onManage: ()->Unit, search: @Composable ()->Unit, management: @Composable ()->Unit,
+    onManage: ()->Unit, search: @Composable ()->Unit,
     modifier: Modifier=Modifier) {
-    var reading by remember {mutableStateOf(false)}
-    var manage by remember {mutableStateOf(false)}
     var detail by remember {mutableStateOf<DeskAssignment?>(null)}
     val cells=remember(assignments) {deskGridCells(assignments)}
     Column(modifier.fillMaxWidth()) {
         search()
         Row(Modifier.fillMaxWidth().padding(horizontal=20.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
             Text(if(generating) "Ricerca in corso…" else "${assignments.count {!it.isVacantDesk}} banchi",Modifier.weight(1f),style=MaterialTheme.typography.labelSmall,color=AppTheme.TextMuted)
-            if(assignments.isNotEmpty()) AilaTextButton({reading=!reading}) {Text(if(reading) "Vista aula" else "Leggi nomi")}
-            if(representative) AilaTextButton({onManage();manage=true}) {Text("Gestione")}
+            if(representative) AilaTextButton(onManage) {Text("Gestione")}
         }
         if(assignments.isEmpty()) {
             Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(20.dp)) {
@@ -52,14 +48,11 @@ internal fun NothingSeatMapContent(assignments: List<DeskAssignment>, studentsMa
                 Text("LAVAGNA E CATTEDRA",style=MaterialTheme.typography.labelSmall,color=AppTheme.TextMuted)
                 Box(Modifier.weight(1f).height(1.dp).background(AppTheme.Hairline))
             }
-            if(reading) Text("Scorri la mappa per leggere tutti i banchi.",Modifier.padding(horizontal=20.dp).padding(bottom=8.dp),style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
-            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(horizontal=20.dp).padding(bottom=16.dp+LocalBottomBarPadding.current)) {
+            Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal=20.dp).padding(bottom=16.dp+LocalBottomBarPadding.current)) {
                 val columns=cells.first.coerceAtLeast(1)
-                val available=maxWidth
-                val planWidth=if(reading) maxOf(available, (164*columns+8*(columns-1)).dp) else available
                 Box(Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)).background(AppTheme.TrackFill)
-                    .horizontalScroll(rememberScrollState()).verticalScroll(rememberScrollState())) {
-                    Column(Modifier.width(planWidth).padding(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                    .verticalScroll(rememberScrollState())) {
+                    Column(Modifier.fillMaxWidth().padding(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                         cells.second.chunked(columns).forEach { row ->
                             Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                                 row.forEach { cell ->
@@ -68,7 +61,7 @@ internal fun NothingSeatMapContent(assignments: List<DeskAssignment>, studentsMa
                                         val desk=cell.value
                                         val requester=remember(desk.row,desk.column) {BringIntoViewRequester()}
                                         val active=focusedStudentId != null && focusedStudentId in listOf(desk.studentAId,desk.studentBId,desk.studentCId)
-                                        LaunchedEffect(active,reading) {if(active) {withFrameNanos {};requester.bringIntoView()}}
+                                        LaunchedEffect(active) {if(active) {withFrameNanos {};requester.bringIntoView()}}
                                         SeatMapDeskCard(desk,studentsMap,desk.hasThirdSeat,
                                             Modifier.weight(1f).fillMaxHeight().bringIntoViewRequester(requester)
                                                 .clickable(role=Role.Button) {detail=desk}
@@ -81,15 +74,6 @@ internal fun NothingSeatMapContent(assignments: List<DeskAssignment>, studentsMa
                     }
                 }
             }
-        }
-    }
-    if(manage) AilaBottomSheet(onDismissRequest={manage=false}) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
-            Row(verticalAlignment=Alignment.CenterVertically) {
-                Text("Gestione aula",Modifier.weight(1f),style=nothingDisplayStyle(28,38),color=AppTheme.TextDark)
-                AilaIconButton("Chiudi gestione aula",{manage=false}) {AppIcons.Close(Modifier.size(18.dp),it)}
-            }
-            management()
         }
     }
     detail?.let {desk -> AilaBottomSheet(onDismissRequest={detail=null}) {

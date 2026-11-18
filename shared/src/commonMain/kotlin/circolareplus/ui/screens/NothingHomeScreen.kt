@@ -42,12 +42,10 @@ internal fun NothingHomeScreen(
     subjectColorsEnabled: Boolean, subjectColorOverrides: Map<String,String>, actions: NothingHomeActions,
     eventsLoading: Boolean, circularsLoading: Boolean,
     conflicts: List<CalendarConflict> = emptyList(),
-    glyphEvents: List<CalendarEvent> = events,
-    onOpenGlyphEvent: (CalendarEvent) -> Unit = actions.openEvent
+    calendarUnavailable: Boolean = false,
+    homeVisible: Boolean = true,
+    glyphConflicts: List<CalendarConflict> = conflicts
 ) {
-    var glyph by remember { mutableStateOf(false) }
-    var studio by remember { mutableStateOf(false) }
-    var focus by remember { mutableStateOf(false) }
     var allBrief by remember { mutableStateOf(false) }
     val date = today()
     val firstCircular = briefItems.firstOrNull { it.kind == AilaBriefKind.CIRCULAR }
@@ -131,13 +129,15 @@ internal fun NothingHomeScreen(
                 } else Text(if(eventsLoading) "Caricamento…" else "Nessun impegno in programma.",color=AppTheme.TextMuted,style=MaterialTheme.typography.bodyMedium)
             }
         }
-        if (NothingExperience.preferences.showFocusWidget) {
-            val session = NothingExperience.focus
-            val focusLabel = if (session.running) formatFocusTime(session.remaining(NothingExperience.nowMillis)) else "Focus"
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                AilaSecondaryButton("Glyph", { glyph = true }, modifier = Modifier.weight(1f))
-                AilaSecondaryButton(focusLabel, { focus = true }, modifier = Modifier.weight(1f))
-            }
+        if (NothingExperience.preferences.showCalendarGlyph) {
+            CalendarConflictGlyph(
+                conflicts = glyphConflicts,
+                loading = eventsLoading,
+                unavailable = calendarUnavailable,
+                homeVisible = homeVisible,
+                onOpenEvent = actions.openEvent,
+                onOpenCalendar = actions.calendar
+            )
         }
         val links=listOf(
             Triple("Circolari",NothingSymbol.DOCUMENT,actions.circulars),Triple("Calendario",NothingSymbol.CALENDAR,actions.calendar),
@@ -163,25 +163,6 @@ internal fun NothingHomeScreen(
                 Text(latestCircular.title,style=MaterialTheme.typography.bodyMedium,color=AppTheme.TextDark)
             }
         } else if(circularsLoading && latestCircular == null) Text("Aggiornamento circolari…",style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
-    }
-    if (glyph) GlyphPreparationSheet(
-        events = glyphEvents,
-        loading = eventsLoading,
-        onDismiss = { glyph = false },
-        onOpenStudio = { glyph = false; studio = true },
-        onOpenFocus = { glyph = false; focus = true },
-        onOpenEvent = { event -> glyph = false; onOpenGlyphEvent(event) },
-        onOpenCalendar = { glyph = false; actions.calendar() }
-    )
-    if(studio) NothingGlyphStudio {studio=false}
-    if(focus) AilaBottomSheet(onDismissRequest={focus=false}) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
-            Row(verticalAlignment=Alignment.CenterVertically) {
-                Text("Focus",Modifier.weight(1f),style=nothingDisplayStyle(28,38),color=AppTheme.TextDark)
-                AilaIconButton("Chiudi Focus",{focus=false}) {AppIcons.Close(Modifier.size(18.dp),it)}
-            }
-            NothingFocusWidget(Modifier.widthIn(max=360.dp).fillMaxWidth())
-        }
     }
     if(allBrief) AilaBottomSheet(onDismissRequest={allBrief=false}) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {

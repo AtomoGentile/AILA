@@ -126,8 +126,11 @@ fun AilaBottomSheet(
                     ) else null
                 }
                 .padding(start = inset, end = inset, bottom = inset)
-                // Stessa trasparenza del resto del vetro (richiesta di Simone).
-                .ailaGlassSurface(shape),
+                // Senza sfocatura, un fondo più denso tiene leggibili i testi sopra la schermata.
+                .ailaGlassSurface(
+                    shape,
+                    tint = if (AppTheme.liteEffects) AppTheme.SurfaceWhite.copy(alpha = .9f) else null
+                ),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Maniglia a capsula, come iOS.

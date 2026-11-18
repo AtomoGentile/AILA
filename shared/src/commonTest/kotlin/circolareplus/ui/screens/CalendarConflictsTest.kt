@@ -2,6 +2,7 @@ package circolareplus.ui.screens
 
 import circolareplus.domain.model.CalendarEvent
 import circolareplus.domain.model.CalendarEventCategory
+import circolareplus.util.CivilDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -28,5 +29,21 @@ class CalendarConflictsTest {
         assertTrue(calendarConflicts(listOf(exam, circular.copy(time = "10:00"))).isEmpty())
         assertTrue(calendarConflicts(listOf(exam, circular.copy(date = "2026-11-20"))).isEmpty())
         assertTrue(calendarConflicts(listOf(exam.copy(isRelevantToMe = false), circular)).isEmpty())
+    }
+
+    @Test fun glyphShowsTheNextSevenDatesAndSkipsAnOverlapThatHasAlreadyStarted() {
+        val today = CivilDate(2026, 11, 19)
+        val exact = calendarConflicts(listOf(exam, circular)).single()
+        val untimed = calendarConflicts(listOf(exam.copy(time = null), circular)).single()
+        val lastDay = exact.copy(date = "2026-11-25")
+        val later = exact.copy(date = "2026-11-26")
+        val past = exact.copy(date = "2026-11-18")
+
+        assertEquals(listOf(exact, untimed, lastDay), currentGlyphConflicts(
+            listOf(past, exact, untimed, lastDay, later), today, 9 * 60
+        ))
+        assertEquals(listOf(untimed, lastDay), currentGlyphConflicts(
+            listOf(past, exact, untimed, lastDay, later), today, 9 * 60 + 1
+        ))
     }
 }

@@ -86,6 +86,7 @@ fun PollHistoryScreen(
         )
     }
 
+    val horizontalPadding = if (AppTheme.isNothing) 20.dp else AppTheme.Space16
     Column(modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
         // isCalculated implica già che il sondaggio è stato chiuso/calcolato (automaticamente
         // o tramite pulsante "Calcola risultati" con force=true), indipendentemente da quanti
@@ -94,9 +95,10 @@ fun PollHistoryScreen(
         val completedPolls = polls.filter { it.isCalculated && it.totalStudents > 0 }
         if (completedPolls.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-                circolareplus.design.AilaEmptyState(
+                SectionEmptyCard(
                     title = "Nessuno storico",
-                    message = "I sondaggi con tutte le risposte raccolte e calcolati restano qui.",
+                    description = "Qui trovi i sondaggi di cui sono stati calcolati i risultati.",
+                    modifier = Modifier.padding(horizontal = horizontalPadding, vertical = AppTheme.Space16),
                     icon = { AppIcons.Check(modifier = Modifier.size(30.dp), color = AppTheme.PrimaryBlue) }
                 )
             }
@@ -106,8 +108,8 @@ fun PollHistoryScreen(
                 key = { poll -> poll.id },
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
-                    start = AppTheme.Space16,
-                    end = AppTheme.Space16,
+                    start = horizontalPadding,
+                    end = horizontalPadding,
                     top = AppTheme.Space16,
                     bottom = AppTheme.Space16 + circolareplus.design.LocalBottomBarPadding.current
                 )

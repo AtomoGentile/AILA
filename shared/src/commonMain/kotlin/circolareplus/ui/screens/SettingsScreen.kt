@@ -266,7 +266,7 @@ fun SettingsScreen(
                                     circolareplus.design.UiStyle.EXPRESSIVE ->
                                         "Colori pieni, forme che si deformano al tocco e movimenti vivaci, come Android."
                                     circolareplus.design.UiStyle.NOTHING ->
-                                        "Superfici monocromatiche, testi leggibili, movimenti essenziali e timer Glyph personalizzabile."
+                                        "Superfici monocromatiche, testi leggibili, movimenti essenziali e Glyph a puntini per gli incastri in agenda."
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = AppTheme.TextMuted
@@ -274,9 +274,6 @@ fun SettingsScreen(
                             if (uiStyle == circolareplus.design.UiStyle.NOTHING) {
                                 Spacer(modifier = Modifier.height(AppTheme.Space12))
                                 circolareplus.design.NothingGlyphSettingsSection(Modifier.fillMaxWidth())
-                                Spacer(Modifier.height(8.dp))
-                                Text("Personalizza il timer, il disegno e il ritmo del Glyph. Le preferenze restano salvate su questo dispositivo.",
-                                    style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
                             }
                             if (uiStyle != circolareplus.design.UiStyle.NOTHING) {
                             Spacer(modifier = Modifier.height(AppTheme.Space16))
@@ -496,6 +493,12 @@ fun SettingsScreen(
                                 )
                             }
                         )
+                        if (circolareplus.platform.LocalNothingGlyph.current.notificationSettingsAvailable) {
+                            HorizontalDivider(color = AppTheme.Hairline, modifier = Modifier.padding(start = 16.dp))
+                            circolareplus.design.NothingGlyphNotificationSettings(
+                                modifier = Modifier.fillMaxWidth().padding(AppTheme.Space16)
+                            )
+                        }
                     }
             
                 }

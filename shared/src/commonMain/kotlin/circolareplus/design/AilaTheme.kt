@@ -249,20 +249,14 @@ fun AilaTheme(content: @Composable () -> Unit) {
                 .fillMaxSize()
                 .then(if (AppTheme.isGlass) androidx.compose.ui.Modifier.ailaGlassBackdrop() else androidx.compose.ui.Modifier)
         ) {
-            if (AppTheme.isGlass) {
-                androidx.compose.runtime.CompositionLocalProvider(
-                    androidx.compose.foundation.LocalIndication provides AilaGlassHighlight,
-                    content = content
-                )
-            } else if (AppTheme.isNothing) {
-                val glyph = circolareplus.platform.rememberNothingGlyph()
-                androidx.compose.runtime.CompositionLocalProvider(circolareplus.platform.LocalNothingGlyph provides glyph, androidx.compose.foundation.LocalIndication provides AilaGlassHighlight) {
-                    NothingFocusRuntime()
-                    content()
-                }
-            } else {
-                content()
-            }
+            val glyph = circolareplus.platform.rememberNothingGlyph(connectLights = AppTheme.isNothing)
+            val indication = if (AppTheme.isGlass || AppTheme.isNothing) AilaGlassHighlight
+                else androidx.compose.foundation.LocalIndication.current
+            androidx.compose.runtime.CompositionLocalProvider(
+                circolareplus.platform.LocalNothingGlyph provides glyph,
+                androidx.compose.foundation.LocalIndication provides indication,
+                content = content
+            )
         }
     }
 }

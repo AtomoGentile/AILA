@@ -1062,6 +1062,7 @@ fun MainAppShell(
     // --- Stato Calendario --------------------------------------------------------------
     var calendarEvents by remember { mutableStateOf<List<CalendarEvent>>(emptyList()) }
     var isCalendarLoading by remember { mutableStateOf(false) }
+    var calendarLoadedOnce by remember(currentUser?.id) { mutableStateOf(false) }
     var calendarError by remember { mutableStateOf<String?>(null) }
     var calendarRefreshTrigger by remember { mutableStateOf(0) }
     var handledCalendarRefresh by remember { mutableStateOf(0) }
@@ -1815,6 +1816,7 @@ fun MainAppShell(
             try {
                 calendarEvents = StartupPrefetch.take<List<CalendarEvent>>("calendar")
                     ?: AppContainer.calendarRepository.listEvents()
+                calendarLoadedOnce = true
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -3507,7 +3509,6 @@ fun MainAppShell(
                                 },
                                 onNavigateToPolls = { selectedTab = MainTab.POLLS },
                                 onNavigateToCalendar = { selectedTab = MainTab.CALENDAR },
-                                onOpenGlyphEvent = { event -> eventDetailToShow = event },
                                 onEventClick = { event ->
                                     calendarFocusDateIso = event.date
                                     selectedTab = MainTab.CALENDAR
@@ -3519,7 +3520,9 @@ fun MainAppShell(
                                 onNavigateToGita = { isInGitaScreen = true },
                                 onNavigateToSearch = { isInSearchScreen = true },
                                 isCircularsLoading = isCircularsLoading && !circularsLoadedOnce,
-                                isEventsLoading = isCalendarLoading && calendarEvents.isEmpty()
+                                isEventsLoading = isCalendarLoading || (!calendarLoadedOnce && calendarError == null),
+                                calendarUnavailable = !calendarLoadedOnce && calendarError != null,
+                                homeVisible = selectedTab == MainTab.HOME
                             )
                         }
                         MainTab.CALENDAR -> {
@@ -4114,17 +4117,24 @@ fun MainAppShell(
                             }
                             }
                         }
-                        MainTab.POLLS -> {
+                        MainTab.POLLS -> androidx.compose.animation.AnimatedContent(
+                            targetState = showPollHistory,
+                            transitionSpec = {
+                                if (AppTheme.isGlass) ailaTabTransition() else ailaPushTransition(forward = targetState)
+                            },
+                            label = "pollHistory",
+                            modifier = Modifier.fillMaxSize().clipToBounds()
+                        ) { history ->
                             val onCreatePoll: (() -> Unit)? = if (isRepresentative) {
                                 {
                                     if (pollsSection == 1) showCreateRankingPollDialog = true
                                     else showCreatePollDialog = true
                                 }
                             } else null
-                            Column(modifier = Modifier.fillMaxSize()) {
+                            Column(modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
                                 circolareplus.ui.screens.PollNavigation(
                                     section = pollsSection,
-                                    showingHistory = showPollHistory,
+                                    showingHistory = history,
                                     onSectionChange = { pollsSection = it },
                                     onHistoryChange = { showPollHistory = it },
                                     onCreate = onCreatePoll
@@ -4136,8 +4146,8 @@ fun MainAppShell(
                                         onRetry = { rankingRefreshTrigger++ }
                                     ) {
                                         RankingPollsScreen(
-                                            polls = rankingPolls.filter { it.isClosed == showPollHistory }.sortedByDescending { it.id == briefRankingId },
-                                            showingHistory = showPollHistory,
+                                            polls = rankingPolls.filter { it.isClosed == history }.sortedByDescending { it.id == briefRankingId },
+                                            showingHistory = history,
                                             totalStudents = rankingTotalStudents,
                                             isRepresentative = isRepresentative,
                                             submittingPollId = submittingRankingPollId,
@@ -4181,7 +4191,7 @@ fun MainAppShell(
                                             onCreatePoll = { showCreateRankingPollDialog = true }
                                         )
                                     }
-                                } else if (showPollHistory) {
+                                } else if (history) {
                                     PollHistoryScreen(
                                         loadAssignmentPreview = { pollId, basis -> AppContainer.pollsRepository.previewAssignments(pollId, basis) },
                                         publishRevision = { pollId, data ->
@@ -6276,20 +6286,12 @@ internal fun AddCalendarEventDialog(
             step = EventCreationStep.MENU
         }
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .appImePadding()
-                .padding(horizontal = AppTheme.Space16)
-                .padding(top = AppTheme.Space12)
-                .padding(bottom = AppTheme.Space24)
+            modifier = Modifier.eventCreationSheetPadding()
         ) {
             // Intestazione Material: freccia indietro (fuori dal menu iniziale) + titolo + chiudi.
             // La freccia entra e esce, il titolo si dissolve da uno all'altro, e i pulsanti sono
             // tondi e si schiacciano al tocco come quelli del resto dell'app.
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = AppTheme.Space16),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            EventSheetHeading(onClose = ::closeAnimated) {
                 androidx.compose.animation.AnimatedVisibility(
                     visible = step != EventCreationStep.MENU,
                     enter = androidx.compose.animation.fadeIn(circolareplus.design.ailaFadeSpec()) +
@@ -6328,9 +6330,6 @@ internal fun AddCalendarEventDialog(
                         style = MaterialTheme.typography.titleLarge,
                         color = AppTheme.TextDark
                     )
-                }
-                EventSheetRoundButton(onClick = { closeAnimated() }) {
-                    AppIcons.Close(modifier = Modifier.size(16.dp), color = AppTheme.TextMuted)
                 }
             }
 
@@ -6767,13 +6766,10 @@ internal fun AddCalendarEventDialog(
             }
             }
             if (step == EventCreationStep.MANUAL) {
-                Spacer(Modifier.height(AppTheme.Space12))
-                HorizontalDivider(color = AppTheme.FieldOutline, modifier = Modifier.padding(bottom = AppTheme.Space12))
-                circolareplus.design.AilaPrimaryButton(
+                EventSheetSubmit(
                     text = "Aggiungi evento",
                     onClick = { submitManualEvent() },
-                    enabled = canSubmitManualEvent,
-                    fillMaxWidth = true
+                    enabled = canSubmitManualEvent
                 )
             }
         }
@@ -6838,14 +6834,51 @@ private fun HourDropdown(
 
 /** Pulsante tondo del foglio "Nuovo evento" (indietro, chiudi): si schiaccia al tocco come gli altri. */
 @Composable
-private fun EventSheetRoundButton(onClick: () -> Unit, icon: @Composable () -> Unit) {
+private fun EventSheetHeading(onClose: () -> Unit, content: @Composable RowScope.() -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(bottom = AppTheme.Space16),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        content()
+        EventSheetRoundButton(onClick = onClose, description = "Chiudi") {
+            AppIcons.Close(modifier = Modifier.size(16.dp), color = AppTheme.TextMuted)
+        }
+    }
+}
+
+private fun Modifier.eventCreationSheetPadding(): Modifier =
+    fillMaxWidth().appImePadding()
+        .padding(horizontal = AppTheme.Space16)
+        .padding(top = AppTheme.Space12, bottom = AppTheme.Space24)
+
+@Composable
+private fun EventSheetSubmit(text: String, onClick: () -> Unit, enabled: Boolean) {
+    Spacer(Modifier.height(AppTheme.Space12))
+    HorizontalDivider(color = AppTheme.FieldOutline, modifier = Modifier.padding(bottom = AppTheme.Space12))
+    circolareplus.design.AilaPrimaryButton(text, onClick, enabled = enabled, fillMaxWidth = true)
+}
+
+@Composable
+private fun EventSheetRoundButton(
+    onClick: () -> Unit,
+    description: String = "Indietro",
+    enabled: Boolean = true,
+    icon: @Composable () -> Unit
+) {
     val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Box(
         modifier = Modifier
             .size(36.dp)
             .ailaMorphClip(interactionSource, pressedPercent = 28)
             .background(AppTheme.TintSlate)
-            .clickable(interactionSource = interactionSource, indication = null) { onClick() },
+            .semantics { contentDescription = description }
+            .clickable(
+                enabled = enabled,
+                interactionSource = interactionSource,
+                indication = null,
+                role = Role.Button,
+                onClick = onClick
+            ),
         contentAlignment = Alignment.Center
     ) {
         icon()
@@ -7445,11 +7478,10 @@ private fun CreatePollDialog(
     // null = tutta la classe; altrimenti solo chi deve essere interrogato.
     var audience by remember { mutableStateOf<List<String>?>(null) }
     val slots = remember { mutableStateListOf<PollSlotDraft>() }
-    var pendingDateMillis by remember { mutableStateOf<Long?>(null) }
     var showDatePicker by remember { mutableStateOf(false) }
 
     if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = pendingDateMillis)
+        val datePickerState = rememberDatePickerState()
         circolareplus.design.AilaDatePickerDialog(
             state = datePickerState,
             onDismiss = { showDatePicker = false },
@@ -7462,155 +7494,94 @@ private fun CreatePollDialog(
         }
     }
 
-    // Col selettore data aperto (in Glass) il foglio si dissolve: la card e' vetro trasparente e
-    // i testi del foglio, dietro, la rendevano illeggibile.
-    circolareplus.design.AilaOriginSheet(
-        originKey = "pollCreateSheet",
+    PollCreationSheet(
+        title = "Nuovo sondaggio interrogazioni",
+        isSubmitting = isSubmitting,
+        canSubmit = subject.isNotBlank() && slots.isNotEmpty() && audience?.isEmpty() != true,
         onDismiss = onDismiss,
         closeRequested = closeRequested,
-        faded = showDatePicker
-    ) { closeAnimated ->
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .appImePadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = AppTheme.Space20)
-                .padding(bottom = AppTheme.Space32)
-        ) {
-            CreationSheetHeader(title = "Nuovo sondaggio interrogazioni", onClose = closeAnimated)
-
-            OutlinedTextField(
-                value = subject,
-                onValueChange = { subject = it },
-                label = { Text("Materia") },
-                singleLine = true,
-                colors = circolareplus.design.ailaFieldColors(),
-                shape = RoundedCornerShape(AppTheme.SmallElementRadius),
-                modifier = Modifier.fillMaxWidth().ailaSheetReveal(0)
+        faded = showDatePicker,
+        onSubmit = {
+            onConfirm(
+                subject.trim(),
+                slots.map { CreatePollSlotRequestDto(epochMillisToIsoDate(it.dateMillis), it.capacity) },
+                audience
             )
-            Spacer(modifier = Modifier.height(AppTheme.Space16))
-
-            if (slots.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8), modifier = Modifier.ailaSheetReveal(1)) {
-                    slots.forEachIndexed { index, slot ->
-                        PollSlotDraftRow(
-                            slot = slot,
-                            onCapacityChange = { newCapacity -> slots[index] = slot.copy(capacity = newCapacity) },
-                            onRemove = { slots.removeAt(index) }
-                        )
-                    }
+        }
+    ) {
+        EventFormTextField(
+            value = subject,
+            onValueChange = { subject = it },
+            label = "Materia",
+            placeholder = "Es. Inglese"
+        )
+        EventFormValueRow(
+            label = "Date delle interrogazioni",
+            value = "Aggiungi una data",
+            onClick = { showDatePicker = true },
+            icon = { AppIcons.Calendar(Modifier.size(20.dp), color = AppTheme.PrimaryBlue) }
+        )
+        if (slots.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                slots.forEachIndexed { index, slot ->
+                    PollSlotDraftRow(
+                        slot = slot,
+                        onCapacityChange = { slots[index] = slot.copy(capacity = it) },
+                        onRemove = { slots.removeAt(index) }
+                    )
                 }
-                Spacer(modifier = Modifier.height(AppTheme.Space12))
-            }
-
-            circolareplus.design.AilaSecondaryButton(
-                text = "+ Aggiungi data/slot",
-                onClick = { showDatePicker = true },
-                icon = { color -> AppIcons.Calendar(modifier = Modifier.size(15.dp), color = color) },
-                modifier = Modifier.fillMaxWidth().ailaSheetReveal(if (slots.isEmpty()) 1 else 2)
-            )
-
-            Spacer(modifier = Modifier.height(AppTheme.Space20))
-            circolareplus.ui.screens.PollAudienceSelector(
-                selectedIds = audience,
-                onSelectionChange = { audience = it },
-                modifier = Modifier.ailaSheetReveal(if (slots.isEmpty()) 3 else 4)
-            )
-
-            Spacer(modifier = Modifier.height(AppTheme.Space24))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12), modifier = Modifier.ailaSheetReveal(if (slots.isEmpty()) 4 else 5)) {
-                circolareplus.design.AilaSecondaryButton(
-                    text = "Annulla",
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f)
-                )
-                circolareplus.design.AilaPrimaryButton(
-                    text = if (isSubmitting) "Creazione..." else "Crea e pubblica",
-                    onClick = {
-                        onConfirm(
-                            subject.trim(),
-                            slots.map { CreatePollSlotRequestDto(epochMillisToIsoDate(it.dateMillis), it.capacity) },
-                            audience
-                        )
-                    },
-                    enabled = !isSubmitting && subject.isNotBlank() && slots.isNotEmpty() && audience?.isEmpty() != true,
-                    fillMaxWidth = true,
-                    modifier = Modifier.weight(1f)
-                )
             }
         }
+        PollAudienceSelector(selectedIds = audience, onSelectionChange = { audience = it })
     }
 }
 
-/** Una riga di data/slot nel foglio "Nuovo sondaggio", nello stesso stile a card delle altre liste. */
 @Composable
 private fun PollSlotDraftRow(
     slot: PollSlotDraft,
     onCapacityChange: (Int) -> Unit,
     onRemove: () -> Unit
 ) {
+    val isoDate = epochMillisToIsoDate(slot.dateMillis)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-            .background(AppTheme.TintSlate)
+            .clip(EventFormShape)
+            .background(AppTheme.FieldSurface)
+            .border(1.dp, AppTheme.FieldOutline, EventFormShape)
+            .heightIn(min = 56.dp)
             .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8),
+        horizontalArrangement = Arrangement.spacedBy(AppTheme.Space4),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = epochMillisToIsoDate(slot.dateMillis),
-            style = MaterialTheme.typography.labelLarge,
+            text = "${circolareplus.util.formatItalianDateWithWeekday(isoDate)} ${isoDate.take(4)}",
+            style = MaterialTheme.typography.bodyMedium,
             color = AppTheme.TextDark,
             modifier = Modifier.weight(1f)
         )
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(26.dp)
-                    .clip(CircleShape)
-                    .background(AppTheme.SurfaceWhite)
-                    .clickable(enabled = slot.capacity > 1) { onCapacityChange(slot.capacity - 1) },
-                contentAlignment = Alignment.Center
-            ) {
-                Text("−", style = MaterialTheme.typography.titleSmall, color = AppTheme.TextDark)
-            }
-            Text(
-                text = "${slot.capacity}",
-                style = MaterialTheme.typography.labelLarge,
-                color = AppTheme.TextDark,
-                modifier = Modifier.padding(horizontal = AppTheme.Space8)
-            )
-            Box(
-                modifier = Modifier
-                    .size(26.dp)
-                    .clip(CircleShape)
-                    .background(AppTheme.SurfaceWhite)
-                    .clickable { onCapacityChange(slot.capacity + 1) },
-                contentAlignment = Alignment.Center
-            ) {
-                Text("+", style = MaterialTheme.typography.titleSmall, color = AppTheme.TextDark)
-            }
-        }
-        Spacer(modifier = Modifier.width(AppTheme.Space8))
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                .clickable { onRemove() }
-                .padding(AppTheme.Space8),
-            contentAlignment = Alignment.Center
+        EventSheetRoundButton(
+            onClick = { onCapacityChange(slot.capacity - 1) },
+            description = "Riduci il numero di posti",
+            enabled = slot.capacity > 1
         ) {
-            AppIcons.Trash(modifier = Modifier.size(15.dp), color = AppTheme.TintRedInk)
+            Text("−", style = MaterialTheme.typography.titleSmall, color = if (slot.capacity > 1) AppTheme.TextDark else AppTheme.TextFaint)
+        }
+        Text(
+            text = "${slot.capacity}",
+            style = MaterialTheme.typography.labelLarge,
+            color = AppTheme.TextDark
+        )
+        EventSheetRoundButton(onClick = { onCapacityChange(slot.capacity + 1) }, description = "Aumenta il numero di posti") {
+            AppIcons.Plus(Modifier.size(16.dp), color = AppTheme.TextDark)
+        }
+        EventSheetRoundButton(onClick = onRemove, description = "Rimuovi la data") {
+            AppIcons.Trash(Modifier.size(16.dp), color = AppTheme.TintRedInk)
         }
     }
 }
 
-/**
- * Creazione di un sondaggio a ordinamento (solo Rappresentante): una domanda e da 2 a 10
- * opzioni che la classe metterà in ordine. Si pubblica subito, come i sondaggi interrogazioni.
- */
-@OptIn(ExperimentalMaterial3Api::class)
+/** Sondaggio a ordinamento, con una domanda e da 2 a 10 opzioni. */
 @Composable
 private fun CreateRankingPollDialog(
     isSubmitting: Boolean,
@@ -7620,108 +7591,105 @@ private fun CreateRankingPollDialog(
 ) {
     var question by remember { mutableStateOf("") }
     val options = remember { mutableStateListOf("", "") }
-    // null = tutta la classe.
     var audience by remember { mutableStateOf<List<String>?>(null) }
     val filled = options.map { it.trim() }.filter { it.isNotEmpty() }
     val hasDuplicates = filled.map { it.lowercase() }.distinct().size != filled.size
-    val canSubmit = !isSubmitting && question.isNotBlank() && filled.size >= 2 && !hasDuplicates &&
-        audience?.isEmpty() != true
+    val canSubmit = question.isNotBlank() && filled.size >= 2 && !hasDuplicates && audience?.isEmpty() != true
 
-    circolareplus.design.AilaOriginSheet(
-        originKey = "pollCreateSheet",
+    PollCreationSheet(
+        title = "Nuovo sondaggio a ordinamento",
+        isSubmitting = isSubmitting,
+        canSubmit = canSubmit,
         onDismiss = onDismiss,
-        closeRequested = closeRequested
-    ) { closeAnimated ->
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .appImePadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = AppTheme.Space20)
-                .padding(bottom = AppTheme.Space32)
-        ) {
-            CreationSheetHeader(title = "Nuovo sondaggio a ordinamento", onClose = closeAnimated)
-
-            OutlinedTextField(
-                value = question,
-                onValueChange = { question = it.take(200) },
-                label = { Text("Domanda") },
-                placeholder = { Text("Es. Dove andiamo in gita?") },
-                colors = circolareplus.design.ailaFieldColors(),
-                shape = RoundedCornerShape(AppTheme.SmallElementRadius),
-                modifier = Modifier.fillMaxWidth().ailaSheetReveal(0)
-            )
-            Spacer(modifier = Modifier.height(AppTheme.Space16))
-
-            Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8), modifier = Modifier.ailaSheetReveal(1)) {
-                options.forEachIndexed { index, option ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(
-                            value = option,
-                            onValueChange = { options[index] = it.take(80) },
-                            label = { Text("Opzione ${index + 1}") },
-                            singleLine = true,
-                            colors = circolareplus.design.ailaFieldColors(),
-                            shape = RoundedCornerShape(AppTheme.SmallElementRadius),
-                            modifier = Modifier.weight(1f)
-                        )
-                        if (options.size > 2) {
-                            Box(
-                                modifier = Modifier
-                                    .padding(start = AppTheme.Space4)
-                                    .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-                                    .clickable { options.removeAt(index) }
-                                    .padding(AppTheme.Space12),
-                                contentAlignment = Alignment.Center
+        closeRequested = closeRequested,
+        onSubmit = { onConfirm(question.trim(), filled, audience) }
+    ) {
+        EventFormTextField(
+            value = question,
+            onValueChange = { question = it.take(200) },
+            label = "Domanda",
+            placeholder = "Es. Dove andiamo in gita?"
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+            options.forEachIndexed { index, option ->
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    EventFormTextField(
+                        value = option,
+                        onValueChange = { options[index] = it.take(80) },
+                        label = "Opzione ${index + 1}",
+                        placeholder = "Scrivi un’opzione",
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (options.size > 2) {
+                        Box(Modifier.height(56.dp), contentAlignment = Alignment.Center) {
+                            EventSheetRoundButton(
+                                onClick = { options.removeAt(index) },
+                                description = "Rimuovi opzione ${index + 1}"
                             ) {
-                                AppIcons.Trash(modifier = Modifier.size(16.dp), color = AppTheme.TintRedInk)
+                                AppIcons.Trash(Modifier.size(16.dp), color = AppTheme.TintRedInk)
                             }
                         }
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(AppTheme.Space12))
-
             if (options.size < 10) {
                 circolareplus.design.AilaSecondaryButton(
                     text = "Aggiungi opzione",
                     onClick = { options.add("") },
-                    icon = { color -> AppIcons.Plus(modifier = Modifier.size(15.dp), color = color) },
-                    modifier = Modifier.fillMaxWidth().ailaSheetReveal(2)
+                    icon = { color -> AppIcons.Plus(Modifier.size(15.dp), color = color) },
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
             Text(
                 text = if (hasDuplicates) "Ci sono opzioni ripetute."
-                else "Ognuno le metterà in ordine; la classifica della classe è a punti.",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Normal,
-                color = if (hasDuplicates) AppTheme.TintRedInk else AppTheme.TextMuted,
-                modifier = Modifier.padding(top = AppTheme.Space8).ailaSheetReveal(3)
+                else "Ognuno le metterà in ordine. La classifica della classe è a punti.",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (hasDuplicates) AppTheme.TintRedInk else AppTheme.TextMuted
             )
+        }
+        PollAudienceSelector(selectedIds = audience, onSelectionChange = { audience = it })
+    }
+}
 
-            Spacer(modifier = Modifier.height(AppTheme.Space20))
-            circolareplus.ui.screens.PollAudienceSelector(
-                selectedIds = audience,
-                onSelectionChange = { audience = it },
-                modifier = Modifier.ailaSheetReveal(4)
-            )
-
-            Spacer(modifier = Modifier.height(AppTheme.Space24))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12), modifier = Modifier.ailaSheetReveal(5)) {
-                circolareplus.design.AilaSecondaryButton(
-                    text = "Annulla",
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f)
-                )
-                circolareplus.design.AilaPrimaryButton(
-                    text = if (isSubmitting) "Creazione..." else "Crea e pubblica",
-                    onClick = { onConfirm(question.trim(), filled, audience) },
-                    enabled = canSubmit,
-                    fillMaxWidth = true,
+@Composable
+private fun PollCreationSheet(
+    title: String,
+    isSubmitting: Boolean,
+    canSubmit: Boolean,
+    onDismiss: () -> Unit,
+    closeRequested: Boolean,
+    onSubmit: () -> Unit,
+    faded: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    circolareplus.design.AilaOriginSheet(
+        originKey = "pollCreateSheet",
+        onDismiss = onDismiss,
+        closeRequested = closeRequested,
+        faded = faded
+    ) { closeAnimated ->
+        Column(Modifier.eventCreationSheetPadding()) {
+            EventSheetHeading(onClose = closeAnimated) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = AppTheme.TextDark,
                     modifier = Modifier.weight(1f)
                 )
             }
+            Column(
+                modifier = Modifier.weight(1f, fill = false).fillMaxWidth().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(AppTheme.Space16),
+                content = content
+            )
+            EventSheetSubmit(
+                text = if (isSubmitting) "Creazione…" else "Crea e pubblica",
+                onClick = onSubmit,
+                enabled = !isSubmitting && canSubmit
+            )
         }
     }
 }

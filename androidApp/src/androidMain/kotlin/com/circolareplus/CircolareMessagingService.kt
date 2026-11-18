@@ -119,9 +119,8 @@ class CircolareMessagingService : FirebaseMessagingService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val glyphChannels = circolareplus.design.UiStyle.fromKey(AppContainer.settings.uiStyleKey) == circolareplus.design.UiStyle.NOTHING &&
-            circolareplus.design.NothingExperience.readPreferences(AppContainer.settings.nothingExperienceJson).systemNotifications &&
-            (Build.MANUFACTURER.equals("Nothing", true) || Build.BRAND.equals("Nothing", true))
+        val glyphChannels = circolareplus.design.NothingExperience
+            .readPreferences(AppContainer.settings.nothingExperienceJson).systemNotifications
         val channelId = circolareplus.platform.NothingNotificationChannels.route(this, category, glyphChannels)
         val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.drawable.ic_stat_aila)

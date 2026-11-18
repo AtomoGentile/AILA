@@ -32,7 +32,7 @@ import kotlinx.coroutines.CancellationException
  * "A chi è rivolto?" nei fogli di creazione dei sondaggi: tutta la classe (default) oppure solo
  * alcune persone scelte. [selectedIds] null = tutta la classe.
  *
- * L'elenco della classe si carica qui, alla prima apertura di "Solo alcune persone", come nel
+ * L'elenco della classe si carica qui, alla prima scelta di "Persone specifiche", come nel
  * foglio "Nuovo evento": `classmates` di MainAppShell è popolato solo dopo una visita alla Mappa
  * Posti.
  */
@@ -66,29 +66,15 @@ fun PollAudienceSelector(
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
-        Text(
-            text = "A chi è rivolto",
-            style = MaterialTheme.typography.labelMedium,
-            color = AppTheme.TextMuted,
-            modifier = Modifier.padding(bottom = AppTheme.Space8)
+        EventFormDropdown(
+            label = "Destinatari",
+            options = listOf("Tutta la classe", "Persone specifiche"),
+            selectedIndex = if (isEveryone) 0 else 1,
+            onSelect = { index ->
+                if (index == 0) onSelectionChange(null)
+                else if (isEveryone) onSelectionChange(emptyList())
+            }
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
-        ) {
-            AnimatedFilterChip(
-                label = "Tutta la classe",
-                isSelected = isEveryone,
-                onClick = { onSelectionChange(null) },
-                modifier = Modifier.weight(1f)
-            )
-            AnimatedFilterChip(
-                label = "Solo alcune persone",
-                isSelected = !isEveryone,
-                onClick = { if (isEveryone) onSelectionChange(emptyList()) },
-                modifier = Modifier.weight(1f)
-            )
-        }
         if (!isEveryone) {
             val selected = selectedIds.orEmpty()
             Spacer(modifier = Modifier.height(AppTheme.Space12))

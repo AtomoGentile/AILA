@@ -15,9 +15,3 @@ enum class NothingNotificationGroup(val key: String, val label: String) {
         }
     }
 }
-
-internal fun nothingBarChannels(fraction: Float, segments: Int): List<Int> {
-    if(!fraction.isFinite() || segments !in 1..6) return emptyList()
-    val lit = kotlin.math.ceil(fraction.coerceIn(0f,1f)*segments).toInt()
-    return (0 until lit).map { segments - 1 - it }
-}

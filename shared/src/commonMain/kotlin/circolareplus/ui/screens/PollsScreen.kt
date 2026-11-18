@@ -30,15 +30,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import circolareplus.algorithms.InterrogationVoteType
 import circolareplus.design.AilaCard
+import circolareplus.design.AilaBackBar
 import circolareplus.design.AilaDuration
 import circolareplus.design.AilaDot
 import circolareplus.design.AilaEmptyState
+import circolareplus.design.AilaFilterBar
 import circolareplus.design.AilaIconButton
 import circolareplus.design.AilaIconTile
 import circolareplus.design.AilaPrimaryButton
 import circolareplus.design.AilaScreenHeader
 import circolareplus.design.AilaSecondaryButton
 import circolareplus.design.AilaSegmentedTabs
+import circolareplus.design.NothingContentLead
+import circolareplus.design.NothingSymbol
 import circolareplus.design.ailaAppear
 import circolareplus.design.ailaBouncySpring
 import circolareplus.design.ailaColorSpec
@@ -57,35 +61,65 @@ internal fun PollNavigation(
     onHistoryChange: (Boolean) -> Unit,
     onCreate: (() -> Unit)?
 ) {
+    val sections = listOf("Interrogazioni", "Ordinamento")
+    val horizontalPadding = if (AppTheme.isNothing) 20.dp else AppTheme.Space16
+    val createAction: (@Composable () -> Unit)? = onCreate?.let { create ->
+        {
+            AilaIconButton("Crea sondaggio", create, opensPage = true) { tint ->
+                AppIcons.Plus(Modifier.size(18.dp), tint)
+            }
+        }
+    }
+    if (showingHistory) {
+        AilaBackBar(
+            title = "Sondaggi",
+            onBackClick = { onHistoryChange(false) },
+            backContentDescription = "Torna ai sondaggi in corso",
+            action = createAction
+        )
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = horizontalPadding)
+                .padding(top = AppTheme.Space16),
+            verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)
+        ) {
+            val title = "Storico sondaggi"
+            val description = "Risultati delle interrogazioni e classifiche dei sondaggi conclusi."
+            if (AppTheme.isNothing) {
+                NothingContentLead(title, description, NothingSymbol.POLL)
+            } else {
+                SectionFeatureCard(title, description, icon = {
+                    AppIcons.History(Modifier.size(24.dp), MaterialTheme.colorScheme.tertiary)
+                })
+            }
+            AilaFilterBar(sections, section, onSectionChange)
+        }
+        return
+    }
+
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         AilaScreenHeader(
-            title = if (showingHistory) "Storico sondaggi" else "Sondaggi",
+            title = "Sondaggi",
             showBrand = maxWidth >= 400.dp,
             titleMaxLines = 2,
             action = {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     AilaIconButton(
-                        contentDescription = if (showingHistory) "Torna ai sondaggi in corso" else "Apri storico sondaggi",
-                        onClick = { onHistoryChange(!showingHistory) }
+                        contentDescription = "Apri storico sondaggi",
+                        onClick = { onHistoryChange(true) }
                     ) { tint ->
-                        if (showingHistory) AppIcons.ChevronLeft(Modifier.size(18.dp), tint)
-                        else AppIcons.History(Modifier.size(18.dp), tint)
+                        AppIcons.History(Modifier.size(18.dp), tint)
                     }
-                    if (onCreate != null) {
-                        AilaIconButton("Crea sondaggio", onCreate) { tint ->
-                            AppIcons.Plus(Modifier.size(18.dp), tint)
-                        }
-                    }
+                    createAction?.invoke()
                 }
             }
         )
     }
     AilaSegmentedTabs(
-        labels = listOf("Interrogazioni", "Ordinamento"),
+        labels = sections,
         selectedIndex = section,
         onSelect = onSectionChange,
         modifier = Modifier.fillMaxWidth()
-            .padding(horizontal = if (AppTheme.isNothing) 20.dp else AppTheme.Space16)
+            .padding(horizontal = horizontalPadding)
             .padding(bottom = AppTheme.Space12)
     )
 }

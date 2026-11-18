@@ -7,26 +7,20 @@ interface NothingGlyphConnection {
     val ownerLabel: String?
     val ready: Boolean
     val status: String
-    val supportsProgress: Boolean
     val notificationSettingsAvailable: Boolean get() = false
-    val barSegments: Int get() = 0
     fun openNotificationSettings(group: circolareplus.design.NothingNotificationGroup): Boolean = false
-    fun testNotification(group: circolareplus.design.NothingNotificationGroup): Boolean = false
     fun pulse(zone: Int = 0, periodMillis: Int = 1200): Boolean
-    fun showProgress(fraction: Float): Boolean
     fun stop()
 }
 
 @Composable
-expect fun rememberNothingGlyph(): NothingGlyphConnection
+expect fun rememberNothingGlyph(connectLights: Boolean): NothingGlyphConnection
 
 internal object PreviewNothingGlyph : NothingGlyphConnection {
     override val ownerLabel: String? = null
     override val ready = false
     override val status = "Anteprima sullo schermo"
-    override val supportsProgress = false
     override fun pulse(zone: Int, periodMillis: Int) = false
-    override fun showProgress(fraction: Float) = false
     override fun stop() = Unit
 }
 

@@ -2,13 +2,9 @@ package circolareplus.platform
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.provider.Settings
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import circolareplus.design.NothingNotificationGroup
 
 /** System-owned channels: Nothing OS owns sounds, Glyph patterns, DND and lock-screen delivery. */
@@ -35,7 +31,7 @@ object NothingNotificationChannels {
         }
     }
     fun route(context: Context, category: String, enabled: Boolean): String {
-        if(!enabled) return LEGACY
+        if (!enabled || !isNothingDevice()) return LEGACY
         ensure(context)
         // Opting into split channels must not silently bypass a previously blocked AILA channel.
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -51,21 +47,5 @@ object NothingNotificationChannels {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             true
         }.getOrDefault(false)
-    }
-    fun test(context: Context, group: NothingNotificationGroup): Boolean {
-        if(!NotificationManagerCompat.from(context).areNotificationsEnabled()) return false
-        val channel = route(context, group.key, true)
-        val manager = context.getSystemService(NotificationManager::class.java) ?: return false
-        if(manager.getNotificationChannel(channel)?.importance == NotificationManager.IMPORTANCE_NONE) return false
-        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
-        val pending = launch?.let { PendingIntent.getActivity(context, 8401, it,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE) }
-        val icon = context.resources.getIdentifier("ic_stat_aila", "drawable", context.packageName)
-            .takeIf { it != 0 } ?: android.R.drawable.ic_dialog_info
-        val note = NotificationCompat.Builder(context, channel).setSmallIcon(icon)
-            .setContentTitle("AILA · Prova ${group.label}")
-            .setContentText("Avviso di prova. Il pattern Glyph dipende dal suono e dalle impostazioni Nothing OS.")
-            .setContentIntent(pending).setAutoCancel(true).setTimeoutAfter(30_000).build()
-        return runCatching { manager.notify(8401 + group.ordinal, note); true }.getOrDefault(false)
     }
 }

@@ -166,12 +166,13 @@ fun AilaBackBar(
     title: String,
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier,
+    backContentDescription: String = "Indietro",
     action: (@Composable () -> Unit)? = null
 ) {
     if(AppTheme.isNothing) {
         Row(modifier.fillMaxWidth().background(AppTheme.BackgroundLight).padding(NothingSpacing.Edge),
             verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(NothingSpacing.Item)) {
-            AilaIconButton("Indietro",onBackClick) {AppIcons.ChevronLeft(Modifier.size(19.dp),it)}
+            AilaIconButton(backContentDescription,onBackClick) {AppIcons.ChevronLeft(Modifier.size(19.dp),it)}
             Text(title,Modifier.weight(1f),style=nothingDisplayStyle(22,30),color=AppTheme.TextDark,maxLines=2,overflow=TextOverflow.Ellipsis)
             action?.invoke()
         }
@@ -194,6 +195,10 @@ fun AilaBackBar(
                     .size(44.dp)
                     .clip(CircleShape)
                     .background(AppTheme.TintSlate)
+                    .semantics {
+                        contentDescription = backContentDescription
+                        role = Role.Button
+                    }
                     .ailaPressable(pressedScale = 0.9f) { onBackClick() },
                 contentAlignment = Alignment.Center
             ) {

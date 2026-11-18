@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -17,6 +18,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.unit.dp
 import circolareplus.design.*
+import circolareplus.util.plusDays
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -79,14 +81,11 @@ class NothingUiRegressionTest {
         screenshot("nothing-home-light")
         compose.runOnIdle {AppTheme.isDarkMode=true}
         screenshot("nothing-home-dark")
-        compose.onNodeWithText("Focus", useUnmergedTree=true).performScrollTo().performClick()
-        compose.onNodeWithText("25:00").assertIsDisplayed()
-        compose.onNodeWithText("Avvia").performClick()
-        compose.onNodeWithText("Pausa").assertIsDisplayed().performClick()
-        compose.onNodeWithText("Riprendi").assertIsDisplayed()
-        screenshot("nothing-home-focus-panel")
-        compose.onNodeWithContentDescription("Chiudi Focus").performClick()
-        compose.onNodeWithText("Ciao, Simone").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Focus").assertDoesNotExist()
+        compose.onNodeWithText("Incastri in agenda", useUnmergedTree = true).performScrollTo().performClick()
+        compose.onNode(hasText("Nessun incastro nei prossimi 7 giorni") and hasAnyAncestor(isDialog()))
+            .assertIsDisplayed()
+        compose.onNodeWithContentDescription("Chiudi incastri").performClick()
     }
 
     @Test fun publishedMapPrioritizesTheClassroomAndKeepsNamesAndManagementAccessible() {
@@ -96,7 +95,7 @@ class NothingUiRegressionTest {
             SeatMapScreen("s20",true,desks,students,false)
         } }
         compose.onNodeWithText("Preferenze sociali").assertDoesNotExist()
-        compose.onNodeWithText("Leggi nomi").assertIsDisplayed()
+        compose.onNodeWithText("Leggi nomi").assertDoesNotExist()
         screenshot("nothing-seat-map-light")
         compose.runOnIdle {AppTheme.isDarkMode=true}
         screenshot("nothing-seat-map-dark")
@@ -106,14 +105,33 @@ class NothingUiRegressionTest {
         compose.onNodeWithText("Nome20 Cognome completo 20").assertIsDisplayed()
         screenshot("nothing-seat-detail")
         compose.onNodeWithContentDescription("Chiudi dettaglio banco").performClick()
-        compose.onNodeWithText("Leggi nomi").performClick()
-        compose.onNodeWithText("Vista aula").assertIsDisplayed()
         compose.onNodeWithText("Gestione").performClick()
         compose.onNodeWithText("Preferenze sociali").assertExists()
         screenshot("nothing-seat-management")
         compose.onNodeWithContentDescription("Chiudi gestione aula").performClick()
         compose.onNodeWithText("Preferenze sociali").assertDoesNotExist()
-        compose.onNodeWithText("Vista aula").assertIsDisplayed()
+        compose.onNodeWithText("Gestione").assertIsDisplayed()
+    }
+
+    @Test fun representativeSeatManagementOpensInASheetInTheOtherStyles() {
+        var open by androidx.compose.runtime.mutableStateOf(false)
+        activity.get().setContent { AilaTheme {
+            SeatMapScreen("student", true, emptyList(), emptyMap(), open,
+                onTogglePreferencesWindow = { open = it })
+        } }
+        for (style in listOf(UiStyle.EXPRESSIVE, UiStyle.GLASS)) {
+            compose.runOnIdle {
+                AppTheme.uiStyle = style
+                open = false
+            }
+            compose.onNodeWithText("Apri votazione").assertDoesNotExist()
+            compose.onNodeWithText("Gestione", useUnmergedTree = true).performScrollTo().performClick()
+            compose.onNodeWithText("Gestione aula").assertIsDisplayed()
+            compose.onNodeWithText("Apri votazione").performClick()
+            compose.runOnIdle { kotlin.test.assertTrue(open) }
+            compose.onNodeWithContentDescription("Chiudi gestione aula").performClick()
+            compose.onNodeWithText("Preferenze sociali").assertDoesNotExist()
+        }
     }
 
     @Test fun pollRequiresEveryDateAndLocksVotingWhenClosed() {
@@ -234,27 +252,25 @@ class NothingUiRegressionTest {
         compose.runOnIdle {assertEquals(event.id,opened)}
     }
 
-    @Test fun radarShowsRealCategoriesAndOpensTheSelectedEntry() {
+    @Test fun calendarGlyphCountsDatesAndOpensTheSelectedDay() {
         var opened = ""
-        val entries = listOf(
-            GlyphRadarEntry("e1", GlyphChannel.CALENDAR, "Fisica · energia", "Oggi alle 10:00", true) { opened = "e1" },
-            GlyphRadarEntry("c1", GlyphChannel.CIRCULARS, "Assemblea d’istituto", "Apri circolare") { opened = "c1" },
-            GlyphRadarEntry("p1", GlyphChannel.CLASS, "Sondaggio gita", "Vota") { opened = "p1" })
+        val date = circolareplus.util.today().plusDays(1).toIso()
+        val conflict = testConflict("first", date)
         activity.get().setContent { AilaTheme {
-            Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight).padding(20.dp)) {
-                NothingRadarWidget(GlyphRadarData(entries), Modifier.fillMaxSize())
-            }
+            CalendarConflictGlyph(
+                listOf(conflict, testConflict("other", date)),
+                loading = false, unavailable = false, homeVisible = true,
+                onOpenEvent = { opened = it.date }, onOpenCalendar = {}
+            )
         } }
-        compose.onNodeWithContentDescription("Apri Radar: 3 voci, 1 oggi").assertIsDisplayed()
-        screenshot("nothing-radar-light")
+        compose.onNodeWithText("01").assertIsDisplayed()
+        screenshot("nothing-calendar-glyph-light")
         compose.runOnIdle { AppTheme.isDarkMode = true }
-        screenshot("nothing-radar-dark")
-        compose.onNodeWithText("Apri radar").performClick()
-        compose.onNodeWithText("Sondaggio gita").performScrollTo().performClick()
-        compose.runOnIdle { assertEquals("p1", opened); assertEquals(0, NothingExperience.completedSessions) }
-        compose.onNodeWithText("Apri radar").performClick()
-        compose.onNodeWithText("Assemblea d’istituto").performScrollTo().assertIsDisplayed()
-        screenshot("nothing-radar-inbox")
+        compose.onNodeWithText("Incastri in agenda", useUnmergedTree = true).performClick()
+        compose.onAllNodesWithText("Sovrapposizione di orario").assertCountEquals(2)
+        screenshot("nothing-calendar-glyph-detail")
+        compose.onNodeWithText("Verifica first · Assemblea", useUnmergedTree = true).performClick()
+        compose.runOnIdle { assertEquals(date, opened) }
     }
 
     @Test fun briefActionsExpandDismissAndPlanWithTheActualEventContext() {
@@ -278,48 +294,47 @@ class NothingUiRegressionTest {
         compose.onNodeWithText("Tutte le 4 voci").performScrollTo().performClick()
         compose.onNodeWithText("Circolare 4").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("Non ora: Circolare 4").performScrollTo().performClick()
-        compose.runOnIdle { assertEquals("e4",dismissed); assertEquals(0,NothingExperience.completedSessions) }
+        compose.runOnIdle { assertEquals("e4",dismissed) }
         compose.runOnIdle { AppTheme.isDarkMode=true }
         compose.onNodeWithText("Brief.").performScrollTo()
         screenshot("nothing-brief-feed-dark")
     }
 
-    @Test fun radarSignalsOnlyNewEnabledEntriesAndStopsThePhysicalCue() {
-        val zones = mutableListOf<Int>()
+    @Test fun glyphSignalsOnlyNewConfirmedOverlapsAndStopsThePhysicalCue() {
+        var pulses = 0
         var stops = 0
         val hardware = object : circolareplus.platform.NothingGlyphConnection {
             override val ownerLabel = "Nothing test"
             override val ready = true
             override val status = "Test"
-            override val supportsProgress = true
-            override fun pulse(zone: Int, periodMillis: Int): Boolean { zones += zone; return true }
-            override fun showProgress(fraction: Float) = true
+            override fun pulse(zone: Int, periodMillis: Int): Boolean { pulses++; return true }
             override fun stop() { stops++ }
         }
-        val first = GlyphRadarEntry("first", GlyphChannel.CALENDAR, "Fisica", "") {}
-        var entries by androidx.compose.runtime.mutableStateOf(listOf(first))
-        NothingExperience.configure(NothingPreferences(rearLights=true))
+        val date = circolareplus.util.today().plusDays(1).toIso()
+        var conflicts by androidx.compose.runtime.mutableStateOf(listOf(testConflict("initial", date)))
+        NothingExperience.configure(NothingPreferences(conflictLights = true))
         activity.get().setContent { AilaTheme {
             CompositionLocalProvider(circolareplus.platform.LocalNothingGlyph provides hardware) {
-                NothingRadarWidget(GlyphRadarData(entries))
+                CalendarConflictGlyph(conflicts, false, false, true, {}, {})
             }
         } }
-        compose.waitForIdle()
-        compose.runOnIdle { assertEquals(emptyList<Int>(),zones) }
-        compose.runOnIdle { entries = entries + GlyphRadarEntry("new", GlyphChannel.CLASS, "Sondaggio", "") {} }
-        compose.waitForIdle()
-        compose.runOnIdle { assertEquals(listOf(3), zones) }
+        compose.runOnIdle { assertEquals(0, pulses) }
+        compose.runOnIdle {
+            conflicts = conflicts + testConflict("possible", date).copy(kind = CalendarConflictKind.POSSIBLE)
+        }
+        compose.runOnIdle { assertEquals(0, pulses) }
+        compose.runOnIdle { conflicts = conflicts + testConflict("new", date) }
+        compose.runOnIdle { assertEquals(1, pulses) }
         compose.mainClock.advanceTimeBy(1500)
-        compose.waitForIdle()
         compose.runOnIdle { kotlin.test.assertTrue(stops > 0) }
-        compose.runOnIdle { NothingExperience.configure(NothingExperience.preferences.copy(radarClass=false)) }
-        compose.waitForIdle()
-        compose.runOnIdle { entries = entries + GlyphRadarEntry("muted", GlyphChannel.CLASS, "Risultato", "") {} }
-        compose.waitForIdle()
-        compose.runOnIdle { assertEquals(listOf(3), zones) }
-        compose.runOnIdle { NothingExperience.configure(NothingExperience.preferences.copy(radarClass=true)) }
-        compose.waitForIdle()
-        compose.runOnIdle { assertEquals(listOf(3), zones) }
+    }
+
+    private fun testConflict(id: String, date: String): CalendarConflict {
+        val first = circolareplus.domain.model.CalendarEvent(
+            id, "Verifica $id", date, "09:00", circolareplus.domain.model.CalendarEventCategory.VERIFICA
+        )
+        val second = first.copy(id = "$id-other", title = "Assemblea")
+        return CalendarConflict(date, first, second, CalendarConflictKind.OVERLAP)
     }
 
     @Test fun nothingCircularsHaveARealListAndKeepFilteringAndDocumentNavigation() {
@@ -373,34 +388,30 @@ class NothingUiRegressionTest {
         compose.runOnIdle { assertEquals(circolareplus.algorithms.InterrogationVoteType.GREEN,vote) }
     }
 
-    @Test fun phone4aStudioOpensRealCategorySettingsAndOffersAnExplicitTest() {
-        var configured:NothingNotificationGroup?=null
-        var tested:NothingNotificationGroup?=null
-        val hardware=object:circolareplus.platform.NothingGlyphConnection {
-            override val ownerLabel="Phone (4a)"
-            override val ready=true
-            override val status="Connessione di test"
-            override val supportsProgress=true
-            override val notificationSettingsAvailable=true
-            override val barSegments=6
-            override fun pulse(zone:Int,periodMillis:Int)=true
-            override fun showProgress(fraction:Float)=true
-            override fun stop()=Unit
-            override fun openNotificationSettings(group:NothingNotificationGroup):Boolean {configured=group;return true}
-            override fun testNotification(group:NothingNotificationGroup):Boolean {tested=group;return true}
+    @Test fun glyphSettingsOpenTheRealNotificationCategory() {
+        var configured: NothingNotificationGroup? = null
+        val hardware = object : circolareplus.platform.NothingGlyphConnection {
+            override val ownerLabel = "Phone (4a)"
+            override val ready = true
+            override val status = "Connessione di test"
+            override val notificationSettingsAvailable = true
+            override fun pulse(zone: Int, periodMillis: Int) = true
+            override fun stop() = Unit
+            override fun openNotificationSettings(group: NothingNotificationGroup): Boolean {
+                configured = group
+                return true
+            }
         }
-        NothingExperience.configure(NothingPreferences(systemNotifications=true))
+        NothingExperience.configure(NothingPreferences(systemNotifications = true))
         activity.get().setContent { AilaTheme {
             CompositionLocalProvider(circolareplus.platform.LocalNothingGlyph provides hardware) {
-                NothingGlyphStudio {}
+                Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    NothingGlyphNotificationSettings()
+                }
             }
         } }
-        compose.onNodeWithContentDescription("Anteprima Glyph Bar a 6 segmenti").assertIsDisplayed()
         compose.onNodeWithText("Configura Circolari").performScrollTo().performClick()
-        compose.runOnIdle {assertEquals(NothingNotificationGroup.CIRCULARS,configured)}
-        screenshot("nothing-glyph-notifications-4a")
-        compose.onNodeWithText("Prova Pere").performScrollTo().performClick()
-        compose.runOnIdle {assertEquals(NothingNotificationGroup.FORUM,tested)}
+        compose.runOnIdle { assertEquals(NothingNotificationGroup.CIRCULARS, configured) }
     }
 
     @Test fun personalAccentsDoNotLeakIntoNothingAndAreRestoredOnExit() {
@@ -424,7 +435,7 @@ class NothingUiRegressionTest {
                 Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
                     AilaScreenHeader("Calendario", "Le scadenze della classe")
                     Column(Modifier.padding(20.dp)) {
-                        NothingGlyphWidget()
+                        NothingMatrixLoader(Modifier.size(48.dp))
                         AilaSectionTitle("Prossimi eventi")
                         AilaProgressBar(.62f)
                     }
@@ -438,37 +449,6 @@ class NothingUiRegressionTest {
         screenshot("nothing-components-dark")
         android.provider.Settings.Global.putFloat(activity.get().contentResolver,
             android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
-    }
-
-    @Test fun glyphStudioChangesAreSavedAndTimerCanBeReset() {
-        var saved = ""
-        NothingExperience.restore("{}") { saved = it }
-        activity.get().setContent { AilaTheme { HomeScreen(studentFirstName = "Simone") } }
-        compose.onNodeWithText("Glyph", useUnmergedTree = true).performScrollTo().performClick()
-        compose.onNodeWithContentDescription("Personalizza Glyph").performClick()
-        compose.mainClock.advanceTimeBy(400)
-        compose.onNodeWithText("Orbita").performScrollTo().performClick()
-        compose.onNodeWithText("15 min").performScrollTo().performClick()
-        compose.onNode(hasSetTextAction()).performScrollTo().performTextReplacement("STUDIO")
-        compose.runOnIdle {
-            assertEquals(GlyphFace.ORBIT,NothingExperience.preferences.face)
-            assertEquals(15,NothingExperience.preferences.focusMinutes)
-            assertEquals("STUDIO",NothingExperience.preferences.signature)
-            kotlin.test.assertTrue(saved.contains("ORBIT"))
-        }
-        screenshot("nothing-glyph-studio")
-        compose.mainClock.autoAdvance = false
-        compose.onNodeWithText("Prova").performClick()
-        repeat(8) { frame ->
-            compose.mainClock.advanceTimeBy(80)
-            screenshot("nothing-glyph-motion-${frame.toString().padStart(2,'0')}",settle=false)
-        }
-        compose.mainClock.autoAdvance = true
-        compose.onNodeWithContentDescription("Chiudi Glyph Studio").performClick()
-        compose.mainClock.advanceTimeBy(400)
-        compose.onNodeWithText("Focus", useUnmergedTree = true).performScrollTo().performClick()
-        compose.onNodeWithText("15:00").assertIsDisplayed()
-        compose.onNodeWithText("STUDIO").assertIsDisplayed()
     }
 
     @Test @Config(qualifiers = "w360dp-h800dp-xxhdpi")

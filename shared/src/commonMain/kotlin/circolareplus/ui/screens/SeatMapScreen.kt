@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package circolareplus.ui.screens
 
 import androidx.compose.animation.AnimatedContent
@@ -41,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import circolareplus.algorithms.DeskAssignment
 import circolareplus.algorithms.OptimizerWeights
 import circolareplus.algorithms.SeatMapOptimizer
+import circolareplus.design.AilaBottomSheet
 import circolareplus.design.AilaIconButton
 import circolareplus.design.AilaCard
 import circolareplus.design.AilaPrimaryButton
@@ -51,6 +54,8 @@ import circolareplus.design.ailaFieldColors
 import circolareplus.design.ailaPressable
 import circolareplus.design.AilaScreenHeader
 import circolareplus.design.AilaSegmentedTabs
+import circolareplus.design.AilaTextButton
+import circolareplus.design.nothingDisplayStyle
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
 import circolareplus.domain.model.User
@@ -87,7 +92,7 @@ fun SeatMapScreen(
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var showHistory by remember { mutableStateOf(false) }
-    var adminExpanded by remember { mutableStateOf(false) }
+    var showManagement by remember { mutableStateOf(false) }
     if (showHistory) SeatMapHistoryDialog(
         studentsMap = studentsMap,
         loadHistory = loadPublishedHistory,
@@ -310,208 +315,210 @@ fun SeatMapScreen(
         }
         }
         val adminPanel: @Composable () -> Unit = {
-                // animateContentSize: quando arriva il conteggio dei voti il pannello cresce
-                // morbido invece di spingere giu' la mappa di scatto.
-                Column(modifier = Modifier.fillMaxWidth().animateContentSize().padding(if(AppTheme.isNothing)0.dp else AppTheme.Space16)) {
-                    if(!AppTheme.isNothing) {
-                    Row(Modifier.fillMaxWidth(),verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "Gestione aula",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = AppTheme.TextDark,
-                            modifier = Modifier.weight(1f)
-                        )
-                        circolareplus.design.AilaTextButton(onClick={adminExpanded=!adminExpanded},modifier=Modifier.widthIn(min=1.dp),contentPadding=PaddingValues(horizontal=0.dp,vertical=8.dp)) { Text(if(adminExpanded) "Chiudi" else "Opzioni") }
+            Column(modifier = Modifier.fillMaxWidth().animateContentSize()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val windowColor by animateColorAsState(
+                        targetValue = if (isPreferencesOpen) AppTheme.PollGreen else AppTheme.PollDarkRed,
+                        animationSpec = circolareplus.design.ailaColorSpec(),
+                        label = "prefWindowColor"
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        AilaDot(color = windowColor)
+                        Spacer(modifier = Modifier.width(AppTheme.Space8))
+                        AnimatedContent(
+                            targetState = isPreferencesOpen,
+                            transitionSpec = {
+                                (fadeIn(circolareplus.design.ailaFadeSpec(200)) + slideInVertically(circolareplus.design.ailaMoveSpec(220)) { it / 2 }) togetherWith
+                                    (fadeOut(circolareplus.design.ailaFadeSpec(120)) + slideOutVertically(circolareplus.design.ailaMoveSpec(160)) { -it / 2 })
+                            },
+                            label = "prefWindowLabel"
+                        ) { open ->
+                            Text(
+                                text = if (open) "Preferenze: APERTE" else "Preferenze: CHIUSE",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = windowColor
+                            )
+                        }
                     }
+                    Spacer(modifier = Modifier.width(AppTheme.Space8))
+                    AilaPrimaryButton(
+                        text = if (isPreferencesOpen) "Chiudi votazione" else "Apri votazione",
+                        onClick = { onTogglePreferencesWindow(!isPreferencesOpen) },
+                        compact = true
+                    )
+                }
 
-                    }
+                if (preferencesProgress != null && preferencesProgress.totalStudents > 0) {
                     Spacer(modifier = Modifier.height(AppTheme.Space8))
+                    PreferencesProgressBlock(progress = preferencesProgress)
+                }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        val windowColor by animateColorAsState(
-                            targetValue = if (isPreferencesOpen) AppTheme.PollGreen else AppTheme.PollDarkRed,
-                            animationSpec = circolareplus.design.ailaColorSpec(),
-                            label = "prefWindowColor"
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            AilaDot(color = windowColor)
-                            Spacer(modifier = Modifier.width(AppTheme.Space8))
-                            AnimatedContent(
-                                targetState = isPreferencesOpen,
-                                transitionSpec = {
-                                    (fadeIn(circolareplus.design.ailaFadeSpec(200)) + slideInVertically(circolareplus.design.ailaMoveSpec(220)) { it / 2 }) togetherWith
-                                        (fadeOut(circolareplus.design.ailaFadeSpec(120)) + slideOutVertically(circolareplus.design.ailaMoveSpec(160)) { -it / 2 })
-                                },
-                                label = "prefWindowLabel"
-                            ) { open ->
-                                Text(
-                                    text = if (open) "Preferenze: APERTE" else "Preferenze: CHIUSE",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = windowColor
+                if (showDummiesMenu) {
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                    DummiesBlock(
+                        dummies = dummies,
+                        isSaving = isSavingDummy,
+                        onAdd = onAddDummy,
+                        onDelete = onDeleteDummy
+                    )
+                    Spacer(modifier = Modifier.height(AppTheme.Space12))
+                }
+
+                // Pesi dell'algoritmo. **C'era un solo slider per tre pesi**: quello del peso
+                // sociale. Gli altri due comparivano nell'etichetta ma non erano regolabili in
+                // nessun modo — restavano a 1.0x qualunque cosa si facesse. Ora ognuno ha il
+                // suo cursore, e sotto c'è scritto cosa cambia.
+                WeightSlider(
+                    label = "Preferenze sociali",
+                    help = "Quanto contano le simpatie e le antipatie dichiarate dai compagni",
+                    value = wSocial,
+                    onValueChange = { wSocial = it }
+                )
+                WeightSlider(
+                    label = "Disciplina",
+                    help = "Quanto pesa separare chi fa chiasso",
+                    value = wDiscipline,
+                    onValueChange = { wDiscipline = it }
+                )
+                WeightSlider(
+                    label = "Didattica",
+                    help = "Quanto pesa affiancare chi va bene a chi fa più fatica",
+                    value = wDidactic,
+                    onValueChange = { wDidactic = it }
+                )
+
+                Spacer(modifier = Modifier.height(AppTheme.Space8))
+
+                // Banchi da coppia o da trio: stesso algoritmo (stesse funzioni di
+                // punteggio, applicate a tutte le coppie del banco), cambia solo quante
+                // persone ci mette insieme.
+                Text(
+                    text = if (customLayout) "Tipo di banco preferito" else "Posti per banco",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = AppTheme.TextDark
+                )
+                Spacer(modifier = Modifier.height(AppTheme.Space4))
+                // Selettore a pillole (connected button group in Material, segmented
+                // control in Glass) invece di due riquadri separati.
+                val seatOptions = listOf(SeatMapOptimizer.SEATS_PER_DESK_PAIR, SeatMapOptimizer.SEATS_PER_DESK_TRIO)
+                AilaSegmentedTabs(
+                    labels = listOf("Coppie (2)", "Trii (3)"),
+                    selectedIndex = seatOptions.indexOf(seatsPerDesk).coerceAtLeast(0),
+                    onSelect = { index -> seatsPerDesk = seatOptions[index] },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(AppTheme.Space12))
+
+                // Disposizione dell'aula: automatica oppure scelta fila per fila.
+                Text(
+                    text = "Disposizione dell'aula",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = AppTheme.TextDark
+                )
+                Spacer(modifier = Modifier.height(AppTheme.Space4))
+                AilaSegmentedTabs(
+                    labels = listOf("Automatica", "Personalizzata"),
+                    selectedIndex = if (customLayout) 1 else 0,
+                    onSelect = {
+                        customLayout = it == 1
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                val layoutOk = !customLayout || (customDeskSlots.sumOf { it.seats } >= studentCount &&
+                    customDeskSlots.groupBy { it.row }.values.all { row -> row.any { it.seats > 0 } })
+                if (customLayout) {
+                    Spacer(modifier = Modifier.height(AppTheme.Space8))
+                    DeskPositionsEditor(
+                        slots = customDeskSlots,
+                        onChange = { customDeskSlots = it; deskPositionsEdited = true },
+                        studentCount = studentCount,
+                        preferredDeskSeats = seatsPerDesk
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(AppTheme.Space16))
+
+                if (isGeneratingProposals) {
+                    SeatMapGenerationProgress(generationCompleted)
+                    Spacer(Modifier.height(AppTheme.Space12))
+                }
+                AilaPrimaryButton(
+                    text = if (isGeneratingProposals) "Ricerca in corso…" else "Cerca le migliori proposte",
+                    enabled = !isGeneratingProposals && layoutOk,
+                    // Mentre calcola: la forma che cambia (Material) o i puntini (Glass),
+                    // invece di un pulsante che non reagisce per qualche secondo.
+                    icon = if (isGeneratingProposals) {
+                        { _ ->
+                            if (AppTheme.isGlass) {
+                                androidx.compose.material3.CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    strokeWidth = 2.dp,
+                                    color = AppTheme.PrimaryBlue
                                 )
+                            } else {
+                                circolareplus.design.AilaMorphingLoader(size = 18.dp, color = AppTheme.PrimaryBlue)
                             }
                         }
-                        Spacer(modifier = Modifier.width(AppTheme.Space8))
-                        AilaPrimaryButton(
-                            text = if (isPreferencesOpen) "Chiudi votazione" else "Apri votazione",
-                            onClick = { onTogglePreferencesWindow(!isPreferencesOpen) },
-                            compact = true
+                    } else null,
+                    onClick = {
+                        onGenerateProposals(
+                            OptimizerWeights(
+                                wSocial = wSocial.toDouble(),
+                                wDiscipline = wDiscipline.toDouble(),
+                                wDidactic = wDidactic.toDouble()
+                            ),
+                            seatsPerDesk,
+                            if (customLayout) customDeskSlots.groupBy { it.row }.entries.sortedBy { it.key }.map { entry -> entry.value.sumOf { it.seats } } else emptyList(),
+                            if (customLayout) customDeskSlots else null
                         )
-                    }
-
-                    if (preferencesProgress != null && preferencesProgress.totalStudents > 0) {
-                        Spacer(modifier = Modifier.height(AppTheme.Space8))
-                        PreferencesProgressBlock(progress = preferencesProgress)
-                    }
-
-                    AnimatedVisibility(adminExpanded || isGeneratingProposals) {
-                    Column {
-                    if (showDummiesMenu) {
-                        Spacer(modifier = Modifier.height(AppTheme.Space12))
-                        DummiesBlock(
-                            dummies = dummies,
-                            isSaving = isSavingDummy,
-                            onAdd = onAddDummy,
-                            onDelete = onDeleteDummy
+                    },
+                    fillMaxWidth = true
+                )
+            }
+        }
+        if (isRepresentative && showManagement) {
+            AilaBottomSheet(onDismissRequest = { showManagement = false }) {
+                Column(
+                    Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(AppTheme.Space16)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Gestione aula",
+                            modifier = Modifier.weight(1f),
+                            style = if (AppTheme.isNothing) nothingDisplayStyle(28, 38) else MaterialTheme.typography.titleLarge,
+                            color = AppTheme.TextDark
                         )
-                        Spacer(modifier = Modifier.height(AppTheme.Space12))
+                        AilaIconButton("Chiudi gestione aula", { showManagement = false }) {
+                            AppIcons.Close(Modifier.size(18.dp), it)
+                        }
                     }
-
-                    // Pesi dell'algoritmo. **C'era un solo slider per tre pesi**: quello del peso
-                    // sociale. Gli altri due comparivano nell'etichetta ma non erano regolabili in
-                    // nessun modo — restavano a 1.0x qualunque cosa si facesse. Ora ognuno ha il
-                    // suo cursore, e sotto c'è scritto cosa cambia.
-                    WeightSlider(
-                        label = "Preferenze sociali",
-                        help = "Quanto contano le simpatie e le antipatie dichiarate dai compagni",
-                        value = wSocial,
-                        onValueChange = { wSocial = it }
-                    )
-                    WeightSlider(
-                        label = "Disciplina",
-                        help = "Quanto pesa separare chi fa chiasso",
-                        value = wDiscipline,
-                        onValueChange = { wDiscipline = it }
-                    )
-                    WeightSlider(
-                        label = "Didattica",
-                        help = "Quanto pesa affiancare chi va bene a chi fa più fatica",
-                        value = wDidactic,
-                        onValueChange = { wDidactic = it }
-                    )
-
-                    Spacer(modifier = Modifier.height(AppTheme.Space8))
-
-                    // Banchi da coppia o da trio: stesso algoritmo (stesse funzioni di
-                    // punteggio, applicate a tutte le coppie del banco), cambia solo quante
-                    // persone ci mette insieme.
-                    Text(
-                        text = if (customLayout) "Tipo di banco preferito" else "Posti per banco",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = AppTheme.TextDark
-                    )
-                    Spacer(modifier = Modifier.height(AppTheme.Space4))
-                    // Selettore a pillole (connected button group in Material, segmented
-                    // control in Glass) invece di due riquadri separati.
-                    val seatOptions = listOf(SeatMapOptimizer.SEATS_PER_DESK_PAIR, SeatMapOptimizer.SEATS_PER_DESK_TRIO)
-                    AilaSegmentedTabs(
-                        labels = listOf("Coppie (2)", "Trii (3)"),
-                        selectedIndex = seatOptions.indexOf(seatsPerDesk).coerceAtLeast(0),
-                        onSelect = { index -> seatsPerDesk = seatOptions[index] },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Spacer(modifier = Modifier.height(AppTheme.Space12))
-
-                    // Disposizione dell'aula: automatica oppure scelta fila per fila.
-                    Text(
-                        text = "Disposizione dell'aula",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = AppTheme.TextDark
-                    )
-                    Spacer(modifier = Modifier.height(AppTheme.Space4))
-                    AilaSegmentedTabs(
-                        labels = listOf("Automatica", "Personalizzata"),
-                        selectedIndex = if (customLayout) 1 else 0,
-                        onSelect = {
-                            customLayout = it == 1
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    val layoutOk = !customLayout || (customDeskSlots.sumOf { it.seats } >= studentCount &&
-                        customDeskSlots.groupBy { it.row }.values.all { row -> row.any { it.seats > 0 } })
-                    if (customLayout) {
-                        Spacer(modifier = Modifier.height(AppTheme.Space8))
-                        DeskPositionsEditor(
-                            slots = customDeskSlots,
-                            onChange = { customDeskSlots = it; deskPositionsEdited = true },
-                            studentCount = studentCount,
-                            preferredDeskSeats = seatsPerDesk
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(AppTheme.Space16))
-
-                    if (isGeneratingProposals) {
-                        SeatMapGenerationProgress(generationCompleted)
-                        Spacer(Modifier.height(AppTheme.Space12))
-                    }
-                    AilaPrimaryButton(
-                        text = if (isGeneratingProposals) "Ricerca in corso…" else "Cerca le migliori proposte",
-                        enabled = !isGeneratingProposals && layoutOk,
-                        // Mentre calcola: la forma che cambia (Material) o i puntini (Glass),
-                        // invece di un pulsante che non reagisce per qualche secondo.
-                        icon = if (isGeneratingProposals) {
-                            { _ ->
-                                if (AppTheme.isGlass) {
-                                    androidx.compose.material3.CircularProgressIndicator(
-                                        modifier = Modifier.size(14.dp),
-                                        strokeWidth = 2.dp,
-                                        color = AppTheme.PrimaryBlue
-                                    )
-                                } else {
-                                    circolareplus.design.AilaMorphingLoader(size = 18.dp, color = AppTheme.PrimaryBlue)
-                                }
-                            }
-                        } else null,
-                        onClick = {
-                            onGenerateProposals(
-                                OptimizerWeights(
-                                    wSocial = wSocial.toDouble(),
-                                    wDiscipline = wDiscipline.toDouble(),
-                                    wDidactic = wDidactic.toDouble()
-                                ),
-                                seatsPerDesk,
-                                if (customLayout) customDeskSlots.groupBy { it.row }.entries.sortedBy { it.key }.map { entry -> entry.value.sumOf { it.seats } } else emptyList(),
-                                if (customLayout) customDeskSlots else null
-                            )
-                        },
-                        fillMaxWidth = true
-                    )
-
-                    }
-                    }
+                    adminPanel()
                 }
+            }
         }
         val controlsPanel: @Composable () -> Unit = {
-            AilaCard(modifier=Modifier.ailaAppear(0)) {
-                Column(Modifier.fillMaxWidth()) {
-                    searchBlock()
-                    if(isRepresentative) {
-                        HorizontalDivider(Modifier.padding(horizontal=AppTheme.Space16),color=AppTheme.FieldOutline.copy(alpha=.4f))
-                        adminPanel()
+            AilaCard(modifier = Modifier.ailaAppear(0)) {
+                searchBlock()
+                if (isRepresentative) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        AilaTextButton(onClick = { showManagement = true }) { Text("Gestione") }
                     }
                 }
             }
         }
-        if(AppTheme.isNothing) {
-            NothingSeatMapContent(assignments,studentsMap,highlightedId,isRepresentative,isGeneratingProposals,
-                {adminExpanded=true},searchBlock,adminPanel,Modifier.weight(1f))
+        if (AppTheme.isNothing) {
+            NothingSeatMapContent(assignments, studentsMap, highlightedId, isRepresentative, isGeneratingProposals,
+                { showManagement = true }, searchBlock, Modifier.weight(1f))
         } else {
         // Tablet e iPad larghi: ricerca e pannello del Rappresentante in una colonna a sinistra,
         // la mappa dell'aula a destra, sempre in vista mentre si regolano i pesi o si cerca.
