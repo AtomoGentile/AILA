@@ -94,6 +94,7 @@ fun AilaScreenHeader(
     subtitle: String? = null,
     modifier: Modifier = Modifier,
     showBrand: Boolean = true,
+    titleMaxLines: Int = 1,
     action: (@Composable () -> Unit)? = null
 ) {
     if (AppTheme.isNothing) {
@@ -126,7 +127,7 @@ fun AilaScreenHeader(
                     text = title,
                     style = MaterialTheme.typography.headlineMedium,
                     color = AppTheme.TextDark,
-                    maxLines = 1,
+                    maxLines = titleMaxLines,
                     overflow = TextOverflow.Ellipsis
                 )
                 if (subtitle != null) {

@@ -49,7 +49,7 @@ enum class AilaAccent(
 enum class UiStyle(val key: String, val label: String) {
     AUTO("auto", "Automatico"),
     GLASS("glass", "Liquid Glass"),
-    EXPRESSIVE("expressive", "Material"),
+    EXPRESSIVE("expressive", "Neural Expressive"),
     NOTHING("nothing", "Nothing");
 
     companion object {

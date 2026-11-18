@@ -9,6 +9,8 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
+internal const val MAX_FOCUS_SECONDS = 90 * 60
+
 @Serializable
 enum class GlyphFace(val label: String) { CLASSIC("Circuito"), ORBIT("Orbita"), MATRIX("Matrice"), BARS("Tracce") }
 @Serializable
@@ -38,9 +40,11 @@ data class NothingFocusSession(
     val pausedSeconds: Int = 25 * 60,
     val deadlineMillis: Long? = null,
     val started: Boolean = false,
-    val completed: Boolean = false
+    val completed: Boolean = false,
+    val preparingForEvent: Boolean = false
 ) {
     val running: Boolean get() = deadlineMillis != null
+    internal val canStartPreparation: Boolean get() = !running && (!started || completed)
     fun remaining(nowMillis: Long): Int = deadlineMillis?.let {
         ((it - nowMillis + 999L) / 1000L).coerceIn(0L, totalSeconds.toLong()).toInt()
     } ?: pausedSeconds.coerceIn(0, totalSeconds)
@@ -79,7 +83,7 @@ object NothingExperience {
     fun restore(json: String, write: (String) -> Unit) {
         val saved = runCatching { codec.decodeFromString<NothingSavedState>(json) }.getOrDefault(NothingSavedState())
         preferences = saved.preferences.copy(previewBrightness = saved.preferences.previewBrightness.coerceIn(.25f, 1f), focusMinutes = saved.preferences.focusMinutes.coerceIn(1, 90), signature = cleanSignature(saved.preferences.signature))
-        val total = saved.focus.totalSeconds.coerceIn(60, 5400)
+        val total = saved.focus.totalSeconds.coerceIn(if (saved.focus.preparingForEvent) 1 else 60, MAX_FOCUS_SECONDS)
         focus = saved.focus.copy(totalSeconds = total, pausedSeconds = saved.focus.pausedSeconds.coerceIn(0,total))
         refreshClock()
         completedSessions = saved.completedSessions.coerceAtLeast(0)
@@ -101,11 +105,28 @@ object NothingExperience {
         this.nowMillis = nowMillis
         if (completeIfDue(nowMillis)) return
         focus = when {
+            focus.preparingForEvent && focus.running -> NothingFocusSession.fresh(preferences.focusMinutes)
             focus.running -> focus.pause(nowMillis)
             focus.completed || focus.pausedSeconds == 0 -> NothingFocusSession.fresh(preferences.focusMinutes).start(nowMillis)
             else -> focus.start(nowMillis)
         }
         save()
+    }
+
+    internal fun startPreparation(nowMillis: Long, deadlineMillis: Long): Boolean {
+        val duration = deadlineMillis - nowMillis
+        if (!focus.canStartPreparation || duration !in 1L..MAX_FOCUS_SECONDS * 1000L) return false
+        val seconds = ((duration + 999L) / 1000L).toInt()
+        this.nowMillis = nowMillis
+        focus = NothingFocusSession(
+            totalSeconds = seconds,
+            pausedSeconds = seconds,
+            deadlineMillis = deadlineMillis,
+            started = true,
+            preparingForEvent = true
+        )
+        save()
+        return true
     }
     fun resetFocus() { focus = NothingFocusSession.fresh(preferences.focusMinutes); save() }
     /** True exactly once per completed session; callers can trigger one completion cue. */

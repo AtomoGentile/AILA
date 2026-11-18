@@ -33,9 +33,12 @@ import circolareplus.design.AilaCard
 import circolareplus.design.AilaDuration
 import circolareplus.design.AilaDot
 import circolareplus.design.AilaEmptyState
+import circolareplus.design.AilaIconButton
 import circolareplus.design.AilaIconTile
 import circolareplus.design.AilaPrimaryButton
+import circolareplus.design.AilaScreenHeader
 import circolareplus.design.AilaSecondaryButton
+import circolareplus.design.AilaSegmentedTabs
 import circolareplus.design.ailaAppear
 import circolareplus.design.ailaBouncySpring
 import circolareplus.design.ailaColorSpec
@@ -45,6 +48,47 @@ import circolareplus.design.AppTheme
 import circolareplus.util.ITALIAN_MONTHS
 import circolareplus.util.parseIsoDate
 import circolareplus.util.weekdayName
+
+@Composable
+internal fun PollNavigation(
+    section: Int,
+    showingHistory: Boolean,
+    onSectionChange: (Int) -> Unit,
+    onHistoryChange: (Boolean) -> Unit,
+    onCreate: (() -> Unit)?
+) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        AilaScreenHeader(
+            title = if (showingHistory) "Storico sondaggi" else "Sondaggi",
+            showBrand = maxWidth >= 400.dp,
+            titleMaxLines = 2,
+            action = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AilaIconButton(
+                        contentDescription = if (showingHistory) "Torna ai sondaggi in corso" else "Apri storico sondaggi",
+                        onClick = { onHistoryChange(!showingHistory) }
+                    ) { tint ->
+                        if (showingHistory) AppIcons.ChevronLeft(Modifier.size(18.dp), tint)
+                        else AppIcons.History(Modifier.size(18.dp), tint)
+                    }
+                    if (onCreate != null) {
+                        AilaIconButton("Crea sondaggio", onCreate) { tint ->
+                            AppIcons.Plus(Modifier.size(18.dp), tint)
+                        }
+                    }
+                }
+            }
+        )
+    }
+    AilaSegmentedTabs(
+        labels = listOf("Interrogazioni", "Ordinamento"),
+        selectedIndex = section,
+        onSelect = onSectionChange,
+        modifier = Modifier.fillMaxWidth()
+            .padding(horizontal = if (AppTheme.isNothing) 20.dp else AppTheme.Space16)
+            .padding(bottom = AppTheme.Space12)
+    )
+}
 
 data class SlotUiItem(
     val slotId: String,

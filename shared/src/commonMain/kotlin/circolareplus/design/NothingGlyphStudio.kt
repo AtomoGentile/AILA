@@ -56,7 +56,8 @@ fun NothingFocusWidget(modifier: Modifier = Modifier, compact: Boolean = false) 
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("FOCUS", style = MaterialTheme.typography.labelMedium, color = GlyphMuted)
-                Text(prefs.signature.ifBlank { "Il tuo tempo" }, style = MaterialTheme.typography.labelSmall, color = GlyphMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(if (focus.preparingForEvent) "Fino a 5 min prima dell’impegno" else prefs.signature.ifBlank { "Il tuo tempo" },
+                    style = MaterialTheme.typography.labelSmall, color = GlyphMuted, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             Box(Modifier.size(44.dp).clip(CircleShape).background(Color(0xFF2A2A2A))
                 .clickable(role = Role.Button) { studio = true }
@@ -73,7 +74,8 @@ fun NothingFocusWidget(modifier: Modifier = Modifier, compact: Boolean = false) 
         Text(formatFocusTime(focus.remaining(now)), style = MaterialTheme.typography.headlineMedium.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Normal),
             color = GlyphPaper, maxLines = 1)
 
-        if (focus.completed) Text("Sessione conclusa", style = MaterialTheme.typography.bodySmall, color = GlyphMuted)
+        if (focus.completed) Text(if (focus.preparingForEvent) "È ora di prepararti" else "Sessione conclusa",
+            style = MaterialTheme.typography.bodySmall, color = GlyphMuted)
         Box(Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(CircleShape).background(AppTheme.PrimaryBlue)
             .clickable(role = Role.Button) {
                 hardware.stop()
@@ -81,7 +83,14 @@ fun NothingFocusWidget(modifier: Modifier = Modifier, compact: Boolean = false) 
                 signal++
                 if (prefs.haptics) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             }, contentAlignment = Alignment.Center) {
-            Text(when { focus.running -> "Pausa"; focus.completed -> "Ancora"; focus.started -> "Riprendi"; else -> "Avvia" },
+            val actionLabel = when {
+                focus.running && focus.preparingForEvent -> "Termina Focus"
+                focus.running -> "Pausa"
+                focus.completed && !focus.preparingForEvent -> "Ancora"
+                focus.started && !focus.completed -> "Riprendi"
+                else -> "Avvia"
+            }
+            Text(actionLabel,
                 style = MaterialTheme.typography.labelLarge, color = if(AppTheme.isDarkMode) Color.Black else Color.White)
         }
     }
@@ -194,7 +203,7 @@ fun NothingGlyphStudio(onDismiss: () -> Unit) {
                 label = { Text("Firma del Glyph") }, supportingText = { Text("Fino a 8 caratteri, mostrati sotto il timer.") },
                 singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = ailaFieldColors())
             NothingPreferenceRow("Caratteri a punti", "Titoli e strumenti; il testo dei contenuti resta leggibile.", p.dotDisplay) { update(p.copy(dotDisplay = it)) }
-            NothingPreferenceRow("Widget nella Home", "Mostra i comandi Glyph e Focus nella Home.", p.showFocusWidget) { update(p.copy(showFocusWidget = it)) }
+            NothingPreferenceRow("Widget nella Home", "Mostra il prossimo impegno nel Glyph e i comandi di Focus.", p.showFocusWidget) { update(p.copy(showFocusWidget = it)) }
             NothingPreferenceRow("Feedback tattile", "Un segnale all’avvio e a fine sessione.", p.haptics) { update(p.copy(haptics = it)) }
             if (hardware.ownerLabel != null) {
                 AilaSectionTitle("Nothing Insider")

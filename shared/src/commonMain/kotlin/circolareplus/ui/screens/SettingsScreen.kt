@@ -260,7 +260,7 @@ fun SettingsScreen(
                             Text(
                                 text = when (uiStyle) {
                                     circolareplus.design.UiStyle.AUTO ->
-                                        "Liquid Glass su iPhone e iPad, Material su Android."
+                                        "Liquid Glass su iPhone e iPad, Neural Expressive sulle altre piattaforme."
                                     circolareplus.design.UiStyle.GLASS ->
                                         "Superfici di vetro traslucide e movimenti morbidi, come iOS."
                                     circolareplus.design.UiStyle.EXPRESSIVE ->

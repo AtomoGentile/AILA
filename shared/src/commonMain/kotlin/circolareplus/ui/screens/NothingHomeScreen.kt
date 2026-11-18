@@ -16,8 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import circolareplus.design.*
 import circolareplus.domain.model.CalendarEvent
@@ -43,8 +41,11 @@ internal fun NothingHomeScreen(
     onDismissBrief: (AilaBriefItemDto) -> Unit, onPlanStudy: (String) -> Unit,
     subjectColorsEnabled: Boolean, subjectColorOverrides: Map<String,String>, actions: NothingHomeActions,
     eventsLoading: Boolean, circularsLoading: Boolean,
-    conflicts: List<CalendarConflict> = emptyList()
+    conflicts: List<CalendarConflict> = emptyList(),
+    glyphEvents: List<CalendarEvent> = events,
+    onOpenGlyphEvent: (CalendarEvent) -> Unit = actions.openEvent
 ) {
+    var glyph by remember { mutableStateOf(false) }
     var studio by remember { mutableStateOf(false) }
     var focus by remember { mutableStateOf(false) }
     var allBrief by remember { mutableStateOf(false) }
@@ -130,6 +131,14 @@ internal fun NothingHomeScreen(
                 } else Text(if(eventsLoading) "Caricamento…" else "Nessun impegno in programma.",color=AppTheme.TextMuted,style=MaterialTheme.typography.bodyMedium)
             }
         }
+        if (NothingExperience.preferences.showFocusWidget) {
+            val session = NothingExperience.focus
+            val focusLabel = if (session.running) formatFocusTime(session.remaining(NothingExperience.nowMillis)) else "Focus"
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                AilaSecondaryButton("Glyph", { glyph = true }, modifier = Modifier.weight(1f))
+                AilaSecondaryButton(focusLabel, { focus = true }, modifier = Modifier.weight(1f))
+            }
+        }
         val links=listOf(
             Triple("Circolari",NothingSymbol.DOCUMENT,actions.circulars),Triple("Calendario",NothingSymbol.CALENDAR,actions.calendar),
             Triple("Bacheca",NothingSymbol.CHAT,actions.board),Triple("Pere",NothingSymbol.CHAT,actions.forum),
@@ -154,13 +163,16 @@ internal fun NothingHomeScreen(
                 Text(latestCircular.title,style=MaterialTheme.typography.bodyMedium,color=AppTheme.TextDark)
             }
         } else if(circularsLoading && latestCircular == null) Text("Aggiornamento circolari…",style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
-        if(NothingExperience.preferences.showFocusWidget) {
-            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                AilaTextButton({studio=true},Modifier.weight(1f).semantics {contentDescription="Personalizza Glyph"}) {Text("Glyph")}
-                AilaSecondaryButton(if(NothingExperience.focus.running) formatFocusTime(NothingExperience.focus.remaining(NothingExperience.nowMillis)) else "Focus",{focus=true},modifier=Modifier.weight(1f))
-            }
-        }
     }
+    if (glyph) GlyphPreparationSheet(
+        events = glyphEvents,
+        loading = eventsLoading,
+        onDismiss = { glyph = false },
+        onOpenStudio = { glyph = false; studio = true },
+        onOpenFocus = { glyph = false; focus = true },
+        onOpenEvent = { event -> glyph = false; onOpenGlyphEvent(event) },
+        onOpenCalendar = { glyph = false; actions.calendar() }
+    )
     if(studio) NothingGlyphStudio {studio=false}
     if(focus) AilaBottomSheet(onDismissRequest={focus=false}) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {

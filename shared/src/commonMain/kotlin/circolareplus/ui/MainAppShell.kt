@@ -3283,7 +3283,9 @@ fun MainAppShell(
                     // prima alla mappa, non subito a Home.
                     circolareplus.platform.PlatformBackHandler(enabled = selectedTab != MainTab.HOME || returnPoint != null) {
                         val ret = returnPoint
-                        if (selectedTab == MainTab.SEATMAP && seatMapMode == "VOTE_PREFERENCES") {
+                        if (selectedTab == MainTab.POLLS && showPollHistory) {
+                            showPollHistory = false
+                        } else if (selectedTab == MainTab.SEATMAP && seatMapMode == "VOTE_PREFERENCES") {
                             seatMapMode = "MAP"
                         } else if (ret != null && selectedTab == ret.targetTab) {
                             // Si era arrivati dalla Ricerca o dall'Assistant: si torna li', com'erano.
@@ -3505,6 +3507,7 @@ fun MainAppShell(
                                 },
                                 onNavigateToPolls = { selectedTab = MainTab.POLLS },
                                 onNavigateToCalendar = { selectedTab = MainTab.CALENDAR },
+                                onOpenGlyphEvent = { event -> eventDetailToShow = event },
                                 onEventClick = { event ->
                                     calendarFocusDateIso = event.date
                                     selectedTab = MainTab.CALENDAR
@@ -4112,63 +4115,20 @@ fun MainAppShell(
                             }
                         }
                         MainTab.POLLS -> {
-                            // Se si è nello storico, il back torna prima al sondaggio corrente (come la
-                            // freccia in ScreenBackBar sotto), solo un secondo back chiude il flusso.
-                            // Dallo storico il back torna ai sondaggi in corso; da li' vale il back
-                            // delle tab (torna a Home).
-                            circolareplus.platform.PlatformBackHandler(enabled = showPollHistory) {
-                                showPollHistory = false
-                            }
+                            val onCreatePoll: (() -> Unit)? = if (isRepresentative) {
+                                {
+                                    if (pollsSection == 1) showCreateRankingPollDialog = true
+                                    else showCreatePollDialog = true
+                                }
+                            } else null
                             Column(modifier = Modifier.fillMaxSize()) {
-                                if(AppTheme.isNothing) {
-                                    circolareplus.ui.screens.NothingPollNavigation(pollsSection,showPollHistory,
-                                        {pollsSection=it},{showPollHistory=!showPollHistory},
-                                        if(isRepresentative) ({if(pollsSection==1)showCreateRankingPollDialog=true else showCreatePollDialog=true}) else null)
-                                } else {
-                                circolareplus.design.AilaScreenHeader(title = "Sondaggi")
-                                val showPollIntro = showPollHistory || pollsSection == 1 || currentPoll == null
-                                if(showPollIntro) circolareplus.ui.screens.SectionFeatureCard(
-                                    title=if(showPollHistory) "Le scelte della classe" else "Decidiamo insieme",
-                                    description=if(showPollHistory) "Ritrova i risultati e le date assegnate." else "Esprimi le tue preferenze sulle date o metti in ordine le proposte.",
-                                    modifier=Modifier.padding(horizontal=16.dp,vertical=8.dp),
-                                    icon={AppIcons.Poll(Modifier.size(24.dp),MaterialTheme.colorScheme.tertiary)},
-                                    actions=if(isRepresentative) ({
-                                        androidx.compose.material3.Button(onClick={if(pollsSection==1)showCreateRankingPollDialog=true else showCreatePollDialog=true},shape=RoundedCornerShape(18.dp)) {
-                                            AppIcons.Plus(Modifier.size(18.dp),MaterialTheme.colorScheme.onPrimary);Spacer(Modifier.width(6.dp));Text("Nuovo sondaggio")
-                                        }
-                                    }) else null
+                                circolareplus.ui.screens.PollNavigation(
+                                    section = pollsSection,
+                                    showingHistory = showPollHistory,
+                                    onSectionChange = { pollsSection = it },
+                                    onHistoryChange = { showPollHistory = it },
+                                    onCreate = onCreatePoll
                                 )
-                                // Sopra: sondaggi in corso o storico (vale per entrambi i tipi), con
-                                // l'azione "nuovo" accanto. Sotto: il tipo di sondaggio.
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(start = AppTheme.Space16, end = AppTheme.Space16, top = AppTheme.Space8),
-                                    horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    circolareplus.design.AilaSegmentedTabs(
-                                        labels = listOf("In corso", "Storico"),
-                                        selectedIndex = if (showPollHistory) 1 else 0,
-                                        onSelect = { index -> showPollHistory = index == 1 },
-                                        modifier = Modifier.weight(1f),
-                                        key = showPollHistory
-                                    )
-                                    if(isRepresentative && !showPollIntro) androidx.compose.material3.TextButton(onClick={showCreatePollDialog=true}) {
-                                        AppIcons.Plus(Modifier.size(18.dp),AppTheme.PrimaryBlue);Spacer(Modifier.width(4.dp));Text("Nuovo")
-                                    }
-                                }
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space8),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    circolareplus.design.AilaSegmentedTabs(
-                                        labels = listOf("Interrogazioni", "Ordinamento"),
-                                        selectedIndex = pollsSection,
-                                        onSelect = { index -> pollsSection = index },
-                                        modifier = Modifier.weight(1f),
-                                        key = pollsSection
-                                    )
-                                }
-                                }
                                 if (pollsSection == 1) {
                                     LoadableContent(
                                         isLoading = isRankingLoading && !rankingLoadedOnce,

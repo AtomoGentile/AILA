@@ -88,7 +88,8 @@ fun HomeScreen(
     isEventsLoading: Boolean = false,
     subjectColorsRevision: Int = 0,
     subjectColorsEnabled: Boolean = false,
-    subjectColorOverrides: Map<String, String> = emptyMap()
+    subjectColorOverrides: Map<String, String> = emptyMap(),
+    onOpenGlyphEvent: (CalendarEvent) -> Unit = onEventClick
 ) {
     val scrollState = rememberScrollState()
     val homeGutter = if(AppTheme.isNothing) circolareplus.design.NothingSpacing.Edge else AppTheme.Space16
@@ -120,7 +121,7 @@ fun HomeScreen(
             briefItems,briefLoading,briefError,onRefreshBrief,onOpenBrief,onDismissBrief,onPlanStudy,
             subjectColorsEnabled,subjectColorOverrides,NothingHomeActions(onNavigateToSearch,onNavigateToGita,onNavigateToCirculars,onNavigateToCalendar,
                 onNavigateToBoard,onOpenForum,onNavigateToPolls,onNavigateToSeatMap,onEventClick,onNavigateToCircularDetail),
-            isEventsLoading,isCircularsLoading, briefConflicts)
+            isEventsLoading,isCircularsLoading, briefConflicts, glyphEvents = calendarEvents, onOpenGlyphEvent = onOpenGlyphEvent)
         return
     }
 

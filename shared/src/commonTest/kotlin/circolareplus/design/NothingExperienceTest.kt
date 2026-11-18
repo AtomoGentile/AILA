@@ -42,6 +42,35 @@ class NothingExperienceTest {
         assertFalse(NothingExperience.focus.running)
         NothingExperience.restore("{}") {}
     }
+    @Test fun preparationKeepsItsDeadlineAfterRestoreAndCanBeStopped() {
+        var saved = ""
+        NothingExperience.restore("{}") { saved = it }
+        try {
+            assertTrue(NothingExperience.startPreparation(1000, 31_500))
+            NothingExperience.restore(saved) {}
+            assertTrue(NothingExperience.focus.preparingForEvent)
+            assertEquals(31_500L, NothingExperience.focus.deadlineMillis)
+            assertEquals(31, NothingExperience.focus.totalSeconds)
+            assertFalse(NothingExperience.startPreparation(2000, 60_000))
+            NothingExperience.toggleFocus(5000)
+            assertFalse(NothingExperience.focus.running)
+            assertFalse(NothingExperience.focus.preparingForEvent)
+            assertEquals(1500, NothingExperience.focus.pausedSeconds)
+        } finally { NothingExperience.restore("{}") {} }
+    }
+
+    @Test fun preparationCannotReplacePausedFocusOrUseAnExpiredDeadline() {
+        NothingExperience.restore("{}") {}
+        try {
+            assertFalse(NothingExperience.startPreparation(1000, 1000))
+            assertFalse(NothingExperience.startPreparation(1000, 1001 + MAX_FOCUS_SECONDS * 1000L))
+            NothingExperience.toggleFocus(1000)
+            NothingExperience.toggleFocus(2000)
+            assertFalse(NothingExperience.startPreparation(3000, 60_000))
+            assertEquals(1499, NothingExperience.focus.pausedSeconds)
+        } finally { NothingExperience.restore("{}") {} }
+    }
+
     @Test fun nothingTextAndSelectionsHaveReadableContrastInBothThemes() {
         val previousStyle=AppTheme.uiStyle;val previousDark=AppTheme.isDarkMode
         try {

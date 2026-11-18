@@ -13,20 +13,6 @@ import androidx.compose.ui.unit.dp
 import circolareplus.algorithms.InterrogationVoteType
 import circolareplus.design.*
 
-@Composable
-internal fun NothingPollNavigation(section: Int, history: Boolean, onSection: (Int)->Unit,
-    onHistory: ()->Unit, onCreate: (() -> Unit)?) {
-    AilaScreenHeader(if(history) "Storico sondaggi" else "Sondaggi",action={
-        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-            AilaIconButton(if(history) "Torna ai sondaggi in corso" else "Apri storico sondaggi",onHistory) {
-                if(history) AppIcons.ChevronLeft(Modifier.size(18.dp),it) else AppIcons.History(Modifier.size(18.dp),it)
-            }
-            if(onCreate != null) AilaIconButton("Crea sondaggio",onCreate) {AppIcons.Plus(Modifier.size(18.dp),it)}
-        }
-    })
-    AilaSegmentedTabs(listOf("Interrogazioni","Ordinamento"),section,onSection,Modifier.fillMaxWidth().padding(horizontal=20.dp).padding(bottom=12.dp))
-}
-
 /** Dates are the main content. Rules and management have explicit, separate entry points. */
 @Composable
 internal fun NothingPollContent(subject: String, slots: List<SlotUiItem>, bonus: Int, globalAssignment: Boolean,

@@ -122,7 +122,7 @@ class NothingUiRegressionTest {
         var expired by androidx.compose.runtime.mutableStateOf(false)
         activity.get().setContent { AilaTheme {
             Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
-                NothingPollNavigation(0,false,{},{},null)
+                PollNavigation(0,false,{},{},null)
                 PollsScreen("Fisica",slots,0,isExpired=expired,onCastVote={id,v->slots=slots.map {if(it.slotId==id)it.copy(currentVote=v)else it}},onSubmit={sent++})
             }
         } }
@@ -167,7 +167,7 @@ class NothingUiRegressionTest {
             circolareplus.data.remote.dto.RankingPollOptionDto("c","Teatro")))
         activity.get().setContent { AilaTheme {
             Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight)) {
-                NothingPollNavigation(section,history,{section=it},{history=!history},null)
+                PollNavigation(section,history,{section=it},{history=it},null)
                 RankingPollsScreen(listOf(poll),totalStudents=22,isRepresentative=true,submittingPollId=null,
                     onSubmitRanking={_,ids->order=ids},onClosePoll={},onDeletePoll={},onCreatePoll={})
             }
@@ -183,6 +183,33 @@ class NothingUiRegressionTest {
         compose.runOnIdle {kotlin.test.assertFalse(history)}
         compose.onNodeWithText("Interrogazioni").performClick()
         compose.runOnIdle {assertEquals(0,section)}
+    }
+
+    @Test fun allStylesOpenPollHistoryFromTheHeaderAndKeepTheSelectedCategory() {
+        var history by androidx.compose.runtime.mutableStateOf(false)
+        var section by androidx.compose.runtime.mutableStateOf(0)
+        activity.get().setContent {
+            AilaTheme {
+                Column {
+                    PollNavigation(section, history, { section = it }, { history = it }, null)
+                }
+            }
+        }
+
+        for (style in listOf(UiStyle.NOTHING, UiStyle.EXPRESSIVE, UiStyle.GLASS)) {
+            compose.runOnIdle {
+                AppTheme.uiStyle = style
+                section = 0
+            }
+            compose.onNodeWithText("In corso").assertDoesNotExist()
+            compose.onNodeWithContentDescription("Apri storico sondaggi").performClick()
+            compose.onNodeWithText("Storico sondaggi").assertIsDisplayed()
+            compose.onNodeWithText("Ordinamento").performClick()
+            compose.runOnIdle { assertEquals(1, section) }
+            compose.onNodeWithContentDescription("Torna ai sondaggi in corso").performClick()
+            compose.onNodeWithText("Sondaggi").assertIsDisplayed()
+            compose.runOnIdle { assertEquals(1, section) }
+        }
     }
 
     @Test fun homeBriefUsesOneOverviewAndRetainsTheNextEventWhenTheFeedIsEmpty() {
