@@ -444,7 +444,8 @@ class NothingUiRegressionTest {
         var saved = ""
         NothingExperience.restore("{}") { saved = it }
         activity.get().setContent { AilaTheme { HomeScreen(studentFirstName = "Simone") } }
-        compose.onNodeWithContentDescription("Personalizza Glyph").performScrollTo().performClick()
+        compose.onNodeWithText("Glyph", useUnmergedTree = true).performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Personalizza Glyph").performClick()
         compose.mainClock.advanceTimeBy(400)
         compose.onNodeWithText("Orbita").performScrollTo().performClick()
         compose.onNodeWithText("15 min").performScrollTo().performClick()
