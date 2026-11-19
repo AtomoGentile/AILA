@@ -7738,7 +7738,7 @@ private fun AddProposalDialog(
     var uploading by remember { mutableStateOf(false) }
     var submitted by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val pickAttachment = rememberContentPicker({ uploadError = it }) { file: IncomingContent ->
+    val pickAttachment = rememberContentPicker(onError = { uploadError = it }, onPicked = { file: IncomingContent ->
         if (attachments.size >= 5) uploadError = "Puoi allegare al massimo 5 file."
         else scope.launch {
             uploading = true; uploadError = null
@@ -7746,7 +7746,7 @@ private fun AddProposalDialog(
             catch (e: Exception) { uploadError = e.message ?: "Caricamento non riuscito" }
             finally { uploading = false }
         }
-    }
+    })
 
     circolareplus.design.AilaOriginSheet(
         originKey = "proposalCreateSheet",
