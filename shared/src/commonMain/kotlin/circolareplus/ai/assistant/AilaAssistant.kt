@@ -90,6 +90,7 @@ class AilaAssistant internal constructor(
         // Le risposte pronte del codice rispondono sull'app intera: nella chat della Gita no,
         // li' l'unica fonte e' il materiale della gita e il modello la legge tutta.
         if (mode == AssistantMode.GENERAL && knowledge.attachedSources.isEmpty() && !AssistantActionIntent.matches(question, history)) {
+            AssistantAgenda.examDates(knowledge, question)?.let { return it }
             AssistantMeetingComparison.answer(question, knowledge) { numbers ->
                 fetchCircularTexts(numbers, knowledge.circulars, PREFETCH_BUDGET_MS)
             }?.let { return it }

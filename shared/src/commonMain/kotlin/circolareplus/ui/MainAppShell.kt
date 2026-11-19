@@ -4833,7 +4833,7 @@ fun MainAppShell(
                             AppContainer.settings.isSystemNotificationsEnabled = enabled
                             syncPushPreferences()
                         },
-                        localAiEnabled = AppContainer.settings.isLocalAiEnabled,
+                        localAiEnabled = run { apiKeyRevision; AppContainer.settings.isLocalAiEnabled },
                         onLocalAiEnabledChange = { enabled ->
                             AppContainer.settings.isLocalAiEnabled = enabled
                             apiKeyRevision++

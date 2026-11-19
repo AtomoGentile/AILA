@@ -157,22 +157,24 @@ class NothingUiRegressionTest {
         compose.onNodeWithText("Mappa generata").assertIsDisplayed()
     }
 
-    @Test fun chatShowsPhotoAlongsideFileAndVoice() {
+    @Test fun chatKeepsRecordingInTheComposerWithFileAndPhotoInTheMenu() {
         activity.get().setContent { AilaTheme {
             AssistantChatScreen(
                 messages = emptyList(), isThinking = false, conversations = emptyList(),
                 onSend = {}, onBackClick = {}, onClearChat = {},
                 onOpenConversation = {}, onDeleteConversation = {}, onOpenSource = {},
-                onAttachContent = {}
+                onAttachContent = {}, initialDraft = "Appunti",
+                attachedFiles = listOf(circolareplus.ai.assistant.AssistantAttachedFile("notes", "Appunti.pdf"))
             )
         } }
         compose.onNodeWithText("ACA").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Registra vocale").assertIsDisplayed().assertIsEnabled()
+        compose.onNodeWithContentDescription("Invia").assertIsDisplayed().assertIsEnabled()
         compose.onNodeWithContentDescription("Menu allegati").performClick()
-        val titles = listOf("File", "Foto", "Vocale").map { title ->
-            compose.onNodeWithText(title, useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-        }
-        assertEquals(titles.first().top, titles[1].top)
-        assertEquals(titles.first().top, titles[2].top)
+        val file = compose.onNodeWithText("File", useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode()
+        val photo = compose.onNodeWithText("Foto", useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode()
+        assertEquals(file.boundsInRoot.top, photo.boundsInRoot.top)
+        compose.onNodeWithText("Vocale", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test fun pollRequiresEveryDateAndLocksVotingWhenClosed() {

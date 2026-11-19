@@ -17,8 +17,8 @@ import circolareplus.util.plusDays
  * sbagliare e in un millisecondo; il modello non aggiungeva niente se non errori e attesa.
  *
  * Scatta solo quando la domanda e' davvero un elenco: se contiene anche solo una parola che
- * indica un argomento ("la verifica di *storia*", "quanto costa la *gita a Roma*") la risposta
- * resta al modello, che quella cosa la deve cercare nei riassunti e nei PDF.
+ * indica un argomento, la risposta generica lascia la ricerca al modello. Le richieste semplici
+ * sulle date di una materia possono usare direttamente gli eventi pertinenti.
  */
 internal object AssistantAgenda {
 
@@ -51,6 +51,50 @@ internal object AssistantAgenda {
         val circularNumber: Int?,
         val fromCalendar: Boolean
     )
+
+    private val examDatesRequest = Regex(
+        """(?:(?:trova|cerca|elenca|mostrami|dimmi|quali sono) )?(?:tutte )?le date (?:dell |della |delle )(interrogazion[ei]|verific[ae]) (?:di |della )?(.+?)( (?:in|nel) calendario)?"""
+    )
+    private val oralExam = Regex("""\binterrogazion[ei]\b""")
+    private val writtenExam = Regex("""\bverific[ae]\b""")
+    private val spaces = Regex("""\s+""")
+
+    /** A source-backed answer for a single exam, independent of model availability. */
+    fun examDates(knowledge: AssistantKnowledge, question: String): AssistantReply? {
+        if (knowledge.calendarWarning != null || TimeScopeParser.parse(question, knowledge.todayIso) != null) return null
+        val request = AssistantContext.normalize(question).trim().replace(spaces, " ")
+        val exam = examDatesRequest.matchEntire(request) ?: return null
+        val (examType, subject, calendarScope) = exam.destructured
+        val calendarOnly = calendarScope.isNotEmpty()
+        val oral = oralExam.matches(examType)
+        val label = if (oral) oralExam else writtenExam
+        val category = if (oral) CalendarEventCategory.INTERROGAZIONE else CalendarEventCategory.VERIFICA
+        val subjectPhrase = Regex("""\b${Regex.escape(subject)}\b""")
+        val found = collectItems(knowledge).filter { item ->
+            val title = AssistantContext.normalize(item.title).replace(spaces, " ")
+            (!calendarOnly || item.fromCalendar) && subjectPhrase.containsMatchIn(title) &&
+                (item.category == category || (item.category == null || item.category == CalendarEventCategory.ALTRO) &&
+                    label.containsMatchIn(title))
+        }
+        if (found.isEmpty()) {
+            if (!calendarOnly) return null
+            return AssistantReply(
+                text = "Nel calendario non ho trovato date per questa attività. Se hai il programma delle interrogazioni o delle verifiche, puoi allegarlo qui.",
+                sources = listOf(AssistantSource(AssistantSourceKind.CALENDAR, "Calendario di classe")),
+                modelLabel = "Dai dati di AILA"
+            )
+        }
+        val scope = when {
+            found.none { it.fromCalendar } -> "nelle circolari analizzate"
+            found.any { !it.fromCalendar } -> "nel calendario e nelle circolari analizzate"
+            else -> "nel calendario"
+        }
+        return AssistantReply(
+            text = "Date trovate $scope\n" + found.joinToString("\n") { line(it, knowledge.todayIso, withYear = true) },
+            sources = sourcesOf(found, knowledge),
+            modelLabel = "Dai dati di AILA"
+        )
+    }
 
     /**
      * La risposta gia' pronta, o `null` se la domanda non e' un elenco e va passata al modello.
@@ -222,8 +266,8 @@ internal object AssistantAgenda {
         }
     }
 
-    private fun line(item: Item, todayIso: String): String = buildString {
-        append("• ").append(AssistantContext.readableDate(item.date, todayIso))
+    private fun line(item: Item, todayIso: String, withYear: Boolean = false): String = buildString {
+        append("• ").append(AssistantContext.readableDate(item.date, todayIso, withYear))
         cleanTime(item.time)?.let { append(", ore ").append(it) }
         append(" — ").append(item.title.trim())
         readable(item.category)?.let { append(" (").append(it).append(")") }

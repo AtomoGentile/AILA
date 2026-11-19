@@ -41,6 +41,31 @@ class AssistantAgentLoopTest {
         assertTrue(model.prompts.isEmpty())
     }
 
+    @Test fun biologyDatesComeFromTheCalendarEvenWhenModelsAreUnavailable() = runTest {
+        val model = ScriptedClassifier()
+        val exam = CalendarEvent("bio1", "Interrogazione di Biologia", "2026-11-08",
+            category = CalendarEventCategory.INTERROGAZIONE)
+        val events = listOf(
+            exam.copy(id = "bio2", date = "2026-12-19"),
+            exam,
+            exam.copy(id = "written", title = "Verifica di Biologia", date = "2026-11-20", category = CalendarEventCategory.VERIFICA),
+            exam.copy(id = "other", title = "Interrogazione di Storia", date = "2026-11-21"),
+            exam.copy(id = "private", date = "2026-11-22", isForAll = false, visibleToUserIds = listOf("colleague"))
+        )
+        val reply = assistant(model).ask("Trova tutte le date dell'interrogazione di biologia", emptyList(),
+            knowledge.copy(calendarEvents = events))
+
+        assertTrue("8 novembre 2026" in reply.text)
+        assertTrue("19 dicembre 2026" in reply.text)
+        assertTrue(reply.text.indexOf("8 novembre") < reply.text.indexOf("19 dicembre"))
+        assertFalse("20 novembre" in reply.text)
+        assertFalse("21 novembre" in reply.text)
+        assertFalse("22 novembre" in reply.text)
+        assertTrue(reply.sources.any { it.kind == AssistantSourceKind.CALENDAR })
+        assertTrue(model.prompts.isEmpty())
+        assertNull(reply.actionPlan)
+    }
+
     @Test fun missingGroupCanBeRecoveredFromExplicitDatedPdfRows() = runTest {
         val circular = Circular(71, "Corso B2 First", "2026-09-10", "b2-english")
         val g = CalendarEvent("g", "Giornalino", "2026-11-20", "14:15–15:45", CalendarEventCategory.ALTRO)

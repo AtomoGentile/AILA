@@ -351,7 +351,8 @@ fun AssistantChatScreen(
                 )
             }
 
-            val canSend = (draft.trim().isNotEmpty()||attachedFiles.isNotEmpty()) && !isThinking
+            val hasDraft = draft.isNotBlank() || attachedFiles.isNotEmpty()
+            val canSend = hasDraft && !isThinking
             val send = {
                 val question = draft.trim().ifBlank{"Riassumi gli allegati di questo messaggio."}
                 draft = ""
@@ -398,9 +399,15 @@ fun AssistantChatScreen(
                     integrated = true
                 )
                 Spacer(modifier = Modifier.width(AppTheme.Space8))
-                if(draft.isBlank()&&attachedFiles.isEmpty()&&recorder!=null)AilaIconButton(contentDescription=if(recording)"Termina vocale"else"Registra vocale",onClick={if(recording)recorder?.stop()else if(!isThinking)recorder?.start()}){tint->
-                    MicrophoneGlyph(if(recording) AppTheme.TintRedInk else tint)
-                }else SendButton(enabled = canSend, onClick = send)
+                if (recorder != null) {
+                    AilaIconButton(contentDescription = "Registra vocale", enabled = !isThinking, onClick = {
+                        attachmentError = null
+                        recorder.start()
+                    }) { tint -> MicrophoneGlyph(tint) }
+                }
+                if (hasDraft || recorder == null) {
+                    SendButton(enabled = canSend, onClick = send)
+                }
             }
 
             Spacer(modifier = Modifier.height(AppTheme.Space8))
@@ -426,7 +433,7 @@ fun AssistantChatScreen(
                     }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AttachmentMenuTile("File", "Documenti", AppTheme.TintViolet, AppTheme.TintVioletInk,
+                    AttachmentMenuTile("File", "Documenti e audio", AppTheme.TintViolet, AppTheme.TintVioletInk,
                         enabled = !isThinking && !recording, onClick = { fileSources = true }, modifier = Modifier.weight(1f)) {
                         AppIcons.Document(Modifier.size(24.dp), it)
                     }
@@ -436,13 +443,6 @@ fun AssistantChatScreen(
                             photoPicker?.invoke()
                         }, modifier = Modifier.weight(1f)) {
                         AppIcons.Photo(Modifier.size(24.dp), it)
-                    }
-                    AttachmentMenuTile("Vocale", if (recording) "Termina" else "Registra", AppTheme.TintGreen, AppTheme.TintGreenInk,
-                        enabled = !isThinking, onClick = {
-                            attachmentsMenu = false
-                            if (recording) recorder?.stop() else recorder?.start()
-                        }, modifier = Modifier.weight(1f)) {
-                        MicrophoneGlyph(it)
                     }
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

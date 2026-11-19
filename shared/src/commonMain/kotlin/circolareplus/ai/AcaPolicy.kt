@@ -15,7 +15,9 @@ fun AcaPreferencesDto.allows(service: String): Boolean =
 /** Every individual provider checks live consent, including a fallback after settings change. */
 class PolicyAiClassifier(private val delegate:AiClassifier,private val kind:String):AiClassifier {
  private fun denied(service:String):String? {
-  val p=AppContainer.settings.cachedAiPreferences
+  val settings = AppContainer.settings
+  val p = settings.cachedAiPreferences
+  if (kind == "LOCAL" && !settings.isLocalAiEnabled) return "L’AI locale è disattivata nelle impostazioni."
   if(!p.aiEnabled)return "L’AI è disattivata. Puoi attivarla in Impostazioni → AI."
   if(requiresContextualAca(service)&&!p.acaEnabled)return "ACA è opzionale ed è disattivata. Puoi attivarla in Impostazioni → AI."
   if(service !in p.services)return "Questo servizio AI è disattivato in Impostazioni → AI."

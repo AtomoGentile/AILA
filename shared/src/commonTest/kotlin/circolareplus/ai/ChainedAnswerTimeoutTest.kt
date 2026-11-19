@@ -34,6 +34,15 @@ class ChainedAnswerTimeoutTest {
         assertFalse("entro 30" in failure.reason)
     }
 
+    @Test fun disablingFallbackPreservesTheCloudFailureWithoutInvokingNano() = runTest {
+        val primary = Stub { AiTextResult.Failure("Google: quota esaurita") }
+        val secondary = Stub { error("The disabled on-device model must never be invoked") }
+        val chain = ChainedAiClassifier(primary, secondary, escalateToSecondary = false)
+
+        assertEquals("Google: quota esaurita", assertIs<AiTextResult.Failure>(chain.generateAnswer(prompt)).reason)
+        assertEquals(0, secondary.calls)
+    }
+
     @Test fun callerCancellationStillStopsBeforeFallback() = runTest {
         val primary = Stub { awaitCancellation() }
         val secondary = Stub { error("Cancellation must not start another provider") }
