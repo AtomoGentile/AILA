@@ -7,6 +7,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -36,14 +37,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import circolareplus.algorithms.DeskAssignment
 import circolareplus.algorithms.OptimizerWeights
 import circolareplus.algorithms.SeatMapOptimizer
-import circolareplus.design.AilaOriginSheet
 import circolareplus.design.AilaIconButton
 import circolareplus.design.AilaCard
 import circolareplus.design.AilaPrimaryButton
@@ -58,6 +61,8 @@ import circolareplus.design.AilaTextButton
 import circolareplus.design.nothingDisplayStyle
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
+import circolareplus.design.LocalFloatingTabBarVisibility
+import circolareplus.design.appSafeDrawingPadding
 import circolareplus.domain.model.User
 import circolareplus.domain.model.PublishedSeatMap
 import kotlinx.coroutines.launch
@@ -492,31 +497,11 @@ fun SeatMapScreen(
             }
         }
         if (isRepresentative && showManagement) {
-            AilaOriginSheet(
-                originKey = "seat-map-management",
-                onDismiss = { showManagement = false },
+            SeatMapManagementScreen(
                 closeRequested = generatedProposalsReady,
-                fromBottom = true,
-                useOrigin = false
-            ) { close ->
-                Column(
-                    Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(AppTheme.Space16)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "Gestione aula",
-                            modifier = Modifier.weight(1f),
-                            style = if (AppTheme.isNothing) nothingDisplayStyle(28, 38) else MaterialTheme.typography.titleLarge,
-                            color = AppTheme.TextDark
-                        )
-                        AilaIconButton("Chiudi gestione aula", close) {
-                            AppIcons.Close(Modifier.size(18.dp), it)
-                        }
-                    }
-                    adminPanel()
-                }
-            }
+                onClosed = { showManagement = false },
+                content = adminPanel
+            )
         }
         val controlsPanel: @Composable () -> Unit = {
             AilaCard(modifier = Modifier.ailaAppear(0)) {
@@ -649,6 +634,70 @@ fun SeatMapScreen(
  * "Il mio posto", dentro la barra di ricerca della mappa: pillola che si accende (gradiente del
  * brand) quando il proprio banco e' evidenziato e si spegne al secondo tocco.
  */
+@Composable
+private fun SeatMapManagementScreen(
+    closeRequested: Boolean,
+    onClosed: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    val transition = remember { MutableTransitionState(false).apply { targetState = true } }
+    val close = { transition.targetState = false }
+    val currentOnClosed by rememberUpdatedState(onClosed)
+    val setTabBarVisible by rememberUpdatedState(LocalFloatingTabBarVisibility.current)
+    DisposableEffect(Unit) {
+        setTabBarVisible(false)
+        onDispose { setTabBarVisible(true) }
+    }
+    LaunchedEffect(closeRequested) {
+        if (closeRequested) close()
+    }
+    LaunchedEffect(transition.isIdle, transition.currentState, transition.targetState) {
+        if (transition.isIdle && !transition.currentState && !transition.targetState) currentOnClosed()
+    }
+
+    Dialog(onDismissRequest = close, properties = DialogProperties(
+        dismissOnClickOutside = false, usePlatformDefaultWidth = false
+    )) {
+        Box(Modifier.fillMaxSize()) {
+            AnimatedVisibility(
+                visibleState = transition,
+                modifier = Modifier.fillMaxSize(),
+                enter = if (AppTheme.reduceMotion) fadeIn() else slideInVertically { it },
+                exit = if (AppTheme.reduceMotion) fadeOut() else slideOutVertically { it }
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxSize().semantics { paneTitle = "Gestione aula" },
+                    color = AppTheme.BackgroundLight
+                ) {
+                    Column(Modifier.fillMaxSize().appSafeDrawingPadding()) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Gestione aula",
+                                modifier = Modifier.weight(1f),
+                                style = if (AppTheme.isNothing) nothingDisplayStyle(28, 38) else MaterialTheme.typography.titleLarge,
+                                color = AppTheme.TextDark
+                            )
+                            AilaIconButton("Chiudi gestione aula", close) {
+                                AppIcons.Close(Modifier.size(18.dp), it)
+                            }
+                        }
+                        Column(
+                            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
+                                .padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
+                            verticalArrangement = Arrangement.spacedBy(AppTheme.Space16)
+                        ) {
+                            content()
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun MySeatPill(active: Boolean, onClick: () -> Unit) {
     val ink by animateColorAsState(

@@ -113,24 +113,37 @@ class NothingUiRegressionTest {
         compose.onNodeWithText("Gestione").assertIsDisplayed()
     }
 
-    @Test fun representativeSeatManagementOpensInASheetInTheOtherStyles() {
+    @Test fun representativeSeatManagementFillsTheWindowAndHidesNavigation() {
         var open by androidx.compose.runtime.mutableStateOf(false)
+        var tabsVisible = true
         activity.get().setContent { AilaTheme {
-            SeatMapScreen("student", true, emptyList(), emptyMap(), open,
-                onTogglePreferencesWindow = { open = it })
+            CompositionLocalProvider(LocalFloatingTabBarVisibility provides { tabsVisible = it }) {
+                SeatMapScreen("student", true, emptyList(), emptyMap(), open,
+                    onTogglePreferencesWindow = { open = it })
+            }
         } }
-        for (style in listOf(UiStyle.EXPRESSIVE, UiStyle.GLASS)) {
+        for (style in listOf(UiStyle.EXPRESSIVE, UiStyle.GLASS, UiStyle.NOTHING)) {
             compose.runOnIdle {
                 AppTheme.uiStyle = style
                 open = false
             }
             compose.onNodeWithText("Apri votazione").assertDoesNotExist()
-            compose.onNodeWithText("Gestione", useUnmergedTree = true).performScrollTo().performClick()
+            val manage = compose.onNodeWithText("Gestione", useUnmergedTree = true)
+            if (style != UiStyle.NOTHING) manage.performScrollTo()
+            manage.performClick()
             compose.onNodeWithText("Gestione aula").assertIsDisplayed()
+            compose.runOnIdle { kotlin.test.assertFalse(tabsVisible) }
+            val management = compose.onNode(
+                SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.PaneTitle, "Gestione aula"),
+                useUnmergedTree = true
+            ).fetchSemanticsNode().boundsInRoot
+            val window = compose.onNode(isDialog(), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            assertEquals(window, management)
             compose.onNodeWithText("Apri votazione").performClick()
             compose.runOnIdle { kotlin.test.assertTrue(open) }
             compose.onNodeWithContentDescription("Chiudi gestione aula").performClick()
-            compose.onNodeWithText("Preferenze sociali").assertDoesNotExist()
+            compose.onNodeWithText("Gestione aula").assertDoesNotExist()
+            compose.runOnIdle { kotlin.test.assertTrue(tabsVisible) }
         }
     }
 
