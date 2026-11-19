@@ -80,6 +80,7 @@ class AilaAssistant internal constructor(
         mode: AssistantMode = AssistantMode.GENERAL,
         onAgentPhase: (AssistantAgentPhase) -> Unit = {}
     ): AssistantReply {
+        val missingDatesRequest = if (mode == AssistantMode.GENERAL) AssistantActionIntent.missingDatesRequest(question, history) else null
         if (mode == AssistantMode.GENERAL && !actionsEnabled && AssistantActionIntent.matches(question, history))
             return AssistantReply("Le azioni di ACA sono disattivate. Puoi abilitarle in Impostazioni → AI → ACA e Calendario.", modelLabel = "AILA")
         // The model can request reads or a validated action plan. Keyword intent is only a
@@ -120,6 +121,9 @@ class AilaAssistant internal constructor(
         val seenSearches = mutableSetOf<String>()
         val seenCirculars = texts.keys.toMutableSet()
         val studyOnly = studyPlan
+        val sourceCalendarRequest = mode == AssistantMode.GENERAL && !studyOnly &&
+            knowledge.attachedSources.isNotEmpty() && AssistantActionIntent.matches(question, history)
+        val explicitCalendarRequest = missingDatesRequest != null || sourceCalendarRequest
         var reviewAttempted = false
         var readsAfterReview = false
         var reviewIncomplete = false
@@ -142,7 +146,7 @@ class AilaAssistant internal constructor(
             // Retrieval supplies evidence, not proof that the answer covers the request.
             // Check the first terminal candidate once even when it follows a tool read.
             if (mode == AssistantMode.GENERAL && !reviewAttempted &&
-                !parsed.incomplete && parsed.answer.isNotBlank() && parsed.actionRequest.isBlank() &&
+                !explicitCalendarRequest && !parsed.incomplete && parsed.answer.isNotBlank() && parsed.actionRequest.isBlank() &&
                 parsed.calendarQueries.isEmpty() && parsed.needsCircularText.isEmpty() && parsed.searches.isEmpty()) {
                 reviewAttempted = true
                 val candidate = partialReply(parsed, result.modelLabel)
@@ -173,18 +177,19 @@ class AilaAssistant internal constructor(
                 "La risposta è incompleta. Riprova: nessuna nuova azione è stata eseguita.", isError = true,
                 modelLabel = result.modelLabel
             )
-            if (mode == AssistantMode.GENERAL && parsed.actionRequest.isNotBlank() && parsed.calendarQueries.isEmpty() && parsed.needsCircularText.isEmpty() && parsed.searches.isEmpty()) {
-                if (!actionsEnabled) return AssistantReply(
-                    "Le azioni di ACA sono disattivate. Puoi abilitarle in Impostazioni → AI → ACA e Calendario.", modelLabel = "AILA"
-                )
-                known.calendarWarning?.let { return AssistantReply(it, isError = true) }
-                return planAction(question, history, known, onAgentPhase, parsed.actionRequest)
-            }
             val queries = if (mode == AssistantMode.GENERAL) parsed.calendarQueries.filter { seenQueries.add(it) } else emptyList()
             val requested = parsed.needsCircularText.filter { seenCirculars.add(it) }
             val searches = parsed.searches.filter { seenSearches.add(it) }
             val wantsMore = queries.isNotEmpty() || requested.isNotEmpty() || searches.isNotEmpty()
             val requestedReads = parsed.calendarQueries.isNotEmpty() || parsed.needsCircularText.isNotEmpty() || parsed.searches.isNotEmpty()
+            if (mode == AssistantMode.GENERAL &&
+                (explicitCalendarRequest && (!canRead || !wantsMore) || parsed.actionRequest.isNotBlank() && !requestedReads)) {
+                if (!actionsEnabled) return AssistantReply(
+                    "Le azioni di ACA sono disattivate. Puoi abilitarle in Impostazioni → AI → ACA e Calendario.", modelLabel = "AILA"
+                )
+                known.calendarWarning?.let { return AssistantReply(it, isError = true) }
+                return planAction(question, history, known, onAgentPhase, parsed.actionRequest.ifBlank { question }, texts, missingDatesRequest)
+            }
             if (!canRead || !wantsMore) {
                 if (parsed.answer.isBlank() && partialCandidate != null) return partialCandidate.copy(readContext = known.readContext)
                 val limitNotice = if (requestedReads || parsed.verified == false || reviewIncomplete && !readsAfterReview) "\n\nNon ho completato tutte le verifiche richieste: i risultati possono essere parziali." else ""
@@ -211,45 +216,94 @@ class AilaAssistant internal constructor(
         history: List<AssistantMessage>,
         knowledge: AssistantKnowledge,
         onAgentPhase: (AssistantAgentPhase) -> Unit,
-        resolvedRequest: String
+        resolvedRequest: String,
+        retrievedTexts: Map<Int, String>,
+        missingDatesRequest: String?
     ): AssistantReply {
-        AssistantAudienceEdit.plan(question, history, knowledge)?.let { plan ->
+        val datesCorrection = missingDatesRequest != null
+        if (!datesCorrection) AssistantAudienceEdit.plan(question, history, knowledge)?.let { plan ->
             if (AssistantActionPrompt.validate(plan, knowledge)) return actionReply(plan)
         }
         onAgentPhase(AssistantAgentPhase.READING)
         val searchQuery = AssistantContext.searchQuery(resolvedRequest, history)
-        val planningRequest = "$question\n\nRiferimenti ricostruiti dalla conversazione, da verificare sulla richiesta originale (che prevale):\n$resolvedRequest"
-        val texts = fetchCircularTexts(
-            AssistantContext.mostRelevantCirculars(knowledge, searchQuery, PREFETCHED_CIRCULARS),
+        val planningRequest = buildString {
+            appendLine(question)
+            if (missingDatesRequest != null) appendLine("\nCorrezione delle date omesse: $missingDatesRequest")
+            if (resolvedRequest != question) appendLine("\nRiferimenti ricostruiti dalla conversazione, da verificare sulla richiesta originale (che prevale):\n$resolvedRequest")
+        }.trimEnd()
+        val texts = retrievedTexts + fetchCircularTexts(
+            AssistantContext.mostRelevantCirculars(knowledge, searchQuery, PREFETCHED_CIRCULARS)
+                .filter { it !in retrievedTexts },
             knowledge.circulars, budgetMs = PREFETCH_BUDGET_MS
         )
         onAgentPhase(AssistantAgentPhase.PLANNING)
         val classifier = classifierFactory()
-        suspend fun generate(repair: Boolean) = classifier.generateAnswer(
-            AssistantActionPrompt.builderFor(knowledge, history, planningRequest, texts, searchQuery, repair)
-                .withAttachmentServices(knowledge.attachedSources.map{it.file.service}.toSet())
-        )
-        var result = generate(false)
-        var plan = (result as? AiTextResult.Success)?.let { AssistantActionPrompt.parse(it.text, knowledge) }
-        if (result is AiTextResult.Success && (plan == null || !AssistantActionPrompt.validate(plan, knowledge))) {
-            // Malformed model output is not missing user information. Retry once with
-            // the compact schema rather than repeatedly asking for the same event title.
-            result = generate(true)
-            plan = (result as? AiTextResult.Success)?.let { AssistantActionPrompt.parse(it.text, knowledge) }
-        }
-        return when (val answer = result) {
-            is AiTextResult.Failure -> AssistantReply(answer.reason, isError = true)
-            is AiTextResult.Success -> {
-                val verified = plan?.copy(requestedByUserId = knowledge.user?.id)
-                if (verified == null || !AssistantActionPrompt.validate(verified, knowledge)) {
-                    AssistantReply("Il modello non è riuscito a preparare la modifica. Nessun evento è stato modificato. Riprova oppure scegli un altro modello nelle impostazioni AI.",
-                        modelLabel = "AILA ACA", isError = true)
-                } else {
-                    actionReply(verified)
-                }
+        val services = knowledge.attachedSources.map { it.file.service }.toSet()
+        val explicitDates = missingDatesRequest?.let {
+            AssistantActionIntent.explicitlyNamedDates(it).ifEmpty { AssistantActionIntent.explicitlyNamedDates(question) }
+        }.orEmpty()
+        val coverageCheck = datesCorrection || knowledge.attachedSources.isNotEmpty() ||
+            AssistantContext.normalize(planningRequest).contains(Regex("""\btutt[ei] (?:le date|gli eventi)\b"""))
+        val previousDraft = if (datesCorrection) history.lastOrNull { it.actionPlan != null }
+            ?.takeIf { it.actionStatus == AssistantActionStatus.AWAITING_CONFIRMATION ||
+                it.actionStatus == AssistantActionStatus.CANCELLED && history.lastOrNull()?.awaitingActionInput == true }
+            ?.actionPlan?.actions.orEmpty().filter { it.tool == "calendar.create" } else emptyList()
+        var issue: String? = null
+        repeat(2) { attempt ->
+            val request = if (issue == null) planningRequest else "$planningRequest\n\nEsito del controllo sulla bozza: $issue"
+            val result = classifier.generateAnswer(
+                AssistantActionPrompt.builderFor(knowledge, history, request, texts, searchQuery, repair = attempt > 0)
+                    .withAttachmentServices(services)
+            )
+            if (result is AiTextResult.Failure) {
+                return issue?.let(::actionClarification) ?: AssistantReply(result.reason, isError = true)
             }
+            val plan = AssistantActionPrompt.parse((result as AiTextResult.Success).text, knowledge)
+            if (plan == null || !AssistantActionPrompt.validate(plan, knowledge)) {
+                issue = "Il piano generato non è valido. Controlla date, eventi e destinatari."
+                return@repeat
+            }
+            if (plan.clarification.isNotBlank() && plan.actions.isEmpty()) return actionClarification(plan.clarification)
+            if (plan.clarification.isNotBlank() && coverageCheck) {
+                issue = plan.clarification
+                return@repeat
+            }
+            if (plan.actions.isEmpty()) {
+                if (!datesCorrection) return actionReply(plan)
+                issue = "Verifica nel documento le date mancanti${explicitDates.takeIf { it.isNotEmpty() }?.joinToString(prefix = " (", postfix = ")").orEmpty()}."
+                return@repeat
+            }
+            if (datesCorrection && (plan.actions.any { it.tool != "calendar.create" } ||
+                    explicitDates.any { date -> plan.actions.none { it.date.endsWith(date) } } ||
+                    explicitDates.isNotEmpty() && plan.actions.any { a -> explicitDates.none { a.date.endsWith(it) } })) {
+                issue = "Prepara un’aggiunta per ciascuna delle date mancanti ${explicitDates.joinToString()}. Controlla i destinatari nella fonte."
+                return@repeat
+            }
+            val combined = plan.actions + previousDraft.filterNot { original ->
+                plan.actions.any { it.title == original.title && it.date == original.date && it.category == original.category }
+            }
+            if (combined.size > AssistantActionPrompt.MAX_ACTIONS) {
+                return actionClarification("Le date superano il limite di dodici azioni. Quale intervallo vuoi preparare per primo?")
+            }
+            val candidate = plan.copy(actions = combined)
+            if (coverageCheck) {
+                val checked = classifier.generateAnswer(
+                    AssistantActionPrompt.builderFor(knowledge, history, planningRequest, texts, searchQuery, review = candidate)
+                        .withAttachmentServices(services)
+                )
+                issue = when (checked) {
+                    is AiTextResult.Failure -> "Non ho potuto verificare tutte le date. ${checked.reason}"
+                    is AiTextResult.Success -> AssistantActionPrompt.reviewIssue(checked.text)
+                }
+                if (issue != null) return@repeat
+            }
+            return actionReply(candidate.copy(requestedByUserId = knowledge.user?.id))
         }
+        return actionClarification(issue ?: "Quali date vuoi includere nel calendario?")
     }
+
+    private fun actionClarification(text: String) =
+        AssistantReply(text, modelLabel = "AILA ACA", awaitingActionInput = true)
 
     private fun actionReply(plan: AssistantActionPlan): AssistantReply = if (plan.actions.isEmpty()) {
         AssistantReply(plan.clarification.ifBlank { "Quali eventi vuoi creare o modificare e con quali dettagli?" },

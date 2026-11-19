@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
@@ -32,12 +33,52 @@ private fun readPickedContent(context:Context,uri:Uri):IncomingContent {
  require(bytes.isNotEmpty()){"Il file è vuoto"}
  return IncomingContent(name,context.contentResolver.getType(uri)?:contentMime(name),bytes)
 }
-@Composable actual fun rememberContentPicker(onError:(String)->Unit,onPicked:(IncomingContent)->Unit):()->Unit {
- val context=LocalContext.current;val scope=rememberCoroutineScope();val picked by rememberUpdatedState(onPicked);val error by rememberUpdatedState(onError)
- val launcher=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri->if(uri!=null)scope.launch{
-  try{val file=withContext(Dispatchers.IO){readPickedContent(context,uri)};picked(file)}catch(e:CancellationException){throw e}catch(e:Exception){error(e.message?:"Impossibile leggere il file")}
- }}
- return remember(launcher){{launcher.launch(arrayOf("application/pdf","text/plain","application/vnd.openxmlformats-officedocument.wordprocessingml.document","image/png","image/jpeg","image/webp","audio/wav","audio/x-wav","audio/mp4","audio/mpeg","audio/ogg"))}}
+private fun normalizePhoto(file: IncomingContent): IncomingContent {
+ val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+ android.graphics.BitmapFactory.decodeByteArray(file.bytes, 0, file.bytes.size, bounds)
+ check(bounds.outWidth > 0 && bounds.outHeight > 0) { "Formato foto non leggibile. Scegli una foto JPEG, PNG o WebP." }
+ val options = android.graphics.BitmapFactory.Options()
+ while (maxOf(bounds.outWidth, bounds.outHeight) / options.inSampleSize.coerceAtLeast(1) > 3000) {
+  options.inSampleSize = options.inSampleSize.coerceAtLeast(1) * 2
+ }
+ val bitmap = android.graphics.BitmapFactory.decodeByteArray(file.bytes, 0, file.bytes.size, options)
+  ?: error("Impossibile leggere la foto")
+ try {
+  val output = ByteArrayOutputStream()
+  check(bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, output)) { "Impossibile convertire la foto" }
+  return IncomingContent(file.fileName.substringBeforeLast('.') + ".jpg", "image/jpeg", output.toByteArray())
+ } finally {
+  bitmap.recycle()
+ }
+}
+@Composable actual fun rememberContentPicker(
+ onError: (String) -> Unit, onPicked: (IncomingContent) -> Unit, photosOnly: Boolean
+): () -> Unit {
+ val context = LocalContext.current
+ val scope = rememberCoroutineScope()
+ val picked by rememberUpdatedState(onPicked)
+ val error by rememberUpdatedState(onError)
+ val onResult: (Uri?) -> Unit = { uri ->
+  if (uri != null) scope.launch {
+   try {
+    picked(withContext(Dispatchers.IO) {
+     val file = readPickedContent(context, uri)
+     if (photosOnly && file.mime !in setOf("image/jpeg", "image/png", "image/webp")) normalizePhoto(file) else file
+    })
+   } catch (e: CancellationException) {
+    throw e
+   } catch (e: Exception) {
+    error(e.message ?: "Impossibile leggere il file")
+   }
+  }
+ }
+ return if (photosOnly) {
+  val launcher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia(), onResult)
+  remember(launcher) { { launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) } }
+ } else {
+  val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument(), onResult)
+  remember(launcher) { { launcher.launch(arrayOf("application/pdf","text/plain","application/vnd.openxmlformats-officedocument.wordprocessingml.document","image/png","image/jpeg","image/webp","audio/wav","audio/x-wav","audio/mp4","audio/mpeg","audio/ogg")) } }
+ }
 }
 actual suspend fun openContentFile(bytes:ByteArray,fileName:String,mime:String){
  val context=AndroidAppContext.require()

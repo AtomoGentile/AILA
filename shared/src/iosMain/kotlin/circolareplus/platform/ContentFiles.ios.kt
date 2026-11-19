@@ -9,6 +9,7 @@ import platform.posix.memcpy
 
 interface ContentFileBridge {
  fun pickFile(onResult:(String?)->Unit)
+ fun pickPhoto(onResult:(String?)->Unit,onError:(String)->Unit)
  fun openFile(path:String):String?
  fun startRecording(onStarted:()->Unit,onResult:(String?)->Unit,onError:(String)->Unit)
  fun stopRecording()
@@ -33,13 +34,15 @@ object IosContentIngress {
   catch(e:CancellationException){throw e}catch(e:Exception){IncomingContentInbox.reject(e.message?:"File non leggibile")}
   finally{NSFileManager.defaultManager.removeItemAtPath(path,null)}}}
 }
-@Composable actual fun rememberContentPicker(onError:(String)->Unit,onPicked:(IncomingContent)->Unit):()->Unit {
+@Composable actual fun rememberContentPicker(onError:(String)->Unit,onPicked:(IncomingContent)->Unit,photosOnly:Boolean):()->Unit {
  val scope=rememberCoroutineScope();val picked by rememberUpdatedState(onPicked);val error by rememberUpdatedState(onError)
- return remember{{val bridge=ContentFileBridgeHolder.bridge
-  if(bridge==null)error("Selettore file non disponibile") else bridge.pickFile{path->if(path!=null)scope.launch{
+ return remember(photosOnly){{val bridge=ContentFileBridgeHolder.bridge
+  val receive: (String?) -> Unit = {path->if(path!=null)scope.launch{
    try{picked(withContext(Dispatchers.Default){loadContent(path)})}catch(e:CancellationException){throw e}catch(e:Exception){error(e.message?:"File non leggibile")}
    finally{NSFileManager.defaultManager.removeItemAtPath(path,null)}
   }}
+  if(bridge==null) error("Selettore file non disponibile")
+  else if(photosOnly) bridge.pickPhoto(receive, error) else bridge.pickFile(receive)
  }}
 }
 actual suspend fun openContentFile(bytes:ByteArray,fileName:String,mime:String){

@@ -24,7 +24,14 @@ fun contentMime(name:String):String=when(name.substringAfterLast('.').lowercase(
  "wav"->"audio/wav";"m4a"->"audio/mp4";"mp3"->"audio/mpeg";"ogg"->"audio/ogg"
  else->"application/octet-stream"
 }
-@Composable expect fun rememberContentPicker(onError:(String)->Unit,onPicked:(IncomingContent)->Unit):()->Unit
+@Composable
+fun rememberContentPicker(onError: (String) -> Unit, onPicked: (IncomingContent) -> Unit): () -> Unit =
+    rememberContentPicker(onError, onPicked, photosOnly = false)
+
+@Composable
+expect fun rememberContentPicker(
+    onError: (String) -> Unit, onPicked: (IncomingContent) -> Unit, photosOnly: Boolean
+): () -> Unit
 expect suspend fun openContentFile(bytes:ByteArray,fileName:String,mime:String)
 
 class AudioRecorderActions(val start:()->Unit,val stop:()->Unit,val cancel:()->Unit)
