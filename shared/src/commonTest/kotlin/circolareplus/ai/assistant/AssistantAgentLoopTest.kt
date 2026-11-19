@@ -79,6 +79,57 @@ class AssistantAgentLoopTest {
         assertEquals(2, model.prompts.size)
     }
 
+    @Test fun omittedDatesAfterExecutionAreAddedWithoutRepeatingEarlierWrites() = runTest {
+        val previous = AssistantCalendarAction(
+            "calendar.create", "Interrogazione di Biologia", "2026-11-26",
+            CalendarEventCategory.INTERROGAZIONE, visibility = "CLASS"
+        )
+        val history = listOf(
+            AssistantMessage("u", AssistantAuthor.USER, "Inserisci tutte le date del file di Biologia nel calendario."),
+            AssistantMessage("p", AssistantAuthor.ASSISTANT, "Controlla le azioni.", actionPlan = AssistantActionPlan(listOf(previous)),
+                actionStatus = AssistantActionStatus.COMPLETED),
+            AssistantMessage("r", AssistantAuthor.ASSISTANT, "Inserito: 26 novembre")
+        )
+        val students = mapOf(19 to "Anna", 20 to "Marta", 21 to "Luca")
+        fun additions(vararg days: Int) = days.joinToString(prefix = """{"actions":[""", postfix = "]}") {
+            """{"tool":"calendar.create","title":"Interrogazione di Biologia","date":"2026-11-$it","category":"INTERROGAZIONE","visibility":"CLASS","notes":"${students[it]}"}"""
+        }
+        val source = AssistantAttachedSource(
+            AssistantAttachedFile("biology", "Biologia.txt"),
+            "19 novembre 2026 — Anna; 20 novembre 2026 — Marta; 21 novembre 2026 — Luca"
+        )
+        val model = ScriptedClassifier(
+            """{"answer":"Ho trovato il 20 e il 21 novembre."}""",
+            additions(20, 21),
+            additions(19, 20, 21),
+            """{"verified":true}"""
+        )
+        val reply = assistant(model).ask("Mancano 19, 20, 21 novembre", history, knowledge.copy(attachedSources = listOf(source)))
+        val plan = assertNotNull(reply.actionPlan)
+        assertEquals(listOf("2026-11-19", "2026-11-20", "2026-11-21"), plan.actions.map { it.date })
+        assertTrue(plan.actions.all { it.tool == "calendar.create" })
+        assertEquals(students.values.toList(), plan.actions.map { it.notes })
+        assertTrue("11-19" in model.prompts[2].userPrompt)
+        assertTrue(source.text in model.prompts[3].userPrompt)
+    }
+
+    @Test fun sourcePlanThatFailsCoverageReviewIsNeverConfirmable() = runTest {
+        val source = AssistantAttachedSource(
+            AssistantAttachedFile("biology", "Biologia.txt"),
+            "19 novembre 2026 — Anna; 20 novembre 2026 — Marta"
+        )
+        val partialPlan = """{"actions":[{"tool":"calendar.create","title":"Interrogazione di Biologia","date":"2026-11-20","category":"INTERROGAZIONE","visibility":"CLASS"}]}"""
+        val review = """{"verified":false,"reason":"Manca il 19 novembre."}"""
+        val model = ScriptedClassifier(
+            """{"actionRequest":"Crea tutte le interrogazioni dal file"}""",
+            partialPlan, review, partialPlan, review
+        )
+        val reply = assistant(model).ask("Crea gli eventi dal file di Biologia.", emptyList(), knowledge.copy(attachedSources = listOf(source)))
+        assertNull(reply.actionPlan)
+        assertTrue(reply.awaitingActionInput)
+        assertEquals("Manca il 19 novembre.", reply.text)
+    }
+
     @Test fun theModelCanReadBothGroupsThenAnswerFromActualResults() = runTest {
         val model = ScriptedClassifier(
             """{"answer":"","calendarQueries":[{"text":"giornalino","compareWith":"FCE"}]}""",

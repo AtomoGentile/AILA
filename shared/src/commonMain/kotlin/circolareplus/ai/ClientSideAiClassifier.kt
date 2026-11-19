@@ -33,7 +33,10 @@ import kotlinx.serialization.json.jsonPrimitive
 // ---------------------------------------------------------------------------
 
 @Serializable
-private data class GeminiPart(val text: String)
+private data class GeminiPart(val text: String? = null, val inlineData: GeminiInlineData? = null)
+
+@Serializable
+private data class GeminiInlineData(val mimeType: String, val data: String)
 
 @Serializable
 private data class GeminiContent(val parts: List<GeminiPart>)
@@ -524,6 +527,28 @@ class ClientSideAiClassifier(
             return retried
         }
         return response
+    }
+
+    internal suspend fun transcribeImage(mime: String, bytes: ByteArray, instruction: String): String {
+        check(userApiKey.isNotBlank()) { "Configura la chiave Google AI Studio nelle impostazioni AI." }
+        val response = httpClient.post("$API_BASE/gemini-flash-lite-latest:generateContent") {
+            retry { noRetry() }
+            header("x-goog-api-key", userApiKey)
+            contentType(ContentType.Application.Json)
+            setBody(GeminiRequest(
+                contents = listOf(GeminiContent(listOf(
+                    GeminiPart(text = instruction),
+                    GeminiPart(inlineData = GeminiInlineData(mime, kotlin.io.encoding.Base64.encode(bytes)))
+                ))),
+                generationConfig = GeminiGenerationConfig(responseMimeType = "text/plain")
+            ))
+        }
+        check(response.status.isSuccess()) { "Google AI Studio non ha letto l’immagine (HTTP ${response.status.value})." }
+        val raw = response.bodyAsText()
+        val reason = json.parseToJsonElement(raw).jsonObject["candidates"]?.jsonArray?.firstOrNull()
+            ?.jsonObject?.get("finishReason")?.jsonPrimitive?.contentOrNull
+        check(reason == "STOP") { "Google AI Studio non ha completato la lettura dell’immagine." }
+        return geminiGeneratedText(raw)
     }
 
     /** Una singola chiamata generateContent al modello indicato. */

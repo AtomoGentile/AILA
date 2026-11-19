@@ -1554,8 +1554,12 @@ fun MainAppShell(
         val filesForTurn = assistantAttachments[conversationId].orEmpty()
         val sourceFiles = (history.flatMap{it.attachedFiles}+filesForTurn).distinctBy{it.localId}.takeLast(5)
 
-        // Keep the active draft while the user asks questions or supplies a correction.
-        // Its execution authority is revoked only when a replacement preview is ready.
+        val correctingDates = requestedMode == AssistantMode.GENERAL &&
+            circolareplus.ai.assistant.AssistantActionIntent.correctsMissingDates(trimmed, history)
+        if (correctingDates) {
+            history.filter { it.actionStatus == AssistantActionStatus.AWAITING_CONFIRMATION }
+                .forEach { cancelAssistantAction(it.id, conversationId, it.actionPlan) }
+        }
         assistantMessageCounter++
         assistantMessages += AssistantMessage(
             id = "q${currentTimeMillis()}-$assistantMessageCounter",
@@ -1577,14 +1581,25 @@ fun MainAppShell(
                 val attachedSources = sourceFiles.mapNotNull { reference ->
                     // Previous temporary originals can expire; they must not block every later turn.
                     val entry=AppContainer.localContents.entry(reference.localId)
-                    if(entry==null && filesForTurn.none { it.localId==reference.localId })return@mapNotNull null
+                    if (entry == null && filesForTurn.none { it.localId == reference.localId }) {
+                        if (!correctingDates || sourceFiles.any {
+                                it.localId != reference.localId && it.name == reference.name &&
+                                    AppContainer.localContents.entry(it.localId) != null
+                            }) return@mapNotNull null
+                        error("Riallega ${reference.name} per verificare tutte le date mancanti.")
+                    }
                     val p=circolareplus.ai.AcaPolicyState.preferences
                     check(p.aiEnabled && p.acaEnabled && reference.service in p.services) {
                         "Il servizio per ${reference.name} è disattivato. Attivalo nelle impostazioni AI o apri una nuova chat senza allegati."
                     }
                     checkNotNull(entry) { "L’allegato temporaneo ${reference.name} non è più disponibile. Allegalo di nuovo per continuare." }
-                    val text=AppContainer.localContents.text(entry)?.takeIf{it.isNotBlank()}
-                        ?: error("Non è disponibile un testo leggibile per ${reference.name}. Apri il file per estrarlo o trascriverlo.")
+                    val text = AppContainer.localContents.text(entry)?.takeIf { it.isNotBlank() }
+                        ?: if (reference.service == "IMAGES") {
+                            val photo = AppContainer.localContents.read(entry)
+                            val prepared = circolareplus.ai.prepareChatAttachment(photo)
+                            val preparedEntry = checkNotNull(AppContainer.localContents.entry(prepared.localId))
+                            checkNotNull(AppContainer.localContents.text(preparedEntry))
+                        } else error("Non è disponibile un testo leggibile per ${reference.name}. Apri il file per estrarlo o trascriverlo.")
                     AssistantAttachedSource(reference,text)
                 }
                 val dynamic = assistantDynamic
@@ -3025,7 +3040,11 @@ fun MainAppShell(
             var spoken:String?=null
             assistantAgentPhases[target]=if(file.mime.startsWith("audio/"))AssistantAgentPhase.TRANSCRIBING else AssistantAgentPhase.READING
             try{
-                val attached=circolareplus.ai.prepareChatAttachment(file)
+                val attached = if (file.mime.startsWith("image/")) {
+                    require(file.bytes.size <= 10 * 1024 * 1024) { "Scegli una foto fino a 10 MB." }
+                    val entry = AppContainer.localContents.saveTemporary(file)
+                    AssistantAttachedFile(entry.id, file.fileName, "IMAGES", generated = true)
+                } else circolareplus.ai.prepareChatAttachment(file)
                 assistantAttachments[target]=(assistantAttachments[target].orEmpty().filterNot{it.localId==attached.localId}+attached).takeLast(5)
 
                 if(voice)AppContainer.localContents.entry(attached.localId)?.let{spoken=AppContainer.localContents.text(it)}
@@ -5130,6 +5149,17 @@ fun MainAppShell(
                         onOpenFiles={filesOpenedFromSettings=false;isInLocalFiles=true;isInAssistantScreen=false},
                         onStudyPlan={askAssistant("Prepara un piano di ripasso solo per gli impegni destinati a me. Spiega come distribuire lo studio, senza creare eventi.")},
                         onOpenAiSettings={isInSettingsScreen=true;isInAiSettings=true},
+                        acaEnabled = aiPolicy.allows("CHAT"),
+                        onOpenAca = {
+                            if (aiPolicy.allows("CHAT")) {
+                                acaOverlayStart = assistantMessages.size
+                                acaResponsePresented = false
+                                acaOverlay = true
+                            } else {
+                                isInSettingsScreen = true
+                                isInAiSettings = true
+                            }
+                        },
                         onAttachContent = { receiveAssistantAttachment(it,false) },
                         onVoiceContent = { receiveAssistantAttachment(it,true) },
                         attachedFiles = assistantAttachments[assistantConversationId].orEmpty(),

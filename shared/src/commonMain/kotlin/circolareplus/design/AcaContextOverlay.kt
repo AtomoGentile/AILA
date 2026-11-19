@@ -66,10 +66,17 @@ fun AcaContextOverlay(
     var dragDistancePx by remember { mutableStateOf(0f) }
     var dragging by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val picker = circolareplus.platform.rememberContentPicker({ voiceError = it }) {
+    val receiveFile: (circolareplus.platform.IncomingContent) -> Unit = {
         attachmentMenu = false
+        voiceError = null
         onAttachContent(it)
     }
+    val picker = circolareplus.platform.rememberContentPicker({ voiceError = it }, receiveFile)
+    val photoPicker = circolareplus.platform.rememberContentPicker(
+        onError = { message -> attachmentMenu = false; voiceError = message },
+        onPicked = receiveFile,
+        photosOnly = true
+    )
     val openChat by rememberUpdatedState<() -> Unit> { if(isInteractive && !recording && !transcribing) { keyboard?.hide(); onOpenChat(question, attachedScreen) } }
     val recorder = rememberVoiceRecorder({ recording = it }, { voiceError = it }) { audio ->
         scope.launch {
@@ -107,7 +114,7 @@ fun AcaContextOverlay(
     val insetFill = if(AppTheme.isNothing) AppTheme.TrackFill else if(dark) Color(0xFF151B27) else Color(0xFFE3E9F5)
     val muted = if(AppTheme.isNothing) AppTheme.TextMuted else if(dark) Color(0xFFA5AFC2) else AppTheme.TextMuted
     val edge = if(dark) Color.White.copy(alpha = .085f) else Color.White.copy(alpha = .85f)
-    val canSend = question.isNotBlank() && !thinking && !recording && !transcribing
+    val canSend = (question.isNotBlank() || attachedFiles.isNotEmpty()) && !thinking && !recording && !transcribing
     var answerPresented by remember(answer) { mutableStateOf(false) }
     val rainbowActive = answer == null || thinking || !answerPresented
     val rainbowAlpha by animateFloatAsState(
@@ -123,7 +130,7 @@ fun AcaContextOverlay(
     )
     val submit = {
         if(canSend && isInteractive) {
-            val text = question; question = ""; keyboard?.hide(); onSend(text, attachedScreen)
+            val text = question.ifBlank { "Riassumi gli allegati di questo messaggio." }; question = ""; keyboard?.hide(); onSend(text, attachedScreen)
             attachedScreen = false
         }
     }
@@ -299,7 +306,8 @@ fun AcaContextOverlay(
                 AcaAttachmentOption("Schermata", "Allega il contenuto aperto", AppTheme.TintViolet, AppTheme.TintVioletInk, isInteractive) {
                     attachedScreen=true;attachmentMenu=false
                 }
-                AcaAttachmentOption("File, foto o audio", "Scegli dal dispositivo · fino a 20 MB", AppTheme.TintBlue, AppTheme.TintBlueInk, isInteractive&&!thinking) { picker() }
+                AcaAttachmentOption("File", "Importa dal dispositivo", AppTheme.TintBlue, AppTheme.TintBlueInk, isInteractive && !thinking) { picker() }
+                AcaAttachmentOption("Allega da Foto", "Scegli un’immagine dalla galleria", AppTheme.TintViolet, AppTheme.TintVioletInk, isInteractive && !thinking) { photoPicker() }
                 Text("Gli allegati della chat sono temporanei: nessuna copia salvata automaticamente sul dispositivo.",style=MaterialTheme.typography.bodySmall,color=muted)
             }
         }

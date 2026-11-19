@@ -1,12 +1,16 @@
 import UIKit
+import PhotosUI
+import ImageIO
 import AVFoundation
 import Speech
 import UniformTypeIdentifiers
 import shared
 
 /// Files remain local until the user explicitly starts a cloud operation in the preview.
-final class ContentFileBridgeImpl: NSObject, ContentFileBridge, UIDocumentPickerDelegate, AVAudioRecorderDelegate {
+final class ContentFileBridgeImpl: NSObject, ContentFileBridge, UIDocumentPickerDelegate, PHPickerViewControllerDelegate, AVAudioRecorderDelegate {
     private var pickCallback: ((String?) -> Void)?
+    private var photoCallback: ((String?) -> Void)?
+    private var photoError: ((String) -> Void)?
     private var recorder: AVAudioRecorder?
     private var recordCallback: ((String?) -> Void)?
     private var recordError: ((String) -> Void)?
@@ -26,6 +30,52 @@ final class ContentFileBridgeImpl: NSObject, ContentFileBridge, UIDocumentPicker
         callback?(Self.localCopy(source)?.path)
     }
     func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { pickCallback?(nil); pickCallback = nil }
+    func pickPhoto(onResult: @escaping (String?) -> Void, onError: @escaping (String) -> Void) {
+        guard let presenter = presenter() else { onError("Selettore foto non disponibile"); return }
+        photoCallback = onResult
+        photoError = onError
+        var configuration = PHPickerConfiguration()
+        configuration.filter = .images
+        configuration.selectionLimit = 1
+        configuration.preferredAssetRepresentationMode = .current
+        let picker = PHPickerViewController(configuration: configuration)
+        picker.delegate = self
+        presenter.present(picker, animated: true)
+    }
+    func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+        picker.dismiss(animated: true)
+        let callback = photoCallback
+        let failure = photoError
+        photoCallback = nil
+        photoError = nil
+        guard let provider = results.first?.itemProvider else { callback?(nil); return }
+        guard let imageType = provider.registeredTypeIdentifiers.first(where: { UTType($0)?.conforms(to: .image) == true }) else {
+            failure?("Formato foto non leggibile.")
+            return
+        }
+        provider.loadFileRepresentation(forTypeIdentifier: imageType) { url, _ in
+            let path = url.flatMap { Self.preparePhoto($0) }
+            DispatchQueue.main.async {
+                if let path { callback?(path) }
+                else { failure?("Impossibile leggere la foto selezionata.") }
+            }
+        }
+    }
+    private static func preparePhoto(_ source: URL) -> String? {
+        guard let image = CGImageSourceCreateWithURL(source as CFURL, nil),
+              let thumbnail = CGImageSourceCreateThumbnailAtIndex(image, 0, [
+                  kCGImageSourceCreateThumbnailFromImageAlways: true,
+                  kCGImageSourceCreateThumbnailWithTransform: true,
+                  kCGImageSourceThumbnailMaxPixelSize: 3000
+              ] as CFDictionary) else { return nil }
+        let target = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Foto-\(UUID().uuidString).jpg")
+        guard let destination = CGImageDestinationCreateWithURL(target as CFURL, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, thumbnail, [kCGImageDestinationLossyCompressionQuality: 0.9] as CFDictionary)
+        if CGImageDestinationFinalize(destination) { return target.path }
+        try? FileManager.default.removeItem(at: target)
+        return nil
+    }
     func openFile(path: String) -> String? {
         guard let presenter = presenter() else { return "Nessuna schermata disponibile" }
         let sheet = UIActivityViewController(activityItems: [URL(fileURLWithPath: path)], applicationActivities: nil)
