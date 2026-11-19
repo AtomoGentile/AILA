@@ -100,6 +100,25 @@ object AppIcons {
     }
 
     @Composable
+    fun Photo(modifier: Modifier = Modifier.size(24.dp), color: Color = Color(0xFF1E293B)) {
+        Canvas(modifier) {
+            val w = size.width
+            val h = size.height
+            val line = Stroke(width = w * .075f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            drawRoundRect(color, Offset(w * .12f, h * .17f), Size(w * .76f, h * .66f),
+                CornerRadius(w * .10f), style = line)
+            drawCircle(color, w * .06f, Offset(w * .35f, h * .38f))
+            drawPath(Path().apply {
+                moveTo(w * .15f, h * .69f)
+                lineTo(w * .34f, h * .53f)
+                lineTo(w * .46f, h * .64f)
+                lineTo(w * .65f, h * .44f)
+                lineTo(w * .86f, h * .65f)
+            }, color, style = line)
+        }
+    }
+
+    @Composable
     fun Document(modifier: Modifier = Modifier.size(24.dp), color: Color = Color(0xFF1E293B)) {
         Canvas(modifier = modifier) {
             val w = size.width

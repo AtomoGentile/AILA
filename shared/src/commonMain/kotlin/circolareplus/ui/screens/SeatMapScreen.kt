@@ -43,7 +43,7 @@ import androidx.compose.ui.unit.dp
 import circolareplus.algorithms.DeskAssignment
 import circolareplus.algorithms.OptimizerWeights
 import circolareplus.algorithms.SeatMapOptimizer
-import circolareplus.design.AilaBottomSheet
+import circolareplus.design.AilaOriginSheet
 import circolareplus.design.AilaIconButton
 import circolareplus.design.AilaCard
 import circolareplus.design.AilaPrimaryButton
@@ -88,11 +88,17 @@ fun SeatMapScreen(
     loadPublishedHistory: suspend () -> List<PublishedSeatMap> = { emptyList() },
     /** Proposte in calcolo: il pulsante mostra l'attesa e non si puo' ripremere. */
     isGeneratingProposals: Boolean = false,
-    generationCompleted: Int = 0
+    generationCompleted: Int = 0,
+    onUseCurrentResult: (() -> Unit)? = null,
+    generatedProposalsReady: Boolean = false,
+    onShowGeneratedProposals: () -> Unit = {}
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var showHistory by remember { mutableStateOf(false) }
     var showManagement by remember { mutableStateOf(false) }
+    LaunchedEffect(showManagement, generatedProposalsReady) {
+        if (generatedProposalsReady && !showManagement) onShowGeneratedProposals()
+    }
     if (showHistory) SeatMapHistoryDialog(
         studentsMap = studentsMap,
         loadHistory = loadPublishedHistory,
@@ -446,11 +452,14 @@ fun SeatMapScreen(
 
                 if (isGeneratingProposals) {
                     SeatMapGenerationProgress(generationCompleted)
+                    onUseCurrentResult?.let { useResult ->
+                        AilaTextButton(onClick = useResult) { Text("Usa questo risultato") }
+                    }
                     Spacer(Modifier.height(AppTheme.Space12))
                 }
                 AilaPrimaryButton(
                     text = if (isGeneratingProposals) "Ricerca in corso…" else "Cerca le migliori proposte",
-                    enabled = !isGeneratingProposals && layoutOk,
+                    enabled = !isGeneratingProposals && !generatedProposalsReady && layoutOk,
                     // Mentre calcola: la forma che cambia (Material) o i puntini (Glass),
                     // invece di un pulsante che non reagisce per qualche secondo.
                     icon = if (isGeneratingProposals) {
@@ -483,7 +492,13 @@ fun SeatMapScreen(
             }
         }
         if (isRepresentative && showManagement) {
-            AilaBottomSheet(onDismissRequest = { showManagement = false }) {
+            AilaOriginSheet(
+                originKey = "seat-map-management",
+                onDismiss = { showManagement = false },
+                closeRequested = generatedProposalsReady,
+                fromBottom = true,
+                useOrigin = false
+            ) { close ->
                 Column(
                     Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(AppTheme.Space16)
@@ -495,7 +510,7 @@ fun SeatMapScreen(
                             style = if (AppTheme.isNothing) nothingDisplayStyle(28, 38) else MaterialTheme.typography.titleLarge,
                             color = AppTheme.TextDark
                         )
-                        AilaIconButton("Chiudi gestione aula", { showManagement = false }) {
+                        AilaIconButton("Chiudi gestione aula", close) {
                             AppIcons.Close(Modifier.size(18.dp), it)
                         }
                     }

@@ -134,6 +134,47 @@ class NothingUiRegressionTest {
         }
     }
 
+    @Test fun generatedSeatMapAppearsAfterManagementCloses() {
+        var generating by androidx.compose.runtime.mutableStateOf(false)
+        var ready by androidx.compose.runtime.mutableStateOf(false)
+        var revealed by androidx.compose.runtime.mutableStateOf(false)
+        activity.get().setContent { AilaTheme {
+            if (revealed) androidx.compose.material3.Text("Mappa generata")
+            else SeatMapScreen("student", true, emptyList(), emptyMap(), false,
+                isGeneratingProposals = generating,
+                generatedProposalsReady = ready,
+                onShowGeneratedProposals = { revealed = true })
+        } }
+        compose.onNodeWithText("Gestione").performClick()
+        compose.runOnIdle { generating = true }
+        compose.onNodeWithText("Gestione aula").assertIsDisplayed()
+        compose.onNodeWithText("Mappa generata").assertDoesNotExist()
+        compose.runOnIdle {
+            generating = false
+            ready = true
+        }
+        compose.onNodeWithText("Gestione aula").assertDoesNotExist()
+        compose.onNodeWithText("Mappa generata").assertIsDisplayed()
+    }
+
+    @Test fun chatShowsPhotoAlongsideFileAndVoice() {
+        activity.get().setContent { AilaTheme {
+            AssistantChatScreen(
+                messages = emptyList(), isThinking = false, conversations = emptyList(),
+                onSend = {}, onBackClick = {}, onClearChat = {},
+                onOpenConversation = {}, onDeleteConversation = {}, onOpenSource = {},
+                onAttachContent = {}
+            )
+        } }
+        compose.onNodeWithText("ACA").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Menu allegati").performClick()
+        val titles = listOf("File", "Foto", "Vocale").map { title ->
+            compose.onNodeWithText(title, useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        }
+        assertEquals(titles.first().top, titles[1].top)
+        assertEquals(titles.first().top, titles[2].top)
+    }
+
     @Test fun pollRequiresEveryDateAndLocksVotingWhenClosed() {
         var slots by androidx.compose.runtime.mutableStateOf(listOf(SlotUiItem("a","2026-11-18","Fisica",4),SlotUiItem("b","2026-11-19","Fisica",4)))
         var sent=0

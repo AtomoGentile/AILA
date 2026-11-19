@@ -72,7 +72,7 @@ internal object AssistantAbout {
         • "Riassumimi le ultime circolari" o "Cosa dice la circolare 12?"
         • "Quali proposte della bacheca sono aperte?"
         • "Dove sono seduto in aula?"
-        • "Metti questi impegni a calendario": con ACA attiva preparo gli eventi e li inserisco dopo la tua conferma.
+        • "Metti questi impegni a calendario": con il servizio Calendario attivo preparo gli eventi e li inserisco dopo la tua conferma.
         • "Sposta la verifica a venerdì" o "Elimina questo evento": mostro prima il riepilogo esatto.
         • Da Revisione tra pere puoi chiedere riassunti e richiamare @perabot.
         • Puoi aprire un documento o un vocale in ACA per scegliere cosa analizzare.

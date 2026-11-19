@@ -82,7 +82,7 @@ class AilaAssistant internal constructor(
     ): AssistantReply {
         val missingDatesRequest = if (mode == AssistantMode.GENERAL) AssistantActionIntent.missingDatesRequest(question, history) else null
         if (mode == AssistantMode.GENERAL && !actionsEnabled && AssistantActionIntent.matches(question, history))
-            return AssistantReply("Le azioni di ACA sono disattivate. Puoi abilitarle in Impostazioni → AI → ACA e Calendario.", modelLabel = "AILA")
+            return AssistantReply("Le azioni sul calendario sono disattivate. Puoi abilitarle in Impostazioni → AI → Azioni sul calendario.", modelLabel = "AILA")
         // The model can request reads or a validated action plan. Keyword intent is only a
         // fast disabled-feature notice, never the gate that decides what the model may do.
         // "Ciao", "grazie": niente dati e niente modello, vedi [AssistantGreeting].
@@ -185,7 +185,7 @@ class AilaAssistant internal constructor(
             if (mode == AssistantMode.GENERAL &&
                 (explicitCalendarRequest && (!canRead || !wantsMore) || parsed.actionRequest.isNotBlank() && !requestedReads)) {
                 if (!actionsEnabled) return AssistantReply(
-                    "Le azioni di ACA sono disattivate. Puoi abilitarle in Impostazioni → AI → ACA e Calendario.", modelLabel = "AILA"
+                    "Le azioni sul calendario sono disattivate. Puoi abilitarle in Impostazioni → AI → Azioni sul calendario.", modelLabel = "AILA"
                 )
                 known.calendarWarning?.let { return AssistantReply(it, isError = true) }
                 return planAction(question, history, known, onAgentPhase, parsed.actionRequest.ifBlank { question }, texts, missingDatesRequest)

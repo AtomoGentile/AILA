@@ -1203,6 +1203,8 @@ fun MainAppShell(
     var seatMapMode by rememberSaveable { mutableStateOf("MAP") } // "MAP" | "VOTE_PREFERENCES"
     val socialVotes = remember { mutableStateMapOf<String, SocialPreferenceScore>() }
     var proposalOptions by remember { mutableStateOf<List<SeatMapProposal>>(emptyList()) }
+    var generatedSeatMapProposals by remember(currentUser?.id) { mutableStateOf<List<SeatMapProposal>>(emptyList()) }
+    var hasCurrentSeatMapResult by remember(currentUser?.id) { mutableStateOf(false) }
     // Bozza delle proposte salvata sul telefono (v1.1.6): le tre mappe calcolate ma NON ancora
     // pubblicate non si perdono uscendo dall'app. In avvio si legge e basta (nessun cambio di
     // schermata a sorpresa): le proposte ripresentate quando il Rappresentante torna lì, usando
@@ -1262,14 +1264,8 @@ fun MainAppShell(
         else runCatching { AppContainer.settings.saveSeatMapDraft(draft) }
     }
 
-    // Ripristina una bozza negli stati in memoria. Con [showProposals] anche le proposte tornano
-    // in RAM e la schermata si riapre; al bootstrap no: la shellRoute deriva da proposalOptions
-    // e un ripristino in avvio aprirebbe le proposte sopra qualunque tab a ogni accensione —
-    // lì si torna con il solito tasto di generazione, che le ripristina (vedi onGenerateProposals).
-    fun restoreSeatMapDraft(
-        draft: circolareplus.data.local.SeatMapProposalsDraft,
-        showProposals: Boolean
-    ) {
+    // La bozza ripristina gli input anche al bootstrap, prima che l'utente apra le proposte.
+    fun restoreSeatMapDraft(draft: circolareplus.data.local.SeatMapProposalsDraft) {
         lastRequestedSeatsPerDesk = draft.seatsPerDesk
         lastRequestedDeskSlots = draft.requestedDeskSlots.orEmpty()
         seatMapOptimizerProfiles = draft.profiles
@@ -1279,10 +1275,6 @@ fun MainAppShell(
         seatMapOptimizerHistory = draft.history
         seatMapOptimizerWeights = draft.weights
         seatMapOptimizerIsSmallClass = draft.isSmallClass
-        if (showProposals) {
-            circolareplus.design.AilaContainerTransform.touchFresh()
-            proposalOptions = draft.proposals
-        }
     }
 
     // Fine del flusso editor: pubblicare svuota proposte ed editing INSIEME, mentre il back
@@ -1325,7 +1317,7 @@ fun MainAppShell(
     // in `savedSeatMapDraft` (stessa composizione); le proposte si ripresentano solo quando il
     // Rappresentante torna lì, con il solito tasto di generazione.
     LaunchedEffect(Unit) {
-        savedSeatMapDraft?.let { draft -> restoreSeatMapDraft(draft, showProposals = false) }
+        savedSeatMapDraft?.let { draft -> restoreSeatMapDraft(draft) }
     }
 
     // --- Stato Sondaggi Interrogazioni ------------------------------------------------------
@@ -1589,7 +1581,7 @@ fun MainAppShell(
                         error("Riallega ${reference.name} per verificare tutte le date mancanti.")
                     }
                     val p=circolareplus.ai.AcaPolicyState.preferences
-                    check(p.aiEnabled && p.acaEnabled && reference.service in p.services) {
+                    check(p.allows(reference.service)) {
                         "Il servizio per ${reference.name} è disattivato. Attivalo nelle impostazioni AI o apri una nuova chat senza allegati."
                     }
                     checkNotNull(entry) { "L’allegato temporaneo ${reference.name} non è più disponibile. Allegalo di nuovo per continuare." }
@@ -3066,7 +3058,7 @@ fun MainAppShell(
             .fillMaxSize()
             .acaHoldToOpen(
                 enabled = aiPolicy.aiEnabled && aiPolicy.acaEnabled && aiPolicy.holdToOpen &&
-                    !acaOverlay && circolareplus.design.AilaSheetBackdrop.openSheets == 0 &&
+                    shellRoute != ShellRoute.ASSISTANT && !acaOverlay && circolareplus.design.AilaSheetBackdrop.openSheets == 0 &&
                     circolareplus.design.AilaSheetBackdrop.openDialogs == 0,
                 surfaceKey = listOf(shellRoute, selectedTab, selectedCircularForDetail?.number, eventDetailToShow)
             ) {
@@ -3689,6 +3681,18 @@ fun MainAppShell(
                                                 isExportingPdf = isExportingSeatMapPdf,
                                                 isGeneratingProposals = isGeneratingProposals,
                                                 generationCompleted = seatMapSearchesCompleted,
+                                                onUseCurrentResult = if (isGeneratingProposals && hasCurrentSeatMapResult && !stopSeatMapSearch) {
+                                                    { stopSeatMapSearch = true }
+                                                } else null,
+                                                generatedProposalsReady = generatedSeatMapProposals.isNotEmpty(),
+                                                onShowGeneratedProposals = {
+                                                    if (selectedTab == MainTab.SEATMAP && shellRoute == ShellRoute.TABS &&
+                                                        generatedSeatMapProposals.isNotEmpty()) {
+                                                        circolareplus.design.AilaContainerTransform.touchFresh()
+                                                        proposalOptions = generatedSeatMapProposals
+                                                        generatedSeatMapProposals = emptyList()
+                                                    }
+                                                },
                                                 onExportPdf = {
                                                     coroutineScope.launch {
                                                         isExportingSeatMapPdf = true
@@ -3734,10 +3738,12 @@ fun MainAppShell(
                                                     seatMapAssignments = publishedMaps.firstOrNull()?.assignments ?: emptyList()
                                                     seatMapOptimizerHistory = emptyList()
                                                     proposalOptions = emptyList()
+                                                    generatedSeatMapProposals = emptyList()
                                                     updateSeatMapDraft(null)
                                                 },
                                                 onGenerateProposals = { weights, seatsPerDesk, rowSeats, customDeskSlots ->
                                                     coroutineScope.launch {
+                                                        if (isGeneratingProposals || generatedSeatMapProposals.isNotEmpty()) return@launch
                                                         // Porta nel generatore con una bozza in sospeso (generate e
                                                         // non pubblicate, v1.1.6): invece di ricalcolare si ripristina
                                                         // la bozza, le proposte e gli input dell'ottimizzatore tornano
@@ -3757,7 +3763,8 @@ fun MainAppShell(
                                                                 // sullo storico: un altro rappresentante può aver pubblicato.
                                                                 val publishedHistory = AppContainer.seatMapRepository.getHistoryForOptimizer()
                                                                 if (draft.history == publishedHistory) {
-                                                                    restoreSeatMapDraft(draft, showProposals = true)
+                                                                    restoreSeatMapDraft(draft)
+                                                                    generatedSeatMapProposals = draft.proposals
                                                                     return@launch
                                                                 }
                                                                 // Una correzione retroattiva cambia gli input: si rigenerano le proposte.
@@ -3774,6 +3781,7 @@ fun MainAppShell(
                                                         }
                                                         isGeneratingProposals = true
                                                         seatMapSearchesCompleted = 0
+                                                        hasCurrentSeatMapResult = false
                                                         stopSeatMapSearch = false
                                                         lastRequestedSeatsPerDesk = seatsPerDesk
                                                         // Griglia COMPLETA scelta (v1.1.6, layout personalizzato):
@@ -3840,18 +3848,15 @@ fun MainAppShell(
                                                                     rowSeats = rowSeats,
                                                                     customDeskSlots = customDeskSlots,
                                                                     shouldStop = { stopSeatMapSearch },
-                                                                    onBest = { best ->
-                                                                        withContext(Dispatchers.Main) { proposalOptions = listOf(best) }
+                                                                    onBest = {
+                                                                        withContext(Dispatchers.Main) { hasCurrentSeatMapResult = true }
                                                                     },
                                                                     onProgress = { completed, _ ->
                                                                         withContext(Dispatchers.Main) { seatMapSearchesCompleted = completed }
                                                                     }
                                                                 )
                                                             }
-                                                            // La pagina delle proposte si apre dal pulsante "Calcola":
-                                                            // il tocco e' di qualche secondo fa, lo si rinnova.
-                                                            circolareplus.design.AilaContainerTransform.touchFresh()
-                                                            proposalOptions = computed
+                                                            check(computed.isNotEmpty()) { "Nessuna disposizione disponibile." }
                                                             // Bozza salvata sul telefono (v1.1.6): se l'app viene chiusa
                                                             // senza pubblicare, rientrando il "Calcola" ripresenta le
                                                             // stesse tre mappe invece di ricalcolare. Il salvataggio
@@ -3871,11 +3876,14 @@ fun MainAppShell(
                                                                 weights = weights,
                                                                 isSmallClass = seatMapOptimizerIsSmallClass
                                                             )
-                                                            proposalOptions = draftData.proposals
                                                             updateSeatMapDraft(draftData)
+                                                            generatedSeatMapProposals = draftData.proposals
+                                                        } catch (e: CancellationException) {
+                                                            throw e
                                                         } catch (e: Exception) {
                                                             seatMapActionError = "Impossibile calcolare le proposte: ${e.message}"
                                                         } finally {
+                                                            hasCurrentSeatMapResult = false
                                                             isGeneratingProposals = false
                                                         }
                                                     }
@@ -5149,17 +5157,6 @@ fun MainAppShell(
                         onOpenFiles={filesOpenedFromSettings=false;isInLocalFiles=true;isInAssistantScreen=false},
                         onStudyPlan={askAssistant("Prepara un piano di ripasso solo per gli impegni destinati a me. Spiega come distribuire lo studio, senza creare eventi.")},
                         onOpenAiSettings={isInSettingsScreen=true;isInAiSettings=true},
-                        acaEnabled = aiPolicy.allows("CHAT"),
-                        onOpenAca = {
-                            if (aiPolicy.allows("CHAT")) {
-                                acaOverlayStart = assistantMessages.size
-                                acaResponsePresented = false
-                                acaOverlay = true
-                            } else {
-                                isInSettingsScreen = true
-                                isInAiSettings = true
-                            }
-                        },
                         onAttachContent = { receiveAssistantAttachment(it,false) },
                         onVoiceContent = { receiveAssistantAttachment(it,true) },
                         attachedFiles = assistantAttachments[assistantConversationId].orEmpty(),
@@ -6482,8 +6479,8 @@ internal fun AddCalendarEventDialog(
                             eventGenerationJob = scope.launch {
                                 try {
                                     val preferences = circolareplus.ai.AcaPolicyState.preferences
-                                    if (!preferences.aiEnabled || !preferences.acaEnabled || "CALENDAR" !in preferences.services) {
-                                        aiGenerationError = "Attiva ACA e il servizio Calendario in Impostazioni → AI."
+                                    if (!preferences.allows("CALENDAR")) {
+                                        aiGenerationError = "Attiva il servizio Calendario in Impostazioni → AI."
                                         return@launch
                                     }
                                     val prompt = selectedDateMillis?.let {

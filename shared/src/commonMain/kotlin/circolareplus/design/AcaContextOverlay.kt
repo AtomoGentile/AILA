@@ -307,7 +307,8 @@ fun AcaContextOverlay(
                     attachedScreen=true;attachmentMenu=false
                 }
                 AcaAttachmentOption("File", "Importa dal dispositivo", AppTheme.TintBlue, AppTheme.TintBlueInk, isInteractive && !thinking) { picker() }
-                AcaAttachmentOption("Allega da Foto", "Scegli un’immagine dalla galleria", AppTheme.TintViolet, AppTheme.TintVioletInk, isInteractive && !thinking) { photoPicker() }
+                AcaAttachmentOption("Foto", "Scegli un’immagine dalla galleria", AppTheme.TintBlue, AppTheme.TintBlueInk,
+                    isInteractive && !thinking, icon = { AppIcons.Photo(Modifier.size(24.dp), it) }) { photoPicker() }
                 Text("Gli allegati della chat sono temporanei: nessuna copia salvata automaticamente sul dispositivo.",style=MaterialTheme.typography.bodySmall,color=muted)
             }
         }
@@ -316,14 +317,18 @@ fun AcaContextOverlay(
 }
 
 @Composable
-private fun AcaAttachmentOption(title:String,subtitle:String,fill:Color,muted:Color,enabled:Boolean,onClick:()->Unit) {
+private fun AcaAttachmentOption(
+    title: String, subtitle: String, fill: Color, muted: Color, enabled: Boolean,
+    icon: @Composable (Color) -> Unit = { AppIcons.Document(Modifier.size(24.dp), it) },
+    onClick: () -> Unit
+) {
     val interaction = remember { MutableInteractionSource() }
     val optionShape = ailaMorphShape(interaction)
     Row(Modifier.fillMaxWidth().ailaPressScale(interaction, .97f).ailaTopicSurface(optionShape,fill,muted)
         .clickable(interactionSource=interaction,indication=null,enabled=enabled,role=androidx.compose.ui.semantics.Role.Button,onClick=onClick)
         .padding(20.dp),verticalAlignment=Alignment.CenterVertically) {
         Box(Modifier.size(48.dp).background(muted.copy(alpha=.12f),RoundedCornerShape(16.dp)),contentAlignment=Alignment.Center) {
-            AppIcons.Document(Modifier.size(24.dp),muted)
+            icon(muted)
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {

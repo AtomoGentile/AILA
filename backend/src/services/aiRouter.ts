@@ -29,10 +29,11 @@ export async function saveAiPreferences(env:Env,userId:string,value:AiPreference
  .bind(userId,+value.aiEnabled,+value.acaEnabled,+value.holdToOpen,JSON.stringify(value.services),+value.cloudConsent,+value.externalConsent,+value.attachmentConsent,+value.audioConsent,+value.nudgesEnabled,+value.advancedEnabled).run();
 }
 export const AI_SERVICES=['CIRCULARS','CHAT','CALENDAR','DOCUMENTS','AUDIO','IMAGES','FORUM','FORUM_SUGGESTIONS','STUDY_PLAN','NOW_NUDGE'];
-export async function requireAiService(env:Env,userId:string,service:string,needsAca=true):Promise<AiPreferences>{
+const CONTEXTUAL_ACA_SERVICES = new Set(['FORUM', 'FORUM_SUGGESTIONS', 'NOW_NUDGE']);
+export async function requireAiService(env:Env,userId:string,service:string):Promise<AiPreferences>{
  const pref=await aiPreferences(env,userId);
  if(!pref.aiEnabled)throw new HTTPException(403,{message:'L’AI è disattivata. Puoi attivarla in Impostazioni → AI.'});
- if(needsAca&&!pref.acaEnabled)throw new HTTPException(403,{message:'ACA è opzionale ed è disattivata. Puoi attivarla in Impostazioni → AI.'});
+ if(CONTEXTUAL_ACA_SERVICES.has(service)&&!pref.acaEnabled)throw new HTTPException(403,{message:'ACA è opzionale ed è disattivata. Puoi attivarla in Impostazioni → AI.'});
  if(!pref.services.includes(service))throw new HTTPException(403,{message:'Questo servizio AI è disattivato. Puoi abilitarlo in Impostazioni → AI.'});
  return pref;
 }
@@ -81,7 +82,7 @@ export async function runAiTask(env:Env,userId:string,task:AiTask):Promise<AiTas
  if(task.localOnly)throw new HTTPException(403,{message:'È attiva la modalità solo dispositivo. Nessun contenuto inviato al cloud.'});
  if((task.system?.length??0)>16000||task.question.length>8000||task.context.length>(task.feature==='AGENT'?60_000:48_000))throw new HTTPException(413,{message:'Dividi il contenuto in parti più piccole'});
  const service=task.service??({CHAT:'CHAT',DOCUMENT:'DOCUMENTS',SUMMARIZE:'DOCUMENTS',STUDY_PLAN:'STUDY_PLAN',AGENT:'CALENDAR',TRANSCRIBE:'AUDIO',IMAGE:'IMAGES',PERABOT:'FORUM'} as const)[task.feature];
- const pref=await requireAiService(env,userId,service,task.feature!=='CHAT');
+ const pref=await requireAiService(env,userId,service);
  if(!pref.cloudConsent)throw new HTTPException(403,{message:'Consenti l’elaborazione cloud in Impostazioni → AI prima di usare questa funzione.'});
  if(task.attachment&&!pref.attachmentConsent)throw new HTTPException(403,{message:'Serve il consenso all’analisi degli allegati.'});
  if(task.audio&&!pref.audioConsent)throw new HTTPException(403,{message:'Serve il consenso alla trascrizione audio.'});

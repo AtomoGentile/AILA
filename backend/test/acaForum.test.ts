@@ -277,13 +277,20 @@ describe('Optional AI, service consent and hard budgets',()=>{
   expect((await call('POST','/api/aca/task',{feature:'CHAT',question:'Ciao',context:''})).status).toBe(403);
   expect(db.prepare('SELECT * FROM calendar_events').all()).toHaveLength(0);expect(run).not.toHaveBeenCalled();
  });
- it('ACA and each service are independent opt-ins',async()=>{
+ it('plans and confirms from chat with contextual ACA off and respects the calendar opt-in',async()=>{
   await consent();await call('PUT','/api/aca/preferences',{acaEnabled:false});
-  expect((await preview()).status).toBe(403);
-  expect((await call('POST','/api/aca/task',{feature:'CHAT',question:'Ciao',context:''})).status).toBe(200);
+  const planning={feature:'AGENT',messages:[{role:'user',content:'Prepara un evento'}]};
+  expect((await call('POST','/api/ai/chat',planning)).status).toBe(200);
+  const plan=await preview();
+  expect(plan.status).toBe(201);
+  expect(db.prepare('SELECT * FROM calendar_events').all()).toHaveLength(0);
+  expect((await confirm(plan.json)).status).toBe(200);
+  const thread=(await createThread()).json.thread.id;
+  expect((await call('POST',`/api/forum/${thread}/ai`,{})).status).toBe(403);
   await call('PUT','/api/aca/preferences',{acaEnabled:true,services:['CHAT']});
-  expect((await call('POST','/api/aca/task',{feature:'DOCUMENT',question:'Riassumi',context:'Testo'})).status).toBe(403);
-  expect((await preview()).status).toBe(403);expect(run).toHaveBeenCalledTimes(1);
+  expect((await call('POST','/api/ai/chat',planning)).status).toBe(403);
+  expect((await preview()).status).toBe(403);
+  expect(run).toHaveBeenCalledTimes(1);
  });
  it('private summaries require forum service and consent; refusal never invokes a provider',async()=>{
   const id=(await createThread()).json.thread.id;
@@ -468,12 +475,13 @@ describe('Shared proactive calendar proposals',()=>{
 
 describe('Classic chatbot attachment consent',()=>{
  const request=(attachmentServices:string[])=>({messages:[{role:'user',content:'Riassumi il testo allegato'}],attachmentServices});
- it('blocks file text before invoking any provider when ACA or document consent is off',async()=>{
-  await consent();await call('PUT','/api/aca/preferences',{attachmentConsent:false});
-  expect((await call('POST','/api/ai/chat',request(['DOCUMENTS']))).status).toBe(403);
-  await call('PUT','/api/aca/preferences',{attachmentConsent:true,acaEnabled:false});
+ it('blocks file text without consent and accepts it with contextual ACA off',async()=>{
+  await consent();await call('PUT','/api/aca/preferences',{attachmentConsent:false,acaEnabled:false});
   expect((await call('POST','/api/ai/chat',request(['DOCUMENTS']))).status).toBe(403);
   expect(run).not.toHaveBeenCalled();
+  await call('PUT','/api/aca/preferences',{attachmentConsent:true});
+  expect((await call('POST','/api/ai/chat',request(['DOCUMENTS']))).status).toBe(200);
+  expect(run).toHaveBeenCalledTimes(1);
  });
  it('requires the individual audio service and audio consent for transcripts in classic chat',async()=>{
   await consent();await call('PUT','/api/aca/preferences',{audioConsent:false});

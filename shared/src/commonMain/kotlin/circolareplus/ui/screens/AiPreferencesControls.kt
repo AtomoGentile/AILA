@@ -35,15 +35,15 @@ import kotlinx.coroutines.sync.withLock
   AilaSectionTitle("AI e servizi")
   AilaCard{Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){
    AiControlRow("Attiva l’AI","Se disattivata, puoi continuare a usare circolari, calendario e forum senza avviare elaborazioni AI.",p.aiEnabled,true){save(p.copy(aiEnabled=it))}
-   AiControlRow("Attiva ACA","Opzionale. Aggiunge strumenti contestuali e azioni sul calendario da confermare. Scegli i servizi qui sotto.",p.acaEnabled,p.aiEnabled){save(p.copy(acaEnabled=it))}
-   AiControlRow("Apri ACA tenendo premuto","Tieni premuto brevemente in un’area libera di qualsiasi schermata. Scorrimento, controlli e selezione del testo hanno precedenza.",p.holdToOpen,p.aiEnabled&&p.acaEnabled){save(p.copy(holdToOpen=it))}
+   AiControlRow("Attiva ACA contestuale","Abilita il pannello contestuale, i servizi del forum e il brief. La chat usa i servizi che scegli qui sotto.",p.acaEnabled,p.aiEnabled){save(p.copy(acaEnabled=it))}
+   AiControlRow("Apri ACA tenendo premuto","Tieni premuto brevemente in un’area libera dell’app. Scorrimento, controlli e selezione del testo hanno precedenza.",p.holdToOpen,p.aiEnabled&&p.acaEnabled){save(p.copy(holdToOpen=it))}
   }}
   AilaSectionTitle("Servizi da attivare")
   AilaCard{Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
    val services=listOf("CIRCULARS" to "Analisi delle circolari","CHAT" to "Chat con AILA","CALENDAR" to "Azioni sul calendario",
     "DOCUMENTS" to "Documenti e testi selezionati","AUDIO" to "Trascrizione dei vocali","IMAGES" to "Analisi delle immagini",
     "FORUM" to "Riassunti e @perabot nel forum","FORUM_SUGGESTIONS" to "Proposte automatiche dalle conversazioni","STUDY_PLAN" to "Piani di studio","NOW_NUDGE" to "AILA brief nella home")
-   services.forEach{(id,label)->val aca=id !in setOf("CIRCULARS","CHAT")
+   services.forEach{(id,label)->val aca=circolareplus.ai.requiresContextualAca(id)
     AiControlRow(label,if(id=="FORUM_SUGGESTIONS")"Opzionale: con il consenso cloud, analizza i messaggi della discussione aperta e propone impegni visibili alla classe. Nessun inserimento senza conferma."else if(id=="NOW_NUDGE")"Impegni personali, circolari pertinenti, sondaggi e novità della classe. Non avvia modelli in automatico."else if(aca)"Richiede ACA attiva."else"Servizio AI di base.",id in p.services,p.aiEnabled&&(!aca||p.acaEnabled)){enabled->
      val next=if(enabled)(p.services+id).distinct()else p.services-id
      save(p.copy(services=next,nudgesEnabled=if(id=="NOW_NUDGE")enabled else p.nudgesEnabled))

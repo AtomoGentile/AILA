@@ -200,7 +200,7 @@ fun ForumScreen(
         circolareplus.design.AilaTextButton(onClick={focusPostId=proposal.sourcePostIds.firstOrNull{it!=snap.thread.id}?:snap.thread.id}){Text("Mostra i messaggi di origine")}
         if(proposal.status=="PENDING"){
          circolareplus.design.AilaActionButton(onClick={confirmingProposal=proposal},enabled=!busy&&policy.allows("CALENDAR")){Text("Aggiungi al calendario")}
-         if(!policy.allows("CALENDAR"))Text("Per confermare, attiva ACA e il servizio Calendario nelle impostazioni AI. Non serve una chiave personale.",style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
+         if(!policy.allows("CALENDAR"))Text("Per confermare, attiva il servizio Calendario nelle impostazioni AI. Non serve una chiave personale.",style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
         }
        }}
       }}

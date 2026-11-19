@@ -118,8 +118,6 @@ fun AssistantChatScreen(
     agentPhase: AssistantAgentPhase? = null,
     onRecoverAction: (String) -> Unit = {},
     onAttachContent: ((circolareplus.platform.IncomingContent) -> Unit)? = null,
-    acaEnabled: Boolean = false,
-    onOpenAca: (() -> Unit)? = null,
     onVoiceContent: ((circolareplus.platform.IncomingContent) -> Unit)? = null,
     onOpenFiles:()->Unit={},onStudyPlan:()->Unit={},onOpenAiSettings:()->Unit={},
     attachedFiles: List<circolareplus.ai.assistant.AssistantAttachedFile> = emptyList(),
@@ -199,8 +197,6 @@ fun AssistantChatScreen(
             hasMessages = messages.isNotEmpty(),
             statusLabel = messages.lastOrNull { it.author != AssistantAuthor.USER && !it.isError }?.modelLabel,
             onBackClick = onBackClick,
-            acaEnabled = acaEnabled,
-            onOpenAca = onOpenAca,
             // Lo storico resta raggiungibile anche a chat vuota: e' proprio quando non c'e'
             // niente a schermo che si va a cercare la conversazione di ieri.
             onHistoryClick = if (conversations.isNotEmpty()) ({ isHistoryOpen = true }) else null,
@@ -423,28 +419,32 @@ fun AssistantChatScreen(
         if(attachmentsMenu)circolareplus.design.AilaBottomSheet(onDismissRequest={attachmentsMenu=false}){
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Aggiungi alla chat", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, color = AppTheme.TextDark)
-                        Text("Scegli una fonte per la conversazione.", style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
-                    }
+                    Text("Aggiungi alla chat", modifier = Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.SemiBold, color = AppTheme.TextDark)
                     androidx.compose.material3.IconButton(onClick = { attachmentsMenu = false }, modifier = Modifier.size(36.dp).semantics { contentDescription = "Chiudi allegati" }) {
                         AppIcons.Close(Modifier.size(19.dp), AppTheme.TextMuted)
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    AttachmentMenuTile("File", "Documenti e audio", AppTheme.TintViolet, AppTheme.TintVioletInk,
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AttachmentMenuTile("File", "Documenti", AppTheme.TintViolet, AppTheme.TintVioletInk,
                         enabled = !isThinking && !recording, onClick = { fileSources = true }, modifier = Modifier.weight(1f)) {
-                        AppIcons.Document(Modifier.size(24.dp), if (AppTheme.isGlass) AppTheme.PrimaryBlue else AppTheme.TintVioletInk)
+                        AppIcons.Document(Modifier.size(24.dp), it)
                     }
-                    AttachmentMenuTile(if(recording) "Termina vocale" else "Vocale", "Registra un messaggio", AppTheme.TintGreen, AppTheme.TintGreenInk,
-                        enabled = !isThinking, onClick = { attachmentsMenu = false; if(recording) recorder?.stop() else recorder?.start() }, modifier = Modifier.weight(1f)) {
-                        MicrophoneGlyph(if (AppTheme.isGlass) AppTheme.PrimaryBlue else AppTheme.TintGreenInk)
+                    AttachmentMenuTile("Foto", "Galleria", AppTheme.TintBlue, AppTheme.TintBlueInk,
+                        enabled = !isThinking && !recording, onClick = {
+                            attachmentError = null
+                            photoPicker?.invoke()
+                        }, modifier = Modifier.weight(1f)) {
+                        AppIcons.Photo(Modifier.size(24.dp), it)
+                    }
+                    AttachmentMenuTile("Vocale", if (recording) "Termina" else "Registra", AppTheme.TintGreen, AppTheme.TintGreenInk,
+                        enabled = !isThinking, onClick = {
+                            attachmentsMenu = false
+                            if (recording) recorder?.stop() else recorder?.start()
+                        }, modifier = Modifier.weight(1f)) {
+                        MicrophoneGlyph(it)
                     }
                 }
-                AttachmentMenuRow("Allega da Foto", "Scegli un’immagine dalla galleria", enabled = !isThinking && !recording, onClick = {
-                    attachmentError = null
-                    photoPicker?.invoke()
-                }) { AppIcons.Document(Modifier.size(22.dp), AppTheme.TintVioletInk) }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     AppIcons.Shield(Modifier.size(16.dp), AppTheme.TextMuted)
                     Spacer(Modifier.width(8.dp))
@@ -480,7 +480,7 @@ fun AssistantChatScreen(
 
 @Composable
 private fun AttachmentMenuTile(title: String, subtitle: String, fill: Color, ink: Color,
-    enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, icon: @Composable () -> Unit) {
+    enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, icon: @Composable (Color) -> Unit) {
     val shape = RoundedCornerShape(26.dp)
     val textColor = if (AppTheme.isGlass) AppTheme.TextDark else ink
     val iconColor = if (AppTheme.isGlass) AppTheme.PrimaryBlue else ink
@@ -489,9 +489,9 @@ private fun AttachmentMenuTile(title: String, subtitle: String, fill: Color, ink
         else Modifier.clip(shape).background(fill)
     ).alpha(if(enabled) 1f else .45f)
         .clickable(enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
-        .padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(Modifier.size(42.dp).background(iconColor.copy(alpha = .10f), RoundedCornerShape(15.dp)), contentAlignment = Alignment.Center) { icon() }
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = textColor)
+        .padding(horizontal = 10.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.size(38.dp).background(iconColor.copy(alpha = .10f), RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) { icon(iconColor) }
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = textColor)
         Text(subtitle, minLines = 2, style = MaterialTheme.typography.labelMedium, color = if (AppTheme.isGlass) AppTheme.TextMuted else ink.copy(alpha = .8f))
     }
 }
@@ -972,8 +972,6 @@ private fun AssistantHeader(
     isThinking: Boolean,
     hasMessages: Boolean,
     statusLabel: String?,
-    acaEnabled: Boolean,
-    onOpenAca: (() -> Unit)?,
     onBackClick: () -> Unit,
     onHistoryClick: (() -> Unit)?,
     onNewChatClick: (() -> Unit)?
@@ -1027,14 +1025,6 @@ private fun AssistantHeader(
         }
         Spacer(modifier = Modifier.width(AppTheme.Space8))
         Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
-            if (onOpenAca != null) {
-                AilaIconButton(
-                    contentDescription = if (acaEnabled) "Apri ACA" else "Attiva ACA",
-                    onClick = onOpenAca
-                ) { tint ->
-                    Text("ACA", style = MaterialTheme.typography.labelMedium, color = if (acaEnabled) AppTheme.PrimaryBlue else tint)
-                }
-            }
             if (onHistoryClick != null) {
                 AilaIconButton(contentDescription = "Cronologia chat", onClick = onHistoryClick, opensPage = true) { tint ->
                     AppIcons.History(modifier = Modifier.size(20.dp), color = tint)

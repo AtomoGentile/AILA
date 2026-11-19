@@ -1,5 +1,6 @@
 package circolareplus.data
 
+import circolareplus.ai.allows
 import circolareplus.ai.AiClassifier
 import circolareplus.ai.AiCoreCooldown
 import circolareplus.ai.AilaCloudClassifier
@@ -122,7 +123,7 @@ object AppContainer {
         },
         circularsRepository = circularsRepository,
         pdfTextExtractor = pdfTextExtractor,
-        actionsEnabled = settings.cachedAiPreferences.let { it.aiEnabled && it.acaEnabled && "CALENDAR" in it.services }
+        actionsEnabled = settings.cachedAiPreferences.allows("CALENDAR")
     )
 
 

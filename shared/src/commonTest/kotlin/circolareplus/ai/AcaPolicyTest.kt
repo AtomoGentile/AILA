@@ -16,17 +16,19 @@ class AcaPolicyTest {
  }
  @Test fun defaultsRequireExplicitActivation(){
   val defaults=AcaPreferencesDto()
-  assertFalse(defaults.allows("CHAT",false))
+  assertFalse(defaults.allows("CHAT"))
   assertFalse(defaults.allows("CALENDAR"))
   assertFalse(defaults.cloudConsent)
  }
- @Test fun servicesAndAcaRemainIndependent(){
-  val basic=AcaPreferencesDto(aiEnabled=true,services=listOf("CHAT","CALENDAR"))
-  assertTrue(basic.allows("CHAT",false))
-  assertFalse(basic.allows("CALENDAR"))
-  assertTrue(basic.copy(acaEnabled=true).allows("CALENDAR"))
-  assertFalse(basic.copy(acaEnabled=true).allows("DOCUMENTS"))
-  assertFalse(basic.copy(aiEnabled=false,acaEnabled=true).allows("CALENDAR"))
+ @Test fun chatServicesWorkIndependentlyOfContextualAca() {
+  val native = listOf("CHAT", "CALENDAR", "DOCUMENTS", "IMAGES", "AUDIO", "STUDY_PLAN")
+  val contextual = listOf("FORUM", "FORUM_SUGGESTIONS", "NOW_NUDGE")
+  val basic = AcaPreferencesDto(aiEnabled = true, services = native + contextual)
+  assertTrue(native.all { basic.allows(it) })
+  assertTrue(contextual.none { basic.allows(it) })
+  assertTrue(contextual.all { basic.copy(acaEnabled = true).allows(it) })
+  assertFalse(basic.copy(services = listOf("CHAT")).allows("CALENDAR"))
+  assertFalse(basic.copy(aiEnabled = false, acaEnabled = true).allows("CALENDAR"))
  }
  @Test fun remoteAttachmentMetadataExpiresAtTheExactServerDeadline(){
   val item=ContentAttachmentDto("file","Vocale.wav","audio/wav",100,"2026-11-12T10:00:00Z")

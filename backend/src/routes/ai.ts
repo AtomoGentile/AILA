@@ -146,7 +146,7 @@ ai.post('/chat', bodyLimit({maxSize:256*1024}), async (c) => {
   if(!Array.isArray(attachmentServices)||attachmentServices.length>3||!attachmentServices.every(x=>['DOCUMENTS','AUDIO','IMAGES'].includes(x)))return c.json({error:'Servizi degli allegati non validi'},400);
   if(body.feature!==undefined&&!['CHAT','AGENT','STUDY_PLAN'].includes(String(body.feature)))return c.json({error:'Funzione non supportata da questa rotta'},400);
   {
-    const pref=await requireAiService(c.env,c.get('jwtPayload').sub,body.feature==='AGENT'?'CALENDAR':body.feature==='STUDY_PLAN'?'STUDY_PLAN':'CHAT',body.feature==='AGENT'||body.feature==='STUDY_PLAN');
+    const pref=await requireAiService(c.env,c.get('jwtPayload').sub,body.feature==='AGENT'?'CALENDAR':body.feature==='STUDY_PLAN'?'STUDY_PLAN':'CHAT');
     if(!pref.cloudConsent)return c.json({error:'Consenti il cloud in Impostazioni → AI prima di usare il servizio.'},403);
     if(attachmentServices.length&&!pref.attachmentConsent)return c.json({error:'Consenti l’analisi degli allegati nelle impostazioni AI.'},403);
     if(attachmentServices.includes('AUDIO')&&!pref.audioConsent)return c.json({error:'Consenti l’uso dell’audio nelle impostazioni AI.'},403);
