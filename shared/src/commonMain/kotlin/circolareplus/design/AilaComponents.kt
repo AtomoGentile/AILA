@@ -48,6 +48,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -236,7 +237,8 @@ fun AilaSegmentedTabs(
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    key: Any? = null
+    key: Any? = null,
+    unreadIndices: Set<Int> = emptySet()
 ) {
     // Il pill non compare/scompare più a scatti su un segmento o sull'altro: è un unico riquadro
     // condiviso che scivola e cambia larghezza dall'uno all'altro. Niente scala/pressione di tocco
@@ -296,6 +298,7 @@ fun AilaSegmentedTabs(
         ) {
             labels.forEachIndexed { index, label ->
                 val isSelected = index == selectedIndex
+                val unread = index in unreadIndices
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -307,6 +310,7 @@ fun AilaSegmentedTabs(
                         }
                         // 44dp come bersaglio di tocco: prima l'altezza veniva dall'interlinea di
                         // 24sp ereditata da Material, che la scala tipografica non ha più.
+                        .semantics { if (unread) stateDescription = "Da leggere" }
                         .heightIn(min = 44.dp)
                         .padding(vertical = 9.dp),
                     contentAlignment = Alignment.Center
@@ -320,6 +324,10 @@ fun AilaSegmentedTabs(
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
                     )
+                    if (unread) {
+                        Box(Modifier.align(Alignment.TopEnd).padding(end = 9.dp).size(6.dp)
+                            .background(AppTheme.PrimaryBlue, CircleShape))
+                    }
                 }
             }
         }
@@ -1412,7 +1420,7 @@ fun AilaFab(
 }
 
 /** Accesso a profilo e impostazioni dall'avatar: iniziali dell'utente e cosa fare al tocco. */
-class AilaProfileEntry(val initials: String, val onClick: () -> Unit)
+class AilaProfileEntry(val initials: String, val hasUnread: Boolean = false, val onClick: () -> Unit)
 
 /**
  * Fornito da MainAppShell alle schermate delle tab: se c'e', le intestazioni mostrano l'avatar a
@@ -1453,6 +1461,7 @@ fun AilaProfileButton(entry: AilaProfileEntry, modifier: Modifier = Modifier, on
             .clickable(interactionSource = interactionSource, indication = null) { entry.onClick() }
             .semantics {
                 contentDescription = "Profilo e impostazioni"
+                if (entry.hasUnread) stateDescription = "Da leggere"
                 role = Role.Button
             },
         contentAlignment = Alignment.Center
@@ -1467,5 +1476,9 @@ fun AilaProfileButton(entry: AilaProfileEntry, modifier: Modifier = Modifier, on
                 else -> AppTheme.OnAccentContainer
             }
         )
+        if (entry.hasUnread) {
+            Box(Modifier.align(Alignment.TopEnd).padding(7.dp).size(7.dp)
+                .background(AppTheme.PrimaryBlue, CircleShape))
+        }
     }
 }

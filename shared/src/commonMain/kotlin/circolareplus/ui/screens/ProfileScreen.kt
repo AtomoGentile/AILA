@@ -301,7 +301,8 @@ fun ProfileScreen(
 
             Spacer(modifier = Modifier.height(AppTheme.Space24))
 
-            // --- Uscita ---------------------------------------------------------------------
+            AilaSectionTitle(text = "Account")
+            Spacer(modifier = Modifier.height(AppTheme.Space12))
             AilaCard {
                 AilaListRow(
                     title = "Modifica nome",

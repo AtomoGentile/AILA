@@ -19,6 +19,9 @@ object NotificationCategoryMapper {
             "poll_published", "poll_complete", "swap_request", "swap_accepted" -> "polls"
             "new_circular" -> "circulars"
             "new_proposal" -> "board"
+            "bureaucracy_practice" -> "bureaucracy"
+            "gita_update", "gita_report" -> "gita"
+            "calendar_event" -> "calendar"
             "forum_reply", "forum_nudge" -> "forum"
             "name_change_request", "name_change_approved", "name_change_rejected" -> "profile"
             else -> null
@@ -26,6 +29,7 @@ object NotificationCategoryMapper {
         if (fromAction != null) return fromAction
 
         return when {
+            data["type"] == "gita_report" -> "gita"
             data.containsKey("circular_number") -> "circulars"
             data.containsKey("proposal_id") -> "board"
             data.containsKey("poll_id") || data.containsKey("swap_id") || data.containsKey("grid_id") -> "polls"

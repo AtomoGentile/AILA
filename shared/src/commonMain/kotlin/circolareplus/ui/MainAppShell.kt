@@ -22,6 +22,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import circolareplus.data.remote.dto.AilaBriefKind
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
@@ -171,8 +173,7 @@ const val NOTIFICATION_CATEGORY_RANKING_POLLS = "ranking_polls"
 
 /**
  * Tocchi dedicati al Profilo: la richiesta di cambio nome porta chi decide alla schermata con
- * l'elenco da approvare, l'esito torna a chi l'aveva chiesta. Non e' in NotificationKind: resta
- * sempre attiva (le interruttori delle impostazioni non toccano il Profilo).
+ * l'elenco da approvare, l'esito torna a chi l'aveva chiesta.
  */
 const val NOTIFICATION_CATEGORY_PROFILE = "profile"
 
@@ -549,7 +550,7 @@ fun MainAppShell(
 
     // --- Stato Notifiche (storico locale, mai sul server) -------------------------------------
     var notificationLog by remember { mutableStateOf(AppContainer.settings.listNotifications()) }
-    val hasUnreadNotifications = notificationLog.any { !it.read }
+    val unreadCategories = notificationLog.filterNot { it.read }.mapTo(mutableSetOf()) { it.category }
 
     /**
      * Confronta quello che è appena arrivato dal server con l'ultima cosa vista e, se c'è
@@ -971,6 +972,19 @@ fun MainAppShell(
     }
     var isInNotificationsScreen by rememberSaveable { mutableStateOf(false) }
     var isInBureaucracy by rememberSaveable { mutableStateOf(false) }
+    var initialPracticeId by rememberSaveable { mutableStateOf<String?>(null) }
+    var practices by remember(currentUser?.id) { mutableStateOf(emptyList<circolareplus.data.remote.dto.BureaucracyPracticeDto>()) }
+    var seenPractices by remember(currentUser?.id) { mutableStateOf(AppContainer.settings.seenBureaucracyPracticeIds) }
+    var dismissedPractices by remember(currentUser?.id) { mutableStateOf(AppContainer.settings.dismissedBureaucracyPracticeIds) }
+    LaunchedEffect(currentUser?.id, selectedTab, isInBureaucracy, circolareplus.platform.AppForeground.isForeground) {
+        if (currentUser == null || selectedTab != MainTab.HOME || isInBureaucracy || !circolareplus.platform.AppForeground.isForeground) return@LaunchedEffect
+        while (isActive) {
+            try {
+                practices = AppContainer.api.get<circolareplus.data.remote.dto.BureaucracyFeedDto>("/api/burocrazia", offlineCopy = false).practices
+            } catch (e: CancellationException) { throw e } catch (_: Exception) {}
+            delay(60_000)
+        }
+    }
     var isInGitaScreen by rememberSaveable { mutableStateOf(false) }
     var isInSettingsScreen by rememberSaveable { mutableStateOf(false) }
     var isInAiSettings by rememberSaveable { mutableStateOf(false) }
@@ -1001,6 +1015,23 @@ fun MainAppShell(
     var contentActivity by remember { mutableStateOf<AssistantAgentPhase?>(null) }
     var acaExperience by remember { mutableStateOf(circolareplus.data.remote.dto.AcaExperienceDto()) }
     var briefItems by remember(currentUser?.id) { mutableStateOf<List<circolareplus.data.remote.dto.AilaBriefItemDto>>(emptyList()) }
+    val unreadClassSections = buildSet {
+        if ("circulars" in unreadCategories || briefItems.any { it.kind == AilaBriefKind.CIRCULAR }) add(ClassSection.CIRCULARS)
+        if ("board" in unreadCategories) add(ClassSection.BOARD)
+        if ("forum" in unreadCategories) add(ClassSection.PERE)
+    }
+    val unreadTabs = buildSet {
+        if (unreadClassSections.isNotEmpty()) add(MainTab.CLASS)
+        if ("calendar" in unreadCategories) add(MainTab.CALENDAR)
+        if (unreadCategories.any { it == "polls" || it == NOTIFICATION_CATEGORY_RANKING_POLLS }) add(MainTab.POLLS)
+        if (unreadCategories.any { it == "seatmap" || it == NOTIFICATION_CATEGORY_SEATMAP_PREFERENCES }) add(MainTab.SEATMAP)
+    }
+    val unreadMenus = buildSet {
+        if (MainTab.CLASS in unreadTabs) add("class")
+        if (practices.any { it.archivedAt == null && it.id !in seenPractices } || "bureaucracy" in unreadCategories) add("bureaucracy")
+        if ("gita" in unreadCategories) add("gita")
+        if (unreadCategories.isNotEmpty()) add("notifications")
+    }
     var briefError by remember(currentUser?.id) { mutableStateOf<String?>(null) }
     var briefLoading by remember { mutableStateOf(false) }
     var briefRefreshTrigger by remember { mutableStateOf(0) }
@@ -1059,6 +1090,12 @@ fun MainAppShell(
 
     // --- Stato Calendario --------------------------------------------------------------
     var calendarEvents by remember { mutableStateOf<List<CalendarEvent>>(emptyList()) }
+    val homeBriefItems = remember(briefItems, practices, dismissedPractices, calendarEvents) {
+        circolareplus.ui.screens.mergeBureaucracyBrief(
+            briefItems, practices, dismissedPractices,
+            circolareplus.ui.screens.upcomingEvents(calendarEvents, limit = calendarEvents.size)
+        )
+    }
     var isCalendarLoading by remember { mutableStateOf(false) }
     var calendarLoadedOnce by remember(currentUser?.id) { mutableStateOf(false) }
     var calendarError by remember { mutableStateOf<String?>(null) }
@@ -1743,6 +1780,8 @@ fun MainAppShell(
         isInBackgroundDebugScreen = false
         isInClassRosterScreen = false
         isInProfileScreen = false
+        isInBureaucracy = false
+        isInGitaScreen = false
         when (category) {
             NotificationKind.CIRCULARS.key -> {
                 classSection = ClassSection.CIRCULARS
@@ -1777,6 +1816,8 @@ fun MainAppShell(
             NotificationKind.CALENDAR.key -> {
                 selectedTab = MainTab.CALENDAR
             }
+            NotificationKind.BUREAUCRACY.key -> { initialPracticeId = null; isInBureaucracy = true }
+            NotificationKind.TRIP.key -> { isInGitaScreen = true }
             NOTIFICATION_CATEGORY_PROFILE -> {
                 isInProfileScreen = true
             }
@@ -2477,10 +2518,13 @@ fun MainAppShell(
 
     // Ingresso nella schermata Notifiche: ricarica lo storico (elimina quelle scadute) e,
     // uscendo, segna tutto come letto (così il pallino sulla campanella sparisce).
+    var visitedNotifications by remember { mutableStateOf(false) }
     LaunchedEffect(isInNotificationsScreen) {
         if (isInNotificationsScreen) {
+            visitedNotifications = true
             notificationLog = AppContainer.settings.listNotifications()
-        } else if (notificationLog.any { !it.read }) {
+        } else if (visitedNotifications) {
+            visitedNotifications = false
             AppContainer.settings.markAllNotificationsRead()
             notificationLog = AppContainer.settings.listNotifications()
         }
@@ -2827,6 +2871,29 @@ fun MainAppShell(
         proposalOptions.isNotEmpty() && editingSeatMapProposal == null -> ShellRoute.SEATMAP_PROPOSALS
         editingSeatMapProposal != null -> ShellRoute.SEATMAP_EDITOR
         else -> ShellRoute.TABS
+    }
+    LaunchedEffect(shellRoute, selectedTab, classSection, unreadCategories) {
+        val opened = when (shellRoute) {
+            ShellRoute.BUREAUCRACY -> setOf("bureaucracy")
+            ShellRoute.GITA -> setOf("gita")
+            ShellRoute.PROFILE -> setOf(NOTIFICATION_CATEGORY_PROFILE)
+            ShellRoute.TABS -> when (selectedTab) {
+                MainTab.HOME -> emptySet()
+                MainTab.CALENDAR -> setOf("calendar")
+                MainTab.CLASS -> setOf(when (classSection) {
+                    ClassSection.CIRCULARS -> "circulars"
+                    ClassSection.BOARD -> "board"
+                    ClassSection.PERE -> "forum"
+                })
+                MainTab.POLLS -> setOf("polls", NOTIFICATION_CATEGORY_RANKING_POLLS)
+                MainTab.SEATMAP -> setOf("seatmap", NOTIFICATION_CATEGORY_SEATMAP_PREFERENCES)
+            }
+            else -> emptySet()
+        }
+        if (unreadCategories.any { it in opened }) {
+            AppContainer.settings.markNotificationCategoriesRead(opened)
+            notificationLog = AppContainer.settings.listNotifications()
+        }
     }
     // Container transform (Material): a ogni cambio di schermata si annota da dove parte la
     // nuova (l'elemento appena toccato) o che si sta tornando indietro. Fatto qui, durante la
@@ -3274,9 +3341,11 @@ fun MainAppShell(
                 // solo thread. La barra ripiega sul velo traslucido (vedi tabBarSurface).
                 val hazeState = if (AppTheme.liteEffects) null else dev.chrisbanes.haze.rememberHazeState()
                 Box(modifier = Modifier.weight(1f)) {
-                val profileEntry = remember(user.firstName, user.lastName) {
+                val profileUnread = NOTIFICATION_CATEGORY_PROFILE in unreadCategories
+                val profileEntry = remember(user.firstName, user.lastName, profileUnread) {
                     circolareplus.design.AilaProfileEntry(
                         initials = "${user.firstName.take(1)}${user.lastName.take(1)}".uppercase(),
+                        hasUnread = profileUnread,
                         onClick = { isInProfileScreen = true }
                     )
                 }
@@ -3445,11 +3514,16 @@ fun MainAppShell(
                                 experience = acaExperience,
                                 aiEnabled = aiPolicy.aiEnabled && "CIRCULARS" in aiPolicy.services,
                                 onOpenAca = { assistantMode=AssistantMode.GENERAL;isInAssistantScreen=true },
-                                briefItems = briefItems,
+                                briefItems = homeBriefItems,
                                 briefLoading = briefLoading,
                                 briefError = briefError,
                                 onRefreshBrief = { briefRefreshTrigger++ },
-                                onDismissBrief = { item ->
+                                onDismissBrief = dismissBrief@{ item ->
+                                    if (item.kind == AilaBriefKind.BUREAUCRACY) {
+                                        dismissedPractices = dismissedPractices + item.sourceId
+                                        AppContainer.settings.dismissedBureaucracyPracticeIds = dismissedPractices
+                                        return@dismissBrief
+                                    }
                                     val owner = currentUser?.id
                                     briefItems = briefItems.filterNot { it.id == item.id }
                                     coroutineScope.launch {
@@ -3484,6 +3558,10 @@ fun MainAppShell(
                                         }
                                     }
                                     when (item.kind) {
+                                        AilaBriefKind.BUREAUCRACY -> {
+                                            initialPracticeId = item.sourceId
+                                            isInBureaucracy = true
+                                        }
                                         circolareplus.data.remote.dto.AilaBriefKind.SEATMAP -> { openSeatPreferencesFromBrief = item.sourceId.startsWith("preferences:"); selectedTab = MainTab.SEATMAP }
                                         circolareplus.data.remote.dto.AilaBriefKind.EVENT -> { calendarFocusDateIso = item.date; selectedTab = MainTab.CALENDAR }
                                         circolareplus.data.remote.dto.AilaBriefKind.CIRCULAR -> {
@@ -3527,8 +3605,8 @@ fun MainAppShell(
                                 },
                                 onNavigateToClassRoster = { openClassRoster() },
                                 onNavigateToNotifications = { isInNotificationsScreen = true },
-                                hasUnreadNotifications = hasUnreadNotifications,
-                                onNavigateToBureaucracy = { isInBureaucracy = true },
+                                unreadMenus = unreadMenus,
+                                onNavigateToBureaucracy = { initialPracticeId = null; isInBureaucracy = true },
                                 onNavigateToGita = { isInGitaScreen = true },
                                 onNavigateToSearch = { isInSearchScreen = true },
                                 isCircularsLoading = isCircularsLoading && !circularsLoadedOnce,
@@ -3940,6 +4018,7 @@ fun MainAppShell(
                                         circolareplus.design.AilaSegmentedTabs(
                                             labels = ClassSection.entries.map { it.title },
                                             selectedIndex = classSection.ordinal,
+                                            unreadIndices = unreadClassSections.mapTo(mutableSetOf()) { it.ordinal },
                                             onSelect = { classSection = ClassSection.entries[it] },
                                             modifier = Modifier.fillMaxWidth().padding(horizontal = if(AppTheme.isNothing) 20.dp else AppTheme.Space16).padding(bottom = AppTheme.Space12)
                                         )
@@ -4419,6 +4498,7 @@ fun MainAppShell(
                 if (useRail) {
                     FloatingTabRail(
                         selectedTab = selectedTab,
+                        unreadTabs = unreadTabs,
                         onSelect = { selectedTab = it },
                         hazeState = hazeState,
                         modifier = Modifier.align(Alignment.CenterStart)
@@ -4439,6 +4519,7 @@ fun MainAppShell(
                 ) {
                     FloatingTabBar(
                         selectedTab = selectedTab,
+                        unreadTabs = unreadTabs,
                         onSelect = { selectedTab = it },
                         dragPosition = tabBarDrag,
                         hazeState = hazeState
@@ -4802,21 +4883,20 @@ fun MainAppShell(
                             AppContainer.settings.accentKey = accent.key
                         },
                         isNotificationKindEnabled = { kind ->
-                            AppContainer.settings.isNotificationKindEnabled(kind.key)
+                            AppContainer.settings.isNotificationKindEnabled(kind.key) &&
+                                (kind != NotificationKind.BOARD || currentProfile?.notificationBoardEnabled != false)
                         },
                         onNotificationKindChange = { kind, enabled ->
                             AppContainer.settings.setNotificationKindEnabled(kind.key, enabled)
-                            syncPushPreferences()
-                        },
-                        boardNotificationsEnabled = currentProfile?.notificationBoardEnabled ?: true,
-                        onToggleBoardNotifications = { enabled ->
-                            coroutineScope.launch {
-                                try {
-                                    AppContainer.authRepository.toggleBoardNotifications(enabled)
-                                } catch (e: Exception) {
-                                    // Best-effort
+                            if (kind == NotificationKind.BOARD) {
+                                currentProfile = currentProfile?.copy(notificationBoardEnabled = enabled)
+                                coroutineScope.launch {
+                                    try { AppContainer.authRepository.toggleBoardNotifications(enabled) }
+                                    catch (e: CancellationException) { throw e }
+                                    catch (_: Exception) {}
                                 }
                             }
+                            syncPushPreferences()
                         },
                         systemNotificationsEnabled = AppContainer.settings.isSystemNotificationsEnabled,
                         onToggleSystemNotifications = { enabled ->
@@ -5259,7 +5339,13 @@ fun MainAppShell(
                         api = AppContainer.api,
                         studentName = listOf(user.firstName, user.lastName).filter { it.isNotBlank() }.joinToString(" "),
                         active = route == shellRoute,
-                        onBackClick = { isInBureaucracy = false }
+                        initialPracticeId = initialPracticeId,
+                        onPracticesRead = { feed ->
+                            practices = feed.practices
+                            seenPractices = seenPractices + practices.map { it.id }
+                            AppContainer.settings.seenBureaucracyPracticeIds = seenPractices
+                        },
+                        onBackClick = { isInBureaucracy = false; initialPracticeId = null }
                     )
                 }
                 ShellRoute.GITA -> {
@@ -8042,8 +8128,18 @@ private enum class ShellRoute(val depth: Int) {
  * accorciate ("Calend.", "Mappa"); il nome della sezione in cui ci si trova resta sempre scritto.
  */
 @Composable
+private fun UnreadTabIcon(hasUnread: Boolean, icon: @Composable () -> Unit) {
+    Box {
+        icon()
+        if (hasUnread) Box(Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-2).dp)
+            .size(7.dp).background(AppTheme.PrimaryBlue, androidx.compose.foundation.shape.CircleShape))
+    }
+}
+
+@Composable
 private fun FloatingTabBar(
     selectedTab: MainTab,
+    unreadTabs: Set<MainTab>,
     onSelect: (MainTab) -> Unit,
     /** Posizione delle pagine mentre si trascina (vedi tabBarDrag), null altrimenti. */
     dragPosition: androidx.compose.runtime.State<Float?>,
@@ -8056,7 +8152,7 @@ private fun FloatingTabBar(
             .border(1.dp, AppTheme.Hairline, RoundedCornerShape(28.dp)).padding(horizontal = 6.dp),
             verticalAlignment = Alignment.CenterVertically) {
             MainTab.entries.forEach { tab ->
-                NothingTabItem(tab, tab == selectedTab, { onSelect(tab) }, Modifier.weight(1f))
+                NothingTabItem(tab, tab == selectedTab, tab in unreadTabs, { onSelect(tab) }, Modifier.weight(1f))
             }
         }
         return
@@ -8080,12 +8176,13 @@ private fun FloatingTabBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (AppTheme.isGlass) {
-                GlassTabBarContent(selectedTab = selectedTab, onSelect = onSelect, dragPosition = dragPosition.value)
+                GlassTabBarContent(selectedTab = selectedTab, unreadTabs = unreadTabs, onSelect = onSelect, dragPosition = dragPosition.value)
             } else {
                 val drag = dragPosition.value
                 MainTab.entries.forEachIndexed { index, tab ->
                     FloatingTabItem(
                         tab = tab,
+                        hasUnread = tab in unreadTabs,
                         selected = tab == selectedTab,
                         // Trascinando: quanto questa voce e' "attiva" dipende da quanto la sua
                         // pagina e' vicina (1 = sua pagina piena, 0 = a una pagina o piu').
@@ -8167,6 +8264,7 @@ private val CircularsListPaneWidth = 400.dp
 @Composable
 private fun FloatingTabRail(
     selectedTab: MainTab,
+    unreadTabs: Set<MainTab>,
     onSelect: (MainTab) -> Unit,
     hazeState: dev.chrisbanes.haze.HazeState?,
     modifier: Modifier = Modifier
@@ -8175,7 +8273,7 @@ private fun FloatingTabRail(
         Column(modifier.padding(start = 12.dp).width(80.dp).clip(RoundedCornerShape(28.dp))
             .background(AppTheme.SurfaceWhite).border(1.dp, AppTheme.Hairline, RoundedCornerShape(28.dp))
             .padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            MainTab.entries.forEach { tab -> NothingTabItem(tab, tab == selectedTab, { onSelect(tab) }) }
+            MainTab.entries.forEach { tab -> NothingTabItem(tab, tab == selectedTab, tab in unreadTabs, { onSelect(tab) }) }
         }
         return
     }
@@ -8190,13 +8288,13 @@ private fun FloatingTabRail(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         MainTab.entries.forEach { tab ->
-            FloatingRailItem(tab = tab, selected = tab == selectedTab, onClick = { onSelect(tab) })
+            FloatingRailItem(tab = tab, selected = tab == selectedTab, hasUnread = tab in unreadTabs, onClick = { onSelect(tab) })
         }
     }
 }
 
 @Composable
-private fun FloatingRailItem(tab: MainTab, selected: Boolean, onClick: () -> Unit) {
+private fun FloatingRailItem(tab: MainTab, selected: Boolean, hasUnread: Boolean, onClick: () -> Unit) {
     val progress by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (selected) 1f else 0f,
         // Molla viva da selezione, senza rimbalzo con "Riduci movimento".
@@ -8226,6 +8324,7 @@ private fun FloatingRailItem(tab: MainTab, selected: Boolean, onClick: () -> Uni
                 contentDescription = tab.title
                 role = Role.Tab
                 this.selected = selected
+                if (hasUnread) stateDescription = "Da leggere"
             }
             .padding(vertical = AppTheme.Space8),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -8239,12 +8338,14 @@ private fun FloatingRailItem(tab: MainTab, selected: Boolean, onClick: () -> Uni
             contentAlignment = Alignment.Center
         ) {
             val iconModifier = Modifier.size(22.dp).ailaSelectionPop(selected)
-            when (tab) {
-                MainTab.HOME -> AppIcons.Home(modifier = iconModifier, color = ink)
-                MainTab.CALENDAR -> AppIcons.Calendar(modifier = iconModifier, color = ink)
-                MainTab.CLASS -> AppIcons.Document(modifier = iconModifier, color = ink)
-                MainTab.SEATMAP -> AppIcons.Chair(modifier = iconModifier, color = ink)
-                MainTab.POLLS -> AppIcons.Poll(modifier = iconModifier, color = ink)
+            UnreadTabIcon(hasUnread) {
+                when (tab) {
+                    MainTab.HOME -> AppIcons.Home(modifier = iconModifier, color = ink)
+                    MainTab.CALENDAR -> AppIcons.Calendar(modifier = iconModifier, color = ink)
+                    MainTab.CLASS -> AppIcons.Document(modifier = iconModifier, color = ink)
+                    MainTab.SEATMAP -> AppIcons.Chair(modifier = iconModifier, color = ink)
+                    MainTab.POLLS -> AppIcons.Poll(modifier = iconModifier, color = ink)
+                }
             }
         }
         Spacer(modifier = Modifier.height(AppTheme.Space4))
@@ -8303,6 +8404,7 @@ private fun CircularDetailPane(
 @Composable
 private fun RowScope.FloatingTabItem(
     tab: MainTab,
+    hasUnread: Boolean,
     selected: Boolean,
     dragProgress: Float?,
     onClick: () -> Unit
@@ -8357,6 +8459,7 @@ private fun RowScope.FloatingTabItem(
                 contentDescription = tab.title
                 role = Role.Tab
                 this.selected = selected
+                if (hasUnread) stateDescription = "Da leggere"
             }
             .padding(horizontal = AppTheme.Space12),
         horizontalArrangement = Arrangement.Center,
@@ -8365,12 +8468,14 @@ private fun RowScope.FloatingTabItem(
         // L'icona toccata fa un piccolo "pop" elastico quando diventa attiva (trascinando no:
         // passando a meta' avanti e indietro rimbalzerebbe a ogni passaggio).
         val iconModifier = Modifier.size(22.dp).ailaSelectionPop(selected && !following)
-        when (tab) {
-            MainTab.HOME -> AppIcons.Home(modifier = iconModifier, color = iconColor)
-            MainTab.CALENDAR -> AppIcons.Calendar(modifier = iconModifier, color = iconColor)
-            MainTab.CLASS -> AppIcons.Document(modifier = iconModifier, color = iconColor)
-            MainTab.SEATMAP -> AppIcons.Chair(modifier = iconModifier, color = iconColor)
-            MainTab.POLLS -> AppIcons.Poll(modifier = iconModifier, color = iconColor)
+        UnreadTabIcon(hasUnread) {
+            when (tab) {
+                MainTab.HOME -> AppIcons.Home(modifier = iconModifier, color = iconColor)
+                MainTab.CALENDAR -> AppIcons.Calendar(modifier = iconModifier, color = iconColor)
+                MainTab.CLASS -> AppIcons.Document(modifier = iconModifier, color = iconColor)
+                MainTab.SEATMAP -> AppIcons.Chair(modifier = iconModifier, color = iconColor)
+                MainTab.POLLS -> AppIcons.Poll(modifier = iconModifier, color = iconColor)
+            }
         }
         // Il nome si apre e si chiude con lo stesso valore della pillola (larghezza e dissolvenza),
         // invece di un'animazione sua che partiva solo quando la voce cambiava.
@@ -8409,7 +8514,7 @@ private fun RowScope.FloatingTabItem(
  * rimbalzi elastici di Material.
  */
 @Composable
-private fun RowScope.GlassTabBarContent(selectedTab: MainTab, onSelect: (MainTab) -> Unit, dragPosition: Float?) {
+private fun RowScope.GlassTabBarContent(selectedTab: MainTab, unreadTabs: Set<MainTab>, onSelect: (MainTab) -> Unit, dragPosition: Float?) {
     val tabs = MainTab.entries
     BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxHeight()) {
         val itemWidth = maxWidth / tabs.size
@@ -8483,17 +8588,20 @@ private fun RowScope.GlassTabBarContent(selectedTab: MainTab, onSelect: (MainTab
                             contentDescription = tab.title
                             role = Role.Tab
                             this.selected = selected
+                            if (tab in unreadTabs) stateDescription = "Da leggere"
                         },
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
                     val iconModifier = Modifier.size(22.dp)
-                    when (tab) {
-                        MainTab.HOME -> AppIcons.Home(modifier = iconModifier, color = ink)
-                        MainTab.CALENDAR -> AppIcons.Calendar(modifier = iconModifier, color = ink)
-                        MainTab.CLASS -> AppIcons.Document(modifier = iconModifier, color = ink)
-                        MainTab.SEATMAP -> AppIcons.Chair(modifier = iconModifier, color = ink)
-                        MainTab.POLLS -> AppIcons.Poll(modifier = iconModifier, color = ink)
+                    UnreadTabIcon(tab in unreadTabs) {
+                        when (tab) {
+                            MainTab.HOME -> AppIcons.Home(modifier = iconModifier, color = ink)
+                            MainTab.CALENDAR -> AppIcons.Calendar(modifier = iconModifier, color = ink)
+                            MainTab.CLASS -> AppIcons.Document(modifier = iconModifier, color = ink)
+                            MainTab.SEATMAP -> AppIcons.Chair(modifier = iconModifier, color = ink)
+                            MainTab.POLLS -> AppIcons.Poll(modifier = iconModifier, color = ink)
+                        }
                     }
                     Spacer(modifier = Modifier.height(AppTheme.Space4))
                     Text(
@@ -8514,7 +8622,7 @@ private fun RowScope.GlassTabBarContent(selectedTab: MainTab, onSelect: (MainTab
 
 /** Fixed circular controls and a red recording dot, independent of Material's stretching tabs. */
 @Composable
-private fun NothingTabItem(tab: MainTab, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun NothingTabItem(tab: MainTab, selected: Boolean, hasUnread: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val ink by androidx.compose.animation.animateColorAsState(if (selected) AppTheme.BackgroundLight else AppTheme.TextMuted,
         animationSpec = androidx.compose.animation.core.tween(if(AppTheme.reduceMotion) 0 else 140), label = "nothingTabInk")
     val fill by androidx.compose.animation.animateColorAsState(if (selected) AppTheme.TextDark else Color.Transparent,
@@ -8523,6 +8631,7 @@ private fun NothingTabItem(tab: MainTab, selected: Boolean, onClick: () -> Unit,
         contentDescription = tab.title
         role = Role.Tab
         this.selected = selected
+        if (hasUnread) stateDescription = "Da leggere"
     }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Box(Modifier.size(34.dp).clip(androidx.compose.foundation.shape.CircleShape)
             .background(fill), contentAlignment = Alignment.Center) {
@@ -8533,7 +8642,7 @@ private fun NothingTabItem(tab: MainTab, selected: Boolean, onClick: () -> Unit,
                 MainTab.SEATMAP -> circolareplus.design.NothingSymbol.SEAT
                 MainTab.POLLS -> circolareplus.design.NothingSymbol.POLL
             }
-            circolareplus.design.NothingDotIcon(symbol, Modifier.size(28.dp), ink)
+            UnreadTabIcon(hasUnread) { circolareplus.design.NothingDotIcon(symbol, Modifier.size(28.dp), ink) }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             if (selected) Box(Modifier.size(4.dp).background(AppTheme.PrimaryBlue, androidx.compose.foundation.shape.CircleShape))

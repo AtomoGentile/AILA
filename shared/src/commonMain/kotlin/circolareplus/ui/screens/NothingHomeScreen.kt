@@ -111,7 +111,7 @@ internal fun NothingHomeScreen(
                                     Box(Modifier.size(6.dp).background(color.color,CircleShape))
                                 }
                             }
-                            Text(when(item.kind) { AilaBriefKind.EVENT -> item.date?.let {circolareplus.util.formatItalianDateWithWeekday(it)} ?: "CALENDARIO"; AilaBriefKind.CIRCULAR -> "CIRCOLARE N. ${item.sourceId}"; else -> item.actionLabel.uppercase() },
+                            Text(when(item.kind) { AilaBriefKind.EVENT -> item.date?.let {circolareplus.util.formatItalianDateWithWeekday(it)} ?: "CALENDARIO"; AilaBriefKind.CIRCULAR -> "CIRCOLARE N. ${item.sourceId}"; AilaBriefKind.BUREAUCRACY -> nothingBriefLabel(item); else -> item.actionLabel.uppercase() },
                                 style=MaterialTheme.typography.labelSmall,color=AppTheme.TextMuted)
                             Text(item.title,style=MaterialTheme.typography.titleMedium,color=AppTheme.TextDark)
                         }

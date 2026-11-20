@@ -15,7 +15,7 @@ import kotlinx.serialization.Serializable
  val subtitle:String="AILA ACA e Revisione tra pere",val videoUrl:String?=null,val posterUrl:String?=null)
 @Serializable data class AcaNudgeDto(val id:String,val eventId:String,val eventDate:String,val title:String,val message:String,val suggestion:String,val canPlanStudy:Boolean=false)
 @Serializable data class AcaNudgesResponseDto(val nudges:List<AcaNudgeDto> = emptyList())
-@Serializable enum class AilaBriefKind { EVENT, CIRCULAR, POLL, RANKING_POLL, FORUM, PROPOSAL, SEATMAP }
+@Serializable enum class AilaBriefKind { EVENT, CIRCULAR, POLL, RANKING_POLL, FORUM, PROPOSAL, SEATMAP, BUREAUCRACY }
 @Serializable data class AilaBriefItemDto(
  val id:String,val revision:String,val kind:AilaBriefKind,val sourceId:String,val title:String,
  val message:String,val actionLabel:String,val date:String?=null,val canPlanStudy:Boolean=false,val isResult:Boolean=false,

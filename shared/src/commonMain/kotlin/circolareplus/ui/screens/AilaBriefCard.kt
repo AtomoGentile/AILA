@@ -90,7 +90,7 @@ internal fun AilaBriefCard(
                 val tint = if (item.kind == AilaBriefKind.CIRCULAR && !item.isActive) AppTheme.TextMuted else subjectColor?.let {
                     if (it.key == "white") if (dark) Color.White else Color(0xFF667085) else it.color
                 } ?: if (AppTheme.isNothing) AppTheme.TextDark else when(item.kind) {
-                    AilaBriefKind.EVENT, AilaBriefKind.CIRCULAR -> AppTheme.PrimaryBlue
+                    AilaBriefKind.EVENT, AilaBriefKind.CIRCULAR, AilaBriefKind.BUREAUCRACY -> AppTheme.PrimaryBlue
                     AilaBriefKind.POLL, AilaBriefKind.RANKING_POLL -> if(dark) Color(0xFFC9B9FF) else Color(0xFF6D28D9)
                     AilaBriefKind.FORUM -> if(dark) Color(0xFFA0D5FF) else Color(0xFF0369A1)
                     AilaBriefKind.PROPOSAL -> if(dark) Color(0xFFFFBDD5) else Color(0xFFBE185D)
@@ -103,6 +103,7 @@ internal fun AilaBriefCard(
                     AilaBriefKind.FORUM -> "REVISIONE TRA PERE"
                     AilaBriefKind.PROPOSAL -> "BACHECA"
                     AilaBriefKind.SEATMAP -> "POSTI"
+                    AilaBriefKind.BUREAUCRACY -> item.date?.let { "BUROCRAZIA · ${briefDate(it)}" } ?: "BUROCRAZIA"
                 }
                 val itemShape = RoundedCornerShape(24.dp)
                 val fillAlpha = if (dark) .17f else .10f
@@ -166,7 +167,7 @@ internal fun AilaBriefCard(
                             when(item.kind) {
                                 AilaBriefKind.SEATMAP -> AppIcons.Chair(Modifier.size(20.dp), if (AppTheme.isNothing || subjectColor?.key == "white") AppTheme.TextDark else tint)
                                 AilaBriefKind.EVENT -> AppIcons.Calendar(Modifier.size(20.dp), if (AppTheme.isNothing || subjectColor?.key == "white") AppTheme.TextDark else tint)
-                                AilaBriefKind.CIRCULAR -> AppIcons.Document(Modifier.size(20.dp), if (AppTheme.isNothing) AppTheme.TextDark else tint)
+                                AilaBriefKind.CIRCULAR, AilaBriefKind.BUREAUCRACY -> AppIcons.Document(Modifier.size(20.dp), if (AppTheme.isNothing) AppTheme.TextDark else tint)
                                 AilaBriefKind.POLL, AilaBriefKind.RANKING_POLL -> AppIcons.Poll(Modifier.size(20.dp), if (AppTheme.isNothing) AppTheme.TextDark else tint)
                                 AilaBriefKind.FORUM, AilaBriefKind.PROPOSAL -> AppIcons.ChatBubble(Modifier.size(20.dp), if (AppTheme.isNothing) AppTheme.TextDark else tint)
                             }

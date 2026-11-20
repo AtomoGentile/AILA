@@ -96,7 +96,7 @@ fun HomeScreen(
     onNavigateToBureaucracy: () -> Unit = {},
     onNavigateToClassRoster: () -> Unit = {},
     onNavigateToNotifications: () -> Unit = {},
-    hasUnreadNotifications: Boolean = false,
+    unreadMenus: Set<String> = emptySet(),
     profileEntry: AilaProfileEntry? = LocalProfileEntry.current
 ) {
     val scrollState = rememberScrollState()
@@ -119,18 +119,23 @@ fun HomeScreen(
         allConflicts.filter { it.date in todayDate.toIso()..lastBriefDate }
     }
     val wide = circolareplus.design.LocalWideLayout.current
-    val nextEvents = remember(calendarEvents, wide) { upcomingEvents(calendarEvents, limit = if (wide) 6 else 3) }
+    val briefPreviewLimit = if (AppTheme.isNothing) 2 else 3
+    val nextEvents = remember(calendarEvents, wide, briefItems, briefPreviewLimit) {
+        val events = calendarPreviewWithoutBriefDuplicates(calendarEvents, briefItems.take(briefPreviewLimit))
+        upcomingEvents(events, limit = if (wide) 6 else 3)
+    }
     val recentCirculars = remember(circulars, wide, aiEnabled) {
         if (wide) circulars.sortedByDescending { it.number }.take(5) else emptyList()
     }
 
     val shortcuts = HomeShortcuts(
         onNavigateToClassRoster, onNavigateToBureaucracy, onNavigateToGita,
-        onNavigateToNotifications, hasUnreadNotifications
+        onNavigateToNotifications, unreadMenus
     )
     if(AppTheme.isNothing) {
         NothingHomeScreen(studentFirstName,nextEvents,latestCircular,
-            circolareplus.ai.AcaPolicyState.preferences.let {it.aiEnabled && it.acaEnabled && it.nudgesEnabled && "NOW_NUDGE" in it.services},
+            circolareplus.ai.AcaPolicyState.preferences.let {it.aiEnabled && it.acaEnabled && it.nudgesEnabled && "NOW_NUDGE" in it.services} ||
+                briefItems.any { it.kind == circolareplus.data.remote.dto.AilaBriefKind.BUREAUCRACY },
             briefItems,briefLoading,briefError,onRefreshBrief,onOpenBrief,onDismissBrief,onPlanStudy,
             subjectColorsEnabled,subjectColorOverrides,NothingHomeActions(onNavigateToSearch, onNavigateToCalendar,
                 onEventClick, onNavigateToCircularDetail, shortcuts),
@@ -163,7 +168,7 @@ fun HomeScreen(
             profileEntry = profileEntry
         )
 
-        if (briefAllowed) {
+        if (briefAllowed || briefItems.any { it.kind == circolareplus.data.remote.dto.AilaBriefKind.BUREAUCRACY }) {
             AilaBriefCard(briefItems, onDismissBrief, onOpenBrief, onPlanStudy, briefLoading, briefError, onRefreshBrief,
                 Modifier.padding(horizontal = homeGutter).padding(top = if(AppTheme.isNothing) circolareplus.design.NothingSpacing.Section else 18.dp, bottom = if(AppTheme.isNothing) 0.dp else 4.dp),
                 subjectColorsRevision = subjectColorsRevision,
@@ -471,7 +476,7 @@ internal data class HomeShortcuts(
     val openBureaucracy: () -> Unit = {},
     val openTrip: () -> Unit = {},
     val openNotifications: () -> Unit = {},
-    val hasUnreadNotifications: Boolean = false
+    val unreadMenus: Set<String> = emptySet()
 )
 
 @Composable
@@ -484,17 +489,17 @@ internal fun HomeShortcutRow(shortcuts: HomeShortcuts) {
         horizontalArrangement = Arrangement.spacedBy(if (tablet) AppTheme.Space16 else AppTheme.Space8)
     ) {
         val tile = if (tablet) Modifier.width(96.dp) else Modifier.weight(1f)
-        HomeQuickIcon("Classe", tile, shortcuts.openClass) {
+        HomeQuickIcon("Classe", tile, shortcuts.openClass, "class" in shortcuts.unreadMenus) {
             AppIcons.People(Modifier.size(22.dp), iconColor)
         }
-        HomeQuickIcon("Burocrazia", tile, shortcuts.openBureaucracy) {
+        HomeQuickIcon("Burocrazia", tile, shortcuts.openBureaucracy, "bureaucracy" in shortcuts.unreadMenus) {
             AppIcons.Document(Modifier.size(22.dp), iconColor)
         }
-        HomeQuickIcon("Gita", tile, shortcuts.openTrip) {
+        HomeQuickIcon("Gita", tile, shortcuts.openTrip, "gita" in shortcuts.unreadMenus) {
             AppIcons.Bus(Modifier.size(22.dp), iconColor)
         }
-        HomeQuickIcon("Notifiche", tile, shortcuts.openNotifications, shortcuts.hasUnreadNotifications) {
-            AppIcons.Bell(Modifier.size(22.dp), iconColor, shortcuts.hasUnreadNotifications)
+        HomeQuickIcon("Notifiche", tile, shortcuts.openNotifications, "notifications" in shortcuts.unreadMenus) {
+            AppIcons.Bell(Modifier.size(22.dp), iconColor)
         }
     }
 }
@@ -668,6 +673,10 @@ private fun HomeQuickIcon(
             contentAlignment = Alignment.Center
         ) {
             icon()
+            if (hasUnread) {
+                Box(Modifier.align(Alignment.TopEnd).padding(8.dp).size(8.dp)
+                    .background(AppTheme.PrimaryBlue, CircleShape))
+            }
         }
         Spacer(modifier = Modifier.height(AppTheme.Space8))
         Text(

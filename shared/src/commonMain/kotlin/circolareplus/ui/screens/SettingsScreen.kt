@@ -53,7 +53,10 @@ enum class NotificationKind(val key: String, val label: String, val description:
     BOARD("board", "Bacheca", "Nuove proposte della classe"),
     SEATMAP("seatmap", "Mappa posti", "Nuova disposizione o votazione aperta"),
     FORUM("forum", "Revisione tra pere", "Risposte e promemoria delle discussioni seguite"),
-    POLLS("polls", "Sondaggi", "Nuovi sondaggi, interrogazioni e a ordinamento")
+    POLLS("polls", "Sondaggi", "Nuovi sondaggi, interrogazioni e a ordinamento"),
+    BUREAUCRACY("bureaucracy", "Burocrazia", "Nuove pratiche da consegnare"),
+    TRIP("gita", "Gita", "Aggiornamenti e segnalazioni della gita"),
+    PROFILE("profile", "Account", "Richieste ed esiti del cambio nome")
 }
 
 /**
@@ -79,8 +82,6 @@ fun SettingsScreen(
     onTertiaryAccentChange: (circolareplus.design.AilaAccent) -> Unit = {},
     isNotificationKindEnabled: (NotificationKind) -> Boolean,
     onNotificationKindChange: (NotificationKind, Boolean) -> Unit,
-    boardNotificationsEnabled: Boolean = true,
-    onToggleBoardNotifications: (Boolean) -> Unit = {},
     systemNotificationsEnabled: Boolean = true,
     onToggleSystemNotifications: (Boolean) -> Unit = {},
     isRepresentative: Boolean = false,
@@ -447,7 +448,7 @@ fun SettingsScreen(
                     AilaSectionTitle(text = "Notifiche", modifier = Modifier.ailaAppear(2))
                     Spacer(modifier = Modifier.height(AppTheme.Space12))
                     AilaCard(modifier = Modifier.ailaAppear(3)) {
-                        NotificationKind.entries.forEachIndexed { index, kind ->
+                        NotificationKind.entries.forEach { kind ->
                             AilaListRow(
                                 title = kind.label,
                                 subtitle = kind.description,
@@ -468,19 +469,6 @@ fun SettingsScreen(
                             )
                             HorizontalDivider(color = AppTheme.Hairline, modifier = Modifier.padding(start = 72.dp))
                         }
-                        AilaListRow(
-                            title = "Bacheca",
-                            subtitle = "Avvisi per le nuove proposte create",
-                            tint = AppTheme.TintBlue,
-                            icon = { AppIcons.Bell(modifier = Modifier.size(19.dp), color = AppTheme.TintBlueInk) },
-                            trailing = {
-                                AilaSwitch(
-                                    checked = boardNotificationsEnabled,
-                                    onCheckedChange = { onToggleBoardNotifications(it) }
-                                )
-                            }
-                        )
-                        HorizontalDivider(color = AppTheme.Hairline, modifier = Modifier.padding(start = 72.dp))
                         AilaListRow(
                             title = "Notifiche di sistema",
                             subtitle = "Mostra notifiche nel pannello del dispositivo",

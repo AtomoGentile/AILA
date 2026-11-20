@@ -43,7 +43,7 @@ interface FcmRecipient {
 
 /**
  * Stessa logica di NotificationCategoryMapper (app, codice condiviso Kotlin): dal payload `data`
- * alla categoria delle Impostazioni ("circulars", "board", "seatmap", "polls" o "" se nessuna).
+ * alla categoria delle Impostazioni, o una stringa vuota se nessuna corrisponde.
  * "seatmap_preferences" dell'app qui e' gia' "seatmap", la voce dell'interruttore.
  */
 export function notificationKind(data: Record<string, string>): string {
@@ -53,6 +53,7 @@ export function notificationKind(data: Record<string, string>): string {
     case 'seat_map_updated':
       return 'seatmap';
     case 'poll_published':
+    case 'ranking_poll_published':
     case 'poll_complete':
     case 'swap_request':
     case 'swap_accepted':
@@ -64,7 +65,19 @@ export function notificationKind(data: Record<string, string>): string {
       return 'forum';
     case 'new_proposal':
       return 'board';
+    case 'calendar_event':
+      return 'calendar';
+    case 'bureaucracy_practice':
+      return 'bureaucracy';
+    case 'gita_update':
+    case 'gita_report':
+      return 'gita';
+    case 'name_change_request':
+    case 'name_change_approved':
+    case 'name_change_rejected':
+      return 'profile';
   }
+  if (data.type === 'gita_report') return 'gita';
   if ('circular_number' in data) return 'circulars';
   if ('proposal_id' in data) return 'board';
   if ('poll_id' in data || 'swap_id' in data || 'grid_id' in data) return 'polls';

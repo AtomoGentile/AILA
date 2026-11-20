@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import { authMiddleware, requireRole, resolveClassId } from '../auth';
 import { fullName } from '../names';
+import { inBackground } from '../services/background';
+import { notifyClass } from '../services/fcm';
 import type { Env, JWTPayload } from '../types';
 
 const bureaucracy = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();
@@ -44,9 +46,11 @@ bureaucracy.post('/', representativeOnly, async (c) => {
     return c.json({ error: 'Le istruzioni possono contenere al massimo 1000 caratteri.' }, 400);
   }
   const id = crypto.randomUUID();
+  const classId = await resolveClassId(c);
   await c.env.DB.prepare(
     'INSERT INTO bureaucracy_practices (id, class_id, title, description) VALUES (?, ?, ?, ?)'
-  ).bind(id, await resolveClassId(c), title, description).run();
+  ).bind(id, classId, title, description).run();
+  inBackground(c, notifyClass(c.env, 'Nuova pratica da consegnare', title, { action: 'bureaucracy_practice' }, classId));
   return c.json({ id }, 201);
 });
 

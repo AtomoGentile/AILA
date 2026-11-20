@@ -43,12 +43,14 @@ internal fun BureaucracyScreen(
     api: ApiClient,
     studentName: String,
     active: Boolean,
+    initialPracticeId: String? = null,
+    onPracticesRead: (BureaucracyFeedDto) -> Unit = {},
     onBackClick: () -> Unit
 ) {
     var feed by remember { mutableStateOf<BureaucracyFeedDto?>(null) }
     var deliveries by remember { mutableStateOf<List<BureaucracyDeliveryDto>?>(null) }
     var archived by rememberSaveable { mutableStateOf(false) }
-    var selection by rememberSaveable { mutableStateOf<String?>(null) }
+    var selection by rememberSaveable(initialPracticeId) { mutableStateOf(initialPracticeId) }
     var revision by remember { mutableStateOf(0) }
     var busy by remember { mutableStateOf(false) }
     var creating by rememberSaveable { mutableStateOf(false) }
@@ -65,13 +67,14 @@ internal fun BureaucracyScreen(
             try {
                 val updated = api.get<BureaucracyFeedDto>(PRACTICES, offlineCopy = false)
                 feed = updated
+                onPracticesRead(updated)
                 val selected = updated.practices.firstOrNull { it.id == selection }
                 if (updated.canManage && selected != null) {
                     deliveries = api.get<BureaucracyDeliveriesDto>(
                         "$PRACTICES/${selected.id}/deliveries", offlineCopy = false
                     ).deliveries
                 } else {
-                    selection = null
+                    if (selected == null) selection = null
                     deliveries = null
                 }
                 loadError = null
@@ -124,7 +127,7 @@ internal fun BureaucracyScreen(
             .background(AppTheme.BackgroundLight)
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
     ) {
-        AilaBackBar(title = practice?.title?.takeIf { canManage } ?: "Burocrazia", onBackClick = back) {
+        AilaBackBar(title = practice?.title ?: "Burocrazia", onBackClick = back) {
             AilaIconButton("Aggiorna", { revision++ }, enabled = !busy) {
                 AppIcons.Refresh(Modifier.size(19.dp), it)
             }
@@ -209,6 +212,15 @@ internal fun BureaucracyScreen(
                             item { PracticeLoader("Caricamento consegne…") }
                         }
                     }
+                    practice != null -> item {
+                        AilaCard {
+                            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(practice.title, style = MaterialTheme.typography.titleLarge)
+                                if (practice.description.isNotBlank()) Text(practice.description, color = AppTheme.TextMuted)
+                                Text(if (practice.received == true) "Consegnata" else "Da consegnare")
+                            }
+                        }
+                    }
                     else -> {
                         item {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -231,7 +243,7 @@ internal fun BureaucracyScreen(
                             }
                         }
                         items(shown, key = { it.id }) { item ->
-                            val open: (() -> Unit)? = if (canManage && !busy) {
+                            val open: (() -> Unit)? = if (!busy) {
                                 { deliveries = null; actionError = null; selection = item.id }
                             } else null
                             AilaCard(onClick = open) {

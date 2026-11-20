@@ -117,17 +117,21 @@ internal fun NothingBriefCard(
     }
 }
 
-private fun nothingBriefLabel(item: AilaBriefItemDto): String = when(item.kind) {
+internal fun nothingBriefLabel(item: AilaBriefItemDto): String = when(item.kind) {
     AilaBriefKind.EVENT -> when(item.date) {
         today().toIso() -> "OGGI"
         null -> "CALENDARIO"
-        else -> item.date.orEmpty().split('-').let { parts ->
-            if(parts.size == 3) "${parts[2]}.${parts[1]}.${parts[0]}" else item.date.orEmpty()
-        }
+        else -> nothingBriefDate(item.date.orEmpty())
     }
     AilaBriefKind.CIRCULAR -> "CIRCOLARE N. ${item.sourceId}"
     AilaBriefKind.POLL, AilaBriefKind.RANKING_POLL -> if(item.isResult) "RISULTATI" else "SONDAGGIO APERTO"
     AilaBriefKind.FORUM -> "REVISIONE TRA PERE"
     AilaBriefKind.PROPOSAL -> "BACHECA"
     AilaBriefKind.SEATMAP -> "POSTI"
+    AilaBriefKind.BUREAUCRACY -> item.date?.let { "BUROCRAZIA · ${nothingBriefDate(it)}" } ?: "BUROCRAZIA"
+}
+
+private fun nothingBriefDate(date: String): String {
+    val parts = date.split('-')
+    return if (parts.size == 3) "${parts[2]}.${parts[1]}.${parts[0]}" else date
 }

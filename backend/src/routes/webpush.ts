@@ -11,7 +11,7 @@ import { vapidKeysOf } from '../services/webpush';
 const webPush = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();
 
 // Stesse categorie delle Impostazioni dell'app.
-const KINDS = ['circulars', 'calendar', 'board', 'seatmap', 'polls'];
+const KINDS = ['circulars', 'calendar', 'board', 'seatmap', 'polls', 'forum', 'bureaucracy', 'gita', 'profile'];
 
 function cleanMutedKinds(raw: unknown): string {
   if (!Array.isArray(raw)) return '';

@@ -46,6 +46,8 @@ class LocalSettingsManager(
         private const val KEY_COMPATIBLE_AI_MODEL = "compatible_ai_model"
         private const val KEY_COMPATIBLE_AI_API_KEY = "compatible_ai_api_key"
         private const val KEY_COMPATIBLE_AI_CONFIGS_MIGRATED = "compatible_ai_configs_migrated"
+        private const val KEY_SEEN_BUREAUCRACY = "seen_bureaucracy"
+        private const val KEY_DISMISSED_BUREAUCRACY = "dismissed_bureaucracy"
         private const val KEY_LOCAL_AI_ENABLED = "local_ai_enabled"
         private const val KEY_LOCAL_AI_MODEL = "local_ai_model_id"
         private const val KEY_ASSISTANT_THINKING = "assistant_thinking_enabled"
@@ -577,6 +579,21 @@ class LocalSettingsManager(
         writeNotifications(readNotifications(currentTimeMillis()).map { it.copy(read = true) })
     }
 
+    fun markNotificationCategoriesRead(categories: Set<String>) {
+        val fresh = readNotifications(currentTimeMillis())
+        if (fresh.any { !it.read && it.category in categories }) {
+            writeNotifications(fresh.map { if (it.category in categories) it.copy(read = true) else it })
+        }
+    }
+
+    var seenBureaucracyPracticeIds: Set<String>
+        get() = settings.getStringOrNull(KEY_SEEN_BUREAUCRACY)?.lineSequence()?.filter(String::isNotBlank)?.toSet().orEmpty()
+        set(value) = settings.putString(KEY_SEEN_BUREAUCRACY, value.joinToString("\n"))
+
+    var dismissedBureaucracyPracticeIds: Set<String>
+        get() = settings.getStringOrNull(KEY_DISMISSED_BUREAUCRACY)?.lineSequence()?.filter(String::isNotBlank)?.toSet().orEmpty()
+        set(value) = settings.putString(KEY_DISMISSED_BUREAUCRACY, value.joinToString("\n"))
+
     fun clearNotifications() {
         settings.remove(KEY_NOTIFICATION_LOG)
     }
@@ -706,7 +723,7 @@ class LocalSettingsManager(
         listOf(
             KEY_AUTH_TOKEN, KEY_USER_ID, KEY_CACHED_USER, KEY_USER_AI_API_KEY, KEY_COMPATIBLE_AI_API_KEY,
             KEY_COMPATIBLE_AI_FORMAT, KEY_COMPATIBLE_AI_BASE_URL, KEY_COMPATIBLE_AI_MODEL, KEY_COMPATIBLE_AI_CONFIGS_MIGRATED,
-            KEY_NOTIFICATION_LOG, KEY_ASSISTANT_HISTORY, KEY_CIRCULAR_ANALYSES,
+            KEY_NOTIFICATION_LOG, KEY_SEEN_BUREAUCRACY, KEY_DISMISSED_BUREAUCRACY, KEY_ASSISTANT_HISTORY, KEY_CIRCULAR_ANALYSES,
             KEY_RECENT_SEARCHES, KEY_SUBMITTED_POLLS,
             KEY_LAST_SEEN_CIRCULAR, KEY_LAST_SEEN_PROPOSAL, KEY_LAST_SEEN_SEATMAP,
             KEY_LAST_SEEN_PREFERENCES_OPEN, KEY_LAST_SEEN_POLL_ID, KEY_LAST_SEEN_POLL_CREATED_AT,

@@ -10,7 +10,7 @@
 import { Hono } from 'hono';
 import type { Env, JWTPayload } from '../types';
 import { authMiddleware, requireRole, newUUID, resolveClassId } from '../auth';
-import { notifyUsers } from '../services/fcm';
+import { notifyClass, notifyUsers } from '../services/fcm';
 import { inBackground } from '../services/background';
 
 export const GITA_MAX_BYTES = 100 * 1024 * 1024;
@@ -123,6 +123,7 @@ gita.post('/updates', requireRole('REPRESENTATIVE'), async (c) => {
   await c.env.DB.prepare(`INSERT INTO gita_updates (id, trip_id, title, body, author_id, author_name, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(id, trip.id, title, text, me,
       author ? `${author.first_name} ${author.last_name}`.trim() : 'Rappresentante', romeNow()).run();
+  inBackground(c, notifyClass(c.env, 'Gita: nuovo aggiornamento', title, { action: 'gita_update' }, classId));
   return c.json({ id }, 201);
 });
 
