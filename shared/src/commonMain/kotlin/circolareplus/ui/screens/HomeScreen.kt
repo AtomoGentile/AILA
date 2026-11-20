@@ -90,7 +90,8 @@ fun HomeScreen(
     subjectColorsEnabled: Boolean = false,
     subjectColorOverrides: Map<String, String> = emptyMap(),
     calendarUnavailable: Boolean = false,
-    homeVisible: Boolean = true
+    homeVisible: Boolean = true,
+    onNavigateToBureaucracy: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
     val homeGutter = if(AppTheme.isNothing) circolareplus.design.NothingSpacing.Edge else AppTheme.Space16
@@ -122,7 +123,7 @@ fun HomeScreen(
             circolareplus.ai.AcaPolicyState.preferences.let {it.aiEnabled && it.acaEnabled && it.nudgesEnabled && "NOW_NUDGE" in it.services},
             briefItems,briefLoading,briefError,onRefreshBrief,onOpenBrief,onDismissBrief,onPlanStudy,
             subjectColorsEnabled,subjectColorOverrides,NothingHomeActions(onNavigateToSearch,onNavigateToGita,onNavigateToCirculars,onNavigateToCalendar,
-                onNavigateToBoard,onOpenForum,onNavigateToPolls,onNavigateToSeatMap,onEventClick,onNavigateToCircularDetail),
+                onNavigateToBoard,onOpenForum,onNavigateToPolls,onNavigateToSeatMap,onEventClick,onNavigateToCircularDetail,onNavigateToBureaucracy),
             isEventsLoading,isCircularsLoading, briefConflicts, calendarUnavailable, homeVisible, glyphConflicts = allConflicts)
         return
     }
@@ -154,6 +155,14 @@ fun HomeScreen(
             onNavigateToBoard = onNavigateToBoard,
             onNavigateToSeatMap = onNavigateToSeatMap
         )
+
+        AilaCard(modifier = Modifier.padding(horizontal = homeGutter).padding(top = AppTheme.Space16)) {
+            AilaListRow(
+                title = "Burocrazia",
+                onClick = onNavigateToBureaucracy,
+                icon = { AppIcons.Document(Modifier.size(20.dp), AppTheme.TintBlueInk) }
+            )
+        }
 
         if (briefAllowed) {
             AilaBriefCard(briefItems, onDismissBrief, onOpenBrief, onPlanStudy, briefLoading, briefError, onRefreshBrief,

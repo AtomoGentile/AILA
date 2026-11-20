@@ -29,7 +29,8 @@ internal data class NothingHomeActions(
     val search: () -> Unit, val gita: () -> Unit, val circulars: () -> Unit,
     val calendar: () -> Unit, val board: () -> Unit, val forum: () -> Unit,
     val polls: () -> Unit, val seats: () -> Unit,
-    val openEvent: (CalendarEvent) -> Unit, val openCircular: (Int) -> Unit
+    val openEvent: (CalendarEvent) -> Unit, val openCircular: (Int) -> Unit,
+    val bureaucracy: () -> Unit = {}
 )
 
 /** One content overview and one navigation grid. No second copy of the Classic Home. */
@@ -142,7 +143,8 @@ internal fun NothingHomeScreen(
         val links=listOf(
             Triple("Circolari",NothingSymbol.DOCUMENT,actions.circulars),Triple("Calendario",NothingSymbol.CALENDAR,actions.calendar),
             Triple("Bacheca",NothingSymbol.CHAT,actions.board),Triple("Pere",NothingSymbol.CHAT,actions.forum),
-            Triple("Sondaggi",NothingSymbol.POLL,actions.polls),Triple("Posti",NothingSymbol.SEAT,actions.seats))
+            Triple("Sondaggi",NothingSymbol.POLL,actions.polls),Triple("Posti",NothingSymbol.SEAT,actions.seats),
+            Triple("Burocrazia",NothingSymbol.DOCUMENT,actions.bureaucracy))
         Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
             links.chunked(2).forEach { pair ->
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.height(IntrinsicSize.Min)) {

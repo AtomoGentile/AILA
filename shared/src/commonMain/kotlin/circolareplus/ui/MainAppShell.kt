@@ -964,6 +964,7 @@ fun MainAppShell(
     var isInProfileScreen by rememberSaveable { mutableStateOf(false) }
     var isInClassRosterScreen by rememberSaveable { mutableStateOf(false) }
     var isInNotificationsScreen by rememberSaveable { mutableStateOf(false) }
+    var isInBureaucracy by rememberSaveable { mutableStateOf(false) }
     var isInGitaScreen by rememberSaveable { mutableStateOf(false) }
     // Le notifiche aperte dal profilo tornano al profilo, non alla Home.
     var notificationsOpenedFromProfile by rememberSaveable { mutableStateOf(false) }
@@ -2823,6 +2824,7 @@ fun MainAppShell(
         isInAssistantScreen -> ShellRoute.ASSISTANT
         isInSearchScreen -> ShellRoute.SEARCH
         isInNotificationsScreen -> ShellRoute.NOTIFICATIONS
+        isInBureaucracy -> ShellRoute.BUREAUCRACY
         isInGitaScreen -> ShellRoute.GITA
         proposalOptions.isNotEmpty() && editingSeatMapProposal == null -> ShellRoute.SEATMAP_PROPOSALS
         editingSeatMapProposal != null -> ShellRoute.SEATMAP_EDITOR
@@ -3527,6 +3529,7 @@ fun MainAppShell(
                                     classSection = ClassSection.CIRCULARS
                                     selectedTab = MainTab.CLASS
                                 },
+                                onNavigateToBureaucracy = { isInBureaucracy = true },
                                 onNavigateToGita = { isInGitaScreen = true },
                                 onNavigateToSearch = { isInSearchScreen = true },
                                 isCircularsLoading = isCircularsLoading && !circularsLoadedOnce,
@@ -5257,6 +5260,14 @@ fun MainAppShell(
                         onOpenCirculars = { openTabFromOverlay(MainTab.CLASS, AppTheme.TintBlue) { classSection = ClassSection.CIRCULARS } },
                         onOpenCalendar = { openTabFromOverlay(MainTab.CALENDAR, AppTheme.TintAmber) },
                         onOpenBoard = { openTabFromOverlay(MainTab.CLASS, AppTheme.TintViolet) { classSection = ClassSection.BOARD } }
+                    )
+                }
+                ShellRoute.BUREAUCRACY -> {
+                    circolareplus.ui.screens.BureaucracyScreen(
+                        api = AppContainer.api,
+                        studentName = listOf(user.firstName, user.lastName).filter { it.isNotBlank() }.joinToString(" "),
+                        active = route == shellRoute,
+                        onBackClick = { isInBureaucracy = false }
                     )
                 }
                 ShellRoute.GITA -> {
@@ -8023,6 +8034,7 @@ private enum class ShellRoute(val depth: Int) {
     SEARCH(1),
     NOTIFICATIONS(1),
     GITA(1),
+    BUREAUCRACY(1),
     SEATMAP_PROPOSALS(1),
     SEATMAP_EDITOR(2)
 }
