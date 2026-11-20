@@ -67,15 +67,15 @@ class NothingUiRegressionTest {
                 HomeScreen(studentFirstName = "Simone", calendarEvents = listOf(circolareplus.domain.model.CalendarEvent(
                     "today", "Fisica · energia", circolareplus.util.today().toIso(),
                     category=circolareplus.domain.model.CalendarEventCategory.INTERROGAZIONE)), onNavigateToCalendar = { destination = "calendar" },
-                    onNavigateToCirculars = { destination = "circulars" })
+                    onNavigateToClassRoster = { destination = "roster" })
                 }
             }
         }
         compose.onNodeWithText("Ciao, Simone", ignoreCase = true).assertIsDisplayed()
         compose.onNodeWithText("OGGI").assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals("calendar", destination) }
-        compose.onNodeWithText("Circolari", useUnmergedTree = true).assertIsDisplayed().performClick()
-        compose.runOnIdle { assertEquals("circulars", destination) }
+        compose.onNodeWithText("Classe", useUnmergedTree = true).assertIsDisplayed().performClick()
+        compose.runOnIdle { assertEquals("roster", destination) }
         compose.onAllNodesWithText("Fisica · energia").assertCountEquals(1)
         compose.onNodeWithContentDescription("Anteprima Glyph Bar a 6 segmenti").assertDoesNotExist()
         screenshot("nothing-home-light")
@@ -228,11 +228,16 @@ class NothingUiRegressionTest {
         var destination=""
         activity.get().setContent { AilaTheme {
             CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(3f,1.3f)) {
-                HomeScreen(studentFirstName="Alessandro",onNavigateToCirculars={destination="Circolari"},onNavigateToCalendar={destination="Calendario"},
-                    onNavigateToBoard={destination="Bacheca"},onOpenForum={destination="Pere"},onNavigateToPolls={destination="Sondaggi"},onNavigateToSeatMap={destination="Posti"})
+                HomeScreen(
+                    studentFirstName = "Alessandro",
+                    onNavigateToClassRoster = { destination = "Classe" },
+                    onNavigateToBureaucracy = { destination = "Burocrazia" },
+                    onNavigateToGita = { destination = "Gita" },
+                    onNavigateToNotifications = { destination = "Notifiche" }
+                )
             }
         } }
-        listOf("Circolari","Calendario","Bacheca","Pere","Sondaggi","Posti").forEach {label->
+        listOf("Classe", "Burocrazia", "Gita", "Notifiche").forEach { label ->
             compose.onNodeWithText(label,useUnmergedTree=true).performScrollTo().assertIsDisplayed().performClick()
             compose.runOnIdle {assertEquals(label,destination)}
         }
@@ -306,7 +311,7 @@ class NothingUiRegressionTest {
         var planned=""
         activity.get().setContent { AilaTheme {
             NothingHomeScreen("Simone",listOf(event),null,true,feed,false,null,{}, {opened=it.id},{feed=emptyList()}, {planned=it},false,emptyMap(),
-                NothingHomeActions({},{},{},{},{},{},{},{},{opened=it.id},{}),false,false)
+                NothingHomeActions({}, {}, { opened = it.id }, {}), false, false)
         } }
         compose.onAllNodesWithText(event.title).assertCountEquals(1)
         screenshot("nothing-home-brief")

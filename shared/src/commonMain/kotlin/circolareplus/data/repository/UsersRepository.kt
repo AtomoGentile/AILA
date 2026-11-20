@@ -51,9 +51,9 @@ class UsersRepository(private val api: ApiClient) {
         api.post<EmptyBodyDto, SuccessDto>("/api/telegram/unlink", EmptyBodyDto())
     }
 
-    /** Solo Rappresentante: elenco di tutti gli studenti della classe. */
-    suspend fun listStudents(): List<User> =
-        api.get<UsersListResponseDto>("/api/users").users.map { it.toDomain().first }
+    /** Elenco dei profili della classe dell'utente autenticato. */
+    suspend fun listStudents(offlineCopy: Boolean = true): List<User> =
+        api.get<UsersListResponseDto>("/api/users", offlineCopy = offlineCopy).users.map { it.toDomain().first }
 
     /** Solo Rappresentante: codice per entrare nella classe (creato alla prima richiesta). */
     suspend fun classCode(): String =

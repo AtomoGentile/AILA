@@ -963,18 +963,15 @@ fun MainAppShell(
     val isInPollsScreen = selectedTab == MainTab.POLLS
     var isInProfileScreen by rememberSaveable { mutableStateOf(false) }
     var isInClassRosterScreen by rememberSaveable { mutableStateOf(false) }
+    var showClassManagement by rememberSaveable { mutableStateOf(false) }
+    var classDirectory by remember(user.id) { mutableStateOf<List<User>>(emptyList()) }
+    fun openClassRoster() {
+        showClassManagement = false
+        isInClassRosterScreen = true
+    }
     var isInNotificationsScreen by rememberSaveable { mutableStateOf(false) }
     var isInBureaucracy by rememberSaveable { mutableStateOf(false) }
     var isInGitaScreen by rememberSaveable { mutableStateOf(false) }
-    // Le notifiche aperte dal profilo tornano al profilo, non alla Home.
-    var notificationsOpenedFromProfile by rememberSaveable { mutableStateOf(false) }
-    fun closeNotifications() {
-        isInNotificationsScreen = false
-        if (notificationsOpenedFromProfile) {
-            notificationsOpenedFromProfile = false
-            isInProfileScreen = true
-        }
-    }
     var isInSettingsScreen by rememberSaveable { mutableStateOf(false) }
     var isInAiSettings by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(isInSettingsScreen) { if (!isInSettingsScreen) isInAiSettings = false }
@@ -2450,30 +2447,31 @@ fun MainAppShell(
         }
     }
 
-    // Ingresso nella Scheda Classe: carica le valutazioni correnti (solo Rappresentante).
-    LaunchedEffect(isInClassRosterScreen, classRosterRetry) {
-        if (isInClassRosterScreen) {
-            isClassRosterLoading = true
-            classRosterError = null
-            classRosterActionError = null
-            try {
+    LaunchedEffect(isInClassRosterScreen, showClassManagement, classRosterRetry, user.id, isRepresentative) {
+        if (!isInClassRosterScreen) return@LaunchedEffect
+        isClassRosterLoading = true
+        classRosterError = null
+        classRosterActionError = null
+        try {
+            if (isRepresentative && showClassManagement) {
                 classRosterEntries = AppContainer.ratingsRepository.listRatings()
-            } catch (e: CancellationException) {
-                // "Riprova" riavvia l'effetto: il giro annullato non deve scrivere un errore.
-                throw e
-            } catch (e: Exception) {
-                classRosterError = "Impossibile caricare la Scheda Classe: controlla la connessione e riprova."
-            } finally {
-                isClassRosterLoading = false
+                // Le valutazioni restano consultabili se il server non restituisce le coppie.
+                disciplinePairs = try {
+                    AppContainer.ratingsRepository.listDisciplinePairs()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    emptyList()
+                }
+            } else {
+                classDirectory = AppContainer.usersRepository.listStudents(offlineCopy = false)
             }
-            // A parte: un server senza la rotta nuova non deve nascondere le valutazioni.
-            try {
-                disciplinePairs = AppContainer.ratingsRepository.listDisciplinePairs()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                disciplinePairs = emptyList()
-            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            classRosterError = "Impossibile caricare la scheda classe. Riprova."
+        } finally {
+            isClassRosterLoading = false
         }
     }
 
@@ -3284,7 +3282,6 @@ fun MainAppShell(
                 }
                 androidx.compose.runtime.CompositionLocalProvider(
                     circolareplus.design.LocalBottomBarPadding provides bottomBarPadding,
-                    circolareplus.design.LocalProfileEntry provides profileEntry,
                     circolareplus.design.LocalWideLayout provides twoPane,
                     circolareplus.design.LocalFloatingTabBarVisibility provides { visible ->
                         timetableOverlayVisible = !visible
@@ -3444,10 +3441,10 @@ fun MainAppShell(
                                 subjectColorsEnabled = run { subjectColorsRevision; AppContainer.settings.subjectColorsEnabled },
                                 subjectColorOverrides = run { subjectColorsRevision; AppContainer.settings.subjectColorOverrides },
                                 studentFirstName = user.firstName,
+                                profileEntry = profileEntry,
                                 experience = acaExperience,
                                 aiEnabled = aiPolicy.aiEnabled && "CIRCULARS" in aiPolicy.services,
                                 onOpenAca = { assistantMode=AssistantMode.GENERAL;isInAssistantScreen=true },
-                                onOpenForum = { isInAcaHub = false; classSection = ClassSection.PERE; selectedTab = MainTab.CLASS },
                                 briefItems = briefItems,
                                 briefLoading = briefLoading,
                                 briefError = briefError,
@@ -3514,7 +3511,6 @@ fun MainAppShell(
                                     classSection = ClassSection.CIRCULARS
                                     selectedTab = MainTab.CLASS
                                 },
-                                onNavigateToSeatMap = { selectedTab = MainTab.SEATMAP },
                                 onNavigateToBoard = {
                                     classSection = ClassSection.BOARD
                                     selectedTab = MainTab.CLASS
@@ -3529,6 +3525,9 @@ fun MainAppShell(
                                     classSection = ClassSection.CIRCULARS
                                     selectedTab = MainTab.CLASS
                                 },
+                                onNavigateToClassRoster = { openClassRoster() },
+                                onNavigateToNotifications = { isInNotificationsScreen = true },
+                                hasUnreadNotifications = hasUnreadNotifications,
                                 onNavigateToBureaucracy = { isInBureaucracy = true },
                                 onNavigateToGita = { isInGitaScreen = true },
                                 onNavigateToSearch = { isInSearchScreen = true },
@@ -3931,18 +3930,6 @@ fun MainAppShell(
                                         ) { tint ->
                                             if(isClassSearchOpen) AppIcons.Close(Modifier.size(20.dp),tint)
                                             else AppIcons.Search(Modifier.size(20.dp),tint)
-                                        }
-                                        if (isRepresentative) {
-                                            Spacer(modifier = Modifier.width(AppTheme.Space8))
-                                            circolareplus.design.AilaIconButton(
-                                                contentDescription = "Scheda della classe",
-                                                onClick = { isInClassRosterScreen = true },
-                                                opensPage = true
-                                            ) { tint -> AppIcons.People(modifier = Modifier.size(20.dp), color = tint) }
-                                        }
-                                        circolareplus.design.LocalProfileEntry.current?.let { entry ->
-                                            Spacer(modifier = Modifier.width(AppTheme.Space8))
-                                            circolareplus.design.AilaProfileButton(entry)
                                         }
                                     }
                                     androidx.compose.animation.AnimatedVisibility(
@@ -4948,13 +4935,6 @@ fun MainAppShell(
                                 isInBackgroundDebugScreen = false
                                 isInSettingsScreen = true
                             },
-                            onManageClassRoster = { isInClassRosterScreen = true },
-                            onOpenNotifications = {
-                                isInProfileScreen = false
-                                notificationsOpenedFromProfile = true
-                                isInNotificationsScreen = true
-                            },
-                            hasUnreadNotifications = hasUnreadNotifications,
                             onLogoutClick = {
                                 // Toglie il token push dal server (con la sessione ancora valida)
                                 // e poi chiude quella locale, dati dell'account compresi.
@@ -4996,8 +4976,16 @@ fun MainAppShell(
                 ShellRoute.CLASS_ROSTER -> {
                     circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { isInClassRosterScreen = false }
                     Column(modifier = Modifier.fillMaxSize()) {
-                        ScreenBackBar(title = "Scheda Classe", onBackClick = { isInClassRosterScreen = false })
-                        if (classRosterActionError != null) {
+                        ScreenBackBar(title = "Classe", onBackClick = { isInClassRosterScreen = false })
+                        if (isRepresentative) {
+                            circolareplus.design.AilaSegmentedTabs(
+                                labels = listOf("Elenco", "Gestione"),
+                                selectedIndex = if (showClassManagement) 1 else 0,
+                                onSelect = { showClassManagement = it == 1 },
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space8)
+                            )
+                        }
+                        if (isRepresentative && showClassManagement && classRosterActionError != null) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -5025,6 +5013,10 @@ fun MainAppShell(
                             }
                         }
                         LoadableContent(isLoading = isClassRosterLoading, error = classRosterError, onRetry = { classRosterRetry++ }) {
+                            if (!isRepresentative || !showClassManagement) {
+                                circolareplus.ui.screens.ClassDirectoryScreen(classDirectory)
+                                return@LoadableContent
+                            }
                             ClassRosterScreen(
                                 entries = classRosterEntries,
                                 currentUserId = user.id,
@@ -5225,7 +5217,7 @@ fun MainAppShell(
                                 AssistantSourceKind.POLL -> openTabFromOverlay(MainTab.POLLS)
                                 AssistantSourceKind.SEAT_MAP -> openTabFromOverlay(MainTab.SEATMAP)
                                 // L'elenco classe e' un livello sopra la chat: indietro torna alla chat.
-                                AssistantSourceKind.CLASS -> isInClassRosterScreen = true
+                                AssistantSourceKind.CLASS -> openClassRoster()
                                 // Il materiale della gita si legge nella sezione Gita, sopra la chat.
                                 AssistantSourceKind.GITA -> isInGitaScreen = true
                             }
@@ -5288,9 +5280,9 @@ fun MainAppShell(
                     )
                 }
                 ShellRoute.NOTIFICATIONS -> {
-                    circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { closeNotifications() }
+                    circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { isInNotificationsScreen = false }
                     Column(modifier = Modifier.fillMaxSize()) {
-                        ScreenBackBar(title = "Notifiche", onBackClick = { closeNotifications() })
+                        ScreenBackBar(title = "Notifiche", onBackClick = { isInNotificationsScreen = false })
                         NotificationsScreen(
                             notifications = notificationLog,
                             onNotificationClick = { entry -> navigateForNotificationCategory(entry.category) }

@@ -18,6 +18,8 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -31,6 +33,8 @@ import androidx.compose.ui.unit.sp
 import circolareplus.design.AilaCard
 import circolareplus.design.AilaIconTile
 import circolareplus.design.AilaListRow
+import circolareplus.design.AilaProfileEntry
+import circolareplus.design.LocalProfileEntry
 import circolareplus.design.AilaSectionTitle
 import circolareplus.design.ailaAppear
 import circolareplus.design.ailaGlassOverlay
@@ -63,7 +67,6 @@ fun HomeScreen(
     calendarEvents: List<CalendarEvent> = emptyList(),
     openProposalsCount: Int = 0,
     onNavigateToCircularDetail: (Int) -> Unit = {},
-    onNavigateToSeatMap: () -> Unit = {},
     onNavigateToBoard: () -> Unit = {},
     onNavigateToPolls: () -> Unit = {},
     onNavigateToCalendar: () -> Unit = {},
@@ -76,7 +79,6 @@ fun HomeScreen(
     isCircularsLoading: Boolean = false,
     experience: circolareplus.data.remote.dto.AcaExperienceDto = circolareplus.data.remote.dto.AcaExperienceDto(),
     onOpenAca: () -> Unit = {},
-    onOpenForum: () -> Unit = {},
     briefItems: List<circolareplus.data.remote.dto.AilaBriefItemDto> = emptyList(),
     briefLoading: Boolean = false,
     briefError: String? = null,
@@ -91,7 +93,11 @@ fun HomeScreen(
     subjectColorOverrides: Map<String, String> = emptyMap(),
     calendarUnavailable: Boolean = false,
     homeVisible: Boolean = true,
-    onNavigateToBureaucracy: () -> Unit = {}
+    onNavigateToBureaucracy: () -> Unit = {},
+    onNavigateToClassRoster: () -> Unit = {},
+    onNavigateToNotifications: () -> Unit = {},
+    hasUnreadNotifications: Boolean = false,
+    profileEntry: AilaProfileEntry? = LocalProfileEntry.current
 ) {
     val scrollState = rememberScrollState()
     val homeGutter = if(AppTheme.isNothing) circolareplus.design.NothingSpacing.Edge else AppTheme.Space16
@@ -118,13 +124,17 @@ fun HomeScreen(
         if (wide) circulars.sortedByDescending { it.number }.take(5) else emptyList()
     }
 
+    val shortcuts = HomeShortcuts(
+        onNavigateToClassRoster, onNavigateToBureaucracy, onNavigateToGita,
+        onNavigateToNotifications, hasUnreadNotifications
+    )
     if(AppTheme.isNothing) {
         NothingHomeScreen(studentFirstName,nextEvents,latestCircular,
             circolareplus.ai.AcaPolicyState.preferences.let {it.aiEnabled && it.acaEnabled && it.nudgesEnabled && "NOW_NUDGE" in it.services},
             briefItems,briefLoading,briefError,onRefreshBrief,onOpenBrief,onDismissBrief,onPlanStudy,
-            subjectColorsEnabled,subjectColorOverrides,NothingHomeActions(onNavigateToSearch,onNavigateToGita,onNavigateToCirculars,onNavigateToCalendar,
-                onNavigateToBoard,onOpenForum,onNavigateToPolls,onNavigateToSeatMap,onEventClick,onNavigateToCircularDetail,onNavigateToBureaucracy),
-            isEventsLoading,isCircularsLoading, briefConflicts, calendarUnavailable, homeVisible, glyphConflicts = allConflicts)
+            subjectColorsEnabled,subjectColorOverrides,NothingHomeActions(onNavigateToSearch, onNavigateToCalendar,
+                onEventClick, onNavigateToCircularDetail, shortcuts),
+            isEventsLoading,isCircularsLoading, briefConflicts, calendarUnavailable, homeVisible, glyphConflicts = allConflicts, profileEntry = profileEntry)
         return
     }
 
@@ -148,21 +158,10 @@ fun HomeScreen(
         }
         HomeHeroPanel(
             studentFirstName = studentFirstName,
-            onNavigateToGita = onNavigateToGita,
             onNavigateToSearch = onNavigateToSearch,
-            onNavigateToCirculars = onNavigateToCirculars,
-            onNavigateToCalendar = onNavigateToCalendar,
-            onNavigateToBoard = onNavigateToBoard,
-            onNavigateToSeatMap = onNavigateToSeatMap
+            shortcuts = shortcuts,
+            profileEntry = profileEntry
         )
-
-        AilaCard(modifier = Modifier.padding(horizontal = homeGutter).padding(top = AppTheme.Space16)) {
-            AilaListRow(
-                title = "Burocrazia",
-                onClick = onNavigateToBureaucracy,
-                icon = { AppIcons.Document(Modifier.size(20.dp), AppTheme.TintBlueInk) }
-            )
-        }
 
         if (briefAllowed) {
             AilaBriefCard(briefItems, onDismissBrief, onOpenBrief, onPlanStudy, briefLoading, briefError, onRefreshBrief,
@@ -405,12 +404,9 @@ private fun NextEventsCard(
 @Composable
 private fun HomeHeroPanel(
     studentFirstName: String,
-    onNavigateToGita: () -> Unit,
     onNavigateToSearch: () -> Unit,
-    onNavigateToCirculars: () -> Unit,
-    onNavigateToCalendar: () -> Unit,
-    onNavigateToBoard: () -> Unit,
-    onNavigateToSeatMap: () -> Unit
+    shortcuts: HomeShortcuts,
+    profileEntry: AilaProfileEntry?
 ) {
     Column(
         modifier = Modifier
@@ -458,13 +454,7 @@ private fun HomeHeroPanel(
                 HeroIconButton(contentDescription = "Cerca", onClick = onNavigateToSearch) {
                     AppIcons.Search(modifier = Modifier.size(21.dp), color = AppTheme.OnHeroPrimary)
                 }
-                // Gita: documenti e link della classe, al posto della campanella. Le notifiche
-                // ora stanno nella scheda account (vedi ProfileScreen).
-                HeroIconButton(contentDescription = "Gita", onClick = onNavigateToGita) {
-                    AppIcons.Bus(modifier = Modifier.size(21.dp), color = AppTheme.OnHeroPrimary)
-                }
-                // Profilo e impostazioni (prima erano la tab "Altro").
-                circolareplus.design.LocalProfileEntry.current?.let { entry ->
+                profileEntry?.let { entry ->
                     circolareplus.design.AilaProfileButton(entry, onHero = true)
                 }
             }
@@ -472,26 +462,39 @@ private fun HomeHeroPanel(
 
         Spacer(modifier = Modifier.height(AppTheme.Space24))
 
-        // Su tablet le scorciatoie restano grandi come sul telefono e stanno a sinistra: quattro
-        // tasti larghi un quarto di schermo sarebbero strisce con un'icona minuscola in mezzo.
-        val tablet = circolareplus.design.isTabletWidth()
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(if (tablet) AppTheme.Space16 else AppTheme.Space12)
-        ) {
-            val tileModifier = if (tablet) Modifier.width(96.dp) else Modifier.weight(1f)
-            HomeQuickIcon(label = "Circolari", modifier = tileModifier, onClick = onNavigateToCirculars) {
-                AppIcons.Document(modifier = Modifier.size(22.dp), color = AppTheme.OnHeroPrimary)
-            }
-            HomeQuickIcon(label = "Calendario", modifier = tileModifier, onClick = onNavigateToCalendar) {
-                AppIcons.Calendar(modifier = Modifier.size(22.dp), color = AppTheme.OnHeroPrimary)
-            }
-            HomeQuickIcon(label = "Bacheca", modifier = tileModifier, onClick = onNavigateToBoard) {
-                AppIcons.ChatBubble(modifier = Modifier.size(22.dp), color = AppTheme.OnHeroPrimary)
-            }
-            HomeQuickIcon(label = "Mappa posti", modifier = tileModifier, onClick = onNavigateToSeatMap) {
-                AppIcons.Chair(modifier = Modifier.size(22.dp), color = AppTheme.OnHeroPrimary)
-            }
+        HomeShortcutRow(shortcuts)
+    }
+}
+
+internal data class HomeShortcuts(
+    val openClass: () -> Unit = {},
+    val openBureaucracy: () -> Unit = {},
+    val openTrip: () -> Unit = {},
+    val openNotifications: () -> Unit = {},
+    val hasUnreadNotifications: Boolean = false
+)
+
+@Composable
+internal fun HomeShortcutRow(shortcuts: HomeShortcuts) {
+    val tablet = circolareplus.design.isTabletWidth()
+    val nothing = AppTheme.isNothing
+    val iconColor = if (nothing) AppTheme.TextDark else AppTheme.OnHeroPrimary
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(if (tablet) AppTheme.Space16 else AppTheme.Space8)
+    ) {
+        val tile = if (tablet) Modifier.width(96.dp) else Modifier.weight(1f)
+        HomeQuickIcon("Classe", tile, shortcuts.openClass) {
+            AppIcons.People(Modifier.size(22.dp), iconColor)
+        }
+        HomeQuickIcon("Burocrazia", tile, shortcuts.openBureaucracy) {
+            AppIcons.Document(Modifier.size(22.dp), iconColor)
+        }
+        HomeQuickIcon("Gita", tile, shortcuts.openTrip) {
+            AppIcons.Bus(Modifier.size(22.dp), iconColor)
+        }
+        HomeQuickIcon("Notifiche", tile, shortcuts.openNotifications, shortcuts.hasUnreadNotifications) {
+            AppIcons.Bell(Modifier.size(22.dp), iconColor, shortcuts.hasUnreadNotifications)
         }
     }
 }
@@ -623,10 +626,12 @@ private fun HomeQuickIcon(
     label: String,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
+    hasUnread: Boolean = false,
     icon: @Composable () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val glass = AppTheme.isGlass
+    val nothing = AppTheme.isNothing
     // Material: riquadro tonale pieno che alla pressione stringe gli angoli (forma che si
     // deforma, come i pulsanti di M3 Expressive). Glass: vetro chiaro con filo di luce.
     val pressed by interactionSource.collectIsPressedAsState()
@@ -643,8 +648,10 @@ private fun HomeQuickIcon(
     Column(
         modifier = modifier.clickable(
             interactionSource = interactionSource,
-            indication = null
-        ) { onClick() },
+            indication = null,
+            role = Role.Button,
+            onClick = onClick
+        ).then(if (hasUnread) Modifier.semantics { stateDescription = "Da leggere" } else Modifier),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
@@ -656,7 +663,7 @@ private fun HomeQuickIcon(
                     if (glass) Modifier
                         .ailaGlassSurface(shape)
                         .ailaGlassOverlay(interactionSource, tint = AppTheme.PrimaryBlue)
-                    else Modifier.background(heroTonalFill)
+                    else Modifier.background(if (nothing) AppTheme.TrackFill else heroTonalFill)
                 ),
             contentAlignment = Alignment.Center
         ) {
@@ -667,9 +674,9 @@ private fun HomeQuickIcon(
             text = label,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Medium,
-            color = AppTheme.OnHeroSecondary,
-            maxLines = 1,
-            softWrap = false
+            color = if (nothing) AppTheme.TextDark else AppTheme.OnHeroSecondary,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            maxLines = 2
         )
     }
 }

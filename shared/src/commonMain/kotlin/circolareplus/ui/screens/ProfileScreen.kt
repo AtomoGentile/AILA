@@ -42,10 +42,6 @@ fun ProfileScreen(
     profile: StudentProfile = StudentProfile(userId = "user_1", heightCm = 170, className = "", academicYear = "", priorityPass = false, notificationBoardEnabled = true),
     userAiApiKey: String = "",
     onOpenSettings: () -> Unit = {},
-    onManageClassRoster: () -> Unit = {},
-    /** Le notifiche stanno qui: prima avevano la campanella in Home. */
-    onOpenNotifications: () -> Unit = {},
-    hasUnreadNotifications: Boolean = false,
     onLogoutClick: () -> Unit = {},
     /**
      * Elimina l'account dopo la conferma con password. Restituisce il messaggio d'errore da
@@ -224,23 +220,6 @@ fun ProfileScreen(
             }
         }
         val restSection: @Composable () -> Unit = {
-            // --- Sezione: gestione classe (solo Rappresentante) -----------------------------
-            if (isRepresentative) {
-                AilaSectionTitle(text = "Gestione classe")
-                Spacer(modifier = Modifier.height(AppTheme.Space12))
-                AilaCard {
-                    AilaListRow(
-                        title = "Scheda Classe",
-                        subtitle = "Valutazioni didattica/comportamento e Priority Pass",
-                        tint = AppTheme.TintViolet,
-                        onClick = onManageClassRoster,
-                        icon = { AppIcons.Profile(modifier = Modifier.size(21.dp), color = AppTheme.TintVioletInk) }
-                    )
-                }
-                Spacer(modifier = Modifier.height(AppTheme.Space24))
-            }
-
-
             // --- Richieste di cambio nome (solo chi decide) ----------------------------------
             // Una card a sé: nome attuale → nome richiesto, con approva e rifiuta sulla stessa
             // riga. Sulla propria richiesta non compaiono i tasti.
@@ -305,19 +284,6 @@ fun ProfileScreen(
             AilaSectionTitle(text = "Impostazioni")
             Spacer(modifier = Modifier.height(AppTheme.Space12))
             AilaCard {
-                AilaListRow(
-                    title = "Notifiche",
-                    subtitle = if (hasUnreadNotifications) "Ci sono novità da leggere" else "Circolari, bacheca e calendario",
-                    tint = AppTheme.TintBlue,
-                    onClick = onOpenNotifications,
-                    icon = {
-                        AppIcons.Bell(
-                            modifier = Modifier.size(21.dp),
-                            color = AppTheme.TintBlueInk,
-                            hasBadge = hasUnreadNotifications
-                        )
-                    }
-                )
                 AilaListRow(
                     title = "Impostazioni",
                     subtitle = if (userAiApiKey.isBlank()) {

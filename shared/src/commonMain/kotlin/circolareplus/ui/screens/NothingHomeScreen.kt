@@ -26,11 +26,11 @@ import circolareplus.util.ITALIAN_MONTHS
 import circolareplus.util.today
 
 internal data class NothingHomeActions(
-    val search: () -> Unit, val gita: () -> Unit, val circulars: () -> Unit,
-    val calendar: () -> Unit, val board: () -> Unit, val forum: () -> Unit,
-    val polls: () -> Unit, val seats: () -> Unit,
-    val openEvent: (CalendarEvent) -> Unit, val openCircular: (Int) -> Unit,
-    val bureaucracy: () -> Unit = {}
+    val search: () -> Unit,
+    val calendar: () -> Unit,
+    val openEvent: (CalendarEvent) -> Unit,
+    val openCircular: (Int) -> Unit,
+    val shortcuts: HomeShortcuts = HomeShortcuts()
 )
 
 /** One content overview and one navigation grid. No second copy of the Classic Home. */
@@ -45,7 +45,8 @@ internal fun NothingHomeScreen(
     conflicts: List<CalendarConflict> = emptyList(),
     calendarUnavailable: Boolean = false,
     homeVisible: Boolean = true,
-    glyphConflicts: List<CalendarConflict> = conflicts
+    glyphConflicts: List<CalendarConflict> = conflicts,
+    profileEntry: AilaProfileEntry? = null
 ) {
     var allBrief by remember { mutableStateOf(false) }
     val date = today()
@@ -61,11 +62,11 @@ internal fun NothingHomeScreen(
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
             Text("AILA / NOTHING",Modifier.weight(1f),style=MaterialTheme.typography.labelSmall,color=AppTheme.TextMuted)
             AilaIconButton("Cerca",actions.search) {AppIcons.Search(Modifier.size(18.dp),it)}
-            AilaIconButton("Gita",actions.gita) {AppIcons.Bus(Modifier.size(18.dp),it)}
-            LocalProfileEntry.current?.let {AilaProfileButton(it)}
+            profileEntry?.let { AilaProfileButton(it) }
         }
         Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
             Text("Ciao, $firstName",style=nothingDisplayStyle(30,40),color=AppTheme.TextDark)
+            HomeShortcutRow(actions.shortcuts)
             Row(Modifier.heightIn(min=44.dp).clickable(role=Role.Button,onClick=actions.calendar),
                 verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 Box(Modifier.size(5.dp).background(AppTheme.PrimaryBlue,CircleShape))
@@ -139,24 +140,6 @@ internal fun NothingHomeScreen(
                 onOpenEvent = actions.openEvent,
                 onOpenCalendar = actions.calendar
             )
-        }
-        val links=listOf(
-            Triple("Circolari",NothingSymbol.DOCUMENT,actions.circulars),Triple("Calendario",NothingSymbol.CALENDAR,actions.calendar),
-            Triple("Bacheca",NothingSymbol.CHAT,actions.board),Triple("Pere",NothingSymbol.CHAT,actions.forum),
-            Triple("Sondaggi",NothingSymbol.POLL,actions.polls),Triple("Posti",NothingSymbol.SEAT,actions.seats),
-            Triple("Burocrazia",NothingSymbol.DOCUMENT,actions.bureaucracy))
-        Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-            links.chunked(2).forEach { pair ->
-                Row(horizontalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.height(IntrinsicSize.Min)) {
-                    pair.forEach { (label,symbol,open) ->
-                        Row(Modifier.weight(1f).fillMaxHeight().heightIn(min=64.dp).clip(RoundedCornerShape(20.dp)).background(AppTheme.TrackFill)
-                            .clickable(role=Role.Button,onClick=open).padding(12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                            NothingDotIcon(symbol,Modifier.size(24.dp))
-                            Text(label,Modifier.weight(1f),style=MaterialTheme.typography.labelMedium,color=AppTheme.TextDark)
-                        }
-                    }
-                }
-            }
         }
         if(latestCircular != null && (!briefAllowed || briefItems.none {it.kind==AilaBriefKind.CIRCULAR && it.sourceId==latestCircular.number.toString()})) {
             Column(Modifier.fillMaxWidth().clickable(role=Role.Button) {actions.openCircular(latestCircular.number)}.padding(vertical=8.dp),
