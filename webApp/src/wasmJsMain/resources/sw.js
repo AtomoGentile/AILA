@@ -35,7 +35,7 @@ const indexUrl = new URL('index.html', scopeUrl).href;
 
 // File fissi della shell, scaricati all'installazione. I nomi con hash (.wasm) si ricavano da
 // aila.js, cosi' non serve generare nulla a build.
-const SHELL_FILES = ['./', 'index.html', 'aila.js', 'ios-keyboard.js', 'startup.js?v=1', 'perf-debug.js', 'styles.css', 'manifest.webmanifest',
+const SHELL_FILES = ['./', 'index.html', 'aila.js?boot=2', 'ios-keyboard.js', 'startup.js?v=1', 'perf-debug.js', 'styles.css', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/favicon-32.png', 'icons/apple-touch-icon.png'];
 
 // --- IndexedDB (ponte con l'app) ------------------------------------------------------------
@@ -110,19 +110,29 @@ function isCacheable(response) {
   return response && response.status === 200 && response.type === 'basic' && !response.redirected;
 }
 
+function isCacheableWasm(response) {
+  return isCacheable(response) && /^application\/wasm\s*(?:;|$)/i.test(response.headers.get('content-type') || '');
+}
+
+function isHashedWasm(pathname) {
+  return /\/[0-9a-f]{16,}\.wasm$/.test(pathname);
+}
+
+async function wasmDependencies(request, response) {
+  const text = await response.clone().text();
+  const names = new Set(Array.from(text.matchAll(/["'`]([0-9a-f]{16,}\.wasm)["'`]/g), (match) => match[1]));
+  return Array.from(names, (name) => new URL(name, request.url).href);
+}
+
 // aila.js non ha hash nel nome ma punta ai .wasm che ce l'hanno: se si mettesse in cache la nuova
 // aila.js senza i suoi .wasm, al prossimo avvio offline l'app cercherebbe file mai scaricati.
 // Prima i .wasm, poi aila.js: la versione in cache resta sempre completa. Solo i nomi con hash:
 // aila.js cita anche nomi che non sono file pubblicati (es. "skiko.wasm", nome interno del modulo).
 async function cacheScriptWithWasm(cache, request, response) {
-  const text = await response.clone().text();
-  const names = new Set();
-  for (const m of text.matchAll(/["'`]([0-9a-f]{16,}\.wasm)["'`]/g)) names.add(m[1]);
-  for (const name of names) {
-    const wasmUrl = new URL(name, request.url).href;
-    if (await cache.match(wasmUrl)) continue;
-    const wasm = await fetch(wasmUrl);
-    if (!isCacheable(wasm)) throw new Error(`wasm non scaricato: ${name}`);
+  for (const wasmUrl of await wasmDependencies(request, response)) {
+    if (isCacheableWasm(await cache.match(wasmUrl))) continue;
+    const wasm = await fetch(wasmUrl, { cache: 'reload' });
+    if (!isCacheableWasm(wasm)) throw new Error(`wasm non scaricato: ${wasmUrl}`);
     await cache.put(wasmUrl, wasm);
   }
   await cache.put(request, response);
@@ -133,7 +143,7 @@ async function putInCache(request, response) {
   const url = new URL(request.url);
   if (url.pathname.endsWith('.js') && !url.pathname.endsWith('/sw.js')) {
     await cacheScriptWithWasm(cache, request, response);
-  } else {
+  } else if (!isHashedWasm(url.pathname) || isCacheableWasm(response)) {
     await cache.put(request, response);
   }
 }
@@ -170,7 +180,7 @@ function isNewVersion(cached, fresh) {
 // appena arriva la risposta (prima che la pagina la legga) e si salva senza farla aspettare.
 function staleWhileRevalidate(event) {
   const request = event.request;
-  const cachedP = cacheLookup(request);
+  const cachedP = cachedShellResponse(request);
   const network = fetch(request).then((response) => ({
     response,
     copy: isCacheable(response) ? response.clone() : null,
@@ -188,12 +198,28 @@ function cacheLookup(request) {
   return caches.match(request).catch(() => undefined);
 }
 
+async function cachedShellResponse(request) {
+  const cached = await cacheLookup(request);
+  if (!cached || new URL(request.url).pathname !== new URL('aila.js', scopeUrl).pathname) return cached;
+  try {
+    const urls = await wasmDependencies(request, cached);
+    if (!urls.length) return undefined;
+    const modules = await Promise.all(urls.map(cacheLookup));
+    // Dopo un aggiornamento o un'evizione parziale, il vecchio bundle può puntare a file
+    // che il browser e il server non hanno più. Usa subito la copia di rete in quel caso.
+    return modules.every(isCacheableWasm) ? cached : undefined;
+  } catch (e) {
+    return undefined;
+  }
+}
+
 async function cacheFirst(event) {
   const request = event.request;
   const cached = await cacheLookup(request);
-  if (cached) return cached;
-  const response = await fetch(request);
-  if (isCacheable(response)) {
+  if (isCacheableWasm(cached)) return cached;
+  // Rileva anche le risposte HTML che sono finite nella cache HTTP del browser.
+  const response = await fetch(request, { cache: 'reload' });
+  if (isCacheableWasm(response)) {
     // In parallelo: la pagina compila il .wasm mentre arriva, senza aspettare la copia in cache.
     const copy = response.clone();
     event.waitUntil(caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy)).catch(() => {}));
@@ -287,7 +313,7 @@ self.addEventListener('fetch', (event) => {
   }
   // I .wasm hanno l'hash del contenuto nel nome (webpack): non cambiano mai, inutile
   // riscaricare decine di MB a ogni avvio per scoprirlo.
-  if (/\/[0-9a-f]{16,}\.wasm$/.test(url.pathname)) {
+  if (isHashedWasm(url.pathname)) {
     event.respondWith(cacheFirst(event));
     return;
   }
