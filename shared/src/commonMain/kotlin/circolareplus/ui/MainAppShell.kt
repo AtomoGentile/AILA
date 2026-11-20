@@ -551,6 +551,10 @@ fun MainAppShell(
     // --- Stato Notifiche (storico locale, mai sul server) -------------------------------------
     var notificationLog by remember { mutableStateOf(AppContainer.settings.listNotifications()) }
     val unreadCategories = notificationLog.filterNot { it.read }.mapTo(mutableSetOf()) { it.category }
+    val notificationRevision by AppContainer.settings.notificationRevision.collectAsState()
+    LaunchedEffect(currentUser?.id, notificationRevision, circolareplus.platform.AppForeground.isForeground) {
+        notificationLog = AppContainer.settings.listNotifications()
+    }
 
     /**
      * Confronta quello che è appena arrivato dal server con l'ultima cosa vista e, se c'è

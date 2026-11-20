@@ -15,6 +15,9 @@ import circolareplus.domain.model.StudentProfile
 import circolareplus.platform.createSecureSettings
 import circolareplus.platform.currentTimeMillis
 import com.russhwolf.settings.Settings
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.decodeFromString
@@ -31,6 +34,9 @@ class LocalSettingsManager(
     // stesse preferenze).
     private val secure: Settings = createSecureSettings() ?: settings
 ) {
+    private val notificationChanges = MutableStateFlow(0)
+    val notificationRevision = notificationChanges.asStateFlow()
+
     var cachedAiPreferences: circolareplus.data.remote.dto.AcaPreferencesDto
         get() = runCatching { Json.decodeFromString<circolareplus.data.remote.dto.AcaPreferencesDto>(settings.getString("aca_policy_v1", "{}")) }
             .getOrDefault(circolareplus.data.remote.dto.AcaPreferencesDto())
@@ -540,6 +546,7 @@ class LocalSettingsManager(
         )
         val updated = (readNotifications(now) + entry).sortedByDescending { it.receivedAtMillis }
         writeNotifications(updated)
+        notificationChanges.update { it + 1 }
     }
 
     /**
@@ -568,12 +575,9 @@ class LocalSettingsManager(
         return isSystemNotificationsEnabled
     }
 
-    /** Elenco notifiche non scadute, più recenti prima. Scarta e ripulisce quelle scadute. */
-    fun listNotifications(): List<NotificationLogEntry> {
-        val fresh = readNotifications(currentTimeMillis())
-        writeNotifications(fresh) // ripulisce lo storage se qualcosa era scaduto
-        return fresh.sortedByDescending { it.receivedAtMillis }
-    }
+    /** Elenco notifiche non scadute, più recenti prima. Le scritture rimuovono quelle scadute. */
+    fun listNotifications(): List<NotificationLogEntry> =
+        readNotifications(currentTimeMillis()).sortedByDescending { it.receivedAtMillis }
 
     fun markAllNotificationsRead() {
         writeNotifications(readNotifications(currentTimeMillis()).map { it.copy(read = true) })
