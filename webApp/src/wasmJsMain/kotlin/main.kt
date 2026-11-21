@@ -1,5 +1,9 @@
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.remember
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.window.ComposeViewport
 import circolareplus.data.AppContainer
 import circolareplus.design.AilaAccent
@@ -42,10 +46,20 @@ fun main() {
         // subito). ?a11y=1 la riaccende dove e' spenta, ?a11y=0 la spegne anche su iOS: vedi
         // perf-debug.js.
         ComposeViewport(configure = { isA11YEnabled = a11yRequested() }) {
-            // Il primo fotogramma di Compose e' pronto: via la schermata di avvio HTML.
-            LaunchedEffect(Unit) { hideSplash() }
+            val firstFrame = remember { object { var drawn = false } }
             AilaTheme {
-                MainAppShell()
+                Box(
+                    Modifier.fillMaxSize().drawWithContent {
+                        drawContent()
+                        if (!firstFrame.drawn) {
+                            firstFrame.drawn = true
+                            startupPhase("Primo fotogramma disegnato.")
+                            hideSplashAfterFrame()
+                        }
+                    }
+                ) {
+                    MainAppShell()
+                }
             }
         }
     }
@@ -57,6 +71,6 @@ private fun startupPhase(message: String) {
     js("if (window.__ailaStartupTrace) window.__ailaStartupTrace(message); var stage = document.getElementById('diagnosi-avvio'); if (stage) { stage.setAttribute('data-kotlin', ''); stage.textContent = message; }")
 }
 
-private fun hideSplash() {
-    js("if (window.__ailaStartupReady) window.__ailaStartupReady(); var s = document.getElementById('aila-splash'); if (s) { s.classList.add('done'); setTimeout(function () { s.remove(); }, 400); }")
+private fun hideSplashAfterFrame() {
+    js("requestAnimationFrame(function () { document.getElementById('aila-splash')?.remove(); if (window.__ailaStartupReady) window.__ailaStartupReady(); });")
 }

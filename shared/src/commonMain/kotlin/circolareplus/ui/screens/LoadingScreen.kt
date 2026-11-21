@@ -37,7 +37,10 @@ import kotlin.math.sin
 private var ailaIntroPlayed = false
 
 /** Vero finché l'intro del logo di questo avvio non è stata vista: MainAppShell aspetta la fine. */
-fun isAilaIntroPending(): Boolean = !ailaIntroPlayed
+fun isAilaIntroPending(): Boolean = !usesStaticWebStartup() && !ailaIntroPlayed
+
+private fun usesStaticWebStartup(): Boolean =
+    circolareplus.platform.isWeb() && circolareplus.platform.isIos()
 
 /** Fine dell'intro: il segno è costruito e la scritta "AILA" è entrata tutta. */
 private const val IntroSeconds = 1.7f
@@ -83,6 +86,19 @@ fun AilaLoadingScreen(
     message: String = "Caricamento...",
     onIntroFinished: () -> Unit = {}
 ) {
+    // La PWA iOS mostra già lo splash HTML. Non far dipendere l'accesso dalla seconda
+    // animazione su canvas né dal ritmo con cui WebKit consegna i suoi fotogrammi.
+    if (usesStaticWebStartup()) {
+        LaunchedEffect(Unit) { onIntroFinished() }
+        Box(
+            modifier = Modifier.fillMaxSize().background(AppTheme.SplashBackground),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(message, style = MaterialTheme.typography.bodyMedium, color = Color.White)
+        }
+        return
+    }
+
     // Letto qui dal sistema e non da AppTheme.reduceMotion: questa e' la prima schermata e
     // AilaTheme lo copia in AppTheme solo dopo il primo fotogramma, quando l'intro sarebbe gia'
     // partita.
