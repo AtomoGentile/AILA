@@ -1,8 +1,6 @@
 package circolareplus.ui.screens
 
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,11 +13,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.State
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.Alignment
@@ -30,13 +26,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
 import circolareplus.design.AilaCard
 import circolareplus.design.AilaIconTile
@@ -61,7 +60,8 @@ import circolareplus.util.today
 import circolareplus.util.plusDays
 import circolareplus.domain.model.CalendarEvent
 import circolareplus.domain.model.Circular
-import kotlinx.coroutines.flow.collectLatest
+import kotlin.math.abs
+import kotlin.math.sign
 
 /**
  * Home in stile AILA: pannello superiore a gradiente con il saluto e le quattro icone di accesso
@@ -108,7 +108,9 @@ fun HomeScreen(
     onNavigateToClassRoster: () -> Unit = {},
     onNavigateToNotifications: () -> Unit = {},
     unreadMenus: Set<String> = emptySet(),
-    profileEntry: AilaProfileEntry? = LocalProfileEntry.current
+    profileEntry: AilaProfileEntry? = LocalProfileEntry.current,
+    cardSwipeProgress: (() -> Float)? = null,
+    cardSwipeAnchorY: () -> Float = { 0f }
 ) {
     val scrollState = rememberScrollState()
     val homeGutter = if(AppTheme.isNothing) circolareplus.design.NothingSpacing.Edge else AppTheme.Space16
@@ -153,10 +155,6 @@ fun HomeScreen(
         return
     }
 
-    val cardShift = if (AppTheme.isGlass && !AppTheme.reduceMotion && homeVisible) {
-        rememberGlassHomeCardShift(scrollState)
-    } else null
-
     // Circolare più recente in evidenza. Tipo esplicito sulla callback: un lambda scritto dentro
     // un "if" come argomento nullable è ambiguo da leggere e da inferire.
     val openLatestCircular: (() -> Unit)? =
@@ -187,7 +185,7 @@ fun HomeScreen(
                 Modifier
                     .padding(horizontal = homeGutter)
                     .padding(top = 18.dp, bottom = 4.dp)
-                    .glassHomeCardShift(cardShift, response = 0.55f),
+                    .glassHomeCardMotion(cardSwipeProgress, cardSwipeAnchorY),
                 subjectColorsRevision = subjectColorsRevision,
                 subjectColorsEnabled = subjectColorsEnabled,
                 subjectColorOverrides = subjectColorOverrides,
@@ -199,7 +197,7 @@ fun HomeScreen(
                 latestCircular = latestCircular,
                 onClick = openLatestCircular,
                 isLoading = isCircularsLoading,
-                modifier = Modifier.ailaAppear(0).glassHomeCardShift(cardShift, response = 0.75f)
+                modifier = Modifier.ailaAppear(0).glassHomeCardMotion(cardSwipeProgress, cardSwipeAnchorY)
             )
         }
         val eventsSection: @Composable () -> Unit = {
@@ -215,7 +213,7 @@ fun HomeScreen(
                 onNavigateToCalendar = onNavigateToCalendar,
                 onEventClick = onEventClick,
                 isLoading = isEventsLoading,
-                modifier = Modifier.ailaAppear(2).glassHomeCardShift(cardShift)
+                modifier = Modifier.ailaAppear(2).glassHomeCardMotion(cardSwipeProgress, cardSwipeAnchorY)
             )
         }
         val shortcutsSection: @Composable () -> Unit = {
@@ -223,7 +221,7 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(AppTheme.Space12))
 
-            AilaCard(modifier = Modifier.ailaAppear(4).glassHomeCardShift(cardShift, response = 0.85f)) {
+            AilaCard(modifier = Modifier.ailaAppear(4).glassHomeCardMotion(cardSwipeProgress, cardSwipeAnchorY)) {
                 AilaListRow(
                     title = "Sondaggi",
                     subtitle = "Date delle interrogazioni e opzioni da mettere in ordine",
@@ -272,7 +270,7 @@ fun HomeScreen(
                             circulars = recentCirculars,
                             onCircularClick = onNavigateToCircularDetail,
                             isLoading = isCircularsLoading,
-                            modifier = Modifier.ailaAppear(1).glassHomeCardShift(cardShift, response = 0.75f)
+                            modifier = Modifier.ailaAppear(1).glassHomeCardMotion(cardSwipeProgress, cardSwipeAnchorY)
                         )
                     }
                     Column(modifier = Modifier.weight(1f)) {
@@ -283,7 +281,7 @@ fun HomeScreen(
                     AilaSectionTitle(text = "Scorciatoie", modifier = Modifier.ailaAppear(3))
                     Spacer(modifier = Modifier.height(AppTheme.Space12))
                     Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space20)) {
-                        AilaCard(modifier = Modifier.weight(1f).ailaAppear(4).glassHomeCardShift(cardShift, response = 0.85f)) {
+                        AilaCard(modifier = Modifier.weight(1f).ailaAppear(4).glassHomeCardMotion(cardSwipeProgress, cardSwipeAnchorY)) {
                             AilaListRow(
                                 title = "Sondaggi",
                                 subtitle = "Date delle interrogazioni e opzioni da mettere in ordine",
@@ -294,7 +292,7 @@ fun HomeScreen(
                                 }
                             )
                         }
-                        AilaCard(modifier = Modifier.weight(1f).ailaAppear(5).glassHomeCardShift(cardShift)) {
+                        AilaCard(modifier = Modifier.weight(1f).ailaAppear(5).glassHomeCardMotion(cardSwipeProgress, cardSwipeAnchorY)) {
                             AilaListRow(
                                 title = "Bacheca della classe",
                                 subtitle = if (openProposalsCount > 0)
@@ -335,29 +333,24 @@ fun HomeScreen(
 }
 
 @Composable
-private fun rememberGlassHomeCardShift(scrollState: ScrollState): State<Float> {
-    val shift = remember { Animatable(0f) }
-    val limit = with(LocalDensity.current) { 11.dp.toPx() }
-    LaunchedEffect(scrollState, limit) {
-        var previousOffset = scrollState.value
-        snapshotFlow { scrollState.value to scrollState.isScrollInProgress }
-            .collectLatest { (offset, scrolling) ->
-                val delta = offset - previousOffset
-                previousOffset = offset
-                if (delta != 0) {
-                    // La traslazione compensa una parte dello scorrimento e dà inerzia alla card.
-                    shift.snapTo((shift.value * 0.5f + delta * 0.55f).coerceIn(-limit, limit))
-                }
-                if (!scrolling && shift.value != 0f) {
-                    shift.animateTo(0f, ailaSpatialSpring())
-                }
-            }
+private fun Modifier.glassHomeCardMotion(
+    swipeProgress: (() -> Float)?,
+    anchorY: () -> Float
+): Modifier {
+    if (swipeProgress == null) return this
+    val centerY = remember { mutableFloatStateOf(0f) }
+    val direction = if (LocalLayoutDirection.current == LayoutDirection.Ltr) 1f else -1f
+    return onGloballyPositioned { coordinates ->
+        centerY.floatValue = coordinates.positionInRoot().y + coordinates.size.height / 2f
+    }.graphicsLayer {
+        val progress = swipeProgress()
+        val phase = abs(progress).coerceAtMost(1f)
+        // La distanza dal punto del gesto regola quanto a lungo la card rimane indietro.
+        val distance = (abs(centerY.floatValue - anchorY()) / 420.dp.toPx()).coerceAtMost(1f)
+        val lag = 4f * phase * (1f - phase) * (0.16f + 0.84f * distance)
+        translationX = direction * progress.sign * lag * minOf(58.dp.toPx(), size.width * 0.18f)
     }
-    return shift.asState()
 }
-
-private fun Modifier.glassHomeCardShift(shift: State<Float>?, response: Float = 1f): Modifier =
-    if (shift == null) this else graphicsLayer { translationY = shift.value * response }
 
 /** Card della circolare più recente messa in evidenza in cima alla Home. */
 @Composable

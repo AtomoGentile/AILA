@@ -6,6 +6,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -39,6 +41,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
@@ -81,6 +84,7 @@ import circolareplus.design.ailaExplodeOut
 import circolareplus.design.animateContainerClose
 import circolareplus.design.animateContainerOpen
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import circolareplus.design.ailaMorphClip
 import circolareplus.design.ailaSheetReveal
 import circolareplus.design.GlassBase
@@ -3396,6 +3400,9 @@ fun MainAppShell(
                     val glassTabs = AppTheme.isGlass
                     val liteTabEffects = AppTheme.liteEffects
                     val reduceTabMotion = AppTheme.reduceMotion
+                    val glassCardMotion = glassTabs && !reduceTabMotion && !useRail
+                    val pagerTop = remember { mutableFloatStateOf(0f) }
+                    val swipeAnchorY = remember { mutableFloatStateOf(0f) }
                     val tabExitDuration = if (liteTabEffects || reduceTabMotion) 60 else 85
                     val tabEnterDuration = when {
                         liteTabEffects -> 130
@@ -3463,6 +3470,15 @@ fun MainAppShell(
                             snapAnimationSpec = circolareplus.design.ailaNavigationSpring()
                         ),
                         modifier = Modifier.fillMaxSize()
+                            .then(if (glassCardMotion) {
+                                Modifier.onGloballyPositioned { pagerTop.floatValue = it.positionInRoot().y }
+                                    .pointerInput(Unit) {
+                                        awaitEachGesture {
+                                            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                                            swipeAnchorY.floatValue = pagerTop.floatValue + down.position.y
+                                        }
+                                    }
+                            } else Modifier)
                             .graphicsLayer {
                                 alpha = tabFade.value
                                 val arrival = if (!liteTabEffects && !reduceTabMotion) {
@@ -3518,6 +3534,14 @@ fun MainAppShell(
                     when (tab) {
                         MainTab.HOME -> {
                             HomeScreen(
+                                cardSwipeProgress = if (glassCardMotion) {
+                                    {
+                                        if (selectedTab == confirmedTab && tabFade.value == 1f) {
+                                            tabPager.currentPage - page + tabPager.currentPageOffsetFraction
+                                        } else 0f
+                                    }
+                                } else null,
+                                cardSwipeAnchorY = { swipeAnchorY.floatValue },
                                 subjectColorsRevision = subjectColorsRevision,
                                 subjectColorsEnabled = run { subjectColorsRevision; AppContainer.settings.subjectColorsEnabled },
                                 subjectColorOverrides = run { subjectColorsRevision; AppContainer.settings.subjectColorOverrides },
