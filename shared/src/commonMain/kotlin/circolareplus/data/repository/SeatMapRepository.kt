@@ -52,25 +52,26 @@ class SeatMapRepository(private val api: ApiClient? = null) {
     }
 
     /** Archivio consultabile: solo pubblicazioni confermate dal server, mai bozze locali. */
-    suspend fun getPublishedHistory(): List<PublishedSeatMap> = readPublishedHistory(archive = true)
+    suspend fun getPublishedHistory(): List<PublishedSeatMap> =
+        readHistory("/api/seat-map/history?archive=true").toPublishedMaps()
 
-    private suspend fun readPublishedHistory(archive: Boolean): List<PublishedSeatMap> {
-        val path = if (archive) "/api/seat-map/history?archive=true" else "/api/seat-map/history"
-        // Lo storico deve riflettere anche pubblicazioni/reset fatti da un altro rappresentante.
-        val response: SeatMapHistoryResponseDto = requireApi().get(path, offlineCopy = false)
-        return response.history.mapNotNull { entry ->
+    private suspend fun readHistory(path: String): SeatMapHistoryResponseDto =
+        requireApi().get(path, offlineCopy = false)
+
+    private fun SeatMapHistoryResponseDto.toPublishedMaps(): List<PublishedSeatMap> =
+        history.mapNotNull { entry ->
             val index = entry.mapIndex?.takeIf { it >= 1 } ?: return@mapNotNull null
             PublishedSeatMap(entry.id, index, entry.publishedAt,
                 apiJson.decodeFromJsonElement<List<DeskAssignment>>(entry.layout))
         }.sortedBy { it.mapIndex }
-    }
 
-    /** Storico regressivo (almeno 4 mappe e gli ultimi 12 mesi) usato da [SeatMapOptimizer.calculateMemoryPenalty]. Un
-     * banco da trio genera tutte e tre le coppie possibili (A-B, A-C, B-C): sono tre fatti
-     * storici distinti ("erano insieme"), coerenti con come SeatMapOptimizer li ricontrolla uno
-     * per uno per i banchi futuri — vedi il commento su SeatMapOptimizer.pairRepeatPenalty. */
-    suspend fun getHistoryForOptimizer(): List<SeatMapHistoryRecord> {
-        return readPublishedHistory(archive = false).map { entry ->
+    data class OptimizerInput(val history: List<SeatMapHistoryRecord>, val rotation: SeatMapRotationPolicy)
+
+    suspend fun getHistoryForOptimizer(): List<SeatMapHistoryRecord> = getOptimizerInput().history
+
+    suspend fun getOptimizerInput(): OptimizerInput {
+        val response = readHistory("/api/seat-map/history?rotation=true")
+        val history = response.toPublishedMaps().map { entry ->
             val assignments = entry.assignments
             val pairs = assignments.flatMap { a ->
                 val occupants = listOfNotNull(a.studentAId, a.studentBId, a.studentCId)
@@ -81,15 +82,25 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                     listOfNotNull(a.studentAId, a.studentBId, a.studentCId).forEach { put(it, a.row to a.column) }
                 }
             }
-            SeatMapHistoryRecord(mapIndex = entry.mapIndex, pairs = pairs, deskAssignments = deskPositions, publishedAt = entry.publishedAt)
+            SeatMapHistoryRecord(
+                mapIndex = entry.mapIndex, pairs = pairs, deskAssignments = deskPositions, publishedAt = entry.publishedAt,
+                publicationNumber = response.publishedCount?.let { it - entry.mapIndex + 1 }
+            )
         }
+        return OptimizerInput(history, response.rotation)
     }
 
-    /** Solo Rappresentante: pubblica la disposizione scelta e la aggiunge allo storico condiviso. */
-    suspend fun publish(assignments: List<DeskAssignment>): SuccessDto {
-        val latestHistory = getHistoryForOptimizer()
-        require(SeatMapOptimizer.recentCompanionViolations(assignments, latestHistory).isEmpty()) {
-            "Alcuni compagni sono già stati insieme negli ultimi tre mesi. Separa queste coppie prima di pubblicare."
+    suspend fun saveRotationPolicy(policy: SeatMapRotationPolicy): SeatMapRotationPolicy =
+        requireApi().put("/api/seat-map/rotation", policy)
+
+    /** Solo Rappresentante: pubblica dopo la verifica sulle regole aggiornate. */
+    suspend fun publish(assignments: List<DeskAssignment>, profiles: Map<String, StudentProfile>): SuccessDto {
+        val (history, rotation) = getOptimizerInput()
+        require(SeatMapOptimizer.rowRotationViolations(assignments, profiles, history, rotation).isEmpty()) {
+            "La disposizione non rispetta la rotazione delle file con lo storico e le regole attuali."
+        }
+        require(SeatMapOptimizer.recentCompanionViolations(assignments, history, rotation.companionWaitMaps).isEmpty()) {
+            "Alcune coppie non hanno ancora aspettato ${rotation.companionWaitMaps} mappe pubblicate."
         }
         val layoutJson = apiJson.encodeToString(assignments)
         val layoutElement = apiJson.parseToJsonElement(layoutJson)
@@ -170,12 +181,16 @@ class SeatMapRepository(private val api: ApiClient? = null) {
         onProgress: suspend (completed: Int, total: Int) -> Unit = { _, _ -> },
         previousProposals: List<SeatMapProposal> = emptyList(),
         onBest: suspend (SeatMapProposal) -> Unit = {},
-        shouldStop: () -> Boolean = { false }
+        shouldStop: () -> Boolean = { false },
+        rotation: SeatMapRotationPolicy = SeatMapRotationPolicy()
     ): List<SeatMapProposal> {
         val slots = customDeskSlots?.filter { it.seats > 0 }
             ?: if (rowSeats.isEmpty()) null else SeatMapOptimizer.buildDeskSlots(rowSeats, seatsPerDesk, students.size)
         require(slots == null || slots.sumOf { it.seats } >= students.size) { "Posti insufficienti per gli studenti della classe" }
         val isSmallClass = students.size < 22
+        fun scoringHistory(assignments: List<DeskAssignment>) = SeatMapOptimizer.rotationScoringHistory(
+            history, profiles, assignments.filter { it.seats > 0 }.map { it.row }.distinct().size, rotation
+        )
         val baseSeed = kotlin.random.Random.nextLong()
 
         // Re-evaluate old layouts under the CURRENT inputs; never trust their saved scores.
@@ -186,8 +201,8 @@ class SeatMapRepository(private val api: ApiClient? = null) {
             ids.size == students.size && ids.toSet() == expectedIds &&
                 (expectedSlots == null || proposal.assignments.filter { it.seats > 0 }
                     .map { Triple(it.row, it.column, it.seats) }.toSet() == expectedSlots) &&
-                SeatMapOptimizer.rowRotationViolations(proposal.assignments.filter { it.seats > 0 }, profiles, history).isEmpty() &&
-                SeatMapOptimizer.recentCompanionViolations(proposal.assignments, history).isEmpty() &&
+                SeatMapOptimizer.rowRotationViolations(proposal.assignments.filter { it.seats > 0 }, profiles, history, rotation).isEmpty() &&
+                SeatMapOptimizer.recentCompanionViolations(proposal.assignments, history, rotation.companionWaitMaps).isEmpty() &&
                 !SeatMapOptimizer.scoreLayout(proposal.assignments, profiles, ratings, socialPreferences,
                     history, weights, isSmallClass, disciplinePairs).hasForbiddenPair
         }
@@ -224,7 +239,8 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                 disciplinePairs = disciplinePairs,
                 slots = slots,
                 // Alternate fresh starts with refinement of the best layout found so far.
-                initialLayout = if (i % 2 == 1) incumbent else null
+                initialLayout = if (i % 2 == 1) incumbent else null,
+                rotation = rotation
             )
             val geometry = generated.map { Triple(it.row, it.column, it.seats) }
             if (geometry != neighborhoodGeometry) {
@@ -247,9 +263,9 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                     generated.map { Triple(it.row, it.column, it.seats) }
                 if (matchingGeometry) {
                     val repaired = SeatMapOptimizer.improveDeskNeighborhood(origin, indices,
-                        profiles, ratings, socialPreferences, history, weights, isSmallClass, disciplinePairs)
+                        profiles, ratings, socialPreferences, history, weights, isSmallClass, disciplinePairs, rotation = rotation)
                     fun total(map: List<circolareplus.algorithms.DeskAssignment>) =
-                        SeatMapOptimizer.scoreLayout(map, profiles, ratings, socialPreferences, history,
+                        SeatMapOptimizer.scoreLayout(map, profiles, ratings, socialPreferences, scoringHistory(map),
                             weights, isSmallClass, disciplinePairs).total
                     if (SeatMapRanking.compare(total(repaired), SeatMapOptimizer.voteSatisfaction(repaired, socialPreferences),
                         total(generated), SeatMapOptimizer.voteSatisfaction(generated, socialPreferences)) > 0) generated = repaired
@@ -270,7 +286,7 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                 profiles = profiles,
                 ratings = ratings,
                 socialPreferences = socialPreferences,
-                history = history,
+                history = scoringHistory(assignments),
                 weights = weights,
                 isSmallClass = isSmallClass,
                 disciplinePairs = disciplinePairs

@@ -82,7 +82,14 @@ data class SeatMapHistoryRecord(
     val mapIndex: Int, // 1 for N-1, 2 for N-2, 3 for N-3, 4 for N-4
     val pairs: Set<Pair<String, String>>,
     val deskAssignments: Map<String, Pair<Int, Int>>, // studentId -> (row, col)
-    val publishedAt: String? = null
+    val publishedAt: String? = null,
+    val publicationNumber: Int? = null
+)
+
+@Serializable
+data class SeatMapRotationPolicy(
+    val rowCycleMaps: Int? = null,
+    val companionWaitMaps: Int = 4
 )
 
 @Serializable
@@ -860,7 +867,8 @@ object SeatMapOptimizer {
         // Banchi personalizzati (file con posti diversi, coppie e trii insieme): se presenti
         // sostituiscono la disposizione automatica a 3 banchi per fila.
         slots: List<DeskSlot>? = null,
-        initialLayout: List<DeskAssignment>? = null
+        initialLayout: List<DeskAssignment>? = null,
+        rotation: SeatMapRotationPolicy = SeatMapRotationPolicy()
     ): List<DeskAssignment> {
         require(seatsPerDesk == SEATS_PER_DESK_PAIR || seatsPerDesk == SEATS_PER_DESK_TRIO) {
             "seatsPerDesk deve essere $SEATS_PER_DESK_PAIR (coppia) o $SEATS_PER_DESK_TRIO (trio), ricevuto $seatsPerDesk"
@@ -870,10 +878,8 @@ object SeatMapOptimizer {
         // Use the existing hard-pair constraint in initialization, row matching and swaps.
         // Keep the original preferences for the objective and satisfaction calculations.
         val constraintPreferences = socialPreferences.toMutableMap()
-        recentCompanionPairs(history).forEach { constraintPreferences[it] = SocialPreferenceScore.STRONG_REJECTION }
+        recentCompanionPairs(history, rotation.companionWaitMaps).forEach { constraintPreferences[it] = SocialPreferenceScore.STRONG_REJECTION }
         val random = Random(seed)
-        val evaluator = PreparedScoreEvaluator(profiles, ratings, socialPreferences, history, weights, isSmallClass, disciplinePairs)
-        fun score(layout: List<DeskAssignment>) = evaluator.total(layout)
 
         val incumbent = initialLayout?.filter { it.seats > 0 }?.takeIf { layout ->
             val ids = layout.flatMap { deskOccupantIds(it) }
@@ -881,13 +887,16 @@ object SeatMapOptimizer {
                 layout.all { deskOccupantIds(it).size <= it.seats && !hasForbiddenPairAtDesk(it, constraintPreferences) } &&
                 (slots == null || layout.map { Triple(it.row, it.column, it.seats) }.toSet() ==
                     slots.map { Triple(it.row, it.column, it.seats) }.toSet()) &&
-                rowRotationViolations(layout, profiles, history).isEmpty()
+                rowRotationViolations(layout, profiles, history, rotation).isEmpty()
         }
         var current = incumbent ?: if (slots != null) buildInitialLayoutFromSlots(students, constraintPreferences, random, slots)
         else buildInitialLayout(students, constraintPreferences, random, seatsPerDesk)
-        val rowCount = ((slots?.maxOfOrNull { it.row } ?: current.maxOf { it.row }) + 1)
+        val rows = availableRows(current)
+        val scoringHistory = rotationScoringHistory(history, profiles, rows.size, rotation)
+        val evaluator = PreparedScoreEvaluator(profiles, ratings, socialPreferences, scoringHistory, weights, isSmallClass, disciplinePairs)
+        fun score(layout: List<DeskAssignment>) = evaluator.total(layout)
         val allowedRows = students.associate { student ->
-            student.id to allowedRowsForStudent(student.id, profiles, history, rowCount)
+            student.id to allowedRowsForStudent(student.id, profiles, history, rows, rotation)
         }
         current = arrangeWithRowRotation(current, students, allowedRows, constraintPreferences, random)
         var currentScore = score(current)
@@ -1040,20 +1049,22 @@ object SeatMapOptimizer {
         profiles: Map<String, StudentProfile>, ratings: Map<String, RepresentativeRating>,
         preferences: Map<Pair<String, String>, SocialPreferenceScore>, history: List<SeatMapHistoryRecord>,
         weights: OptimizerWeights, isSmallClass: Boolean,
-        disciplinePairs: Set<Pair<String, String>> = emptySet(), maxCandidates: Int = 3000
+        disciplinePairs: Set<Pair<String, String>> = emptySet(), maxCandidates: Int = 3000,
+        rotation: SeatMapRotationPolicy = SeatMapRotationPolicy()
     ): List<DeskAssignment> {
         require(deskIndices.distinct().size == deskIndices.size && deskIndices.size in 2..3)
         require(deskIndices.all { it in layout.indices && layout[it].seats in 1..3 })
         if (maxCandidates <= 0) return layout
         val constraints = preferences.toMutableMap()
-        recentCompanionPairs(history).forEach { constraints[it] = SocialPreferenceScore.STRONG_REJECTION }
-        val rows = (layout.maxOfOrNull { it.row } ?: 0) + 1
+        recentCompanionPairs(history, rotation.companionWaitMaps).forEach { constraints[it] = SocialPreferenceScore.STRONG_REJECTION }
+        val rows = availableRows(layout)
         val ids = deskIndices.flatMap { index ->
             val desk = layout[index]
             deskOccupantIds(desk) + List(desk.seats - deskOccupantIds(desk).size) { null }
         }.sortedWith(compareBy<String?> { it == null }.thenBy { it })
-        val allowed = ids.filterNotNull().associateWith { allowedRowsForStudent(it, profiles, history, rows) }
-        val evaluator = PreparedScoreEvaluator(profiles, ratings, preferences, history, weights, isSmallClass, disciplinePairs)
+        val allowed = ids.filterNotNull().associateWith { allowedRowsForStudent(it, profiles, history, rows, rotation) }
+        val scoringHistory = rotationScoringHistory(history, profiles, rows.size, rotation)
+        val evaluator = PreparedScoreEvaluator(profiles, ratings, preferences, scoringHistory, weights, isSmallClass, disciplinePairs)
         var best = layout
         var bestScore = evaluator.total(layout)
         var bestSatisfaction = voteSatisfaction(layout, preferences)
@@ -1117,59 +1128,80 @@ object SeatMapOptimizer {
         return rotated
     }
 
-    /** Coppie vietate fino allo stesso giorno di calendario, tre mesi dopo la pubblicazione. */
+    /** Ogni coppia torna disponibile dopo il suo numero di pubblicazioni intermedie. */
     fun recentCompanionPairs(
         history: List<SeatMapHistoryRecord>,
-        todayIso: String = circolareplus.util.today().toIso()
-    ): Set<Pair<String, String>> {
-        val now = circolareplus.util.parseIsoDate(todayIso) ?: error("Data non valida")
-        val todayKey = now.year * 10000 + now.month * 100 + now.day
-        return history.filter { record ->
-            val date = record.publishedAt?.take(10)?.let { circolareplus.util.parseIsoDate(it) }
-                ?: return@filter false
-            val monthIndex = date.year * 12 + date.month - 1 + 3
-            val year = monthIndex / 12
-            val month = monthIndex % 12 + 1
-            val day = minOf(date.day, circolareplus.util.daysInMonth(year, month))
-            val startKey = date.year * 10000 + date.month * 100 + date.day
-            todayKey >= startKey && todayKey < year * 10000 + month * 100 + day
-        }.flatMap { it.pairs }.flatMap { listOf(it, it.second to it.first) }.toSet()
+        mapsToWait: Int = SeatMapRotationPolicy().companionWaitMaps
+    ): Set<Pair<String, String>> = buildSet {
+        history.filter { it.mapIndex in 1..mapsToWait }.forEach { record ->
+            record.pairs.forEach { pair ->
+                add(pair)
+                add(pair.second to pair.first)
+            }
+        }
     }
 
     fun recentCompanionViolations(
         layout: List<DeskAssignment>, history: List<SeatMapHistoryRecord>,
-        todayIso: String = circolareplus.util.today().toIso()
+        mapsToWait: Int = SeatMapRotationPolicy().companionWaitMaps
     ): List<Pair<String, String>> {
-        val blocked = recentCompanionPairs(history, todayIso)
+        val blocked = recentCompanionPairs(history, mapsToWait)
         return layout.flatMap { deskPairIds(it) }.filter { it in blocked }
     }
 
-    /** Una fila visitata a ottobre torna disponibile a febbraio con quattro file,
-     * a gennaio per un Priority Pass con tre file. Si contano i mesi di calendario. */
+    private fun availableRows(layout: List<DeskAssignment>): Set<Int> =
+        layout.filter { it.seats > 0 }.mapTo(mutableSetOf()) { it.row }
+
+    private fun mapsInRowCycle(history: List<SeatMapHistoryRecord>, rowCount: Int, rotation: SeatMapRotationPolicy): Int {
+        if (rowCount <= 1) return 0
+        val cycle = (rotation.rowCycleMaps ?: rowCount).coerceIn(1, rowCount)
+        val published = history.maxOfOrNull { it.publicationNumber ?: it.mapIndex } ?: 0
+        return published % cycle
+    }
+
+    internal fun rotationScoringHistory(
+        history: List<SeatMapHistoryRecord>, profiles: Map<String, StudentProfile>,
+        rowCount: Int, rotation: SeatMapRotationPolicy
+    ): List<SeatMapHistoryRecord> {
+        val activeMaps = mapsInRowCycle(history, rowCount, rotation)
+        return history.map { record ->
+            val deskAssignments = if (record.mapIndex <= activeMaps) record.deskAssignments
+                else record.deskAssignments.filterKeys { profiles[it]?.priorityPass == true }
+            record.copy(deskAssignments = deskAssignments)
+        }
+    }
+
     internal fun allowedRowsForStudent(
         studentId: String,
         profiles: Map<String, StudentProfile>,
         history: List<SeatMapHistoryRecord>,
-        rowCount: Int,
-        todayIso: String = circolareplus.util.today().toIso()
+        rows: Set<Int>,
+        rotation: SeatMapRotationPolicy = SeatMapRotationPolicy(),
+        todayIso: String? = null
     ): Set<Int> {
-        val cycle = if (profiles[studentId]?.priorityPass == true) minOf(rowCount, MAX_PRIORITY_ROW + 1) else rowCount
-        val now = circolareplus.util.parseIsoDate(todayIso) ?: error("Data di rotazione non valida")
+        if (profiles[studentId]?.priorityPass != true) {
+            val activeMaps = mapsInRowCycle(history, rows.size, rotation)
+            return rows - history.filter { it.mapIndex in 1..activeMaps }
+                .mapNotNull { it.deskAssignments[studentId]?.first }.toSet()
+        }
+        val priorityRows = rows.filterTo(mutableSetOf()) { it <= MAX_PRIORITY_ROW }
+        val now = (if (todayIso == null) circolareplus.util.today() else circolareplus.util.parseIsoDate(todayIso)) ?: error("Data di rotazione non valida")
         val recentRows = history.mapNotNull { record ->
             val date = record.publishedAt?.take(10)?.let { circolareplus.util.parseIsoDate(it) }
-                ?: return@mapNotNull null // Le vecchie bozze senza data non permettono di dedurre un mese.
+                ?: return@mapNotNull null
             val months = (now.year - date.year) * 12 + now.month - date.month
-            if (months in 0 until cycle) record.deskAssignments[studentId]?.first else null
+            if (months in 0 until priorityRows.size) record.deskAssignments[studentId]?.first else null
         }.toSet()
-        return (0 until cycle).filterTo(mutableSetOf()) { it !in recentRows }
+        return priorityRows - recentRows
     }
 
     fun rowRotationViolations(
-        layout: List<DeskAssignment>, profiles: Map<String, StudentProfile>, history: List<SeatMapHistoryRecord>
+        layout: List<DeskAssignment>, profiles: Map<String, StudentProfile>, history: List<SeatMapHistoryRecord>,
+        rotation: SeatMapRotationPolicy = SeatMapRotationPolicy()
     ): List<String> {
-        val rowCount = (layout.maxOfOrNull { it.row } ?: return emptyList()) + 1
+        val rows = availableRows(layout)
         return layout.flatMap { desk -> deskOccupantIds(desk).filter {
-            desk.row !in allowedRowsForStudent(it, profiles, history, rowCount)
+            desk.row !in allowedRowsForStudent(it, profiles, history, rows, rotation)
         } }.distinct()
     }
 

@@ -46,6 +46,11 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import circolareplus.algorithms.DeskAssignment
 import circolareplus.algorithms.OptimizerWeights
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import circolareplus.algorithms.SeatMapRotationPolicy
+import circolareplus.design.AilaPillTextField
+import kotlinx.coroutines.CancellationException
 import circolareplus.algorithms.SeatMapOptimizer
 import circolareplus.design.AilaIconButton
 import circolareplus.design.AilaCard
@@ -96,7 +101,9 @@ fun SeatMapScreen(
     generationCompleted: Int = 0,
     onUseCurrentResult: (() -> Unit)? = null,
     generatedProposalsReady: Boolean = false,
-    onShowGeneratedProposals: () -> Unit = {}
+    onShowGeneratedProposals: () -> Unit = {},
+    loadRotationPolicy: suspend () -> SeatMapRotationPolicy = { SeatMapRotationPolicy() },
+    onSaveRotationPolicy: suspend (SeatMapRotationPolicy) -> SeatMapRotationPolicy = { it }
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var showHistory by remember { mutableStateOf(false) }
@@ -379,6 +386,10 @@ fun SeatMapScreen(
                     )
                     Spacer(modifier = Modifier.height(AppTheme.Space12))
                 }
+
+                Spacer(Modifier.height(AppTheme.Space12))
+                SeatMapRotationSettings(loadRotationPolicy, onSaveRotationPolicy, isGeneratingProposals)
+                Spacer(Modifier.height(AppTheme.Space12))
 
                 // Pesi dell'algoritmo. **C'era un solo slider per tre pesi**: quello del peso
                 // sociale. Gli altri due comparivano nell'etichetta ma non erano regolabili in
@@ -1148,5 +1159,83 @@ private fun StepperButton(text: String, description: String, enabled: Boolean, o
             style = MaterialTheme.typography.titleMedium,
             color = if (enabled) AppTheme.TintBlueInk else AppTheme.TextFaint
         )
+    }
+}
+
+@Composable
+private fun SeatMapRotationSettings(
+    load: suspend () -> SeatMapRotationPolicy,
+    save: suspend (SeatMapRotationPolicy) -> SeatMapRotationPolicy,
+    generating: Boolean
+) {
+    var saved by remember { mutableStateOf<SeatMapRotationPolicy?>(null) }
+    var rows by remember { mutableStateOf("") }
+    var pairs by remember { mutableStateOf("") }
+    var saving by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var retry by remember { mutableStateOf(0) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(retry) {
+        try {
+            val policy = load()
+            saved = policy
+            rows = policy.rowCycleMaps?.toString().orEmpty()
+            pairs = policy.companionWaitMaps.toString()
+            error = null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            error = "Impossibile caricare le regole di rotazione."
+        }
+    }
+    AilaCard {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Rotazione", style = MaterialTheme.typography.titleMedium, color = AppTheme.TextDark)
+            error?.let { Text(it, color = AppTheme.TintRedInk) }
+            val policy = saved
+            if (policy == null) {
+                if (error == null) Text("Caricamento regole…", color = AppTheme.TextMuted)
+                else AilaTextButton({ retry++ }) { Text("Riprova") }
+            } else {
+                Text("Mappe per ciclo delle file", style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
+                AilaPillTextField(
+                    value = rows, onValueChange = { rows = it.filter(Char::isDigit).take(2) },
+                    placeholder = "Automatico", modifier = Modifier.fillMaxWidth(),
+                    singleLine = true, enabled = !saving && !generating, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+                Text("Lascia vuoto per usare il numero di file. Il ciclo usa al massimo le file disponibili.",
+                    color = AppTheme.TextMuted, style = MaterialTheme.typography.bodySmall)
+                Text("Mappe da aspettare per le coppie", style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
+                AilaPillTextField(
+                    value = pairs, onValueChange = { pairs = it.filter(Char::isDigit).take(2) },
+                    placeholder = "4", modifier = Modifier.fillMaxWidth(),
+                    singleLine = true, enabled = !saving && !generating, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+                val rowCount = rows.toIntOrNull()
+                val pairCount = pairs.toIntOrNull()
+                val updated = if ((rows.isEmpty() || (rowCount != null && rowCount in 1..30)) && pairCount != null && pairCount in 0..30) {
+                    SeatMapRotationPolicy(rowCount, pairCount)
+                } else null
+                AilaPrimaryButton(
+                    "Salva rotazione",
+                    enabled = updated != null && updated != policy && !saving && !generating,
+                    onClick = {
+                        if (updated != null) scope.launch {
+                            saving = true
+                            error = null
+                            try {
+                                saved = save(updated)
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (_: Exception) {
+                                error = "Impossibile salvare le regole di rotazione."
+                            } finally {
+                                saving = false
+                            }
+                        }
+                    }
+                )
+            }
+        }
     }
 }

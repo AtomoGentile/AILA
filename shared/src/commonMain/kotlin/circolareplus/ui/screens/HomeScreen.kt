@@ -119,9 +119,8 @@ fun HomeScreen(
         allConflicts.filter { it.date in todayDate.toIso()..lastBriefDate }
     }
     val wide = circolareplus.design.LocalWideLayout.current
-    val briefPreviewLimit = if (AppTheme.isNothing) 2 else 3
-    val nextEvents = remember(calendarEvents, wide, briefItems, briefPreviewLimit) {
-        val events = calendarPreviewWithoutBriefDuplicates(calendarEvents, briefItems.take(briefPreviewLimit))
+    val nextEvents = remember(calendarEvents, wide, briefItems) {
+        val events = calendarPreviewWithoutBriefDuplicates(calendarEvents, briefItems)
         upcomingEvents(events, limit = if (wide) 6 else 3)
     }
     val recentCirculars = remember(circulars, wide, aiEnabled) {

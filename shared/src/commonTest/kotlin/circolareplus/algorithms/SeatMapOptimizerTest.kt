@@ -34,10 +34,20 @@ class SeatMapOptimizerTest {
 
 
     @Test
-    fun fourRowsRotateThroughOtherRowsBeforeReturningInFourthMonth() {
-        val history = listOf(SeatMapHistoryRecord(1, emptySet(), mapOf("s1" to (0 to 0)), "2026-10-30"))
-        assertEquals(setOf(1, 2, 3), SeatMapOptimizer.allowedRowsForStudent("s1", emptyMap(), history, 4, "2027-01-31"))
-        assertEquals(setOf(0, 1, 2, 3), SeatMapOptimizer.allowedRowsForStudent("s1", emptyMap(), history, 4, "2027-02-01"))
+    fun rowCycleResetReleasesAllRowsButKeepsPriorityPassHistory() {
+        val rows = setOf(0, 1, 2, 3)
+        val profiles = mapOf("priority" to StudentProfile("priority", 170, priorityPass = true))
+        val history = listOf(
+            SeatMapHistoryRecord(1, emptySet(), mapOf("s1" to (1 to 0), "priority" to (1 to 1)), "2026-10-30", 8),
+            SeatMapHistoryRecord(2, emptySet(), mapOf("s1" to (0 to 0), "priority" to (0 to 1)), "2026-09-30", 7)
+        )
+        val policy = SeatMapRotationPolicy(rowCycleMaps = 2, companionWaitMaps = 4)
+        assertEquals(setOf(1, 2, 3), SeatMapOptimizer.allowedRowsForStudent("s1", profiles,
+            listOf(history[1].copy(mapIndex = 1)), rows, policy))
+        assertEquals(rows, SeatMapOptimizer.allowedRowsForStudent("s1", profiles, history, rows, policy))
+        assertEquals(setOf(2), SeatMapOptimizer.allowedRowsForStudent("priority", profiles, history, rows, policy, "2026-11-01"))
+        val scoring = SeatMapOptimizer.rotationScoringHistory(history, profiles, rows.size, policy)
+        assertTrue(scoring.all { it.deskAssignments.keys == setOf("priority") })
     }
 
     @Test
@@ -47,13 +57,13 @@ class SeatMapOptimizerTest {
             SeatMapHistoryRecord(2, emptySet(), mapOf("s1" to (0 to 0)), "2026-08-31"),
             SeatMapHistoryRecord(1, emptySet(), mapOf("s1" to (1 to 0)), "2026-09-30")
         )
-        assertEquals(setOf(2), SeatMapOptimizer.allowedRowsForStudent("s1", profiles, history, 4, "2026-10-01"))
-        assertEquals(setOf(0, 2), SeatMapOptimizer.allowedRowsForStudent("s1", profiles, history, 4, "2026-11-01"))
-        assertEquals(setOf(0, 1, 2), SeatMapOptimizer.allowedRowsForStudent("s1", profiles, history, 4, "2026-12-01"))
+        assertEquals(setOf(2), SeatMapOptimizer.allowedRowsForStudent("s1", profiles, history, setOf(0, 1, 2, 3), todayIso = "2026-10-01"))
+        assertEquals(setOf(0, 2), SeatMapOptimizer.allowedRowsForStudent("s1", profiles, history, setOf(0, 1, 2, 3), todayIso = "2026-11-01"))
+        assertEquals(setOf(0, 1, 2), SeatMapOptimizer.allowedRowsForStudent("s1", profiles, history, setOf(0, 1, 2, 3), todayIso = "2026-12-01"))
     }
 
     @Test
-    fun optimizerHonorsFourMonthCycleForEveryStudentAcrossSeeds() {
+    fun optimizerHonorsFourMapCycleForEveryStudentAcrossSeeds() {
         val students = (0 until 8).map { User("s$it", "Nome", "$it", "s$it") }
         val now = circolareplus.util.today()
         val history = (1..3).map { ago ->

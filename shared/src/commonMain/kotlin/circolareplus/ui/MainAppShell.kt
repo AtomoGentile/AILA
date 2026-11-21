@@ -51,6 +51,7 @@ import circolareplus.algorithms.OptimizerWeights
 import circolareplus.algorithms.SeatMapHistoryRecord
 import circolareplus.algorithms.SeatMapOptimizer
 import circolareplus.algorithms.SeatMapProposal
+import circolareplus.algorithms.SeatMapRotationPolicy
 import circolareplus.domain.model.RepresentativeRating
 import circolareplus.data.AppContainer
 import circolareplus.data.remote.ConnectivityState
@@ -1094,11 +1095,8 @@ fun MainAppShell(
 
     // --- Stato Calendario --------------------------------------------------------------
     var calendarEvents by remember { mutableStateOf<List<CalendarEvent>>(emptyList()) }
-    val homeBriefItems = remember(briefItems, practices, dismissedPractices, calendarEvents) {
-        circolareplus.ui.screens.mergeBureaucracyBrief(
-            briefItems, practices, dismissedPractices,
-            circolareplus.ui.screens.upcomingEvents(calendarEvents, limit = calendarEvents.size)
-        )
+    val homeBriefItems = remember(briefItems, practices, dismissedPractices) {
+        circolareplus.ui.screens.mergeBureaucracyBrief(briefItems, practices, dismissedPractices)
     }
     var isCalendarLoading by remember { mutableStateOf(false) }
     var calendarLoadedOnce by remember(currentUser?.id) { mutableStateOf(false) }
@@ -1284,6 +1282,7 @@ fun MainAppShell(
     var seatMapOptimizerDisciplinePairs by remember { mutableStateOf<Set<Pair<String, String>>>(emptySet()) }
     var seatMapOptimizerSocialMap by remember { mutableStateOf<Map<Pair<String, String>, SocialPreferenceScore>>(emptyMap()) }
     var seatMapOptimizerHistory by remember { mutableStateOf<List<SeatMapHistoryRecord>>(emptyList()) }
+    var seatMapOptimizerRotation by remember { mutableStateOf(SeatMapRotationPolicy()) }
     var seatMapOptimizerWeights by remember { mutableStateOf(OptimizerWeights()) }
     var seatMapOptimizerIsSmallClass by remember { mutableStateOf(false) }
     // Compagni veri + fantocci, per l'ottimizzatore e per la generazione: un fantoccio occupa un
@@ -1312,6 +1311,7 @@ fun MainAppShell(
         seatMapOptimizerDisciplinePairs = draft.disciplinePairs
         seatMapOptimizerSocialMap = draft.socialPreferences
         seatMapOptimizerHistory = draft.history
+        seatMapOptimizerRotation = draft.rotation
         seatMapOptimizerWeights = draft.weights
         seatMapOptimizerIsSmallClass = draft.isSmallClass
     }
@@ -3524,7 +3524,7 @@ fun MainAppShell(
                                 onRefreshBrief = { briefRefreshTrigger++ },
                                 onDismissBrief = dismissBrief@{ item ->
                                     if (item.kind == AilaBriefKind.BUREAUCRACY) {
-                                        dismissedPractices = dismissedPractices + item.sourceId
+                                        dismissedPractices = dismissedPractices + item.revision
                                         AppContainer.settings.dismissedBureaucracyPracticeIds = dismissedPractices
                                         return@dismissBrief
                                     }
@@ -3825,6 +3825,8 @@ fun MainAppShell(
                                                     generatedSeatMapProposals = emptyList()
                                                     updateSeatMapDraft(null)
                                                 },
+                                                loadRotationPolicy = { AppContainer.seatMapRepository.getOptimizerInput().rotation },
+                                                onSaveRotationPolicy = { AppContainer.seatMapRepository.saveRotationPolicy(it) },
                                                 onGenerateProposals = { weights, seatsPerDesk, rowSeats, customDeskSlots ->
                                                     coroutineScope.launch {
                                                         if (isGeneratingProposals || generatedSeatMapProposals.isNotEmpty()) return@launch
@@ -3845,8 +3847,8 @@ fun MainAppShell(
                                                             try {
                                                                 // Una bozza conserva gli input di calcolo, mai un'autorità
                                                                 // sullo storico: un altro rappresentante può aver pubblicato.
-                                                                val publishedHistory = AppContainer.seatMapRepository.getHistoryForOptimizer()
-                                                                if (draft.history == publishedHistory) {
+                                                                val (publishedHistory, policy) = AppContainer.seatMapRepository.getOptimizerInput()
+                                                                if (draft.history == publishedHistory && draft.rotation == policy) {
                                                                     restoreSeatMapDraft(draft)
                                                                     generatedSeatMapProposals = draft.proposals
                                                                     return@launch
@@ -3886,12 +3888,13 @@ fun MainAppShell(
                                                                     emptySet()
                                                                 }
                                                             }
-                                                            val (ratings, matrix, history) = coroutineScope {
+                                                            val (ratings, matrix, optimizerInput) = coroutineScope {
                                                                 val ratingsDeferred = async { AppContainer.ratingsRepository.listRatings() }
                                                                 val matrixDeferred = async { AppContainer.preferencesRepository.matrixForAlgorithm().matrix }
-                                                                val historyDeferred = async { AppContainer.seatMapRepository.getHistoryForOptimizer() }
+                                                                val historyDeferred = async { AppContainer.seatMapRepository.getOptimizerInput() }
                                                                 Triple(ratingsDeferred.await(), matrixDeferred.await(), historyDeferred.await())
                                                             }
+                                                            val (history, rotation) = optimizerInput
                                                             val disciplinePairs = disciplinePairsDeferred.await()
                                                             val ratingsMap = ratings.associate { rating ->
                                                                 rating.studentId to circolareplus.domain.model.RepresentativeRating(
@@ -3917,6 +3920,7 @@ fun MainAppShell(
                                                             seatMapOptimizerDisciplinePairs = disciplinePairs
                                                             seatMapOptimizerSocialMap = socialMap
                                                             seatMapOptimizerHistory = history
+                                                            seatMapOptimizerRotation = rotation
                                                             seatMapOptimizerWeights = weights
                                                             seatMapOptimizerIsSmallClass = seatMapGenerationStudents.size < 22
                                                             val computed = withContext(Dispatchers.Default) {
@@ -3926,6 +3930,7 @@ fun MainAppShell(
                                                                     ratings = ratingsMap,
                                                                     socialPreferences = socialMap,
                                                                     history = history,
+                                                                    rotation = rotation,
                                                                     weights = weights,
                                                                     seatsPerDesk = seatsPerDesk,
                                                                     disciplinePairs = disciplinePairs,
@@ -3946,10 +3951,15 @@ fun MainAppShell(
                                                             // stesse tre mappe invece di ricalcolare. Il salvataggio
                                                             // non deve impedire il flusso: se proprio non si puo' scrivere,
                                                             // le proposte restano quelle di sempre (in memoria, volatile).
+                                                            val retained = draft?.proposals.orEmpty().filter { proposal ->
+                                                                proposal.id in draft?.retainedProposalIds.orEmpty() &&
+                                                                    SeatMapOptimizer.rowRotationViolations(proposal.assignments, profiles, history, rotation).isEmpty() &&
+                                                                    SeatMapOptimizer.recentCompanionViolations(proposal.assignments, history, rotation.companionWaitMaps).isEmpty()
+                                                            }
                                                             val draftData = circolareplus.data.local.SeatMapProposalsDraft(
                                                                 requestedDeskSlots = requestedSlots,
-                                                                retainedProposalIds = draft?.retainedProposalIds.orEmpty(),
-                                                                proposals = (draft?.proposals.orEmpty().filter { it.id in draft?.retainedProposalIds.orEmpty() } + computed)
+                                                                retainedProposalIds = retained.mapTo(mutableSetOf()) { it.id },
+                                                                proposals = (retained + computed)
                                                                     .sortedWith(circolareplus.algorithms.SeatMapRanking.bestFirst),
                                                                 seatsPerDesk = seatsPerDesk,
                                                                 profiles = profiles,
@@ -3957,6 +3967,7 @@ fun MainAppShell(
                                                                 disciplinePairs = disciplinePairs,
                                                                 socialPreferences = socialMap,
                                                                 history = history,
+                                                                rotation = rotation,
                                                                 weights = weights,
                                                                 isSmallClass = seatMapOptimizerIsSmallClass
                                                             )
@@ -5412,7 +5423,13 @@ fun MainAppShell(
                                         try {
                                             val students = seatMapGenerationStudents.toList()
                                             val expectedIds = students.map { it.id }.toSet()
-                                            val retained = draft.proposals.filter { it.id in draft.retainedProposalIds }
+                                            val (latestHistory, rotation) = AppContainer.seatMapRepository.getOptimizerInput()
+                                            val retained = draft.proposals.filter { proposal ->
+                                                proposal.id in draft.retainedProposalIds &&
+                                                    SeatMapOptimizer.rowRotationViolations(proposal.assignments, draft.profiles, latestHistory, rotation).isEmpty() &&
+                                                    SeatMapOptimizer.recentCompanionViolations(proposal.assignments, latestHistory, rotation.companionWaitMaps).isEmpty()
+                                            }
+                                            val retainedIds = retained.mapTo(mutableSetOf()) { it.id }
                                             check(retained.all { proposal ->
                                                 proposal.assignments.flatMap {
                                                     listOfNotNull(it.studentAId, it.studentBId, it.studentCId)
@@ -5421,12 +5438,11 @@ fun MainAppShell(
                                             val slots = draft.requestedDeskSlots ?: draft.proposals.firstOrNull()?.assignments?.map {
                                                 SeatMapOptimizer.DeskSlot(it.row, it.column, it.seats)
                                             }
-                                            val latestHistory = AppContainer.seatMapRepository.getHistoryForOptimizer()
                                             val generated = withContext(Dispatchers.Default) {
                                                 AppContainer.seatMapRepository.generateThreeProposals(
                                                     students = students, profiles = draft.profiles,
                                                     ratings = draft.ratings, socialPreferences = draft.socialPreferences,
-                                                    history = latestHistory, weights = draft.weights,
+                                                    history = latestHistory, rotation = rotation, weights = draft.weights,
                                                     seatsPerDesk = draft.seatsPerDesk,
                                                     disciplinePairs = draft.disciplinePairs, customDeskSlots = slots,
                                                     previousProposals = draft.proposals,
@@ -5434,7 +5450,7 @@ fun MainAppShell(
                                                     onBest = { best ->
                                                         withContext(Dispatchers.Main) {
                                                             val kept = savedSeatMapDraft?.proposals.orEmpty()
-                                                                .filter { it.id in draft.retainedProposalIds }
+                                                                .filter { it.id in retainedIds }
                                                             proposalOptions = (kept + best).distinctBy { it.id }
                                                                 .sortedWith(circolareplus.algorithms.SeatMapRanking.bestFirst)
                                                         }
@@ -5447,7 +5463,7 @@ fun MainAppShell(
                                             val ranking = circolareplus.algorithms.SeatMapRanking
                                             val oldBest = draft.proposals.minWithOrNull(ranking.bestFirst)
                                             val newBest = generated.minWithOrNull(ranking.bestFirst)
-                                            seatMapSearchSummary = if (oldBest != null && newBest != null && latestHistory == draft.history) {
+                                            seatMapSearchSummary = if (oldBest != null && newBest != null && latestHistory == draft.history && rotation == draft.rotation) {
                                                 when {
                                                     newBest.totalScore > oldBest.totalScore -> "Punteggio migliore: ${newBest.totalScore.toInt()} (+${(newBest.totalScore - oldBest.totalScore).toInt()})"
                                                     ranking.compare(newBest, oldBest) > 0 -> {
@@ -5468,7 +5484,8 @@ fun MainAppShell(
                                                 .sortedWith(circolareplus.algorithms.SeatMapRanking.bestFirst)
                                             proposalOptions = combined
                                             seatMapOptimizerHistory = latestHistory
-                                            updateSeatMapDraft(draft.copy(proposals = combined, history = latestHistory))
+                                            seatMapOptimizerRotation = rotation
+                                            updateSeatMapDraft(draft.copy(proposals = combined, retainedProposalIds = retainedIds, history = latestHistory, rotation = rotation))
                                         } catch (e: Exception) {
                                             seatMapActionError = "Impossibile rigenerare: ${e.message}"
                                         } finally {
@@ -5556,6 +5573,18 @@ fun MainAppShell(
                         editingSeatMapProposal = null
                         originalSeatMapProposal = null
                     }
+                    LaunchedEffect(editingChosenProposalId, route == shellRoute) {
+                        if (route != shellRoute) return@LaunchedEffect
+                        try {
+                            val (history, rotation) = AppContainer.seatMapRepository.getOptimizerInput()
+                            seatMapOptimizerHistory = history
+                            seatMapOptimizerRotation = rotation
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            // La pubblicazione rilegge le regole e verifica lo storico dal server.
+                        }
+                    }
                     val editorBreakdown = remember(
                         currentAssignments,
                         seatMapOptimizerProfiles,
@@ -5563,6 +5592,7 @@ fun MainAppShell(
                         seatMapOptimizerSocialMap,
                         seatMapOptimizerHistory,
                         seatMapOptimizerWeights,
+                        seatMapOptimizerRotation,
                         seatMapOptimizerIsSmallClass,
                         seatMapOptimizerDisciplinePairs
                     ) {
@@ -5571,7 +5601,10 @@ fun MainAppShell(
                             profiles = seatMapOptimizerProfiles,
                             ratings = seatMapOptimizerRatings,
                             socialPreferences = seatMapOptimizerSocialMap,
-                            history = seatMapOptimizerHistory,
+                            history = SeatMapOptimizer.rotationScoringHistory(
+                                seatMapOptimizerHistory, seatMapOptimizerProfiles,
+                                currentAssignments.filter { it.seats > 0 }.map { it.row }.distinct().size, seatMapOptimizerRotation
+                            ),
                             weights = seatMapOptimizerWeights,
                             isSmallClass = seatMapOptimizerIsSmallClass,
                             disciplinePairs = seatMapOptimizerDisciplinePairs
@@ -5585,13 +5618,21 @@ fun MainAppShell(
                             seatMapDummies.associateBy { it.id }.mapValues { it.value.asUser() }
                     }
 
-                    val rowRotationViolations = remember(currentAssignments, seatMapOptimizerProfiles, seatMapOptimizerHistory) {
-                        SeatMapOptimizer.rowRotationViolations(currentAssignments, seatMapOptimizerProfiles, seatMapOptimizerHistory)
-                    }
-                    val rotationWarning = rowRotationViolations.takeIf { it.isNotEmpty() }?.let { ids ->
-                        "Rotazione delle file non rispettata: " + ids.joinToString(", ") { id ->
-                            editorStudentsMap[id]?.let { "${it.firstName} ${it.lastName}" } ?: id
-                        } + ". Sposta questi studenti in una fila consentita prima di pubblicare."
+                    val rotationWarning = remember(currentAssignments, seatMapOptimizerProfiles, seatMapOptimizerHistory, seatMapOptimizerRotation) {
+                        val rowViolations = SeatMapOptimizer.rowRotationViolations(
+                            currentAssignments, seatMapOptimizerProfiles, seatMapOptimizerHistory, seatMapOptimizerRotation
+                        )
+                        val pairViolations = SeatMapOptimizer.recentCompanionViolations(
+                            currentAssignments, seatMapOptimizerHistory, seatMapOptimizerRotation.companionWaitMaps
+                        )
+                        when {
+                            rowViolations.isNotEmpty() -> "Rotazione delle file non rispettata: " +
+                                rowViolations.joinToString(", ") { id ->
+                                    editorStudentsMap[id]?.let { "${it.firstName} ${it.lastName}" } ?: id
+                                }
+                            pairViolations.isNotEmpty() -> "Alcune coppie non hanno ancora aspettato ${seatMapOptimizerRotation.companionWaitMaps} mappe pubblicate."
+                            else -> null
+                        }
                     }
 
                     Column(modifier = Modifier.fillMaxSize()) {
@@ -5636,24 +5677,9 @@ fun MainAppShell(
                             },
                             onPublish = {
                                 coroutineScope.launch {
-                                    if (rotationWarning != null) {
-                                        seatMapActionError = rotationWarning
-                                        return@launch
-                                    }
                                     isGeneratingProposals = true
                                     try {
-                                        // Tra il calcolo e la pubblicazione un altro rappresentante
-                                        // può aver pubblicato: verifica sullo storico attuale del server.
-                                        val latestHistory = AppContainer.seatMapRepository.getHistoryForOptimizer()
-                                        seatMapOptimizerHistory = latestHistory
-                                        if (SeatMapOptimizer.rowRotationViolations(
-                                                currentAssignments, seatMapOptimizerProfiles, latestHistory
-                                            ).isNotEmpty()) {
-                                            savedSeatMapDraft?.let { updateSeatMapDraft(it.copy(history = latestHistory)) }
-                                            seatMapActionError = "Lo storico delle mappe pubblicate è cambiato: controlla la rotazione delle file prima di pubblicare."
-                                            return@launch
-                                        }
-                                        AppContainer.seatMapRepository.publish(currentAssignments)
+                                        AppContainer.seatMapRepository.publish(currentAssignments, seatMapOptimizerProfiles)
                                         seatMapAssignments = currentAssignments
                                         editingSeatMapProposal = null
                                         originalSeatMapProposal = null

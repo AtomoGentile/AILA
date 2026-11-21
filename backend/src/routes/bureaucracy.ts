@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { authMiddleware, requireRole, resolveClassId } from '../auth';
+import { isValidIsoDate } from '../dates';
 import { fullName } from '../names';
 import { inBackground } from '../services/background';
 import { notifyClass } from '../services/fcm';
@@ -16,7 +17,7 @@ bureaucracy.use('*', authMiddleware(), async (c, next) => {
 bureaucracy.get('/', async (c) => {
   const user = c.get('jwtPayload');
   const { results } = await c.env.DB.prepare(
-    `SELECT p.id, p.title, p.description, p.archived_at AS archivedAt, d.received
+    `SELECT p.id, p.title, p.description, p.due_date AS dueDate, p.archived_at AS archivedAt, d.received
      FROM bureaucracy_practices p
      LEFT JOIN bureaucracy_deliveries d ON d.practice_id = p.id AND d.student_id = ?
      WHERE p.class_id = ? AND (? = 1 OR p.archived_at IS NULL OR d.student_id IS NOT NULL)
@@ -26,6 +27,7 @@ bureaucracy.get('/', async (c) => {
     title: string;
     description: string;
     archivedAt: string | null;
+    dueDate: string | null;
     received: number | null;
   }>();
   return c.json({
@@ -38,20 +40,37 @@ bureaucracy.get('/', async (c) => {
 });
 
 bureaucracy.post('/', representativeOnly, async (c) => {
-  const body = await c.req.json<{ title?: unknown; description?: unknown } | null>();
+  const body = await c.req.json<{ title?: unknown; description?: unknown; dueDate?: unknown } | null>();
   const title = typeof body?.title === 'string' ? body.title.trim() : '';
   const description = typeof body?.description === 'string' ? body.description.trim() : '';
   if (!title || title.length > 120) return c.json({ error: 'Il titolo deve contenere da 1 a 120 caratteri.' }, 400);
   if (description.length > 1000 || (body?.description !== undefined && typeof body.description !== 'string')) {
     return c.json({ error: 'Le istruzioni possono contenere al massimo 1000 caratteri.' }, 400);
   }
+  const dueDate = body?.dueDate ?? null;
+  if (dueDate !== null && (typeof dueDate !== 'string' || !isValidIsoDate(dueDate))) {
+    return c.json({ error: 'Data di consegna non valida.' }, 400);
+  }
   const id = crypto.randomUUID();
   const classId = await resolveClassId(c);
   await c.env.DB.prepare(
-    'INSERT INTO bureaucracy_practices (id, class_id, title, description) VALUES (?, ?, ?, ?)'
-  ).bind(id, classId, title, description).run();
+    'INSERT INTO bureaucracy_practices (id, class_id, title, description, due_date) VALUES (?, ?, ?, ?, ?)'
+  ).bind(id, classId, title, description, dueDate).run();
   inBackground(c, notifyClass(c.env, 'Nuova pratica da consegnare', title, { action: 'bureaucracy_practice' }, classId));
   return c.json({ id }, 201);
+});
+
+bureaucracy.put('/:id/deadline', representativeOnly, async (c) => {
+  const body = await c.req.json<{ dueDate?: unknown } | null>().catch(() => null);
+  const dueDate = body?.dueDate;
+  if (dueDate !== null && (typeof dueDate !== 'string' || !isValidIsoDate(dueDate))) {
+    return c.json({ error: 'Data di consegna non valida.' }, 400);
+  }
+  const updated = await c.env.DB.prepare(
+    'UPDATE bureaucracy_practices SET due_date = ? WHERE id = ? AND class_id = ? AND archived_at IS NULL'
+  ).bind(dueDate, c.req.param('id'), await resolveClassId(c)).run();
+  if (!updated.meta.changes) return c.json({ error: 'Pratica attiva non trovata.' }, 404);
+  return c.json({ success: true });
 });
 
 bureaucracy.get('/:id/deliveries', representativeOnly, async (c) => {

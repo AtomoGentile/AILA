@@ -32,27 +32,59 @@ seatmap.get('/current', async (c) => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// GET /api/seat-map/history — Ultime 4 mappe e tutte quelle necessarie alla rotazione annuale
-// ---------------------------------------------------------------------------
-seatmap.get('/history', async (c) => {
-  // L'archivio consultabile conserva tutte le pubblicazioni; l'ottimizzatore usa
-  // soltanto le quattro più recenti e quelle necessarie alla rotazione annuale.
-  const archive = c.req.query('archive') === 'true';
-  const rows = await c.env.DB.prepare(
-    'SELECT id, map_index, layout_json, published_at FROM seat_map_history WHERE class_id = ?' +
-    (archive ? '' : " AND (map_index <= 4 OR published_at >= datetime('now', '-12 months'))") +
-    ' ORDER BY map_index ASC'
-  ).bind(await resolveClassId(c)).all<{ id: string; map_index: number; layout_json: string; published_at: string }>();
+interface RotationPolicy {
+  rowCycleMaps: number | null;
+  companionWaitMaps: number;
+}
 
+seatmap.get('/history', async (c) => {
+  const archive = c.req.query('archive') === 'true';
+  const optimizer = c.req.query('rotation') === 'true';
+  const classId = await resolveClassId(c);
+  type HistoryRow = {
+    id: string | null; map_index: number; layout_json: string; published_at: string;
+    rowCycleMaps?: number | null; companionWaitMaps?: number; publishedCount?: number;
+  };
+  const rows = optimizer
+    ? await c.env.DB.prepare(`WITH rotation_config AS (
+        SELECT id, seat_row_cycle AS rowCycleMaps, seat_companion_wait AS companionWaitMaps,
+          (SELECT COALESCE(MAX(map_index), 0) FROM seat_map_history WHERE class_id = classes.id) AS publishedCount
+        FROM classes WHERE id = ?
+      )
+      SELECT history.id, history.map_index, history.layout_json, history.published_at,
+        rotation_config.rowCycleMaps, rotation_config.companionWaitMaps, rotation_config.publishedCount
+      FROM rotation_config LEFT JOIN seat_map_history history ON history.class_id = rotation_config.id
+        AND (? OR history.map_index <= 30 OR history.published_at >= datetime('now', '-12 months'))
+      ORDER BY history.map_index ASC`).bind(classId, Number(archive)).all<HistoryRow>()
+    : await c.env.DB.prepare(
+        'SELECT id, map_index, layout_json, published_at FROM seat_map_history WHERE class_id = ?' +
+        (archive ? '' : " AND (map_index <= 4 OR published_at >= datetime('now', '-12 months'))") +
+        ' ORDER BY map_index ASC'
+      ).bind(classId).all<HistoryRow>();
+  const rotation = optimizer ? rows.results[0] : undefined;
   return c.json({
-    history: rows.results.map((r) => ({
+    history: rows.results.filter(r => r.id !== null).map((r) => ({
       id: r.id,
       mapIndex: r.map_index,
       layout: JSON.parse(r.layout_json),
       publishedAt: r.published_at,
     })),
+    ...(rotation && {
+      rotation: { rowCycleMaps: rotation.rowCycleMaps, companionWaitMaps: rotation.companionWaitMaps },
+      publishedCount: rotation.publishedCount
+    })
   });
+});
+
+seatmap.put('/rotation', requireRole('REPRESENTATIVE'), async (c) => {
+  const body = await c.req.json<RotationPolicy | null>().catch(() => null);
+  const validCount = (count: number, minimum: number) => Number.isInteger(count) && count >= minimum && count <= 30;
+  if (!body || (body.rowCycleMaps !== null && !validCount(body.rowCycleMaps, 1)) || !validCount(body.companionWaitMaps, 0)) {
+    return c.json({ error: 'Durata della rotazione non valida.' }, 400);
+  }
+  await c.env.DB.prepare('UPDATE classes SET seat_row_cycle = ?, seat_companion_wait = ? WHERE id = ?')
+    .bind(body.rowCycleMaps, body.companionWaitMaps, await resolveClassId(c)).run();
+  return c.json({ rowCycleMaps: body.rowCycleMaps, companionWaitMaps: body.companionWaitMaps });
 });
 
 // ---------------------------------------------------------------------------

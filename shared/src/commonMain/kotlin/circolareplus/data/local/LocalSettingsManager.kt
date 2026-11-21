@@ -827,5 +827,6 @@ data class SeatMapProposalsDraft(
     val socialPreferences: Map<Pair<String, String>, SocialPreferenceScore> = emptyMap(),
     val history: List<SeatMapHistoryRecord> = emptyList(),
     val weights: OptimizerWeights = OptimizerWeights(),
-    val isSmallClass: Boolean = false
+    val isSmallClass: Boolean = false,
+    val rotation: circolareplus.algorithms.SeatMapRotationPolicy = circolareplus.algorithms.SeatMapRotationPolicy()
 )

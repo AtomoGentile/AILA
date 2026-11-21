@@ -3,6 +3,7 @@ import { studyAudience } from '../services/studyAudience';
 // CIRCOLARE+ — Calendar Routes (/api/calendar/*)
 // =============================================================================
 
+import { isValidIsoDate } from '../dates';
 import { Hono } from 'hono';
 import type { Env, JWTPayload, EventCategory } from '../types';
 import { authMiddleware, requireRole, newUUID, resolveClassId } from '../auth';
@@ -16,11 +17,7 @@ function isValidEventTime(value: string): boolean {
   return range !== null && Number(range[1]) <= Number(range[2]);
 }
 
-function isValidIsoDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T00:00:00Z`);
-  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
-}
+
 
 
 const calendar = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();

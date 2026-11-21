@@ -13,6 +13,8 @@ it('isolates class deliveries, permits concurrent practices and freezes the arch
   const migration = readFileSync(new URL('../migrations/034_bureaucracy.sql', import.meta.url), 'utf8');
   db.exec(migration);
   db.exec(migration);
+  db.exec('ALTER TABLE classes DROP COLUMN seat_row_cycle; ALTER TABLE classes DROP COLUMN seat_companion_wait;');
+  db.exec(readFileSync(new URL('../migrations/035_seat_rotation_and_paperwork_deadlines.sql', import.meta.url), 'utf8'));
   db.exec("INSERT INTO classes (id, label) VALUES ('class-b', '5 B')");
 
   async function addUser(id: string, role: UserRole = 'STUDENT', classId = 'DEFAULT_CLASS') {
@@ -36,13 +38,22 @@ it('isolates class deliveries, permits concurrent practices and freezes the arch
   const outsider = await addUser('other', 'REPRESENTATIVE', 'class-b');
   expect((await call(student, 'POST', '', { title: 'Ricevuta' })).status).toBe(403);
   expect((await call(rep, 'POST', '', { title: '   ' })).status).toBe(400);
-  const first = await call(rep, 'POST', '', { title: ' Ricevuta ', description: ' Porta la stampa. ' });
+  const first = await call(rep, 'POST', '', { title: ' Ricevuta ', description: ' Porta la stampa. ', dueDate: '2026-12-07' });
   const second = await call(rep, 'POST', '', { title: 'Circolare firmata' });
   expect(first.status).toBe(201);
   expect(second.status).toBe(201);
   const id = (first.data as { id: string }).id;
   const deliveries = '/' + id + '/deliveries';
   const archive = '/' + id + '/archive';
+  const deadline = '/' + id + '/deadline';
+  expect((await call(rep)).data).toMatchObject({ practices: expect.arrayContaining([
+    expect.objectContaining({ id, dueDate: '2026-12-07' })
+  ]) });
+  expect((await call(student, 'PUT', deadline, { dueDate: null })).status).toBe(403);
+  expect((await call(outsider, 'PUT', deadline, { dueDate: null })).status).toBe(404);
+  expect((await call(rep, 'PUT', deadline, { dueDate: '2026-02-29' })).status).toBe(400);
+  expect((await call(rep, 'PUT', deadline, { dueDate: null })).status).toBe(200);
+  expect((await call(rep, 'PUT', deadline, { dueDate: '2026-12-09' })).status).toBe(200);
   expect((await call(student, 'GET', deliveries)).status).toBe(403);
   expect((await call(student, 'PUT', archive)).status).toBe(403);
   expect((await call(outsider, 'GET', deliveries)).status).toBe(404);
@@ -57,8 +68,8 @@ it('isolates class deliveries, permits concurrent practices and freezes the arch
   expect(own.data).toEqual({
     canManage: false,
     practices: expect.arrayContaining([
-      { id, title: 'Ricevuta', description: 'Porta la stampa.', archivedAt: null, received: true },
-      expect.objectContaining({ title: 'Circolare firmata', received: false, archivedAt: null })
+      { id, title: 'Ricevuta', description: 'Porta la stampa.', dueDate: '2026-12-09', archivedAt: null, received: true },
+      expect.objectContaining({ title: 'Circolare firmata', dueDate: null, received: false, archivedAt: null })
     ])
   });
   expect((await call(peer)).data).toMatchObject({ practices: expect.arrayContaining([expect.objectContaining({ id, received: false })]) });
@@ -67,6 +78,7 @@ it('isolates class deliveries, permits concurrent practices and freezes the arch
   expect((await call(rep, 'PUT', deliveries + '/studente', { received: false })).status).toBe(200);
   expect((await call(rep, 'PUT', deliveries + '/studente', { received: true })).status).toBe(200);
   expect((await call(rep, 'PUT', archive)).status).toBe(200);
+  expect((await call(rep, 'PUT', deadline, { dueDate: null })).status).toBe(404);
   const archived = db.prepare('SELECT archived_at FROM bureaucracy_practices WHERE id = ?').get(id);
   expect(archived?.archived_at).toEqual(expect.any(String));
   expect((await call(rep, 'PUT', archive)).status).toBe(200);

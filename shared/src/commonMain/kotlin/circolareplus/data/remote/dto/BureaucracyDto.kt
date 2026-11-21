@@ -14,7 +14,8 @@ internal data class BureaucracyPracticeDto(
     val title: String,
     val description: String,
     val archivedAt: String?,
-    val received: Boolean?
+    val received: Boolean?,
+    val dueDate: String? = null
 )
 
 @Serializable
@@ -24,7 +25,10 @@ internal data class BureaucracyDeliveriesDto(val deliveries: List<BureaucracyDel
 internal data class BureaucracyDeliveryDto(val studentId: String, val name: String, val received: Boolean)
 
 @Serializable
-internal data class CreateBureaucracyPracticeDto(val title: String, val description: String)
+internal data class CreateBureaucracyPracticeDto(val title: String, val description: String, val dueDate: String? = null)
+
+@Serializable
+internal data class BureaucracyDeadlineDto(val dueDate: String?)
 
 @Serializable
 internal data class SetBureaucracyDeliveryDto(val received: Boolean)

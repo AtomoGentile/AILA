@@ -14,30 +14,32 @@ class BureaucracyBriefTest {
         val deadline = CalendarEvent("first", "Autorizzazione gita", "2026-12-01", category = CalendarEventCategory.AVVISO)
         val later = deadline.copy(id = "later", date = "2026-12-10")
         val other = deadline.copy(id = "other", title = "Riunione")
-        val practice = BureaucracyPracticeDto("practice", " AUTORIZZAZIONE  GITA ", "", null, false)
+        val practice = BureaucracyPracticeDto("practice", " AUTORIZZAZIONE  GITA ", "", null, false, dueDate = deadline.date)
         val events = listOf(deadline, later, other)
-        val brief = mergeBureaucracyBrief(events.map(::briefEvent), listOf(practice), emptySet(), events)
+        val brief = mergeBureaucracyBrief(events.map(::briefEvent), listOf(practice), emptySet())
 
-        assertEquals(listOf("practice", "later", "other"), brief.map { it.sourceId })
+        assertEquals(listOf("practice", "other", "later"), brief.map { it.sourceId })
         assertEquals(AilaBriefKind.BUREAUCRACY, brief.first().kind)
         assertEquals(deadline.date, brief.first().date)
         assertEquals(listOf(later, other), calendarPreviewWithoutBriefDuplicates(events, brief))
     }
 
     @Test
-    fun keepsOnlyPendingPracticesAndWorksWithTheCalendarAlone() {
+    fun ordersByExplicitDeadlineAndLeavesUndatedOrDismissedPracticesOut() {
         val deadline = CalendarEvent("event", "Modulo", "2026-12-01", category = CalendarEventCategory.AVVISO)
-        val pending = BureaucracyPracticeDto("pending", "Modulo", "", null, false)
+        val pending = BureaucracyPracticeDto("pending", "Modulo", "", null, false, dueDate = deadline.date)
         val practices = listOf(
             pending,
             pending.copy(id = "archived", archivedAt = "2026-11-20"),
             pending.copy(id = "delivered", received = true),
-            pending.copy(id = "dismissed")
+            pending.copy(id = "dismissed"),
+            pending.copy(id = "undated", dueDate = null),
+            pending.copy(id = "earlier", dueDate = "2026-11-25")
         )
 
-        val brief = mergeBureaucracyBrief(emptyList(), practices, setOf("dismissed"), listOf(deadline))
-        assertEquals(listOf("pending"), brief.map { it.sourceId })
-        assertEquals(deadline.date, brief.single().date)
+        val brief = mergeBureaucracyBrief(emptyList(), practices, setOf("dismissed:${deadline.date}"))
+        assertEquals(listOf("earlier", "pending"), brief.map { it.sourceId })
+        assertEquals(deadline.date, brief.last().date)
         assertEquals(listOf(deadline), calendarPreviewWithoutBriefDuplicates(listOf(deadline), emptyList()))
     }
 

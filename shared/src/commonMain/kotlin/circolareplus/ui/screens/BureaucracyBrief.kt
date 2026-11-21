@@ -8,35 +8,31 @@ import circolareplus.domain.model.CalendarEvent
 internal fun mergeBureaucracyBrief(
     brief: List<AilaBriefItemDto>,
     practices: List<BureaucracyPracticeDto>,
-    dismissed: Set<String>,
-    upcoming: List<CalendarEvent> = emptyList()
+    dismissed: Set<String>
 ): List<AilaBriefItemDto> {
-    val pending = practices.filter { it.archivedAt == null && it.received == false && it.id !in dismissed }
-    if (pending.isEmpty()) return brief
-
-    val upcomingByTitle = upcoming.groupBy { paperworkTitleKey(it.title) }
-    val briefEventsByTitle = brief.filter { it.kind == AilaBriefKind.EVENT }.groupBy { paperworkTitleKey(it.title) }
-    val paperwork = pending.map { practice ->
-        val title = paperworkTitleKey(practice.title)
-        val date = (upcomingByTitle[title].orEmpty().map { it.date } +
-            briefEventsByTitle[title].orEmpty().mapNotNull { it.date }).minOrNull()
+    val paperwork = practices.mapNotNull { practice ->
+        val date = practice.dueDate ?: return@mapNotNull null
+        val revision = "${practice.id}:$date"
+        if (practice.archivedAt != null || practice.received != false || revision in dismissed) return@mapNotNull null
         AilaBriefItemDto(
-            id = "BUREAUCRACY:${practice.id}", revision = practice.id, kind = AilaBriefKind.BUREAUCRACY,
+            id = "BUREAUCRACY:${practice.id}", revision = revision, kind = AilaBriefKind.BUREAUCRACY,
             sourceId = practice.id, title = practice.title, message = "Da consegnare", actionLabel = "Apri la pratica",
             date = date
         )
     }
-    val coveredDates = paperwork.mapNotNull { item -> item.date?.let { paperworkTitleKey(item.title) to it } }.toSet()
-    return paperwork + brief.filterNot {
-        it.kind == AilaBriefKind.EVENT && (paperworkTitleKey(it.title) to it.date) in coveredDates
-    }
+    if (paperwork.isEmpty()) return brief
+
+    val coveredDates = paperwork.map { paperworkTitleKey(it.title) to it.date }.toSet()
+    val (timeline, otherItems) = brief.partition { it.kind == AilaBriefKind.EVENT }
+    val remainingEvents = timeline.filterNot { (paperworkTitleKey(it.title) to it.date) in coveredDates }
+    return (paperwork + remainingEvents).sortedWith(compareBy { it.date ?: "9999-12-31" }) + otherItems
 }
 
 internal fun calendarPreviewWithoutBriefDuplicates(
     events: List<CalendarEvent>,
-    visibleBrief: List<AilaBriefItemDto>
+    brief: List<AilaBriefItemDto>
 ): List<CalendarEvent> {
-    val coveredDates = visibleBrief.filter { it.kind == AilaBriefKind.BUREAUCRACY }
+    val coveredDates = brief.filter { it.kind == AilaBriefKind.BUREAUCRACY }
         .mapNotNull { item -> item.date?.let { paperworkTitleKey(item.title) to it } }.toSet()
     return events.filterNot { (paperworkTitleKey(it.title) to it.date) in coveredDates }
 }

@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS classes (
     -- Ore di lezione al giorno: 5 (8:00-13:00) o 6 (8:00-14:00). Lo sceglie il Rappresentante
     -- (alla registrazione o dalla Scheda Classe); il calendario offre solo le ore che la classe ha.
     lesson_hours INTEGER NOT NULL DEFAULT 6 CHECK (lesson_hours IN (5, 6)),
+    seat_row_cycle INTEGER CHECK (seat_row_cycle BETWEEN 1 AND 30),
+    seat_companion_wait INTEGER NOT NULL DEFAULT 4 CHECK (seat_companion_wait BETWEEN 0 AND 30),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -806,6 +808,7 @@ CREATE TABLE IF NOT EXISTS bureaucracy_practices (
     class_id TEXT NOT NULL REFERENCES classes(id),
     title TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
+    due_date TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     archived_at TEXT
 );

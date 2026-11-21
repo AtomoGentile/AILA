@@ -804,6 +804,29 @@ describe('storico delle mappe pubblicate', () => {
     expect((await call('GET', '/api/seat-map/history?archive=true', undefined, rep)).json.history).toHaveLength(7);
   });
 
+  it('salva le regole per classe e conta anche le pubblicazioni fuori dalla finestra di calendario', async () => {
+    const { rep, student } = await setup();
+    const history = '/api/seat-map/history?rotation=true';
+    const rotation = '/api/seat-map/rotation';
+    const policy = { rowCycleMaps: 3, companionWaitMaps: 7 };
+    expect((await call('GET', history, undefined, student)).json)
+      .toEqual({ history: [], rotation: { rowCycleMaps: null, companionWaitMaps: 4 }, publishedCount: 0 });
+    expect((await call('PUT', rotation, policy, student)).status).toBe(403);
+    expect((await call('PUT', rotation, { ...policy, rowCycleMaps: 0 }, rep)).status).toBe(400);
+    expect((await call('PUT', rotation, { ...policy, companionWaitMaps: 31 }, rep)).status).toBe(400);
+    expect((await call('PUT', rotation, policy, rep)).json).toEqual(policy);
+    for (let i = 0; i < 32; i++) {
+      await call('POST', '/api/seat-map/publish', { layout: [] }, rep);
+    }
+    await env.DB.prepare("UPDATE seat_map_history SET published_at = datetime('now', '-13 months')").run();
+    const snapshot = (await call('GET', history, undefined, student)).json;
+    expect(snapshot).toMatchObject({ rotation: policy, publishedCount: 32 });
+    expect(snapshot.history).toHaveLength(30);
+    await call('DELETE', '/api/seat-map/history/' + snapshot.history[0].id, undefined, rep);
+    expect((await call('GET', history, undefined, student)).json.publishedCount).toBe(31);
+    expect((await call('PUT', rotation, { rowCycleMaps: null, companionWaitMaps: 0 }, rep)).status).toBe(200);
+  });
+
   it('elimina una sola mappa e ricompatta gli indici senza toccare le date o le altre pubblicazioni', async () => {
     const { rep, student } = await setup();
     const ids: string[] = [];

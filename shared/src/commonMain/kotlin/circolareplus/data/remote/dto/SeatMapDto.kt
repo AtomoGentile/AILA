@@ -1,5 +1,6 @@
 package circolareplus.data.remote.dto
 
+import circolareplus.algorithms.SeatMapRotationPolicy
 import circolareplus.domain.model.SeatMapDummy
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
@@ -21,7 +22,11 @@ data class SeatMapEntryDto(
 data class CurrentSeatMapResponseDto(val seatMap: SeatMapEntryDto? = null)
 
 @Serializable
-data class SeatMapHistoryResponseDto(val history: List<SeatMapEntryDto>)
+data class SeatMapHistoryResponseDto(
+    val history: List<SeatMapEntryDto>,
+    val rotation: SeatMapRotationPolicy = SeatMapRotationPolicy(),
+    val publishedCount: Int? = null
+)
 
 @Serializable
 data class PublishSeatMapRequestDto(val layout: JsonElement)

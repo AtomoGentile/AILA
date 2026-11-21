@@ -12,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -22,6 +23,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import circolareplus.data.remote.ApiClient
 import circolareplus.data.remote.ApiException
+import circolareplus.data.remote.dto.BureaucracyDeadlineDto
 import circolareplus.data.remote.dto.BureaucracyDeliveriesDto
 import circolareplus.data.remote.dto.BureaucracyDeliveryDto
 import circolareplus.data.remote.dto.BureaucracyFeedDto
@@ -31,6 +33,11 @@ import circolareplus.data.remote.dto.SuccessDto
 import circolareplus.design.*
 import circolareplus.platform.AppForeground
 import circolareplus.platform.PlatformBackHandler
+import circolareplus.util.CivilDate
+import circolareplus.util.civilFromEpochMillis
+import circolareplus.util.daysBetween
+import circolareplus.util.formatItalianDateWithWeekday
+import circolareplus.util.parseIsoDate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -54,6 +61,7 @@ internal fun BureaucracyScreen(
     var revision by remember { mutableStateOf(0) }
     var busy by remember { mutableStateOf(false) }
     var creating by rememberSaveable { mutableStateOf(false) }
+    var editingDeadline by rememberSaveable { mutableStateOf(false) }
     var confirmingArchive by rememberSaveable { mutableStateOf(false) }
     var loadError by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
@@ -118,7 +126,7 @@ internal fun BureaucracyScreen(
             onBackClick()
         }
     }
-    PlatformBackHandler(enabled = active && !creating && !confirmingArchive, onBack = back)
+    PlatformBackHandler(enabled = active && !creating && !confirmingArchive && !editingDeadline, onBack = back)
 
     val gutter = if (AppTheme.isNothing) NothingSpacing.Edge else AppTheme.Space16
     val shown = feed?.practices.orEmpty().filter { (it.archivedAt != null) == archived }
@@ -143,7 +151,7 @@ internal fun BureaucracyScreen(
                         AilaErrorState(error, onRetry = { revision++ })
                     }
                 }
-                actionError?.takeIf { !creating && !confirmingArchive }?.let { error ->
+                actionError?.takeIf { !creating && !confirmingArchive && !editingDeadline }?.let { error ->
                     item { Text(error, color = AppTheme.TintRedInk, style = MaterialTheme.typography.bodyMedium) }
                 }
                 when {
@@ -152,6 +160,16 @@ internal fun BureaucracyScreen(
                     }
                     canManage && practice != null -> {
                         val closed = practice.archivedAt != null
+                        item {
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(practice.dueDate?.let(::formatItalianDateWithWeekday) ?: "Nessuna scadenza",
+                                    Modifier.weight(1f), color = AppTheme.TextMuted)
+                                if (!closed) AilaTextButton({ actionError = null; editingDeadline = true }, enabled = !busy) {
+                                    Text(if (practice.dueDate == null) "Aggiungi scadenza" else "Modifica scadenza")
+                                }
+                            }
+                        }
                         if (practice.description.isNotBlank()) {
                             item { Text(practice.description, color = AppTheme.TextMuted) }
                         }
@@ -217,6 +235,7 @@ internal fun BureaucracyScreen(
                             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(practice.title, style = MaterialTheme.typography.titleLarge)
                                 if (practice.description.isNotBlank()) Text(practice.description, color = AppTheme.TextMuted)
+                                practice.dueDate?.let { Text("Scadenza · ${formatItalianDateWithWeekday(it)}", color = AppTheme.TextMuted) }
                                 Text(if (practice.received == true) "Consegnata" else "Da consegnare")
                             }
                         }
@@ -257,6 +276,7 @@ internal fun BureaucracyScreen(
                                     }
                                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Text(item.title, style = MaterialTheme.typography.titleMedium, color = AppTheme.TextDark)
+                                        item.dueDate?.let { Text("Scadenza · ${formatItalianDateWithWeekday(it)}", color = AppTheme.TextMuted) }
                                         if (item.description.isNotBlank()) {
                                             Text(
                                                 item.description,
@@ -288,12 +308,14 @@ internal fun BureaucracyScreen(
         AilaBottomSheet(onDismissRequest = { if (!busy) creating = false }) {
             var title by rememberSaveable { mutableStateOf("") }
             var description by rememberSaveable { mutableStateOf("") }
+            var dueDate by rememberSaveable { mutableStateOf<String?>(null) }
             PracticeSheetBody("Nuova pratica", actionError) {
                 AilaPillTextField(title, { title = it.take(120) }, "Titolo della pratica", Modifier.fillMaxWidth(), singleLine = true)
                 AilaPillTextField(
                     description, { description = it.take(1000) }, "Istruzioni (facoltative)",
                     Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), maxLines = 4
                 )
+                PracticeDeadlineField(dueDate, { dueDate = it }, enabled = !busy)
                 AilaPrimaryButton(
                     if (busy) "Apertura in corso…" else "Apri pratica",
                     enabled = title.isNotBlank() && !busy,
@@ -301,9 +323,27 @@ internal fun BureaucracyScreen(
                     onClick = {
                         save(change = {
                             api.post<CreateBureaucracyPracticeDto, JsonObject>(
-                                PRACTICES, CreateBureaucracyPracticeDto(title.trim(), description.trim())
+                                PRACTICES, CreateBureaucracyPracticeDto(title.trim(), description.trim(), dueDate)
                             )
                         }, onDone = { creating = false; archived = false })
+                    }
+                )
+            }
+        }
+    }
+    if (canManage && editingDeadline && practice != null && practice.archivedAt == null) {
+        AilaBottomSheet(onDismissRequest = { if (!busy) editingDeadline = false }) {
+            var dueDate by rememberSaveable(practice.id) { mutableStateOf(practice.dueDate) }
+            PracticeSheetBody("Scadenza della pratica", actionError) {
+                PracticeDeadlineField(dueDate, { dueDate = it }, enabled = !busy)
+                AilaPrimaryButton(
+                    "Salva scadenza", fillMaxWidth = true, enabled = !busy && dueDate != practice.dueDate,
+                    onClick = {
+                        save(change = {
+                            api.put<BureaucracyDeadlineDto, SuccessDto>(
+                                "$PRACTICES/${practice.id}/deadline", BureaucracyDeadlineDto(dueDate)
+                            )
+                        }, onDone = { editingDeadline = false })
                     }
                 )
             }
@@ -332,6 +372,29 @@ internal fun BureaucracyScreen(
                     Text("Annulla")
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun PracticeDeadlineField(date: String?, onChange: (String?) -> Unit, enabled: Boolean) {
+    var picking by rememberSaveable { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        AilaTextButton({ picking = true }, enabled = enabled, modifier = Modifier.weight(1f)) {
+            Text(date?.let(::formatItalianDateWithWeekday) ?: "Scegli la scadenza (facoltativa)")
+        }
+        if (date != null) AilaIconButton("Rimuovi scadenza", { onChange(null) }, enabled = enabled) {
+            AppIcons.Close(Modifier.size(18.dp), it)
+        }
+    }
+    if (picking) {
+        val initialDate = date?.let(::parseIsoDate)
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = initialDate?.let { daysBetween(CivilDate(1970, 1, 1), it) * 86_400_000L }
+        )
+        AilaDatePickerDialog(state, onDismiss = { picking = false }, confirmLabel = "Scegli") {
+            state.selectedDateMillis?.let { onChange(civilFromEpochMillis(it).toIso()) }
+            picking = false
         }
     }
 }

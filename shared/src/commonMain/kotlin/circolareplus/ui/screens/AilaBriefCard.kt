@@ -8,6 +8,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,7 +47,9 @@ internal fun AilaBriefCard(
         return
     }
     val relevant = items
-    val visible = relevant.take(3)
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val canExpand = relevant.drop(3).any { it.kind == AilaBriefKind.BUREAUCRACY }
+    val visible = if (canExpand && expanded) relevant else relevant.take(3)
     val dark = AppTheme.isDarkMode
     val glass = AppTheme.isGlass
     val primaryText = AppTheme.TextDark
@@ -185,6 +191,11 @@ internal fun AilaBriefCard(
                         AppIcons.Close(Modifier.size(17.dp), soft)
                     }
                 }
+                }
+            }
+            if (canExpand) {
+                circolareplus.design.AilaTextButton(onClick = { expanded = !expanded }) {
+                    Text(if (expanded) "Mostra meno" else "Mostra tutte le scadenze")
                 }
             }
         }
