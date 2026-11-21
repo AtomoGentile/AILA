@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Verifica di avvio AILA</title>
+  <style>
+    body { max-width: 36rem; margin: 2rem auto; padding: 0 1rem; background: white; color: #171927; font: 1rem/1.5 system-ui, sans-serif; }
+    h1 { font-size: 1.5rem; }
+    button { min-height: 44px; padding: 0.5rem 1rem; font: inherit; }
+    li { margin: 0.35rem 0; }
+  </style>
+  <script src="verifica-avvio.js" defer></script>
+</head>
+<body>
+  <main>
+    <h1>Verifica di avvio AILA</h1>
+    <p id="stato" role="status">Pagina HTML ricevuta. Attendo lo script di verifica.</p>
+    <noscript><p>JavaScript è disattivato nel browser.</p></noscript>
+    <button id="verifica" disabled>Esegui la verifica</button>
+    <ol id="risultati" aria-live="polite"></ol>
+    <p><a href="./?diagnosi=1#diagnosi-avvio">Apri AILA</a></p>
+  </main>
+</body>
+</html>
