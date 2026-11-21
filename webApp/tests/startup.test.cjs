@@ -75,26 +75,35 @@ test('transazione abortita: non restituisce una cache incompleta', async () => {
 });
 
 function startup() {
-  let timeout, retry, reloaded = false;
+  let timeout, reloaded = false;
   const classes = new Set();
+  const documentListeners = {};
+  const windowListeners = {};
   const nodes = {
     'aila-splash': { classList: { add: name => classes.add(name) } },
-    'aila-startup-recovery': { hidden: true },
-    'aila-startup-retry': { addEventListener(type, fn) { retry = fn; } },
+    'aila-startup-error': { hidden: true },
+    'diagnosi-avvio': { hasAttribute() { return this.kotlinStarted; } },
   };
-  const window = {};
+  const window = { addEventListener: (type, handler) => { windowListeners[type] = handler; } };
   vm.runInNewContext(readFileSync(join(__dirname, '../src/wasmJsMain/resources/startup.js'), 'utf8'), {
-    window, document: { getElementById: id => nodes[id] },
+    window, document: {
+      getElementById: id => nodes[id],
+      addEventListener: (type, handler) => { documentListeners[type] = handler; },
+    },
     location: { reload() { reloaded = true; } },
     setTimeout(fn) { timeout = fn; return 1; }, clearTimeout() { timeout = null; },
   });
-  return { window, nodes, classes, expire() { timeout?.(); }, retry() { retry(); }, get reloaded() { return reloaded; } };
+  return {
+    window, nodes, classes, windowListeners,
+    expire() { timeout?.(); },
+    retry() { documentListeners.click({ target: { id: 'aila-startup-retry' }, preventDefault() {} }); },
+    get reloaded() { return reloaded; },
+  };
 }
 
 test('runtime bloccato: mostra un recupero e ricarica solo su richiesta', () => {
   const s = startup();
   s.expire();
-  assert.equal(s.nodes['aila-startup-recovery'].hidden, false);
   assert.equal(s.classes.has('startup-slow'), true);
   assert.equal(s.reloaded, false);
   s.retry();
@@ -105,5 +114,24 @@ test('avvio riuscito: non compare la schermata di recupero', () => {
   const s = startup();
   s.window.__ailaStartupReady();
   s.expire();
-  assert.equal(s.nodes['aila-startup-recovery'].hidden, true);
+  assert.equal(s.classes.has('startup-slow'), false);
+});
+
+test('bundle assente: mostra subito l’errore e il recupero', () => {
+  const s = startup();
+  s.windowListeners.error({ target: { id: 'aila-app-script' } });
+  assert.equal(s.nodes['aila-startup-error'].hidden, false);
+  assert.match(s.nodes['aila-startup-error'].textContent, /non ha caricato il bundle/);
+  assert.equal(s.classes.has('startup-slow'), true);
+});
+
+test('un errore Wasm conserva la fase raggiunta e mostra solo la categoria', () => {
+  const s = startup();
+  const stage = s.nodes['diagnosi-avvio'];
+  stage.kotlinStarted = true;
+  stage.textContent = 'Carico i dati offline.';
+  s.windowListeners.load({ target: { id: 'aila-app-script' } });
+  s.windowListeners.unhandledrejection({ reason: new WebAssembly.RuntimeError('https://private.test') });
+  assert.equal(stage.textContent, 'Carico i dati offline.');
+  assert.equal(s.nodes['aila-startup-error'].textContent, 'Errore durante l’avvio (RuntimeError).');
 });

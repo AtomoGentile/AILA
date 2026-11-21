@@ -8,7 +8,7 @@
 //          da riempire a ogni fotogramma, testo appena meno nitido. ?dpr=0 toglie il limite.
 //          Senza scelta esplicita il limite e' 2 (vedi DEFAULT_DPR_CAP): e' il rimedio piu' efficace
 //          contro gli scatti sugli iPhone, che hanno 3 pixel per punto = 2,25 volte i pixel.
-//          Va letta prima di aila.js: per questo lo script e' caricato senza "defer".
+//          Va letta prima di aila.js: i due script con "defer" seguono l'ordine dell'HTML.
 // ?a11y=1  riaccende la copia DOM dell'albero di accessibilita' se e' spenta. Su iOS e' ACCESA di
 //          default: ios-keyboard.js la usa per riconoscere il campo di testo toccato e aprirgli la
 //          tastiera dentro il gesto; senza, la tastiera si apre e si richiude subito (accesso e

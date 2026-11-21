@@ -36,6 +36,7 @@ input, textarea, [contenteditable], [contenteditable] * {
 }
 #aila-splash.done { opacity: 0; pointer-events: none; }
 #aila-splash.startup-slow { z-index: 2147483647; }
+.startup-text,
 #aila-startup-recovery {
   max-width: 320px;
   padding: 0 24px;
@@ -43,7 +44,21 @@ input, textarea, [contenteditable], [contenteditable] * {
   font: 16px/1.5 system-ui, -apple-system, sans-serif;
   letter-spacing: normal;
 }
+#diagnosi-avvio { display: none; }
+#diagnosi-avvio:target { display: block; }
+#aila-startup-recovery {
+  visibility: hidden;
+  animation: aila-show-startup-recovery 0s 20s forwards;
+}
+#aila-splash.startup-slow #aila-startup-recovery {
+  animation: none;
+  visibility: visible;
+}
+@keyframes aila-show-startup-recovery {
+  to { visibility: visible; }
+}
 #aila-startup-retry {
+  display: inline-block;
   border: 0;
   border-radius: 12px;
   padding: 12px 24px;
@@ -51,4 +66,5 @@ input, textarea, [contenteditable], [contenteditable] * {
   background: #fff;
   color: #16204A;
   cursor: pointer;
+  text-decoration: none;
 }

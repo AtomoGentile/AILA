@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
+    startupPhase("WebAssembly avviato. Carico le impostazioni.")
     // Tema riletto prima della prima composizione, come sulle altre piattaforme: senza, chi usa il
     // tema scuro vedrebbe un lampo chiaro a ogni avvio.
     AppTheme.isDarkMode = AppContainer.settings.isDarkMode
@@ -29,7 +30,9 @@ fun main() {
     // La copia offline sta in IndexedDB (asincrona) ma l'app la legge in modo sincrono: va caricata
     // in memoria prima che parta la UI. Nel frattempo si vede la schermata di avvio di index.html.
     MainScope().launch {
+        startupPhase("Carico i dati offline.")
         OfflineStore.init()
+        startupPhase("Dati offline pronti. Avvio l’interfaccia.")
         // isA11YEnabled: Compose affianca al canvas una copia DOM dell'albero di accessibilita'
         // (un elemento per ogni nodo) e la risincronizza a ogni cambio di layout, cioe' a ogni
         // fotogramma di un'animazione o di uno scorrimento, sullo stesso thread che disegna. Su
@@ -49,6 +52,10 @@ fun main() {
 }
 
 private fun a11yRequested(): Boolean = js("window.__ailaA11y === true")
+
+private fun startupPhase(message: String) {
+    js("var stage = document.getElementById('diagnosi-avvio'); if (stage) { stage.setAttribute('data-kotlin', ''); stage.textContent = message; }")
+}
 
 private fun hideSplash() {
     js("if (window.__ailaStartupReady) window.__ailaStartupReady(); var s = document.getElementById('aila-splash'); if (s) { s.classList.add('done'); setTimeout(function () { s.remove(); }, 400); }")
