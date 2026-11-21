@@ -25,11 +25,12 @@ data class CurrentSeatMapResponseDto(val seatMap: SeatMapEntryDto? = null)
 data class SeatMapHistoryResponseDto(
     val history: List<SeatMapEntryDto>,
     val rotation: SeatMapRotationPolicy = SeatMapRotationPolicy(),
-    val publishedCount: Int? = null
+    val publishedCount: Int? = null,
+    val rotationRevision: Long? = null
 )
 
 @Serializable
-data class PublishSeatMapRequestDto(val layout: JsonElement)
+data class PublishSeatMapRequestDto(val layout: JsonElement, val rotationRevision: Long? = null)
 
 /**
  * Fantoccio della Mappa Posti: studente inventato dal Rappresentante per riempire la mappa.

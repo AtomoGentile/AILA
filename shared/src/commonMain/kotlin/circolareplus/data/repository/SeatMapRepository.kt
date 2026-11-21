@@ -65,7 +65,11 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                 apiJson.decodeFromJsonElement<List<DeskAssignment>>(entry.layout))
         }.sortedBy { it.mapIndex }
 
-    data class OptimizerInput(val history: List<SeatMapHistoryRecord>, val rotation: SeatMapRotationPolicy)
+    data class OptimizerInput(
+        val history: List<SeatMapHistoryRecord>,
+        val rotation: SeatMapRotationPolicy,
+        val revision: Long?
+    )
 
     suspend fun getHistoryForOptimizer(): List<SeatMapHistoryRecord> = getOptimizerInput().history
 
@@ -87,7 +91,7 @@ class SeatMapRepository(private val api: ApiClient? = null) {
                 publicationNumber = response.publishedCount?.let { it - entry.mapIndex + 1 }
             )
         }
-        return OptimizerInput(history, response.rotation)
+        return OptimizerInput(history, response.rotation, response.rotationRevision)
     }
 
     suspend fun saveRotationPolicy(policy: SeatMapRotationPolicy): SeatMapRotationPolicy =
@@ -95,7 +99,7 @@ class SeatMapRepository(private val api: ApiClient? = null) {
 
     /** Solo Rappresentante: pubblica dopo la verifica sulle regole aggiornate. */
     suspend fun publish(assignments: List<DeskAssignment>, profiles: Map<String, StudentProfile>): SuccessDto {
-        val (history, rotation) = getOptimizerInput()
+        val (history, rotation, revision) = getOptimizerInput()
         require(SeatMapOptimizer.rowRotationViolations(assignments, profiles, history, rotation).isEmpty()) {
             "La disposizione non rispetta la rotazione delle file con lo storico e le regole attuali."
         }
@@ -104,7 +108,7 @@ class SeatMapRepository(private val api: ApiClient? = null) {
         }
         val layoutJson = apiJson.encodeToString(assignments)
         val layoutElement = apiJson.parseToJsonElement(layoutJson)
-        return requireApi().post("/api/seat-map/publish", PublishSeatMapRequestDto(layoutElement))
+        return requireApi().post("/api/seat-map/publish", PublishSeatMapRequestDto(layoutElement, revision))
     }
 
     suspend fun saveHistoricalMap(id: String?, assignments: List<DeskAssignment>, publishedAt: String) {

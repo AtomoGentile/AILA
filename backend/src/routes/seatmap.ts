@@ -43,16 +43,16 @@ seatmap.get('/history', async (c) => {
   const classId = await resolveClassId(c);
   type HistoryRow = {
     id: string | null; map_index: number; layout_json: string; published_at: string;
-    rowCycleMaps?: number | null; companionWaitMaps?: number; publishedCount?: number;
+    rowCycleMaps?: number | null; companionWaitMaps?: number; publishedCount?: number; rotationRevision?: number;
   };
   const rows = optimizer
     ? await c.env.DB.prepare(`WITH rotation_config AS (
-        SELECT id, seat_row_cycle AS rowCycleMaps, seat_companion_wait AS companionWaitMaps,
+        SELECT id, seat_row_cycle AS rowCycleMaps, seat_companion_wait AS companionWaitMaps, seat_rotation_revision AS rotationRevision,
           (SELECT COALESCE(MAX(map_index), 0) FROM seat_map_history WHERE class_id = classes.id) AS publishedCount
         FROM classes WHERE id = ?
       )
       SELECT history.id, history.map_index, history.layout_json, history.published_at,
-        rotation_config.rowCycleMaps, rotation_config.companionWaitMaps, rotation_config.publishedCount
+        rotation_config.rowCycleMaps, rotation_config.companionWaitMaps, rotation_config.publishedCount, rotation_config.rotationRevision
       FROM rotation_config LEFT JOIN seat_map_history history ON history.class_id = rotation_config.id
         AND (? OR history.map_index <= 30 OR history.published_at >= datetime('now', '-12 months'))
       ORDER BY history.map_index ASC`).bind(classId, Number(archive)).all<HistoryRow>()
@@ -71,7 +71,8 @@ seatmap.get('/history', async (c) => {
     })),
     ...(rotation && {
       rotation: { rowCycleMaps: rotation.rowCycleMaps, companionWaitMaps: rotation.companionWaitMaps },
-      publishedCount: rotation.publishedCount
+      publishedCount: rotation.publishedCount,
+      rotationRevision: rotation.rotationRevision
     })
   });
 });
@@ -82,7 +83,8 @@ seatmap.put('/rotation', requireRole('REPRESENTATIVE'), async (c) => {
   if (!body || (body.rowCycleMaps !== null && !validCount(body.rowCycleMaps, 1)) || !validCount(body.companionWaitMaps, 0)) {
     return c.json({ error: 'Durata della rotazione non valida.' }, 400);
   }
-  await c.env.DB.prepare('UPDATE classes SET seat_row_cycle = ?, seat_companion_wait = ? WHERE id = ?')
+  await c.env.DB.prepare(`UPDATE classes SET seat_row_cycle = ?, seat_companion_wait = ?,
+    seat_rotation_revision = seat_rotation_revision + 1 WHERE id = ?`)
     .bind(body.rowCycleMaps, body.companionWaitMaps, await resolveClassId(c)).run();
   return c.json({ rowCycleMaps: body.rowCycleMaps, companionWaitMaps: body.companionWaitMaps });
 });
@@ -111,22 +113,31 @@ seatmap.delete('/history/:id', requireRole('REPRESENTATIVE'), async (c) => {
 // layoutJson: oggetto con la disposizione, es. { seats: [{studentId, row, col}, ...] }
 // ---------------------------------------------------------------------------
 seatmap.post('/publish', requireRole('REPRESENTATIVE'), async (c) => {
-  const body = await c.req.json<{ layout: object }>();
+  const body = await c.req.json<{ layout: object; rotationRevision?: number | null }>();
   const classId = await resolveClassId(c);
 
   if (!body.layout || typeof body.layout !== 'object') {
     return c.json({ error: 'layout è richiesto e deve essere un oggetto JSON' }, 400);
   }
 
-  // Questa è l'unica scrittura nello storico: generazione, scelta ed editing delle
-  // proposte restano locali. La nuova pubblicazione diventa la 1, in transazione.
+  const revision = body.rotationRevision ?? null;
+  if (revision !== null && (!Number.isSafeInteger(revision) || revision < 0)) {
+    return c.json({ error: 'Versione della rotazione non valida.' }, 400);
+  }
+
+  // Controlla e pubblica nella stessa transazione. Le bozze non entrano nello storico.
   const id = newUUID();
-  await c.env.DB.batch([
-    c.env.DB.prepare('UPDATE seat_map_history SET map_index = map_index + 1 WHERE class_id = ?').bind(classId),
-    c.env.DB.prepare(
-      'INSERT INTO seat_map_history (id, map_index, layout_json, class_id) VALUES (?, ?, ?, ?)'
-    ).bind(id, 1, JSON.stringify(body.layout), classId),
+  const [inserted] = await c.env.DB.batch([
+    c.env.DB.prepare(`INSERT INTO seat_map_history (id, map_index, layout_json, class_id)
+      SELECT ?, 1, ?, id FROM classes WHERE id = ? AND (? IS NULL OR seat_rotation_revision = ?)`)
+      .bind(id, JSON.stringify(body.layout), classId, revision, revision),
+    c.env.DB.prepare(`UPDATE seat_map_history SET map_index = map_index + 1
+      WHERE class_id = ? AND id <> ? AND EXISTS (SELECT 1 FROM seat_map_history WHERE id = ?)`)
+      .bind(classId, id, id),
   ]);
+  if (!inserted.meta.changes) {
+    return c.json({ error: 'Le regole o lo storico delle mappe sono cambiati. Riprova con la disposizione aggiornata.' }, 409);
+  }
 
   // Push notification to class
   inBackground(c, notifyClass(

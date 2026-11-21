@@ -810,7 +810,7 @@ describe('storico delle mappe pubblicate', () => {
     const rotation = '/api/seat-map/rotation';
     const policy = { rowCycleMaps: 3, companionWaitMaps: 7 };
     expect((await call('GET', history, undefined, student)).json)
-      .toEqual({ history: [], rotation: { rowCycleMaps: null, companionWaitMaps: 4 }, publishedCount: 0 });
+      .toEqual({ history: [], rotation: { rowCycleMaps: null, companionWaitMaps: 4 }, publishedCount: 0, rotationRevision: 0 });
     expect((await call('PUT', rotation, policy, student)).status).toBe(403);
     expect((await call('PUT', rotation, { ...policy, rowCycleMaps: 0 }, rep)).status).toBe(400);
     expect((await call('PUT', rotation, { ...policy, companionWaitMaps: 31 }, rep)).status).toBe(400);
@@ -822,8 +822,14 @@ describe('storico delle mappe pubblicate', () => {
     const snapshot = (await call('GET', history, undefined, student)).json;
     expect(snapshot).toMatchObject({ rotation: policy, publishedCount: 32 });
     expect(snapshot.history).toHaveLength(30);
+    const publication = { layout: [], rotationRevision: snapshot.rotationRevision };
+    const concurrent = await Promise.all([
+      call('POST', '/api/seat-map/publish', publication, rep),
+      call('POST', '/api/seat-map/publish', publication, rep),
+    ]);
+    expect(concurrent.map((res) => res.status).sort()).toEqual([201, 409]);
     await call('DELETE', '/api/seat-map/history/' + snapshot.history[0].id, undefined, rep);
-    expect((await call('GET', history, undefined, student)).json.publishedCount).toBe(31);
+    expect((await call('GET', history, undefined, student)).json.publishedCount).toBe(32);
     expect((await call('PUT', rotation, { rowCycleMaps: null, companionWaitMaps: 0 }, rep)).status).toBe(200);
   });
 

@@ -13,7 +13,12 @@ it('isolates class deliveries, permits concurrent practices and freezes the arch
   const migration = readFileSync(new URL('../migrations/034_bureaucracy.sql', import.meta.url), 'utf8');
   db.exec(migration);
   db.exec(migration);
-  db.exec('ALTER TABLE classes DROP COLUMN seat_row_cycle; ALTER TABLE classes DROP COLUMN seat_companion_wait;');
+  db.exec(`DROP TRIGGER seat_rotation_history_insert;
+    DROP TRIGGER seat_rotation_history_update;
+    DROP TRIGGER seat_rotation_history_delete;
+    ALTER TABLE classes DROP COLUMN seat_row_cycle;
+    ALTER TABLE classes DROP COLUMN seat_companion_wait;
+    ALTER TABLE classes DROP COLUMN seat_rotation_revision;`);
   db.exec(readFileSync(new URL('../migrations/035_seat_rotation_and_paperwork_deadlines.sql', import.meta.url), 'utf8'));
   db.exec("INSERT INTO classes (id, label) VALUES ('class-b', '5 B')");
 

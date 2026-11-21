@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS classes (
     lesson_hours INTEGER NOT NULL DEFAULT 6 CHECK (lesson_hours IN (5, 6)),
     seat_row_cycle INTEGER CHECK (seat_row_cycle BETWEEN 1 AND 30),
     seat_companion_wait INTEGER NOT NULL DEFAULT 4 CHECK (seat_companion_wait BETWEEN 0 AND 30),
+    seat_rotation_revision INTEGER NOT NULL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -373,6 +374,22 @@ CREATE TABLE IF NOT EXISTS seat_map_history (
 );
 
 CREATE INDEX IF NOT EXISTS idx_seatmap_class ON seat_map_history(class_id);
+
+CREATE TRIGGER IF NOT EXISTS seat_rotation_history_insert AFTER INSERT ON seat_map_history
+BEGIN
+    UPDATE classes SET seat_rotation_revision = seat_rotation_revision + 1 WHERE id = NEW.class_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS seat_rotation_history_update AFTER UPDATE OF layout_json, published_at ON seat_map_history
+BEGIN
+    UPDATE classes SET seat_rotation_revision = seat_rotation_revision + 1 WHERE id = NEW.class_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS seat_rotation_history_delete AFTER DELETE ON seat_map_history
+BEGIN
+    UPDATE classes SET seat_rotation_revision = seat_rotation_revision + 1 WHERE id = OLD.class_id;
+END;
+
 
 -- 10a. FANTOCCI DELLA MAPPA POSTI (migrazione 021)
 -- Studenti inventati dal Rappresentante per riempire la mappa quando in classe le file sono piu'
