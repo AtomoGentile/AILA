@@ -1,5 +1,6 @@
 package circolareplus.ui.screens
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.Canvas
@@ -59,7 +60,11 @@ internal fun AilaBriefCard(
     ) else Modifier.clip(panelShape)
         .background(Brush.linearGradient(panelColors))
         .border(1.dp, if(dark) Color.White.copy(alpha=.12f) else Color(0xFF27324B).copy(alpha=.12f), panelShape)
-    Box(modifier.fillMaxWidth().then(panelSurface)) {
+    Box(
+        modifier.fillMaxWidth()
+            .then(panelSurface)
+            .animateContentSize(animationSpec = ailaMoveSpec(durationMillis = 280))
+    ) {
         if (!AppTheme.isNothing) Canvas(Modifier.matchParentSize()) {
             val center = Offset(size.width * .96f, size.height * .04f)
             listOf(.33f, .57f, .82f).forEachIndexed { i, scale ->

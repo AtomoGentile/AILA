@@ -235,11 +235,13 @@ fun Modifier.ailaGlassOverlay(
     tint: Color = Color.White
 ): Modifier {
     val isPressed by interactionSource.collectIsPressedAsState()
+    val reduceMotion = AppTheme.reduceMotion
 
     // Punto del tocco: il colore parte da lì, non dal centro — così sembra davvero "arrivare"
     // da dove hai messo il dito invece di comparire uniforme su tutto il pulsante.
     var pressPosition by remember { mutableStateOf(Offset.Zero) }
-    LaunchedEffect(interactionSource) {
+    LaunchedEffect(interactionSource, reduceMotion) {
+        if (reduceMotion) return@LaunchedEffect
         interactionSource.interactions.collect { interaction ->
             if (interaction is PressInteraction.Press) {
                 pressPosition = interaction.pressPosition
@@ -252,26 +254,30 @@ fun Modifier.ailaGlassOverlay(
     val fillProgress by animateFloatAsState(
         targetValue = if (isPressed && enabled) 1f else 0f,
         // Rapido: il vetro deve rispondere subito al dito (prima 260 ms, sembrava in ritardo).
-        animationSpec = tween(durationMillis = if (isPressed) 120 else 240),
+        animationSpec = ailaFadeSpec(if (isPressed) 120 else 240),
         label = "ailaGlassFill"
     )
 
     return this.drawWithContent {
         drawContent()
         if (fillProgress > 0f) {
+            if (reduceMotion) {
+                drawRect(color = tint, alpha = 0.24f * fillProgress)
+                return@drawWithContent
+            }
             // Raggio che a progress=1 copre l'angolo più lontano dal punto di tocco, quindi il
             // pulsante risulta interamente colorato quando il riempimento è completo.
             val dx = maxOf(pressPosition.x, size.width - pressPosition.x)
             val dy = maxOf(pressPosition.y, size.height - pressPosition.y)
             val maxRadius = kotlin.math.sqrt(dx * dx + dy * dy)
             drawCircle(
-                color = tint.copy(alpha = 0.4f * fillProgress),
+                color = tint.copy(alpha = tint.alpha * 0.4f * fillProgress),
                 radius = (maxRadius * fillProgress).coerceAtLeast(1f),
                 center = pressPosition
             )
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(tint.copy(alpha = 0.55f * fillProgress), Color.Transparent),
+                    colors = listOf(tint.copy(alpha = tint.alpha * 0.55f * fillProgress), tint.copy(alpha = 0f)),
                     center = pressPosition,
                     radius = (maxRadius * fillProgress).coerceAtLeast(1f)
                 ),

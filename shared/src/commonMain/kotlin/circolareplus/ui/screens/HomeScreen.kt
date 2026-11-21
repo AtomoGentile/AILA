@@ -1,5 +1,7 @@
 package circolareplus.ui.screens
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,6 +14,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -21,13 +24,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import circolareplus.design.AilaCard
@@ -41,6 +49,9 @@ import circolareplus.design.ailaGlassOverlay
 import circolareplus.design.ailaGlassSurface
 import circolareplus.design.ailaGlassPressable
 import circolareplus.design.ailaMorphClip
+import circolareplus.design.ailaMoveSpec
+import circolareplus.design.ailaNavigationSpring
+import circolareplus.design.ailaSpatialSpring
 import circolareplus.design.ailaTransformOrigin
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
@@ -51,6 +62,8 @@ import circolareplus.util.today
 import circolareplus.util.plusDays
 import circolareplus.domain.model.CalendarEvent
 import circolareplus.domain.model.Circular
+import kotlin.math.PI
+import kotlin.math.sin
 
 /**
  * Home in stile AILA: pannello superiore a gradiente con il saluto e le quattro icone di accesso
@@ -97,7 +110,8 @@ fun HomeScreen(
     onNavigateToClassRoster: () -> Unit = {},
     onNavigateToNotifications: () -> Unit = {},
     unreadMenus: Set<String> = emptySet(),
-    profileEntry: AilaProfileEntry? = LocalProfileEntry.current
+    profileEntry: AilaProfileEntry? = LocalProfileEntry.current,
+    isCurrentTab: Boolean = true
 ) {
     val scrollState = rememberScrollState()
     val homeGutter = if(AppTheme.isNothing) circolareplus.design.NothingSpacing.Edge else AppTheme.Space16
@@ -162,6 +176,7 @@ fun HomeScreen(
         }
         HomeHeroPanel(
             studentFirstName = studentFirstName,
+            isCurrentTab = isCurrentTab,
             onNavigateToSearch = onNavigateToSearch,
             shortcuts = shortcuts,
             profileEntry = profileEntry
@@ -408,6 +423,7 @@ private fun NextEventsCard(
 @Composable
 private fun HomeHeroPanel(
     studentFirstName: String,
+    isCurrentTab: Boolean,
     onNavigateToSearch: () -> Unit,
     shortcuts: HomeShortcuts,
     profileEntry: AilaProfileEntry?
@@ -431,6 +447,7 @@ private fun HomeHeroPanel(
                     .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
                     .background(AppTheme.HeroGradient)
             )
+            .homeHeroReflection(isCurrentTab)
             // Il pannello passa sotto la barra di stato (ora, Wi-Fi): prima sopra restava una
             // striscia del colore di fondo, staccata dal pannello.
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
@@ -499,6 +516,51 @@ internal fun HomeShortcutRow(shortcuts: HomeShortcuts) {
         }
         HomeQuickIcon("Notifiche", tile, shortcuts.openNotifications, "notifications" in shortcuts.unreadMenus) {
             AppIcons.Bell(Modifier.size(22.dp), iconColor)
+        }
+    }
+}
+
+/** Un riflesso attraversa il pannello quando la Home diventa la scheda corrente. */
+@Composable
+private fun Modifier.homeHeroReflection(isCurrentTab: Boolean): Modifier {
+    if (!isCurrentTab || AppTheme.reduceMotion) return this
+
+    val progress = remember { Animatable(0f) }
+    val duration = if (AppTheme.isGlass) 900 else 720
+    LaunchedEffect(duration) {
+        progress.snapTo(0f)
+        progress.animateTo(1f, ailaMoveSpec(duration))
+    }
+
+    val tint = when {
+        !AppTheme.isGlass -> Color.White.copy(alpha = 0.20f)
+        AppTheme.isDarkMode -> AppTheme.PrimaryBlue.copy(alpha = 0.24f)
+        else -> AppTheme.PrimaryBlue.copy(alpha = 0.15f)
+    }
+    return drawWithCache {
+        val radius = minOf(size.width * 0.58f, size.height * 1.18f)
+        if (radius <= 0f) return@drawWithCache onDrawBehind {}
+        val glow = Brush.radialGradient(
+            0f to tint,
+            0.55f to tint.copy(alpha = tint.alpha * 0.42f),
+            1f to tint.copy(alpha = 0f),
+            center = Offset.Zero,
+            radius = radius
+        )
+        onDrawBehind {
+            val fraction = progress.value
+            if (fraction > 0f && fraction < 1f) {
+                val position = 0.16f + 0.82f * fraction
+                val horizontalFraction = if (layoutDirection == LayoutDirection.Ltr) position else 1f - position
+                translate(left = size.width * horizontalFraction, top = size.height * 0.10f) {
+                    drawCircle(
+                        brush = glow,
+                        radius = radius,
+                        center = Offset.Zero,
+                        alpha = sin(PI * fraction).toFloat()
+                    )
+                }
+            }
         }
     }
 }
@@ -636,19 +698,18 @@ private fun HomeQuickIcon(
     val interactionSource = remember { MutableInteractionSource() }
     val glass = AppTheme.isGlass
     val nothing = AppTheme.isNothing
+    val reduceMotion = AppTheme.reduceMotion
     // Material: riquadro tonale pieno che alla pressione stringe gli angoli (forma che si
     // deforma, come i pulsanti di M3 Expressive). Glass: vetro chiaro con filo di luce.
     val pressed by interactionSource.collectIsPressedAsState()
-    val corner by androidx.compose.animation.core.animateDpAsState(
-        targetValue = if (!glass && pressed) 10.dp else if (glass) 18.dp else 22.dp,
-        // Entrata rigida e quasi senza rimbalzo (la molla piu' ferma del vocabolario), rilascio
-        // con il rimbalzo della molla "viva": stesso carattere di prima, ma con "Riduci
-        // movimento" entrambe diventano rapide e senza rimbalzo.
-        animationSpec = if (pressed) circolareplus.design.ailaNavigationSpring()
-            else circolareplus.design.ailaSpatialSpring(),
-        label = "quickIconCorner"
+    val pressDepth = animateFloatAsState(
+        targetValue = if (pressed && !reduceMotion) 1f else 0f,
+        animationSpec = if (pressed) ailaNavigationSpring() else ailaSpatialSpring(),
+        label = "quickIconPress"
     )
-    val shape = RoundedCornerShape(corner)
+    val shape = RoundedCornerShape(
+        if (glass) 18.dp else if (reduceMotion) 22.dp else (22f - 12f * pressDepth.value).dp
+    )
     Column(
         modifier = modifier.clickable(
             interactionSource = interactionSource,
@@ -667,11 +728,21 @@ private fun HomeQuickIcon(
                     if (glass) Modifier
                         .ailaGlassSurface(shape)
                         .ailaGlassOverlay(interactionSource, tint = AppTheme.PrimaryBlue)
-                    else Modifier.background(if (nothing) AppTheme.TrackFill else heroTonalFill)
+                    else Modifier
+                        .background(if (nothing) AppTheme.TrackFill else heroTonalFill)
+                        .then(if (nothing) Modifier else Modifier
+                        .ailaGlassOverlay(interactionSource, tint = Color.White.copy(alpha = 0.22f)))
                 ),
             contentAlignment = Alignment.Center
         ) {
-            icon()
+            Box(Modifier.graphicsLayer {
+                val depth = if (reduceMotion) 0f else pressDepth.value
+                translationY = 2.dp.toPx() * depth
+                scaleX = 1f - 0.12f * depth
+                scaleY = scaleX
+            }) {
+                icon()
+            }
             if (hasUnread) {
                 Box(Modifier.align(Alignment.TopEnd).padding(8.dp).size(8.dp)
                     .background(AppTheme.PrimaryBlue, CircleShape))

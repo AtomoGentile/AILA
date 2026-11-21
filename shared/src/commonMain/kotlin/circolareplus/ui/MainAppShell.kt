@@ -40,9 +40,11 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import circolareplus.algorithms.DeskAssignment
@@ -3382,18 +3384,24 @@ fun MainAppShell(
                             selectedTab = MainTab.HOME
                         }
                     }
-                    // Transizione fra le tab: la nuova schermata entra scivolando di poco dal lato
-                    // della tab toccata (destra se e' piu' a destra nella barra, sinistra altrimenti)
-                    // mentre la vecchia sfuma via. Prima il cambio era uno stacco secco e il movimento
-                    // lo dava solo la cascata degli elementi, che ora si vede solo la prima volta.
                     // Le tab sono pagine affiancate: si passa dall'una all'altra anche scorrendo
                     // col dito a destra e sinistra (oltre che toccando la barra in basso).
                     val tabPager = androidx.compose.foundation.pager.rememberPagerState(
                         initialPage = MainTab.entries.indexOf(selectedTab)
                     ) { MainTab.entries.size }
-                    // Dissolvenza del cambio di tab toccando la barra: la pagina non scorre attraverso
-                    // quelle in mezzo, ma svanisce e la nuova emerge (fade through, come prima).
+                    // Sul tocco, il pager salta alla destinazione mentre è trasparente.
                     val tabFade = remember { androidx.compose.animation.core.Animatable(1f) }
+                    var tabArrivalDirection by remember { mutableFloatStateOf(0f) }
+                    val layoutSign = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1f else 1f
+                    val glassTabs = AppTheme.isGlass
+                    val liteTabEffects = AppTheme.liteEffects
+                    val reduceTabMotion = AppTheme.reduceMotion
+                    val tabExitDuration = if (liteTabEffects || reduceTabMotion) 60 else 85
+                    val tabEnterDuration = when {
+                        liteTabEffects -> 130
+                        glassTabs -> 210
+                        else -> 230
+                    }
                     var confirmedTab by remember(tabPager) { mutableStateOf(selectedTab) }
                     // Il tocco sceglie la pagina anche se uno swipe si sta ancora assestando.
                     LaunchedEffect(selectedTab) {
@@ -3401,18 +3409,19 @@ fun MainAppShell(
                         val target = MainTab.entries.indexOf(requestedTab)
                         val alreadyThere = !tabPager.isScrollInProgress &&
                             tabPager.currentPage == target && tabPager.currentPageOffsetFraction == 0f
-                        // Le durate restano quelle tarate per il fade through; ailaFadeSpec le
-                        // accorcia con "Riduci movimento" (e' solo opacita', resta anche li').
                         if (alreadyThere) {
                             confirmedTab = requestedTab
                             // Un tocco rapido annullato a meta' non deve lasciare la pagina sbiadita.
                             if (tabFade.value < 1f) tabFade.animateTo(1f, circolareplus.design.ailaFadeSpec(140))
+                            tabArrivalDirection = 0f
                             return@LaunchedEffect
                         }
-                        tabFade.animateTo(0f, circolareplus.design.ailaFadeSpec(if (AppTheme.isGlass) 60 else 50))
+                        tabFade.animateTo(0f, circolareplus.design.ailaFadeSpec(tabExitDuration))
+                        tabArrivalDirection = (target - tabPager.currentPage).compareTo(0).toFloat()
                         tabPager.scrollToPage(target)
                         confirmedTab = requestedTab
-                        tabFade.animateTo(1f, circolareplus.design.ailaFadeSpec(if (AppTheme.isGlass) 110 else 130))
+                        tabFade.animateTo(1f, circolareplus.design.ailaFadeSpec(tabEnterDuration))
+                        tabArrivalDirection = 0f
                     }
                     // Un tocco cambia selectedTab prima del fade-out. In quell'intervallo il
                     // pager mostra ancora la vecchia pagina, quindi non può guidare la barra.
@@ -3455,15 +3464,14 @@ fun MainAppShell(
                         ),
                         modifier = Modifier.fillMaxSize()
                             .graphicsLayer {
-                                val f = tabFade.value
-                                alpha = f
-                                // Con "Riduci movimento" resta solo la dissolvenza, senza il
-                                // piccolo rimpicciolimento di Material.
-                                if (!AppTheme.isGlass && !AppTheme.reduceMotion) {
-                                    val scale = 0.94f + 0.06f * f
-                                    scaleX = scale
-                                    scaleY = scale
-                                }
+                                alpha = tabFade.value
+                                val arrival = if (!liteTabEffects && !reduceTabMotion) {
+                                    (1f - alpha) * tabArrivalDirection
+                                } else 0f
+                                translationX = (if (glassTabs) 14.dp else 10.dp).toPx() * layoutSign * arrival
+                                val scale = if (glassTabs) 1f else 1f - 0.02f * kotlin.math.abs(arrival)
+                                scaleX = scale
+                                scaleY = scale
                             }
                             .then(
                             // Lo sfondo a macchie e' fermo sullo schermo: le pagine trasparenti ci
@@ -3510,6 +3518,7 @@ fun MainAppShell(
                     when (tab) {
                         MainTab.HOME -> {
                             HomeScreen(
+                                isCurrentTab = tabPager.settledPage == page,
                                 subjectColorsRevision = subjectColorsRevision,
                                 subjectColorsEnabled = run { subjectColorsRevision; AppContainer.settings.subjectColorsEnabled },
                                 subjectColorOverrides = run { subjectColorsRevision; AppContainer.settings.subjectColorOverrides },
