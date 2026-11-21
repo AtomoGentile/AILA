@@ -1,6 +1,5 @@
 package circolareplus.ui.screens
 
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.Canvas
@@ -63,7 +62,6 @@ internal fun AilaBriefCard(
     Box(
         modifier.fillMaxWidth()
             .then(panelSurface)
-            .animateContentSize(animationSpec = ailaMoveSpec(durationMillis = 280))
     ) {
         if (!AppTheme.isNothing) Canvas(Modifier.matchParentSize()) {
             val center = Offset(size.width * .96f, size.height * .04f)
@@ -91,7 +89,7 @@ internal fun AilaBriefCard(
             if(conflicts.isEmpty() && relevant.isEmpty() && !loading && error == null) {
                 Text("Sei in pari. Qui troverai novità, risposte e cose da fare per te.", color = soft, style = MaterialTheme.typography.bodyMedium)
             }
-            visible.forEach { item ->
+            AnimatedBriefItems(visible, spacing = 18.dp) { _, item ->
                 val subjectColor = if (subjectColorsEnabled && item.kind == AilaBriefKind.EVENT) {
                     SubjectColors.choiceForSubject(item.title, subjectColorOverrides)
                 } else null

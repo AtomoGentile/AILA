@@ -3518,7 +3518,6 @@ fun MainAppShell(
                     when (tab) {
                         MainTab.HOME -> {
                             HomeScreen(
-                                isCurrentTab = tabPager.settledPage == page,
                                 subjectColorsRevision = subjectColorsRevision,
                                 subjectColorsEnabled = run { subjectColorsRevision; AppContainer.settings.subjectColorsEnabled },
                                 subjectColorOverrides = run { subjectColorsRevision; AppContainer.settings.subjectColorOverrides },

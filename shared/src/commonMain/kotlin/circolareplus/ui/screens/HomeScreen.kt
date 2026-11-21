@@ -2,6 +2,7 @@ package circolareplus.ui.screens
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,8 +16,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.Alignment
@@ -24,18 +27,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import circolareplus.design.AilaCard
@@ -49,7 +49,6 @@ import circolareplus.design.ailaGlassOverlay
 import circolareplus.design.ailaGlassSurface
 import circolareplus.design.ailaGlassPressable
 import circolareplus.design.ailaMorphClip
-import circolareplus.design.ailaMoveSpec
 import circolareplus.design.ailaNavigationSpring
 import circolareplus.design.ailaSpatialSpring
 import circolareplus.design.ailaTransformOrigin
@@ -62,8 +61,7 @@ import circolareplus.util.today
 import circolareplus.util.plusDays
 import circolareplus.domain.model.CalendarEvent
 import circolareplus.domain.model.Circular
-import kotlin.math.PI
-import kotlin.math.sin
+import kotlinx.coroutines.flow.collectLatest
 
 /**
  * Home in stile AILA: pannello superiore a gradiente con il saluto e le quattro icone di accesso
@@ -110,8 +108,7 @@ fun HomeScreen(
     onNavigateToClassRoster: () -> Unit = {},
     onNavigateToNotifications: () -> Unit = {},
     unreadMenus: Set<String> = emptySet(),
-    profileEntry: AilaProfileEntry? = LocalProfileEntry.current,
-    isCurrentTab: Boolean = true
+    profileEntry: AilaProfileEntry? = LocalProfileEntry.current
 ) {
     val scrollState = rememberScrollState()
     val homeGutter = if(AppTheme.isNothing) circolareplus.design.NothingSpacing.Edge else AppTheme.Space16
@@ -156,6 +153,10 @@ fun HomeScreen(
         return
     }
 
+    val cardShift = if (AppTheme.isGlass && !AppTheme.reduceMotion && homeVisible) {
+        rememberGlassHomeCardShift(scrollState)
+    } else null
+
     // Circolare più recente in evidenza. Tipo esplicito sulla callback: un lambda scritto dentro
     // un "if" come argomento nullable è ambiguo da leggere e da inferire.
     val openLatestCircular: (() -> Unit)? =
@@ -176,7 +177,6 @@ fun HomeScreen(
         }
         HomeHeroPanel(
             studentFirstName = studentFirstName,
-            isCurrentTab = isCurrentTab,
             onNavigateToSearch = onNavigateToSearch,
             shortcuts = shortcuts,
             profileEntry = profileEntry
@@ -184,7 +184,10 @@ fun HomeScreen(
 
         if (briefAllowed || briefItems.any { it.kind == circolareplus.data.remote.dto.AilaBriefKind.BUREAUCRACY }) {
             AilaBriefCard(briefItems, onDismissBrief, onOpenBrief, onPlanStudy, briefLoading, briefError, onRefreshBrief,
-                Modifier.padding(horizontal = homeGutter).padding(top = if(AppTheme.isNothing) circolareplus.design.NothingSpacing.Section else 18.dp, bottom = if(AppTheme.isNothing) 0.dp else 4.dp),
+                Modifier
+                    .padding(horizontal = homeGutter)
+                    .padding(top = 18.dp, bottom = 4.dp)
+                    .glassHomeCardShift(cardShift, response = 0.55f),
                 subjectColorsRevision = subjectColorsRevision,
                 subjectColorsEnabled = subjectColorsEnabled,
                 subjectColorOverrides = subjectColorOverrides,
@@ -196,7 +199,7 @@ fun HomeScreen(
                 latestCircular = latestCircular,
                 onClick = openLatestCircular,
                 isLoading = isCircularsLoading,
-                modifier = Modifier.ailaAppear(0)
+                modifier = Modifier.ailaAppear(0).glassHomeCardShift(cardShift, response = 0.75f)
             )
         }
         val eventsSection: @Composable () -> Unit = {
@@ -212,7 +215,7 @@ fun HomeScreen(
                 onNavigateToCalendar = onNavigateToCalendar,
                 onEventClick = onEventClick,
                 isLoading = isEventsLoading,
-                modifier = Modifier.ailaAppear(2)
+                modifier = Modifier.ailaAppear(2).glassHomeCardShift(cardShift)
             )
         }
         val shortcutsSection: @Composable () -> Unit = {
@@ -220,7 +223,7 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(AppTheme.Space12))
 
-            AilaCard(modifier = Modifier.ailaAppear(4)) {
+            AilaCard(modifier = Modifier.ailaAppear(4).glassHomeCardShift(cardShift, response = 0.85f)) {
                 AilaListRow(
                     title = "Sondaggi",
                     subtitle = "Date delle interrogazioni e opzioni da mettere in ordine",
@@ -269,7 +272,7 @@ fun HomeScreen(
                             circulars = recentCirculars,
                             onCircularClick = onNavigateToCircularDetail,
                             isLoading = isCircularsLoading,
-                            modifier = Modifier.ailaAppear(1)
+                            modifier = Modifier.ailaAppear(1).glassHomeCardShift(cardShift, response = 0.75f)
                         )
                     }
                     Column(modifier = Modifier.weight(1f)) {
@@ -280,7 +283,7 @@ fun HomeScreen(
                     AilaSectionTitle(text = "Scorciatoie", modifier = Modifier.ailaAppear(3))
                     Spacer(modifier = Modifier.height(AppTheme.Space12))
                     Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space20)) {
-                        AilaCard(modifier = Modifier.weight(1f).ailaAppear(4)) {
+                        AilaCard(modifier = Modifier.weight(1f).ailaAppear(4).glassHomeCardShift(cardShift, response = 0.85f)) {
                             AilaListRow(
                                 title = "Sondaggi",
                                 subtitle = "Date delle interrogazioni e opzioni da mettere in ordine",
@@ -291,7 +294,7 @@ fun HomeScreen(
                                 }
                             )
                         }
-                        AilaCard(modifier = Modifier.weight(1f).ailaAppear(5)) {
+                        AilaCard(modifier = Modifier.weight(1f).ailaAppear(5).glassHomeCardShift(cardShift)) {
                             AilaListRow(
                                 title = "Bacheca della classe",
                                 subtitle = if (openProposalsCount > 0)
@@ -330,6 +333,31 @@ fun HomeScreen(
         }
     }
 }
+
+@Composable
+private fun rememberGlassHomeCardShift(scrollState: ScrollState): State<Float> {
+    val shift = remember { Animatable(0f) }
+    val limit = with(LocalDensity.current) { 11.dp.toPx() }
+    LaunchedEffect(scrollState, limit) {
+        var previousOffset = scrollState.value
+        snapshotFlow { scrollState.value to scrollState.isScrollInProgress }
+            .collectLatest { (offset, scrolling) ->
+                val delta = offset - previousOffset
+                previousOffset = offset
+                if (delta != 0) {
+                    // La traslazione compensa una parte dello scorrimento e dà inerzia alla card.
+                    shift.snapTo((shift.value * 0.5f + delta * 0.55f).coerceIn(-limit, limit))
+                }
+                if (!scrolling && shift.value != 0f) {
+                    shift.animateTo(0f, ailaSpatialSpring())
+                }
+            }
+    }
+    return shift.asState()
+}
+
+private fun Modifier.glassHomeCardShift(shift: State<Float>?, response: Float = 1f): Modifier =
+    if (shift == null) this else graphicsLayer { translationY = shift.value * response }
 
 /** Card della circolare più recente messa in evidenza in cima alla Home. */
 @Composable
@@ -423,7 +451,6 @@ private fun NextEventsCard(
 @Composable
 private fun HomeHeroPanel(
     studentFirstName: String,
-    isCurrentTab: Boolean,
     onNavigateToSearch: () -> Unit,
     shortcuts: HomeShortcuts,
     profileEntry: AilaProfileEntry?
@@ -447,7 +474,6 @@ private fun HomeHeroPanel(
                     .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
                     .background(AppTheme.HeroGradient)
             )
-            .homeHeroReflection(isCurrentTab)
             // Il pannello passa sotto la barra di stato (ora, Wi-Fi): prima sopra restava una
             // striscia del colore di fondo, staccata dal pannello.
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
@@ -516,51 +542,6 @@ internal fun HomeShortcutRow(shortcuts: HomeShortcuts) {
         }
         HomeQuickIcon("Notifiche", tile, shortcuts.openNotifications, "notifications" in shortcuts.unreadMenus) {
             AppIcons.Bell(Modifier.size(22.dp), iconColor)
-        }
-    }
-}
-
-/** Un riflesso attraversa il pannello quando la Home diventa la scheda corrente. */
-@Composable
-private fun Modifier.homeHeroReflection(isCurrentTab: Boolean): Modifier {
-    if (!isCurrentTab || AppTheme.reduceMotion) return this
-
-    val progress = remember { Animatable(0f) }
-    val duration = if (AppTheme.isGlass) 900 else 720
-    LaunchedEffect(duration) {
-        progress.snapTo(0f)
-        progress.animateTo(1f, ailaMoveSpec(duration))
-    }
-
-    val tint = when {
-        !AppTheme.isGlass -> Color.White.copy(alpha = 0.20f)
-        AppTheme.isDarkMode -> AppTheme.PrimaryBlue.copy(alpha = 0.24f)
-        else -> AppTheme.PrimaryBlue.copy(alpha = 0.15f)
-    }
-    return drawWithCache {
-        val radius = minOf(size.width * 0.58f, size.height * 1.18f)
-        if (radius <= 0f) return@drawWithCache onDrawBehind {}
-        val glow = Brush.radialGradient(
-            0f to tint,
-            0.55f to tint.copy(alpha = tint.alpha * 0.42f),
-            1f to tint.copy(alpha = 0f),
-            center = Offset.Zero,
-            radius = radius
-        )
-        onDrawBehind {
-            val fraction = progress.value
-            if (fraction > 0f && fraction < 1f) {
-                val position = 0.16f + 0.82f * fraction
-                val horizontalFraction = if (layoutDirection == LayoutDirection.Ltr) position else 1f - position
-                translate(left = size.width * horizontalFraction, top = size.height * 0.10f) {
-                    drawCircle(
-                        brush = glow,
-                        radius = radius,
-                        center = Offset.Zero,
-                        alpha = sin(PI * fraction).toFloat()
-                    )
-                }
-            }
         }
     }
 }
