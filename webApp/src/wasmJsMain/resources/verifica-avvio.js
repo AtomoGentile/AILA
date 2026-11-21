@@ -3,7 +3,7 @@
   const state = document.getElementById('stato');
   const button = document.getElementById('verifica');
   const results = document.getElementById('risultati');
-  const bundle = 'aila.js?boot=5';
+  const bundle = 'aila.js?boot=6';
 
   async function check(label, run) {
     const item = document.createElement('li');

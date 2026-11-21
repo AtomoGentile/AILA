@@ -20,6 +20,10 @@ input, textarea, [contenteditable], [contenteditable] * {
   user-select: text;
   -webkit-touch-callout: default;
 }
+#aila-viewport {
+  width: 100%;
+  height: 100%;
+}
 #aila-splash {
   position: fixed;
   inset: 0;
@@ -32,9 +36,7 @@ input, textarea, [contenteditable], [contenteditable] * {
   font: 700 34px/1 system-ui, -apple-system, sans-serif;
   letter-spacing: 6px;
   z-index: 10;
-  transition: opacity 0.25s ease;
 }
-#aila-splash.done { opacity: 0; pointer-events: none; }
 #aila-splash.startup-slow { z-index: 2147483647; }
 .startup-text,
 #aila-startup-recovery {

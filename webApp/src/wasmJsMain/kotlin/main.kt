@@ -45,7 +45,8 @@ fun main() {
         // testo toccato e gli apre la tastiera dentro il gesto (senza, si apre e si richiude
         // subito). ?a11y=1 la riaccende dove e' spenta, ?a11y=0 la spegne anche su iOS: vedi
         // perf-debug.js.
-        ComposeViewport(configure = { isA11YEnabled = a11yRequested() }) {
+        // Compose svuota il suo contenitore quando crea il canvas. Lo splash resta fuori.
+        ComposeViewport(viewportContainerId = "aila-viewport", configure = { isA11YEnabled = a11yRequested() }) {
             val firstFrame = remember { object { var drawn = false } }
             AilaTheme {
                 Box(
