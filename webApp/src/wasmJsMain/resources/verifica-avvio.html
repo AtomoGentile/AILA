@@ -10,7 +10,7 @@
     button { min-height: 44px; padding: 0.5rem 1rem; font: inherit; }
     li { margin: 0.35rem 0; }
   </style>
-  <script src="verifica-avvio.js" defer></script>
+  <script src="verifica-avvio.js?v=2" defer></script>
 </head>
 <body>
   <main>
@@ -19,7 +19,11 @@
     <noscript><p>JavaScript è disattivato nel browser.</p></noscript>
     <button id="verifica" disabled>Esegui la verifica</button>
     <ol id="risultati" aria-live="polite"></ol>
-    <p><a href="./?diagnosi=1#diagnosi-avvio">Apri AILA</a></p>
+    <p><a href="./?avvio=compatibile#diagnosi-avvio">Prova l’avvio compatibile di AILA</a></p>
+    <section id="registro-avvio" hidden>
+      <h2>Ultimo tentativo di avvio</h2>
+      <ol id="fasi-avvio"></ol>
+    </section>
   </main>
 </body>
 </html>

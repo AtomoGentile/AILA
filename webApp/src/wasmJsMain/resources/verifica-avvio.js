@@ -3,7 +3,7 @@
   const state = document.getElementById('stato');
   const button = document.getElementById('verifica');
   const results = document.getElementById('risultati');
-  const bundle = 'aila.js?boot=3';
+  const bundle = 'aila.js?boot=4';
 
   async function check(label, run) {
     const item = document.createElement('li');
@@ -62,8 +62,8 @@
       }
       await check('Grafica WebGL', () => {
         const canvas = document.createElement('canvas');
-        const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
-        if (!gl) throw new DOMException('WebGL non disponibile', 'NotSupportedError');
+        const gl = canvas.getContext('webgl2');
+        if (!gl) throw new DOMException('WebGL 2 non disponibile', 'NotSupportedError');
         gl.getExtension('WEBGL_lose_context')?.loseContext();
       });
       await check('Archivio locale IndexedDB', () => indexedDB.databases());
@@ -74,6 +74,23 @@
       button.disabled = false;
     }
   });
+
+  function showStartupTrace() {
+    try {
+      const trace = JSON.parse(localStorage.getItem('aila-startup-trace') || '[]');
+      if (!Array.isArray(trace) || !trace.length) return;
+      const list = document.getElementById('fasi-avvio');
+      list.replaceChildren(...trace.filter(phase => typeof phase === 'string').map(phase => {
+        const item = document.createElement('li');
+        item.textContent = phase;
+        return item;
+      }));
+      document.getElementById('registro-avvio').hidden = false;
+    } catch (err) { /* La verifica resta utilizzabile anche se l'archivio locale è bloccato. */ }
+  }
+
+  showStartupTrace();
+  window.addEventListener('pageshow', showStartupTrace);
 
   state.textContent = 'JavaScript pronto. Tocca «Esegui la verifica».';
   button.disabled = false;

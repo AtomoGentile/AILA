@@ -90,7 +90,7 @@ function startup() {
       getElementById: id => nodes[id],
       addEventListener: (type, handler) => { documentListeners[type] = handler; },
     },
-    location: { reload() { reloaded = true; } },
+    URLSearchParams, location: { search: '', reload() { reloaded = true; } },
     setTimeout(fn) { timeout = fn; return 1; }, clearTimeout() { timeout = null; },
   });
   return {

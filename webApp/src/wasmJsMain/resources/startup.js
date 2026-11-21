@@ -5,6 +5,40 @@
   var slow = false;
   var errorMessage = '';
   var phase = 'Script di avvio caricato. Attendo il bundle.';
+  var trace;
+  var restoreStreaming;
+
+  if (new URLSearchParams(location.search).get('avvio') === 'compatibile') {
+    var phases = [];
+    trace = window.__ailaStartupTrace = function (message) {
+      phases.push(message);
+      try {
+        localStorage.setItem('aila-startup-trace', JSON.stringify(phases.slice(-16)));
+      } catch (err) { /* Il messaggio resta comunque visibile nella schermata di avvio. */ }
+    };
+    trace(phase);
+
+    // In questo avvio separiamo la compilazione dall'istanziazione. È lo stesso modulo
+    // verificato dalla pagina di diagnosi, con gli import forniti dal bundle di produzione.
+    var wasm = window.WebAssembly;
+    if (wasm && typeof wasm.compileStreaming === 'function' && typeof wasm.instantiateStreaming === 'function') {
+      var originalStreaming = wasm.instantiateStreaming;
+      var compatibleStreaming = async function (source, imports, options) {
+        var response = await source;
+        var file = new URL(response.url, location.href).pathname.split('/').pop() || 'WebAssembly';
+        trace('Compilazione: ' + file);
+        var module = await wasm.compileStreaming(response, options);
+        trace('Istanziazione: ' + file);
+        var instance = await wasm.instantiate(module, imports);
+        trace('Modulo avviato: ' + file);
+        return { module: module, instance: instance };
+      };
+      wasm.instantiateStreaming = compatibleStreaming;
+      restoreStreaming = function () {
+        if (wasm.instantiateStreaming === compatibleStreaming) wasm.instantiateStreaming = originalStreaming;
+      };
+    }
+  }
 
   function render() {
     if (ready) return;
@@ -20,8 +54,10 @@
   }
 
   function fail(message) {
+    if (ready) return;
     slow = true;
     errorMessage = message;
+    if (trace) trace(message);
     render();
   }
 
@@ -33,11 +69,14 @@
   window.__ailaStartupReady = function () {
     ready = true;
     clearTimeout(timer);
+    if (trace) trace('Interfaccia avviata.');
+    if (restoreStreaming) restoreStreaming();
   };
 
   window.addEventListener('load', function (event) {
     if (event.target.id !== 'aila-app-script') return;
     phase = 'Bundle caricato. Attendo WebAssembly.';
+    if (trace) trace(phase);
     render();
   }, true);
   window.addEventListener('error', function (event) {

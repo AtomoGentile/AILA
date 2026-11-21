@@ -54,7 +54,7 @@ fun main() {
 private fun a11yRequested(): Boolean = js("window.__ailaA11y === true")
 
 private fun startupPhase(message: String) {
-    js("var stage = document.getElementById('diagnosi-avvio'); if (stage) { stage.setAttribute('data-kotlin', ''); stage.textContent = message; }")
+    js("if (window.__ailaStartupTrace) window.__ailaStartupTrace(message); var stage = document.getElementById('diagnosi-avvio'); if (stage) { stage.setAttribute('data-kotlin', ''); stage.textContent = message; }")
 }
 
 private fun hideSplash() {
