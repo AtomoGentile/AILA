@@ -61,7 +61,7 @@ internal fun AilaBriefCard(
         .border(1.dp, if(dark) Color.White.copy(alpha=.12f) else Color(0xFF27324B).copy(alpha=.12f), panelShape)
     Box(
         modifier.fillMaxWidth()
-            .then(panelSurface)
+            .glassPageMotion().then(panelSurface)
     ) {
         if (!AppTheme.isNothing) Canvas(Modifier.matchParentSize()) {
             val center = Offset(size.width * .96f, size.height * .04f)

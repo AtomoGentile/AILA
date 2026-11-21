@@ -6,8 +6,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -41,7 +39,6 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
@@ -84,12 +81,15 @@ import circolareplus.design.ailaExplodeOut
 import circolareplus.design.animateContainerClose
 import circolareplus.design.animateContainerOpen
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
 import circolareplus.design.ailaMorphClip
 import circolareplus.design.ailaSheetReveal
 import circolareplus.design.GlassBase
 import circolareplus.design.GlassEdge
 import circolareplus.design.ailaGlassSurface
+import circolareplus.design.GlassPageFrame
+import circolareplus.design.GlassPageMotion
+import circolareplus.design.LocalGlassPageMotion
+import circolareplus.design.glassPageMotion
 import androidx.compose.animation.core.animateFloat
 import circolareplus.design.ailaSelectionPop
 import circolareplus.design.ailaUnlock
@@ -3400,13 +3400,11 @@ fun MainAppShell(
                     val glassTabs = AppTheme.isGlass
                     val liteTabEffects = AppTheme.liteEffects
                     val reduceTabMotion = AppTheme.reduceMotion
-                    val glassCardMotion = glassTabs && !reduceTabMotion && !useRail
-                    val pagerTop = remember { mutableFloatStateOf(0f) }
-                    val swipeAnchorY = remember { mutableFloatStateOf(0f) }
+                    val glassCardMotion = glassTabs && !reduceTabMotion
                     val tabExitDuration = if (liteTabEffects || reduceTabMotion) 60 else 85
                     val tabEnterDuration = when {
+                        glassCardMotion -> 330
                         liteTabEffects -> 130
-                        glassTabs -> 210
                         else -> 230
                     }
                     var confirmedTab by remember(tabPager) { mutableStateOf(selectedTab) }
@@ -3470,15 +3468,6 @@ fun MainAppShell(
                             snapAnimationSpec = circolareplus.design.ailaNavigationSpring()
                         ),
                         modifier = Modifier.fillMaxSize()
-                            .then(if (glassCardMotion) {
-                                Modifier.onGloballyPositioned { pagerTop.floatValue = it.positionInRoot().y }
-                                    .pointerInput(Unit) {
-                                        awaitEachGesture {
-                                            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                                            swipeAnchorY.floatValue = pagerTop.floatValue + down.position.y
-                                        }
-                                    }
-                            } else Modifier)
                             .graphicsLayer {
                                 alpha = tabFade.value
                                 val arrival = if (!liteTabEffects && !reduceTabMotion) {
@@ -3500,9 +3489,31 @@ fun MainAppShell(
                         )
                     ) { page ->
                     val tab = MainTab.entries[page]
+                    val glassMotion = if (glassCardMotion) {
+                        val readFrame by rememberUpdatedState<() -> GlassPageFrame?>({
+                            val fade = tabFade.value
+                            val arrival = tabArrivalDirection
+                            val offset = tabPager.currentPage - page + tabPager.currentPageOffsetFraction
+                            val distance = kotlin.math.abs(offset)
+                            when {
+                                selectedTab == confirmedTab && tab == selectedTab && fade < 1f && arrival != 0f ->
+                                    GlassPageFrame(fade, arrival, followsPager = false)
+                                !useRail && fade == 1f && selectedTab == confirmedTab && distance > 0f && distance < 1f -> {
+                                    val outgoing = tabPager.settledPage == page
+                                    val direction = if (offset > 0f) 1f else -1f
+                                    if (outgoing) GlassPageFrame(distance, direction, followsPager = true)
+                                    else GlassPageFrame(1f - distance, -direction, followsPager = true)
+                                }
+                                else -> null
+                            }
+                        })
+                        remember(page) { GlassPageMotion { readFrame() } }
+                    } else null
                     // Margine della barra di stato per ogni tab tranne la Home (che ci fa passare
                     // sotto il suo pannello) e salvo quando c'e' gia' la striscia offline in cima.
                     Box(modifier = Modifier.fillMaxSize().then(
+                        if (glassMotion != null) Modifier.onGloballyPositioned(glassMotion::updateBounds) else Modifier
+                    ).then(
                         // Il pager trasla gia' le pagine. Manteniamo solo una lieve scala:
                         // alpha < 1 sull'intera pagina richiede un buffer fuori schermo e
                         // compositing aggiuntivo per entrambe le pagine a ogni frame.
@@ -3531,17 +3542,10 @@ fun MainAppShell(
                             }
                         )
                     )) {
+                    CompositionLocalProvider(LocalGlassPageMotion provides glassMotion) {
                     when (tab) {
                         MainTab.HOME -> {
                             HomeScreen(
-                                cardSwipeProgress = if (glassCardMotion) {
-                                    {
-                                        if (selectedTab == confirmedTab && tabFade.value == 1f) {
-                                            tabPager.currentPage - page + tabPager.currentPageOffsetFraction
-                                        } else 0f
-                                    }
-                                } else null,
-                                cardSwipeAnchorY = { swipeAnchorY.floatValue },
                                 subjectColorsRevision = subjectColorsRevision,
                                 subjectColorsEnabled = run { subjectColorsRevision; AppContainer.settings.subjectColorsEnabled },
                                 subjectColorOverrides = run { subjectColorsRevision; AppContainer.settings.subjectColorOverrides },
@@ -4042,7 +4046,7 @@ fun MainAppShell(
                                         .fillMaxWidth()
                                         .background(AppTheme.BackgroundLight)
                                 ) {
-                                    Row(Modifier.fillMaxWidth().padding(horizontal = if(AppTheme.isNothing) 20.dp else AppTheme.Space16).padding(top = AppTheme.Space16, bottom = AppTheme.Space12), verticalAlignment = Alignment.CenterVertically) {
+                                    Row(Modifier.fillMaxWidth().glassPageMotion().padding(horizontal = if(AppTheme.isNothing) 20.dp else AppTheme.Space16).padding(top = AppTheme.Space16, bottom = AppTheme.Space12), verticalAlignment = Alignment.CenterVertically) {
                                         if(!AppTheme.isNothing) {
                                             circolareplus.design.AilaBrandMark(size = 40.dp)
                                             Spacer(Modifier.width(12.dp))
@@ -4534,6 +4538,7 @@ fun MainAppShell(
                                 }
                             }
                         }
+                    }
                     }
                     }
                     }

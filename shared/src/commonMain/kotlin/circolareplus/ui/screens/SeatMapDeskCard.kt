@@ -1,5 +1,6 @@
 package circolareplus.ui.screens
 
+import circolareplus.design.glassPageMotion
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -105,6 +106,7 @@ fun SeatMapDeskCard(
         colors = CardDefaults.cardColors(containerColor = if (glass) Color.Transparent else containerColor),
         elevation = CardDefaults.cardElevation(defaultElevation = AppTheme.CardElevation),
         modifier = modifier
+            .glassPageMotion()
             .graphicsLayer {
                 scaleX = focusScale.value
                 scaleY = focusScale.value

@@ -23,6 +23,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -102,7 +103,7 @@ fun AilaScreenHeader(
         NothingScreenHeader(title, subtitle, modifier, action)
         return
     }
-    Column(modifier = modifier.fillMaxWidth().background(AppTheme.BackgroundLight)) {
+    Column(modifier = modifier.fillMaxWidth().glassPageMotion().background(AppTheme.BackgroundLight)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -179,7 +180,7 @@ fun AilaBackBar(
         }
         return
     }
-    Column(modifier = modifier.fillMaxWidth().background(AppTheme.BackgroundLight)) {
+    Column(modifier = modifier.fillMaxWidth().glassPageMotion().background(AppTheme.BackgroundLight)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -263,6 +264,7 @@ fun AilaSegmentedTabs(
     BoxWithConstraints(
         modifier = modifier
             .then(tabletMaxWidth)
+            .glassPageMotion()
             .clip(RoundedCornerShape(percent = 50))
             .background(AppTheme.TrackFill)
             .then(if (AppTheme.isGlass) Modifier.border(1.dp, AppTheme.GlassEdge, RoundedCornerShape(percent = 50)) else Modifier)
@@ -454,12 +456,14 @@ fun AilaCard(
     } else {
         Color.White.copy(alpha = 0.13f)
     }
+    val motion = LocalGlassPageMotion.current
     Card(
         shape = shape,
         colors = CardDefaults.cardColors(containerColor = if (glass) Color.Transparent else containerColor),
         elevation = CardDefaults.cardElevation(defaultElevation = AppTheme.CardElevation),
         modifier = modifier
             .fillMaxWidth()
+            .glassPageMotion()
             // Scala più contenuta delle righe: su una superficie grande il 3% si nota già.
             .then(
                 if (onClick != null) {
@@ -470,8 +474,10 @@ fun AilaCard(
                 } else Modifier
             )
             .then(if (glass) Modifier.ailaGlassSurface(shape, tint = glassTint) else if (AppTheme.isNothing) Modifier.border(1.dp, AppTheme.CardBorder, shape) else Modifier),
-        content = content
-    )
+    ) {
+        if (motion == null) content()
+        else CompositionLocalProvider(LocalGlassPageMotion provides null) { content() }
+    }
 }
 
 /** Riquadro icona colorato: l'elemento che nel mockup accompagna ogni riga di ogni lista. */
@@ -951,6 +957,7 @@ fun AilaEmptyState(
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .glassPageMotion()
             .padding(horizontal = AppTheme.Space32, vertical = AppTheme.Space48),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {

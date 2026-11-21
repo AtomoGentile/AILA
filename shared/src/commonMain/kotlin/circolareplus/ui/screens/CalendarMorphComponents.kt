@@ -191,7 +191,7 @@ internal fun CalendarMorphSurface(progress: Float, content: @Composable ColumnSc
     val shape = RoundedCornerShape(AppTheme.CardCornerRadius * (1f - progress))
     val tint = if (AppTheme.isDarkMode) androidx.compose.ui.graphics.Color(0xFFB8C8E8).copy(alpha = 0.075f)
         else androidx.compose.ui.graphics.Color.White.copy(alpha = 0.13f)
-    Box(Modifier.fillMaxWidth().clip(shape)) {
+    Box(Modifier.fillMaxWidth().glassPageMotion().clip(shape)) {
         Box(Modifier.matchParentSize().graphicsLayer { alpha = 1f - progress }
             .then(if (AppTheme.isGlass) Modifier.ailaGlassSurface(shape, tint = tint)
                 else Modifier.background(AppTheme.CardSurface)))

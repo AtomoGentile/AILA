@@ -1,5 +1,6 @@
 package circolareplus.ui.screens
 
+import circolareplus.design.glassPageMotion
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -23,7 +24,7 @@ import androidx.compose.ui.graphics.Shape
 internal fun SectionFeatureCard(title:String, description:String, modifier:Modifier=Modifier, badge:String?=null,
     icon:@Composable ()->Unit, actions:(@Composable RowScope.()->Unit)?=null) {
     val tint=MaterialTheme.colorScheme.tertiary
-    Column(modifier.fillMaxWidth().communitySurface(RoundedCornerShape(28.dp),tint).padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+    Column(modifier.fillMaxWidth().glassPageMotion().communitySurface(RoundedCornerShape(28.dp),tint).padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
             Box(Modifier.size(44.dp).background(tint.copy(alpha=.16f),RoundedCornerShape(16.dp)),contentAlignment=Alignment.Center){icon()}
             Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)) {
@@ -42,7 +43,7 @@ internal fun SectionEmptyCard(title:String, description:String, modifier:Modifie
         AilaEmptyState(title,description,modifier,icon=icon)
         return
     }
-    Column(modifier.fillMaxWidth().communitySurface(RoundedCornerShape(28.dp)).padding(24.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(12.dp)) {
+    Column(modifier.fillMaxWidth().glassPageMotion().communitySurface(RoundedCornerShape(28.dp)).padding(24.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(12.dp)) {
         Box(Modifier.size(60.dp).background(MaterialTheme.colorScheme.secondaryContainer,RoundedCornerShape(22.dp)),contentAlignment=Alignment.Center){icon()}
         Text(title,style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold,color=AppTheme.TextDark,textAlign=TextAlign.Center)
         Text(description,style=MaterialTheme.typography.bodyMedium,color=AppTheme.TextMuted,textAlign=TextAlign.Center)

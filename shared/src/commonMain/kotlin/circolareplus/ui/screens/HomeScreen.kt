@@ -14,7 +14,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.shape.CircleShape
@@ -26,16 +25,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
 import circolareplus.design.AilaCard
 import circolareplus.design.AilaIconTile
@@ -46,6 +41,7 @@ import circolareplus.design.AilaSectionTitle
 import circolareplus.design.ailaAppear
 import circolareplus.design.ailaGlassOverlay
 import circolareplus.design.ailaGlassSurface
+import circolareplus.design.glassPageMotion
 import circolareplus.design.ailaGlassPressable
 import circolareplus.design.ailaMorphClip
 import circolareplus.design.ailaNavigationSpring
@@ -60,8 +56,6 @@ import circolareplus.util.today
 import circolareplus.util.plusDays
 import circolareplus.domain.model.CalendarEvent
 import circolareplus.domain.model.Circular
-import kotlin.math.abs
-import kotlin.math.sign
 
 /**
  * Home in stile AILA: pannello superiore a gradiente con il saluto e le quattro icone di accesso
@@ -108,9 +102,7 @@ fun HomeScreen(
     onNavigateToClassRoster: () -> Unit = {},
     onNavigateToNotifications: () -> Unit = {},
     unreadMenus: Set<String> = emptySet(),
-    profileEntry: AilaProfileEntry? = LocalProfileEntry.current,
-    cardSwipeProgress: (() -> Float)? = null,
-    cardSwipeAnchorY: () -> Float = { 0f }
+    profileEntry: AilaProfileEntry? = LocalProfileEntry.current
 ) {
     val scrollState = rememberScrollState()
     val homeGutter = if(AppTheme.isNothing) circolareplus.design.NothingSpacing.Edge else AppTheme.Space16
@@ -185,7 +177,7 @@ fun HomeScreen(
                 Modifier
                     .padding(horizontal = homeGutter)
                     .padding(top = 18.dp, bottom = 4.dp)
-                    .glassHomeCardMotion(cardSwipeProgress, cardSwipeAnchorY),
+                    ,
                 subjectColorsRevision = subjectColorsRevision,
                 subjectColorsEnabled = subjectColorsEnabled,
                 subjectColorOverrides = subjectColorOverrides,
@@ -197,7 +189,7 @@ fun HomeScreen(
                 latestCircular = latestCircular,
                 onClick = openLatestCircular,
                 isLoading = isCircularsLoading,
-                modifier = Modifier.ailaAppear(0).glassHomeCardMotion(cardSwipeProgress, cardSwipeAnchorY)
+                modifier = Modifier.ailaAppear(0)
             )
         }
         val eventsSection: @Composable () -> Unit = {
@@ -213,7 +205,7 @@ fun HomeScreen(
                 onNavigateToCalendar = onNavigateToCalendar,
                 onEventClick = onEventClick,
                 isLoading = isEventsLoading,
-                modifier = Modifier.ailaAppear(2).glassHomeCardMotion(cardSwipeProgress, cardSwipeAnchorY)
+                modifier = Modifier.ailaAppear(2)
             )
         }
         val shortcutsSection: @Composable () -> Unit = {
@@ -221,7 +213,7 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(AppTheme.Space12))
 
-            AilaCard(modifier = Modifier.ailaAppear(4).glassHomeCardMotion(cardSwipeProgress, cardSwipeAnchorY)) {
+            AilaCard(modifier = Modifier.ailaAppear(4)) {
                 AilaListRow(
                     title = "Sondaggi",
                     subtitle = "Date delle interrogazioni e opzioni da mettere in ordine",
@@ -270,7 +262,7 @@ fun HomeScreen(
                             circulars = recentCirculars,
                             onCircularClick = onNavigateToCircularDetail,
                             isLoading = isCircularsLoading,
-                            modifier = Modifier.ailaAppear(1).glassHomeCardMotion(cardSwipeProgress, cardSwipeAnchorY)
+                            modifier = Modifier.ailaAppear(1)
                         )
                     }
                     Column(modifier = Modifier.weight(1f)) {
@@ -281,7 +273,7 @@ fun HomeScreen(
                     AilaSectionTitle(text = "Scorciatoie", modifier = Modifier.ailaAppear(3))
                     Spacer(modifier = Modifier.height(AppTheme.Space12))
                     Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space20)) {
-                        AilaCard(modifier = Modifier.weight(1f).ailaAppear(4).glassHomeCardMotion(cardSwipeProgress, cardSwipeAnchorY)) {
+                        AilaCard(modifier = Modifier.weight(1f).ailaAppear(4)) {
                             AilaListRow(
                                 title = "Sondaggi",
                                 subtitle = "Date delle interrogazioni e opzioni da mettere in ordine",
@@ -292,7 +284,7 @@ fun HomeScreen(
                                 }
                             )
                         }
-                        AilaCard(modifier = Modifier.weight(1f).ailaAppear(5).glassHomeCardMotion(cardSwipeProgress, cardSwipeAnchorY)) {
+                        AilaCard(modifier = Modifier.weight(1f).ailaAppear(5)) {
                             AilaListRow(
                                 title = "Bacheca della classe",
                                 subtitle = if (openProposalsCount > 0)
@@ -329,26 +321,6 @@ fun HomeScreen(
                 shortcutsSection()
             }
         }
-    }
-}
-
-@Composable
-private fun Modifier.glassHomeCardMotion(
-    swipeProgress: (() -> Float)?,
-    anchorY: () -> Float
-): Modifier {
-    if (swipeProgress == null) return this
-    val centerY = remember { mutableFloatStateOf(0f) }
-    val direction = if (LocalLayoutDirection.current == LayoutDirection.Ltr) 1f else -1f
-    return onGloballyPositioned { coordinates ->
-        centerY.floatValue = coordinates.positionInRoot().y + coordinates.size.height / 2f
-    }.graphicsLayer {
-        val progress = swipeProgress()
-        val phase = abs(progress).coerceAtMost(1f)
-        // La distanza dal punto del gesto regola quanto a lungo la card rimane indietro.
-        val distance = (abs(centerY.floatValue - anchorY()) / 420.dp.toPx()).coerceAtMost(1f)
-        val lag = 4f * phase * (1f - phase) * (0.16f + 0.84f * distance)
-        translationX = direction * progress.sign * lag * minOf(58.dp.toPx(), size.width * 0.18f)
     }
 }
 
@@ -451,6 +423,7 @@ private fun HomeHeroPanel(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .glassPageMotion()
             // Liquid Glass: pannello di vetro vero (lo stesso delle card: velo chiaro, bagliore in
             // alto, bordo speculare), che lascia vedere lo sfondo a macchie invece di coprirlo con
             // un colore suo. Il gradiente colorato di prima sembrava un giocattolo.
