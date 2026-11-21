@@ -7,8 +7,9 @@
   var phase = 'Script di avvio caricato. Attendo il bundle.';
   var trace;
   var restoreStreaming;
+  var compatible = new URLSearchParams(location.search).get('avvio') === 'compatibile';
 
-  if (new URLSearchParams(location.search).get('avvio') === 'compatibile') {
+  if (compatible) {
     var phases = [];
     trace = window.__ailaStartupTrace = function (message) {
       phases.push(message);
@@ -56,6 +57,7 @@
   function fail(message) {
     if (ready) return;
     slow = true;
+    if (errorMessage && message === 'Errore durante l’avvio.') return;
     errorMessage = message;
     if (trace) trace(message);
     render();
@@ -83,24 +85,44 @@
     if (event.target.id === 'aila-app-script') {
       fail('Il browser non ha caricato il bundle.');
     } else if (event.filename && /\/aila\.js(?:[?#]|$)/.test(event.filename)) {
-      runtimeFailure(event.error);
+      runtimeFailure(event.error, event.message);
     }
   }, true);
   window.addEventListener('unhandledrejection', function (event) {
     runtimeFailure(event.reason);
   });
 
-  function runtimeFailure(error) {
-    // Riporta solo la categoria locale. I messaggi delle eccezioni possono contenere URL o dati.
+  function errorDetail(value) {
+    if (typeof value !== 'string') return '';
+    return value.split(/[\r\n]/)[0]
+      .replace(/\b(?:https?:\/\/|blob:|data:|file:\/\/)[^\s"'\x60]+/gi, '[indirizzo]')
+      .replace(/\b[A-Za-z0-9_-]{24,}(?:\.[A-Za-z0-9_-]+)*/g, '[valore]')
+      .trim()
+      .slice(0, 180);
+  }
+
+  function runtimeFailure(error, eventMessage) {
     var name = error && error.name;
-    var category = typeof name === 'string' && /^[A-Za-z]{1,32}Error$/.test(name) ? ' (' + name + ')' : '';
-    fail('Errore durante l’avvio' + category + '.');
+    var category = typeof name === 'string' && /^(?:Error|[A-Za-z]{1,32}(?:Error|Exception))$/.test(name)
+      ? ' (' + name + ')' : '';
+    var detail = errorDetail(error && error.message) || errorDetail(eventMessage) || errorDetail(error);
+    var cause = errorDetail(error && error.cause && error.cause.message);
+    if (cause && cause !== detail) detail += (detail ? ' · ' : '') + cause;
+    fail('Errore durante l’avvio' + category + (detail ? ': ' + detail : '.'));
   }
 
   document.addEventListener('click', function (event) {
     if (event.target.id !== 'aila-startup-retry') return;
     event.preventDefault();
-    location.reload();
+    var ua = navigator.userAgent || '';
+    var ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    if (!compatible && ios) {
+      var retryUrl = new URL(location.href);
+      retryUrl.searchParams.set('avvio', 'compatibile');
+      location.replace(retryUrl.href);
+    } else {
+      location.reload();
+    }
   });
   document.addEventListener('DOMContentLoaded', render);
   render();

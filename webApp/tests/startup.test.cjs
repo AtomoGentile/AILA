@@ -74,8 +74,8 @@ test('transazione abortita: non restituisce una cache incompleta', async () => {
   assert.equal(s.timers.size, 0);
 });
 
-function startup() {
-  let timeout, reloaded = false;
+function startup({ userAgent = '', search = '' } = {}) {
+  let timeout, replaced, reloaded = false;
   const classes = new Set();
   const documentListeners = {};
   const windowListeners = {};
@@ -90,7 +90,13 @@ function startup() {
       getElementById: id => nodes[id],
       addEventListener: (type, handler) => { documentListeners[type] = handler; },
     },
-    URLSearchParams, location: { search: '', reload() { reloaded = true; } },
+    URL, URLSearchParams, navigator: { userAgent }, localStorage: { setItem() {} },
+    location: {
+      search,
+      href: 'https://aila.test/' + search + '#diagnosi-avvio',
+      reload() { reloaded = true; },
+      replace(url) { replaced = url; },
+    },
     setTimeout(fn) { timeout = fn; return 1; }, clearTimeout() { timeout = null; },
   });
   return {
@@ -98,6 +104,7 @@ function startup() {
     expire() { timeout?.(); },
     retry() { documentListeners.click({ target: { id: 'aila-startup-retry' }, preventDefault() {} }); },
     get reloaded() { return reloaded; },
+    get replaced() { return replaced; },
   };
 }
 
@@ -125,7 +132,7 @@ test('bundle assente: mostra subito l’errore e il recupero', () => {
   assert.equal(s.classes.has('startup-slow'), true);
 });
 
-test('un errore Wasm conserva la fase raggiunta e mostra solo la categoria', () => {
+test('un errore Wasm conserva la fase raggiunta e oscura gli indirizzi', () => {
   const s = startup();
   const stage = s.nodes['diagnosi-avvio'];
   stage.kotlinStarted = true;
@@ -133,5 +140,25 @@ test('un errore Wasm conserva la fase raggiunta e mostra solo la categoria', () 
   s.windowListeners.load({ target: { id: 'aila-app-script' } });
   s.windowListeners.unhandledrejection({ reason: new WebAssembly.RuntimeError('https://private.test') });
   assert.equal(stage.textContent, 'Carico i dati offline.');
-  assert.equal(s.nodes['aila-startup-error'].textContent, 'Errore durante l’avvio (RuntimeError).');
+  assert.equal(s.nodes['aila-startup-error'].textContent, 'Errore durante l’avvio (RuntimeError): [indirizzo]');
+});
+
+test('un errore generico conserva la descrizione e la causa locale', () => {
+  const s = startup();
+  const error = new Error('Impossibile aprire il canvas.', { cause: new Error('Contesto WebGL perso.') });
+  s.windowListeners.unhandledrejection({ reason: error });
+  s.windowListeners.unhandledrejection({ reason: undefined });
+  assert.equal(s.nodes['aila-startup-error'].textContent,
+    'Errore durante l’avvio (Error): Impossibile aprire il canvas. · Contesto WebGL perso.');
+});
+
+test('Riprova su iPhone passa una volta all’avvio compatibile e conserva il link', () => {
+  const s = startup({ userAgent: 'iPhone', search: '?diagnosi=1' });
+  s.retry();
+  assert.equal(s.replaced, 'https://aila.test/?diagnosi=1&avvio=compatibile#diagnosi-avvio');
+  assert.equal(s.reloaded, false);
+  const second = startup({ userAgent: 'iPhone', search: '?avvio=compatibile' });
+  second.retry();
+  assert.equal(second.reloaded, true);
+  assert.equal(second.replaced, undefined);
 });

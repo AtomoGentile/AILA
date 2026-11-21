@@ -47,7 +47,9 @@ input, textarea, [contenteditable], [contenteditable] * {
   letter-spacing: normal;
 }
 #diagnosi-avvio { display: none; }
-#diagnosi-avvio:target { display: block; }
+#diagnosi-avvio:target,
+#aila-splash.startup-slow #diagnosi-avvio { display: block; }
+#aila-startup-error { overflow-wrap: anywhere; }
 #aila-startup-recovery {
   visibility: hidden;
   animation: aila-show-startup-recovery 0s 20s forwards;
