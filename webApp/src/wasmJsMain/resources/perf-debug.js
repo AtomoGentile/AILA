@@ -18,8 +18,11 @@
 (function () {
   'use strict';
   var DEFAULT_DPR_CAP = 2;
+  var IOS_CANVAS_PIXEL_BUDGET = 2000000;
   var perf = false;
   var dprCap = DEFAULT_DPR_CAP;
+  var dprOverridden = false;
+  var savedReducedGraphics = false;
   // Il browser non dice "sono un iPhone" in modo diretto: si legge lo user agent. Gli iPad recenti
   // si presentano come Mac, ma un Mac vero non ha lo schermo tattile (stesso criterio di
   // Platform.wasmJs.kt e ios-keyboard.js).
@@ -42,9 +45,25 @@
     var d = /[?&]dpr=([0-9.]+)/.exec(location.search);
     if (d) localStorage.setItem('aila-dpr', d[1]);
     var stored = localStorage.getItem('aila-dpr');
-    if (stored !== null) dprCap = parseFloat(stored) || 0;
+    if (stored !== null) {
+      dprCap = parseFloat(stored) || 0;
+      dprOverridden = true;
+    }
+    savedReducedGraphics = localStorage.getItem('aila-grafica-ridotta') === '1';
   } catch (err) {
     perf = /[?&]perf=1/.test(location.search);
+  }
+
+  if (isIOS) {
+    var viewport = document.getElementById('aila-viewport');
+    var width = (viewport && viewport.clientWidth) || window.innerWidth;
+    var height = (viewport && viewport.clientHeight) || window.innerHeight;
+    var projectedPixels = width * height * dprCap * dprCap;
+    // Su tablet il buffer WebGL a DPR 2 può diventare molto più grande di quello di un iPhone.
+    if ((!dprOverridden && (savedReducedGraphics || projectedPixels > IOS_CANVAS_PIXEL_BUDGET)) ||
+        new URLSearchParams(location.search).get('grafica') === 'ridotta') {
+      dprCap = 1;
+    }
   }
 
   if (dprCap > 0) {

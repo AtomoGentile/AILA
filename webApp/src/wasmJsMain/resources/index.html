@@ -14,14 +14,15 @@
     <meta name="apple-mobile-web-app-title" content="AILA" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="format-detection" content="telephone=no" />
-    <script src="startup.js?v=4" defer></script>
-    <link rel="stylesheet" href="styles.css?v=4" />
-    <script src="perf-debug.js" defer></script>
+    <script src="startup.js?v=5" defer></script>
+    <link rel="stylesheet" href="styles.css?v=5" />
+    <script src="perf-debug.js?v=2" defer></script>
     <script src="ios-keyboard.js?v=11" defer></script>
     <script id="aila-app-script" src="aila.js?boot=6" defer></script>
   </head>
   <body>
-    <div id="aila-viewport"></div>
+    <!-- Dimensioni disponibili anche prima del caricamento del foglio di stile. -->
+    <div id="aila-viewport" style="position: fixed; inset: 0"></div>
     <!-- Schermata di avvio: resta finche' Compose non disegna il primo fotogramma. -->
     <div id="aila-splash">
       <div class="mark">AILA</div>

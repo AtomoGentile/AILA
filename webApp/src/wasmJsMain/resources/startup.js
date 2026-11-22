@@ -7,7 +7,11 @@
   var phase = 'Script di avvio caricato. Attendo il bundle.';
   var trace;
   var restoreStreaming;
-  var compatible = new URLSearchParams(location.search).get('avvio') === 'compatibile';
+  var params = new URLSearchParams(location.search);
+  var compatible = params.get('avvio') === 'compatibile';
+  var reducedGraphics = params.get('grafica') === 'ridotta';
+  var ua = navigator.userAgent || '';
+  var ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
 
   if (compatible) {
     var phases = [];
@@ -71,6 +75,11 @@
   window.__ailaStartupReady = function () {
     ready = true;
     clearTimeout(timer);
+    if (ios && params.get('grafica') === 'ridotta') {
+      try {
+        localStorage.setItem('aila-grafica-ridotta', '1');
+      } catch (err) { /* La modalità resta attiva per questa pagina. */ }
+    }
     if (trace) trace('Interfaccia avviata.');
     if (restoreStreaming) restoreStreaming();
   };
@@ -109,13 +118,17 @@
     var cause = errorDetail(error && error.cause && error.cause.message);
     if (cause && cause !== detail) detail += (detail ? ' · ' : '') + cause;
     fail('Errore durante l’avvio' + category + (detail ? ': ' + detail : '.'));
+    if (!ready && ios && !reducedGraphics && /can't wrap nullptr/i.test(detail)) {
+      reducedGraphics = true;
+      var retryUrl = new URL(location.href);
+      retryUrl.searchParams.set('grafica', 'ridotta');
+      location.replace(retryUrl.href);
+    }
   }
 
   document.addEventListener('click', function (event) {
     if (event.target.id !== 'aila-startup-retry') return;
     event.preventDefault();
-    var ua = navigator.userAgent || '';
-    var ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
     if (!compatible && ios) {
       var retryUrl = new URL(location.href);
       retryUrl.searchParams.set('avvio', 'compatibile');

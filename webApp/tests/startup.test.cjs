@@ -77,6 +77,7 @@ test('transazione abortita: non restituisce una cache incompleta', async () => {
 function startup({ userAgent = '', search = '' } = {}) {
   let timeout, replaced, reloaded = false;
   const classes = new Set();
+  const storage = new Map();
   const documentListeners = {};
   const windowListeners = {};
   const nodes = {
@@ -90,7 +91,7 @@ function startup({ userAgent = '', search = '' } = {}) {
       getElementById: id => nodes[id],
       addEventListener: (type, handler) => { documentListeners[type] = handler; },
     },
-    URL, URLSearchParams, navigator: { userAgent }, localStorage: { setItem() {} },
+    URL, URLSearchParams, navigator: { userAgent }, localStorage: { setItem: storage.set.bind(storage) },
     location: {
       search,
       href: 'https://aila.test/' + search + '#diagnosi-avvio',
@@ -100,7 +101,7 @@ function startup({ userAgent = '', search = '' } = {}) {
     setTimeout(fn) { timeout = fn; return 1; }, clearTimeout() { timeout = null; },
   });
   return {
-    window, nodes, classes, windowListeners,
+    window, nodes, classes, windowListeners, storage,
     expire() { timeout?.(); },
     retry() { documentListeners.click({ target: { id: 'aila-startup-retry' }, preventDefault() {} }); },
     get reloaded() { return reloaded; },
@@ -161,4 +162,19 @@ test('Riprova su iPhone passa una volta all’avvio compatibile e conserva il li
   second.retry();
   assert.equal(second.reloaded, true);
   assert.equal(second.replaced, undefined);
+});
+
+test('un errore di Skiko su iOS riparte a grafica ridotta e la conserva soltanto dopo il disegno', () => {
+  const error = { reason: new Error("Can't wrap nullptr") };
+  const first = startup({ userAgent: 'iPad', search: '?avvio=compatibile' });
+  first.windowListeners.unhandledrejection(error);
+  assert.equal(first.replaced, 'https://aila.test/?avvio=compatibile&grafica=ridotta#diagnosi-avvio');
+  assert.equal(first.storage.has('aila-grafica-ridotta'), false);
+
+  const second = startup({ userAgent: 'iPad', search: '?grafica=ridotta' });
+  second.windowListeners.unhandledrejection(error);
+  assert.equal(second.replaced, undefined);
+  assert.equal(second.storage.has('aila-grafica-ridotta'), false);
+  second.window.__ailaStartupReady();
+  assert.equal(second.storage.get('aila-grafica-ridotta'), '1');
 });
