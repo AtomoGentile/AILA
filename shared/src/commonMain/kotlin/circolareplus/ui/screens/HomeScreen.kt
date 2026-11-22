@@ -41,7 +41,6 @@ import circolareplus.design.AilaSectionTitle
 import circolareplus.design.ailaAppear
 import circolareplus.design.ailaGlassOverlay
 import circolareplus.design.ailaGlassSurface
-import circolareplus.design.glassPageMotion
 import circolareplus.design.ailaGlassPressable
 import circolareplus.design.ailaMorphClip
 import circolareplus.design.ailaNavigationSpring
@@ -423,7 +422,6 @@ private fun HomeHeroPanel(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .glassPageMotion()
             // Liquid Glass: pannello di vetro vero (lo stesso delle card: velo chiaro, bagliore in
             // alto, bordo speculare), che lascia vedere lo sfondo a macchie invece di coprirlo con
             // un colore suo. Il gradiente colorato di prima sembrava un giocattolo.

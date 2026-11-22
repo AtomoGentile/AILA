@@ -66,7 +66,9 @@ import circolareplus.design.AilaTextButton
 import circolareplus.design.nothingDisplayStyle
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
+import circolareplus.design.GlassBase
 import circolareplus.design.LocalFloatingTabBarVisibility
+import circolareplus.design.ailaGlassBackdrop
 import circolareplus.design.appSafeDrawingPadding
 import circolareplus.domain.model.User
 import circolareplus.domain.model.PublishedSeatMap
@@ -676,11 +678,16 @@ private fun SeatMapManagementScreen(
                 enter = if (AppTheme.reduceMotion) fadeIn() else slideInVertically { it },
                 exit = if (AppTheme.reduceMotion) fadeOut() else slideOutVertically { it }
             ) {
+                val glass = AppTheme.isGlass
                 Surface(
                     modifier = Modifier.fillMaxSize().semantics { paneTitle = "Gestione aula" },
-                    color = AppTheme.BackgroundLight
+                    color = if (glass) AppTheme.GlassBase else AppTheme.BackgroundLight
                 ) {
-                    Column(Modifier.fillMaxSize().appSafeDrawingPadding()) {
+                    Column(
+                        Modifier.fillMaxSize()
+                            .then(if (glass) Modifier.ailaGlassBackdrop() else Modifier)
+                            .appSafeDrawingPadding()
+                    ) {
                         Row(
                             Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically

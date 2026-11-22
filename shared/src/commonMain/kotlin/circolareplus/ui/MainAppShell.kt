@@ -3508,7 +3508,8 @@ fun MainAppShell(
                         )
                     ) { page ->
                     val tab = MainTab.entries[page]
-                    val glassMotion = if (glassCardMotion) {
+                    // La Home scorre come un blocco unico per tenere allineati saluto, Brief e card.
+                    val glassMotion = if (glassCardMotion && tab != MainTab.HOME) {
                         val readFrame by rememberUpdatedState<() -> GlassPageFrame?>({
                             val fade = tabFade.value
                             val arrival = tabArrivalDirection
@@ -3541,6 +3542,8 @@ fun MainAppShell(
                         // alpha < 1 sull'intera pagina richiede un buffer fuori schermo e
                         // compositing aggiuntivo per entrambe le pagine a ogni frame.
                         Modifier.graphicsLayer {
+                            // Le card in ritardo restano entro i limiti della loro scheda.
+                            clip = glassCardMotion
                             val offset = (tabPager.currentPage - page) + tabPager.currentPageOffsetFraction
                             val d = kotlin.math.abs(offset).coerceIn(0f, 1f)
                             val scale = if (reduceTabMotion || glassCardMotion) 1f else 1f - 0.04f * d

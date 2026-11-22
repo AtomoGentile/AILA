@@ -16,6 +16,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -60,8 +61,7 @@ internal fun AilaBriefCard(
         .background(Brush.linearGradient(panelColors))
         .border(1.dp, if(dark) Color.White.copy(alpha=.12f) else Color(0xFF27324B).copy(alpha=.12f), panelShape)
     Box(
-        modifier.fillMaxWidth()
-            .glassPageMotion().then(panelSurface)
+        modifier.fillMaxWidth().then(panelSurface)
     ) {
         if (!AppTheme.isNothing) Canvas(Modifier.matchParentSize()) {
             val center = Offset(size.width * .96f, size.height * .04f)
@@ -102,6 +102,12 @@ internal fun AilaBriefCard(
                     AilaBriefKind.PROPOSAL -> if(dark) Color(0xFFFFBDD5) else Color(0xFFBE185D)
                     AilaBriefKind.SEATMAP -> if(dark) Color(0xFFA8D8B9) else Color(0xFF15803D)
                 }
+                val iconColor = when {
+                    subjectColor?.key == "white" -> primaryText
+                    glass && dark && subjectColor != null -> lerp(tint, primaryText, 0.55f)
+                    else -> tint
+                }
+                val labelColor = if (glass && dark && subjectColor != null) primaryText else tint
                 val label = when(item.kind) {
                     AilaBriefKind.EVENT -> if(item.date == today().toIso()) "OGGI" else item.date?.let(::briefDate) ?: "CALENDARIO"
                     AilaBriefKind.CIRCULAR -> "CIRCOLARE N. ${item.sourceId}"
@@ -172,7 +178,7 @@ internal fun AilaBriefCard(
                         ) {
                             when(item.kind) {
                                 AilaBriefKind.SEATMAP -> AppIcons.Chair(Modifier.size(20.dp), if (AppTheme.isNothing || subjectColor?.key == "white") AppTheme.TextDark else tint)
-                                AilaBriefKind.EVENT -> AppIcons.Calendar(Modifier.size(20.dp), if (AppTheme.isNothing || subjectColor?.key == "white") AppTheme.TextDark else tint)
+                                AilaBriefKind.EVENT -> AppIcons.Calendar(Modifier.size(20.dp), iconColor)
                                 AilaBriefKind.CIRCULAR, AilaBriefKind.BUREAUCRACY -> AppIcons.Document(Modifier.size(20.dp), if (AppTheme.isNothing) AppTheme.TextDark else tint)
                                 AilaBriefKind.POLL, AilaBriefKind.RANKING_POLL -> AppIcons.Poll(Modifier.size(20.dp), if (AppTheme.isNothing) AppTheme.TextDark else tint)
                                 AilaBriefKind.FORUM, AilaBriefKind.PROPOSAL -> AppIcons.ChatBubble(Modifier.size(20.dp), if (AppTheme.isNothing) AppTheme.TextDark else tint)
@@ -180,7 +186,7 @@ internal fun AilaBriefCard(
                         }
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(label, color = if (AppTheme.isNothing) AppTheme.TextMuted else tint, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            Text(label, color = labelColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                             Text(item.title, color = if (item.kind == AilaBriefKind.CIRCULAR && !item.isActive) soft else primaryText, style = MaterialTheme.typography.titleMedium, maxLines = if (AppTheme.isNothing) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis)
                         }
                     }
