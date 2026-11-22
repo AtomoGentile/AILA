@@ -14,6 +14,9 @@ import circolareplus.platform.OfflineStore
 import circolareplus.ui.screens.MainAppShell
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.await
+import kotlin.js.JsBoolean
+import kotlin.js.Promise
 
 /**
  * Punto d'ingresso della PWA: l'equivalente di MainActivity (Android) e MainViewController (iOS).
@@ -37,6 +40,7 @@ fun main() {
         startupPhase("Carico i dati offline.")
         OfflineStore.init()
         startupPhase("Dati offline pronti. Avvio l’interfaccia.")
+        viewportReady().await()
         // isA11YEnabled: Compose affianca al canvas una copia DOM dell'albero di accessibilita'
         // (un elemento per ogni nodo) e la risincronizza a ogni cambio di layout, cioe' a ogni
         // fotogramma di un'animazione o di uno scorrimento, sullo stesso thread che disegna. Su
@@ -65,6 +69,9 @@ fun main() {
         }
     }
 }
+
+private fun viewportReady(): Promise<JsBoolean> =
+    js("new Promise(resolve => { const start = () => resolve(true); if (window.__ailaStartViewport) window.__ailaStartViewport(start); else start(); })")
 
 private fun a11yRequested(): Boolean = js("window.__ailaA11y === true")
 

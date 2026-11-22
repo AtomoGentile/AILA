@@ -74,24 +74,28 @@ test('transazione abortita: non restituisce una cache incompleta', async () => {
   assert.equal(s.timers.size, 0);
 });
 
-function startup({ userAgent = '', search = '' } = {}) {
+function startup({ userAgent = '', search = '', maxTouchPoints = 0 } = {}) {
   let timeout, replaced, reloaded = false;
   const classes = new Set();
   const storage = new Map();
+  const frames = [];
   const documentListeners = {};
   const windowListeners = {};
   const nodes = {
     'aila-splash': { classList: { add: name => classes.add(name) } },
+    'aila-viewport': { clientWidth: 0, clientHeight: 0 },
     'aila-startup-error': { hidden: true },
     'diagnosi-avvio': { hasAttribute() { return this.kotlinStarted; } },
   };
   const window = { addEventListener: (type, handler) => { windowListeners[type] = handler; } };
+  const document = {
+    hidden: false,
+    getElementById: id => nodes[id],
+    addEventListener: (type, handler) => { documentListeners[type] = handler; },
+  };
   vm.runInNewContext(readFileSync(join(__dirname, '../src/wasmJsMain/resources/startup.js'), 'utf8'), {
-    window, document: {
-      getElementById: id => nodes[id],
-      addEventListener: (type, handler) => { documentListeners[type] = handler; },
-    },
-    URL, URLSearchParams, navigator: { userAgent }, localStorage: { setItem: storage.set.bind(storage) },
+    window, document, requestAnimationFrame: fn => frames.push(fn),
+    URL, URLSearchParams, navigator: { userAgent, maxTouchPoints }, localStorage: { setItem: storage.set.bind(storage) },
     location: {
       search,
       href: 'https://aila.test/' + search + '#diagnosi-avvio',
@@ -101,13 +105,43 @@ function startup({ userAgent = '', search = '' } = {}) {
     setTimeout(fn) { timeout = fn; return 1; }, clearTimeout() { timeout = null; },
   });
   return {
-    window, nodes, classes, windowListeners, storage,
+    window, document, nodes, classes, windowListeners, storage,
+    frame() { frames.shift()?.(); },
     expire() { timeout?.(); },
     retry() { documentListeners.click({ target: { id: 'aila-startup-retry' }, preventDefault() {} }); },
     get reloaded() { return reloaded; },
     get replaced() { return replaced; },
   };
 }
+
+test('il viewport di iPadOS deve essere visibile, avere dimensioni e stabilizzarsi prima di montare Compose', () => {
+  const s = startup({ userAgent: 'Macintosh', maxTouchPoints: 5 });
+  const viewport = s.nodes['aila-viewport'];
+  let starts = 0;
+  s.window.__ailaStartViewport(() => starts++);
+  s.frame();
+  s.document.hidden = true;
+  viewport.clientWidth = 834;
+  viewport.clientHeight = 1194;
+  s.frame();
+  s.frame();
+  assert.equal(starts, 0);
+  s.document.hidden = false;
+  s.frame();
+  viewport.clientHeight = 1100;
+  s.frame();
+  assert.equal(starts, 0);
+  s.frame();
+  s.frame();
+  assert.equal(starts, 1);
+});
+
+test('i browser non iOS avviano Compose subito', () => {
+  const s = startup({ userAgent: 'Macintosh' });
+  let started = false;
+  s.window.__ailaStartViewport(() => { started = true; });
+  assert.equal(started, true);
+});
 
 test('runtime bloccato: mostra un recupero e ricarica solo su richiesta', () => {
   const s = startup();
@@ -177,4 +211,10 @@ test('un errore di Skiko su iOS riparte a grafica ridotta e la conserva soltanto
   assert.equal(second.storage.has('aila-grafica-ridotta'), false);
   second.window.__ailaStartupReady();
   assert.equal(second.storage.get('aila-grafica-ridotta'), '1');
+});
+
+test('un errore di framebuffer fa partire il recupero anche con il nuovo motore', () => {
+  const s = startup({ userAgent: 'iPhone' });
+  s.windowListeners.unhandledrejection({ reason: new Error('Cannot create surface') });
+  assert.match(s.replaced, /grafica=ridotta/);
 });

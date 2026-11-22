@@ -4,7 +4,7 @@
 // Fa quattro cose:
 //  1. offline della shell: index.html, aila.js, i .wasm, composeResources e icone restano in
 //     cache e l'app riparte anche senza rete. Niente elenco di precache generato a build: la cache
-//     si riempie a runtime (stale-while-revalidate) e all'installazione si scaricano solo i pochi
+//     si riempie a runtime e all'installazione si scaricano solo i pochi
 //     file fissi della shell piu' i .wasm che aila.js nomina;
 //  2. Web Push: mostra SEMPRE la notifica (iOS revoca l'iscrizione se un push non ne mostra una),
 //     la mette nella "casella" letta dall'app per la campanella e avvisa le finestre aperte;
@@ -32,10 +32,12 @@ const INBOX_MAX = 50;
 
 const scopeUrl = new URL(self.registration.scope);
 const indexUrl = new URL('index.html', scopeUrl).href;
+const bundlePath = new URL('aila.js', scopeUrl).pathname;
+const SHELL_NETWORK_TIMEOUT_MS = 4000;
 
 // File fissi della shell, scaricati all'installazione. I nomi con hash (.wasm) si ricavano da
 // aila.js, cosi' non serve generare nulla a build.
-const SHELL_FILES = ['./', 'index.html', 'aila.js?boot=7', 'ios-keyboard.js?v=12', 'startup.js?v=5', 'perf-debug.js?v=2', 'styles.css?v=5', 'manifest.webmanifest',
+const SHELL_FILES = ['./', 'index.html', 'aila.js?boot=8', 'ios-keyboard.js?v=12', 'startup.js?v=6', 'perf-debug.js?v=2', 'styles.css?v=5', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/favicon-32.png', 'icons/apple-touch-icon.png'];
 
 // --- IndexedDB (ponte con l'app) ------------------------------------------------------------
@@ -114,6 +116,11 @@ function isCacheableWasm(response) {
   return isCacheable(response) && /^application\/wasm\s*(?:;|$)/i.test(response.headers.get('content-type') || '');
 }
 
+function isCacheableBundle(response) {
+  return isCacheable(response) && /^(?:text|application)\/(?:javascript|ecmascript)\s*(?:;|$)/i
+    .test(response.headers.get('content-type') || '');
+}
+
 function isHashedWasm(pathname) {
   return /\/[0-9a-f]{16,}\.wasm$/.test(pathname);
 }
@@ -141,6 +148,7 @@ async function cacheScriptWithWasm(cache, request, response) {
 async function putInCache(request, response) {
   const cache = await caches.open(SHELL_CACHE);
   const url = new URL(request.url);
+  if (url.pathname === bundlePath && !isCacheableBundle(response)) return;
   if (url.pathname.endsWith('.js') && !url.pathname.endsWith('/sw.js')) {
     await cacheScriptWithWasm(cache, request, response);
   } else if (!isHashedWasm(url.pathname) || isCacheableWasm(response)) {
@@ -155,7 +163,7 @@ async function storeFresh(request, fresh, cached) {
   if (cached && sameVersion(cached, fresh)) return;
   const changed = !!cached && isNewVersion(cached, fresh);
   await putInCache(request, fresh);
-  if (changed && /\/aila\.js$/.test(new URL(request.url).pathname)) {
+  if (changed && new URL(request.url).pathname === bundlePath) {
     await broadcast({ type: 'aila-app-updated' });
   }
 }
@@ -178,19 +186,40 @@ function isNewVersion(cached, fresh) {
 // Stale-while-revalidate: dalla cache subito (avvio istantaneo, anche offline), e intanto si
 // riscarica la copia per la volta dopo. Senza copia si va in rete. La copia per la cache si fa
 // appena arriva la risposta (prima che la pagina la legga) e si salva senza farla aspettare.
-function staleWhileRevalidate(event) {
+function loadShellAsset(event, isBundle) {
   const request = event.request;
   const cachedP = cachedShellResponse(request);
-  const network = fetch(request).then((response) => ({
+  const fetchResponse = isBundle ? fetch(request, { cache: 'no-cache' }) : fetch(request);
+  const network = fetchResponse.then((response) => ({
     response,
-    copy: isCacheable(response) ? response.clone() : null,
+    copy: (isBundle ? isCacheableBundle(response) : isCacheable(response)) ? response.clone() : null,
   }));
   event.waitUntil(
     network
       .then(async ({ copy }) => { if (copy) await storeFresh(request, copy, await cachedP); })
       .catch(() => {})
   );
-  return cachedP.then((cached) => cached || network.then((r) => r.response));
+  if (!isBundle) return cachedP.then((cached) => cached || network.then((r) => r.response));
+
+  // Un avvio online deve usare subito il bundle aggiornato. Una copia integra resta
+  // disponibile se la rete non risponde o il deploy restituisce un errore.
+  return preferFreshBundle(network, cachedP);
+}
+
+async function preferFreshBundle(network, cachedP) {
+  const fresh = network.then(async ({ response, copy }) => copy ? response : (await cachedP) || response);
+  let timer;
+  const slow = new Promise((resolve) => { timer = setTimeout(resolve, SHELL_NETWORK_TIMEOUT_MS); })
+    .then(async () => (await cachedP) || fresh);
+  try {
+    return await Promise.race([fresh, slow]);
+  } catch (error) {
+    const cached = await cachedP;
+    if (cached) return cached;
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Un errore della cache non deve mai diventare un errore di rete per la pagina: si va in rete.
@@ -200,7 +229,8 @@ function cacheLookup(request) {
 
 async function cachedShellResponse(request) {
   const cached = await cacheLookup(request);
-  if (!cached || new URL(request.url).pathname !== new URL('aila.js', scopeUrl).pathname) return cached;
+  if (!cached || new URL(request.url).pathname !== bundlePath) return cached;
+  if (!isCacheableBundle(cached)) return undefined;
   try {
     const urls = await wasmDependencies(request, cached);
     if (!urls.length) return undefined;
@@ -228,12 +258,10 @@ async function cacheFirst(event) {
 }
 
 // Navigazione: prima la rete (cosi' un index.html nuovo si vede subito), la copia in cache se
-// offline o se la rete non risponde entro NAV_TIMEOUT_MS (Wi-Fi della scuola "connesso" ma
+// offline o se la rete non risponde entro SHELL_NETWORK_TIMEOUT_MS (Wi-Fi della scuola "connesso" ma
 // fermo: senza tetto l'app restava sulla pagina bianca fino al timeout del browser). Offline
 // qualunque indirizzo dentro l'app (anche ?push=... dal tocco su una notifica) riceve la stessa
 // index.html: la PWA ha una sola pagina.
-const NAV_TIMEOUT_MS = 4000;
-
 async function navigation(event) {
   const network = fetch(event.request).then((response) => {
     if (isCacheable(response) && new URL(response.url).pathname.replace(/index\.html$/, '') === scopeUrl.pathname) {
@@ -244,7 +272,7 @@ async function navigation(event) {
   });
   const fallback = async () => (await cacheLookup(indexUrl)) || (await cacheLookup(scopeUrl.href));
   let timer;
-  const slow = new Promise((resolve) => { timer = setTimeout(resolve, NAV_TIMEOUT_MS); })
+  const slow = new Promise((resolve) => { timer = setTimeout(resolve, SHELL_NETWORK_TIMEOUT_MS); })
     .then(fallback)
     .then((cached) => cached || network);
   try {
@@ -317,7 +345,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(cacheFirst(event));
     return;
   }
-  event.respondWith(staleWhileRevalidate(event));
+  event.respondWith(loadShellAsset(event, url.pathname === bundlePath));
 });
 
 // --- Messaggi dall'app --------------------------------------------------------------------------

@@ -29,7 +29,7 @@ function worker(cachedEntries, networkEntries) {
     async put(request, value) { entries.set(request.url ?? request, value); },
   };
   vm.runInNewContext(source, {
-    URL,
+    URL, setTimeout, clearTimeout,
     caches: { match: cache.match, open: async () => cache },
     fetch: async request => {
       const url = request.url ?? request;
@@ -73,6 +73,19 @@ test('a bundle whose Wasm is missing uses the complete online version on the sam
 test('offline startup uses the previous bundle while its Wasm is cached', async () => {
   const app = worker([[scriptUrl, oldScript], [oldWasm, wasm]], new Map());
   assert.equal(await app.load(scriptUrl), oldScript);
+});
+
+test('an online launch uses the repaired bundle even when the old one has all its Wasm', async () => {
+  const app = worker([[scriptUrl, oldScript], [oldWasm, wasm]], new Map([[scriptUrl, newScript], [newWasm, wasm]]));
+  assert.equal(await app.load(scriptUrl), newScript);
+  assert.equal(app.entries.get(scriptUrl).headers.get('etag'), 'new');
+  assert.equal(app.entries.get(newWasm), wasm);
+});
+
+test('an HTML fallback from Pages does not replace a complete offline bundle', async () => {
+  const app = worker([[scriptUrl, oldScript], [oldWasm, wasm]], new Map([[scriptUrl, html]]));
+  assert.equal(await app.load(scriptUrl), oldScript);
+  assert.equal(app.entries.get(scriptUrl), oldScript);
 });
 
 test('an HTML fallback cached at a Wasm URL is replaced by the binary', async () => {

@@ -13,6 +13,31 @@
   var ua = navigator.userAgent || '';
   var ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
 
+  // WebKit può completare il layout del viewport dopo l'avvio del runtime, per esempio
+  // al rientro nella PWA installata o durante una rotazione. Skiko alloca il framebuffer
+  // appena si monta Compose: attendiamo due misure valide e uguali prima di montarlo.
+  window.__ailaStartViewport = function (start) {
+    if (!ios) {
+      start();
+      return;
+    }
+    var viewport = document.getElementById('aila-viewport');
+    var lastWidth = 0;
+    var lastHeight = 0;
+    function check() {
+      var width = viewport.clientWidth;
+      var height = viewport.clientHeight;
+      if (!document.hidden && width > 0 && height > 0 && width === lastWidth && height === lastHeight) {
+        start();
+        return;
+      }
+      lastWidth = document.hidden ? 0 : width;
+      lastHeight = document.hidden ? 0 : height;
+      requestAnimationFrame(check);
+    }
+    requestAnimationFrame(check);
+  };
+
   if (compatible) {
     var phases = [];
     trace = window.__ailaStartupTrace = function (message) {
@@ -118,7 +143,7 @@
     var cause = errorDetail(error && error.cause && error.cause.message);
     if (cause && cause !== detail) detail += (detail ? ' · ' : '') + cause;
     fail('Errore durante l’avvio' + category + (detail ? ': ' + detail : '.'));
-    if (!ready && ios && !reducedGraphics && /can't wrap nullptr/i.test(detail)) {
+    if (!ready && ios && !reducedGraphics && /can't wrap nullptr|cannot create surface|can't create opengl/i.test(detail)) {
       reducedGraphics = true;
       var retryUrl = new URL(location.href);
       retryUrl.searchParams.set('grafica', 'ridotta');
