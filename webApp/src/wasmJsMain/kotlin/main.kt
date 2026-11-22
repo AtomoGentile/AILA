@@ -40,7 +40,7 @@ fun main() {
         startupPhase("Carico i dati offline.")
         OfflineStore.init()
         startupPhase("Dati offline pronti. Avvio l’interfaccia.")
-        viewportReady().await()
+        viewportReady().await<JsBoolean>()
         // isA11YEnabled: Compose affianca al canvas una copia DOM dell'albero di accessibilita'
         // (un elemento per ogni nodo) e la risincronizza a ogni cambio di layout, cioe' a ogni
         // fotogramma di un'animazione o di uno scorrimento, sullo stesso thread che disegna. Su
