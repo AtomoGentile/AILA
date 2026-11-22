@@ -6,6 +6,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -39,6 +41,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
@@ -81,6 +84,7 @@ import circolareplus.design.ailaExplodeOut
 import circolareplus.design.animateContainerClose
 import circolareplus.design.animateContainerOpen
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import circolareplus.design.ailaMorphClip
 import circolareplus.design.ailaSheetReveal
 import circolareplus.design.GlassBase
@@ -3401,6 +3405,8 @@ fun MainAppShell(
                     val liteTabEffects = AppTheme.liteEffects
                     val reduceTabMotion = AppTheme.reduceMotion
                     val glassCardMotion = glassTabs && !reduceTabMotion
+                    val pagerTop = remember { mutableFloatStateOf(0f) }
+                    var dragAnchorY by remember { mutableStateOf<Float?>(null) }
                     val tabExitDuration = if (liteTabEffects || reduceTabMotion) 60 else 85
                     val tabEnterDuration = when {
                         glassCardMotion -> 330
@@ -3449,6 +3455,7 @@ fun MainAppShell(
                                 val tab = MainTab.entries[page]
                                 confirmedTab = tab
                                 selectedTab = tab
+                                dragAnchorY = null
                                 null
                             }
                         }
@@ -3468,6 +3475,18 @@ fun MainAppShell(
                             snapAnimationSpec = circolareplus.design.ailaNavigationSpring()
                         ),
                         modifier = Modifier.fillMaxSize()
+                            .then(if (glassCardMotion && !useRail) {
+                                Modifier.onGloballyPositioned { pagerTop.floatValue = it.positionInRoot().y }
+                                    .pointerInput(tabPager) {
+                                        awaitEachGesture {
+                                            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                                            // Conserva l'origine anche mentre la pagina si assesta al rilascio.
+                                            if (!tabPager.isScrollInProgress) {
+                                                dragAnchorY = pagerTop.floatValue + down.position.y
+                                            }
+                                        }
+                                    }
+                            } else Modifier)
                             .graphicsLayer {
                                 alpha = tabFade.value
                                 val arrival = if (!liteTabEffects && !reduceTabMotion) {
@@ -3501,8 +3520,12 @@ fun MainAppShell(
                                 !useRail && fade == 1f && selectedTab == confirmedTab && distance > 0f && distance < 1f -> {
                                     val outgoing = tabPager.settledPage == page
                                     val direction = if (offset > 0f) 1f else -1f
-                                    if (outgoing) GlassPageFrame(distance, direction, followsPager = true)
-                                    else GlassPageFrame(1f - distance, -direction, followsPager = true)
+                                    GlassPageFrame(
+                                        progress = if (outgoing) distance else 1f - distance,
+                                        direction = if (outgoing) direction else -direction,
+                                        followsPager = true,
+                                        dragAnchorY = dragAnchorY
+                                    )
                                 }
                                 else -> null
                             }
@@ -3520,7 +3543,7 @@ fun MainAppShell(
                         Modifier.graphicsLayer {
                             val offset = (tabPager.currentPage - page) + tabPager.currentPageOffsetFraction
                             val d = kotlin.math.abs(offset).coerceIn(0f, 1f)
-                            val scale = if (AppTheme.reduceMotion) 1f else 1f - 0.04f * d
+                            val scale = if (reduceTabMotion || glassCardMotion) 1f else 1f - 0.04f * d
                             scaleX = scale
                             scaleY = scale
                         }

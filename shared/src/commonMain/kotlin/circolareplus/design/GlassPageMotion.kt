@@ -12,11 +12,13 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import kotlin.math.abs
 
 internal data class GlassPageFrame(
     val progress: Float,
     val direction: Float,
-    val followsPager: Boolean
+    val followsPager: Boolean,
+    val dragAnchorY: Float? = null
 )
 
 internal class GlassPageMotion(val frame: () -> GlassPageFrame?) {
@@ -30,11 +32,18 @@ internal class GlassPageMotion(val frame: () -> GlassPageFrame?) {
         width.floatValue = coordinates.size.width.toFloat()
     }
 
-    fun stagedProgress(progress: Float, centerY: Float): Float {
+    fun stagedProgress(frame: GlassPageFrame, centerY: Float, halfHeight: Float): Float {
+        if (frame.followsPager) {
+            val anchor = frame.dragAnchorY ?: return frame.progress
+            // La superficie che contiene il tocco segue il pager a velocità piena.
+            val distance = (abs(centerY - anchor) - halfHeight).coerceAtLeast(0f)
+            val delay = 0.32f * (distance / height.floatValue).coerceAtMost(1f)
+            return ((frame.progress - delay) / (1f - delay)).coerceIn(0f, 1f)
+        }
         val row = ((centerY - top.floatValue) / height.floatValue).coerceIn(0f, 1f)
         val start = 0.32f * row
         val end = 0.82f + 0.18f * row
-        return ((progress - start) / (end - start)).coerceIn(0f, 1f)
+        return ((frame.progress - start) / (end - start)).coerceIn(0f, 1f)
     }
 }
 
@@ -50,10 +59,9 @@ internal fun Modifier.glassPageMotion(): Modifier {
     }.graphicsLayer {
         val frame = motion.frame()
         translationX = if (frame == null) 0f else {
-            val localProgress = motion.stagedProgress(frame.progress, centerY.floatValue)
+            val localProgress = motion.stagedProgress(frame, centerY.floatValue, size.height / 2f)
             val width = motion.width.floatValue
-            // In uno swipe il pager si muove già. Spostiamo solo la differenza fra il suo
-            // avanzamento e quello della riga, sempre a partire dall'alto della pagina.
+            // Il pager si muove già durante lo swipe. Compensiamo solo il ritardo della card.
             val offset = if (frame.followsPager) {
                 (frame.progress - localProgress) * width
             } else {
