@@ -35,7 +35,7 @@ const indexUrl = new URL('index.html', scopeUrl).href;
 
 // File fissi della shell, scaricati all'installazione. I nomi con hash (.wasm) si ricavano da
 // aila.js, cosi' non serve generare nulla a build.
-const SHELL_FILES = ['./', 'index.html', 'aila.js?boot=7', 'ios-keyboard.js', 'startup.js?v=5', 'perf-debug.js?v=2', 'styles.css?v=5', 'manifest.webmanifest',
+const SHELL_FILES = ['./', 'index.html', 'aila.js?boot=7', 'ios-keyboard.js?v=12', 'startup.js?v=5', 'perf-debug.js?v=2', 'styles.css?v=5', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/favicon-32.png', 'icons/apple-touch-icon.png'];
 
 // --- IndexedDB (ponte con l'app) ------------------------------------------------------------

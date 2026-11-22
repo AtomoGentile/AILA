@@ -7,7 +7,7 @@ const vm = require('node:vm');
 const source = readFileSync(require('node:path').join(__dirname,
   '../src/wasmJsMain/resources/ios-keyboard.js'), 'utf8');
 
-function setup({ ios = true, search = '', input = true } = {}) {
+function setup({ ios = true, search = '', input = true, contentEditable = false } = {}) {
   const listeners = new Map();
   const timers = new Map();
   let clock = 0;
@@ -46,7 +46,11 @@ function setup({ ios = true, search = '', input = true } = {}) {
     addEventListener(type, fn) { this.onFocus = fn; },
     removeEventListener(type, fn) { if (this.onFocus === fn) this.onFocus = null; },
   };
-  let field = input ? new Element('input', root) : null;
+  let field = input ? new Element(contentEditable ? 'span' : 'input', root) : null;
+  if (field && contentEditable) {
+    field.isContentEditable = true;
+    field.classList = { contains: name => name === 'compose-backing-field' };
+  }
   const children = [];
   doc = {
     activeElement: null,
@@ -103,6 +107,17 @@ test('tocco con tastiera aperta: impedisce il focus sul canvas senza rifocalizza
   assert.equal(s.tap().prevented, true);
   assert.equal(s.field.focusCalls, 1);
   assert.equal(s.field.blurCalls, 0);
+});
+
+test('Compose 1.13 mette a fuoco lo span del campo durante il gesto', () => {
+  const s = setup({ contentEditable: true });
+  s.field.focus();
+  assert.equal(s.tap().prevented, true);
+  assert.equal(s.field.focusCalls, 2);
+  s.field.focus();
+  assert.equal(s.field.focusCalls, 2);
+  assert.equal(s.root.activeElement, s.field);
+  assert.equal(s.children.length, 0);
 });
 
 test('riapre dal gesto una tastiera chiusa con input ancora attivo', () => {

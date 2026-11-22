@@ -12,8 +12,8 @@
 // CAUSA TROVATA (iOS/Safari 27, WebKit 64ee64b): ogni nuova richiesta focus() SOSTITUISCE la precedente
 // e conta come "senza interazione dell'utente" se non parte da un gesto. Compose chiama focus() sul
 // campo nascosto anche dopo (requestAnimationFrame, a ogni updateState): quella chiamata annulla il
-// fuoco dato nel gesto e la tastiera non compare. Compose 1.12 lo corregge (PR #3446); qui, restando
-// alla 1.11, si ignorano le focus() su un campo che ha gia' il fuoco.
+// fuoco dato nel gesto e la tastiera non compare. Si ignorano le focus() ripetute sul campo
+// che ha gia' il fuoco, anche se Compose lo rappresenta come un elemento contenteditable.
 (function () {
   'use strict';
 
@@ -24,11 +24,11 @@
   // ?kbdoff=1: lo script non fa nulla (serve ai test automatici per confrontare con e senza).
   if (/[?&]kbdoff=1/.test(location.search)) return;
 
+  var backingFieldSelector = 'input, textarea, .compose-backing-field[contenteditable="true"]';
   var origFocus = HTMLElement.prototype.focus;
   HTMLElement.prototype.focus = function () {
     try {
-      var tag = this.tagName;
-      if ((tag === 'INPUT' || tag === 'TEXTAREA') && this.getRootNode().activeElement === this) {
+      if (isEditable(this) && this.getRootNode().activeElement === this) {
         return;
       }
     } catch (err) { /* si prosegue con la focus() vera */ }
@@ -76,7 +76,7 @@
   function patchRoot(r) {
     if (!r || r.__ailaKbdStyle) return;
     var st = document.createElement('style');
-    st.textContent = 'input, textarea { -webkit-user-select: text !important; user-select: text !important; ' +
+    st.textContent = backingFieldSelector + ' { -webkit-user-select: text !important; user-select: text !important; ' +
       '-webkit-touch-callout: default !important; }';
     r.appendChild(st);
     r.__ailaKbdStyle = true;
@@ -127,7 +127,9 @@
   }
 
   function isEditable(el) {
-    return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA');
+    // Compose 1.13 usa uno span contenteditable per l'input effettivo, separato dai nodi a11y.
+    return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' ||
+      (el.isContentEditable && el.classList.contains('compose-backing-field')));
   }
 
   var pending = null;
@@ -185,7 +187,7 @@
     if (e.cancelable) e.preventDefault();
     if (cancelArm) cancelArm();
     var r = getRoot();
-    var bk = r && r.querySelector('input, textarea');
+    var bk = r && r.querySelector(backingFieldSelector);
     if (bk) {
       // Il campo nascosto di Compose esiste gia' (lo crea durante il pointerup): il fuoco lo si da'
       // qui, dentro il gesto. Le focus() successive di Compose vengono ignorate (vedi in cima).
