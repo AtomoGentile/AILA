@@ -3714,7 +3714,10 @@ fun MainAppShell(
                             }
                         }
                         MainTab.SEATMAP -> {
-                            Column(modifier = Modifier.fillMaxSize()) {
+                            Column(
+                                modifier = Modifier.fillMaxSize()
+                                    .padding(top = circolareplus.design.LocalWebSafeAreaTop.current)
+                            ) {
                                 LoadableContent(
                                     // Il caricamento dei compagni avviato dal calendario non deve
                                     // coprire la mappa con lo spinner: ci pensa loadSeatMapData.
