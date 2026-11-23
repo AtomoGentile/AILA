@@ -10,6 +10,13 @@ import circolareplus.data.remote.dto.ClassesListResponseDto
 import circolareplus.data.remote.dto.ClassOptionDto
 import circolareplus.data.remote.dto.ChangePasswordRequestDto
 import circolareplus.data.remote.dto.ChangePasswordResponseDto
+import circolareplus.data.remote.dto.PasskeyInfoDto
+import circolareplus.data.remote.dto.PasskeyListResponseDto
+import circolareplus.data.remote.dto.PasskeyLoginOptionsDto
+import circolareplus.data.remote.dto.PasskeyLoginOptionsRequestDto
+import circolareplus.data.remote.dto.PasskeyLoginVerifyRequestDto
+import circolareplus.data.remote.dto.PasskeyRegisterOptionsDto
+import circolareplus.data.remote.dto.PasskeyRegisterVerifyRequestDto
 import circolareplus.data.remote.dto.ResetPasswordRequestDto
 import circolareplus.data.remote.dto.DeleteAccountRequestDto
 import circolareplus.data.remote.dto.SuccessDto
@@ -20,6 +27,9 @@ import circolareplus.data.remote.dto.UserDto
 import circolareplus.domain.model.StudentProfile
 import circolareplus.domain.model.User
 import circolareplus.domain.model.UserRole
+import circolareplus.platform.createPlatformPasskey
+import circolareplus.platform.defaultPasskeyDeviceLabel
+import circolareplus.platform.signInWithPlatformPasskey
 import kotlinx.coroutines.launch
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -141,6 +151,58 @@ class AuthRepository(
         val response: AuthResponseDto = api.post(
             "/api/auth/login",
             LoginRequestDto(username, password),
+            auth = false
+        )
+        return persistSession(response)
+    }
+
+    /** Elenco delle Passkey / Face ID salvate su questo account. */
+    suspend fun listPasskeys(): List<PasskeyInfoDto> {
+        val response: PasskeyListResponseDto = api.get("/api/auth/passkeys", offlineCopy = false)
+        return response.passkeys
+    }
+
+    /** Registra una nuova Passkey (Face ID / Touch ID / Windows Hello) sull'account corrente. */
+    suspend fun registerPasskey(label: String = defaultPasskeyDeviceLabel()): PasskeyInfoDto {
+        val options: PasskeyRegisterOptionsDto = api.post(
+            "/api/auth/passkeys/register/options",
+            emptyMap<String, String>()
+        )
+        val created = createPlatformPasskey(options)
+        return api.post(
+            "/api/auth/passkeys/register/verify",
+            PasskeyRegisterVerifyRequestDto(
+                credentialId = created.credentialId,
+                clientDataJSON = created.clientDataJSON,
+                authenticatorData = created.authenticatorData,
+                publicKeySpki = created.publicKeySpki,
+                algorithm = created.algorithm,
+                label = label.trim().ifBlank { defaultPasskeyDeviceLabel() }
+            )
+        )
+    }
+
+    /** Rimuove una Passkey dall'account corrente. */
+    suspend fun deletePasskey(credentialId: String) {
+        api.delete<SuccessDto>("/api/auth/passkeys/$credentialId")
+    }
+
+    /** Accesso con Passkey / Face ID (anche senza scrivere lo username). */
+    suspend fun loginWithPasskey(username: String? = null): Pair<User, StudentProfile> {
+        val options: PasskeyLoginOptionsDto = api.post(
+            "/api/auth/passkeys/login/options",
+            PasskeyLoginOptionsRequestDto(username = username?.trim()?.ifBlank { null }),
+            auth = false
+        )
+        val assertion = signInWithPlatformPasskey(options)
+        val response: AuthResponseDto = api.post(
+            "/api/auth/passkeys/login/verify",
+            PasskeyLoginVerifyRequestDto(
+                credentialId = assertion.credentialId,
+                clientDataJSON = assertion.clientDataJSON,
+                authenticatorData = assertion.authenticatorData,
+                signature = assertion.signature
+            ),
             auth = false
         )
         return persistSession(response)

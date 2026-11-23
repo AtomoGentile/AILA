@@ -57,8 +57,10 @@ fun ProfileScreen(
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showPasswordDialog by remember { mutableStateOf(false) }
+    var showPasskeysDialog by remember { mutableStateOf(false) }
     var showNameDialog by remember { mutableStateOf(false) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
+    val passkeyAvailable = remember { circolareplus.platform.isPasskeySupported() }
     val isRepresentative = user.role == UserRole.REPRESENTATIVE
     // Cambio nome: chi decide (Rappresentante o Guardia di Sicurezza) legge l'elenco delle
     // richieste in attesa direttamente dal Profilo, con approva e rifiuta a un tocco ciascuna.
@@ -347,6 +349,18 @@ fun ProfileScreen(
                     }
                 )
                 HorizontalDivider(color = AppTheme.Hairline, modifier = Modifier.padding(start = 72.dp))
+                if (passkeyAvailable) {
+                    AilaListRow(
+                        title = "Face ID / Passkey",
+                        subtitle = "Accedi su questo dispositivo senza password",
+                        tint = AppTheme.TintBlue,
+                        onClick = { showPasskeysDialog = true },
+                        icon = {
+                            AppIcons.Lock(modifier = Modifier.size(20.dp), color = AppTheme.TintBlueInk)
+                        }
+                    )
+                    HorizontalDivider(color = AppTheme.Hairline, modifier = Modifier.padding(start = 72.dp))
+                }
                 AilaListRow(
                     title = "Cambia password",
                     subtitle = "Gli altri dispositivi dovranno accedere di nuovo",
@@ -433,6 +447,9 @@ fun ProfileScreen(
 
     if (showPasswordDialog) {
         ChangePasswordDialog(onDismiss = { showPasswordDialog = false })
+    }
+    if (showPasskeysDialog) {
+        PasskeysDialog(onDismiss = { showPasskeysDialog = false })
     }
     if (showNameDialog) {
         NameChangeDialog(
@@ -545,6 +562,150 @@ private fun ChangePasswordDialog(onDismiss: () -> Unit) {
                     onClick = { if (!busy) onDismiss() }
                 )
             }
+        }
+    )
+}
+
+/** Gestione Passkey (Face ID / Touch ID / Windows Hello): elenco, attivazione 1-tap e rimozione. */
+@Composable
+private fun PasskeysDialog(onDismiss: () -> Unit) {
+    var passkeys by remember { mutableStateOf<List<circolareplus.data.remote.dto.PasskeyInfoDto>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var info by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        try {
+            passkeys = circolareplus.data.AppContainer.authRepository.listPasskeys()
+        } catch (e: circolareplus.data.remote.ApiException) {
+            error = e.message
+        } catch (_: Exception) {
+            error = "Impossibile caricare le Passkey."
+        } finally {
+            loading = false
+        }
+    }
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        containerColor = AppTheme.SurfaceWhite,
+        shape = RoundedCornerShape(AppTheme.CardCornerRadius),
+        title = {
+            Text(text = "Face ID / Passkey", style = MaterialTheme.typography.titleLarge, color = AppTheme.TextDark)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
+                Text(
+                    text = "Attiva Face ID, Touch ID o il blocco schermo per accedere ad AILA in un tocco, senza ricordare username o password.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AppTheme.TextMuted
+                )
+
+                if (loading) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = AppTheme.Space8),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = AppTheme.PrimaryBlue)
+                    }
+                } else if (passkeys.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                        passkeys.forEach { pk ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
+                                    .background(AppTheme.BackgroundLight)
+                                    .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = pk.label,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = AppTheme.TextDark
+                                    )
+                                    val dateHint = pk.createdAt.take(10)
+                                    if (dateHint.isNotBlank()) {
+                                        Text(
+                                            text = "Attivata il $dateHint",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = AppTheme.TextMuted
+                                        )
+                                    }
+                                }
+                                TextButton(
+                                    enabled = !busy,
+                                    onClick = {
+                                        busy = true
+                                        error = null
+                                        info = null
+                                        scope.launch {
+                                            try {
+                                                circolareplus.data.AppContainer.authRepository.deletePasskey(pk.credentialId)
+                                                passkeys = passkeys.filterNot { it.credentialId == pk.credentialId }
+                                                info = "Passkey rimossa."
+                                            } catch (e: circolareplus.data.remote.ApiException) {
+                                                error = e.message
+                                            } catch (_: Exception) {
+                                                error = "Impossibile rimuovere la Passkey."
+                                            } finally {
+                                                busy = false
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    Text("Rimuovi", color = AppTheme.TintRedInk)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                info?.let {
+                    Text(text = it, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TintGreenInk)
+                }
+                error?.let {
+                    Text(text = it, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TintRedInk)
+                }
+            }
+        },
+        confirmButton = {
+            circolareplus.design.AilaPrimaryButton(
+                text = if (busy) "Attendi…" else "Attiva qui",
+                compact = true,
+                onClick = {
+                    if (busy) return@AilaPrimaryButton
+                    busy = true
+                    error = null
+                    info = null
+                    scope.launch {
+                        try {
+                            val added = circolareplus.data.AppContainer.authRepository.registerPasskey()
+                            passkeys = listOf(added) + passkeys.filterNot { it.credentialId == added.credentialId }
+                            info = "Face ID / Passkey attivato! Ora puoi accedere senza password."
+                        } catch (_: circolareplus.platform.PasskeyCancelledException) {
+                            // Annullato dall'utente: nessun errore.
+                        } catch (e: circolareplus.data.remote.ApiException) {
+                            error = e.message
+                        } catch (e: Exception) {
+                            error = e.message ?: "Impossibile attivare la Passkey."
+                        } finally {
+                            busy = false
+                        }
+                    }
+                }
+            )
+        },
+        dismissButton = {
+            circolareplus.design.AilaSecondaryButton(
+                text = "Chiudi",
+                compact = true,
+                onClick = { if (!busy) onDismiss() }
+            )
         }
     )
 }

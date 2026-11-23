@@ -41,6 +41,8 @@ import circolareplus.design.ailaFieldColors
 import circolareplus.design.ailaTextTouchTarget
 import circolareplus.domain.model.StudentProfile
 import circolareplus.domain.model.User
+import circolareplus.platform.PasskeyCancelledException
+import circolareplus.platform.isPasskeySupported
 import kotlinx.coroutines.launch
 
 /**
@@ -126,6 +128,30 @@ fun AuthScreen(
     // Le ore le decide chi crea la classe, cioe' il Rappresentante di una classe che non esiste
     // ancora; chi entra in una classe che c'e' gia' trova quelle scelte.
     val asksLessonHours = representativeCode.isNotBlank() && !joiningExistingClass
+
+    val passkeyAvailable = remember { isPasskeySupported() }
+
+    fun submitPasskey() {
+        if (isLoading) return
+        errorMessage = null
+        isLoading = true
+        coroutineScope.launch {
+            try {
+                val (user, profile) = AppContainer.authRepository.loginWithPasskey(
+                    username = username.trim().ifBlank { null }
+                )
+                onLoginSuccess(user, profile)
+            } catch (_: PasskeyCancelledException) {
+                // L'utente ha chiuso il prompt Face ID / Passkey: nessun errore allarmante.
+            } catch (e: ApiException) {
+                errorMessage = e.message
+            } catch (e: Exception) {
+                errorMessage = e.message ?: "Accesso con Passkey non riuscito."
+            } finally {
+                isLoading = false
+            }
+        }
+    }
 
     fun submit() {
         errorMessage = null
@@ -519,6 +545,31 @@ fun AuthScreen(
                                 text = if (isRegisterMode) "Completa la registrazione" else "Accedi",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = Color.White
+                            )
+                        }
+                    }
+
+                    if (!isRegisterMode && passkeyAvailable) {
+                        Spacer(modifier = Modifier.height(AppTheme.Space12))
+                        OutlinedButton(
+                            onClick = { submitPasskey() },
+                            enabled = !isLoading,
+                            shape = RoundedCornerShape(AppTheme.ButtonCornerRadius),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, AppTheme.Hairline),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = AppTheme.SurfaceWhite,
+                                contentColor = AppTheme.TextDark
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                        ) {
+                            AppIcons.Lock(modifier = Modifier.size(18.dp), color = AppTheme.PrimaryBlue)
+                            Spacer(modifier = Modifier.width(AppTheme.Space8))
+                            Text(
+                                text = "Accedi con Face ID / Passkey",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = AppTheme.TextDark
                             )
                         }
                     }
