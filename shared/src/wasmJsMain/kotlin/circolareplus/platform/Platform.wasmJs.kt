@@ -38,3 +38,8 @@ private fun prefersReducedMotion(): Boolean =
 
 @Composable
 actual fun isReduceMotionEnabled(): Boolean = remember { prefersReducedMotion() }
+
+private fun currentOriginAndPath(): String =
+    js("location.origin + (location.pathname.endsWith('/') ? location.pathname : location.pathname.replace(/[^/]*$/, ''))")
+
+actual fun pwaBaseUrl(): String = currentOriginAndPath()

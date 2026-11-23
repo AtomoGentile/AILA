@@ -756,7 +756,7 @@ fun MainAppShell(
 
     // Primo avvio in assoluto: le 3 schermate di presentazione del mockup, prima del login.
     // Chi ha già una sessione salvata non le vede (non passa di qui: currentUser è valorizzato).
-    if (currentUser == null && !hasSeenOnboarding) {
+    if (currentUser == null && !hasSeenOnboarding && circolareplus.ui.PendingDeepLink.passwordReset == null) {
         // L'ultimo passo dell'onboarding fa scegliere l'AI. Scrive nelle stesse impostazioni che
         // poi mostra la schermata Impostazioni (chiave, provider, modello): niente stato suo.
         // `remember` perché l'oggetto legge la RAM del telefono e ordina il catalogo modelli.

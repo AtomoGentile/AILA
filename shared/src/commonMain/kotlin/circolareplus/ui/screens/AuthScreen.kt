@@ -91,11 +91,23 @@ fun AuthScreen(
     var classCode by remember { mutableStateOf("") }
     var classCodeAsked by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
+    var resetInitialCode by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
     val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
+
+    val pendingReset = circolareplus.ui.PendingDeepLink.passwordReset
+    LaunchedEffect(pendingReset) {
+        if (pendingReset != null) {
+            isRegisterMode = false
+            if (pendingReset.username.isNotBlank()) username = pendingReset.username
+            resetInitialCode = pendingReset.code
+            showResetDialog = true
+            circolareplus.ui.PendingDeepLink.passwordReset = null
+        }
+    }
 
     // Si carica una volta sola, in sottofondo: se il server non risponde la registrazione resta
     // possibile scrivendo la classe a mano, quindi l'errore qui non va mostrato.
@@ -184,9 +196,14 @@ fun AuthScreen(
     if (showResetDialog) {
         ResetPasswordDialog(
             initialUsername = username.trim(),
-            onDismiss = { showResetDialog = false },
+            initialCode = resetInitialCode,
+            onDismiss = {
+                showResetDialog = false
+                resetInitialCode = ""
+            },
             onReset = { user, profile ->
                 showResetDialog = false
+                resetInitialCode = ""
                 onLoginSuccess(user, profile)
             }
         )
@@ -550,12 +567,14 @@ private fun classKey(label: String): String = label.uppercase().filter { it.isLe
 @Composable
 private fun ResetPasswordDialog(
     initialUsername: String,
+    initialCode: String = "",
     onDismiss: () -> Unit,
     onReset: (User, StudentProfile) -> Unit
 ) {
-    var username by remember { mutableStateOf(initialUsername) }
-    var code by remember { mutableStateOf("") }
+    var username by remember(initialUsername) { mutableStateOf(initialUsername) }
+    var code by remember(initialCode) { mutableStateOf(normalizeCodeInput(initialCode).take(12)) }
     var newPassword by remember { mutableStateOf("") }
+    var isNewPasswordVisible by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -568,7 +587,11 @@ private fun ResetPasswordDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
                 Text(
-                    text = "Chiedi al Rappresentante un codice di reset (lo genera dalla Scheda Classe, vale 24 ore), poi scegli la password nuova.",
+                    text = if (initialCode.isNotBlank()) {
+                        "Username e codice sono già pronti: scegli una password nuova per entrare subito."
+                    } else {
+                        "Chiedi al Rappresentante un codice di reset (lo genera dalla Scheda Classe, vale 24 ore), poi scegli la password nuova."
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = AppTheme.TextMuted
                 )
@@ -591,12 +614,36 @@ private fun ResetPasswordDialog(
                     onValueChange = { newPassword = it },
                     placeholder = "Nuova password (almeno 8 caratteri)",
                     modifier = Modifier.fillMaxWidth(),
-                    visualTransformation = PasswordVisualTransformation(),
+                    visualTransformation = if (isNewPasswordVisible) {
+                        VisualTransformation.None
+                    } else {
+                        PasswordVisualTransformation()
+                    },
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.None,
                         autoCorrectEnabled = false,
                         keyboardType = KeyboardType.Password
-                    )
+                    ),
+                    trailing = {
+                        Box(
+                            modifier = Modifier
+                                .padding(end = AppTheme.Space4)
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { isNewPasswordVisible = !isNewPasswordVisible }
+                                .semantics {
+                                    contentDescription =
+                                        if (isNewPasswordVisible) "Nascondi password" else "Mostra password"
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isNewPasswordVisible) {
+                                AppIcons.EyeOff(modifier = Modifier.size(20.dp), color = AppTheme.TextMuted)
+                            } else {
+                                AppIcons.Eye(modifier = Modifier.size(20.dp), color = AppTheme.TextMuted)
+                            }
+                        }
+                    }
                 )
                 error?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TintRedInk) }
             }
