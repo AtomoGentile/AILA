@@ -604,7 +604,7 @@ fun AilaPrimaryButton(
             ),
         contentAlignment = Alignment.Center
     ) {
-        val contentColor = if (enabled && AppTheme.isNothing) AppTheme.BackgroundLight else if (enabled) Color.White else AppTheme.TextFaint
+        val contentColor = if (enabled) AppTheme.OnPrimaryButton else AppTheme.TextFaint
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (icon != null) {
                 icon(contentColor)
@@ -1104,8 +1104,7 @@ fun AilaIconButton(
         icon(
             when {
                 !enabled -> AppTheme.TextFaint
-                primary && AppTheme.isNothing -> AppTheme.BackgroundLight
-                primary -> Color.White
+                primary -> AppTheme.OnPrimaryButton
                 else -> AppTheme.TextDark
             }
         )
@@ -1405,7 +1404,7 @@ fun AilaFab(
         label = "fabCorner"
     )
     val shape = RoundedCornerShape(percent = corner.toInt())
-    val ink = if (AppTheme.isNothing) AppTheme.BackgroundLight else if (glass) Color.White else AppTheme.TintBlueInk
+    val ink = if (AppTheme.isNothing || glass) AppTheme.OnPrimaryButton else AppTheme.TintBlueInk
     Box(
         modifier = modifier
             .size(56.dp)

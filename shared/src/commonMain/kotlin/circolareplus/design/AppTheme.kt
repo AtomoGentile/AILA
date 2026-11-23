@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -39,7 +40,10 @@ enum class AilaAccent(
     GREEN("green", "Verde", 0xFF1E8E5A, 0xFF3DBE84, 0xFFC8F2DC, 0xFF1F4D36, 0xFF002111, 0xFFC8F2DC, 0xFF146B43, 0xFF103A27),
     TEAL("teal", "Petrolio", 0xFF00838F, 0xFF33B5C2, 0xFFC7F1F5, 0xFF0E4A50, 0xFF002022, 0xFFC7F1F5, 0xFF00606A, 0xFF073236),
     ORANGE("orange", "Arancio", 0xFFC2590C, 0xFFF08A3E, 0xFFFFDBC8, 0xFF5C2E0F, 0xFF331200, 0xFFFFDBC8, 0xFF8F3F05, 0xFF3F1D05),
-    PINK("pink", "Rosa", 0xFFC2185B, 0xFFF0679A, 0xFFFFD9E3, 0xFF5C1734, 0xFF3E001D, 0xFFFFD9E3, 0xFF8E0E43, 0xFF3E0A22);
+    PINK("pink", "Rosa", 0xFFC2185B, 0xFFF0679A, 0xFFFFD9E3, 0xFF5C1734, 0xFF3E001D, 0xFFFFD9E3, 0xFF8E0E43, 0xFF3E0A22),
+    INDIGO("indigo", "Indaco", 0xFF3F51A3, 0xFF93A5FF, 0xFFDEE3FF, 0xFF2C3980, 0xFF111C58, 0xFFDEE3FF, 0xFF293784, 0xFF1A245D),
+    AMBER("amber", "Ambra", 0xFF865900, 0xFFF8BD58, 0xFFFFE9BF, 0xFF513600, 0xFF2B1900, 0xFFFFE9BF, 0xFF664200, 0xFF382300),
+    RUBY("ruby", "Rosso rubino", 0xFFA5293A, 0xFFFF8595, 0xFFFFDADD, 0xFF681B2A, 0xFF3D000A, 0xFFFFDADD, 0xFF791C2A, 0xFF49111D);
 
     companion object {
         val Default = BLUE
@@ -110,6 +114,9 @@ object AppTheme {
     val SecondaryContainer get() = if (isNothing) TrackFill else Color(if(isDarkMode) secondaryAccent.containerDark else secondaryAccent.containerLight)
     val OnSecondaryContainer get() = if (isNothing) TextDark else Color(if(isDarkMode) secondaryAccent.onContainerDark else secondaryAccent.onContainerLight)
 
+    val TertiaryContainer get() = if (isNothing) TrackFill else Color(if (isDarkMode) tertiaryAccent.containerDark else tertiaryAccent.containerLight)
+    val OnTertiaryContainer get() = if (isNothing) TextDark else Color(if (isDarkMode) tertiaryAccent.onContainerDark else tertiaryAccent.onContainerLight)
+
     /** Primario, container e toni profondi del colore scelto (vedi [AilaAccent]). */
     val AccentContainer get() = if (isNothing) TrackFill else Color(if (isDarkMode) accent.containerDark else accent.containerLight)
     val OnAccentContainer get() = if (isNothing) TextDark else Color(if (isDarkMode) accent.onContainerDark else accent.onContainerLight)
@@ -167,6 +174,7 @@ object AppTheme {
     }
     val SecondaryIndigo get() = if (isNothing) TextDark else Color(if(isDarkMode) secondaryAccent.primaryDark else secondaryAccent.primaryLight)
     val AccentCyan get() = if (isNothing) TextMuted else Color(if(isDarkMode) tertiaryAccent.primaryDark else tertiaryAccent.primaryLight)
+    val OnPrimaryButton get() = if (isNothing) BackgroundLight else contrastingAccentInk(PrimaryBlue)
 
     // --- Superfici e testo -------------------------------------------------------------------
     // Glass: sfondo grigio-azzurro chiaro (nero quasi puro in scuro, come iOS), testi dai toni di
@@ -352,6 +360,10 @@ object AppTheme {
 }
 
 /** Interpolazione lineare tra due colori (usata per derivare i toni dall'accento scelto). */
+/** Il punto in cui il nero offre più contrasto del bianco su una superficie piena. */
+internal fun contrastingAccentInk(color: Color): Color =
+    if (color.luminance() > 0.179f) Color.Black else Color.White
+
 internal fun lerpColor(a: Color, b: Color, t: Float): Color = Color(
     red = a.red + (b.red - a.red) * t,
     green = a.green + (b.green - a.green) * t,

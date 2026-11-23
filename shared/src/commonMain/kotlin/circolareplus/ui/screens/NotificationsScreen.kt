@@ -81,17 +81,17 @@ private fun categoryVisual(category: String): CategoryVisual = when (category) {
     NotificationKind.CIRCULARS.key ->
         CategoryVisual(AppTheme.TintBlue, AppTheme.TintBlueInk) { AppIcons.Document(modifier = Modifier.size(19.dp), color = it) }
     NotificationKind.BOARD.key ->
-        CategoryVisual(AppTheme.TintViolet, AppTheme.TintVioletInk) { AppIcons.Bulb(modifier = Modifier.size(19.dp), color = it) }
+        CategoryVisual(AppTheme.SecondaryContainer, AppTheme.OnSecondaryContainer) { AppIcons.Bulb(modifier = Modifier.size(19.dp), color = it) }
     NotificationKind.SEATMAP.key, NOTIFICATION_CATEGORY_SEATMAP_PREFERENCES ->
-        CategoryVisual(AppTheme.TintGreen, AppTheme.TintGreenInk) { AppIcons.Chair(modifier = Modifier.size(19.dp), color = it) }
+        CategoryVisual(AppTheme.TertiaryContainer, AppTheme.OnTertiaryContainer) { AppIcons.Chair(modifier = Modifier.size(19.dp), color = it) }
     NotificationKind.POLLS.key, NOTIFICATION_CATEGORY_RANKING_POLLS ->
-        CategoryVisual(AppTheme.TintAmber, AppTheme.TintAmberInk) { AppIcons.Pencil(modifier = Modifier.size(19.dp), color = it) }
+        CategoryVisual(AppTheme.TertiaryContainer, AppTheme.OnTertiaryContainer) { AppIcons.Pencil(modifier = Modifier.size(19.dp), color = it) }
     NotificationKind.CALENDAR.key ->
-        CategoryVisual(AppTheme.TintBlue, AppTheme.TintBlueInk) { AppIcons.Calendar(modifier = Modifier.size(19.dp), color = it) }
+        CategoryVisual(AppTheme.TertiaryContainer, AppTheme.OnTertiaryContainer) { AppIcons.Calendar(modifier = Modifier.size(19.dp), color = it) }
     NotificationKind.BUREAUCRACY.key ->
         CategoryVisual(AppTheme.TintBlue, AppTheme.TintBlueInk) { AppIcons.Document(modifier = Modifier.size(19.dp), color = it) }
     NotificationKind.TRIP.key ->
-        CategoryVisual(AppTheme.TintAmber, AppTheme.TintAmberInk) { AppIcons.Bus(modifier = Modifier.size(19.dp), color = it) }
+        CategoryVisual(AppTheme.TertiaryContainer, AppTheme.OnTertiaryContainer) { AppIcons.Bus(modifier = Modifier.size(19.dp), color = it) }
     // Profilo: richiesta e esito del cambio nome (NOTIFICATION_CATEGORY_PROFILE, in MainAppShell).
     "profile" ->
         CategoryVisual(AppTheme.TintSlate, AppTheme.TintSlateInk) { AppIcons.Profile(modifier = Modifier.size(19.dp), color = it) }

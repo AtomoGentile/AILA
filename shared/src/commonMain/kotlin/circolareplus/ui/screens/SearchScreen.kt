@@ -316,20 +316,20 @@ private fun SearchIdleContent(
                 title = "Calendario",
                 subtitle = "Verifiche e scadenze",
                 count = eventCount,
-                tint = AppTheme.TintAmber,
-                ink = AppTheme.TintAmberInk,
+                tint = AppTheme.TertiaryContainer,
+                ink = AppTheme.OnTertiaryContainer,
                 onClick = onOpenCalendar,
                 modifier = Modifier.weight(1f).fillMaxHeight()
-            ) { AppIcons.Calendar(modifier = Modifier.size(20.dp), color = AppTheme.TintAmberInk) }
+            ) { AppIcons.Calendar(modifier = Modifier.size(20.dp), color = AppTheme.OnTertiaryContainer) }
             SearchSectionTile(
                 title = "Bacheca",
                 subtitle = "Proposte della classe",
                 count = proposalCount,
-                tint = AppTheme.TintViolet,
-                ink = AppTheme.TintVioletInk,
+                tint = AppTheme.SecondaryContainer,
+                ink = AppTheme.OnSecondaryContainer,
                 onClick = onOpenBoard,
                 modifier = Modifier.weight(1f).fillMaxHeight()
-            ) { AppIcons.ChatBubble(modifier = Modifier.size(20.dp), color = AppTheme.TintVioletInk) }
+            ) { AppIcons.ChatBubble(modifier = Modifier.size(20.dp), color = AppTheme.OnSecondaryContainer) }
         }
     }
 }
@@ -375,8 +375,8 @@ private fun SearchSectionTile(
 
 private fun SearchFilter.tint(): Color = when (this) {
     SearchFilter.CIRCULARS -> AppTheme.TintBlue
-    SearchFilter.EVENTS -> AppTheme.TintAmber
-    SearchFilter.PROPOSALS -> AppTheme.TintViolet
+    SearchFilter.EVENTS -> AppTheme.TertiaryContainer
+    SearchFilter.PROPOSALS -> AppTheme.SecondaryContainer
     SearchFilter.ALL -> AppTheme.TintSlate
 }
 
@@ -386,9 +386,9 @@ private fun SearchFilter.Icon() {
         SearchFilter.CIRCULARS ->
             AppIcons.Document(modifier = Modifier.size(20.dp), color = AppTheme.TintBlueInk)
         SearchFilter.EVENTS ->
-            AppIcons.Calendar(modifier = Modifier.size(20.dp), color = AppTheme.TintAmberInk)
+            AppIcons.Calendar(modifier = Modifier.size(20.dp), color = AppTheme.OnTertiaryContainer)
         SearchFilter.PROPOSALS ->
-            AppIcons.ChatBubble(modifier = Modifier.size(20.dp), color = AppTheme.TintVioletInk)
+            AppIcons.ChatBubble(modifier = Modifier.size(20.dp), color = AppTheme.OnSecondaryContainer)
         SearchFilter.ALL ->
             AppIcons.Search(modifier = Modifier.size(20.dp), color = AppTheme.TintSlateInk)
     }

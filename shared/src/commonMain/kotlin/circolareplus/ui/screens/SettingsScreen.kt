@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
@@ -40,6 +41,7 @@ import circolareplus.design.ailaAppear
 import circolareplus.design.ailaFieldColors
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
+import circolareplus.design.contrastingAccentInk
 import circolareplus.design.NothingGlyphMark
 import circolareplus.ai.LocalAiModel
 import circolareplus.ai.deviceTierForRam
@@ -277,24 +279,27 @@ fun SettingsScreen(
                                 circolareplus.design.NothingGlyphSettingsSection(Modifier.fillMaxWidth())
                             }
                             if (uiStyle != circolareplus.design.UiStyle.NOTHING) {
-                            Spacer(modifier = Modifier.height(AppTheme.Space16))
-                            Text(
-                                text = "Colore principale",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = AppTheme.TextDark
-                            )
-                            Spacer(modifier = Modifier.height(AppTheme.Space8))
-                            AccentPicker(selected = accent, onSelect = onAccentChange, label="Primario")
-                            Spacer(Modifier.height(16.dp))
-                            Text("Colore secondario",style=MaterialTheme.typography.labelLarge,color=AppTheme.TextDark)
-                            Text("Schede, dettagli e superfici di supporto.",style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
-                            Spacer(Modifier.height(8.dp))
-                            AccentPicker(selected=secondaryAccent,onSelect=onSecondaryAccentChange,label="Secondario")
-                            Spacer(Modifier.height(16.dp))
-                            Text("Colore terziario",style=MaterialTheme.typography.labelLarge,color=AppTheme.TextDark)
-                            Text("Gradienti e introduzioni delle sezioni.",style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
-                            Spacer(Modifier.height(8.dp))
-                            AccentPicker(selected=tertiaryAccent,onSelect=onTertiaryAccentChange,label="Terziario")
+                                Spacer(Modifier.height(AppTheme.Space16))
+                                Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space16)) {
+                                    AccentPicker(
+                                        label = "Primario",
+                                        description = "Pulsanti principali e documenti PDF.",
+                                        selected = accent,
+                                        onSelect = onAccentChange
+                                    )
+                                    AccentPicker(
+                                        label = "Secondario",
+                                        description = "Istruzioni, circolari collegate e Bacheca.",
+                                        selected = secondaryAccent,
+                                        onSelect = onSecondaryAccentChange
+                                    )
+                                    AccentPicker(
+                                        label = "Terziario",
+                                        description = "Scadenze delle pratiche e dettagli del Calendario.",
+                                        selected = tertiaryAccent,
+                                        onSelect = onTertiaryAccentChange
+                                    )
+                                }
                             } else {
                                 Spacer(Modifier.height(12.dp))
                                 Text("Palette Nothing: bianco, nero e rosso. I colori personali tornano disponibili cambiando stile.",
@@ -1382,44 +1387,52 @@ private fun formatRam(totalRamMb: Int): String {
     return "${tenthsOfGb / 10},${tenthsOfGb % 10} GB"
 }
 
-/** Riga di campioni colore: il primo e' il blu AILA predefinito, quello scelto ha un anello. */
+/** I campioni vanno a capo sui display stretti e mantengono un'area di tocco di 44 dp. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AccentPicker(
+    label: String,
+    description: String,
     selected: circolareplus.design.AilaAccent,
-    onSelect: (circolareplus.design.AilaAccent) -> Unit,
-    label: String
+    onSelect: (circolareplus.design.AilaAccent) -> Unit
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        circolareplus.design.AilaAccent.entries.forEach { option ->
-            val isSelected = option == selected
-            val swatch = androidx.compose.ui.graphics.Color(
-                if (AppTheme.isDarkMode) option.primaryDark else option.primaryLight
-            )
-            val ring by androidx.compose.animation.core.animateDpAsState(
-                targetValue = if (isSelected) 3.dp else 0.dp,
-                // Selezione che risponde al dito: molla giocosa del sistema (senza rimbalzo con
-                // "Riduci movimento"). Lo spessore dell'anello e lo stacco del pallino sotto sono
-                // geometria del selettore, non spaziatura: restano 3/6dp.
-                animationSpec = circolareplus.design.ailaBouncySpring(),
-                label = "accentRing"
-            )
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(androidx.compose.foundation.shape.CircleShape)
-                    .border(ring, swatch.copy(alpha = 0.45f), androidx.compose.foundation.shape.CircleShape)
-                    .selectable(selected=isSelected,role=Role.RadioButton,onClick={onSelect(option)})
-                    .semantics { contentDescription = "$label: ${option.label}" }
-                    .padding(if (isSelected) 6.dp else 3.dp)
-                    .clip(androidx.compose.foundation.shape.CircleShape)
-                    .background(swatch),
-                contentAlignment = Alignment.Center
-            ) {
-                if (isSelected) {
-                    AppIcons.Check(modifier = Modifier.size(16.dp), color = androidx.compose.ui.graphics.Color.White)
+    Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space4)) {
+        Text("Colore ${label.lowercase()}", style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
+        Text(description, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+        Spacer(Modifier.height(AppTheme.Space4))
+        FlowRow(
+            modifier = Modifier.fillMaxWidth().selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
+            verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+        ) {
+            circolareplus.design.AilaAccent.entries.forEach { option ->
+                val isSelected = option == selected
+                val swatch = androidx.compose.ui.graphics.Color(
+                    if (AppTheme.isDarkMode) option.primaryDark else option.primaryLight
+                )
+                val ring by androidx.compose.animation.core.animateDpAsState(
+                    targetValue = if (isSelected) 3.dp else 0.dp,
+                    // Selezione che risponde al dito: molla giocosa del sistema (senza rimbalzo con
+                    // "Riduci movimento"). Lo spessore dell'anello e lo stacco del pallino sotto sono
+                    // geometria del selettore, non spaziatura: restano 3/6dp.
+                    animationSpec = circolareplus.design.ailaBouncySpring(),
+                    label = "accentRing"
+                )
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .border(ring, swatch.copy(alpha = 0.45f), androidx.compose.foundation.shape.CircleShape)
+                        .selectable(selected=isSelected,role=Role.RadioButton,onClick={onSelect(option)})
+                        .semantics { contentDescription = "$label: ${option.label}" }
+                        .padding(if (isSelected) 6.dp else 3.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(swatch),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isSelected) {
+                        AppIcons.Check(modifier = Modifier.size(16.dp), color = contrastingAccentInk(swatch))
+                    }
                 }
             }
         }

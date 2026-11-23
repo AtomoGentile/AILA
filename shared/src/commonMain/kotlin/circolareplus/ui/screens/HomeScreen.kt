@@ -216,10 +216,10 @@ fun HomeScreen(
                 AilaListRow(
                     title = "Sondaggi",
                     subtitle = "Date delle interrogazioni e opzioni da mettere in ordine",
-                    tint = AppTheme.TintAmber,
+                    tint = AppTheme.TertiaryContainer,
                     onClick = onNavigateToPolls,
                     icon = {
-                        AppIcons.Poll(modifier = Modifier.size(21.dp), color = AppTheme.TintAmberInk)
+                        AppIcons.Poll(modifier = Modifier.size(21.dp), color = AppTheme.OnTertiaryContainer)
                     }
                 )
                 HorizontalDivider(color = AppTheme.Hairline, modifier = Modifier.padding(start = 72.dp))
@@ -229,10 +229,10 @@ fun HomeScreen(
                         "$openProposalsCount proposte da leggere e votare"
                     else
                         "Proponi un'idea e falla votare ai compagni",
-                    tint = AppTheme.TintViolet,
+                    tint = AppTheme.SecondaryContainer,
                     onClick = onNavigateToBoard,
                     icon = {
-                        AppIcons.ChatBubble(modifier = Modifier.size(21.dp), color = AppTheme.TintVioletInk)
+                        AppIcons.ChatBubble(modifier = Modifier.size(21.dp), color = AppTheme.OnSecondaryContainer)
                     }
                 )
             }
@@ -276,10 +276,10 @@ fun HomeScreen(
                             AilaListRow(
                                 title = "Sondaggi",
                                 subtitle = "Date delle interrogazioni e opzioni da mettere in ordine",
-                                tint = AppTheme.TintAmber,
+                                tint = AppTheme.TertiaryContainer,
                                 onClick = onNavigateToPolls,
                                 icon = {
-                                    AppIcons.Poll(modifier = Modifier.size(21.dp), color = AppTheme.TintAmberInk)
+                                    AppIcons.Poll(modifier = Modifier.size(21.dp), color = AppTheme.OnTertiaryContainer)
                                 }
                             )
                         }
@@ -290,10 +290,10 @@ fun HomeScreen(
                                     "$openProposalsCount proposte da leggere e votare"
                                 else
                                     "Proponi un'idea e falla votare ai compagni",
-                                tint = AppTheme.TintViolet,
+                                tint = AppTheme.SecondaryContainer,
                                 onClick = onNavigateToBoard,
                                 icon = {
-                                    AppIcons.ChatBubble(modifier = Modifier.size(21.dp), color = AppTheme.TintVioletInk)
+                                    AppIcons.ChatBubble(modifier = Modifier.size(21.dp), color = AppTheme.OnSecondaryContainer)
                                 }
                             )
                         }

@@ -36,7 +36,7 @@ import androidx.compose.foundation.layout.fillMaxSize
  *
  * Da qui in avanti si imposta una volta sola qui e vale ovunque.
  */
-private fun ailaColorScheme() = if (AppTheme.isNothing) {
+internal fun ailaColorScheme() = if (AppTheme.isNothing) {
     val dark = AppTheme.isDarkMode
     val ink = AppTheme.TextDark
     val paper = AppTheme.BackgroundLight
@@ -61,15 +61,17 @@ private fun ailaColorScheme() = if (AppTheme.isNothing) {
     )
 } else if (AppTheme.isDarkMode) darkColorScheme(
     primary = AppTheme.PrimaryBlue,
-    onPrimary = Color.White,
+    onPrimary = AppTheme.OnPrimaryButton,
     primaryContainer = AppTheme.TintBlue,
     onPrimaryContainer = AppTheme.TintBlueInk,
     secondary = AppTheme.SecondaryIndigo,
-    onSecondary = Color.Black,
+    onSecondary = contrastingAccentInk(AppTheme.SecondaryIndigo),
     secondaryContainer = AppTheme.SecondaryContainer,
     onSecondaryContainer = AppTheme.OnSecondaryContainer,
     tertiary = AppTheme.AccentCyan,
-    onTertiary = Color.Black,
+    onTertiary = contrastingAccentInk(AppTheme.AccentCyan),
+    tertiaryContainer = AppTheme.TertiaryContainer,
+    onTertiaryContainer = AppTheme.OnTertiaryContainer,
     background = AppTheme.BackgroundLight,
     onBackground = AppTheme.TextDark,
     surface = AppTheme.SurfaceWhite,
@@ -85,17 +87,19 @@ private fun ailaColorScheme() = if (AppTheme.isNothing) {
     surfaceTint = Color.Transparent
 ) else lightColorScheme(
     primary = AppTheme.PrimaryBlue,
-    onPrimary = Color.White,
+    onPrimary = AppTheme.OnPrimaryButton,
     primaryContainer = AppTheme.TintBlue,
     onPrimaryContainer = AppTheme.TintBlueInk,
 
     secondary = AppTheme.SecondaryIndigo,
-    onSecondary = Color.White,
+    onSecondary = contrastingAccentInk(AppTheme.SecondaryIndigo),
     secondaryContainer = AppTheme.SecondaryContainer,
     onSecondaryContainer = AppTheme.OnSecondaryContainer,
 
     tertiary = AppTheme.AccentCyan,
-    onTertiary = Color.White,
+    onTertiary = contrastingAccentInk(AppTheme.AccentCyan),
+    tertiaryContainer = AppTheme.TertiaryContainer,
+    onTertiaryContainer = AppTheme.OnTertiaryContainer,
 
     background = AppTheme.BackgroundLight,
     onBackground = AppTheme.TextDark,
