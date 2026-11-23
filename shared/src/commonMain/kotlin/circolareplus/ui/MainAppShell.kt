@@ -1246,7 +1246,6 @@ fun MainAppShell(
     var preferencesProgress by remember {
         mutableStateOf<circolareplus.data.remote.dto.PreferencesProgressDto?>(null)
     }
-    var openSeatPreferencesFromBrief by remember { mutableStateOf(false) }
     var seatMapMode by rememberSaveable { mutableStateOf("MAP") } // "MAP" | "VOTE_PREFERENCES"
     val socialVotes = remember { mutableStateMapOf<String, SocialPreferenceScore>() }
     var proposalOptions by remember { mutableStateOf<List<SeatMapProposal>>(emptyList()) }
@@ -2020,7 +2019,6 @@ fun MainAppShell(
     // propria della bottom bar, quindi si aggancia direttamente al cambio di selectedTab.
     LaunchedEffect(selectedTab, seatMapRefreshTrigger) {
         if (selectedTab == MainTab.SEATMAP) {
-            seatMapMode = if(openSeatPreferencesFromBrief) "VOTE_PREFERENCES" else "MAP"
             seatMapError = null
             // Lo spinner a piena schermata solo la prima volta in assoluto: dopo, la mappa gia'
             // in memoria resta a schermo e si aggiorna sotto. Prima valeva "mappa vuota", quindi
@@ -2029,11 +2027,12 @@ fun MainAppShell(
             if (showSpinner) isSeatMapLoading = true
             try {
                 loadSeatMapData()
-                if(!isPreferencesOpen) seatMapMode = "MAP"
-                openSeatPreferencesFromBrief = false
+                if (!isPreferencesOpen) seatMapMode = "MAP"
             } finally {
                 if (showSpinner) isSeatMapLoading = false
             }
+        } else {
+            seatMapMode = "MAP"
         }
     }
 
@@ -3628,7 +3627,10 @@ fun MainAppShell(
                                             initialPracticeId = item.sourceId
                                             isInBureaucracy = true
                                         }
-                                        circolareplus.data.remote.dto.AilaBriefKind.SEATMAP -> { openSeatPreferencesFromBrief = item.sourceId.startsWith("preferences:"); selectedTab = MainTab.SEATMAP }
+                                        circolareplus.data.remote.dto.AilaBriefKind.SEATMAP -> {
+                                            seatMapMode = if (item.sourceId.startsWith("preferences:")) "VOTE_PREFERENCES" else "MAP"
+                                            selectedTab = MainTab.SEATMAP
+                                        }
                                         circolareplus.data.remote.dto.AilaBriefKind.EVENT -> { calendarFocusDateIso = item.date; selectedTab = MainTab.CALENDAR }
                                         circolareplus.data.remote.dto.AilaBriefKind.CIRCULAR -> {
                                             classSection = ClassSection.CIRCULARS; selectedTab = MainTab.CLASS
@@ -3770,13 +3772,6 @@ fun MainAppShell(
                                         }
                                     } else {
                                         Column(modifier = Modifier.fillMaxSize()) {
-                                            // Il banner per votare le preferenze compariva solo
-                                            // agli studenti NON rappresentanti: il rappresentante
-                                            // apriva la votazione e poi non aveva alcun modo di
-                                            // votare a sua volta, pur sedendo in classe come tutti.
-                                            if (isPreferencesOpen) {
-                                                PreferencesOpenBanner(onClick = { seatMapMode = "VOTE_PREFERENCES" })
-                                            }
                                             val memoizedStudentsMap = remember(classmates, user, seatMapDummies) {
                                                 classmates.associateBy { it.id } + (user.id to user) +
                                                     seatMapDummies.associateBy { it.id }.mapValues { it.value.asUser() }
@@ -3787,6 +3782,7 @@ fun MainAppShell(
                                                 assignments = seatMapAssignments,
                                                 studentsMap = memoizedStudentsMap,
                                                 isPreferencesOpen = isPreferencesOpen,
+                                                onOpenPreferences = { seatMapMode = "VOTE_PREFERENCES" },
                                                 loadPublishedHistory = { AppContainer.seatMapRepository.getPublishedHistory() },
                                                 preferencesProgress = preferencesProgress,
                                                 dummies = seatMapDummies,
@@ -5951,36 +5947,6 @@ fun MainAppShell(
 @Composable
 private fun ScreenBackBar(title: String, onBackClick: () -> Unit) {
     circolareplus.design.AilaBackBar(title = title, onBackClick = onBackClick)
-}
-
-@Composable
-private fun PreferencesOpenBanner(onClick: () -> Unit) {
-    Card(
-        shape = RoundedCornerShape(AppTheme.CardCornerRadius),
-        colors = CardDefaults.cardColors(containerColor = AppTheme.TintBlue),
-        modifier = Modifier
-            .fillMaxWidth()
-            // Il banner sta sopra l'intestazione della Mappa Posti: senza padding superiore
-            // finiva incollato al bordo alto dello schermo.
-            .padding(horizontal = AppTheme.Space16)
-            .padding(top = AppTheme.Space16)
-            .clickable { onClick() }
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(AppTheme.Space12),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Il Rappresentante ha aperto la votazione preferenze. Tocca per votare →",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = AppTheme.TintBlueInk,
-                modifier = Modifier.weight(1f)
-            )
-        }
-    }
-    Spacer(modifier = Modifier.height(AppTheme.Space8))
 }
 
 /**

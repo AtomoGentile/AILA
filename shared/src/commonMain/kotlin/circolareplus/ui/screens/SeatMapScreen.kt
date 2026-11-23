@@ -81,6 +81,7 @@ fun SeatMapScreen(
     assignments: List<DeskAssignment>,
     studentsMap: Map<String, User>,
     isPreferencesOpen: Boolean,
+    onOpenPreferences: (() -> Unit)? = null,
     /** Quanti hanno votato le preferenze; null finche' non e' stato caricato. */
     preferencesProgress: circolareplus.data.remote.dto.PreferencesProgressDto? = null,
     /** Fantocci della classe: studenti inventati che occupano un posto in mappa come tutti. */
@@ -210,6 +211,16 @@ fun SeatMapScreen(
                 }
             }
         )
+
+        if (isPreferencesOpen && onOpenPreferences != null) {
+            AilaPrimaryButton(
+                text = "Vota le preferenze",
+                onClick = onOpenPreferences,
+                modifier = Modifier.padding(horizontal = AppTheme.Space16),
+                fillMaxWidth = true,
+                large = true
+            )
+        }
 
         // Tutto dentro un'unica griglia scorrevole: prima intestazione, ricerca, pannello e
         // cattedra stavano in una Column fissa e solo i banchi scorrevano, quindi con il pannello
@@ -570,7 +581,7 @@ fun SeatMapScreen(
             SectionFeatureCard(
                 title="La tua aula",
                 description=if(assignments.isEmpty()) "Prima di assegnare i posti si raccolgono le preferenze." else "Cerca un compagno o trova il tuo posto. Nell’intestazione trovi lo storico e l’esportazione.",
-                badge=if(isPreferencesOpen) "Preferenze aperte" else if(assignments.isNotEmpty()) "${assignments.size} banchi · disposizione pubblicata" else "In attesa della disposizione",
+                badge=if(assignments.isNotEmpty()) "${assignments.size} banchi · disposizione pubblicata" else "In attesa della disposizione",
                 icon={AppIcons.Chair(Modifier.size(24.dp),MaterialTheme.colorScheme.tertiary)}
             )
         }
