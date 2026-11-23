@@ -76,6 +76,8 @@ internal fun BureaucracyScreen(
     var creating by rememberSaveable { mutableStateOf(false) }
     var editingDeadline by rememberSaveable { mutableStateOf(false) }
     var confirmingArchive by rememberSaveable { mutableStateOf(false) }
+    var addingMaterial by rememberSaveable { mutableStateOf(false) }
+    var materialSaved by remember { mutableStateOf(false) }
     var linkingCircular by rememberSaveable { mutableStateOf(false) }
     var removingMaterial by remember { mutableStateOf<BureaucracyMaterialDto?>(null) }
     var loadError by remember { mutableStateOf<String?>(null) }
@@ -92,6 +94,11 @@ internal fun BureaucracyScreen(
                 feed = updated
                 onPracticesRead(updated)
                 val selected = updated.practices.firstOrNull { it.id == selection }
+                if (!updated.canManage || selected == null || selected.archivedAt != null) {
+                    addingMaterial = false
+                    linkingCircular = false
+                    materialSaved = false
+                }
                 if (updated.canManage && selected != null) {
                     deliveries = api.get<BureaucracyDeliveriesDto>(
                         "$PRACTICES/${selected.id}/deliveries", offlineCopy = false
@@ -106,7 +113,6 @@ internal fun BureaucracyScreen(
             } catch (e: Exception) {
                 loadError = (e as? ApiException)?.message ?: "Impossibile aggiornare le pratiche."
             }
-            if (feed?.canManage == true) break
             delay(15_000)
         } while (true)
     }
@@ -134,7 +140,7 @@ internal fun BureaucracyScreen(
     val pickPdf = rememberPdfFilePicker(
         onError = { actionError = it },
         onPicked = { fileName, bytes ->
-            if (active && canManage && practice != null && practice.archivedAt == null && !busy) {
+            if (active && addingMaterial && canManage && practice != null && practice.archivedAt == null && !busy) {
                 if (bytes.size > MAX_PDF_BYTES) {
                     actionError = "Il PDF supera il limite di 10 MB."
                 } else {
@@ -149,7 +155,7 @@ internal fun BureaucracyScreen(
                                 })
                             }
                         )
-                    })
+                    }, onDone = { materialSaved = addingMaterial })
                 }
             }
         }
@@ -181,6 +187,7 @@ internal fun BureaucracyScreen(
     val back: () -> Unit = back@{
         if (busy) return@back
         if (selection != null) {
+            addingMaterial = false
             linkingCircular = false
             removingMaterial = null
             selection = null
@@ -192,7 +199,7 @@ internal fun BureaucracyScreen(
         }
     }
     PlatformBackHandler(
-        enabled = active && !creating && !confirmingArchive && !editingDeadline && !linkingCircular && removingMaterial == null,
+        enabled = active && !creating && !confirmingArchive && !editingDeadline && !addingMaterial && removingMaterial == null,
         onBack = back
     )
 
@@ -204,8 +211,21 @@ internal fun BureaucracyScreen(
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
     ) {
         AilaBackBar(title = practice?.title ?: "Burocrazia", onBackClick = back) {
-            AilaIconButton("Aggiorna", { revision++ }, enabled = !busy) {
-                AppIcons.Refresh(Modifier.size(19.dp), it)
+            if (canManage && selection == null) {
+                AilaIconButton("Nuova pratica", { actionError = null; creating = true }, primary = true, enabled = !busy) {
+                    AppIcons.Plus(Modifier.size(20.dp), it)
+                }
+            } else if (canManage && practice != null && practice.archivedAt == null) {
+                AilaIconButton(
+                    "Aggiungi materiale",
+                    onClick = {
+                        actionError = null
+                        materialSaved = false
+                        addingMaterial = true
+                    },
+                    primary = true,
+                    enabled = !busy
+                ) { AppIcons.Plus(Modifier.size(20.dp), it) }
             }
         }
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -219,7 +239,7 @@ internal fun BureaucracyScreen(
                         AilaErrorState(error, onRetry = { revision++ })
                     }
                 }
-                actionError?.takeIf { !creating && !confirmingArchive && !editingDeadline && !linkingCircular && removingMaterial == null }?.let { error ->
+                actionError?.takeIf { !creating && !confirmingArchive && !editingDeadline && !addingMaterial && removingMaterial == null }?.let { error ->
                     item { Text(error, color = AppTheme.TintRedInk, style = MaterialTheme.typography.bodyMedium) }
                 }
                 when {
@@ -241,17 +261,9 @@ internal fun BureaucracyScreen(
                         if (practice.description.isNotBlank()) {
                             item { Text(practice.description, color = AppTheme.TextMuted) }
                         }
-                        if (!closed || practice.materials.isNotEmpty()) {
+                        if (practice.materials.isNotEmpty()) {
                             item {
                                 Text("Documenti e circolari", style = MaterialTheme.typography.titleSmall, color = AppTheme.TextDark)
-                                if (!closed) {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        AilaTextButton(pickPdf, enabled = !busy) { Text("Carica PDF") }
-                                        AilaTextButton({ actionError = null; linkingCircular = true }, enabled = !busy) {
-                                            Text("Collega circolare")
-                                        }
-                                    }
-                                }
                             }
                             items(practice.materials, key = { "material:${it.id}" }) { material ->
                                 PracticeMaterialRow(material, !busy, onOpen = { openMaterial(practice.id, material) },
@@ -346,19 +358,12 @@ internal fun BureaucracyScreen(
                     }
                     else -> {
                         item {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                AilaSegmentedTabs(
-                                    labels = listOf("Attive", "Archivio"),
-                                    selectedIndex = if (archived) 1 else 0,
-                                    onSelect = { archived = it == 1 },
-                                    modifier = Modifier.weight(1f)
-                                )
-                                if (canManage) {
-                                    AilaIconButton("Nuova pratica", { actionError = null; creating = true }, primary = true, enabled = !busy) {
-                                        AppIcons.Plus(Modifier.size(20.dp), it)
-                                    }
-                                }
-                            }
+                            AilaSegmentedTabs(
+                                labels = listOf("Attive", "Archivio"),
+                                selectedIndex = if (archived) 1 else 0,
+                                onSelect = { archived = it == 1 },
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                         if (shown.isEmpty()) {
                             item {
@@ -454,47 +459,54 @@ internal fun BureaucracyScreen(
             }
         }
     }
-    if (canManage && practice != null && practice.archivedAt == null && linkingCircular) {
-        AilaBottomSheet(onDismissRequest = { if (!busy) linkingCircular = false }) {
-            var circulars by remember { mutableStateOf(emptyList<Circular>()) }
-            var offset by remember { mutableStateOf(0) }
-            var loading by remember { mutableStateOf(false) }
-            var hasMore by remember { mutableStateOf(true) }
-            var pageError by remember { mutableStateOf<String?>(null) }
-            val pickerScope = rememberCoroutineScope()
-            fun loadPage() {
-                if (loading || !hasMore) return
-                loading = true
-                pageError = null
-                pickerScope.launch {
-                    try {
-                        val page = circularsRepository.listCirculars(CIRCULAR_PAGE_SIZE, offset)
-                        offset += page.size
-                        circulars = (circulars + page).distinctBy { it.number }
-                        hasMore = page.size == CIRCULAR_PAGE_SIZE
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        pageError = "Impossibile caricare le circolari. Riprova."
-                    } finally {
-                        loading = false
-                    }
-                }
+    if (addingMaterial && canManage && practice != null && practice.archivedAt == null) {
+        AilaOriginSheet(
+            originKey = "bureaucracyMaterial",
+            closeRequested = materialSaved,
+            useOrigin = false,
+            onDismiss = {
+                addingMaterial = false
+                linkingCircular = false
+                materialSaved = false
             }
-            LaunchedEffect(Unit) { loadPage() }
-            val linked = practice.materials.mapNotNull { it.circularNumber }.toSet()
-            PracticeSheetBody("Collega una circolare", actionError) {
-                CircularPicker(
-                    circulars.filterNot { it.number in linked }, loading, pageError, busy,
-                    onLoadMore = ::loadPage, hasMore = hasMore,
-                    onPick = { number ->
+        ) { close ->
+            val backToChoices = { actionError = null; linkingCircular = false }
+            PlatformBackHandler(enabled = linkingCircular && !busy, onBack = backToChoices)
+            AilaStepSheetBody(
+                title = if (linkingCircular) "Scegli una circolare" else "Aggiungi alla pratica",
+                canGoBack = linkingCircular,
+                onBack = { if (!busy) backToChoices() },
+                onClose = { if (!busy) close() }
+            ) {
+                actionError?.let { Text(it, color = AppTheme.TintRedInk, modifier = Modifier.padding(bottom = 12.dp)) }
+                if (busy) PracticeLoader("Salvataggio…")
+                if (linkingCircular) {
+                    val linked = practice.materials.mapNotNull { it.circularNumber }.toSet()
+                    PracticeCircularPicker(circularsRepository, linked, busy) { number ->
                         save(change = {
                             api.post<Map<String, Int>, SuccessDto>(
                                 "$PRACTICES/${practice.id}/materials/circulars", mapOf("number" to number)
                             )
-                        }, onDone = { linkingCircular = false })
+                        }, onDone = { materialSaved = addingMaterial })
                     }
-                )
+                } else {
+                    AilaCard {
+                        AilaListRow(
+                            title = "Collega circolare",
+                            subtitle = "Scegli dalle circolari di AILA",
+                            icon = { AppIcons.Document(Modifier.size(20.dp), AppTheme.TintBlueInk) },
+                            onClick = if (busy) null else {
+                                { actionError = null; linkingCircular = true }
+                            }
+                        )
+                        AilaListRow(
+                            title = "Carica PDF",
+                            subtitle = "Dal dispositivo, fino a 10 MB",
+                            icon = { AppIcons.Document(Modifier.size(20.dp), AppTheme.TintBlueInk) },
+                            onClick = pickPdf.takeUnless { busy }
+                        )
+                    }
+                }
             }
         }
     }
@@ -536,6 +548,47 @@ internal fun BureaucracyScreen(
             }
         }
     }
+}
+
+@Composable
+private fun PracticeCircularPicker(
+    repository: CircularsRepository,
+    linked: Set<Int>,
+    busy: Boolean,
+    onPick: (Int) -> Unit
+) {
+    var circulars by remember { mutableStateOf(emptyList<Circular>()) }
+    var offset by remember { mutableStateOf(0) }
+    var loading by remember { mutableStateOf(false) }
+    var hasMore by remember { mutableStateOf(true) }
+    var pageError by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    fun loadPage() {
+        if (loading || !hasMore) return
+        loading = true
+        pageError = null
+        scope.launch {
+            try {
+                val page = repository.listCirculars(CIRCULAR_PAGE_SIZE, offset)
+                offset += page.size
+                circulars = (circulars + page).distinctBy { it.number }
+                hasMore = page.size == CIRCULAR_PAGE_SIZE
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                pageError = "Impossibile caricare le circolari. Riprova."
+            } finally {
+                loading = false
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) { loadPage() }
+    CircularPicker(
+        circulars.filterNot { it.number in linked }, loading, pageError, busy,
+        onLoadMore = ::loadPage, hasMore = hasMore, onPick = onPick
+    )
 }
 
 @Composable

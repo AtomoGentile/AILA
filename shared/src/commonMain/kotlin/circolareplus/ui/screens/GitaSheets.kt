@@ -126,7 +126,7 @@ private fun stepTransition(): ContentTransform = ContentTransform(
  * un passo all'altro, chiudi) e contenuto che scorre se non ci sta, sopra la tastiera.
  */
 @Composable
-private fun GitaSheetBody(
+internal fun AilaStepSheetBody(
     title: String,
     canGoBack: Boolean,
     onBack: () -> Unit,
@@ -166,7 +166,7 @@ private fun GitaSheetBody(
                         initialContentExit = fadeOut(ailaFadeSpec(100))
                     )
                 },
-                label = "gitaSheetTitle"
+                label = "stepSheetTitle"
             ) { shown ->
                 Text(
                     text = shown,
@@ -212,7 +212,7 @@ internal fun GitaAddSheet(
     ) { close ->
         // Composto dopo il gestore di chiusura del foglio: ha la precedenza e torna alla scelta.
         PlatformBackHandler(enabled = step !is AddStep.Choose) { onStep(AddStep.Choose) }
-        GitaSheetBody(
+        AilaStepSheetBody(
             title = when (step) {
                 AddStep.Choose -> "Aggiungi alla gita"
                 is AddStep.Document -> "Nuovo documento"
@@ -452,7 +452,7 @@ internal fun GitaItemSheet(
     AilaBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         // Dai passi interni "indietro" torna al dettaglio; dal dettaglio chiude il foglio.
         PlatformBackHandler(enabled = step !is ItemStep.Detail) { onStep(ItemStep.Detail(step.item)) }
-        GitaSheetBody(
+        AilaStepSheetBody(
             title = when (step) {
                 is ItemStep.Detail -> if (step.item.isLink) "Link" else step.item.category.label
                 is ItemStep.Versions -> "Storico"
