@@ -389,15 +389,16 @@ auth.get('/classes', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/auth/reset-password — Nuova password con il codice dato dal Rappresentante
+// POST /api/auth/reset-password — Nuova password con un codice monouso
 //
 // Nell'app non c'e' un'email con cui recuperare la password: il Rappresentante genera per il
 // compagno un codice monouso (POST /api/users/:id/reset-code) e glielo dice. Il codice vale 24
-// ore, una volta sola; i tentativi sbagliati sono limitati.
+// ore, una volta sola; i tentativi sbagliati sono limitati. Per un Rappresentante il codice
+// viene emesso dal gestore di AILA tramite la rotta di amministrazione.
 // ---------------------------------------------------------------------------
 auth.post('/reset-password', async (c) => {
   const body = await c.req.json<{ username?: string; code?: string; newPassword?: string }>();
-  const username = typeof body.username === 'string' ? body.username.trim().toLowerCase() : '';
+  const username = typeof body.username === 'string' ? body.username.trim().replace(/^@/, '').toLowerCase() : '';
   const code = typeof body.code === 'string' ? body.code.trim().toUpperCase().replace(/[\s-]/g, '') : '';
   if (!username || !code) return c.json({ error: 'Username e codice sono obbligatori' }, 400);
   const weakPassword = passwordProblem(body.newPassword);
@@ -439,10 +440,16 @@ auth.post('/reset-password', async (c) => {
   }
 
   const passwordHash = await storedPasswordHash(body.newPassword as string);
-  await c.env.DB.batch([
-    c.env.DB.prepare('UPDATE users SET password_hash = ? WHERE id = ?').bind(passwordHash, row.id),
-    c.env.DB.prepare('DELETE FROM password_reset_codes WHERE user_id = ?').bind(row.id),
+  const now = Math.floor(Date.now() / 1000);
+  const codeMatch = 'user_id = ? AND code_hash = ? AND expires_at > ?';
+  const [updated] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE users SET password_hash = ? WHERE id = ?
+       AND EXISTS (SELECT 1 FROM password_reset_codes WHERE ${codeMatch})`
+    ).bind(passwordHash, row.id, row.id, row.code_hash, now),
+    c.env.DB.prepare(`DELETE FROM password_reset_codes WHERE ${codeMatch}`).bind(row.id, row.code_hash, now),
   ]);
+  if (updated.meta.changes !== 1) return c.json({ error: 'Codice non valido o scaduto' }, 400);
   await clearAttempts(c.env, key);
   await clearAttempts(c.env, `login:user:${username}`);
 

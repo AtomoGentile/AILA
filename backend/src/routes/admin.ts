@@ -12,6 +12,9 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { classIdFromLabel, normalizeClassLabel, timingSafeEqual } from '../auth';
 import { clientIp, isRateLimited, recordAttempt } from '../rateLimit';
+import { inBackground } from '../services/background';
+import { notifyUser } from '../services/fcm';
+import { issuePasswordResetCode } from '../services/passwordReset';
 import {
   INVITE_DEFAULT_TTL_DAYS,
   INVITE_MAX_COUNT,
@@ -45,6 +48,31 @@ admin.use('*', async (c, next) => {
     return c.json({ error: 'Non autorizzato' }, 401);
   }
   await next();
+});
+
+// Recupero di un Rappresentante, dopo che il gestore ha verificato l'identità del titolare.
+admin.post('/representative-reset-code', async (c) => {
+  const body = await c.req.json<{ username?: unknown; classLabel?: unknown }>();
+  const username = typeof body.username === 'string' ? body.username.trim().replace(/^@/, '').toLowerCase() : '';
+  const classLabel = typeof body.classLabel === 'string' ? normalizeClassLabel(body.classLabel) : null;
+  if (!username || !classLabel) return c.json({ error: 'Inserisci username e classe del Rappresentante' }, 400);
+
+  const target = await c.env.DB.prepare(
+    "SELECT id FROM users WHERE username = ? AND class_id = ? AND role = 'REPRESENTATIVE'"
+  ).bind(username, classIdFromLabel(classLabel)).first<{ id: string }>();
+  if (!target) return c.json({ error: 'Rappresentante non trovato nella classe indicata' }, 404);
+
+  const reset = await issuePasswordResetCode(c.env, target.id, null);
+  inBackground(c, notifyUser(
+    c.env,
+    target.id,
+    'Codice per reimpostare la password',
+    'Chi amministra AILA ha generato un codice di recupero. Se non lo hai chiesto, contattalo subito.',
+    { action: 'password_reset_code' }
+  ));
+
+  c.header('Cache-Control', 'no-store');
+  return c.json({ ...reset, username }, 201);
 });
 
 // ---------------------------------------------------------------------------

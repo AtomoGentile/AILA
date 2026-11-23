@@ -1,7 +1,7 @@
 // =============================================================================
 // AILA — Pagina di amministrazione (GET /admin)
 //
-// Per emettere i codici Rappresentante dal browser, anche dal telefono, invece che dal terminale.
+// Per emettere inviti e codici di recupero dei Rappresentanti dal browser.
 // La pagina non contiene niente di segreto: chi la apre deve scrivere ADMIN_SECRET, che il browser
 // manda alle rotte /api/admin (stessa origine, header X-Admin-Secret) e non salva da nessuna parte
 // (il gestore di password puo' ricordarlo, se lo si vuole). I tentativi sbagliati sono limitati
@@ -141,6 +141,20 @@ const PAGE = `<!doctype html>
     <h2 id="history-title">Codici emessi</h2>
     <ul class="list" id="list"></ul>
   </section>
+
+  <form class="card" id="recover" autocomplete="off">
+    <h2>Recupera la password di un Rappresentante</h2>
+    <p class="hint">Verifica l’identità del titolare, poi dagli il codice in privato. Vale 24 ore e si usa una sola volta.</p>
+    <label for="reset-username">Username del Rappresentante</label>
+    <input id="reset-username" required autocapitalize="none" spellcheck="false">
+    <label for="reset-class">Classe</label>
+    <input id="reset-class" list="classes" placeholder="Per esempio 4 CSA" required autocapitalize="characters">
+    <div class="actions">
+      <button type="submit" id="reset-go">Genera codice di recupero</button>
+    </div>
+    <p class="msg" id="reset-msg" role="status"></p>
+    <div id="reset-result" aria-live="polite"></div>
+  </form>
 </main>
 
 <script nonce="__NONCE__">
@@ -149,9 +163,9 @@ const PAGE = `<!doctype html>
   const $ = (id) => document.getElementById(id);
   const msg = $('msg');
 
-  function say(text, isError) {
-    msg.textContent = text || '';
-    msg.className = 'msg' + (isError ? ' error' : '');
+  function say(text, isError, target = msg) {
+    target.textContent = text || '';
+    target.className = 'msg' + (isError ? ' error' : '');
   }
 
   function el(tag, attrs, children) {
@@ -167,18 +181,18 @@ const PAGE = `<!doctype html>
     return new Date(iso).toLocaleString('it-IT', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
   }
 
-  async function call(method, url, body) {
+  async function call(method, url, body, status = msg) {
     const secret = $('secret').value;
-    if (!secret) { say('Scrivi il segreto di amministrazione.', true); $('secret').focus(); return null; }
+    if (!secret) { say('Scrivi il segreto di amministrazione.', true, status); $('secret').focus(); return null; }
     const res = await fetch(url, {
       method,
       headers: Object.assign({ 'X-Admin-Secret': secret }, body ? { 'Content-Type': 'application/json' } : {}),
       body: body ? JSON.stringify(body) : undefined,
     }).catch(() => null);
-    if (!res) { say('Server non raggiungibile. Controlla la connessione.', true); return null; }
+    if (!res) { say('Server non raggiungibile. Controlla la connessione.', true, status); return null; }
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      say(res.status === 401 ? 'Segreto sbagliato.' : (json.error || 'Errore ' + res.status), true);
+      say(res.status === 401 ? 'Segreto sbagliato.' : (json.error || 'Errore ' + res.status), true, status);
       return null;
     }
     return json;
@@ -263,6 +277,32 @@ const PAGE = `<!doctype html>
     $('history').hidden = false;
   }
   $('show').addEventListener('click', showHistory);
+
+  $('recover').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const go = $('reset-go');
+    const status = $('reset-msg');
+    const result = $('reset-result');
+    result.replaceChildren();
+    say('', false, status);
+    go.disabled = true;
+    try {
+      const reset = await call('POST', '/api/admin/representative-reset-code', {
+        username: $('reset-username').value,
+        classLabel: $('reset-class').value,
+      }, status);
+      if (!reset) return;
+      result.appendChild(el('div', { class: 'code' }, [
+        el('div', {}, [
+          el('small', { text: '@' + reset.username + ' · scade il ' + when(reset.expiresAt) }),
+          el('strong', { text: reset.code }),
+        ]),
+      ]));
+      say('Il titolare può usare il codice da «Password dimenticata?» in AILA.', false, status);
+    } finally {
+      go.disabled = false;
+    }
+  });
 })();
 </script>
 </body>

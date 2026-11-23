@@ -10,16 +10,15 @@ import {
   issueToken,
   newUUID,
   passwordProblem,
-  randomCode,
   requireRole,
   resolveClassId,
-  sha256Hex,
   storedPasswordHash,
   verifyPassword,
 } from '../auth';
 import { classInviteCode, regenerateClassInviteCode } from '../services/classInvites';
 import { notifyUser, notifyUsers } from '../services/fcm';
 import { inBackground } from '../services/background';
+import { issuePasswordResetCode } from '../services/passwordReset';
 import { fullName, nameCase } from '../names';
 import type { UserRole } from '../types';
 
@@ -175,8 +174,6 @@ users.post('/class-code/regenerate', requireRole('REPRESENTATIVE'), async (c) =>
 // POST /api/users/:id/reset-code — Codice monouso per reimpostare la password di un compagno
 // (solo REPRESENTATIVE della stessa classe). Vale 24 ore; generarne un altro annulla il primo.
 // ---------------------------------------------------------------------------
-const RESET_CODE_TTL_SECONDS = 24 * 60 * 60;
-
 users.post('/:id/reset-code', requireRole('REPRESENTATIVE'), async (c) => {
   const payload = c.get('jwtPayload');
   const targetId = c.req.param('id');
@@ -190,18 +187,12 @@ users.post('/:id/reset-code', requireRole('REPRESENTATIVE'), async (c) => {
   // Non sull'altro Rappresentante: entrando nel suo account una persona sola avrebbe le due firme
   // da Rappresentante del quorum (la Guardia la nomina lei stessa) e svelerebbe gli anonimi da sola.
   if (target.role === 'REPRESENTATIVE') {
-    return c.json({ error: "Non puoi reimpostare la password dell'altro Rappresentante" }, 403);
+    return c.json({ error: 'Per recuperare la password di un Rappresentante, contatta chi amministra AILA' }, 403);
   }
 
-  const code = randomCode(8);
-  const expiresAt = Math.floor(Date.now() / 1000) + RESET_CODE_TTL_SECONDS;
+  let reset;
   try {
-    await c.env.DB.prepare(
-      `INSERT INTO password_reset_codes (user_id, code_hash, expires_at, created_by, created_at)
-       VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-       ON CONFLICT(user_id) DO UPDATE SET code_hash = excluded.code_hash, expires_at = excluded.expires_at,
-         created_by = excluded.created_by, created_at = excluded.created_at`
-    ).bind(target.id, await sha256Hex(code), expiresAt, payload.sub).run();
+    reset = await issuePasswordResetCode(c.env, target.id, payload.sub);
   } catch {
     return c.json({ error: 'Reset password non ancora attivo sul server (manca la migrazione 013)' }, 503);
   }
@@ -215,7 +206,8 @@ users.post('/:id/reset-code', requireRole('REPRESENTATIVE'), async (c) => {
     { action: 'password_reset_code' }
   ));
 
-  return c.json({ code, username: target.username, expiresAt: new Date(expiresAt * 1000).toISOString() });
+  c.header('Cache-Control', 'no-store');
+  return c.json({ ...reset, username: target.username });
 });
 
 // ---------------------------------------------------------------------------

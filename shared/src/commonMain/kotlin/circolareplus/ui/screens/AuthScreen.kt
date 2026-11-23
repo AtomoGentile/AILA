@@ -641,7 +641,7 @@ private fun ResetPasswordDialog(
                     text = if (initialCode.isNotBlank()) {
                         "Username e codice sono già pronti: scegli una password nuova per entrare subito."
                     } else {
-                        "Chiedi al Rappresentante un codice di reset (lo genera dalla Scheda Classe, vale 24 ore), poi scegli la password nuova."
+                        "Chiedi un codice di recupero al tuo Rappresentante. Se sei tu un Rappresentante, chiedilo a chi amministra AILA. Il codice vale 24 ore."
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = AppTheme.TextMuted

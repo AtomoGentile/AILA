@@ -374,6 +374,36 @@ describe('password e token', () => {
     expect((await call('POST', `/api/users/${rep2.json.user.id}/reset-code`, {}, rep1.json.token)).status).toBe(403);
   });
 
+  it('il gestore emette il codice per il Rappresentante, preservandone ruolo e classe', async () => {
+    await register('studente');
+    const rep = await register('rep1', { representativeCode: await repCode() });
+    const path = '/api/admin/representative-reset-code';
+    const body = { username: ' @Rep1 ', classLabel: '3 B' };
+    const admin = { 'X-Admin-Secret': ADMIN };
+    expect((await call('POST', path, body, rep.json.token)).status).toBe(401);
+    expect((await call('POST', path, { ...body, classLabel: '4 B' }, undefined, admin)).status).toBe(404);
+    expect((await call('POST', path, { ...body, username: 'studente' }, undefined, admin)).status).toBe(404);
+
+    const replaced = await call('POST', path, body, undefined, admin);
+    const issued = await call('POST', path, body, undefined, admin);
+    expect(issued.status).toBe(201);
+    expect(issued.json.username).toBe('rep1');
+    expect(notified).toContainEqual({
+      userIds: [rep.json.user.id],
+      title: 'Codice per reimpostare la password',
+      data: { action: 'password_reset_code' },
+    });
+    const redeem = (code: string) =>
+      call('POST', '/api/auth/reset-password', { username: '@Rep1', code, newPassword: 'nuovapass1' });
+    expect((await redeem(replaced.json.code)).status).toBe(400);
+    const attempts = await Promise.all([redeem(issued.json.code), redeem(issued.json.code)]);
+    expect(attempts.map((attempt) => attempt.status).sort()).toEqual([200, 400]);
+    const reset = attempts.find((attempt) => attempt.status === 200);
+    expect(reset?.json.user).toMatchObject({ id: rep.json.user.id, role: 'REPRESENTATIVE', classId: rep.json.user.classId });
+    expect((await call('GET', '/api/users/me', undefined, rep.json.token)).status).toBe(401);
+    expect((await call('GET', '/api/users/class-code', undefined, reset?.json.token)).status).toBe(200);
+  });
+
   it('un account eliminato non entra piu\' con il token vecchio', async () => {
     const { json } = await register('anna');
     expect((await call('DELETE', '/api/users/me', { password: 'password123' }, json.token)).status).toBe(200);
