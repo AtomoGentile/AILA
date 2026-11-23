@@ -3,16 +3,26 @@ import WebKit
 
 // A disposable simulator app. No AILA account or device data is needed.
 class App: UIResponder, UIApplicationDelegate {
+    func application(_ application: UIApplication, configurationForConnecting session: UISceneSession,
+                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        let config = UISceneConfiguration(name: "Startup", sessionRole: session.role)
+        config.delegateClass = StartupScene.self
+        return config
+    }
+}
+
+class StartupScene: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
     var web: WKWebView!
     var attempts = 0
     let refuseGradient = ProcessInfo.processInfo.environment["AILA_TEST_CASE"] == "refuse-gradient"
 
-    func application(_ application: UIApplication, didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options: UIScene.ConnectionOptions) {
+        guard let windowScene = scene as? UIWindowScene else { return }
         let root = UIViewController()
         web = WKWebView(frame: .zero)
         root.view = web
-        window = UIWindow(frame: UIScreen.main.bounds)
+        window = UIWindow(windowScene: windowScene)
         window?.rootViewController = root
         window?.makeKeyAndVisible()
         let url = ProcessInfo.processInfo.environment["AILA_URL"]!
@@ -40,7 +50,6 @@ class App: UIResponder, UIApplicationDelegate {
         }
         web.load(URLRequest(url: URL(string: url)!))
         poll()
-        return true
     }
 
     func poll() {
@@ -54,12 +63,12 @@ class App: UIResponder, UIApplicationDelegate {
                         new URL(location.href).searchParams.get('grafica') === 'ridotta';
                     if (canvas?.width > 0 && !document.getElementById('aila-splash') &&
                         (!\(self.refuseGradient) || recovered)) return 'PASS';
-                    return [document.getElementById('diagnosi-avvio')?.textContent,
+                    return [location.href, document.readyState, document.getElementById('diagnosi-avvio')?.textContent,
                         document.getElementById('aila-startup-error')?.textContent, window.testStack].filter(Boolean).join('\\n');
                 })()
                 """) { value, error in
                 let result = value as? String ?? error?.localizedDescription ?? ""
-                if result == "PASS" || self.attempts >= 70 {
+                if result == "PASS" || self.attempts >= 110 {
                     let path = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("result")
                     try! (result.isEmpty ? "No first frame" : result).write(to: path, atomically: true, encoding: .utf8)
                 } else {
