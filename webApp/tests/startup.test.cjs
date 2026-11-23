@@ -74,10 +74,10 @@ test('transazione abortita: non restituisce una cache incompleta', async () => {
   assert.equal(s.timers.size, 0);
 });
 
-function startup({ userAgent = '', search = '', maxTouchPoints = 0 } = {}) {
+function startup({ userAgent = '', search = '', maxTouchPoints = 0, wasm, saved = [] } = {}) {
   let timeout, replaced, reloaded = false;
   const classes = new Set();
-  const storage = new Map();
+  const storage = new Map(saved);
   const frames = [];
   const documentListeners = {};
   const windowListeners = {};
@@ -87,7 +87,7 @@ function startup({ userAgent = '', search = '', maxTouchPoints = 0 } = {}) {
     'aila-startup-error': { hidden: true },
     'diagnosi-avvio': { hasAttribute() { return this.kotlinStarted; } },
   };
-  const window = { addEventListener: (type, handler) => { windowListeners[type] = handler; } };
+  const window = { WebAssembly: wasm, addEventListener: (type, handler) => { windowListeners[type] = handler; } };
   const document = {
     hidden: false,
     getElementById: id => nodes[id],
@@ -95,7 +95,7 @@ function startup({ userAgent = '', search = '', maxTouchPoints = 0 } = {}) {
   };
   vm.runInNewContext(readFileSync(join(__dirname, '../src/wasmJsMain/resources/startup.js'), 'utf8'), {
     window, document, requestAnimationFrame: fn => frames.push(fn),
-    URL, URLSearchParams, navigator: { userAgent, maxTouchPoints }, localStorage: { setItem: storage.set.bind(storage) },
+    URL, URLSearchParams, navigator: { userAgent, maxTouchPoints }, localStorage: { setItem: storage.set.bind(storage), getItem: key => storage.get(key) ?? null },
     location: {
       search,
       href: 'https://aila.test/' + search + '#diagnosi-avvio',
@@ -217,4 +217,42 @@ test('un errore di framebuffer fa partire il recupero anche con il nuovo motore'
   const s = startup({ userAgent: 'iPhone' });
   s.windowListeners.unhandledrejection({ reason: new Error('Cannot create surface') });
   assert.match(s.replaced, /grafica=ridotta/);
+});
+
+test('recupero iOS: mantiene il primo colore di un gradiente rifiutato da Skia', async () => {
+  let bindings;
+  const wasm = { instantiateStreaming: (_, imports) => { bindings = imports['./skiko.mjs']; } };
+  const original = wasm.instantiateStreaming;
+  const s = startup({ userAgent: 'iPhone', wasm, saved: [['aila-grafica-ridotta', '1']] });
+  const originalBindings = {
+    org_jetbrains_skia_Shader__1nMakeRadialGradient: () => 0,
+    org_jetbrains_skia_Shader__1nMakeLinearGradient: () => 37,
+    org_jetbrains_skia_Shader__1nMakeColorCS: (...rgbaAndSpace) => {
+      assert.deepEqual(rgbaAndSpace, [0.25, 0.5, 1, 0.75, 91]);
+      return 42;
+    },
+    skia_memGetFloat: addr => [0.25, 0.5, 1, 0.75][(addr - 100) / 4],
+  };
+  await wasm.instantiateStreaming(null, { './skiko.mjs': originalBindings });
+  assert.equal(bindings.org_jetbrains_skia_Shader__1nMakeRadialGradient(0, 0, 10, 100, 91, 0, 2), 42);
+  assert.equal(bindings.org_jetbrains_skia_Shader__1nMakeLinearGradient(), 37);
+  assert.equal(originalBindings.org_jetbrains_skia_Shader__1nMakeRadialGradient(), 0);
+  s.window.__ailaStartupReady();
+  assert.equal(wasm.instantiateStreaming, original);
+});
+
+test('recupero iOS: usa sRGB se Display P3 manca e segnala le altre allocazioni fallite', async () => {
+  let bindings;
+  const wasm = { instantiateStreaming: (_, imports) => { bindings = imports['./skiko.mjs']; } };
+  const s = startup({ userAgent: 'iPad', search: '?grafica=ridotta', wasm });
+  await wasm.instantiateStreaming(null, { './skiko.mjs': {
+    org_jetbrains_skia_ColorSpace__1nMakeDisplayP3: () => 0,
+    org_jetbrains_skia_ColorSpace__1nMakeSRGB: () => 91,
+    org_jetbrains_skia_Paint__1nMake: () => 0,
+  } });
+  assert.equal(bindings.org_jetbrains_skia_ColorSpace__1nMakeDisplayP3(), 91);
+  assert.equal(bindings.org_jetbrains_skia_Paint__1nMake(), 0);
+  s.windowListeners.unhandledrejection({ reason: new Error("Can't wrap nullptr") });
+  assert.match(s.nodes['aila-startup-error'].textContent, /Paint\.Make/);
+  assert.equal(s.replaced, undefined);
 });
