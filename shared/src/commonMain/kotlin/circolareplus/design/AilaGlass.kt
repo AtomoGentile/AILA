@@ -37,6 +37,7 @@ val AppTheme.GlassBase: Color
  * si vede, anche mentre si scorre.
  */
 fun Modifier.ailaGlassBackdrop(): Modifier = drawWithCache {
+    if (size.width <= 0f || size.height <= 0f) return@drawWithCache onDrawBehind {}
     val backdrop = glassBackdrop()
     onDrawBehind { drawGlassBackdrop(backdrop) }
 }
@@ -52,6 +53,7 @@ fun Modifier.ailaGlassPushBackdrop(
     /** Spostamento del livello intero (es. scivola sotto il dettaglio circolare): si compensa. */
     shift: () -> Float = { 0f }
 ): Modifier = drawWithCache {
+    if (size.width <= 0f || size.height <= 0f) return@drawWithCache onDrawBehind {}
     val backdrop = glassBackdrop()
     onDrawBehind {
         val left = (offset() * size.width).coerceIn(0f, size.width)
@@ -68,6 +70,7 @@ fun Modifier.ailaGlassPushBackdrop(
  * cosi' sullo schermo restano ferme mentre il contenuto scorre.
  */
 fun Modifier.ailaGlassBackdrop(shift: () -> Float): Modifier = drawWithCache {
+    if (size.width <= 0f || size.height <= 0f) return@drawWithCache onDrawBehind {}
     val backdrop = glassBackdrop()
     onDrawBehind {
         translate(left = shift() * size.width) { drawGlassBackdrop(backdrop) }
