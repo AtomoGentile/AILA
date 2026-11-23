@@ -20,6 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import circolareplus.data.remote.ApiClient
 import circolareplus.data.remote.ApiException
@@ -246,43 +248,51 @@ internal fun BureaucracyScreen(
                     feed == null -> if (loadError == null) {
                         item { PracticeLoader("Caricamento pratiche…") }
                     }
-                    canManage && practice != null -> {
-                        val closed = practice.archivedAt != null
-                        item {
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(practice.dueDate?.let(::formatItalianDateWithWeekday) ?: "Nessuna scadenza",
-                                    Modifier.weight(1f), color = AppTheme.TextMuted)
-                                if (!closed) AilaTextButton({ actionError = null; editingDeadline = true }, enabled = !busy) {
-                                    Text(if (practice.dueDate == null) "Aggiungi scadenza" else "Modifica scadenza")
-                                }
-                            }
+                    practice != null -> {
+                        val canEdit = canManage && practice.archivedAt == null
+                        val description = practice.description
+                        if (description.isNotBlank()) {
+                            item { PracticeInstructions(description) }
                         }
-                        if (practice.description.isNotBlank()) {
-                            item { Text(practice.description, color = AppTheme.TextMuted) }
+                        if (practice.dueDate != null || canEdit) {
+                            item {
+                                PracticeDeadline(
+                                    date = practice.dueDate,
+                                    onEdit = if (canEdit && !busy) {
+                                        { actionError = null; editingDeadline = true }
+                                    } else null
+                                )
+                            }
                         }
                         if (practice.materials.isNotEmpty()) {
-                            item {
-                                Text("Documenti e circolari", style = MaterialTheme.typography.titleSmall, color = AppTheme.TextDark)
-                            }
+                            item { PracticeSectionTitle("Documenti e circolari") }
                             items(practice.materials, key = { "material:${it.id}" }) { material ->
-                                PracticeMaterialRow(material, !busy, onOpen = { openMaterial(practice.id, material) },
-                                    onRemove = if (closed) null else {
+                                PracticeMaterialRow(
+                                    material, !busy,
+                                    onOpen = { openMaterial(practice.id, material) },
+                                    onRemove = if (canEdit) {
                                         { actionError = null; removingMaterial = material }
-                                    })
+                                    } else null
+                                )
                             }
                         }
                         val roster = deliveries
-                        if (roster != null) {
+                        if (canManage && roster != null) {
                             item {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        "${roster.count { it.received }} su ${roster.size} consegnate",
-                                        Modifier.weight(1f),
-                                        style = MaterialTheme.typography.titleSmall,
-                                        color = AppTheme.TextDark
-                                    )
-                                    if (!closed) {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(top = AppTheme.Space8),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+                                ) {
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        PracticeSectionTitle("Consegne della classe")
+                                        Text(
+                                            "${roster.count { it.received }} su ${roster.size} consegnate",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = AppTheme.TextMuted
+                                        )
+                                    }
+                                    if (canEdit) {
                                         AilaTextButton(
                                             { actionError = null; confirmingArchive = true },
                                             enabled = !busy
@@ -291,7 +301,7 @@ internal fun BureaucracyScreen(
                                 }
                             }
                             items(roster, key = { it.studentId }) { person ->
-                                val rowModifier = if (closed) Modifier else Modifier.toggleable(
+                                val rowModifier = if (!canEdit) Modifier else Modifier.toggleable(
                                     value = person.received,
                                     enabled = !busy,
                                     role = Role.Checkbox,
@@ -314,7 +324,7 @@ internal fun BureaucracyScreen(
                                         subtitle = if (person.received) "Consegnata" else "Da consegnare",
                                         modifier = rowModifier,
                                         trailing = {
-                                            if (closed) DeliveryMark(person.received)
+                                            if (!canEdit) DeliveryMark(person.received)
                                             else AilaCheckbox(
                                                 checked = person.received,
                                                 enabled = !busy,
@@ -325,34 +335,20 @@ internal fun BureaucracyScreen(
                                     )
                                 }
                             }
-                        } else if (loadError == null) {
+                        } else if (canManage && loadError == null) {
                             item { PracticeLoader("Caricamento consegne…") }
-                        }
-                    }
-                    practice != null -> {
-                        item {
-                            AilaCard {
-                                if (practice.description.isNotBlank() || practice.dueDate != null) {
-                                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        if (practice.description.isNotBlank()) Text(practice.description, color = AppTheme.TextMuted)
-                                        practice.dueDate?.let { Text("Scadenza · ${formatItalianDateWithWeekday(it)}", color = AppTheme.TextMuted) }
+                        } else if (!canManage) {
+                            practice.received?.let { received ->
+                                item { PracticeSectionTitle("La tua consegna") }
+                                item {
+                                    AilaCard {
+                                        AilaListRow(
+                                            title = studentName,
+                                            subtitle = if (received) "Consegnata" else "Da consegnare",
+                                            trailing = { DeliveryMark(received) }
+                                        )
                                     }
                                 }
-                                practice.received?.let { received ->
-                                    AilaListRow(
-                                        title = studentName,
-                                        subtitle = if (received) "Consegnata" else "Da consegnare",
-                                        trailing = { DeliveryMark(received) }
-                                    )
-                                }
-                            }
-                        }
-                        if (practice.materials.isNotEmpty()) {
-                            item {
-                                Text("Documenti e circolari", style = MaterialTheme.typography.titleSmall, color = AppTheme.TextDark)
-                            }
-                            items(practice.materials, key = { "material:${it.id}" }) { material ->
-                                PracticeMaterialRow(material, !busy, onOpen = { openMaterial(practice.id, material) })
                             }
                         }
                     }
@@ -490,21 +486,27 @@ internal fun BureaucracyScreen(
                         }, onDone = { materialSaved = addingMaterial })
                     }
                 } else {
-                    AilaCard {
-                        AilaListRow(
-                            title = "Collega circolare",
-                            subtitle = "Scegli dalle circolari di AILA",
-                            icon = { AppIcons.Document(Modifier.size(20.dp), AppTheme.TintBlueInk) },
-                            onClick = if (busy) null else {
-                                { actionError = null; linkingCircular = true }
-                            }
-                        )
-                        AilaListRow(
-                            title = "Carica PDF",
-                            subtitle = "Dal dispositivo, fino a 10 MB",
-                            icon = { AppIcons.Document(Modifier.size(20.dp), AppTheme.TintBlueInk) },
-                            onClick = pickPdf.takeUnless { busy }
-                        )
+                    Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
+                        AilaCard {
+                            AilaListRow(
+                                title = "Carica PDF",
+                                subtitle = "Allega un file dal dispositivo, fino a 10 MB",
+                                tint = AppTheme.TintBlue,
+                                icon = { AppIcons.Document(Modifier.size(20.dp), AppTheme.TintBlueInk) },
+                                onClick = pickPdf.takeUnless { busy }
+                            )
+                        }
+                        AilaCard {
+                            AilaListRow(
+                                title = "Collega circolare",
+                                subtitle = "Scegli una circolare già pubblicata in AILA",
+                                tint = AppTheme.TintViolet,
+                                icon = { AppIcons.ExternalLink(Modifier.size(20.dp), AppTheme.TintVioletInk) },
+                                onClick = if (busy) null else {
+                                    { actionError = null; linkingCircular = true }
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -547,6 +549,57 @@ internal fun BureaucracyScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun PracticeSectionTitle(title: String) {
+    Text(
+        title,
+        modifier = Modifier.semantics { heading() },
+        style = MaterialTheme.typography.titleMedium,
+        color = AppTheme.TextDark
+    )
+}
+
+@Composable
+private fun PracticeInstructions(description: String) {
+    AilaCard(containerColor = AppTheme.TintViolet) {
+        Column(
+            Modifier.fillMaxWidth().padding(AppTheme.Space16),
+            verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+        ) {
+            Text(
+                "Istruzioni",
+                modifier = Modifier.semantics { heading() },
+                style = MaterialTheme.typography.labelLarge,
+                color = AppTheme.TintVioletInk
+            )
+            Text(
+                description,
+                style = MaterialTheme.typography.bodyLarge,
+                color = AppTheme.TextDark
+            )
+        }
+    }
+}
+
+@Composable
+private fun PracticeDeadline(date: String?, onEdit: (() -> Unit)?) {
+    AilaCard {
+        AilaListRow(
+            title = "Scadenza",
+            subtitle = date?.let(::formatItalianDateWithWeekday) ?: "Nessuna data impostata",
+            tint = AppTheme.TintAmber,
+            icon = { AppIcons.Calendar(Modifier.size(20.dp), AppTheme.TintAmberInk) },
+            trailing = if (onEdit != null) {
+                {
+                    AilaIconButton(if (date == null) "Aggiungi scadenza" else "Modifica scadenza", onEdit, size = 40.dp) {
+                        AppIcons.Pencil(Modifier.size(18.dp), it)
+                    }
+                }
+            } else null
+        )
     }
 }
 
@@ -603,7 +656,11 @@ private fun PracticeMaterialRow(
         AilaListRow(
             title = material.title,
             subtitle = if (number == null) "Documento PDF" else "Circolare n. $number",
-            icon = { AppIcons.Document(Modifier.size(20.dp), AppTheme.TintBlueInk) },
+            tint = if (number == null) AppTheme.TintBlue else AppTheme.TintViolet,
+            icon = {
+                if (number == null) AppIcons.Document(Modifier.size(20.dp), AppTheme.TintBlueInk)
+                else AppIcons.ExternalLink(Modifier.size(20.dp), AppTheme.TintVioletInk)
+            },
             onClick = onOpen.takeIf { enabled },
             trailing = {
                 if (onRemove != null) {
