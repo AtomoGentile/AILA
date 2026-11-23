@@ -4,12 +4,13 @@ cd "$(dirname "$0")"
 sim=$(xcrun simctl list devices available -j | python3 -c '
 import json,sys
 devices=json.load(sys.stdin)["devices"]
-for runtime in reversed(sorted(k for k in devices if ".iOS-" in k)):
+for runtime in reversed(sorted(k for k in devices if k.endswith(".iOS-27-1"))):
     phones=[d for d in devices[runtime] if d["name"].startswith("iPhone")]
     if phones:
         print(phones[0]["udid"])
         break')
 test -n "$sim"
+xcrun simctl list devices available 'iOS 27.1' | grep -F "$sim"
 xcrun simctl boot "$sim" || xcrun simctl list devices booted | grep -F "$sim"
 xcrun simctl bootstatus "$sim" -b
 tmp=$(mktemp -d)

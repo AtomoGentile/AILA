@@ -5,10 +5,15 @@ on:
   workflow_dispatch:
 jobs:
   first-frame:
-    runs-on: macos-15
+    runs-on: xcode-27
+    strategy:
+      matrix:
+        startup: [normal, refuse-gradient]
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
     timeout-minutes: 15
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - run: bash webApp/tests/ios/smoke.sh https://aila-scuola.pages.dev/ refuse-gradient
+      - run: bash webApp/tests/ios/smoke.sh https://aila-scuola.pages.dev/ ${{ matrix.startup }}
