@@ -1,0 +1,14 @@
+name: iPhone PWA startup
+on:
+  push:
+    branches: [fix/ios-pwa-renderer]
+  workflow_dispatch:
+jobs:
+  first-frame:
+    runs-on: macos-15
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash webApp/tests/ios/smoke.sh https://aila-scuola.pages.dev/
