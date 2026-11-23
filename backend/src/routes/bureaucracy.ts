@@ -8,6 +8,22 @@ import type { Env, JWTPayload } from '../types';
 
 const bureaucracy = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();
 const representativeOnly = requireRole('REPRESENTATIVE');
+const MAX_PDF_BYTES = 10 * 1024 * 1024;
+const materialKey = (id: string) => `bureaucracy/${id}.pdf`;
+
+async function activePractice(env: Env, id: string, classId: string) {
+  return env.DB.prepare(
+    'SELECT 1 FROM bureaucracy_practices WHERE id = ? AND class_id = ? AND archived_at IS NULL'
+  ).bind(id, classId).first();
+}
+
+async function removePdf(env: Env, id: string) {
+  try {
+    await env.CIRCULARS_BUCKET.delete(materialKey(id));
+  } catch (error) {
+    console.error('Could not remove bureaucracy PDF from R2', id, error);
+  }
+}
 
 bureaucracy.use('*', authMiddleware(), async (c, next) => {
   c.header('Cache-Control', 'no-store');
@@ -16,24 +32,36 @@ bureaucracy.use('*', authMiddleware(), async (c, next) => {
 
 bureaucracy.get('/', async (c) => {
   const user = c.get('jwtPayload');
+  const classId = await resolveClassId(c);
+  const canManage = user.role === 'REPRESENTATIVE';
   const { results } = await c.env.DB.prepare(
-    `SELECT p.id, p.title, p.description, p.due_date AS dueDate, p.archived_at AS archivedAt, d.received
+    `SELECT p.id, p.title, p.description, p.due_date AS dueDate, p.archived_at AS archivedAt, d.received,
+       (SELECT json_group_array(json_object('id', id, 'title', title, 'circularNumber', circular_number))
+        FROM (
+          SELECT m.id, COALESCE(m.file_name, circ.title) AS title, m.circular_number
+          FROM bureaucracy_materials m
+          LEFT JOIN circulars circ ON circ.number = m.circular_number
+          WHERE m.practice_id = p.id AND (m.file_name IS NOT NULL OR circ.number IS NOT NULL)
+          ORDER BY m.created_at, m.id
+        )) AS materials
      FROM bureaucracy_practices p
      LEFT JOIN bureaucracy_deliveries d ON d.practice_id = p.id AND d.student_id = ?
      WHERE p.class_id = ? AND (? = 1 OR p.archived_at IS NULL OR d.student_id IS NOT NULL)
      ORDER BY COALESCE(p.archived_at, p.created_at) DESC, p.id DESC`
-  ).bind(user.sub, await resolveClassId(c), Number(user.role === 'REPRESENTATIVE')).all<{
+  ).bind(user.sub, classId, Number(canManage)).all<{
     id: string;
     title: string;
     description: string;
     archivedAt: string | null;
     dueDate: string | null;
     received: number | null;
+    materials: string;
   }>();
   return c.json({
-    canManage: user.role === 'REPRESENTATIVE',
+    canManage,
     practices: results.map((row) => ({
       ...row,
+      materials: JSON.parse(row.materials) as { id: string; title: string; circularNumber: number | null }[],
       received: row.archivedAt && row.received === null ? null : Boolean(row.received),
     })),
   });
@@ -137,6 +165,97 @@ bureaucracy.put('/:id/archive', representativeOnly, async (c) => {
     ).bind(id, classId),
   ]);
   if (archived.meta.changes === 0) return c.json({ error: 'Pratica non trovata.' }, 404);
+  return c.json({ success: true });
+});
+
+bureaucracy.post('/:id/materials/circulars', representativeOnly, async (c) => {
+  const body = await c.req.json<{ number?: unknown } | null>().catch(() => null);
+  const number = body?.number;
+  if (typeof number !== 'number' || !Number.isSafeInteger(number) || number <= 0) {
+    return c.json({ error: 'Numero di circolare non valido.' }, 400);
+  }
+  const classId = await resolveClassId(c);
+  const practiceId = c.req.param('id')!;
+  const result = await c.env.DB.prepare(
+    `INSERT INTO bureaucracy_materials (id, practice_id, circular_number)
+     SELECT ?, p.id, circ.number FROM bureaucracy_practices p CROSS JOIN circulars circ
+     WHERE p.id = ? AND p.class_id = ? AND p.archived_at IS NULL AND circ.number = ?
+     ON CONFLICT(practice_id, circular_number) DO NOTHING`
+  ).bind(crypto.randomUUID(), practiceId, classId, number).run();
+  if (!result.meta.changes) {
+    if (!await activePractice(c.env, practiceId, classId)) {
+      return c.json({ error: 'Pratica attiva non trovata.' }, 404);
+    }
+    if (!await c.env.DB.prepare('SELECT 1 FROM circulars WHERE number = ?').bind(number).first()) {
+      return c.json({ error: 'Circolare non trovata.' }, 404);
+    }
+  }
+  return c.json({ success: true });
+});
+
+bureaucracy.post('/:id/materials/documents', representativeOnly, async (c) => {
+  const practiceId = c.req.param('id')!;
+  const classId = await resolveClassId(c);
+  if (!await activePractice(c.env, practiceId, classId)) {
+    return c.json({ error: 'Pratica attiva non trovata.' }, 404);
+  }
+  const body = await c.req.parseBody().catch(() => null);
+  const file = body?.file;
+  if (!(file instanceof File) || file.type !== 'application/pdf' || file.size < 5 ||
+      await file.slice(0, 5).text() !== '%PDF-') {
+    return c.json({ error: 'Scegli un documento PDF valido.' }, 400);
+  }
+  if (file.size > MAX_PDF_BYTES) return c.json({ error: 'Il PDF supera il limite di 10 MB.' }, 413);
+  const name = file.name.split(/[\\/]/).pop()?.trim().slice(0, 180) || 'Documento.pdf';
+  const id = crypto.randomUUID();
+  await c.env.CIRCULARS_BUCKET.put(materialKey(id), file.stream(), {
+    httpMetadata: { contentType: 'application/pdf' },
+  });
+  try {
+    const result = await c.env.DB.prepare(
+      `INSERT INTO bureaucracy_materials (id, practice_id, file_name)
+       SELECT ?, id, ? FROM bureaucracy_practices
+       WHERE id = ? AND class_id = ? AND archived_at IS NULL`
+    ).bind(id, name, practiceId, classId).run();
+    if (result.meta.changes) return c.json({ success: true }, 201);
+  } catch (error) {
+    await removePdf(c.env, id);
+    throw error;
+  }
+  await removePdf(c.env, id);
+  return c.json({ error: 'Pratica attiva non trovata.' }, 404);
+});
+
+bureaucracy.get('/:id/materials/:materialId/file', async (c) => {
+  const user = c.get('jwtPayload');
+  const material = await c.env.DB.prepare(
+    `SELECT m.id FROM bureaucracy_materials m
+     JOIN bureaucracy_practices p ON p.id = m.practice_id
+     LEFT JOIN bureaucracy_deliveries d ON d.practice_id = p.id AND d.student_id = ?
+     WHERE p.class_id = ? AND (? = 1 OR p.archived_at IS NULL OR d.student_id IS NOT NULL)
+       AND p.id = ? AND m.id = ? AND m.file_name IS NOT NULL`
+  ).bind(user.sub, await resolveClassId(c), Number(user.role === 'REPRESENTATIVE'),
+    c.req.param('id'), c.req.param('materialId')).first<{ id: string }>();
+  const object = material && await c.env.CIRCULARS_BUCKET.get(materialKey(material.id));
+  if (!object) return c.json({ error: 'Documento non trovato.' }, 404);
+  return new Response(object.body, {
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
+});
+
+bureaucracy.delete('/:id/materials/:materialId', representativeOnly, async (c) => {
+  const material = await c.env.DB.prepare(
+    `DELETE FROM bureaucracy_materials WHERE id = ? AND practice_id IN (
+       SELECT id FROM bureaucracy_practices WHERE id = ? AND class_id = ? AND archived_at IS NULL
+     ) RETURNING id, file_name`
+  ).bind(c.req.param('materialId'), c.req.param('id'), await resolveClassId(c))
+    .first<{ id: string; file_name: string | null }>();
+  if (!material) return c.json({ error: 'Materiale non trovato in una pratica attiva.' }, 404);
+  if (material.file_name !== null) await removePdf(c.env, material.id);
   return c.json({ success: true });
 });
 

@@ -244,7 +244,7 @@ internal fun GitaAddSheet(
                             busy = busy,
                             onSave = { title, category, note -> onSaveDocument(title, category, note, shown.fileName, shown.bytes) }
                         )
-                        AddStep.Circulars -> CircularPicker(circulars, circularsLoading, circularsError, busy, onLoadMoreCirculars, onPickCircular)
+                        AddStep.Circulars -> CircularPicker(circulars, circularsLoading, circularsError, busy, onLoadMoreCirculars, onPick = onPickCircular)
                         AddStep.Link -> LinkForm(
                             titleEditable = true,
                             initialTitle = "",
@@ -815,9 +815,9 @@ private fun CategoryChip(label: String, tint: Color, ink: Color, selected: Boole
 }
 
 @Composable
-private fun CircularPicker(
+internal fun CircularPicker(
     circulars: List<circolareplus.domain.model.Circular>, loading: Boolean, error: String?,
-    busy: Boolean, onLoadMore: () -> Unit, onPick: (Int) -> Unit
+    busy: Boolean, onLoadMore: () -> Unit, hasMore: Boolean = true, onPick: (Int) -> Unit
 ) {
     var query by remember { mutableStateOf("") }
     val matches = circulars.filter { query.isBlank() || it.title.contains(query, true) || it.number.toString().contains(query.trim()) }
@@ -835,8 +835,10 @@ private fun CircularPicker(
             }
         }
         if (matches.isEmpty() && !loading) Text("Nessuna circolare corrisponde alla ricerca.", color = AppTheme.TextMuted)
-        androidx.compose.material3.TextButton(onClick = onLoadMore, enabled = !loading && !busy, modifier = Modifier.fillMaxWidth()) {
-            Text(if (loading) "Caricamento…" else "Carica altre circolari")
+        if (hasMore || loading) {
+            androidx.compose.material3.TextButton(onClick = onLoadMore, enabled = !loading && !busy, modifier = Modifier.fillMaxWidth()) {
+                Text(if (loading) "Caricamento…" else "Carica altre circolari")
+            }
         }
     }
 }

@@ -27,12 +27,21 @@ import circolareplus.data.remote.dto.BureaucracyDeadlineDto
 import circolareplus.data.remote.dto.BureaucracyDeliveriesDto
 import circolareplus.data.remote.dto.BureaucracyDeliveryDto
 import circolareplus.data.remote.dto.BureaucracyFeedDto
+import circolareplus.data.remote.dto.BureaucracyMaterialDto
+import circolareplus.data.remote.dto.BureaucracyPracticeCreatedDto
+import circolareplus.data.repository.CircularsRepository
+import circolareplus.domain.model.Circular
 import circolareplus.data.remote.dto.CreateBureaucracyPracticeDto
 import circolareplus.data.remote.dto.SetBureaucracyDeliveryDto
 import circolareplus.data.remote.dto.SuccessDto
 import circolareplus.design.*
 import circolareplus.platform.AppForeground
 import circolareplus.platform.PlatformBackHandler
+import circolareplus.platform.rememberPdfFilePicker
+import circolareplus.platform.sharePdfFile
+import io.ktor.client.request.forms.formData
+import io.ktor.http.Headers
+import io.ktor.http.HttpHeaders
 import circolareplus.util.CivilDate
 import circolareplus.util.civilFromEpochMillis
 import circolareplus.util.daysBetween
@@ -44,10 +53,14 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 
 private const val PRACTICES = "/api/burocrazia"
+private const val CIRCULAR_PAGE_SIZE = 50
+private const val MAX_PDF_BYTES = 10 * 1024 * 1024
 
 @Composable
 internal fun BureaucracyScreen(
     api: ApiClient,
+    circularsRepository: CircularsRepository,
+    onOpenCircular: (Circular) -> Unit,
     studentName: String,
     active: Boolean,
     initialPracticeId: String? = null,
@@ -63,6 +76,8 @@ internal fun BureaucracyScreen(
     var creating by rememberSaveable { mutableStateOf(false) }
     var editingDeadline by rememberSaveable { mutableStateOf(false) }
     var confirmingArchive by rememberSaveable { mutableStateOf(false) }
+    var linkingCircular by rememberSaveable { mutableStateOf(false) }
+    var removingMaterial by remember { mutableStateOf<BureaucracyMaterialDto?>(null) }
     var loadError by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -82,7 +97,7 @@ internal fun BureaucracyScreen(
                         "$PRACTICES/${selected.id}/deliveries", offlineCopy = false
                     ).deliveries
                 } else {
-                    if (selected == null) selection = null
+                    if (selected == null && selection != null) selection = null
                     deliveries = null
                 }
                 loadError = null
@@ -116,8 +131,58 @@ internal fun BureaucracyScreen(
         }
     }
 
-    val back: () -> Unit = {
+    val pickPdf = rememberPdfFilePicker(
+        onError = { actionError = it },
+        onPicked = { fileName, bytes ->
+            if (active && canManage && practice != null && practice.archivedAt == null && !busy) {
+                if (bytes.size > MAX_PDF_BYTES) {
+                    actionError = "Il PDF supera il limite di 10 MB."
+                } else {
+                    save(change = {
+                        val safeName = fileName.filterNot { it in "\"\r\n" }
+                        api.postMultipart<SuccessDto>(
+                            "$PRACTICES/${practice.id}/materials/documents",
+                            formData {
+                                append("file", bytes, Headers.build {
+                                    append(HttpHeaders.ContentType, "application/pdf")
+                                    append(HttpHeaders.ContentDisposition, "filename=\"$safeName\"")
+                                })
+                            }
+                        )
+                    })
+                }
+            }
+        }
+    )
+
+    fun openMaterial(practiceId: String, material: BureaucracyMaterialDto) {
+        if (busy) return
+        busy = true
+        actionError = null
+        scope.launch {
+            try {
+                val number = material.circularNumber
+                if (number != null) {
+                    onOpenCircular(circularsRepository.getCircular(number))
+                } else {
+                    val pdf = api.getBytes("$PRACTICES/$practiceId/materials/${material.id}/file", offlineCopy = false)
+                    sharePdfFile(pdf, material.title)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                actionError = (e as? ApiException)?.message ?: "Impossibile aprire il materiale."
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    val back: () -> Unit = back@{
+        if (busy) return@back
         if (selection != null) {
+            linkingCircular = false
+            removingMaterial = null
             selection = null
             deliveries = null
             loadError = null
@@ -126,7 +191,10 @@ internal fun BureaucracyScreen(
             onBackClick()
         }
     }
-    PlatformBackHandler(enabled = active && !creating && !confirmingArchive && !editingDeadline, onBack = back)
+    PlatformBackHandler(
+        enabled = active && !creating && !confirmingArchive && !editingDeadline && !linkingCircular && removingMaterial == null,
+        onBack = back
+    )
 
     val gutter = if (AppTheme.isNothing) NothingSpacing.Edge else AppTheme.Space16
     val shown = feed?.practices.orEmpty().filter { (it.archivedAt != null) == archived }
@@ -151,7 +219,7 @@ internal fun BureaucracyScreen(
                         AilaErrorState(error, onRetry = { revision++ })
                     }
                 }
-                actionError?.takeIf { !creating && !confirmingArchive && !editingDeadline }?.let { error ->
+                actionError?.takeIf { !creating && !confirmingArchive && !editingDeadline && !linkingCircular && removingMaterial == null }?.let { error ->
                     item { Text(error, color = AppTheme.TintRedInk, style = MaterialTheme.typography.bodyMedium) }
                 }
                 when {
@@ -172,6 +240,25 @@ internal fun BureaucracyScreen(
                         }
                         if (practice.description.isNotBlank()) {
                             item { Text(practice.description, color = AppTheme.TextMuted) }
+                        }
+                        if (!closed || practice.materials.isNotEmpty()) {
+                            item {
+                                Text("Documenti e circolari", style = MaterialTheme.typography.titleSmall, color = AppTheme.TextDark)
+                                if (!closed) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        AilaTextButton(pickPdf, enabled = !busy) { Text("Carica PDF") }
+                                        AilaTextButton({ actionError = null; linkingCircular = true }, enabled = !busy) {
+                                            Text("Collega circolare")
+                                        }
+                                    }
+                                }
+                            }
+                            items(practice.materials, key = { "material:${it.id}" }) { material ->
+                                PracticeMaterialRow(material, !busy, onOpen = { openMaterial(practice.id, material) },
+                                    onRemove = if (closed) null else {
+                                        { actionError = null; removingMaterial = material }
+                                    })
+                            }
                         }
                         val roster = deliveries
                         if (roster != null) {
@@ -230,13 +317,30 @@ internal fun BureaucracyScreen(
                             item { PracticeLoader("Caricamento consegne…") }
                         }
                     }
-                    practice != null -> item {
-                        AilaCard {
-                            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(practice.title, style = MaterialTheme.typography.titleLarge)
-                                if (practice.description.isNotBlank()) Text(practice.description, color = AppTheme.TextMuted)
-                                practice.dueDate?.let { Text("Scadenza · ${formatItalianDateWithWeekday(it)}", color = AppTheme.TextMuted) }
-                                Text(if (practice.received == true) "Consegnata" else "Da consegnare")
+                    practice != null -> {
+                        item {
+                            AilaCard {
+                                if (practice.description.isNotBlank() || practice.dueDate != null) {
+                                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        if (practice.description.isNotBlank()) Text(practice.description, color = AppTheme.TextMuted)
+                                        practice.dueDate?.let { Text("Scadenza · ${formatItalianDateWithWeekday(it)}", color = AppTheme.TextMuted) }
+                                    }
+                                }
+                                practice.received?.let { received ->
+                                    AilaListRow(
+                                        title = studentName,
+                                        subtitle = if (received) "Consegnata" else "Da consegnare",
+                                        trailing = { DeliveryMark(received) }
+                                    )
+                                }
+                            }
+                        }
+                        if (practice.materials.isNotEmpty()) {
+                            item {
+                                Text("Documenti e circolari", style = MaterialTheme.typography.titleSmall, color = AppTheme.TextDark)
+                            }
+                            items(practice.materials, key = { "material:${it.id}" }) { material ->
+                                PracticeMaterialRow(material, !busy, onOpen = { openMaterial(practice.id, material) })
                             }
                         }
                     }
@@ -286,7 +390,7 @@ internal fun BureaucracyScreen(
                                             )
                                         }
                                     }
-                                    if (canManage) AppIcons.ChevronRight(Modifier.size(16.dp), AppTheme.TextFaint)
+                                    AppIcons.ChevronRight(Modifier.size(16.dp), AppTheme.TextFaint)
                                 }
                                 item.received?.let { received ->
                                     HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = AppTheme.Hairline)
@@ -322,9 +426,10 @@ internal fun BureaucracyScreen(
                     fillMaxWidth = true,
                     onClick = {
                         save(change = {
-                            api.post<CreateBureaucracyPracticeDto, JsonObject>(
+                            val created = api.post<CreateBureaucracyPracticeDto, BureaucracyPracticeCreatedDto>(
                                 PRACTICES, CreateBureaucracyPracticeDto(title.trim(), description.trim(), dueDate)
                             )
+                            selection = created.id
                         }, onDone = { creating = false; archived = false })
                     }
                 )
@@ -346,6 +451,63 @@ internal fun BureaucracyScreen(
                         }, onDone = { editingDeadline = false })
                     }
                 )
+            }
+        }
+    }
+    if (canManage && practice != null && practice.archivedAt == null && linkingCircular) {
+        AilaBottomSheet(onDismissRequest = { if (!busy) linkingCircular = false }) {
+            var circulars by remember { mutableStateOf(emptyList<Circular>()) }
+            var offset by remember { mutableStateOf(0) }
+            var loading by remember { mutableStateOf(false) }
+            var hasMore by remember { mutableStateOf(true) }
+            var pageError by remember { mutableStateOf<String?>(null) }
+            val pickerScope = rememberCoroutineScope()
+            fun loadPage() {
+                if (loading || !hasMore) return
+                loading = true
+                pageError = null
+                pickerScope.launch {
+                    try {
+                        val page = circularsRepository.listCirculars(CIRCULAR_PAGE_SIZE, offset)
+                        offset += page.size
+                        circulars = (circulars + page).distinctBy { it.number }
+                        hasMore = page.size == CIRCULAR_PAGE_SIZE
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        pageError = "Impossibile caricare le circolari. Riprova."
+                    } finally {
+                        loading = false
+                    }
+                }
+            }
+            LaunchedEffect(Unit) { loadPage() }
+            val linked = practice.materials.mapNotNull { it.circularNumber }.toSet()
+            PracticeSheetBody("Collega una circolare", actionError) {
+                CircularPicker(
+                    circulars.filterNot { it.number in linked }, loading, pageError, busy,
+                    onLoadMore = ::loadPage, hasMore = hasMore,
+                    onPick = { number ->
+                        save(change = {
+                            api.post<Map<String, Int>, SuccessDto>(
+                                "$PRACTICES/${practice.id}/materials/circulars", mapOf("number" to number)
+                            )
+                        }, onDone = { linkingCircular = false })
+                    }
+                )
+            }
+        }
+    }
+    val materialToRemove = removingMaterial
+    if (canManage && practice != null && practice.archivedAt == null && materialToRemove != null) {
+        AilaBottomSheet(onDismissRequest = { if (!busy) removingMaterial = null }) {
+            PracticeSheetBody("Rimuovi dalla pratica", actionError) {
+                Text("«${materialToRemove.title}» non sarà più disponibile da questa pratica.", color = AppTheme.TextMuted)
+                AilaPrimaryButton("Rimuovi", enabled = !busy, fillMaxWidth = true, onClick = {
+                    save(change = {
+                        api.delete<SuccessDto>("$PRACTICES/${practice.id}/materials/${materialToRemove.id}")
+                    }, onDone = { removingMaterial = null })
+                })
             }
         }
     }
@@ -373,6 +535,33 @@ internal fun BureaucracyScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun PracticeMaterialRow(
+    material: BureaucracyMaterialDto,
+    enabled: Boolean,
+    onOpen: () -> Unit,
+    onRemove: (() -> Unit)? = null
+) {
+    AilaCard {
+        val number = material.circularNumber
+        AilaListRow(
+            title = material.title,
+            subtitle = if (number == null) "Documento PDF" else "Circolare n. $number",
+            icon = { AppIcons.Document(Modifier.size(20.dp), AppTheme.TintBlueInk) },
+            onClick = onOpen.takeIf { enabled },
+            trailing = {
+                if (onRemove != null) {
+                    AilaIconButton("Rimuovi ${material.title}", onRemove, enabled = enabled) {
+                        AppIcons.Trash(Modifier.size(18.dp), it)
+                    }
+                } else {
+                    AppIcons.ChevronRight(Modifier.size(16.dp), AppTheme.TextFaint)
+                }
+            }
+        )
     }
 }
 

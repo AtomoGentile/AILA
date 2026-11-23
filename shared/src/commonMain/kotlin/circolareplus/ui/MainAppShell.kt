@@ -5415,6 +5415,8 @@ fun MainAppShell(
                 ShellRoute.BUREAUCRACY -> {
                     circolareplus.ui.screens.BureaucracyScreen(
                         api = AppContainer.api,
+                        circularsRepository = AppContainer.circularsRepository,
+                        onOpenCircular = { selectedCircularForDetail = it },
                         studentName = listOf(user.firstName, user.lastName).filter { it.isNotBlank() }.joinToString(" "),
                         active = route == shellRoute,
                         initialPracticeId = initialPracticeId,

@@ -7,9 +7,18 @@ import { createD1 } from './d1shim';
 
 it('isolates class deliveries, permits concurrent practices and freezes the archive', async () => {
   const { db, d1 } = createD1();
-  const env = { DB: d1, JWT_SECRET: 'bureaucracy-test' } as Env;
+  const files = new Map<string, ArrayBuffer>();
+  const env = {
+    DB: d1,
+    JWT_SECRET: 'bureaucracy-test',
+    CIRCULARS_BUCKET: {
+      put: async (key: string, body: ReadableStream) => files.set(key, await new Response(body).arrayBuffer()),
+      get: async (key: string) => files.has(key) ? { body: files.get(key) } : null,
+      delete: async (key: string) => files.delete(key),
+    },
+  } as Env;
   const ctx = {} as ExecutionContext;
-  db.exec('DROP TABLE bureaucracy_deliveries; DROP TABLE bureaucracy_practices;');
+  db.exec('DROP TABLE bureaucracy_materials; DROP TABLE bureaucracy_deliveries; DROP TABLE bureaucracy_practices;');
   const migration = readFileSync(new URL('../migrations/034_bureaucracy.sql', import.meta.url), 'utf8');
   db.exec(migration);
   db.exec(migration);
@@ -20,12 +29,22 @@ it('isolates class deliveries, permits concurrent practices and freezes the arch
     ALTER TABLE classes DROP COLUMN seat_companion_wait;
     ALTER TABLE classes DROP COLUMN seat_rotation_revision;`);
   db.exec(readFileSync(new URL('../migrations/035_seat_rotation_and_paperwork_deadlines.sql', import.meta.url), 'utf8'));
+  const materialsMigration = readFileSync(new URL('../migrations/036_bureaucracy_materials.sql', import.meta.url), 'utf8');
+  db.exec(materialsMigration);
+  db.exec(materialsMigration);
+  db.exec("INSERT INTO circulars (number, title, publish_date, r2_pdf_key) VALUES (15, 'Moduli della gita', '2026-11-22', 'c15.pdf')");
   db.exec("INSERT INTO classes (id, label) VALUES ('class-b', '5 B')");
 
   async function addUser(id: string, role: UserRole = 'STUDENT', classId = 'DEFAULT_CLASS') {
     db.prepare('INSERT INTO users (id, username, first_name, last_name, password_hash, role, class_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(id, id, id, 'Test', 'unused', role, classId);
     return signJWT({ sub: id, username: id, role, classId }, env.JWT_SECRET);
+  }
+
+  function materialRequest(token: string, method: string, path: string, body?: FormData) {
+    return worker.fetch(new Request('https://api.test/api/burocrazia' + path, {
+      method, headers: { Authorization: 'Bearer ' + token }, body,
+    }), env, ctx);
   }
 
   async function call(token: string, method = 'GET', path = '', data?: unknown) {
@@ -73,12 +92,55 @@ it('isolates class deliveries, permits concurrent practices and freezes the arch
   expect(own.data).toEqual({
     canManage: false,
     practices: expect.arrayContaining([
-      { id, title: 'Ricevuta', description: 'Porta la stampa.', dueDate: '2026-12-09', archivedAt: null, received: true },
+      { id, title: 'Ricevuta', description: 'Porta la stampa.', dueDate: '2026-12-09', archivedAt: null, received: true, materials: [] },
       expect.objectContaining({ title: 'Circolare firmata', dueDate: null, received: false, archivedAt: null })
     ])
   });
   expect((await call(peer)).data).toMatchObject({ practices: expect.arrayContaining([expect.objectContaining({ id, received: false })]) });
   expect((await call(outsider)).data).toEqual({ canManage: true, practices: [] });
+
+  const materials = '/' + id + '/materials';
+  const circulars = materials + '/circulars';
+  const documents = materials + '/documents';
+  expect((await call(student, 'POST', circulars, { number: 15 })).status).toBe(403);
+  expect((await call(outsider, 'POST', circulars, { number: 15 })).status).toBe(404);
+  expect((await call(rep, 'POST', circulars, { number: 16 })).status).toBe(404);
+  expect((await call(rep, 'POST', circulars, { number: 15 })).status).toBe(200);
+  expect((await call(rep, 'POST', circulars, { number: 15 })).status).toBe(200);
+
+  const pdf = '%PDF-1.4';
+  function uploadForm(contents: string) {
+    const form = new FormData();
+    form.append('file', new File([contents], 'Modulo.pdf', { type: 'application/pdf' }));
+    return form;
+  }
+  expect((await materialRequest(student, 'POST', documents, uploadForm(pdf))).status).toBe(403);
+  expect((await materialRequest(outsider, 'POST', documents, uploadForm(pdf))).status).toBe(404);
+  expect((await materialRequest(rep, 'POST', documents, uploadForm('invalid'))).status).toBe(400);
+  expect((await materialRequest(rep, 'POST', documents, uploadForm(pdf))).status).toBe(201);
+
+  const saved = (await call(student)).data as {
+    practices: { id: string; materials: { id: string; title: string; circularNumber: number | null }[] }[];
+  };
+  const attached = saved.practices.find((practice) => practice.id === id)!.materials;
+  expect(attached).toHaveLength(2);
+  expect(attached).toEqual(expect.arrayContaining([
+    { id: expect.any(String), title: 'Moduli della gita', circularNumber: 15 },
+    { id: expect.any(String), title: 'Modulo.pdf', circularNumber: null },
+  ]));
+  const pdfLink = materials + '/' + attached.find((material) => material.circularNumber === null)!.id;
+  const download = await materialRequest(student, 'GET', pdfLink + '/file');
+  expect(download.status).toBe(200);
+  expect(download.headers.get('Cache-Control')).toBe('no-store');
+  expect(await download.text()).toBe(pdf);
+  expect((await materialRequest(outsider, 'GET', pdfLink + '/file')).status).toBe(404);
+  expect((await call(student, 'DELETE', pdfLink)).status).toBe(403);
+  expect((await call(outsider, 'DELETE', pdfLink)).status).toBe(404);
+  expect((await call(rep, 'DELETE', pdfLink)).status).toBe(200);
+  expect(files.size).toBe(0);
+  expect((await materialRequest(student, 'GET', pdfLink + '/file')).status).toBe(404);
+  expect((await materialRequest(rep, 'POST', documents, uploadForm(pdf))).status).toBe(201);
+  const archivedFile = materials + '/' + [...files.keys()][0].split('/')[1].replace('.pdf', '');
 
   expect((await call(rep, 'PUT', deliveries + '/studente', { received: false })).status).toBe(200);
   expect((await call(rep, 'PUT', deliveries + '/studente', { received: true })).status).toBe(200);
@@ -90,7 +152,11 @@ it('isolates class deliveries, permits concurrent practices and freezes the arch
   expect(db.prepare('SELECT archived_at FROM bureaucracy_practices WHERE id = ?').get(id)).toEqual(archived);
   expect((await call(rep, 'PUT', deliveries + '/studente', { received: false })).status).toBe(409);
 
+  expect((await call(rep, 'POST', circulars, { number: 15 })).status).toBe(404);
+  expect((await call(rep, 'DELETE', archivedFile)).status).toBe(404);
+  expect((await materialRequest(student, 'GET', archivedFile + '/file')).status).toBe(200);
   const newcomer = await addUser('nuovo');
+  expect((await materialRequest(newcomer, 'GET', archivedFile + '/file')).status).toBe(404);
   expect((await call(newcomer)).data).toMatchObject({ practices: [{ title: 'Circolare firmata', archivedAt: null }] });
   expect((await call(rep, 'GET', deliveries)).data).toEqual({
     deliveries: [
