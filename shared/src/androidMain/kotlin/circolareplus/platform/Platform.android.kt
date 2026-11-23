@@ -79,3 +79,5 @@ actual fun isReduceMotionEnabled(): Boolean {
     }
     return reduce.value
 }
+
+actual fun pwaBaseUrl(): String = "https://aila-scuola.pages.dev/"

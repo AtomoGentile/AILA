@@ -1,22 +1,23 @@
 package circolareplus.platform
 
 import android.content.Context
+import androidx.fragment.app.FragmentActivity
+import java.lang.ref.WeakReference
 
 /**
- * Il `Context` dell'applicazione, messo a disposizione del codice condiviso.
+ * Il `Context` dell'applicazione e un riferimento debole all'Activity corrente (per `BiometricPrompt`),
+ * messi a disposizione del codice condiviso.
  *
- * Serve perché l'AI locale ha bisogno del Context per tre cose che il codice comune non può
- * ottenere da sé: leggere la RAM totale (`ActivityManager`), sapere dove scrivere i file dei
- * modelli (`filesDir`) e costruire il motore di inferenza. Il modulo `:shared` non ha un
- * `ContentProvider` di inizializzazione, quindi si segue la stessa strada già usata da
- * `PdfBoxInit`: `MainActivity` lo riempie all'avvio.
- *
- * Si tiene l'`applicationContext` e mai l'Activity: legare un Context di Activity a un oggetto
- * statico lo terrebbe in vita a ogni rotazione dello schermo.
+ * Il `Context` applicativo viene conservato per l'intero ciclo di vita del processo; l'Activity invece
+ * e' tenuta solo con `WeakReference` e ripulita in `onDestroy()`, cosi' non crea memory leak alle
+ * rotazioni o ricreazioni.
  */
 object AndroidAppContext {
     @Volatile
     private var appContext: Context? = null
+
+    @Volatile
+    private var activityRef: WeakReference<FragmentActivity>? = null
 
     fun init(context: Context) {
         if (appContext == null) {
@@ -25,6 +26,18 @@ object AndroidAppContext {
             }
         }
     }
+
+    fun setActivity(activity: FragmentActivity) {
+        activityRef = WeakReference(activity)
+    }
+
+    fun clearActivity(activity: FragmentActivity) {
+        if (activityRef?.get() === activity) {
+            activityRef = null
+        }
+    }
+
+    fun currentActivity(): FragmentActivity? = activityRef?.get()?.takeUnless { it.isFinishing || it.isDestroyed }
 
     /** `null` finché [init] non è stata chiamata: chi lo usa deve gestire il caso. */
     fun getOrNull(): Context? = appContext

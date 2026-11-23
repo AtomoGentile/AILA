@@ -15,6 +15,7 @@ firebaseBom = "34.18.0"
 googleServices = "4.5.0"
 activityCompose = "1.11.0"
 androidxFragment = "1.8.9"
+androidxBiometric = "1.1.0"
 androidxCoreKtx = "1.17.0"
 litertlm = "0.17.0"
 # Gemini Nano di sistema (AICore) via ML Kit GenAI Prompt API. Sostituisce
@@ -63,6 +64,7 @@ firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "fir
 firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
 androidx-fragment = { module = "androidx.fragment:fragment", version.ref = "androidxFragment" }
+androidx-biometric = { module = "androidx.biometric:biometric", version.ref = "androidxBiometric" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCoreKtx" }
 # Inferenza LLM on-device (AI locale). E' il runtime ufficiale di Google per far girare
 # modelli linguistici su Android, e sostituisce com.google.mediapipe:tasks-genai, che Google ha

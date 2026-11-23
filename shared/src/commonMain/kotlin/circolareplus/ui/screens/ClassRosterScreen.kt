@@ -363,6 +363,15 @@ private fun ResetCodeButton(entry: RatingEntryDto) {
     }
 
     result?.let { reset ->
+        val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+        var linkCopied by remember(reset.code) { mutableStateOf(false) }
+        val resetLink = remember(reset.code, reset.username, entry.username) {
+            circolareplus.ui.buildPasswordResetLink(
+                baseUrl = circolareplus.platform.pwaBaseUrl(),
+                username = reset.username ?: entry.username,
+                code = reset.code
+            )
+        }
         circolareplus.design.AilaAlertDialog(
             onDismissRequest = { result = null },
             // Stessa superficie e forma dei dialoghi del design system (AilaConfirmDialog).
@@ -373,11 +382,21 @@ private fun ResetCodeButton(entry: RatingEntryDto) {
                 Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
                     Text(text = reset.code, style = MaterialTheme.typography.headlineMedium, letterSpacing = 4.sp, color = AppTheme.TextDark)
                     Text(
-                        text = "Username: ${reset.username ?: "—"}. Al login tocca \"Password dimenticata?\" e inserisce " +
-                            "username, questo codice e la password nuova. Vale 24 ore e una volta sola.",
+                        text = "Username: ${reset.username ?: entry.username ?: "—"}. Puoi mandargli il link diretto (precompila username e codice) oppure dirgli questo codice. Vale 24 ore e una volta sola.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = AppTheme.TextMuted
                     )
+                    Button(
+                        onClick = {
+                            clipboard.setText(androidx.compose.ui.text.AnnotatedString(resetLink))
+                            linkCopied = true
+                        },
+                        shape = RoundedCornerShape(AppTheme.ButtonCornerRadius),
+                        colors = ButtonDefaults.buttonColors(containerColor = AppTheme.PrimaryBlue, contentColor = Color.White),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (linkCopied) "Link copiato!" else "Copia link di recupero")
+                    }
                 }
             },
             confirmButton = { circolareplus.design.AilaTextButton(onClick = { result = null }) { Text("Fatto") } }
@@ -412,11 +431,20 @@ private fun ClassRosterRow(
                     )
                 }
                 Spacer(modifier = Modifier.width(AppTheme.Space12))
-                Text(
-                    text = "${entry.firstName} ${entry.lastName}" + if (isSelf) " (Tu)" else "",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = AppTheme.TextDark
-                )
+                Column {
+                    Text(
+                        text = "${entry.firstName} ${entry.lastName}" + if (isSelf) " (Tu)" else "",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = AppTheme.TextDark
+                    )
+                    entry.username?.takeIf { it.isNotBlank() }?.let { uname ->
+                        Text(
+                            text = "@$uname",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AppTheme.TextMuted
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(AppTheme.Space12))

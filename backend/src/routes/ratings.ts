@@ -23,7 +23,7 @@ ratings.use('*', authMiddleware());
 // ---------------------------------------------------------------------------
 ratings.get('/', requireRole('REPRESENTATIVE'), async (c) => {
   const rows = await c.env.DB.prepare(
-    `SELECT u.id, u.first_name, u.last_name, u.role,
+    `SELECT u.id, u.first_name, u.last_name, u.username, u.role,
             (cl.security_guard_id = u.id) AS is_guard,
             rr.didactic, rr.behavior, rr.updated_at,
             sp.priority_pass, sp.height_cm
@@ -37,6 +37,7 @@ ratings.get('/', requireRole('REPRESENTATIVE'), async (c) => {
     id: string;
     first_name: string;
     last_name: string;
+    username: string;
     role: string;
     is_guard: number | null;
     didactic: number | null;
@@ -51,6 +52,7 @@ ratings.get('/', requireRole('REPRESENTATIVE'), async (c) => {
       studentId: r.id,
       firstName: nameCase(r.first_name),
       lastName: nameCase(r.last_name),
+      username: r.username,
       role: r.role,
       // Guardia di Sicurezza della classe (terza firma per lo svelamento): la nomina il
       // Rappresentante da questa stessa schermata.
