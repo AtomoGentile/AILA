@@ -7,7 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.graphics.Color
 import android.provider.Settings
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -29,7 +29,7 @@ import circolareplus.domain.model.NotificationCategoryMapper
 import circolareplus.ui.PendingDeepLink
 import circolareplus.ui.screens.MainAppShell
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     // Su Android 13+ (API 33) le notifiche richiedono un permesso runtime esplicito: senza
     // questa richiesta, le notifiche push arriverebbero al dispositivo ma non verrebbero mai
@@ -51,6 +51,7 @@ class MainActivity : ComponentActivity() {
         // salvare i modelli scaricati e costruisce il motore di inferenza. Va prima di
         // AppContainer, che nel ripristino della sessione puo' gia' chiedere un classificatore.
         AndroidAppContext.init(this)
+        AndroidAppContext.setActivity(this)
 
         // Tema scelto nelle Impostazioni, riletto prima della prima composizione: se si
         // aspettasse un LaunchedEffect, chi usa il tema scuro vedrebbe un lampo bianco a ogni
@@ -120,6 +121,7 @@ class MainActivity : ComponentActivity() {
     // circolare (e la notifica di sistema che l'annunciava non aggiorna nulla da sola).
     override fun onResume() {
         super.onResume()
+        AndroidAppContext.setActivity(this)
         circolareplus.push.DataRefreshEvents.request()
     }
 
@@ -205,5 +207,10 @@ class MainActivity : ComponentActivity() {
             PendingDeepLink.forumThreadId = intent.getStringExtra("thread_id")
             PendingDeepLink.category = category
         }
+    }
+
+    override fun onDestroy() {
+        AndroidAppContext.clearActivity(this)
+        super.onDestroy()
     }
 }

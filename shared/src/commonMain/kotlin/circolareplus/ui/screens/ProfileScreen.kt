@@ -351,7 +351,7 @@ fun ProfileScreen(
                 HorizontalDivider(color = AppTheme.Hairline, modifier = Modifier.padding(start = 72.dp))
                 if (passkeyAvailable) {
                     AilaListRow(
-                        title = "Face ID / Passkey",
+                        title = "Passkey",
                         subtitle = "Accedi su questo dispositivo senza password",
                         tint = AppTheme.TintBlue,
                         onClick = { showPasskeysDialog = true },
@@ -593,12 +593,12 @@ private fun PasskeysDialog(onDismiss: () -> Unit) {
         containerColor = AppTheme.SurfaceWhite,
         shape = RoundedCornerShape(AppTheme.CardCornerRadius),
         title = {
-            Text(text = "Face ID / Passkey", style = MaterialTheme.typography.titleLarge, color = AppTheme.TextDark)
+            Text(text = "Passkey", style = MaterialTheme.typography.titleLarge, color = AppTheme.TextDark)
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
                 Text(
-                    text = "Attiva Face ID, Touch ID o il blocco schermo per accedere ad AILA in un tocco, senza ricordare username o password.",
+                    text = "Attiva una Passkey su questo dispositivo per accedere ad AILA in un tocco, senza ricordare username o password.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = AppTheme.TextMuted
                 )
@@ -686,7 +686,7 @@ private fun PasskeysDialog(onDismiss: () -> Unit) {
                         try {
                             val added = circolareplus.data.AppContainer.authRepository.registerPasskey()
                             passkeys = listOf(added) + passkeys.filterNot { it.credentialId == added.credentialId }
-                            info = "Face ID / Passkey attivato! Ora puoi accedere senza password."
+                            info = "Passkey attivata! Ora puoi accedere senza password."
                         } catch (_: circolareplus.platform.PasskeyCancelledException) {
                             // Annullato dall'utente: nessun errore.
                         } catch (e: circolareplus.data.remote.ApiException) {

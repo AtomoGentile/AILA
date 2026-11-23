@@ -44,7 +44,13 @@ export function resolvePasskeyOriginAndRpId(
   originHeader: string | undefined,
   env: Env
 ): { origin: string; rpId: string } | null {
-  if (!originHeader) return null;
+  // Le app native Android/iOS (client HTTP Ktor) non inviano l'header browser `Origin`:
+  // usano il dominio canonico AILA per legare le chiavi biometriche del dispositivo.
+  // I browser invece inviano sempre `Origin` su POST cross-origin, quindi una pagina malevola
+  // viene sempre filtrata dalla whitelist qui sotto.
+  if (!originHeader) {
+    return { origin: `https://${SHARED_PWA_RP_ID}`, rpId: SHARED_PWA_RP_ID };
+  }
   let parsed: URL;
   try {
     parsed = new URL(originHeader);

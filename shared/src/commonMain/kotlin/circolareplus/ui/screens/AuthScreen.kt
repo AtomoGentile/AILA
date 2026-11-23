@@ -567,7 +567,7 @@ fun AuthScreen(
                             AppIcons.Lock(modifier = Modifier.size(18.dp), color = AppTheme.PrimaryBlue)
                             Spacer(modifier = Modifier.width(AppTheme.Space8))
                             Text(
-                                text = "Accedi con Face ID / Passkey",
+                                text = "Accedi con Passkey",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = AppTheme.TextDark
                             )

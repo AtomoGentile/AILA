@@ -321,4 +321,65 @@ describe('WebAuthn Passkeys / Face ID (/api/auth/passkeys)', () => {
     );
     expect(afterDelete.status).toBe(401);
   });
+
+  it('supporta anche client nativi Android/iOS (senza header Origin)', async () => {
+    const user = await registerTestUser();
+
+    const regOpts = await call('POST', '/api/auth/passkeys/register/options', {}, user.token);
+    expect(regOpts.status).toBe(200);
+    expect(regOpts.json.rpId).toBe('aila-scuola.pages.dev');
+
+    const keyPair = (await crypto.subtle.generateKey(
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      true,
+      ['sign', 'verify']
+    )) as CryptoKeyPair;
+    const spki = new Uint8Array(await crypto.subtle.exportKey('spki', keyPair.publicKey));
+    const credentialId = base64UrlEncode(crypto.getRandomValues(new Uint8Array(24)));
+
+    const regClientData = new TextEncoder().encode(
+      JSON.stringify({
+        type: 'webauthn.create',
+        challenge: regOpts.json.challenge,
+        origin: STABLE_ORIGIN,
+      })
+    );
+    const regAuthData = await buildAuthenticatorData('aila-scuola.pages.dev', 1);
+
+    const regVerify = await call(
+      'POST',
+      '/api/auth/passkeys/register/verify',
+      {
+        credentialId,
+        clientDataJSON: base64UrlEncode(regClientData),
+        authenticatorData: base64UrlEncode(regAuthData),
+        publicKeySpki: base64UrlEncode(spki),
+        algorithm: -7,
+        label: 'Android',
+      },
+      user.token
+    );
+    expect(regVerify.status).toBe(201);
+
+    const loginOpts = await call('POST', '/api/auth/passkeys/login/options', {});
+    expect(loginOpts.status).toBe(200);
+    const loginClientData = new TextEncoder().encode(
+      JSON.stringify({
+        type: 'webauthn.get',
+        challenge: loginOpts.json.challenge,
+        origin: STABLE_ORIGIN,
+      })
+    );
+    const loginAuthData = await buildAuthenticatorData('aila-scuola.pages.dev', 2);
+    const loginSig = await signAssertion(keyPair.privateKey, loginAuthData, loginClientData);
+
+    const loginVerify = await call('POST', '/api/auth/passkeys/login/verify', {
+      credentialId,
+      clientDataJSON: base64UrlEncode(loginClientData),
+      authenticatorData: base64UrlEncode(loginAuthData),
+      signature: base64UrlEncode(loginSig),
+    });
+    expect(loginVerify.status).toBe(200);
+    expect(loginVerify.json.user.username).toBe('simone.passkey');
+  });
 });
