@@ -247,7 +247,7 @@ preferences.post('/vote', async (c) => {
       const reps = await c.env.DB.prepare(
         "SELECT id FROM users WHERE class_id = ? AND role = 'REPRESENTATIVE'"
       ).bind(classId).all<{ id: string }>();
-      await Promise.allSettled(
+      inBackground(c, Promise.allSettled(
         reps.results.map((rep) =>
           notifyUser(
             c.env,
@@ -257,7 +257,7 @@ preferences.post('/vote', async (c) => {
             { action: 'preferences_complete' }
           )
         )
-      );
+      ));
     }
   }
 

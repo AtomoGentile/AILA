@@ -11,16 +11,15 @@ import { POLL_RULES } from '../src/services/pollAssignments';
 
 // Le notifiche si registrano invece di partire: servono a controllare chi viene avvisato.
 const notified = vi.hoisted(() => [] as { userIds: string[]; title: string; data?: Record<string, string> }[]);
+const preferencesNotification = vi.hoisted(() => ({ wait: undefined as Promise<void> | undefined }));
 vi.mock('../src/services/fcm', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/services/fcm')>()),
-  notifyUser: async (_env: unknown, userId: string, title: string, _body: string, data?: Record<string, string>) => {
-    notified.push({ userIds: [userId], title, data });
-  },
   notifyUsers: async (_env: unknown, userIds: string[], title: string, _body: string, data?: Record<string, string>) => {
     notified.push({ userIds, title, data });
   },
   notifyUser: async (_env: unknown, userId: string, title: string, _body: string, data?: Record<string, string>) => {
     notified.push({ userIds: [userId], title, data });
+    if (data?.action === 'preferences_complete') await preferencesNotification.wait;
   },
 }));
 
@@ -31,6 +30,7 @@ beforeEach(() => {
   const { d1 } = createD1();
   env = { DB: d1, JWT_SECRET: 'test-secret', ADMIN_SECRET: ADMIN } as unknown as Env;
   notified.length = 0;
+  preferencesNotification.wait = undefined;
 });
 
 const ADMIN = 'admin-secret-di-prova-1234';
@@ -955,7 +955,24 @@ describe('fantocci della Mappa Posti', () => {
     expect((await call('POST', '/api/preferences/config', { open: true }, rep)).status).toBe(200);
     // Solo gli alunni veri votano: il fantoccio non entra nella finestra.
     expect((await call('POST', '/api/preferences/vote', { toStudentId: studentId, score: 0 }, rep)).status).toBe(200);
-    expect((await call('POST', '/api/preferences/vote', { toStudentId: repId, score: 0 }, student)).status).toBe(200);
+    // L'ultimo primo voto scatena una push, ma la risposta non deve aspettarne la consegna.
+    const push = Promise.withResolvers<void>();
+    preferencesNotification.wait = push.promise;
+    const vote = call('POST', '/api/preferences/vote', { toStudentId: repId, score: 0 }, student);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const result = await Promise.race([
+        vote,
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(() => reject(new Error('Il salvataggio è bloccato dalla notifica')), 1000);
+        }),
+      ]);
+      expect(result.status).toBe(200);
+      expect(notified.some((event) => event.data?.action === 'preferences_complete')).toBe(true);
+    } finally {
+      clearTimeout(timeout);
+      push.resolve();
+    }
     const progress = await call('GET', '/api/preferences/progress', undefined, rep);
     expect(progress.json.totalStudents).toBe(2);
     expect(progress.json.allVoted).toBe(true);

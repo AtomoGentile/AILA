@@ -55,14 +55,16 @@ class PreferencesRepository(private val api: ApiClient) {
     suspend fun vote(toStudentId: String, score: SocialPreferenceScore) {
         api.post<VoteSocialPreferenceRequestDto, SuccessDto>(
             "/api/preferences/vote",
-            VoteSocialPreferenceRequestDto(toStudentId, score.value)
+            VoteSocialPreferenceRequestDto(toStudentId, score.value),
+            timeoutMillis = 30_000,
         )
     }
 
     /** Quanti compagni hanno gia' votato e quanti mancano (i nomi solo al Rappresentante). */
     suspend fun progress(): PreferencesProgressDto = api.get("/api/preferences/progress")
 
-    suspend fun myVotes(): MyPreferencesResponseDto = api.get("/api/preferences/my")
+    suspend fun myVotes(offlineCopy: Boolean = true): MyPreferencesResponseDto =
+        api.get("/api/preferences/my", offlineCopy = offlineCopy)
 
     /** Solo Rappresentante, solo per l'algoritmo: include anche i voti -2. */
     suspend fun matrixForAlgorithm(): PreferenceMatrixResponseDto = api.get("/api/preferences/matrix")

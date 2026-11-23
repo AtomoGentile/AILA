@@ -38,6 +38,9 @@ fun SocialPreferencesVotingScreen(
     loadHistory: suspend () -> List<circolareplus.domain.model.PublishedSeatMap> = { emptyList() },
     studentsMap: Map<String, User> = classmates.associateBy { it.id },
     currentUserId: String? = null,
+    pendingVotes: Int = 0,
+    saveError: String? = null,
+    onRetrySave: () -> Unit = {},
     onSubmitVotes: () -> Unit
 ) {
     var showHistory by remember { mutableStateOf(false) }
@@ -100,6 +103,14 @@ fun SocialPreferencesVotingScreen(
         )
 
         Spacer(modifier = Modifier.height(AppTheme.Space12))
+
+        if (saveError != null) {
+            Text(
+                text = saveError,
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTheme.TintRedInk
+            )
+        }
 
         circolareplus.design.AilaTextButton(onClick = { showHistory = true }) { Text("Dove eravamo seduti: mappe precedenti") }
         historyError?.let { Text(it, color = AppTheme.TextMuted) }
@@ -220,9 +231,14 @@ fun SocialPreferencesVotingScreen(
         // stesso feedback al tocco degli altri pulsanti principali. "large": testo a 15sp come
         // prima e altezza minima di 48dp, e' l'azione che chiude la schermata.
         AilaPrimaryButton(
-            text = if (missingVotes == 0) "Salva preferenze" else "Vota ancora $missingVotes ${if (missingVotes == 1) "compagno" else "compagni"}",
-            onClick = onSubmitVotes,
-            enabled = missingVotes == 0,
+            text = when {
+                pendingVotes > 0 && saveError != null -> "Riprova a salvare"
+                pendingVotes > 0 -> "Salvataggio in corso…"
+                missingVotes == 0 -> "Salva preferenze"
+                else -> "Vota ancora $missingVotes ${if (missingVotes == 1) "compagno" else "compagni"}"
+            },
+            onClick = if (pendingVotes > 0) onRetrySave else onSubmitVotes,
+            enabled = if (pendingVotes > 0) saveError != null else missingVotes == 0,
             fillMaxWidth = true,
             large = true
         )

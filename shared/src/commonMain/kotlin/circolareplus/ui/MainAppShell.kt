@@ -1248,7 +1248,10 @@ fun MainAppShell(
     }
     var openSeatPreferencesFromBrief by remember { mutableStateOf(false) }
     var seatMapMode by rememberSaveable { mutableStateOf("MAP") } // "MAP" | "VOTE_PREFERENCES"
-    val socialVotes = remember { mutableStateMapOf<String, SocialPreferenceScore>() }
+    val socialVotes = remember(user.id) { mutableStateMapOf<String, SocialPreferenceScore>() }
+    var pendingSocialVotes by remember(user.id) { mutableStateOf(emptyMap<String, SocialPreferenceScore>()) }
+    var socialVoteError by remember(user.id) { mutableStateOf<String?>(null) }
+    val socialVoteLock = remember(user.id) { Mutex() }
     var proposalOptions by remember { mutableStateOf<List<SeatMapProposal>>(emptyList()) }
     var generatedSeatMapProposals by remember(currentUser?.id) { mutableStateOf<List<SeatMapProposal>>(emptyList()) }
     var hasCurrentSeatMapResult by remember(currentUser?.id) { mutableStateOf(false) }
@@ -2073,7 +2076,7 @@ fun MainAppShell(
     }
 
     // Ingresso nella votazione preferenze: precarica i voti già espressi dallo studente.
-    LaunchedEffect(seatMapMode) {
+    LaunchedEffect(user.id, seatMapMode) {
         if (seatMapMode == "VOTE_PREFERENCES") {
             // Notifica di apertura votazione preferenze
             if (AppContainer.settings.isNotificationKindEnabled(NotificationKind.SEATMAP.key)) {
@@ -2086,14 +2089,46 @@ fun MainAppShell(
             }
 
             try {
-                val myVotes = AppContainer.preferencesRepository.myVotes()
-                socialVotes.clear()
-                myVotes.votes.forEach { v ->
-                    socialVotes[v.toStudentId] = SocialPreferenceScore.fromValue(v.score)
+                socialVoteLock.withLock {
+                    val myVotes = AppContainer.preferencesRepository.myVotes(offlineCopy = false)
+                    socialVotes.clear()
+                    myVotes.votes.forEach { v ->
+                        socialVotes[v.toStudentId] = SocialPreferenceScore.fromValue(v.score)
+                    }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 seatMapActionError = "Impossibile caricare i tuoi voti precedenti."
             }
+        }
+    }
+
+    LaunchedEffect(user.id, pendingSocialVotes.isNotEmpty(), socialVoteError == null) {
+        if (socialVoteError != null) return@LaunchedEffect
+        while (true) {
+            val (targetId, score) = pendingSocialVotes.entries.firstOrNull() ?: break
+            try {
+                socialVoteLock.withLock {
+                    AppContainer.preferencesRepository.vote(targetId, score)
+                    socialVotes[targetId] = score
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: circolareplus.data.remote.ApiException) {
+                if (e.statusCode in 400..499 && e.statusCode != 429) {
+                    if (pendingSocialVotes[targetId] == score) pendingSocialVotes = pendingSocialVotes - targetId
+                    socialVoteError = e.message
+                } else {
+                    socialVoteError = "Il servizio non ha confermato il salvataggio. Le scelte sono ancora qui."
+                }
+                break
+            } catch (_: Exception) {
+                socialVoteError = "Il servizio non ha confermato il salvataggio. Le scelte sono ancora qui."
+                break
+            }
+            // Un altro tocco sullo stesso compagno può aver aggiornato la scelta durante l'invio.
+            if (pendingSocialVotes[targetId] == score) pendingSocialVotes = pendingSocialVotes - targetId
         }
     }
 
@@ -3746,24 +3781,13 @@ fun MainAppShell(
                                                 loadHistory = { AppContainer.seatMapRepository.getPublishedHistory() },
                                                 studentsMap = classmates.associateBy { it.id } + (user.id to user) + seatMapDummies.associateBy { it.id }.mapValues { it.value.asUser() },
                                                 classmates = classmates.filter { it.id != user.id },
-                                                currentVotes = socialVotes,
+                                                currentVotes = socialVotes + pendingSocialVotes,
+                                                pendingVotes = pendingSocialVotes.size,
+                                                saveError = socialVoteError,
+                                                onRetrySave = { socialVoteError = null },
                                                 onVoteChanged = { targetId, score ->
-                                                    // Aggiornamento ottimistico: la scelta si vede subito e la
-                                                    // richiesta parte in background. Prima il voto compariva solo
-                                                    // a risposta del server arrivata, e sembrava che l'app laggasse.
-                                                    val previousScore = socialVotes[targetId]
-                                                    socialVotes[targetId] = score
-                                                    coroutineScope.launch {
-                                                        try {
-                                                            AppContainer.preferencesRepository.vote(targetId, score)
-                                                        } catch (e: CancellationException) {
-                                                            throw e
-                                                        } catch (e: Exception) {
-                                                            if (previousScore == null) socialVotes.remove(targetId)
-                                                            else socialVotes[targetId] = previousScore
-                                                            seatMapActionError = "Voto non registrato: ${e.message}"
-                                                        }
-                                                    }
+                                                    pendingSocialVotes = pendingSocialVotes + (targetId to score)
+                                                    socialVoteError = null
                                                 },
                                                 onSubmitVotes = { seatMapMode = "MAP" }
                                             )
