@@ -91,6 +91,8 @@ private fun CacheDrawScope.glassBackdrop(): GlassBackdrop {
     val w = size.width
     val h = size.height
     val accent = AppTheme.PrimaryBlue
+    val secondary = AppTheme.SecondaryIndigo
+    val tertiary = AppTheme.AccentCyan
     // Base: un gradiente verticale lungo tutto lo schermo, ampio e morbido come gli sfondi di
     // iOS (dall'alto il colore principale, poi blu-ardesia, in fondo un azzurro ghiaccio: toni freddi, sobri). Il
     // vetro ci passa sopra e cambia tinta man mano che si scorre, senza chiazze.
@@ -100,15 +102,15 @@ private fun CacheDrawScope.glassBackdrop(): GlassBackdrop {
     val stops = if (dark) {
         arrayOf(
             0f to lerpColor(Color(0xFF000000), accent, 0.2f),
-            0.4f to Color(0xFF05070D),
+            0.4f to lerpColor(Color(0xFF05070D), secondary, 0.045f),
             0.8f to Color(0xFF03060A),
             1f to Color(0xFF010204)
         )
     } else {
         arrayOf(
             0f to lerpColor(Color(0xFFE6EDFF), accent, 0.36f),
-            0.45f to Color(0xFFD3DCF3),
-            0.8f to Color(0xFFCFE6EC),
+            0.45f to lerpColor(Color(0xFFDDE1EB), secondary, 0.13f),
+            0.8f to lerpColor(Color(0xFFE1E9EE), tertiary, 0.12f),
             1f to Color(0xFFDEE9EF)
         )
     }
@@ -119,9 +121,9 @@ private fun CacheDrawScope.glassBackdrop(): GlassBackdrop {
     }
     // Due soli bagliori molto larghi e tenui, per dare profondita' senza "macchie".
     val glows = if (dark) {
-        listOf(glow(0.1f, 0.12f, 1.2f, accent.copy(alpha = 0.16f)), glow(0.95f, 0.6f, 1.1f, Color(0x1A0E7490)))
+        listOf(glow(0.1f, 0.12f, 1.2f, accent.copy(alpha = 0.16f)), glow(0.95f, 0.6f, 1.1f, tertiary.copy(alpha = 0.10f)))
     } else {
-        listOf(glow(0.1f, 0.12f, 1.2f, accent.copy(alpha = 0.18f)), glow(0.95f, 0.6f, 1.1f, Color(0x3867C6D8)))
+        listOf(glow(0.1f, 0.12f, 1.2f, accent.copy(alpha = 0.18f)), glow(0.95f, 0.6f, 1.1f, tertiary.copy(alpha = 0.17f)))
     }
     return GlassBackdrop(Brush.verticalGradient(*stops, startY = 0f, endY = h), glows)
 }

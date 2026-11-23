@@ -272,9 +272,9 @@ private fun ChooseBody(onDocument: () -> Unit, onLink: () -> Unit, onCircular: (
         AilaListRow(
             title = "Scegli una circolare",
             subtitle = "Aggiungi le circolari utili alla classe",
-            tint = AppTheme.TintBlue,
+            tint = AppTheme.SecondaryContainer,
             onClick = onCircular,
-            icon = { AppIcons.Document(modifier = Modifier.size(20.dp), color = AppTheme.TintBlueInk) }
+            icon = { AppIcons.Document(modifier = Modifier.size(20.dp), color = AppTheme.OnSecondaryContainer) }
         )
         AilaListRow(
             title = "Carica un PDF",
@@ -829,8 +829,8 @@ internal fun CircularPicker(
             matches.forEach { circular ->
                 AilaCard {
                     AilaListRow(title = "Circolare n. ${circular.number}", subtitle = circular.title,
-                        tint = AppTheme.TintBlue, onClick = { if (!busy) onPick(circular.number) },
-                        icon = { AppIcons.Document(modifier = Modifier.size(20.dp), color = AppTheme.TintBlueInk) })
+                        tint = AppTheme.SecondaryContainer, onClick = { if (!busy) onPick(circular.number) },
+                        icon = { AppIcons.Document(modifier = Modifier.size(20.dp), color = AppTheme.OnSecondaryContainer) })
                 }
             }
         }

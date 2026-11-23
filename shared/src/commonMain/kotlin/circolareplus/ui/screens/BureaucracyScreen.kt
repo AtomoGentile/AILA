@@ -500,8 +500,8 @@ internal fun BureaucracyScreen(
                             AilaListRow(
                                 title = "Collega circolare",
                                 subtitle = "Scegli una circolare già pubblicata in AILA",
-                                tint = AppTheme.TintViolet,
-                                icon = { AppIcons.ExternalLink(Modifier.size(20.dp), AppTheme.TintVioletInk) },
+                                tint = AppTheme.SecondaryContainer,
+                                icon = { AppIcons.ExternalLink(Modifier.size(20.dp), AppTheme.OnSecondaryContainer) },
                                 onClick = if (busy) null else {
                                     { actionError = null; linkingCircular = true }
                                 }
@@ -564,7 +564,7 @@ private fun PracticeSectionTitle(title: String) {
 
 @Composable
 private fun PracticeInstructions(description: String) {
-    AilaCard(containerColor = AppTheme.TintViolet) {
+    AilaCard(containerColor = AppTheme.SecondaryContainer) {
         Column(
             Modifier.fillMaxWidth().padding(AppTheme.Space16),
             verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
@@ -573,12 +573,12 @@ private fun PracticeInstructions(description: String) {
                 "Istruzioni",
                 modifier = Modifier.semantics { heading() },
                 style = MaterialTheme.typography.labelLarge,
-                color = AppTheme.TintVioletInk
+                color = AppTheme.OnSecondaryContainer
             )
             Text(
                 description,
                 style = MaterialTheme.typography.bodyLarge,
-                color = AppTheme.TextDark
+                color = AppTheme.OnSecondaryContainer
             )
         }
     }
@@ -590,8 +590,8 @@ private fun PracticeDeadline(date: String?, onEdit: (() -> Unit)?) {
         AilaListRow(
             title = "Scadenza",
             subtitle = date?.let(::formatItalianDateWithWeekday) ?: "Nessuna data impostata",
-            tint = AppTheme.TintAmber,
-            icon = { AppIcons.Calendar(Modifier.size(20.dp), AppTheme.TintAmberInk) },
+            tint = AppTheme.TertiaryContainer,
+            icon = { AppIcons.Calendar(Modifier.size(20.dp), AppTheme.OnTertiaryContainer) },
             trailing = if (onEdit != null) {
                 {
                     AilaIconButton(if (date == null) "Aggiungi scadenza" else "Modifica scadenza", onEdit, size = 40.dp) {
@@ -656,10 +656,10 @@ private fun PracticeMaterialRow(
         AilaListRow(
             title = material.title,
             subtitle = if (number == null) "Documento PDF" else "Circolare n. $number",
-            tint = if (number == null) AppTheme.TintBlue else AppTheme.TintViolet,
+            tint = if (number == null) AppTheme.TintBlue else AppTheme.SecondaryContainer,
             icon = {
                 if (number == null) AppIcons.Document(Modifier.size(20.dp), AppTheme.TintBlueInk)
-                else AppIcons.ExternalLink(Modifier.size(20.dp), AppTheme.TintVioletInk)
+                else AppIcons.ExternalLink(Modifier.size(20.dp), AppTheme.OnSecondaryContainer)
             },
             onClick = onOpen.takeIf { enabled },
             trailing = {

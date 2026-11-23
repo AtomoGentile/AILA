@@ -73,11 +73,11 @@ internal fun ClassSearchPanel(onOpen: (ClassSearchHitDto)->Unit) {
                 AilaCard(modifier=Modifier.ailaAppear(index),onClick={keyboard?.hide();onOpen(hit)}) {
                     AilaListRow(
                         title=hit.title,subtitle=hit.text,
-                        tint=when(hit.kind) {"CIRCULAR"->AppTheme.TintBlue;"BOARD"->AppTheme.TintViolet;else->AppTheme.TintGreen},
+                        tint=when(hit.kind) {"CIRCULAR"->AppTheme.TintBlue;"BOARD"->AppTheme.SecondaryContainer;else->AppTheme.TertiaryContainer},
                         onClick={keyboard?.hide();onOpen(hit)},
                         icon={when(hit.kind) {
                             "CIRCULAR"->AppIcons.Document(Modifier.size(22.dp),AppTheme.TintBlueInk)
-                            else->AppIcons.ChatBubble(Modifier.size(22.dp),if(hit.kind=="BOARD") AppTheme.TintVioletInk else AppTheme.TintGreenInk)
+                            else->AppIcons.ChatBubble(Modifier.size(22.dp),if(hit.kind=="BOARD") AppTheme.OnSecondaryContainer else AppTheme.OnTertiaryContainer)
                         }}
                     )
                 }

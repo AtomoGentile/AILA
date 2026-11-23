@@ -99,16 +99,16 @@ internal data class CategoryTint(val tint: Color, val ink: Color, val label: Str
 
 internal fun GitaCategory.look(): CategoryTint = when (this) {
     GitaCategory.PROGRAMMA -> CategoryTint(AppTheme.TintBlue, AppTheme.TintBlueInk, label)
-    GitaCategory.PREVENTIVO -> CategoryTint(AppTheme.TintAmber, AppTheme.TintAmberInk, label)
+    GitaCategory.PREVENTIVO -> CategoryTint(AppTheme.TertiaryContainer, AppTheme.OnTertiaryContainer, label)
     GitaCategory.SCADENZA -> CategoryTint(AppTheme.TintRed, AppTheme.TintRedInk, label)
-    GitaCategory.REGOLAMENTO -> CategoryTint(AppTheme.TintViolet, AppTheme.TintVioletInk, label)
+    GitaCategory.REGOLAMENTO -> CategoryTint(AppTheme.SecondaryContainer, AppTheme.OnSecondaryContainer, label)
     GitaCategory.PAGAMENTO -> CategoryTint(AppTheme.TintGreen, AppTheme.TintGreenInk, label)
     GitaCategory.ALTRO -> CategoryTint(AppTheme.TintSlate, AppTheme.TintSlateInk, label)
 }
 
 /** I link non hanno una categoria: tinta neutra. */
 internal fun GitaItem.look(): CategoryTint =
-    if (isLink) CategoryTint(AppTheme.TintSlate, AppTheme.TintSlateInk, "Link") else category.look()
+    if (isLink) CategoryTint(AppTheme.SecondaryContainer, AppTheme.OnSecondaryContainer, "Link") else category.look()
 
 /** Avviso in cima alla lista dopo un'operazione: riuscita (verde) o fallita (rossa). */
 private data class GitaNotice(val text: String, val isError: Boolean = false)

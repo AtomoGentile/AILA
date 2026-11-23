@@ -5408,8 +5408,8 @@ fun MainAppShell(
                         // "indietro" riapre la Ricerca (vedi openTabFromOverlay).
                         onOpenCircular = { circular -> selectedCircularForDetail = circular },
                         onOpenCirculars = { openTabFromOverlay(MainTab.CLASS, AppTheme.TintBlue) { classSection = ClassSection.CIRCULARS } },
-                        onOpenCalendar = { openTabFromOverlay(MainTab.CALENDAR, AppTheme.TintAmber) },
-                        onOpenBoard = { openTabFromOverlay(MainTab.CLASS, AppTheme.TintViolet) { classSection = ClassSection.BOARD } }
+                        onOpenCalendar = { openTabFromOverlay(MainTab.CALENDAR, AppTheme.TertiaryContainer) },
+                        onOpenBoard = { openTabFromOverlay(MainTab.CLASS, AppTheme.SecondaryContainer) { classSection = ClassSection.BOARD } }
                     )
                 }
                 ShellRoute.BUREAUCRACY -> {
