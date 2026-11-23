@@ -81,6 +81,7 @@ fun SeatMapScreen(
     assignments: List<DeskAssignment>,
     studentsMap: Map<String, User>,
     isPreferencesOpen: Boolean,
+    onOpenPreferences: (() -> Unit)? = null,
     /** Quanti hanno votato le preferenze; null finche' non e' stato caricato. */
     preferencesProgress: circolareplus.data.remote.dto.PreferencesProgressDto? = null,
     /** Fantocci della classe: studenti inventati che occupano un posto in mappa come tutti. */
@@ -516,9 +517,23 @@ fun SeatMapScreen(
                 content = adminPanel
             )
         }
+        val voteAction = onOpenPreferences.takeIf { isPreferencesOpen }
+        val searchOrVote: @Composable () -> Unit = {
+            if (voteAction != null) {
+                AilaPrimaryButton(
+                    text = "Vota",
+                    onClick = voteAction,
+                    modifier = Modifier.padding(if (AppTheme.isNothing) 20.dp else AppTheme.Space16),
+                    fillMaxWidth = true,
+                    large = true
+                )
+            } else {
+                searchBlock()
+            }
+        }
         val controlsPanel: @Composable () -> Unit = {
             AilaCard(modifier = Modifier.ailaAppear(0)) {
-                searchBlock()
+                searchOrVote()
                 if (isRepresentative) {
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = AppTheme.Space16),
@@ -531,7 +546,7 @@ fun SeatMapScreen(
         }
         if (AppTheme.isNothing) {
             NothingSeatMapContent(assignments, studentsMap, highlightedId, isRepresentative, isGeneratingProposals,
-                { showManagement = true }, searchBlock, Modifier.weight(1f))
+                { showManagement = true }, searchOrVote, Modifier.weight(1f))
         } else {
         // Tablet e iPad larghi: ricerca e pannello del Rappresentante in una colonna a sinistra,
         // la mappa dell'aula a destra, sempre in vista mentre si regolano i pesi o si cerca.
@@ -569,8 +584,12 @@ fun SeatMapScreen(
         fullRow {
             SectionFeatureCard(
                 title="La tua aula",
-                description=if(assignments.isEmpty()) "Prima di assegnare i posti si raccolgono le preferenze." else "Cerca un compagno o trova il tuo posto. Nell’intestazione trovi lo storico e l’esportazione.",
-                badge=if(isPreferencesOpen) "Preferenze aperte" else if(assignments.isNotEmpty()) "${assignments.size} banchi · disposizione pubblicata" else "In attesa della disposizione",
+                description = when {
+                    voteAction != null -> "La votazione per i posti è aperta."
+                    assignments.isEmpty() -> "Prima di assegnare i posti si raccolgono le preferenze."
+                    else -> "Cerca un compagno o trova il tuo posto. Nell’intestazione trovi lo storico e l’esportazione."
+                },
+                badge=if(assignments.isNotEmpty()) "${assignments.size} banchi · disposizione pubblicata" else "In attesa della disposizione",
                 icon={AppIcons.Chair(Modifier.size(24.dp),MaterialTheme.colorScheme.tertiary)}
             )
         }

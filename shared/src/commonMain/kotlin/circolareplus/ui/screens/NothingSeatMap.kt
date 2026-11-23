@@ -28,12 +28,12 @@ import circolareplus.design.*
 @Composable
 internal fun NothingSeatMapContent(assignments: List<DeskAssignment>, studentsMap: Map<String,User>,
     focusedStudentId: String?, representative: Boolean, generating: Boolean,
-    onManage: ()->Unit, search: @Composable ()->Unit,
+    onManage: ()->Unit, controls: @Composable ()->Unit,
     modifier: Modifier=Modifier) {
     var detail by remember {mutableStateOf<DeskAssignment?>(null)}
     val cells=remember(assignments) {deskGridCells(assignments)}
     Column(modifier.fillMaxWidth()) {
-        search()
+        controls()
         Row(Modifier.fillMaxWidth().padding(horizontal=20.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
             Text(if(generating) "Ricerca in corso…" else "${assignments.count {!it.isVacantDesk}} banchi",Modifier.weight(1f),style=MaterialTheme.typography.labelSmall,color=AppTheme.TextMuted)
             if(representative) AilaTextButton(onManage) {Text("Gestione")}

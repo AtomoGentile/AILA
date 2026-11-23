@@ -1,296 +1,298 @@
 package circolareplus.ui.screens
 
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import circolareplus.design.AilaAdaptiveCardList
+import circolareplus.design.AilaBackBar
+import circolareplus.design.AilaCard
+import circolareplus.design.AilaIconButton
 import circolareplus.design.AilaPrimaryButton
+import circolareplus.design.AilaProgressBar
+import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
-import circolareplus.design.ailaBouncySpring
-import circolareplus.design.ailaColorSpec
-import circolareplus.domain.model.SocialPreference
+import circolareplus.design.LocalBottomBarPadding
+import circolareplus.domain.model.PublishedSeatMap
 import circolareplus.domain.model.SocialPreferenceScore
 import circolareplus.domain.model.User
+import circolareplus.util.formatDayMonth
+import kotlinx.coroutines.CancellationException
+
+private const val MAX_EXTREME_VOTES = 2
 
 @Composable
 fun SocialPreferencesVotingScreen(
     classmates: List<User>,
     currentVotes: Map<String, SocialPreferenceScore>,
     onVoteChanged: (targetStudentId: String, score: SocialPreferenceScore) -> Unit,
-    loadHistory: suspend () -> List<circolareplus.domain.model.PublishedSeatMap> = { emptyList() },
+    loadHistory: suspend () -> List<PublishedSeatMap> = { emptyList() },
     studentsMap: Map<String, User> = classmates.associateBy { it.id },
     currentUserId: String? = null,
+    onBack: () -> Unit,
     onSubmitVotes: () -> Unit
 ) {
     var showHistory by remember { mutableStateOf(false) }
-    if (showHistory) SeatMapHistoryDialog(
-        studentsMap = studentsMap, loadHistory = loadHistory, canManage = false,
-        onDeleteMap = {}, onClearHistory = {}, onHistoryChanged = {}, onDismiss = { showHistory = false }
-    )
-    var publishedMaps by remember { mutableStateOf<List<circolareplus.domain.model.PublishedSeatMap>>(emptyList()) }
-    var historyError by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) {
-        try { publishedMaps = loadHistory() }
-        catch (e: kotlinx.coroutines.CancellationException) { throw e }
-        catch (e: Exception) { historyError = "Storico non disponibile: apri le mappe precedenti per riprovare." }
+    if (showHistory) {
+        SeatMapHistoryDialog(
+            studentsMap = studentsMap,
+            loadHistory = loadHistory,
+            canManage = false,
+            onDeleteMap = {},
+            onClearHistory = {},
+            onHistoryChanged = {},
+            onDismiss = { showHistory = false }
+        )
     }
-    fun pastPositions(studentId: String): String = publishedMaps.take(4).mapNotNull { map ->
-        map.assignments.firstOrNull { studentId in listOfNotNull(it.studentAId, it.studentBId, it.studentCId) }?.let {
-            "${map.publishedAt.take(10)}: fila ${it.row + 1}, banco ${it.column + 1}"
+    var publishedMaps by remember { mutableStateOf<List<PublishedSeatMap>>(emptyList()) }
+    var historyUnavailable by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        try {
+            publishedMaps = loadHistory()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            historyUnavailable = true
         }
-    }.joinToString(" · ")
-    // Calcolo limiti massimi per prevenire abusi (max 2 voti +2 e max 2 voti -2)
-    val plusTwoCount = currentVotes.values.count { it == SocialPreferenceScore.STRONG_AFFINITY }
-    val minusTwoCount = currentVotes.values.count { it == SocialPreferenceScore.STRONG_REJECTION }
+    }
 
-    // Votare tutti è obbligatorio: "0" non è più preselezionato per chi non è mai stato votato,
-    // è una scelta esplicita come le altre (e viene registrato come tale). Il tasto Salva resta
-    // spento finché resta anche un solo compagno senza voto.
-    val missingVotes = classmates.count { it.id !in currentVotes }
+    val remainingPlusTwo = MAX_EXTREME_VOTES -
+        currentVotes.values.count { it == SocialPreferenceScore.STRONG_AFFINITY }
+    val remainingMinusTwo = MAX_EXTREME_VOTES -
+        currentVotes.values.count { it == SocialPreferenceScore.STRONG_REJECTION }
+    val votedCount = classmates.count { it.id in currentVotes }
+    val isComplete = votedCount == classmates.size
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppTheme.BackgroundLight)
-            .padding(
-                start = AppTheme.Space16,
-                end = AppTheme.Space16,
-                top = AppTheme.Space16,
-                // La barra delle tab galleggia sopra il contenuto (vedi FloatingTabBar in
-                // MainAppShell): senza questo margine copriva il pulsante "Salva preferenze"
-                // appoggiato al bordo in basso, come in tutte le altre schermate della tab.
-                bottom = AppTheme.Space12 + circolareplus.design.LocalBottomBarPadding.current
-            )
+        modifier = Modifier.fillMaxSize().background(AppTheme.BackgroundLight)
     ) {
-        Text(
-            text = "Esprimi le tue Preferenze",
-            style = MaterialTheme.typography.titleLarge,
-            color = AppTheme.TextDark
-        )
-        Text(
-            text = "Finestra aperta dal Rappresentante \u2022 Voti strettamente confidenziali",
-            style = MaterialTheme.typography.bodySmall,
-            color = AppTheme.TextMuted
-        )
-
-        Text(
-            text = "Devi votare tutti i compagni prima di salvare" +
-                if (missingVotes > 0) " • ne mancano $missingVotes" else " • hai votato tutti",
-            style = MaterialTheme.typography.labelMedium,
-            color = if (missingVotes > 0) AppTheme.PollDarkRed else AppTheme.TintGreenInk,
-            modifier = Modifier.padding(top = AppTheme.Space4)
-        )
-
-        Spacer(modifier = Modifier.height(AppTheme.Space12))
-
-        circolareplus.design.AilaTextButton(onClick = { showHistory = true }) { Text("Dove eravamo seduti: mappe precedenti") }
-        historyError?.let { Text(it, color = AppTheme.TextMuted) }
-        currentUserId?.let { id ->
-            val positions = pastPositions(id)
-            if (positions.isNotBlank()) Text("I tuoi posti: $positions", color = AppTheme.TextMuted, style = MaterialTheme.typography.bodySmall)
-        }
-        // Contatori di Budget (+2 e -2)
-        Card(
-            shape = RoundedCornerShape(AppTheme.CardCornerRadius),
-            colors = CardDefaults.cardColors(containerColor = AppTheme.TintBlue),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(AppTheme.Space12),
-                horizontalArrangement = Arrangement.SpaceAround
-            ) {
-                Text(
-                    text = "Preferenza massima (+2): $plusTwoCount/2",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = AppTheme.TintBlueInk
-                )
-                Text(
-                    text = "Rifiuto assoluto (-2): $minusTwoCount/2",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = AppTheme.PollDarkRed
-                )
+        AilaBackBar(title = "Preferenze di posto", onBackClick = onBack) {
+            AilaIconButton(contentDescription = "Storico dei posti", onClick = { showHistory = true }) { tint ->
+                AppIcons.History(modifier = Modifier.size(19.dp), color = tint)
             }
         }
-
-        Spacer(modifier = Modifier.height(AppTheme.Space16))
-
-        circolareplus.design.AilaAdaptiveCardList(
+        AilaAdaptiveCardList(
             items = classmates,
             key = { it.id },
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            contentPadding = PaddingValues()
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            contentPadding = PaddingValues(
+                start = AppTheme.Space16,
+                end = AppTheme.Space16,
+                top = AppTheme.Space4,
+                bottom = AppTheme.Space12
+            ),
+            header = {
+                VotingSummary(
+                    votedCount = votedCount,
+                    total = classmates.size,
+                    remainingPlusTwo = remainingPlusTwo.coerceAtLeast(0),
+                    remainingMinusTwo = remainingMinusTwo.coerceAtLeast(0),
+                    lastSeat = currentUserId?.let { publishedMaps.lastSeatLabel(it) },
+                    historyUnavailable = historyUnavailable
+                )
+            }
         ) { _, classmate ->
-            // null = non ancora votato: nessun pulsante selezionato.
             val currentScore = currentVotes[classmate.id]
-
-            Card(
-                shape = RoundedCornerShape(AppTheme.CardCornerRadius),
-                colors = CardDefaults.cardColors(containerColor = AppTheme.SurfaceWhite),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(AppTheme.Space12)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "${classmate.firstName} ${classmate.lastName}",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = AppTheme.TextDark,
-                            modifier = Modifier.weight(1f)
-                        )
-                        if (currentScore == null) {
+            AilaCard {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(AppTheme.Space12),
+                    verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                text = "Da votare",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = AppTheme.PollDarkRed
+                                text = "${classmate.firstName} ${classmate.lastName}",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = AppTheme.TextDark,
+                                modifier = Modifier.weight(1f)
                             )
+                            if (currentScore == null) {
+                                Text("Da votare", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
+                            }
+                        }
+                        publishedMaps.lastSeatLabel(classmate.id)?.let { lastSeat ->
+                            Text(lastSeat, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
                         }
                     }
-
-                    val positions = pastPositions(classmate.id)
-                    if (positions.isNotBlank()) Text(positions, color = AppTheme.TextMuted, style = MaterialTheme.typography.bodySmall)
-                    Spacer(modifier = Modifier.height(AppTheme.Space8))
-
-                    // Bottoni per i 5 valori (+2, +1, 0, -1, -2): colori fissi in ogni tema
-                    // (AppTheme.Pref*), il testo sopra e' sempre AppTheme.OnPollColor.
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().selectableGroup(),
                         horizontalArrangement = Arrangement.spacedBy(AppTheme.Space4)
                     ) {
-                        SocialScoreButton(
-                            label = "+2",
-                            isSelected = currentScore == SocialPreferenceScore.STRONG_AFFINITY,
-                            enabled = currentScore == SocialPreferenceScore.STRONG_AFFINITY || plusTwoCount < 2,
-                            activeColor = AppTheme.PollGreen,
-                            onClick = { onVoteChanged(classmate.id, SocialPreferenceScore.STRONG_AFFINITY) }
-                        )
-                        SocialScoreButton(
-                            label = "+1",
-                            isSelected = currentScore == SocialPreferenceScore.MEDIUM_AFFINITY,
-                            activeColor = AppTheme.PrefPlusOne,
-                            onClick = { onVoteChanged(classmate.id, SocialPreferenceScore.MEDIUM_AFFINITY) }
-                        )
-                        SocialScoreButton(
-                            label = "0",
-                            isSelected = currentScore == SocialPreferenceScore.NEUTRAL,
-                            activeColor = AppTheme.PrefNeutral,
-                            onClick = { onVoteChanged(classmate.id, SocialPreferenceScore.NEUTRAL) }
-                        )
-                        SocialScoreButton(
-                            label = "-1",
-                            isSelected = currentScore == SocialPreferenceScore.MILD_REJECTION,
-                            activeColor = AppTheme.PrefMinusOne,
-                            onClick = { onVoteChanged(classmate.id, SocialPreferenceScore.MILD_REJECTION) }
-                        )
-                        SocialScoreButton(
-                            label = "-2",
-                            isSelected = currentScore == SocialPreferenceScore.STRONG_REJECTION,
-                            enabled = currentScore == SocialPreferenceScore.STRONG_REJECTION || minusTwoCount < 2,
-                            activeColor = AppTheme.PrefMinusTwo,
-                            onClick = { onVoteChanged(classmate.id, SocialPreferenceScore.STRONG_REJECTION) }
-                        )
+                        for (score in SocialPreferenceScore.entries) {
+                            val selected = score == currentScore
+                            val eligible = when (score) {
+                                SocialPreferenceScore.STRONG_AFFINITY -> remainingPlusTwo > 0
+                                SocialPreferenceScore.STRONG_REJECTION -> remainingMinusTwo > 0
+                                else -> true
+                            }
+                            SocialScoreButton(
+                                score = score,
+                                isSelected = selected,
+                                enabled = selected || eligible,
+                                onClick = { onVoteChanged(classmate.id, score) }
+                            )
+                        }
                     }
                 }
             }
         }
-
-        Spacer(modifier = Modifier.height(AppTheme.Space12))
-
-        // Pulsante di sistema al posto del Button di Material: stesso gradiente, stessa forma e
-        // stesso feedback al tocco degli altri pulsanti principali. "large": testo a 15sp come
-        // prima e altezza minima di 48dp, e' l'azione che chiude la schermata.
-        AilaPrimaryButton(
-            text = if (missingVotes == 0) "Salva preferenze" else "Vota ancora $missingVotes ${if (missingVotes == 1) "compagno" else "compagni"}",
-            onClick = onSubmitVotes,
-            enabled = missingVotes == 0,
-            fillMaxWidth = true,
-            large = true
-        )
+        HorizontalDivider(color = AppTheme.FieldOutline)
+        Box(
+            modifier = Modifier.fillMaxWidth().padding(
+                start = AppTheme.Space16,
+                end = AppTheme.Space16,
+                top = AppTheme.Space12,
+                bottom = AppTheme.Space12 + LocalBottomBarPadding.current
+            )
+        ) {
+            AilaPrimaryButton(
+                text = "Salva preferenze",
+                onClick = onSubmitVotes,
+                enabled = isComplete,
+                fillMaxWidth = true,
+                large = true
+            )
+        }
     }
 }
 
 @Composable
-fun RowScope.SocialScoreButton(
-    label: String,
+private fun VotingSummary(
+    votedCount: Int,
+    total: Int,
+    remainingPlusTwo: Int,
+    remainingMinusTwo: Int,
+    lastSeat: String?,
+    historyUnavailable: Boolean
+) {
+    AilaCard {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(AppTheme.Space16),
+            verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (votedCount == total) "Votazione completa" else "Vota ogni compagno",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = AppTheme.TextDark,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = "$votedCount / $total",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = AppTheme.TextDark
+                )
+            }
+            AilaProgressBar(progress = if (total == 0) 0f else votedCount.toFloat() / total)
+            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                VoteBudget("+2", remainingPlusTwo, AppTheme.TintGreen, AppTheme.TintGreenInk, Modifier.weight(1f))
+                VoteBudget("−2", remainingMinusTwo, AppTheme.TintRed, AppTheme.TintRedInk, Modifier.weight(1f))
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AppIcons.Lock(modifier = Modifier.size(14.dp), color = AppTheme.TextMuted)
+                Text("Voti riservati", style = MaterialTheme.typography.labelMedium, color = AppTheme.TextMuted)
+            }
+            when {
+                historyUnavailable -> Text(
+                    "Storico non disponibile. Riprova dall’icona in alto.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTheme.TextMuted
+                )
+                lastSeat != null -> Text(
+                    "Il tuo ultimo posto · $lastSeat",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTheme.TextMuted
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun VoteBudget(label: String, remaining: Int, background: Color, textColor: Color, modifier: Modifier) {
+    val shape = RoundedCornerShape(12.dp)
+    Row(
+        modifier = modifier.background(background, shape).padding(horizontal = AppTheme.Space8, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = MaterialTheme.typography.labelLarge, color = textColor)
+        Text("$remaining di $MAX_EXTREME_VOTES rimasti", style = MaterialTheme.typography.labelSmall, color = textColor)
+    }
+}
+
+@Composable
+private fun RowScope.SocialScoreButton(
+    score: SocialPreferenceScore,
     isSelected: Boolean,
-    enabled: Boolean = true,
-    activeColor: Color,
+    enabled: Boolean,
     onClick: () -> Unit
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-
-    val targetBgColor = when {
-        isSelected -> activeColor
-        !enabled -> AppTheme.TintSlate
-        else -> AppTheme.SurfaceWhite
+    val (label, description, selectedColor) = when (score) {
+        SocialPreferenceScore.STRONG_AFFINITY -> Triple("+2", "Preferenza massima", AppTheme.PollGreen)
+        SocialPreferenceScore.MEDIUM_AFFINITY -> Triple("+1", "Gradimento", AppTheme.PrefPlusOne)
+        SocialPreferenceScore.NEUTRAL -> Triple("0", "Indifferente", AppTheme.PrefNeutral)
+        SocialPreferenceScore.MILD_REJECTION -> Triple("−1", "Preferirei di no", AppTheme.PrefMinusOne)
+        SocialPreferenceScore.STRONG_REJECTION -> Triple("−2", "Rifiuto assoluto", AppTheme.PrefMinusTwo)
     }
-
-    val animatedBgColor by animateColorAsState(
-        targetValue = targetBgColor,
-        animationSpec = ailaColorSpec(),
-        label = "socialBtnBg"
-    )
-
-    val animatedBorderColor by animateColorAsState(
-        targetValue = if (isSelected) activeColor else AppTheme.FieldOutline,
-        animationSpec = ailaColorSpec(),
-        label = "socialBtnBorder"
-    )
-
-    val animatedScale by animateFloatAsState(
-        targetValue = if (isPressed && enabled) 0.93f else if (isSelected) 1.04f else 1.0f,
-        // Pressione e selezione rispondono al dito: la molla giocosa del sistema, che con
-        // "Riduci movimento" perde il rimbalzo.
-        animationSpec = ailaBouncySpring(),
-        label = "socialBtnScale"
-    )
-
+    val shape = RoundedCornerShape(if (AppTheme.isNothing) 8.dp else 14.dp)
+    val borderColor = when {
+        isSelected -> selectedColor
+        enabled -> AppTheme.FieldOutline
+        else -> Color.Transparent
+    }
     Box(
         modifier = Modifier
             .weight(1f)
-            // 44dp minimi: con il solo padding verticale il bottone restava sotto i 44dp.
-            .heightIn(min = 44.dp)
-            .graphicsLayer { scaleX = animatedScale; scaleY = animatedScale }
-            .clip(RoundedCornerShape(AppTheme.SmallElementRadius))
-            .background(animatedBgColor)
-            .border(1.dp, animatedBorderColor, RoundedCornerShape(AppTheme.SmallElementRadius))
-            .clickable(
-                enabled = enabled,
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick
-            )
-            // Il voto scelto si distingue solo dal colore: lo diciamo anche al lettore di schermo.
-            .semantics { selected = isSelected }
-            .padding(vertical = AppTheme.Space12),
+            .heightIn(min = 48.dp)
+            .clip(shape)
+            .background(if (isSelected) selectedColor else AppTheme.TrackFill)
+            .border(1.dp, borderColor, shape)
+            .selectable(selected = isSelected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
+            .semantics { contentDescription = "$label, $description" },
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelLarge,
-            // Testo scuro fisso sui colori dei voti: il bianco sui pastelli scendeva fino a 1.4:1.
-            color = if (isSelected) AppTheme.OnPollColor else if (!enabled) AppTheme.TextFaint else AppTheme.TextDark
+            color = when {
+                isSelected -> AppTheme.OnPollColor
+                enabled -> AppTheme.TextDark
+                else -> AppTheme.TextFaint
+            }
         )
     }
+}
+
+private fun List<PublishedSeatMap>.lastSeatLabel(studentId: String): String? = firstNotNullOfOrNull { map ->
+    val desk = map.assignments.firstOrNull {
+        studentId == it.studentAId || studentId == it.studentBId || studentId == it.studentCId
+    } ?: return@firstNotNullOfOrNull null
+    val date = formatDayMonth(map.publishedAt).ifBlank { map.publishedAt.take(10) }
+    "Fila ${desk.row + 1}, banco ${desk.column + 1} · $date"
 }
