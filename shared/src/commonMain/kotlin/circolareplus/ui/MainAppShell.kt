@@ -3729,38 +3729,33 @@ fun MainAppShell(
                                         if (AppTheme.isGlass) Modifier else Modifier.background(AppTheme.BackgroundLight)
                                     )) {
                                     if (votingPreferences) {
-                                        Column(modifier = Modifier.fillMaxSize()) {
-                                            ScreenBackBar(
-                                                title = "Preferenze Sociali",
-                                                onBackClick = { seatMapMode = "MAP" }
-                                            )
-                                            SocialPreferencesVotingScreen(
-                                                currentUserId = user.id,
-                                                loadHistory = { AppContainer.seatMapRepository.getPublishedHistory() },
-                                                studentsMap = classmates.associateBy { it.id } + (user.id to user) + seatMapDummies.associateBy { it.id }.mapValues { it.value.asUser() },
-                                                classmates = classmates.filter { it.id != user.id },
-                                                currentVotes = socialVotes,
-                                                onVoteChanged = { targetId, score ->
-                                                    // Aggiornamento ottimistico: la scelta si vede subito e la
-                                                    // richiesta parte in background. Prima il voto compariva solo
-                                                    // a risposta del server arrivata, e sembrava che l'app laggasse.
-                                                    val previousScore = socialVotes[targetId]
-                                                    socialVotes[targetId] = score
-                                                    coroutineScope.launch {
-                                                        try {
-                                                            AppContainer.preferencesRepository.vote(targetId, score)
-                                                        } catch (e: CancellationException) {
-                                                            throw e
-                                                        } catch (e: Exception) {
-                                                            if (previousScore == null) socialVotes.remove(targetId)
-                                                            else socialVotes[targetId] = previousScore
-                                                            seatMapActionError = "Voto non registrato: ${e.message}"
-                                                        }
+                                        SocialPreferencesVotingScreen(
+                                            currentUserId = user.id,
+                                            loadHistory = { AppContainer.seatMapRepository.getPublishedHistory() },
+                                            studentsMap = classmates.associateBy { it.id } + (user.id to user) + seatMapDummies.associateBy { it.id }.mapValues { it.value.asUser() },
+                                            classmates = classmates.filter { it.id != user.id },
+                                            currentVotes = socialVotes,
+                                            onVoteChanged = { targetId, score ->
+                                                // Aggiornamento ottimistico: la scelta si vede subito e la
+                                                // richiesta parte in background. Prima il voto compariva solo
+                                                // a risposta del server arrivata, e sembrava che l'app laggasse.
+                                                val previousScore = socialVotes[targetId]
+                                                socialVotes[targetId] = score
+                                                coroutineScope.launch {
+                                                    try {
+                                                        AppContainer.preferencesRepository.vote(targetId, score)
+                                                    } catch (e: CancellationException) {
+                                                        throw e
+                                                    } catch (e: Exception) {
+                                                        if (previousScore == null) socialVotes.remove(targetId)
+                                                        else socialVotes[targetId] = previousScore
+                                                        seatMapActionError = "Voto non registrato: ${e.message}"
                                                     }
-                                                },
-                                                onSubmitVotes = { seatMapMode = "MAP" }
-                                            )
-                                        }
+                                                }
+                                            },
+                                            onBack = { seatMapMode = "MAP" },
+                                            onSubmitVotes = { seatMapMode = "MAP" }
+                                        )
                                     } else {
                                         Column(modifier = Modifier.fillMaxSize()) {
                                             val memoizedStudentsMap = remember(classmates, user, seatMapDummies) {
