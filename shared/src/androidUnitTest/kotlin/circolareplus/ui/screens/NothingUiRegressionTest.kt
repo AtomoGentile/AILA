@@ -113,7 +113,7 @@ class NothingUiRegressionTest {
         compose.onNodeWithText("Gestione").assertIsDisplayed()
     }
 
-    @Test fun seatMapOffersVotingOnlyWhilePreferencesAreOpen() {
+    @Test fun seatMapReplacesSearchWithVotingWhilePreferencesAreOpen() {
         var preferencesOpen by androidx.compose.runtime.mutableStateOf(false)
         var votingOpened = false
         activity.get().setContent { AilaTheme {
@@ -126,14 +126,19 @@ class NothingUiRegressionTest {
                 onOpenPreferences = { votingOpened = true }
             )
         } }
-        compose.onNodeWithText("Vota le preferenze").assertDoesNotExist()
+        val vote = compose.onNodeWithText("Vota")
+        val search = compose.onNodeWithText("Cerca un compagno...", useUnmergedTree = true)
+        vote.assertDoesNotExist()
+        search.assertIsDisplayed()
         compose.runOnIdle { preferencesOpen = true }
-        compose.onNodeWithText("Vota le preferenze").assertIsDisplayed().performClick()
+        search.assertDoesNotExist()
+        vote.assertIsDisplayed().performClick()
         compose.runOnIdle {
             kotlin.test.assertTrue(votingOpened)
             preferencesOpen = false
         }
-        compose.onNodeWithText("Vota le preferenze").assertDoesNotExist()
+        vote.assertDoesNotExist()
+        search.assertIsDisplayed()
     }
 
     @Test fun representativeSeatManagementFillsTheWindowAndHidesNavigation() {

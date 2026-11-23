@@ -691,7 +691,7 @@ fun MainAppShell(
                 if (settings.isNotificationKindEnabled(NotificationKind.SEATMAP.key)) {
                     settings.addNotification(
                         "Preferenze compagni di banco",
-                        "Il Rappresentante ha aperto la votazione preferenze. Tocca per votare →",
+                        "Il Rappresentante ha aperto la votazione per i posti.",
                         NOTIFICATION_CATEGORY_SEATMAP_PREFERENCES
                     )
                     wroteSomething = true
@@ -1810,11 +1810,7 @@ fun MainAppShell(
                 classSection = ClassSection.BOARD
                 selectedTab = MainTab.CLASS
             }
-            NOTIFICATION_CATEGORY_SEATMAP_PREFERENCES -> {
-                selectedTab = MainTab.SEATMAP
-                seatMapMode = "VOTE_PREFERENCES"
-            }
-            NotificationKind.SEATMAP.key -> {
+            NOTIFICATION_CATEGORY_SEATMAP_PREFERENCES, NotificationKind.SEATMAP.key -> {
                 selectedTab = MainTab.SEATMAP
                 seatMapMode = "MAP"
             }
@@ -2074,22 +2070,14 @@ fun MainAppShell(
     // Ingresso nella votazione preferenze: precarica i voti già espressi dallo studente.
     LaunchedEffect(seatMapMode) {
         if (seatMapMode == "VOTE_PREFERENCES") {
-            // Notifica di apertura votazione preferenze
-            if (AppContainer.settings.isNotificationKindEnabled(NotificationKind.SEATMAP.key)) {
-                AppContainer.settings.addNotification(
-                    "Votazione delle preferenze aperta",
-                    "Esprimi i tuoi voti sulle preferenze di seduta",
-                    NOTIFICATION_CATEGORY_SEATMAP_PREFERENCES
-                )
-                notificationLog = AppContainer.settings.listNotifications()
-            }
-
             try {
                 val myVotes = AppContainer.preferencesRepository.myVotes()
                 socialVotes.clear()
                 myVotes.votes.forEach { v ->
                     socialVotes[v.toStudentId] = SocialPreferenceScore.fromValue(v.score)
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 seatMapActionError = "Impossibile caricare i tuoi voti precedenti."
             }
