@@ -9,14 +9,11 @@
   var restoreStreaming;
   var params = new URLSearchParams(location.search);
   var compatible = params.get('avvio') === 'compatibile';
-  var reducedGraphics = params.get('grafica') === 'ridotta';
   var ua = navigator.userAgent || '';
   var ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
 
-  if (ios && !reducedGraphics && !params.has('dpr')) {
-    try { reducedGraphics = localStorage.getItem('aila-grafica-ridotta') === '1'; }
-    catch (_) { /* Il recupero esplicito funziona anche senza storage. */ }
-  }
+  // Ripulisce il vecchio flag di emergenza (DPR 1) salvato dalla build precedente.
+  try { localStorage.removeItem('aila-grafica-ridotta'); } catch (_) {}
 
   // WebKit può completare il layout del viewport dopo l'avvio del runtime, per esempio
   // al rientro nella PWA installata o durante una rotazione. Skiko alloca il framebuffer
@@ -27,6 +24,10 @@
       return;
     }
     var viewport = document.getElementById('aila-viewport');
+    if (!viewport) {
+      start();
+      return;
+    }
     var lastWidth = 0;
     var lastHeight = 0;
     function check() {
@@ -52,61 +53,11 @@
       } catch (err) { /* Il messaggio resta comunque visibile nella schermata di avvio. */ }
     };
     trace(phase);
-  }
 
-  // Solo il recupero iOS adatta le funzioni grafiche di Skiko. I nomi e le posizioni
-  // degli argomenti corrispondono alle funzioni Wasm della versione inclusa nella PWA.
-  var lastNullFactory = '';
-  function recoveryImports(imports) {
-    var skia = imports && imports['./skiko.mjs'];
-    if (!skia) return imports;
-    var adapted = Object.create(skia);
-    var colorShader = skia.org_jetbrains_skia_Shader__1nMakeColorCS;
-    var readFloat = skia.skia_memGetFloat;
-    var gradientColors = { MakeLinearGradient: 4, MakeRadialGradient: 3, MakeSweepGradient: 4 };
-
-    // Se Skia rifiuta un gradiente, Compose richiede comunque uno Shader valido.
-    // Il primo colore mantiene lo spazio colore e l’opacità della decorazione.
-    Object.keys(skia).forEach(function (key) {
-      var factory = /^org_jetbrains_skia_(\w+)__1n(Make\w*|Default\w*)$/.exec(key);
-      if (!factory || typeof skia[key] !== 'function') return;
-      var create = skia[key];
-      Object.defineProperty(adapted, key, { value: function () {
-        var result = create.apply(null, arguments);
-        if (result !== 0) {
-          if (!ready) lastNullFactory = '';
-          return result;
-        }
-        var kind = factory[1], name = factory[2];
-        var offset = kind === 'Shader' ? gradientColors[name] : undefined;
-        if (offset !== undefined && colorShader && readFloat) {
-          var colors = arguments[offset], space = arguments[offset + 1];
-          if (colors && arguments[offset + 3] > 0) {
-            result = colorShader(readFloat(colors), readFloat(colors + 4),
-              readFloat(colors + 8), readFloat(colors + 12), space);
-          }
-        } else if (kind === 'ColorSpace' && name === 'MakeDisplayP3' && skia.org_jetbrains_skia_ColorSpace__1nMakeSRGB) {
-          // I due spazi colore restano referenziati per tutta la durata del runtime.
-          result = skia.org_jetbrains_skia_ColorSpace__1nMakeSRGB();
-        }
-        if (!ready) lastNullFactory = result ? '' : kind + '.' + name;
-        return result;
-      } });
-    });
-    var result = Object.create(imports);
-    Object.defineProperty(result, './skiko.mjs', { value: adapted });
-    return result;
-  }
-
-  if (compatible || (ios && reducedGraphics)) {
     var wasm = window.WebAssembly;
-    if (wasm && typeof wasm.instantiateStreaming === 'function') {
+    if (wasm && typeof wasm.instantiateStreaming === 'function' && typeof wasm.compileStreaming === 'function') {
       var originalStreaming = wasm.instantiateStreaming;
       var compatibleStreaming = async function (source, imports, options) {
-        if (ios && reducedGraphics) imports = recoveryImports(imports);
-        if (!compatible || typeof wasm.compileStreaming !== 'function') {
-          return originalStreaming.call(wasm, source, imports, options);
-        }
         var response = await source;
         var file = new URL(response.url, location.href).pathname.split('/').pop() || 'WebAssembly';
         trace('Compilazione: ' + file);
@@ -153,11 +104,6 @@
   window.__ailaStartupReady = function () {
     ready = true;
     clearTimeout(timer);
-    if (ios && params.get('grafica') === 'ridotta') {
-      try {
-        localStorage.setItem('aila-grafica-ridotta', '1');
-      } catch (err) { /* La modalità resta attiva per questa pagina. */ }
-    }
     if (trace) trace('Interfaccia avviata.');
     if (restoreStreaming) restoreStreaming();
   };
@@ -196,18 +142,11 @@
     var cause = errorDetail(error && error.cause && error.cause.message);
     if (cause && cause !== detail) detail += (detail ? ' · ' : '') + cause;
     if (/can't wrap nullptr/i.test(detail)) {
-      if (lastNullFactory) detail += ' · ' + lastNullFactory;
       var stack = error && typeof error.stack === 'string' ? error.stack : '';
       var frames = Array.from(stack.matchAll(/wasm[- ]function\[(\d+)\]/gi), function (match) { return match[1]; });
       if (frames.length) detail += ' · Wasm ' + frames.slice(0, 6).join('/');
     }
     fail('Errore durante l’avvio' + category + (detail ? ': ' + detail : '.'));
-    if (!ready && ios && !reducedGraphics && /can't wrap nullptr|cannot create surface|can't create opengl/i.test(detail)) {
-      reducedGraphics = true;
-      var retryUrl = new URL(location.href);
-      retryUrl.searchParams.set('grafica', 'ridotta');
-      location.replace(retryUrl.href);
-    }
   }
 
   document.addEventListener('click', function (event) {

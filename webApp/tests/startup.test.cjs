@@ -95,7 +95,12 @@ function startup({ userAgent = '', search = '', maxTouchPoints = 0, wasm, saved 
   };
   vm.runInNewContext(readFileSync(join(__dirname, '../src/wasmJsMain/resources/startup.js'), 'utf8'), {
     window, document, requestAnimationFrame: fn => frames.push(fn),
-    URL, URLSearchParams, navigator: { userAgent, maxTouchPoints }, localStorage: { setItem: storage.set.bind(storage), getItem: key => storage.get(key) ?? null },
+    URL, URLSearchParams, navigator: { userAgent, maxTouchPoints },
+    localStorage: {
+      setItem: storage.set.bind(storage),
+      getItem: key => storage.get(key) ?? null,
+      removeItem: storage.delete.bind(storage),
+    },
     location: {
       search,
       href: 'https://aila.test/' + search + '#diagnosi-avvio',
@@ -198,61 +203,28 @@ test('Riprova su iPhone passa una volta all’avvio compatibile e conserva il li
   assert.equal(second.replaced, undefined);
 });
 
-test('un errore di Skiko su iOS riparte a grafica ridotta e la conserva soltanto dopo il disegno', () => {
-  const error = { reason: new Error("Can't wrap nullptr") };
-  const first = startup({ userAgent: 'iPad', search: '?avvio=compatibile' });
-  first.windowListeners.unhandledrejection(error);
-  assert.equal(first.replaced, 'https://aila.test/?avvio=compatibile&grafica=ridotta#diagnosi-avvio');
-  assert.equal(first.storage.has('aila-grafica-ridotta'), false);
-
-  const second = startup({ userAgent: 'iPad', search: '?grafica=ridotta' });
-  second.windowListeners.unhandledrejection(error);
-  assert.equal(second.replaced, undefined);
-  assert.equal(second.storage.has('aila-grafica-ridotta'), false);
-  second.window.__ailaStartupReady();
-  assert.equal(second.storage.get('aila-grafica-ridotta'), '1');
+test('ripulisce il vecchio flag aila-grafica-ridotta senza ridirigere la pagina', () => {
+  const s = startup({ userAgent: 'iPhone', saved: [['aila-grafica-ridotta', '1']] });
+  assert.equal(s.storage.has('aila-grafica-ridotta'), false);
+  s.windowListeners.unhandledrejection({ reason: new Error("Can't wrap nullptr") });
+  assert.equal(s.replaced, undefined);
+  assert.match(s.nodes['aila-startup-error'].textContent, /Can't wrap nullptr/);
 });
 
-test('un errore di framebuffer fa partire il recupero anche con il nuovo motore', () => {
-  const s = startup({ userAgent: 'iPhone' });
-  s.windowListeners.unhandledrejection({ reason: new Error('Cannot create surface') });
-  assert.match(s.replaced, /grafica=ridotta/);
-});
-
-test('recupero iOS: mantiene il primo colore di un gradiente rifiutato da Skia', async () => {
-  let bindings;
-  const wasm = { instantiateStreaming: (_, imports) => { bindings = imports['./skiko.mjs']; } };
-  const original = wasm.instantiateStreaming;
-  const s = startup({ userAgent: 'iPhone', wasm, saved: [['aila-grafica-ridotta', '1']] });
-  const originalBindings = {
-    org_jetbrains_skia_Shader__1nMakeRadialGradient: () => 0,
-    org_jetbrains_skia_Shader__1nMakeLinearGradient: () => 37,
-    org_jetbrains_skia_Shader__1nMakeColorCS: (...rgbaAndSpace) => {
-      assert.deepEqual(rgbaAndSpace, [0.25, 0.5, 1, 0.75, 91]);
-      return 42;
-    },
-    skia_memGetFloat: addr => [0.25, 0.5, 1, 0.75][(addr - 100) / 4],
+test('avvio compatibile separa compileStreaming e instantiate e ripristina al termine', async () => {
+  const calls = [];
+  const wasm = {
+    async instantiateStreaming() { calls.push('streaming'); },
+    async compileStreaming() { calls.push('compile'); return 'mod'; },
+    async instantiate(mod, imports) { calls.push(['instantiate', mod, imports]); return 'inst'; },
   };
-  await wasm.instantiateStreaming(null, { './skiko.mjs': originalBindings });
-  assert.equal(bindings.org_jetbrains_skia_Shader__1nMakeRadialGradient(0, 0, 10, 100, 91, 0, 2), 42);
-  assert.equal(bindings.org_jetbrains_skia_Shader__1nMakeLinearGradient(), 37);
-  assert.equal(originalBindings.org_jetbrains_skia_Shader__1nMakeRadialGradient(), 0);
+  const original = wasm.instantiateStreaming;
+  const s = startup({ userAgent: 'iPad', search: '?avvio=compatibile', wasm });
+  const res = await wasm.instantiateStreaming(Promise.resolve({ url: 'https://aila.test/abc.wasm' }), { imp: 1 });
+  assert.equal(res.module, 'mod');
+  assert.equal(res.instance, 'inst');
+  assert.equal(calls[0], 'compile');
+  assert.equal(calls[1][0], 'instantiate');
   s.window.__ailaStartupReady();
   assert.equal(wasm.instantiateStreaming, original);
-});
-
-test('recupero iOS: usa sRGB se Display P3 manca e segnala le altre allocazioni fallite', async () => {
-  let bindings;
-  const wasm = { instantiateStreaming: (_, imports) => { bindings = imports['./skiko.mjs']; } };
-  const s = startup({ userAgent: 'iPad', search: '?grafica=ridotta', wasm });
-  await wasm.instantiateStreaming(null, { './skiko.mjs': {
-    org_jetbrains_skia_ColorSpace__1nMakeDisplayP3: () => 0,
-    org_jetbrains_skia_ColorSpace__1nMakeSRGB: () => 91,
-    org_jetbrains_skia_Paint__1nMake: () => 0,
-  } });
-  assert.equal(bindings.org_jetbrains_skia_ColorSpace__1nMakeDisplayP3(), 91);
-  assert.equal(bindings.org_jetbrains_skia_Paint__1nMake(), 0);
-  s.windowListeners.unhandledrejection({ reason: new Error("Can't wrap nullptr") });
-  assert.match(s.nodes['aila-startup-error'].textContent, /Paint\.Make/);
-  assert.equal(s.replaced, undefined);
 });

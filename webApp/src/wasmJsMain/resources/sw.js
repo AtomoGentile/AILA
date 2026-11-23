@@ -24,7 +24,7 @@
 
 // Da aumentare solo se cambia il modo di usare la cache: la vecchia viene cancellata
 // all'attivazione. Per un aggiornamento normale dell'app NON serve (vedi staleWhileRevalidate).
-const SHELL_CACHE = 'aila-shell-v2';
+const SHELL_CACHE = 'aila-shell-v3';
 const DB_NAME = 'aila-sw';
 const DB_VERSION = 1;
 const SYNC_TAG = 'aila-sync';
@@ -37,7 +37,7 @@ const SHELL_NETWORK_TIMEOUT_MS = 4000;
 
 // File fissi della shell, scaricati all'installazione. I nomi con hash (.wasm) si ricavano da
 // aila.js, cosi' non serve generare nulla a build.
-const SHELL_FILES = ['./', 'index.html', 'aila.js?boot=8', 'ios-keyboard.js?v=12', 'startup.js?v=7', 'perf-debug.js?v=2', 'styles.css?v=5', 'manifest.webmanifest',
+const SHELL_FILES = ['./', 'index.html', 'aila.js?boot=9', 'ios-keyboard.js?v=12', 'startup.js?v=8', 'perf-debug.js?v=3', 'styles.css?v=5', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/favicon-32.png', 'icons/apple-touch-icon.png'];
 
 // --- IndexedDB (ponte con l'app) ------------------------------------------------------------
