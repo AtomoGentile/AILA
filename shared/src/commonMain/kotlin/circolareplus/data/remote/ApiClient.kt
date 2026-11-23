@@ -7,6 +7,7 @@ import io.ktor.client.plugins.HttpRequestRetry
 import io.ktor.client.plugins.HttpSend
 import io.ktor.client.plugins.plugin
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.timeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.delete
@@ -231,11 +232,22 @@ class ApiClient(
         return response.parsedOrThrow()
     }
 
-    suspend inline fun <reified B, reified T> post(path: String, body: B, auth: Boolean = true): T {
+    suspend inline fun <reified B, reified T> post(
+        path: String,
+        body: B,
+        auth: Boolean = true,
+        timeoutMillis: Long? = null,
+    ): T {
         val text = sendText {
             client.post(baseUrl + path) {
                 if (auth) authHeader()
                 contentType(ContentType.Application.Json)
+                timeoutMillis?.let { limit ->
+                    timeout {
+                        requestTimeoutMillis = limit
+                        socketTimeoutMillis = limit
+                    }
+                }
                 setBody(body)
             }
         }

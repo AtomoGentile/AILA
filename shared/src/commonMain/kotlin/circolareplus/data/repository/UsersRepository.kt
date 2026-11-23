@@ -65,7 +65,11 @@ class UsersRepository(private val api: ApiClient) {
 
     /** Solo Rappresentante: codice monouso (24 ore) con cui un compagno reimposta la password. */
     suspend fun createResetCode(userId: String): ResetCodeResponseDto =
-        api.post<EmptyBodyDto, ResetCodeResponseDto>("/api/users/$userId/reset-code", EmptyBodyDto())
+        api.post<EmptyBodyDto, ResetCodeResponseDto>(
+            "/api/users/$userId/reset-code",
+            EmptyBodyDto(),
+            timeoutMillis = 30_000,
+        )
 
     /**
      * Solo Rappresentante: corregge l'altezza di un compagno (140-210, a scaglioni di 5 cm).

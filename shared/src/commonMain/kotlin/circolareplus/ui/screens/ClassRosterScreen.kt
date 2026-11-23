@@ -21,6 +21,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import circolareplus.data.remote.ApiException
+import circolareplus.data.remote.OFFLINE_STATUS
 import circolareplus.data.remote.dto.DisciplinePairDto
 import circolareplus.data.remote.dto.RatingEntryDto
 import circolareplus.design.AilaCard
@@ -350,8 +352,14 @@ private fun ResetCodeButton(entry: RatingEntryDto) {
                         result = circolareplus.data.AppContainer.usersRepository.createResetCode(entry.studentId)
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
+                    } catch (e: ApiException) {
+                        error = if (e.statusCode == OFFLINE_STATUS) {
+                            "Il servizio non ha risposto. Controlla la connessione e riprova."
+                        } else {
+                            e.message
+                        }
                     } catch (e: Exception) {
-                        error = (e as? circolareplus.data.remote.ApiException)?.message ?: "Impossibile generare il codice."
+                        error = "Impossibile generare il codice. Riprova."
                     } finally {
                         busy = false
                     }
