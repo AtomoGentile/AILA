@@ -37,13 +37,21 @@ xcrun --sdk iphonesimulator swiftc -sdk "$(xcrun --sdk iphonesimulator --show-sd
   -target "$(uname -m)-apple-ios18.0-simulator" main.swift -o "$app/Startup"
 codesign --force --sign - "$app"
 xcrun simctl install "$sim" "$app"
-SIMCTL_CHILD_AILA_TEST_CASE="${2:-normal}" SIMCTL_CHILD_AILA_URL="$1" xcrun simctl launch --stdout="$tmp/stdout" --stderr="$tmp/stderr" "$sim" "$id"
+url="$1"
+if [[ "${2:-normal}" == compatible ]]; then url="${url}?avvio=compatibile&grafica=ridotta"; fi
+SIMCTL_CHILD_AILA_TEST_CASE="${2:-normal}" SIMCTL_CHILD_AILA_URL="$url" xcrun simctl launch --stdout="$tmp/stdout" --stderr="$tmp/stderr" "$sim" "$id"
 data=$(xcrun simctl get_app_container "$sim" "$id" data)
 for i in {1..200}; do
   if [[ -f "$data/Documents/result" ]]; then
     cat "$data/Documents/result"
     grep -qx PASS "$data/Documents/result"
-    exit
+    for delay in 2 5; do
+      sleep "$delay"
+      shot="$GITHUB_WORKSPACE/screen-$delay.png"
+      xcrun simctl io "$sim" screenshot "$shot"
+      swift visible.swift "$shot"
+    done
+    exit 0
   fi
   sleep 1
 done

@@ -9,7 +9,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        startup: [normal, refuse-gradient]
+        startup: [normal, compatible, refuse-gradient]
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
     timeout-minutes: 30
@@ -18,3 +18,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash webApp/tests/ios/smoke.sh https://aila-scuola.pages.dev/ ${{ matrix.startup }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screen-${{ matrix.startup }}
+          path: screen*.png
+          if-no-files-found: ignore
