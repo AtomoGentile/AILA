@@ -11,4 +11,4 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - run: bash webApp/tests/ios/smoke.sh https://aila-scuola.pages.dev/
+      - run: bash webApp/tests/ios/smoke.sh https://aila-scuola.pages.dev/ refuse-gradient

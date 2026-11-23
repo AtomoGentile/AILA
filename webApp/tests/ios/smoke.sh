@@ -31,7 +31,7 @@ xcrun --sdk iphonesimulator swiftc -sdk "$(xcrun --sdk iphonesimulator --show-sd
   -target "$(uname -m)-apple-ios18.0-simulator" main.swift -o "$app/Startup"
 codesign --force --sign - "$app"
 xcrun simctl install "$sim" "$app"
-SIMCTL_CHILD_AILA_URL="$1" xcrun simctl launch "$sim" "$id"
+SIMCTL_CHILD_AILA_TEST_CASE="${2:-normal}" SIMCTL_CHILD_AILA_URL="$1" xcrun simctl launch "$sim" "$id"
 data=$(xcrun simctl get_app_container "$sim" "$id" data)
 for i in {1..100}; do
   if [[ -f "$data/Documents/result" ]]; then
