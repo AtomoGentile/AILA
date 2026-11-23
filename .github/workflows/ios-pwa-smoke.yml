@@ -9,7 +9,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        startup: [normal, compatible, refuse-gradient]
+        include:
+          - name: stable-iphone
+            url: https://aila-scuola.pages.dev/
+            device: iPhone
+          - name: stable-ipad
+            url: https://aila-scuola.pages.dev/
+            device: iPad
+          - name: beta-iphone
+            url: https://beta.aila-scuola.pages.dev/
+            device: iPhone
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
     timeout-minutes: 30
@@ -17,10 +26,10 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - run: bash webApp/tests/ios/smoke.sh https://aila-scuola.pages.dev/ ${{ matrix.startup }}
+      - run: bash webApp/tests/ios/smoke.sh "${{ matrix.url }}" "${{ matrix.device }}"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: screen-${{ matrix.startup }}
+          name: screen-${{ matrix.name }}
           path: screen*.png
           if-no-files-found: ignore

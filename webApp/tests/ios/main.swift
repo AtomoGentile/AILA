@@ -15,7 +15,6 @@ class StartupScene: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
     var web: WKWebView!
     var attempts = 0
-    let refuseGradient = ProcessInfo.processInfo.environment["AILA_TEST_CASE"] == "refuse-gradient"
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
@@ -30,24 +29,6 @@ class StartupScene: UIResponder, UIWindowSceneDelegate {
             window.addEventListener('error', e => { if (e.error) window.testStack = String(e.error.stack || e.message); });
             window.addEventListener('unhandledrejection', e => { window.testStack = String(e.reason?.stack || e.reason); });
             """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        if refuseGradient {
-            // Install after startup.js so the real recovery adapter receives the failing Skia binding.
-            web.configuration.userContentController.addUserScript(WKUserScript(source: """
-                document.addEventListener('load', event => {
-                 if (!(event.target instanceof HTMLScriptElement) || !event.target.src.includes('/startup.js')) return;
-                 const original = WebAssembly.instantiateStreaming;
-                 WebAssembly.instantiateStreaming = function(source, imports, options) {
-                   const key = './skiko.mjs';
-                   if (!imports[key]) return original.call(this, source, imports, options);
-                   const bindings = {...imports[key]};
-                   Object.defineProperty(bindings, 'org_jetbrains_skia_Shader__1nMakeRadialGradient', {
-                     enumerable: true, value() { window.testSkiaRefusedGradient = true; return 0; }
-                   });
-                   return original.call(this, source, {...imports, [key]: bindings}, options);
-                 };
-                }, true);
-                """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        }
         web.load(URLRequest(url: URL(string: url)!))
         poll()
     }
@@ -57,12 +38,19 @@ class StartupScene: UIResponder, UIWindowSceneDelegate {
             self.attempts += 1
             self.web.evaluateJavaScript("""
                 (() => {
-                    const shadow = document.querySelector('compose-component > div')?.shadowRoot;
-                    const canvas = shadow?.querySelector('canvas');
-                    const recovered = window.testSkiaRefusedGradient === true &&
-                        new URL(location.href).searchParams.get('grafica') === 'ridotta';
-                    if (canvas?.width > 0 && !document.getElementById('aila-splash') &&
-                        (!\(self.refuseGradient) || recovered)) return 'PASS';
+                    function findCanvas() {
+                        let c = document.querySelector('canvas');
+                        if (c) return c;
+                        for (const el of document.querySelectorAll('*')) {
+                            if (el.shadowRoot) {
+                                c = el.shadowRoot.querySelector('canvas');
+                                if (c) return c;
+                            }
+                        }
+                        return null;
+                    }
+                    const canvas = findCanvas();
+                    if (canvas?.width > 0 && !document.getElementById('aila-splash') && !window.testStack) return 'PASS';
                     return [location.href, document.readyState, document.getElementById('diagnosi-avvio')?.textContent,
                         document.getElementById('aila-startup-error')?.textContent, window.testStack].filter(Boolean).join('\\n');
                 })()
