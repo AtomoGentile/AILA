@@ -4883,7 +4883,22 @@ fun MainAppShell(
                         exitOnBackFromThread = initialForumThread != null,
                         onBack = { isInForum = false; initialForumThread = null },
                         onOpenAttachment = { remoteContent = it; localContent = null },
-                        onPrepareCalendar = { text -> isInForum = false; isInAcaHub = false; isInLocalFiles = false; isInAssistantScreen = true; askAssistant("Prepara gli eventi da confermare da questa fonte:\n$text") },
+                        onOpenAca = { prompt ->
+                            assistantMode = AssistantMode.GENERAL
+                            acaOverlayStart = assistantMessages.size
+                            acaResponsePresented = false
+                            acaOverlay = true
+                            if (!prompt.isNullOrBlank()) {
+                                askAssistant(prompt, acaForumContext)
+                            }
+                        },
+                        onPrepareCalendar = { text ->
+                            assistantMode = AssistantMode.GENERAL
+                            acaOverlayStart = assistantMessages.size
+                            acaResponsePresented = false
+                            acaOverlay = true
+                            askAssistant("Prepara gli eventi da confermare da questa fonte:\n$text", acaForumContext)
+                        },
                         onCalendarChanged = { reloadCalendar() },
                         onActivity = { contentActivity = it }
                     )
@@ -5909,6 +5924,7 @@ fun MainAppShell(
             (selectedCircularForDetail?:paneCircular)?.let{"Circolare ${it.number}: ${it.title}\n${classifications[it.number]?.personalSummary.orEmpty()}"}.orEmpty()+
             eventDetailToShow?.toString().orEmpty()+when { shellRoute == ShellRoute.FORUM || (shellRoute == ShellRoute.TABS && selectedTab == MainTab.CLASS && classSection == ClassSection.PERE) -> acaForumContext; shellRoute == ShellRoute.CONTENT -> acaDocumentContext; else -> "" }).take(6000)
         val acaHasDocument = shellRoute == ShellRoute.CONTENT || selectedCircularForDetail != null || paneCircular != null
+        val acaAutoContext = acaHasDocument || shellRoute == ShellRoute.FORUM || (shellRoute == ShellRoute.TABS && selectedTab == MainTab.CLASS && classSection == ClassSection.PERE)
         val acaContextPermitted = circolareplus.ai.AcaPolicyState.preferences.let { p ->
             when {
                 shellRoute == ShellRoute.CONTENT -> p.allows("DOCUMENTS") && p.attachmentConsent
@@ -5945,7 +5961,7 @@ fun MainAppShell(
             onOpenChat={draft,includeContext->
                 acaChatOpening=true
                 acaChatDraft=draft
-                acaChatContext=if((includeContext || acaHasDocument) && acaContextPermitted)acaPageContext else ""
+                acaChatContext=if((includeContext || acaAutoContext) && acaContextPermitted)acaPageContext else ""
                 acaOverlay=false;selectedCircularForDetail=null;paneCircular=null;eventDetailToShow=null
                 isInSettingsScreen=false;isInBackgroundDebugScreen=false;isInProfileScreen=false;isInClassRosterScreen=false
                 localContent=null;remoteContent=null;isInForum=false;isInAcaHub=false;isInLocalFiles=false
@@ -5954,7 +5970,7 @@ fun MainAppShell(
             onSend={question,includeContext->
                 acaOverlayStart=assistantMessages.size
                 acaResponsePresented=false
-                val useContext=includeContext || acaHasDocument
+                val useContext=includeContext || acaAutoContext
                 if(!useContext || acaContextPermitted)askAssistant(question,if(useContext)acaPageContext else "")
                 else appendAssistantMessage(assistantConversationId,AssistantMessage("context-${currentTimeMillis()}",AssistantAuthor.ASSISTANT,"Attiva il servizio e i consensi per questo contesto nelle impostazioni AI.",isError=true))
             }

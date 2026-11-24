@@ -5,6 +5,7 @@ package circolareplus.ui.screens
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -300,35 +301,31 @@ internal fun BureaucracyScreen(
                     practice != null -> {
                         val canEdit = canManage && practice.archivedAt == null
                         val description = practice.description
-                        if (description.isNotBlank() || canEdit) {
-                            item {
-                                PracticeInstructions(
+                        val hasDetails = description.isNotBlank() || practice.dueDate != null || practice.materials.isNotEmpty() || canEdit
+                        if (hasDetails) {
+                            item(key = "practice_details_menu") {
+                                PracticeDetailsMenuCard(
                                     description = description,
-                                    onEdit = if (canEdit && !busy) {
+                                    dueDate = practice.dueDate,
+                                    materials = practice.materials,
+                                    canEdit = canEdit,
+                                    busy = busy,
+                                    onEditInstructions = if (canEdit && !busy) {
                                         { actionError = null; editingInstructions = true }
-                                    } else null
-                                )
-                            }
-                        }
-                        if (practice.dueDate != null || canEdit) {
-                            item {
-                                PracticeDeadline(
-                                    date = practice.dueDate,
-                                    onEdit = if (canEdit && !busy) {
+                                    } else null,
+                                    onEditDeadline = if (canEdit && !busy) {
                                         { actionError = null; editingDeadline = true }
+                                    } else null,
+                                    onOpenMaterial = { material -> openMaterial(practice.id, material) },
+                                    onRemoveMaterial = if (canEdit) {
+                                        { material -> actionError = null; removingMaterial = material }
                                     } else null
                                 )
                             }
-                        }
-                        if (practice.materials.isNotEmpty()) {
-                            item { PracticeSectionTitle("Documenti e circolari") }
-                            items(practice.materials, key = { "material:${it.id}" }) { material ->
-                                PracticeMaterialRow(
-                                    material, !busy,
-                                    onOpen = { openMaterial(practice.id, material) },
-                                    onRemove = if (canEdit) {
-                                        { actionError = null; removingMaterial = material }
-                                    } else null
+                            item(key = "practice_details_divider") {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(vertical = 4.dp),
+                                    color = AppTheme.Hairline
                                 )
                             }
                         }
@@ -789,6 +786,127 @@ private fun PracticeCircularPicker(
         circulars.filterNot { it.number in linked }, loading, pageError, busy,
         onLoadMore = ::loadPage, hasMore = hasMore, onPick = onPick
     )
+}
+
+@Composable
+private fun PracticeDetailsMenuCard(
+    description: String,
+    dueDate: String?,
+    materials: List<BureaucracyMaterialDto>,
+    canEdit: Boolean,
+    busy: Boolean,
+    onEditInstructions: (() -> Unit)?,
+    onEditDeadline: (() -> Unit)?,
+    onOpenMaterial: (BureaucracyMaterialDto) -> Unit,
+    onRemoveMaterial: ((BureaucracyMaterialDto) -> Unit)?
+) {
+    AilaCard {
+        Column(Modifier.fillMaxWidth()) {
+            var hasPreviousSection = false
+
+            if (description.isNotBlank() || canEdit) {
+                hasPreviousSection = true
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (onEditInstructions != null) Modifier.clickable(onClick = onEditInstructions)
+                            else Modifier
+                        )
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        AilaIconTile(tint = AppTheme.TintAmber, size = 38.dp) {
+                            AppIcons.Document(Modifier.size(19.dp), AppTheme.TintAmberInk)
+                        }
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                            Text(
+                                "Istruzioni per la classe",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = AppTheme.TextDark
+                            )
+                            Text(
+                                if (description.isBlank()) "Tocca per aggiungere cosa portare o compilare"
+                                else "Cosa portare o compilare per questa pratica",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = AppTheme.TextMuted
+                            )
+                        }
+                        if (onEditInstructions != null) {
+                            AppIcons.Pencil(Modifier.size(16.dp), AppTheme.TextFaint)
+                        }
+                    }
+                    if (description.isNotBlank()) {
+                        Text(
+                            text = description,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = AppTheme.TextDark
+                        )
+                    }
+                }
+            }
+
+            if (dueDate != null || canEdit) {
+                if (hasPreviousSection) {
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = AppTheme.Hairline)
+                }
+                hasPreviousSection = true
+                AilaListRow(
+                    title = "Scadenza",
+                    subtitle = dueDate?.let(::formatItalianDateWithWeekday) ?: "Nessuna scadenza impostata",
+                    tint = AppTheme.TintGreen,
+                    icon = { AppIcons.Calendar(Modifier.size(19.dp), AppTheme.TintGreenInk) },
+                    onClick = onEditDeadline,
+                    trailing = if (onEditDeadline != null) {
+                        { AppIcons.Pencil(Modifier.size(16.dp), AppTheme.TextFaint) }
+                    } else null
+                )
+            }
+
+            if (materials.isNotEmpty()) {
+                if (hasPreviousSection) {
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = AppTheme.Hairline)
+                }
+                Text(
+                    text = "Documenti e circolari",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AppTheme.TextMuted,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp)
+                )
+                materials.forEachIndexed { index, material ->
+                    if (index > 0) {
+                        HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = AppTheme.Hairline)
+                    }
+                    val number = material.circularNumber
+                    AilaListRow(
+                        title = material.title,
+                        subtitle = if (number == null) "Documento PDF" else "Circolare n. $number",
+                        tint = if (number == null) AppTheme.TintBlue else AppTheme.SecondaryContainer,
+                        icon = {
+                            if (number == null) AppIcons.Document(Modifier.size(19.dp), AppTheme.TintBlueInk)
+                            else AppIcons.ExternalLink(Modifier.size(19.dp), AppTheme.OnSecondaryContainer)
+                        },
+                        onClick = { onOpenMaterial(material) }.takeIf { !busy },
+                        trailing = {
+                            if (onRemoveMaterial != null) {
+                                AilaIconButton("Rimuovi ${material.title}", { onRemoveMaterial(material) }, enabled = !busy, size = 38.dp) {
+                                    AppIcons.Trash(Modifier.size(17.dp), it)
+                                }
+                            } else {
+                                AppIcons.ChevronRight(Modifier.size(16.dp), AppTheme.TextFaint)
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable

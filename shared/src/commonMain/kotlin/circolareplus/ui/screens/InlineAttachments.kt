@@ -35,7 +35,9 @@ import circolareplus.data.remote.dto.ContentAttachmentDto
 import circolareplus.design.*
 import circolareplus.platform.*
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Cache in memoria per evitare riscaricamenti di immagini/vocali durante lo scorrimento. */
 private object AttachmentMediaCache {
@@ -167,8 +169,10 @@ private fun InlineImageAttachment(
         loading = true
         error = null
         try {
-            val bytes = loadAttachmentBytes(item)
-            val decoded = decodeImageBitmap(bytes)
+            val decoded = withContext(Dispatchers.Default) {
+                val bytes = loadAttachmentBytes(item)
+                decodeImageBitmap(bytes)
+            }
             if (decoded != null) {
                 AttachmentMediaCache.putBitmap(item.id, decoded)
                 bitmap = decoded
@@ -375,30 +379,27 @@ internal fun InlineAudioAttachment(
 
     val waveform = remember(item.id) {
         val seed = item.id.hashCode()
-        List(28) { idx ->
+        List(30) { idx ->
             val mixed = ((seed * 31 + idx * 17) xor (idx * 13 + 7)) and 0x7fffffff
-            0.22f + (mixed % 78) / 100f
+            0.20f + (mixed % 80) / 100f
         }
     }
     val activeColor = AppTheme.PrimaryBlue
-    val inactiveColor = AppTheme.TextFaint.copy(alpha = 0.35f)
+    val inactiveColor = AppTheme.TextFaint.copy(alpha = 0.38f)
     val durationLabel = when {
         item.isExpired() && audioBytes == null -> "Vocale scaduto"
         player.isPlaying || player.positionMs > 0 ->
             if (totalMs > 0) "${formatDurationMs(player.positionMs)} / ${formatDurationMs(totalMs)}"
             else formatDurationMs(player.positionMs)
         totalMs > 0 -> formatDurationMs(totalMs)
-        else -> "Vocale"
+        else -> "0:00"
     }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(AppTheme.BackgroundLight.copy(alpha = 0.72f))
-            .border(1.dp, AppTheme.Hairline, RoundedCornerShape(16.dp))
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+            .padding(vertical = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -418,7 +419,7 @@ internal fun InlineAudioAttachment(
                             loadError = null
                             scope.launch {
                                 try {
-                                    audioBytes = loadAttachmentBytes(item)
+                                    audioBytes = withContext(Dispatchers.Default) { loadAttachmentBytes(item) }
                                     pendingAutoPlay = true
                                 } catch (e: CancellationException) {
                                     throw e
@@ -442,20 +443,20 @@ internal fun InlineAudioAttachment(
                 }
             }
 
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Canvas(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(24.dp)
+                        .height(26.dp)
                 ) {
                     val count = waveform.size
                     val step = size.width / count.toFloat()
-                    val barWidth = (step * 0.56f).coerceIn(2.dp.toPx(), 4.dp.toPx())
+                    val barWidth = (step * 0.52f).coerceIn(2.dp.toPx(), 3.5.dp.toPx())
                     val centerY = size.height / 2f
                     waveform.forEachIndexed { index, amp ->
                         val barProgress = (index + 0.5f) / count.toFloat()
                         val x = index * step + step / 2f
-                        val halfH = (size.height * amp * 0.46f).coerceAtLeast(2.dp.toPx())
+                        val halfH = (size.height * amp * 0.44f).coerceAtLeast(2.dp.toPx())
                         drawLine(
                             color = if (barProgress <= progress) activeColor else inactiveColor,
                             start = Offset(x, centerY - halfH),
@@ -467,7 +468,7 @@ internal fun InlineAudioAttachment(
                     val dotX = (size.width * progress).coerceIn(4.dp.toPx(), size.width - 4.dp.toPx())
                     drawCircle(
                         color = activeColor,
-                        radius = 4.dp.toPx(),
+                        radius = 4.5.dp.toPx(),
                         center = Offset(dotX, centerY)
                     )
                 }

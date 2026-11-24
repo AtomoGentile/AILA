@@ -89,22 +89,29 @@ export async function forumAiContext(env:Env,classId:string,userId:string,thread
   if(!a.post_id)continue;
   const list=byPost.get(a.post_id)??[];list.push(a);byPost.set(a.post_id,list);
  }
- // Descrivi fino a 2 immagini recenti non scadute via Workers AI Vision così @ai vede gli allegati visivi.
+ // Descrivi fino a 2 immagini leggere (<= 512 KB) non scadute via Workers AI Vision così @ai vede gli allegati visivi
+ // senza rischiare OOM/crash del Worker su foto multi-megabyte.
  const imageNotes=new Map<string,string>();
  const nowIso=new Date().toISOString();
  const recentImages=attachmentRows.results
-  .filter(a=>a.mime.startsWith('image/')&&a.r2_key&&a.expires_at>nowIso)
+  .filter(a=>a.mime.startsWith('image/')&&a.r2_key&&a.expires_at>nowIso&&a.byte_size>0&&a.byte_size<=512*1024)
   .slice(-2);
  for(const img of recentImages){
   try{
    const obj=await env.CIRCULARS_BUCKET.get(img.r2_key);
    if(obj&&env.AI){
     const bytes=new Uint8Array(await obj.arrayBuffer());
-    if(bytes.byteLength>0&&bytes.byteLength<=6*1024*1024){
-     const res=await (env.AI as {run:(m:string,i:unknown)=>Promise<{description?:string;response?:string}>})
-      .run('@cf/llava-hf/llava-1.5-7b-hf',{image:[...bytes],prompt:'Descrivi in italiano in modo preciso il contenuto di questa immagine scolastica (testo, formule, esercizi o appunti visibili).',max_tokens:350});
-     const desc=(res.description??res.response??'').trim();
-     if(desc)imageNotes.set(img.id,desc.slice(0,1200));
+    if(bytes.byteLength>0&&bytes.byteLength<=512*1024){
+     let timer:ReturnType<typeof setTimeout>|undefined;
+     try{
+      const res=await Promise.race([
+       (env.AI as {run:(m:string,i:unknown)=>Promise<{description?:string;response?:string}>})
+        .run('@cf/llava-hf/llava-1.5-7b-hf',{image:Array.from(bytes),prompt:'Descrivi in italiano in modo preciso il contenuto di questa immagine scolastica (testo, formule, esercizi o appunti visibili).',max_tokens:300}),
+       new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('VISION_TIMEOUT')),10_000);})
+      ]);
+      const desc=(res.description??res.response??'').trim();
+      if(desc)imageNotes.set(img.id,desc.slice(0,1200));
+     }finally{if(timer)clearTimeout(timer);}
     }
    }
   }catch{/* Vision fallback non bloccante */}
@@ -119,9 +126,12 @@ export async function forumAiContext(env:Env,classId:string,userId:string,thread
   return `[messaggio:${p.id}] ${p.author.label}: ${p.body}${atts?`\n${atts}`:''}`;
  }).join('\n');
  const events=await env.DB.prepare('SELECT id,title,event_date,start_time FROM calendar_events WHERE class_id=? AND is_for_all=1 AND event_date>=? ORDER BY event_date LIMIT 30')
- .bind(classId,new Date().toISOString().slice(0,10)).all<{id:string;title:string;event_date:string;start_time:string|null}>();
- const circulars=await env.DB.prepare(`SELECT c.number,c.title,c.publish_date FROM circulars c ORDER BY c.number DESC LIMIT 30`).all<{number:number;title:string;publish_date:string}>();
- const searched=await searchAuthorized(env,classId,userId,question,true);
+  .bind(classId,new Date().toISOString().slice(0,10)).all<{id:string;title:string;event_date:string;start_time:string|null}>()
+  .catch(()=>({results:[] as {id:string;title:string;event_date:string;start_time:string|null}[]}));
+ const circulars=await env.DB.prepare(`SELECT c.number,c.title,c.publish_date FROM circulars c ORDER BY c.number DESC LIMIT 30`)
+  .all<{number:number;title:string;publish_date:string}>()
+  .catch(()=>({results:[] as {number:number;title:string;publish_date:string}[]}));
+ const searched=await searchAuthorized(env,classId,userId,question??'',true).catch(()=>[]);
  const statusLine=snapshot.thread.resolved
   ?'STATO DISCUSSIONE: RISOLTA (contrassegnata risolta dall’autore/moderatore)'
   :'STATO DISCUSSIONE: APERTA (NON RISOLTA — non dichiarare mai la domanda o discussione risolta o chiusa)';

@@ -63,7 +63,8 @@ fun ForumScreen(
     onContextChange: (String) -> Unit = {},
     canSignModeration: Boolean = isModerator,
     onOpenThread: ((String) -> Unit)? = null,
-    exitOnBackFromThread: Boolean = false
+    exitOnBackFromThread: Boolean = false,
+    onOpenAca: ((String?) -> Unit)? = null
 ) {
     val scope = rememberCoroutineScope()
     val repo = AppContainer.forumRepository
@@ -100,6 +101,9 @@ fun ForumScreen(
     var notificationDialog by remember { mutableStateOf(false) }
     var mentionsDialog by remember { mutableStateOf(false) }
     var attachmentsMenu by remember { mutableStateOf(false) }
+    var threadMenuOpen by remember { mutableStateOf(false) }
+    var identityMenuOpen by remember { mutableStateOf(false) }
+    var pendingDirectVoiceSend by remember { mutableStateOf(false) }
     var confirmToggleResolved by remember { mutableStateOf(false) }
     var menuPost by remember { mutableStateOf<ForumPostDto?>(null) }
     var reportPost by remember { mutableStateOf<ForumPostDto?>(null) }
@@ -235,12 +239,30 @@ fun ForumScreen(
             creating -> error = "Puoi allegare al massimo 5 file alla domanda."
             threadId != null && pendingAttachments.size < 5 -> {
                 val targetThread = threadId!!
+                val sendImmediately = pendingDirectVoiceSend && file.mime.startsWith("audio/", ignoreCase = true)
+                pendingDirectVoiceSend = false
                 uploadingAttachment = true
                 error = null
                 scope.launch {
                     try {
                         activity(AssistantAgentPhase.READING)
-                        pendingAttachments = pendingAttachments + AppContainer.acaRepository.upload(file, targetThread, persistLocal = false)
+                        val uploaded = AppContainer.acaRepository.upload(file, targetThread, persistLocal = false)
+                        if (sendImmediately && snapshot != null && rulesAccepted) {
+                            val snapNow = snapshot!!
+                            val parent = replyTo?.id ?: focusPostId ?: snapNow.thread.id
+                            repo.reply(
+                                snapNow.thread.id,
+                                "",
+                                snapNow.myIdentity?.anonymous ?: anonymous,
+                                parent,
+                                emptyList(),
+                                listOf(uploaded.id)
+                            )
+                            replyTo = null
+                            refresh()
+                        } else {
+                            pendingAttachments = pendingAttachments + uploaded
+                        }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -366,7 +388,7 @@ fun ForumScreen(
     ) {
         if (!inline) {
             if (threadId != null && rulesAccepted) {
-                // Intestazione compatta in stile chat (WhatsApp / Telegram), senza barra Classe né tab.
+                // Intestazione compatta in stile chat (WhatsApp / Telegram), tutti i tasti uniformi a 40dp.
                 val th = snapshot?.thread
                 Column(modifier = Modifier.fillMaxWidth().background(AppTheme.BackgroundLight)) {
                     Row(
@@ -379,7 +401,7 @@ fun ForumScreen(
                         AilaIconButton(
                             contentDescription = if (focusPostId != null) "Tutta la discussione" else "Indietro",
                             onClick = goBack,
-                            size = 38.dp
+                            size = 40.dp
                         ) { tint -> AppIcons.ChevronLeft(Modifier.size(18.dp), tint) }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                             Text(
@@ -411,16 +433,71 @@ fun ForumScreen(
                         }
                         if (th != null) {
                             AilaIconButton(
-                                contentDescription = "Riassumi con AILA",
-                                onClick = { askAi(ForumAiRequestDto()) },
+                                contentDescription = "Apri AILA ACA sulla discussione",
+                                onClick = {
+                                    if (onOpenAca != null) onOpenAca(null)
+                                    else askAi(ForumAiRequestDto())
+                                },
                                 enabled = !busy,
-                                size = 36.dp
+                                size = 40.dp
                             ) { _ ->
-                                AilaAssistantMark(size = 17.dp, brush = androidx.compose.ui.graphics.SolidColor(AppTheme.TintVioletInk))
+                                AilaAssistantMark(size = 18.dp, brush = androidx.compose.ui.graphics.SolidColor(AppTheme.TintVioletInk))
                             }
                         }
-                        AilaIconButton("Notifiche discussione", { notificationDialog = true }, size = 36.dp) { tint ->
+                        AilaIconButton("Notifiche discussione", { notificationDialog = true }, size = 40.dp) { tint ->
                             AppIcons.Bell(Modifier.size(18.dp), tint)
+                        }
+                        if (th != null) {
+                            Box {
+                                AilaIconButton("Azioni discussione", { threadMenuOpen = true }, size = 40.dp) { tint ->
+                                    DotsMoreGlyph(Modifier.size(18.dp), tint)
+                                }
+                                DropdownMenu(
+                                    expanded = threadMenuOpen,
+                                    onDismissRequest = { threadMenuOpen = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Riassumi con AILA") },
+                                        leadingIcon = { AilaAssistantMark(size = 16.dp, brush = androidx.compose.ui.graphics.SolidColor(AppTheme.TintVioletInk)) },
+                                        onClick = {
+                                            threadMenuOpen = false
+                                            if (onOpenAca != null) onOpenAca("Riassumi in breve questa discussione: punti principali e questioni ancora aperte.")
+                                            else askAi(ForumAiRequestDto())
+                                        }
+                                    )
+                                    if (th.isAuthor || isModerator) {
+                                        DropdownMenuItem(
+                                            text = { Text(if (th.resolved) "Riapri discussione" else "Segna come risolta") },
+                                            leadingIcon = {
+                                                if (th.resolved) AppIcons.Refresh(Modifier.size(16.dp), AppTheme.TextDark)
+                                                else AppIcons.Check(Modifier.size(16.dp), AppTheme.TintGreenInk)
+                                            },
+                                            onClick = {
+                                                threadMenuOpen = false
+                                                confirmToggleResolved = true
+                                            }
+                                        )
+                                    }
+                                    if (canSignModeration) {
+                                        DropdownMenuItem(
+                                            text = { Text("Segnalazioni") },
+                                            leadingIcon = { AppIcons.Warning(Modifier.size(16.dp), AppTheme.TintAmberInk) },
+                                            onClick = {
+                                                threadMenuOpen = false
+                                                launchWork { reports = repo.reports(th.id) }
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Elimina (firme)", color = AppTheme.TintRedInk) },
+                                            leadingIcon = { AppIcons.Trash(Modifier.size(16.dp), AppTheme.TintRedInk) },
+                                            onClick = {
+                                                threadMenuOpen = false
+                                                deleteRequestTarget = Triple("FORUM_THREAD", th.id, th.title)
+                                            }
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                     HorizontalDivider(color = AppTheme.Hairline)
@@ -442,7 +519,7 @@ fun ForumScreen(
                 AilaIconButton(
                     contentDescription = if (focusPostId != null) "Tutta la discussione" else "Elenco discussioni",
                     onClick = goBack,
-                    size = 38.dp
+                    size = 40.dp
                 ) { tint -> AppIcons.ChevronLeft(Modifier.size(18.dp), tint) }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                     Text(
@@ -461,7 +538,7 @@ fun ForumScreen(
                         )
                     }
                 }
-                AilaIconButton("Preferenze notifiche", { notificationDialog = true }, size = 36.dp) { tint ->
+                AilaIconButton("Preferenze notifiche", { notificationDialog = true }, size = 40.dp) { tint ->
                     AppIcons.Bell(Modifier.size(18.dp), tint)
                 }
             }
@@ -682,8 +759,12 @@ fun ForumScreen(
                     }
                     ids
                 }
-                val visible = snap.posts.filter {
-                    if (focusPostId != null) it.id in descendants else it.id == snap.thread.id || it.parentId == snap.thread.id
+                val postsById = remember(snap.posts) { snap.posts.associateBy { it.id } }
+                val visible = if (focusPostId != null) {
+                    snap.posts.filter { it.id in descendants }
+                } else {
+                    // Tutte le risposte (anche quelle indirizzate a un singolo messaggio) restano visibili a tutta la classe.
+                    snap.posts
                 }
 
                 val chatListState = rememberLazyListState()
@@ -702,102 +783,46 @@ fun ForumScreen(
                     contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    item(key = "thread_header") {
-                        // Card compatta della discussione con pulsanti icona invece di testi lunghi.
-                        Surface(
-                            shape = RoundedCornerShape(18.dp),
-                            color = AppTheme.CardSurface,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, AppTheme.Hairline),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(
-                                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    if (snap.thread.needsResolution || focusPostId != null) {
+                        item(key = "thread_banner") {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(AppTheme.CardSurface)
+                                    .border(1.dp, AppTheme.Hairline, RoundedCornerShape(14.dp))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    ForumStatusPill(
-                                        text = if (snap.thread.resolved) "Risolta" else "Aperta",
-                                        tint = if (snap.thread.resolved) AppTheme.TintGreen else AppTheme.TintBlue,
-                                        ink = if (snap.thread.resolved) AppTheme.TintGreenInk else AppTheme.TintBlueInk
-                                    )
+                                if (focusPostId != null) {
                                     Text(
-                                        text = snap.thread.title,
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = AppTheme.TextDark,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
+                                        "Stai visualizzando un ramo",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = AppTheme.TextMuted,
                                         modifier = Modifier.weight(1f)
                                     )
-                                }
-
-                                if (snap.thread.needsResolution) {
+                                    ForumActionPill(
+                                        label = "Tutta la chat",
+                                        tint = AppTheme.TintBlue,
+                                        ink = AppTheme.TintBlueInk,
+                                        enabled = true,
+                                        onClick = { focusPostId = null }
+                                    ) { AppIcons.ChevronLeft(Modifier.size(13.dp), it) }
+                                } else {
                                     Text(
                                         "Se hai trovato la risposta, puoi segnarla come risolta.",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = AppTheme.PrimaryBlue
+                                        color = AppTheme.PrimaryBlue,
+                                        modifier = Modifier.weight(1f)
                                     )
-                                }
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    ForumCompactIconButton(
-                                        contentDescription = "Riassumi discussione con AILA",
-                                        tint = AppTheme.TintViolet,
-                                        ink = AppTheme.TintVioletInk,
+                                    ForumActionPill(
+                                        label = "Risolta",
+                                        tint = AppTheme.TintGreen,
+                                        ink = AppTheme.TintGreenInk,
                                         enabled = !busy,
-                                        onClick = { askAi(ForumAiRequestDto()) }
-                                    ) { AilaAssistantMark(size = 16.dp, brush = androidx.compose.ui.graphics.SolidColor(it)) }
-
-                                    if (snap.thread.isAuthor || isModerator) {
-                                        ForumCompactIconButton(
-                                            contentDescription = if (snap.thread.resolved) "Riapri discussione" else "Segna come risolta",
-                                            tint = if (snap.thread.resolved) AppTheme.TintSlate else AppTheme.TintGreen,
-                                            ink = if (snap.thread.resolved) AppTheme.TintSlateInk else AppTheme.TintGreenInk,
-                                            enabled = !busy,
-                                            onClick = { confirmToggleResolved = true }
-                                        ) { ink ->
-                                            if (snap.thread.resolved) AppIcons.Refresh(Modifier.size(16.dp), ink)
-                                            else AppIcons.Check(Modifier.size(16.dp), ink)
-                                        }
-                                    }
-
-                                    if (canSignModeration) {
-                                        ForumCompactIconButton(
-                                            contentDescription = "Segnalazioni",
-                                            tint = AppTheme.TintAmber,
-                                            ink = AppTheme.TintAmberInk,
-                                            enabled = !busy,
-                                            onClick = { launchWork { reports = repo.reports(snap.thread.id) } }
-                                        ) { AppIcons.Warning(Modifier.size(16.dp), it) }
-
-                                        ForumCompactIconButton(
-                                            contentDescription = "Richiedi eliminazione discussione",
-                                            tint = AppTheme.TintRed,
-                                            ink = AppTheme.TintRedInk,
-                                            enabled = !busy,
-                                            onClick = { deleteRequestTarget = Triple("FORUM_THREAD", snap.thread.id, snap.thread.title) }
-                                        ) { AppIcons.Trash(Modifier.size(16.dp), it) }
-                                    }
-
-                                    Spacer(Modifier.weight(1f))
-
-                                    if (focusPostId != null) {
-                                        ForumActionPill(
-                                            label = "Tutta la chat",
-                                            tint = AppTheme.TintBlue,
-                                            ink = AppTheme.TintBlueInk,
-                                            enabled = true,
-                                            onClick = { focusPostId = null }
-                                        ) { AppIcons.ChevronLeft(Modifier.size(13.dp), it) }
-                                    }
+                                        onClick = { confirmToggleResolved = true }
+                                    ) { AppIcons.Check(Modifier.size(13.dp), it) }
                                 }
                             }
                         }
@@ -889,7 +914,9 @@ fun ForumScreen(
                     items(visible, key = { it.id }) { post ->
                         val isFeatured = post.id == snap.thread.featuredPostId
                         val isMine = post.author.isMe && !post.isAi
-                        val replies = snap.posts.count { it.parentId == post.id }
+                        val quotedParent = remember(post.parentId, postsById, snap.thread.id) {
+                            post.parentId?.takeIf { it != snap.thread.id }?.let { postsById[it] }
+                        }
                         val bubbleShape = if (isMine) {
                             RoundedCornerShape(topStart = 18.dp, topEnd = 4.dp, bottomStart = 18.dp, bottomEnd = 18.dp)
                         } else {
@@ -923,7 +950,7 @@ fun ForumScreen(
                                     .background(bubbleBg)
                                     .border(1.dp, bubbleBorder, bubbleShape)
                                     .combinedClickable(
-                                        onClick = { if (post.id != snap.thread.id && replies > 0) focusPostId = post.id },
+                                        onClick = {},
                                         onLongClick = { menuPost = post }
                                     )
                                     .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -965,6 +992,51 @@ fun ForumScreen(
                                     }
                                 }
 
+                                if (quotedParent != null) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(AppTheme.BackgroundLight.copy(alpha = 0.55f))
+                                            .padding(horizontal = 8.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Box(
+                                            Modifier
+                                                .width(3.dp)
+                                                .height(26.dp)
+                                                .clip(RoundedCornerShape(2.dp))
+                                                .background(AppTheme.PrimaryBlue)
+                                        )
+                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                            Text(
+                                                text = if (quotedParent.author.isMe) "Tu" else quotedParent.author.label,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = AppTheme.PrimaryBlue,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = quotedParent.body.ifBlank {
+                                                    quotedParent.attachments.firstOrNull()?.let { att ->
+                                                        when {
+                                                            att.mime.startsWith("audio/") -> "Messaggio vocale"
+                                                            att.mime.startsWith("image/") -> "Foto"
+                                                            else -> att.fileName
+                                                        }
+                                                    } ?: "Messaggio"
+                                                },
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = AppTheme.TextMuted,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                }
+
                                 if (isFeatured) {
                                     Row(
                                         modifier = Modifier
@@ -993,47 +1065,11 @@ fun ForumScreen(
                                     LocalForumAttachment(a, !busy) { onOpenAttachment(a) }
                                 }
 
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    if (post.id != snap.thread.id && replies > 0) {
-                                        Row(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(999.dp))
-                                                .background(AppTheme.TintBlue)
-                                                .clickable { focusPostId = post.id }
-                                                .padding(horizontal = 8.dp, vertical = 3.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                        ) {
-                                            Text(
-                                                "$replies ${if (replies == 1) "risposta" else "risposte"}",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = AppTheme.TintBlueInk
-                                            )
-                                            AppIcons.ChevronRight(Modifier.size(11.dp), AppTheme.TintBlueInk)
-                                        }
-                                    }
-                                    if (!post.hidden) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(26.dp)
-                                                .clip(CircleShape)
-                                                .clickable(enabled = !busy, role = Role.Button) {
-                                                    replyTo = post
-                                                    focusPostId = if (post.id == snap.thread.id) null else post.id
-                                                }
-                                                .semantics { contentDescription = "Rispondi al messaggio" },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            AppIcons.ChatBubble(Modifier.size(13.dp), AppTheme.TextMuted)
-                                        }
-                                    }
-                                    Spacer(Modifier.weight(1f))
-                                    if (timeLabel.isNotEmpty()) {
+                                if (timeLabel.isNotEmpty()) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.End
+                                    ) {
                                         Text(
                                             text = timeLabel,
                                             style = MaterialTheme.typography.labelSmall,
@@ -1192,48 +1228,36 @@ fun ForumScreen(
                     }
 
                     if (uploadingAttachment) {
-                        Text("Caricamento allegato…", style = MaterialTheme.typography.labelSmall, color = AppTheme.PrimaryBlue)
-                    }
-
-                    if (snap.myIdentity == null) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            IdentityChip(
-                                label = "Anonimo",
-                                selected = anonymous,
-                                onClick = { anonymous = true }
-                            )
-                            IdentityChip(
-                                label = "Nome reale",
-                                selected = !anonymous,
-                                onClick = { anonymous = false }
-                            )
-                        }
+                        Text("Invio allegato…", style = MaterialTheme.typography.labelSmall, color = AppTheme.PrimaryBlue)
                     }
 
                     if (recording) {
-                        VoiceRecordingPanel(
-                            onStop = recorder.stop,
-                            onCancel = recorder.cancel,
-                            subtitle = "Il vocale verrà allegato al messaggio."
+                        ChatVoiceRecordingBar(
+                            onSend = {
+                                pendingDirectVoiceSend = true
+                                recorder.stop()
+                            },
+                            onCancel = {
+                                pendingDirectVoiceSend = false
+                                recorder.cancel()
+                            }
                         )
                     } else {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .background(AppTheme.CardSurface, RoundedCornerShape(28.dp))
-                                .padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             AilaIconButton(
                                 contentDescription = "Menu allegati",
                                 onClick = { attachmentsMenu = true },
-                                enabled = !busy && !uploadingAttachment
-                            ) { tint -> AppIcons.Plus(Modifier.size(24.dp), tint) }
-                            Spacer(Modifier.width(4.dp))
+                                enabled = !busy && !uploadingAttachment,
+                                size = 40.dp
+                            ) { tint -> AppIcons.Plus(Modifier.size(22.dp), tint) }
+
                             AilaPillTextField(
                                 value = body,
                                 onValueChange = { body = it },
@@ -1245,15 +1269,54 @@ fun ForumScreen(
                                 integrated = true,
                                 enabled = !busy
                             )
-                            Spacer(Modifier.width(AppTheme.Space8))
+
+                            if (snap.myIdentity == null) {
+                                Box {
+                                    AilaIconButton(
+                                        contentDescription = if (anonymous) "Identità: Anonimo (tocca per cambiare)" else "Identità: Nome reale (tocca per cambiare)",
+                                        onClick = { identityMenuOpen = true },
+                                        enabled = !busy,
+                                        size = 40.dp
+                                    ) { _ ->
+                                        if (anonymous) AppIcons.Shield(Modifier.size(18.dp), AppTheme.PrimaryBlue)
+                                        else AppIcons.Profile(Modifier.size(18.dp), AppTheme.TintGreenInk)
+                                    }
+                                    DropdownMenu(
+                                        expanded = identityMenuOpen,
+                                        onDismissRequest = { identityMenuOpen = false }
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text("Anonimo") },
+                                            leadingIcon = { AppIcons.Shield(Modifier.size(17.dp), AppTheme.PrimaryBlue) },
+                                            trailingIcon = if (anonymous) ({ AppIcons.Check(Modifier.size(16.dp), AppTheme.PrimaryBlue) }) else null,
+                                            onClick = {
+                                                anonymous = true
+                                                identityMenuOpen = false
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Nome reale") },
+                                            leadingIcon = { AppIcons.Profile(Modifier.size(17.dp), AppTheme.TintGreenInk) },
+                                            trailingIcon = if (!anonymous) ({ AppIcons.Check(Modifier.size(16.dp), AppTheme.TintGreenInk) }) else null,
+                                            onClick = {
+                                                anonymous = false
+                                                identityMenuOpen = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
                             AilaIconButton(
                                 contentDescription = "Registra vocale",
                                 enabled = !busy && !uploadingAttachment && pendingAttachments.size < 5,
+                                size = 40.dp,
                                 onClick = {
                                     error = null
                                     recorder.start()
                                 }
                             ) { tint -> ForumMicGlyph(tint) }
+
                             if (hasDraft) {
                                 ForumSendButton(enabled = canSend, onClick = sendReply)
                             }
@@ -1407,7 +1470,6 @@ fun ForumScreen(
                         icon = { AppIcons.ChatBubble(Modifier.size(18.dp), AppTheme.TintBlueInk) },
                         onClick = {
                             replyTo = p
-                            focusPostId = if (p.id == threadId) null else p.id
                             menuPost = null
                         }
                     )
@@ -1654,18 +1716,6 @@ fun ForumScreen(
                         },
                         modifier = Modifier.weight(1f)
                     ) { AppIcons.Document(Modifier.size(24.dp), it) }
-                }
-                AilaCard {
-                    AilaListRow(
-                        title = "Menziona @ai o un compagno",
-                        subtitle = "Richiama AILA o un partecipante nel messaggio",
-                        tint = AppTheme.TintViolet,
-                        icon = { AilaAssistantMark(size = 18.dp, brush = androidx.compose.ui.graphics.SolidColor(AppTheme.TintVioletInk)) },
-                        onClick = {
-                            attachmentsMenu = false
-                            mentionsDialog = true
-                        }
-                    )
                 }
             }
         }
@@ -1955,7 +2005,7 @@ private fun ForumSendButton(enabled: Boolean, onClick: () -> Unit) {
     val fill = AppTheme.PrimaryGradient
     Box(
         modifier = Modifier
-            .size(44.dp)
+            .size(40.dp)
             .then(
                 if (glass) Modifier.ailaGlassSurface(shape)
                 else Modifier.clip(shape).background(AppTheme.TrackFill)
