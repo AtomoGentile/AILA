@@ -40,7 +40,7 @@ export async function forumSnapshot(env:Env,classId:string,userId:string,threadI
  const attachments=await env.DB.prepare('SELECT * FROM content_attachments WHERE thread_id=? AND post_id IS NOT NULL').bind(threadId).all<ContentRow>();
  const posts=page.map(post=>{
   const p=people.results.find(p=>p.user_id===post.author_id);
-  const author=post.is_ai?{key:'perabot',label:'Perabot · AILA',isMe:false,isOp:false,anonymous:false}:p?participantJson(p):{key:'removed',label:'Partecipante rimosso',isMe:false,isOp:false,anonymous:true};
+  const author=post.is_ai?{key:'ai',label:'AILA · AI',isMe:false,isOp:false,anonymous:false}:p?participantJson(p):{key:'removed',label:'Partecipante rimosso',isMe:false,isOp:false,anonymous:true};
   const mentions=JSON.parse(post.mentions_json) as string[];
   return {id:post.id,parentId:post.parent_id,body:post.hidden?'Messaggio rimosso dalla moderazione':post.body,
    author,mentions:people.results.filter(p=>mentions.includes(p.public_key)).map(participantJson),
@@ -80,11 +80,50 @@ export async function forumResolutionNudges(env:Env){
 export async function forumAiContext(env:Env,classId:string,userId:string,threadId:string,question=''){
  const snapshot=await forumSnapshot(env,classId,userId,threadId);
  const posts=snapshot.posts.filter(p=>!p.hidden);
- const text=posts.map(p=>`[messaggio:${p.id}] ${p.author.label}: ${p.body}`).join('\n');
+ const attachmentRows=await env.DB.prepare(
+  'SELECT * FROM content_attachments WHERE thread_id=? AND post_id IS NOT NULL AND deleted_at IS NULL'
+ ).bind(threadId).all<ContentRow>();
+ const byPost=new Map<string,ContentRow[]>();
+ for(const a of attachmentRows.results){
+  if(!a.post_id)continue;
+  const list=byPost.get(a.post_id)??[];list.push(a);byPost.set(a.post_id,list);
+ }
+ // Descrivi fino a 2 immagini recenti non scadute via Workers AI Vision così @ai vede gli allegati visivi.
+ const imageNotes=new Map<string,string>();
+ const nowIso=new Date().toISOString();
+ const recentImages=attachmentRows.results
+  .filter(a=>a.mime.startsWith('image/')&&a.r2_key&&a.expires_at>nowIso)
+  .slice(-2);
+ for(const img of recentImages){
+  try{
+   const obj=await env.CIRCULARS_BUCKET.get(img.r2_key);
+   if(obj&&env.AI){
+    const bytes=new Uint8Array(await obj.arrayBuffer());
+    if(bytes.byteLength>0&&bytes.byteLength<=6*1024*1024){
+     const res=await (env.AI as {run:(m:string,i:unknown)=>Promise<{description?:string;response?:string}>})
+      .run('@cf/llava-hf/llava-1.5-7b-hf',{image:[...bytes],prompt:'Descrivi in italiano in modo preciso il contenuto di questa immagine scolastica (testo, formule, esercizi o appunti visibili).',max_tokens:350});
+     const desc=(res.description??res.response??'').trim();
+     if(desc)imageNotes.set(img.id,desc.slice(0,1200));
+    }
+   }
+  }catch{/* Vision fallback non bloccante */}
+ }
+ const text=posts.map(p=>{
+  const atts=(byPost.get(p.id)??[]).map(a=>{
+   if(a.extracted_text)return `[allegato:${a.file_name} (${a.mime}) — testo]: ${a.extracted_text.slice(0,3000)}`;
+   if(a.transcript)return `[vocale:${a.file_name} — trascrizione]: ${a.transcript.slice(0,3000)}`;
+   if(imageNotes.has(a.id))return `[immagine:${a.file_name} — contenuto visivo]: ${imageNotes.get(a.id)}`;
+   return `[allegato:${a.file_name} (${a.mime})]`;
+  }).join('\n');
+  return `[messaggio:${p.id}] ${p.author.label}: ${p.body}${atts?`\n${atts}`:''}`;
+ }).join('\n');
  const events=await env.DB.prepare('SELECT id,title,event_date,start_time FROM calendar_events WHERE class_id=? AND is_for_all=1 AND event_date>=? ORDER BY event_date LIMIT 30')
  .bind(classId,new Date().toISOString().slice(0,10)).all<{id:string;title:string;event_date:string;start_time:string|null}>();
  const circulars=await env.DB.prepare(`SELECT c.number,c.title,c.publish_date FROM circulars c ORDER BY c.number DESC LIMIT 30`).all<{number:number;title:string;publish_date:string}>();
  const searched=await searchAuthorized(env,classId,userId,question,true);
- return {context:`FONTI AILA PERTINENTI:\n${JSON.stringify(searched)}\nDISCUSSIONE: ${snapshot.thread.title}\n${snapshot.hasMore?'ATTENZIONE: sono inclusi solo gli ultimi 100 messaggi.\n':''}${text}\nCALENDARIO CONDIVISO:\n${JSON.stringify(events.results)}\nINDICE CIRCOLARI PUBBLICHE:\n${JSON.stringify(circulars.results)}`.slice(0,46_000),
+ const statusLine=snapshot.thread.resolved
+  ?'STATO DISCUSSIONE: RISOLTA (contrassegnata risolta dall’autore/moderatore)'
+  :'STATO DISCUSSIONE: APERTA (NON RISOLTA — non dichiarare mai la domanda o discussione risolta o chiusa)';
+ return {context:`FONTI AILA PERTINENTI:\n${JSON.stringify(searched)}\nDISCUSSIONE: ${snapshot.thread.title}\n${statusLine}\n${snapshot.hasMore?'ATTENZIONE: sono inclusi solo gli ultimi 100 messaggi.\n':''}${text}\nCALENDARIO CONDIVISO:\n${JSON.stringify(events.results)}\nINDICE CIRCOLARI PUBBLICHE:\n${JSON.stringify(circulars.results)}`.slice(0,46_000),
   sources:posts.map(p=>({postId:p.id,label:p.author.label})).slice(-100)};
 }

@@ -207,6 +207,49 @@ ratings.post('/pairs', requireRole('REPRESENTATIVE'), async (c) => {
   return c.json({ success: true, expiresAt });
 });
 
+ratings.put('/pairs/:id', requireRole('REPRESENTATIVE'), async (c) => {
+  const body = await c.req.json<{ studentA?: string; studentB?: string; duration?: string }>();
+  if (!body.studentA || !body.studentB || body.studentA === body.studentB) {
+    return c.json({ error: 'Servono due studenti diversi' }, 400);
+  }
+  const duration = (body.duration ?? 'MONTH') as PairDuration;
+  if (!PAIR_DURATIONS.includes(duration)) return c.json({ error: 'Durata non valida' }, 400);
+
+  const classId = await resolveClassId(c);
+  const pairId = c.req.param('id');
+  const existing = await c.env.DB.prepare(
+    'SELECT id FROM discipline_pairs WHERE id = ? AND class_id = ?'
+  ).bind(pairId, classId).first<{ id: string }>();
+  if (!existing) return c.json({ error: 'Coppia non trovata' }, 404);
+
+  const found = await c.env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM users WHERE id IN (?, ?) AND class_id = ? AND role IN ('STUDENT', 'REPRESENTATIVE')"
+  ).bind(body.studentA, body.studentB, classId).first<{ n: number }>();
+  if ((found?.n ?? 0) !== 2) return c.json({ error: 'Studenti non trovati in questa classe' }, 404);
+
+  const [a, b] = [body.studentA, body.studentB].sort();
+  const payload = c.get('jwtPayload') as JWTPayload;
+  const expiresAt = pairExpiry(duration);
+
+  const duplicate = await c.env.DB.prepare(
+    'SELECT id FROM discipline_pairs WHERE class_id = ? AND student_a = ? AND student_b = ? AND id != ?'
+  ).bind(classId, a, b, pairId).first<{ id: string }>();
+
+  if (duplicate) {
+    await c.env.DB.batch([
+      c.env.DB.prepare('DELETE FROM discipline_pairs WHERE id = ? AND class_id = ?').bind(pairId, classId),
+      c.env.DB.prepare('UPDATE discipline_pairs SET expires_at = ?, created_by = ? WHERE id = ? AND class_id = ?')
+        .bind(expiresAt, payload.sub, duplicate.id, classId),
+    ]);
+  } else {
+    await c.env.DB.prepare(
+      'UPDATE discipline_pairs SET student_a = ?, student_b = ?, expires_at = ?, created_by = ? WHERE id = ? AND class_id = ?'
+    ).bind(a, b, expiresAt, payload.sub, pairId, classId).run();
+  }
+
+  return c.json({ success: true, expiresAt });
+});
+
 ratings.delete('/pairs/:id', requireRole('REPRESENTATIVE'), async (c) => {
   await c.env.DB.prepare('DELETE FROM discipline_pairs WHERE id = ? AND class_id = ?')
     .bind(c.req.param('id'), await resolveClassId(c)).run();

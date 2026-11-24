@@ -37,6 +37,8 @@ class AcaRepository(private val api:ApiClient,private val pdf:PdfTextExtractor) 
  suspend fun markBriefCircularSeen(number: Int){api.post<Map<String,String>,SuccessDto>("/api/aca/brief/circulars/$number/seen",emptyMap())}
  suspend fun markBriefPollsSeen(){api.post<Map<String,String>,SuccessDto>("/api/aca/brief/polls/seen",emptyMap())}
  suspend fun markBriefSeatMapsSeen(){api.post<Map<String,String>,SuccessDto>("/api/aca/brief/seatmaps/seen",emptyMap())}
+ suspend fun markBriefForumSeen(){api.post<Map<String,String>,SuccessDto>("/api/aca/brief/forum/seen",emptyMap())}
+ suspend fun markBriefBoardSeen(){api.post<Map<String,String>,SuccessDto>("/api/aca/brief/board/seen",emptyMap())}
  suspend fun dismissBrief(item:AilaBriefItemDto,seen:Boolean=false){api.post<AilaBriefDismissDto,SuccessDto>("/api/aca/brief/${item.id.encodeURLParameter()}/dismiss",AilaBriefDismissDto(item.revision,seen))}
  suspend fun task(feature:String,question:String,context:String="",includeAppContext:Boolean=false):AcaAiResultDto {
   val selected=circolareplus.ai.AiProvider.fromId(api.settings.aiProvider)
@@ -118,6 +120,11 @@ class ForumRepository(private val api:ApiClient) {
  suspend fun state(id:String,resolved:Boolean,featuredPostId:String?){api.put<ForumStateRequestDto,SuccessDto>("/api/forum/$id/state",ForumStateRequestDto(resolved,featuredPostId))}
  suspend fun report(id:String,postId:String?,reason:String){api.post<ForumReportRequestDto,ForumWriteDto>("/api/forum/$id/reports",ForumReportRequestDto(reason,postId))}
  suspend fun reports(id:String):List<ForumReportDto> = api.get<ForumReportsDto>("/api/forum/$id/reports",offlineCopy=false).reports
+ suspend fun closeReport(id:String,reportId:String){api.put<Map<String,String>,SuccessDto>("/api/forum/$id/reports/$reportId/close",emptyMap())}
+ suspend fun listDeleteRequests():List<ContentDeleteRequestDto> = api.get<ContentDeleteRequestsListDto>("/api/forum/delete-requests",offlineCopy=false).requests
+ suspend fun requestDelete(scope:String,targetId:String,reason:String){api.post<CreateContentDeleteRequestDto,ForumWriteDto>("/api/forum/delete-requests",CreateContentDeleteRequestDto(scope,targetId,reason))}
+ suspend fun approveDelete(requestId:String):Boolean = api.post<Map<String,String>,ApproveContentDeleteResponseDto>("/api/forum/delete-requests/$requestId/approve",emptyMap()).executed
+ suspend fun rejectDelete(requestId:String){api.post<Map<String,String>,SuccessDto>("/api/forum/delete-requests/$requestId/reject",emptyMap())}
  suspend fun moderate(id:String,postId:String?,hidden:Boolean,reportId:String?=null){api.put<ForumModerationRequestDto,SuccessDto>("/api/forum/$id/moderation",ForumModerationRequestDto(hidden,postId,reportId))}
  suspend fun ai(id:String,question:String?=null,publish:Boolean=false,replyToId:String?=null):AcaAiResultDto=api.post("/api/forum/$id/ai",ForumAiRequestDto(question,publish,replyToId))
 }

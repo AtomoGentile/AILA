@@ -2,11 +2,16 @@
 
 package circolareplus.ui.screens
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
@@ -17,6 +22,10 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -36,6 +45,7 @@ import circolareplus.domain.model.Circular
 import circolareplus.data.remote.dto.CreateBureaucracyPracticeDto
 import circolareplus.data.remote.dto.SetBureaucracyDeliveryDto
 import circolareplus.data.remote.dto.SuccessDto
+import circolareplus.data.remote.dto.UpdateBureaucracyPracticeDto
 import circolareplus.design.*
 import circolareplus.platform.AppForeground
 import circolareplus.platform.PlatformBackHandler
@@ -76,6 +86,7 @@ internal fun BureaucracyScreen(
     var revision by remember { mutableStateOf(0) }
     var busy by remember { mutableStateOf(false) }
     var creating by rememberSaveable { mutableStateOf(false) }
+    var editingInstructions by rememberSaveable { mutableStateOf(false) }
     var editingDeadline by rememberSaveable { mutableStateOf(false) }
     var confirmingArchive by rememberSaveable { mutableStateOf(false) }
     var addingMaterial by rememberSaveable { mutableStateOf(false) }
@@ -84,6 +95,8 @@ internal fun BureaucracyScreen(
     var removingMaterial by remember { mutableStateOf<BureaucracyMaterialDto?>(null) }
     var loadError by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
+    var inFlightStudents by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+    var deliveryFilter by rememberSaveable(selection) { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
     val practice = feed?.practices?.firstOrNull { it.id == selection }
     val canManage = feed?.canManage == true
@@ -100,11 +113,17 @@ internal fun BureaucracyScreen(
                     addingMaterial = false
                     linkingCircular = false
                     materialSaved = false
+                    editingInstructions = false
+                    editingDeadline = false
                 }
                 if (updated.canManage && selected != null) {
-                    deliveries = api.get<BureaucracyDeliveriesDto>(
+                    val fresh = api.get<BureaucracyDeliveriesDto>(
                         "$PRACTICES/${selected.id}/deliveries", offlineCopy = false
                     ).deliveries
+                    val pending = inFlightStudents
+                    deliveries = if (pending.isEmpty()) fresh else fresh.map { d ->
+                        pending[d.studentId]?.let { d.copy(received = it) } ?: d
+                    }
                 } else {
                     if (selected == null && selection != null) selection = null
                     deliveries = null
@@ -117,6 +136,34 @@ internal fun BureaucracyScreen(
             }
             delay(15_000)
         } while (true)
+    }
+
+    fun toggleDelivery(practiceId: String, studentId: String, received: Boolean) {
+        if (studentId in inFlightStudents) return
+        val previous = deliveries?.firstOrNull { it.studentId == studentId }?.received ?: !received
+        inFlightStudents = inFlightStudents + (studentId to received)
+        actionError = null
+        deliveries = deliveries?.map {
+            if (it.studentId == studentId) it.copy(received = received) else it
+        }
+        scope.launch {
+            try {
+                api.put<SetBureaucracyDeliveryDto, SuccessDto>(
+                    "$PRACTICES/$practiceId/deliveries/$studentId",
+                    SetBureaucracyDeliveryDto(received)
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                deliveries = deliveries?.map {
+                    if (it.studentId == studentId) it.copy(received = previous) else it
+                }
+                if (e is ApiException && e.statusCode in listOf(403, 404, 409)) revision++
+                actionError = (e as? ApiException)?.message ?: "Impossibile salvare la consegna."
+            } finally {
+                inFlightStudents = inFlightStudents - studentId
+            }
+        }
     }
 
     fun save(change: suspend () -> Unit, onDone: () -> Unit = {}) {
@@ -192,6 +239,8 @@ internal fun BureaucracyScreen(
             addingMaterial = false
             linkingCircular = false
             removingMaterial = null
+            editingInstructions = false
+            editingDeadline = false
             selection = null
             deliveries = null
             loadError = null
@@ -201,7 +250,7 @@ internal fun BureaucracyScreen(
         }
     }
     PlatformBackHandler(
-        enabled = active && !creating && !confirmingArchive && !editingDeadline && !addingMaterial && removingMaterial == null,
+        enabled = active && !creating && !confirmingArchive && !editingInstructions && !editingDeadline && !addingMaterial && removingMaterial == null,
         onBack = back
     )
 
@@ -241,7 +290,7 @@ internal fun BureaucracyScreen(
                         AilaErrorState(error, onRetry = { revision++ })
                     }
                 }
-                actionError?.takeIf { !creating && !confirmingArchive && !editingDeadline && !addingMaterial && removingMaterial == null }?.let { error ->
+                actionError?.takeIf { !creating && !confirmingArchive && !editingInstructions && !editingDeadline && !addingMaterial && removingMaterial == null }?.let { error ->
                     item { Text(error, color = AppTheme.TintRedInk, style = MaterialTheme.typography.bodyMedium) }
                 }
                 when {
@@ -251,8 +300,15 @@ internal fun BureaucracyScreen(
                     practice != null -> {
                         val canEdit = canManage && practice.archivedAt == null
                         val description = practice.description
-                        if (description.isNotBlank()) {
-                            item { PracticeInstructions(description) }
+                        if (description.isNotBlank() || canEdit) {
+                            item {
+                                PracticeInstructions(
+                                    description = description,
+                                    onEdit = if (canEdit && !busy) {
+                                        { actionError = null; editingInstructions = true }
+                                    } else null
+                                )
+                            }
                         }
                         if (practice.dueDate != null || canEdit) {
                             item {
@@ -278,61 +334,78 @@ internal fun BureaucracyScreen(
                         }
                         val roster = deliveries
                         if (canManage && roster != null) {
-                            item {
-                                Row(
-                                    Modifier.fillMaxWidth().padding(top = AppTheme.Space8),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
-                                ) {
-                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        PracticeSectionTitle("Consegne della classe")
-                                        Text(
-                                            "${roster.count { it.received }} su ${roster.size} consegnate",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = AppTheme.TextMuted
-                                        )
-                                    }
-                                    if (canEdit) {
-                                        AilaTextButton(
-                                            { actionError = null; confirmingArchive = true },
-                                            enabled = !busy
-                                        ) { Text("Archivia") }
+                            val deliveredCount = roster.count { it.received }
+                            val pendingCount = roster.size - deliveredCount
+                            val filteredRoster = when (deliveryFilter) {
+                                1 -> roster.filter { !it.received }
+                                2 -> roster.filter { it.received }
+                                else -> roster
+                            }
+                            item(key = "deliveries_summary") {
+                                DeliveryProgressCard(
+                                    delivered = deliveredCount,
+                                    total = roster.size,
+                                    canEdit = canEdit
+                                )
+                            }
+                            item(key = "deliveries_filter") {
+                                AilaSegmentedTabs(
+                                    labels = listOf(
+                                        "Tutti (${roster.size})",
+                                        "Mancanti ($pendingCount)",
+                                        "Consegnate ($deliveredCount)"
+                                    ),
+                                    selectedIndex = deliveryFilter,
+                                    onSelect = { deliveryFilter = it },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                            if (filteredRoster.isEmpty()) {
+                                item(key = "deliveries_empty") {
+                                    AilaEmptyState(
+                                        when (deliveryFilter) {
+                                            1 -> "Tutti gli alunni hanno consegnato!"
+                                            2 -> "Nessuna consegna registrata"
+                                            else -> "Nessun alunno in elenco"
+                                        }
+                                    )
+                                }
+                            } else {
+                                item(key = "deliveries_list") {
+                                    AilaCard {
+                                        Column(Modifier.fillMaxWidth()) {
+                                            filteredRoster.forEachIndexed { index, person ->
+                                                if (index > 0) {
+                                                    HorizontalDivider(
+                                                        modifier = Modifier.padding(horizontal = 16.dp),
+                                                        color = AppTheme.Hairline
+                                                    )
+                                                }
+                                                DeliveryStudentRow(
+                                                    person = person,
+                                                    canEdit = canEdit,
+                                                    onToggle = { received ->
+                                                        toggleDelivery(practice.id, person.studentId, received)
+                                                    }
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
-                            items(roster, key = { it.studentId }) { person ->
-                                val rowModifier = if (!canEdit) Modifier else Modifier.toggleable(
-                                    value = person.received,
-                                    enabled = !busy,
-                                    role = Role.Checkbox,
-                                    onValueChange = { received ->
-                                        save(change = {
-                                            api.put<SetBureaucracyDeliveryDto, SuccessDto>(
-                                                "$PRACTICES/${practice.id}/deliveries/${person.studentId}",
-                                                SetBureaucracyDeliveryDto(received)
-                                            )
-                                        }, onDone = {
-                                            deliveries = deliveries?.map {
-                                                if (it.studentId == person.studentId) it.copy(received = received) else it
-                                            }
-                                        })
+                            if (canEdit) {
+                                item(key = "archive_practice") {
+                                    AilaCard {
+                                        AilaListRow(
+                                            title = "Archivia pratica",
+                                            subtitle = "Sposta la pratica in archivio quando tutte le consegne sono chiuse",
+                                            tint = AppTheme.TintSlate,
+                                            icon = { AppIcons.Check(Modifier.size(18.dp), AppTheme.TintSlateInk) },
+                                            onClick = if (!busy) {
+                                                { actionError = null; confirmingArchive = true }
+                                            } else null
+                                        )
                                     }
-                                )
-                                AilaCard {
-                                    AilaListRow(
-                                        title = person.name,
-                                        subtitle = if (person.received) "Consegnata" else "Da consegnare",
-                                        modifier = rowModifier,
-                                        trailing = {
-                                            if (!canEdit) DeliveryMark(person.received)
-                                            else AilaCheckbox(
-                                                checked = person.received,
-                                                enabled = !busy,
-                                                modifier = Modifier.clearAndSetSemantics {},
-                                                onCheckedChange = null
-                                            )
-                                        }
-                                    )
                                 }
                             }
                         } else if (canManage && loadError == null) {
@@ -344,8 +417,24 @@ internal fun BureaucracyScreen(
                                     AilaCard {
                                         AilaListRow(
                                             title = studentName,
-                                            subtitle = if (received) "Consegnata" else "Da consegnare",
-                                            trailing = { DeliveryMark(received) }
+                                            subtitle = if (received) "Registrata dal rappresentante · Consegnata" else "Da consegnare al rappresentante",
+                                            tint = if (received) AppTheme.TintGreen else AppTheme.TintAmber,
+                                            icon = { DeliveryMark(received) },
+                                            trailing = {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(999.dp))
+                                                        .background(if (received) AppTheme.TintGreen else AppTheme.TintAmber)
+                                                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                                                ) {
+                                                    Text(
+                                                        text = if (received) "Consegnata" else "Mancante",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = if (received) AppTheme.TintGreenInk else AppTheme.TintAmberInk
+                                                    )
+                                                }
+                                            }
                                         )
                                     }
                                 }
@@ -432,6 +521,35 @@ internal fun BureaucracyScreen(
                             )
                             selection = created.id
                         }, onDone = { creating = false; archived = false })
+                    }
+                )
+            }
+        }
+    }
+    if (canManage && editingInstructions && practice != null && practice.archivedAt == null) {
+        AilaBottomSheet(onDismissRequest = { if (!busy) editingInstructions = false }) {
+            var title by rememberSaveable(practice.id) { mutableStateOf(practice.title) }
+            var description by rememberSaveable(practice.id) { mutableStateOf(practice.description) }
+            val trimmedTitle = title.trim()
+            val trimmedDesc = description.trim()
+            val changed = trimmedTitle != practice.title || trimmedDesc != practice.description
+            PracticeSheetBody("Modifica pratica e istruzioni", actionError) {
+                AilaPillTextField(title, { title = it.take(120) }, "Titolo della pratica", Modifier.fillMaxWidth(), singleLine = true)
+                AilaPillTextField(
+                    description, { description = it.take(1000) }, "Istruzioni per la classe (cosa portare o fare)",
+                    Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), maxLines = 5
+                )
+                AilaPrimaryButton(
+                    if (busy) "Salvataggio…" else "Salva modifiche",
+                    fillMaxWidth = true,
+                    enabled = !busy && trimmedTitle.isNotBlank() && changed,
+                    onClick = {
+                        save(change = {
+                            api.put<UpdateBureaucracyPracticeDto, SuccessDto>(
+                                "$PRACTICES/${practice.id}",
+                                UpdateBureaucracyPracticeDto(trimmedTitle, trimmedDesc)
+                            )
+                        }, onDone = { editingInstructions = false })
                     }
                 )
             }
@@ -563,23 +681,52 @@ private fun PracticeSectionTitle(title: String) {
 }
 
 @Composable
-private fun PracticeInstructions(description: String) {
+private fun PracticeInstructions(description: String, onEdit: (() -> Unit)? = null) {
     AilaCard(containerColor = AppTheme.SecondaryContainer) {
         Column(
             Modifier.fillMaxWidth().padding(AppTheme.Space16),
             verticalArrangement = Arrangement.spacedBy(AppTheme.Space8)
         ) {
-            Text(
-                "Istruzioni",
-                modifier = Modifier.semantics { heading() },
-                style = MaterialTheme.typography.labelLarge,
-                color = AppTheme.OnSecondaryContainer
-            )
-            Text(
-                description,
-                style = MaterialTheme.typography.bodyLarge,
-                color = AppTheme.OnSecondaryContainer
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                AilaIconTile(tint = AppTheme.OnSecondaryContainer.copy(alpha = 0.14f), size = 38.dp) {
+                    AppIcons.Document(Modifier.size(18.dp), AppTheme.OnSecondaryContainer)
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        "Istruzioni per la classe",
+                        modifier = Modifier.semantics { heading() },
+                        style = MaterialTheme.typography.titleSmall,
+                        color = AppTheme.OnSecondaryContainer
+                    )
+                    Text(
+                        "Cosa portare o compilare per questa pratica",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AppTheme.OnSecondaryContainer.copy(alpha = 0.8f)
+                    )
+                }
+                if (onEdit != null) {
+                    AilaIconButton("Modifica istruzioni", onEdit, size = 40.dp) {
+                        AppIcons.Pencil(Modifier.size(18.dp), it)
+                    }
+                }
+            }
+            if (description.isNotBlank()) {
+                Text(
+                    description,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = AppTheme.OnSecondaryContainer
+                )
+            } else {
+                Text(
+                    "Nessuna istruzione inserita. Tocca la matita per spiegare cosa consegnare.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AppTheme.OnSecondaryContainer.copy(alpha = 0.78f)
+                )
+            }
         }
     }
 }
@@ -694,6 +841,199 @@ private fun PracticeDeadlineField(date: String?, onChange: (String?) -> Unit, en
         AilaDatePickerDialog(state, onDismiss = { picking = false }, confirmLabel = "Scegli") {
             state.selectedDateMillis?.let { onChange(civilFromEpochMillis(it).toIso()) }
             picking = false
+        }
+    }
+}
+
+@Composable
+private fun DeliveryProgressCard(
+    delivered: Int,
+    total: Int,
+    canEdit: Boolean
+) {
+    val progressTarget = if (total > 0) delivered.toFloat() / total.toFloat() else 0f
+    val animatedProgress by animateFloatAsState(targetValue = progressTarget, label = "deliveryProgress")
+    val pct = if (total > 0) (delivered * 100) / total else 0
+    val pending = (total - delivered).coerceAtLeast(0)
+    val allDone = total > 0 && delivered == total
+    val accentBg = if (allDone) AppTheme.TintGreen else AppTheme.TintBlue
+    val accentInk = if (allDone) AppTheme.TintGreenInk else AppTheme.TintBlueInk
+
+    AilaCard {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    PracticeSectionTitle("Consegne della classe")
+                    Text(
+                        text = if (canEdit) "Tocca un compagno sotto per segnare chi ha consegnato."
+                        else "Pratica archiviata · stato delle consegne in sola lettura.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTheme.TextMuted
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(accentBg)
+                        .padding(horizontal = 12.dp, vertical = 5.dp)
+                ) {
+                    Text(
+                        text = "$pct%",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = accentInk
+                    )
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(AppTheme.Hairline)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(animatedProgress.coerceIn(0f, 1f))
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(accentInk)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(AppTheme.TintGreen)
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "$delivered consegnate",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AppTheme.TintGreenInk
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(if (pending == 0) AppTheme.TintGreen else AppTheme.TintAmber)
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = if (pending == 0) "Completate" else "$pending da consegnare",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (pending == 0) AppTheme.TintGreenInk else AppTheme.TintAmberInk
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DeliveryStudentRow(
+    person: BureaucracyDeliveryDto,
+    canEdit: Boolean,
+    onToggle: (Boolean) -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val avatarBg by animateColorAsState(
+        targetValue = if (person.received) AppTheme.TintGreen else AppTheme.BackgroundLight,
+        label = "avatarBg"
+    )
+    val avatarInk by animateColorAsState(
+        targetValue = if (person.received) AppTheme.TintGreenInk else AppTheme.TextMuted,
+        label = "avatarInk"
+    )
+    val checkBg by animateColorAsState(
+        targetValue = if (person.received) AppTheme.TintGreenInk else Color.Transparent,
+        label = "checkBg"
+    )
+    val checkBorder by animateColorAsState(
+        targetValue = if (person.received) AppTheme.TintGreenInk else AppTheme.TextFaint,
+        label = "checkBorder"
+    )
+    val initials = remember(person.name) {
+        person.name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+            .take(2).joinToString("") { it.first().uppercaseChar().toString() }
+            .ifEmpty { "?" }
+    }
+    val rowModifier = if (!canEdit) {
+        Modifier.fillMaxWidth()
+    } else {
+        Modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = person.received,
+                interactionSource = interactionSource,
+                indication = null,
+                role = Role.Checkbox,
+                onValueChange = onToggle
+            )
+    }
+
+    Row(
+        modifier = rowModifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(avatarBg),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = initials,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = avatarInk
+            )
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = person.name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = AppTheme.TextDark,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = if (person.received) "Consegnata" else "Da consegnare",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (person.received) AppTheme.TintGreenInk else AppTheme.TextMuted
+            )
+        }
+        if (!canEdit) {
+            DeliveryMark(person.received)
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(26.dp)
+                    .clip(CircleShape)
+                    .background(checkBg)
+                    .border(1.5.dp, checkBorder, CircleShape)
+                    .clearAndSetSemantics {},
+                contentAlignment = Alignment.Center
+            ) {
+                if (person.received) {
+                    AppIcons.Check(Modifier.size(15.dp), Color.White)
+                }
+            }
         }
     }
 }

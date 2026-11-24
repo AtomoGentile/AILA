@@ -3,6 +3,7 @@ package circolareplus.platform
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
@@ -12,6 +13,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.*
 import java.io.ByteArrayOutputStream
@@ -126,7 +128,15 @@ suspend fun readIncomingContent(context:Context,intent:Intent):IncomingContent?=
    r.prepare();r.start();recording(true)
   }catch(e:Exception){recorder?.release();recorder=null;file?.delete();file=null;recording(false);error("Microfono non disponibile: ${e.message.orEmpty()}")}
  }
- val launcher=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){granted->if(alive&&wantsRecording){if(granted)startRecording()else error("Consenti il microfono per registrare un vocale. Puoi comunque scegliere un file audio.")}}
+ val launcher=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){granted->if(alive&&wantsRecording){if(granted)startRecording()else{wantsRecording=false;error("Consenti il microfono per registrare un vocale. Puoi comunque scegliere un file audio.")}}}
  DisposableEffect(Unit){alive=true;onDispose{alive=false;wantsRecording=false;recorder?.let{r->try{r.stop()}catch(_:Exception){};r.release()};recorder=null;file?.delete();file=null}}
- return AudioRecorderActions(start={wantsRecording=true;launcher.launch(Manifest.permission.RECORD_AUDIO)},stop={wantsRecording=false;finish(false)},cancel={wantsRecording=false;finish(true)})
+ return AudioRecorderActions(
+  start={
+   wantsRecording=true
+   if(ContextCompat.checkSelfPermission(context,Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)startRecording()
+   else launcher.launch(Manifest.permission.RECORD_AUDIO)
+  },
+  stop={wantsRecording=false;finish(false)},
+  cancel={wantsRecording=false;finish(true)}
+ )
 }

@@ -44,6 +44,13 @@ class LocalSettingsManager(
     var pendingAiPolicySync: Boolean
         get() = settings.getBoolean("aca_policy_pending", false)
         set(value) { settings.putBoolean("aca_policy_pending", value) }
+
+    fun hasAcceptedForumRules(userId: String): Boolean =
+        userId.isNotBlank() && settings.getBoolean("forum_rules_accepted_$userId", false)
+
+    fun setAcceptedForumRules(userId: String, accepted: Boolean) {
+        if (userId.isNotBlank()) settings.putBoolean("forum_rules_accepted_$userId", accepted)
+    }
     companion object {
         private const val KEY_USER_AI_API_KEY = "user_ai_api_key"
         private const val KEY_AI_PROVIDER = "ai_provider"

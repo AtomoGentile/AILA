@@ -74,9 +74,43 @@ class ProposalsRepository(private val api: ApiClient) {
         )
     }
 
-    /** L'autore può cancellare la propria proposta; il Rappresentante può cancellarne qualunque. */
+    /** L'autore può cancellare direttamente la propria proposta. */
     suspend fun delete(proposalId: String) {
         api.delete<SuccessDto>("/api/proposals/$proposalId")
+    }
+
+    suspend fun listDeleteRequests(): List<circolareplus.data.remote.dto.ContentDeleteRequestDto> =
+        api.get<circolareplus.data.remote.dto.ContentDeleteRequestsListDto>("/api/proposals/delete-requests", offlineCopy = false).requests
+
+    suspend fun requestDelete(scope: String, targetId: String, reason: String) {
+        api.post<circolareplus.data.remote.dto.CreateContentDeleteRequestDto, circolareplus.data.remote.dto.ForumWriteDto>(
+            "/api/proposals/delete-requests",
+            circolareplus.data.remote.dto.CreateContentDeleteRequestDto(scope, targetId, reason)
+        )
+    }
+
+    suspend fun approveDelete(requestId: String): Boolean =
+        api.post<Map<String, String>, circolareplus.data.remote.dto.ApproveContentDeleteResponseDto>(
+            "/api/proposals/delete-requests/$requestId/approve",
+            emptyMap()
+        ).executed
+
+    suspend fun rejectDelete(requestId: String) {
+        api.post<Map<String, String>, SuccessDto>("/api/proposals/delete-requests/$requestId/reject", emptyMap())
+    }
+
+    suspend fun reportProposal(proposalId: String, reason: String, commentId: String? = null) {
+        api.post<circolareplus.data.remote.dto.ProposalReportRequestDto, circolareplus.data.remote.dto.ForumWriteDto>(
+            "/api/proposals/$proposalId/reports",
+            circolareplus.data.remote.dto.ProposalReportRequestDto(reason, commentId)
+        )
+    }
+
+    suspend fun listReports(): List<circolareplus.data.remote.dto.ProposalReportDto> =
+        api.get<circolareplus.data.remote.dto.ProposalReportsListDto>("/api/proposals/reports", offlineCopy = false).reports
+
+    suspend fun closeReport(reportId: String) {
+        api.put<Map<String, String>, SuccessDto>("/api/proposals/reports/$reportId/close", emptyMap())
     }
 
     suspend fun listComments(proposalId: String): List<ProposalComment> {
