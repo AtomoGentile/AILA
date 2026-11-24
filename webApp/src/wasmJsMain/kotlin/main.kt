@@ -1,15 +1,10 @@
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.platform.LocalWindowInfo
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.ComposeViewport
 import circolareplus.data.AppContainer
 import circolareplus.design.AilaAccent
 import circolareplus.design.AilaTheme
 import circolareplus.design.AppTheme
-import circolareplus.design.LocalWebSafeAreaTop
 import circolareplus.design.UiStyle
 import circolareplus.platform.OfflineStore
 import circolareplus.ui.screens.MainAppShell
@@ -46,24 +41,19 @@ fun main() {
         // testo toccato e gli apre la tastiera dentro il gesto (senza, si apre e si richiude
         // subito). ?a11y=1 la riaccende dove e' spenta, ?a11y=0 la spegne anche su iOS: vedi
         // perf-debug.js.
-        ComposeViewport(configure = { isA11YEnabled = a11yRequested() }) {
+        ComposeViewport(viewportContainerId = viewportContainerId(), configure = { isA11YEnabled = a11yRequested() }) {
             // Il primo fotogramma di Compose e' pronto: via la schermata di avvio HTML.
             LaunchedEffect(Unit) { hideSplash() }
-            AilaTheme {
-                val windowSize = LocalWindowInfo.current.containerSize
-                val safeAreaTop = remember(windowSize) { webSafeAreaTop().dp }
-                CompositionLocalProvider(LocalWebSafeAreaTop provides safeAreaTop) {
-                    MainAppShell()
-                }
-            }
+            AilaTheme { MainAppShell() }
         }
     }
 }
 
-private fun a11yRequested(): Boolean = js("window.__ailaA11y === true")
+// Una pagina già aperta durante un aggiornamento può ancora avere il vecchio HTML in cache.
+private fun viewportContainerId(): String? =
+    js("document.getElementById('aila-viewport') ? 'aila-viewport' : null")
 
-private fun webSafeAreaTop(): Double =
-    js("parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--aila-safe-area-top')) || 0")
+private fun a11yRequested(): Boolean = js("window.__ailaA11y === true")
 
 private fun hideSplash() {
     js("if (window.__ailaStartupReady) window.__ailaStartupReady(); var s = document.getElementById('aila-splash'); if (s) { s.classList.add('done'); setTimeout(function () { s.remove(); }, 400); }")

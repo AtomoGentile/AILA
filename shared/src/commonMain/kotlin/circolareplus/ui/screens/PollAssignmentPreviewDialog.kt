@@ -85,7 +85,7 @@ internal fun PollAssignmentPreviewDialog(
         } finally { loading = false }
     }
     Dialog(onDismissRequest = { if (!busy) onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(color = AppTheme.BackgroundLight, modifier = Modifier.fillMaxSize()) {
+        Surface(color = AppTheme.FullScreenDialogSurface, modifier = Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().appSafeDrawingPadding()) {
                 Row(Modifier.fillMaxWidth().padding(AppTheme.Space16), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {

@@ -182,6 +182,8 @@ object AppTheme {
     // Glass: trasparente — lo sfondo vero e' ailaGlassBackdrop (macchie di colore), dipinto una
     // volta sola dietro a tutta l'app; le schermate lo lasciano vedere.
     val BackgroundLight get() = if (isNothing) Color(if(isDarkMode) 0xFF090909 else 0xFFF4F4F2) else style(Color.Transparent, Color.Transparent, Color(0xFFF9F9FF), Color(0xFF111318))
+    /** I dialoghi a schermo intero coprono la pagina sottostante anche in Glass. */
+    val FullScreenDialogSurface get() = if (isGlass) GlassBase else BackgroundLight
     /** Superfici opache: intestazioni, campi, dialoghi. */
     val SurfaceWhite get() = if (isNothing) Color(if(isDarkMode) 0xFF171717 else 0xFFFFFFFF) else style(Color(0xFFFFFFFF), Color(0xFF1C1C1E), Color(0xFFFFFFFF), Color(0xFF1D2026))
     val TextDark get() = if (isNothing) Color(if(isDarkMode) 0xFFF5F5F3 else 0xFF111111) else style(Color(0xFF0B0D12), Color(0xFFFFFFFF), Color(0xFF1A1C22), Color(0xFFE2E2E9))

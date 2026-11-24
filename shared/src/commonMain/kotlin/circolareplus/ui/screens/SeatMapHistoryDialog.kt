@@ -86,7 +86,7 @@ fun SeatMapHistoryDialog(
     }
     val back: () -> Unit = { if (!deleting) { if (selected != null) selected = null else onDismiss() } }
     Dialog(onDismissRequest = back, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(color = AppTheme.BackgroundLight, modifier = Modifier.fillMaxSize()) {
+        Surface(color = AppTheme.FullScreenDialogSurface, modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.fillMaxSize().appSafeDrawingPadding()) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(AppTheme.Space16),

@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import circolareplus.algorithms.DeskAssignment
 import circolareplus.algorithms.InterrogationVoteType
 import circolareplus.algorithms.OptimizerWeights
@@ -3523,14 +3524,16 @@ fun MainAppShell(
                     // Margine della barra di stato per ogni tab tranne la Home (che ci fa passare
                     // sotto il suo pannello) e salvo quando c'e' gia' la striscia offline in cima.
                     Box(modifier = Modifier.fillMaxSize().then(
+                        // Durante lo swipe le card della pagina in uscita passano sopra la tab vicina.
+                        if (glassCardMotion && !useRail && tabPager.settledPage == page) Modifier.zIndex(1f)
+                        else Modifier
+                    ).then(
                         if (glassMotion != null) Modifier.onGloballyPositioned(glassMotion::updateBounds) else Modifier
                     ).then(
                         // Il pager trasla gia' le pagine. Manteniamo solo una lieve scala:
                         // alpha < 1 sull'intera pagina richiede un buffer fuori schermo e
                         // compositing aggiuntivo per entrambe le pagine a ogni frame.
                         Modifier.graphicsLayer {
-                            // Le card in ritardo restano entro i limiti della loro scheda.
-                            clip = glassCardMotion
                             val offset = (tabPager.currentPage - page) + tabPager.currentPageOffsetFraction
                             val d = kotlin.math.abs(offset).coerceIn(0f, 1f)
                             val scale = if (reduceTabMotion || glassCardMotion) 1f else 1f - 0.04f * d
@@ -3702,10 +3705,7 @@ fun MainAppShell(
                             }
                         }
                         MainTab.SEATMAP -> {
-                            Column(
-                                modifier = Modifier.fillMaxSize()
-                                    .padding(top = circolareplus.design.LocalWebSafeAreaTop.current)
-                            ) {
+                            Column(modifier = Modifier.fillMaxSize()) {
                                 LoadableContent(
                                     // Il caricamento dei compagni avviato dal calendario non deve
                                     // coprire la mappa con lo spinner: ci pensa loadSeatMapData.
@@ -8278,7 +8278,7 @@ private fun Modifier.tabBarSurface(
                 ) else Modifier.background(
                     // Senza sfocatura (PWA) il contenuto sotto si leggerebbe nitido: velo piu' fitto.
                     if (AppTheme.liteEffects) {
-                        if (AppTheme.isDarkMode) Color(0xD9202430) else Color(0xE6FFFFFF)
+                        if (AppTheme.isDarkMode) Color(0xF5202430) else Color(0xFAFFFFFF)
                     } else {
                         if (AppTheme.isDarkMode) Color(0xA6202430) else Color(0xB8FFFFFF)
                     }

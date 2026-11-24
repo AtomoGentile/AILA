@@ -25,9 +25,6 @@ import androidx.compose.ui.unit.dp
  */
 fun Modifier.appSafeDrawingPadding(): Modifier = safeDrawingPadding()
 
-// Sul web la safe area della barra di stato è esposta dal browser tramite CSS.
-val LocalWebSafeAreaTop = androidx.compose.runtime.compositionLocalOf { 0.dp }
-
 /**
  * Solo la tastiera (senza status bar/home indicator), per schermate già dentro uno Scaffold o un
  * bottom sheet. Se un genitore ha gia' applicato lo spazio della tastiera (i bottom sheet di

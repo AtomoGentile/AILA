@@ -28,7 +28,7 @@ internal fun HistoricalMapEditor(initial: List<DeskAssignment>, studentsMap: Map
         0 -> d.copy(studentAId = id); 1 -> d.copy(studentBId = id); else -> d.copy(studentCId = id)
     }
     Dialog(onDismissRequest = { if (!busy) onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(color = AppTheme.BackgroundLight, modifier = Modifier.fillMaxSize()) {
+        Surface(color = AppTheme.FullScreenDialogSurface, modifier = Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().appSafeDrawingPadding().padding(AppTheme.Space16), verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
                 Text(if (isNew) "Aggiungi mappa passata" else "Correggi mappa", style = MaterialTheme.typography.titleLarge)
                 Text("Le correzioni conteranno nelle prossime generazioni. Tocca un posto per cambiare studente; se già presente, i posti vengono scambiati.", color = AppTheme.TextMuted)
