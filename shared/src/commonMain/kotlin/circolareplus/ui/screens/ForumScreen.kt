@@ -350,13 +350,34 @@ fun ForumScreen(
         )
     }
 
-    LaunchedEffect(snapshot?.posts, focusPostId) {
+    LaunchedEffect(snapshot, focusPostId) {
         onContextChange(
             snapshot?.let { snap ->
-                "Discussione: ${snap.thread.title}\n" +
-                    snap.posts.filter { !it.hidden }.takeLast(30)
-                        .joinToString("\n") { "${it.author.label}: ${it.body}" }
-                        .take(6000)
+                val byId = snap.posts.associateBy { it.id }
+                val pinned = snap.thread.featuredPostId?.let { byId[it] }
+                buildString {
+                    appendLine("Discussione: ${snap.thread.title}")
+                    appendLine("Stato: ${if (snap.thread.resolved) "Risolta" else "Aperta"}")
+                    if (pinned != null && !pinned.hidden) {
+                        appendLine("Messaggio in evidenza (${pinned.author.label}): ${pinned.body.take(400)}")
+                    }
+                    snap.posts.filter { !it.hidden }.takeLast(60).forEach { post ->
+                        val parentNote = post.parentId?.takeIf { it != snap.thread.id }?.let { pid ->
+                            byId[pid]?.let { parent -> " [in risposta a ${parent.author.label}]" }
+                        }.orEmpty()
+                        val time = formatForumChatTime(post.createdAt).takeIf { it.isNotEmpty() }?.let { " ($it)" }.orEmpty()
+                        append("${post.author.label}$time$parentNote: ${post.body}")
+                        if (post.attachments.isNotEmpty()) {
+                            post.attachments.forEach { att ->
+                                append("\n  [allegato: ${att.fileName} (${att.mime})]")
+                                if (!att.transcript.isNullOrBlank()) {
+                                    append(" Trascrizione: ${att.transcript.take(1500)}")
+                                }
+                            }
+                        }
+                        appendLine()
+                    }
+                }.take(12_000)
             }.orEmpty()
         )
     }
@@ -777,6 +798,90 @@ fun ForumScreen(
                     lastMessageCount = visible.size
                 }
 
+                // Barra messaggio in evidenza fissata in cima (stile Telegram/WhatsApp), sempre visibile durante lo scroll.
+                val pinnedPost = remember(snap.thread.featuredPostId, postsById) {
+                    snap.thread.featuredPostId?.let { postsById[it] }?.takeIf { !it.hidden }
+                }
+                if (pinnedPost != null) {
+                    val pinnedPreview = remember(pinnedPost) {
+                        pinnedPost.body.replace('\n', ' ').trim().ifBlank {
+                            pinnedPost.attachments.firstOrNull()?.let { att ->
+                                when {
+                                    att.mime.startsWith("audio/") -> "Messaggio vocale"
+                                    att.mime.startsWith("image/") -> "Foto"
+                                    else -> att.fileName
+                                }
+                            } ?: "Messaggio"
+                        }
+                    }
+                    Column(Modifier.fillMaxWidth().background(AppTheme.CardSurface)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val idx = visible.indexOfFirst { it.id == pinnedPost.id }
+                                    if (idx >= 0) {
+                                        scope.launch {
+                                            // Offset per eventuali elementi precedenti nella LazyColumn
+                                            val headerOffset = (if (snap.thread.needsResolution || focusPostId != null) 1 else 0) +
+                                                (if (canSignModeration && deleteRequests.isNotEmpty()) 1 else 0) +
+                                                (if (snap.hasMore) 1 else 0)
+                                            chatListState.animateScrollToItem((idx + headerOffset).coerceAtLeast(0))
+                                        }
+                                    }
+                                }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                Modifier
+                                    .width(3.dp)
+                                    .height(30.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(AppTheme.TintVioletInk)
+                            )
+                            AppIcons.Star(Modifier.size(16.dp), AppTheme.TintVioletInk, filled = true)
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                Text(
+                                    text = "In evidenza · ${if (pinnedPost.author.isMe) "Tu" else pinnedPost.author.label}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = AppTheme.TintVioletInk,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = pinnedPreview,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = AppTheme.TextDark,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            if (snap.thread.isAuthor || isModerator) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(30.dp)
+                                        .clip(CircleShape)
+                                        .clickable(enabled = !busy, role = Role.Button) {
+                                            launchWork {
+                                                repo.state(snap.thread.id, snap.thread.resolved, null)
+                                                refresh()
+                                                feedbackMessage = "Messaggio tolto dall’evidenza."
+                                            }
+                                        }
+                                        .semantics { contentDescription = "Togli dall’evidenza" },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    AppIcons.Close(Modifier.size(15.dp), AppTheme.TextMuted)
+                                }
+                            }
+                        }
+                        HorizontalDivider(color = AppTheme.Hairline)
+                    }
+                }
+
                 LazyColumn(
                     state = chatListState,
                     modifier = Modifier.weight(1f),
@@ -928,6 +1033,7 @@ fun ForumScreen(
                             else -> AppTheme.CardSurface
                         }
                         val bubbleBorder = when {
+                            isFeatured -> AppTheme.TintVioletInk.copy(alpha = 0.70f)
                             post.isAi -> AppTheme.TintVioletInk.copy(alpha = 0.25f)
                             isMine -> AppTheme.PrimaryBlue.copy(alpha = 0.28f)
                             else -> AppTheme.Hairline
@@ -945,19 +1051,18 @@ fun ForumScreen(
                             }
                             Column(
                                 modifier = Modifier
-                                    .widthIn(max = 320.dp)
+                                    .widthIn(min = 96.dp, max = 320.dp)
                                     .clip(bubbleShape)
                                     .background(bubbleBg)
-                                    .border(1.dp, bubbleBorder, bubbleShape)
+                                    .border(if (isFeatured) 1.5.dp else 1.dp, bubbleBorder, bubbleShape)
                                     .combinedClickable(
                                         onClick = {},
                                         onLongClick = { menuPost = post }
                                     )
                                     .padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                verticalArrangement = Arrangement.spacedBy(5.dp)
                             ) {
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
@@ -971,24 +1076,15 @@ fun ForumScreen(
                                             else -> AppTheme.PrimaryBlue
                                         },
                                         maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f, fill = false)
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                     if (post.author.isOp) {
                                         ForumStatusPill("OP", AppTheme.TintSlate, AppTheme.TintSlateInk)
                                     } else if (post.isAi) {
                                         ForumStatusPill("AI", AppTheme.TintViolet, AppTheme.TintVioletInk)
                                     }
-                                    Spacer(Modifier.weight(1f))
-                                    Box(
-                                        modifier = Modifier
-                                            .size(26.dp)
-                                            .clip(CircleShape)
-                                            .clickable(role = Role.Button) { menuPost = post }
-                                            .semantics { contentDescription = "Azioni messaggio" },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        DotsMoreGlyph(Modifier.size(15.dp), AppTheme.TextMuted)
+                                    if (isFeatured) {
+                                        AppIcons.Star(Modifier.size(12.dp), AppTheme.TintVioletInk, filled = true)
                                     }
                                 }
 
@@ -1041,24 +1137,33 @@ fun ForumScreen(
                                     Row(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(999.dp))
-                                            .background(AppTheme.TintBlue)
+                                            .background(AppTheme.TintViolet)
                                             .padding(horizontal = 8.dp, vertical = 3.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
-                                        AppIcons.Star(Modifier.size(11.dp), AppTheme.TintBlueInk, filled = true)
-                                        Text("In evidenza", color = AppTheme.TintBlueInk, style = MaterialTheme.typography.labelSmall)
+                                        AppIcons.Star(Modifier.size(11.dp), AppTheme.TintVioletInk, filled = true)
+                                        Text("In evidenza", color = AppTheme.TintVioletInk, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
                                     }
                                 }
 
                                 var shown = post.body
                                 post.mentions.filter { it.isMe }.forEach { shown = shown.replace("@${it.label}", "@Tu") }
                                 if (shown.isNotBlank()) {
-                                    Text(
-                                        text = shown,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = if (post.hidden) AppTheme.TextMuted else AppTheme.TextDark
-                                    )
+                                    if (post.isAi && !post.hidden) {
+                                        val formatted = remember(shown) { formatAilaMarkdown(shown) }
+                                        Text(
+                                            text = formatted,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = AppTheme.TextDark
+                                        )
+                                    } else {
+                                        Text(
+                                            text = shown,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = if (post.hidden) AppTheme.TextMuted else AppTheme.TextDark
+                                        )
+                                    }
                                 }
 
                                 post.attachments.forEach { a ->
@@ -1066,16 +1171,12 @@ fun ForumScreen(
                                 }
 
                                 if (timeLabel.isNotEmpty()) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.End
-                                    ) {
-                                        Text(
-                                            text = timeLabel,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = AppTheme.TextMuted
-                                        )
-                                    }
+                                    Text(
+                                        text = timeLabel,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = AppTheme.TextMuted,
+                                        modifier = Modifier.align(Alignment.End)
+                                    )
                                 }
                             }
                         }
@@ -1500,6 +1601,7 @@ fun ForumScreen(
                                     val s = snapshot!!
                                     repo.state(s.thread.id, s.thread.resolved, if (isPinned) null else p.id)
                                     refresh()
+                                    feedbackMessage = if (isPinned) "Messaggio tolto dall’evidenza." else "Messaggio messo in evidenza in cima."
                                 }
                             }
                         )
@@ -1635,7 +1737,8 @@ fun ForumScreen(
             ) {
                 AilaAssistantBadge("Generato da AILA")
                 SelectionContainer {
-                    Text(r.text, style = MaterialTheme.typography.bodyLarge, color = AppTheme.TextDark)
+                    val formattedSummary = remember(r.text) { formatAilaMarkdown(r.text) }
+                    Text(formattedSummary, style = MaterialTheme.typography.bodyLarge, color = AppTheme.TextDark)
                 }
                 if (r.sources.isNotEmpty()) {
                     Text("Messaggi di origine:", style = MaterialTheme.typography.labelLarge, color = AppTheme.TextMuted)

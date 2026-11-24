@@ -5922,7 +5922,7 @@ fun MainAppShell(
         }
         val acaPageContext=("Schermata: $shellRoute; sezione: $selectedTab / $classSection\n"+
             (selectedCircularForDetail?:paneCircular)?.let{"Circolare ${it.number}: ${it.title}\n${classifications[it.number]?.personalSummary.orEmpty()}"}.orEmpty()+
-            eventDetailToShow?.toString().orEmpty()+when { shellRoute == ShellRoute.FORUM || (shellRoute == ShellRoute.TABS && selectedTab == MainTab.CLASS && classSection == ClassSection.PERE) -> acaForumContext; shellRoute == ShellRoute.CONTENT -> acaDocumentContext; else -> "" }).take(6000)
+            eventDetailToShow?.toString().orEmpty()+when { shellRoute == ShellRoute.FORUM || (shellRoute == ShellRoute.TABS && selectedTab == MainTab.CLASS && classSection == ClassSection.PERE) -> acaForumContext; shellRoute == ShellRoute.CONTENT -> acaDocumentContext; else -> "" }).take(12_000)
         val acaHasDocument = shellRoute == ShellRoute.CONTENT || selectedCircularForDetail != null || paneCircular != null
         val acaAutoContext = acaHasDocument || shellRoute == ShellRoute.FORUM || (shellRoute == ShellRoute.TABS && selectedTab == MainTab.CLASS && classSection == ClassSection.PERE)
         val acaContextPermitted = circolareplus.ai.AcaPolicyState.preferences.let { p ->

@@ -1481,48 +1481,4 @@ private fun AssistantSourceKind.Icon(color: Color, iconSize: androidx.compose.ui
  * arriva a video piena di asterischi — che l'utente legge come un difetto dell'app, non come
  * una convenzione di formattazione.
  */
-private fun formatAssistantText(raw: String): AnnotatedString = buildAnnotatedString {
-    val lines = raw.trim().lines()
-    fun isBullet(line: String) = line.trimStart().let { it.startsWith("- ") || it.startsWith("* ") }
-
-    fun appendLine(line: String) {
-        var index = 0
-        var bold = false
-        while (index < line.length) {
-            val marker = line.indexOf("**", index)
-            if (marker < 0) {
-                appendStyled(line.substring(index), bold)
-                break
-            }
-            appendStyled(line.substring(index, marker), bold)
-            bold = !bold
-            index = marker + 2
-        }
-    }
-
-    lines.forEachIndexed { lineIndex, line ->
-        if (isBullet(line)) {
-            // Il punto elenco e' un paragrafo a se' con l'andata a capo "appesa": la seconda riga
-            // parte sotto il testo e non sotto il pallino. Un paragrafo va a capo da solo, quindi
-            // niente "\n" dopo (ne' prima di un altro paragrafo).
-            val body = line.trimStart().substring(2)
-            withStyle(ParagraphStyle(textIndent = TextIndent(firstLine = 0.sp, restLine = 14.sp))) {
-                append("•  ")
-                appendLine(body)
-            }
-        } else {
-            appendLine(line)
-            val next = lines.getOrNull(lineIndex + 1)
-            if (next != null && !isBullet(next)) append("\n")
-        }
-    }
-}
-
-private fun androidx.compose.ui.text.AnnotatedString.Builder.appendStyled(text: String, bold: Boolean) {
-    if (text.isEmpty()) return
-    if (bold) {
-        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(text) }
-    } else {
-        append(text)
-    }
-}
+private fun formatAssistantText(raw: String): AnnotatedString = circolareplus.design.formatAilaMarkdown(raw)
