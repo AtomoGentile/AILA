@@ -65,3 +65,25 @@ import kotlinx.serialization.Serializable
 
 @Serializable data class ClassSearchHitDto(val kind:String,val id:String,val title:String,val text:String)
 @Serializable data class ClassSearchResponseDto(val hits:List<ClassSearchHitDto> = emptyList())
+
+@Serializable data class ContentDeleteRequestDto(
+ val id:String,
+ val scope:String,
+ val targetId:String,
+ val targetPreview:String="",
+ val reason:String,
+ val status:String="PENDING",
+ val requestedByName:String="",
+ val createdAt:String="",
+ val repApprovals:Int=0,
+ val repRequired:Int=2,
+ val guardApprovals:Int=0,
+ val guardRequired:Int=1,
+ val myApproved:Boolean=false
+)
+@Serializable data class ContentDeleteRequestsListDto(val requests:List<ContentDeleteRequestDto> = emptyList())
+@Serializable data class CreateContentDeleteRequestDto(val scope:String,val targetId:String,val reason:String)
+@Serializable data class ApproveContentDeleteResponseDto(val success:Boolean=true,val executed:Boolean=false)
+@Serializable data class ProposalReportRequestDto(val reason:String,val commentId:String?=null)
+@Serializable data class ProposalReportDto(val id:String,val proposalId:String,val commentId:String?=null,val proposalTitle:String="",val reason:String,val status:String="OPEN",val createdAt:String="")
+@Serializable data class ProposalReportsListDto(val reports:List<ProposalReportDto> = emptyList())

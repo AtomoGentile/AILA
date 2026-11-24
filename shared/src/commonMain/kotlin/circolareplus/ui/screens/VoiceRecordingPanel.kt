@@ -16,7 +16,11 @@ import circolareplus.design.*
 import kotlinx.coroutines.delay
 
 @Composable
-internal fun VoiceRecordingPanel(onStop: () -> Unit, onCancel: () -> Unit) {
+internal fun VoiceRecordingPanel(
+    onStop: () -> Unit,
+    onCancel: () -> Unit,
+    subtitle: String = "Il vocale verrà allegato al messaggio."
+) {
     var seconds by remember { mutableStateOf(0) }
     LaunchedEffect(Unit) { while(true) { delay(1000);seconds++ } }
     val pulse=if(AppTheme.reduceMotion) null else rememberInfiniteTransition(label="recording").animateFloat(
@@ -27,7 +31,7 @@ internal fun VoiceRecordingPanel(onStop: () -> Unit, onCancel: () -> Unit) {
             Box(Modifier.size(10.dp).alpha(pulse?.value?:1f).background(AppTheme.TintRedInk,RoundedCornerShape(5.dp)))
             Column(Modifier.weight(1f)) {
                 Text("Sto registrando",style=MaterialTheme.typography.titleSmall,color=AppTheme.TextDark,fontWeight=FontWeight.SemiBold)
-                Text("Il vocale verrà allegato alla chat.",style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
+                Text(subtitle,style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
             }
             Text("${seconds/60}:${(seconds%60).toString().padStart(2,'0')}",style=MaterialTheme.typography.titleMedium,color=AppTheme.TintRedInk)
         }

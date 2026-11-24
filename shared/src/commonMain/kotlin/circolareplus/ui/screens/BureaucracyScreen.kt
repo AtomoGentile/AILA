@@ -2,11 +2,16 @@
 
 package circolareplus.ui.screens
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
@@ -17,6 +22,10 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -84,6 +93,8 @@ internal fun BureaucracyScreen(
     var removingMaterial by remember { mutableStateOf<BureaucracyMaterialDto?>(null) }
     var loadError by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
+    var inFlightStudents by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+    var deliveryFilter by rememberSaveable(selection) { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
     val practice = feed?.practices?.firstOrNull { it.id == selection }
     val canManage = feed?.canManage == true
@@ -102,9 +113,13 @@ internal fun BureaucracyScreen(
                     materialSaved = false
                 }
                 if (updated.canManage && selected != null) {
-                    deliveries = api.get<BureaucracyDeliveriesDto>(
+                    val fresh = api.get<BureaucracyDeliveriesDto>(
                         "$PRACTICES/${selected.id}/deliveries", offlineCopy = false
                     ).deliveries
+                    val pending = inFlightStudents
+                    deliveries = if (pending.isEmpty()) fresh else fresh.map { d ->
+                        pending[d.studentId]?.let { d.copy(received = it) } ?: d
+                    }
                 } else {
                     if (selected == null && selection != null) selection = null
                     deliveries = null
@@ -117,6 +132,34 @@ internal fun BureaucracyScreen(
             }
             delay(15_000)
         } while (true)
+    }
+
+    fun toggleDelivery(practiceId: String, studentId: String, received: Boolean) {
+        if (studentId in inFlightStudents) return
+        val previous = deliveries?.firstOrNull { it.studentId == studentId }?.received ?: !received
+        inFlightStudents = inFlightStudents + (studentId to received)
+        actionError = null
+        deliveries = deliveries?.map {
+            if (it.studentId == studentId) it.copy(received = received) else it
+        }
+        scope.launch {
+            try {
+                api.put<SetBureaucracyDeliveryDto, SuccessDto>(
+                    "$PRACTICES/$practiceId/deliveries/$studentId",
+                    SetBureaucracyDeliveryDto(received)
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                deliveries = deliveries?.map {
+                    if (it.studentId == studentId) it.copy(received = previous) else it
+                }
+                if (e is ApiException && e.statusCode in listOf(403, 404, 409)) revision++
+                actionError = (e as? ApiException)?.message ?: "Impossibile salvare la consegna."
+            } finally {
+                inFlightStudents = inFlightStudents - studentId
+            }
+        }
     }
 
     fun save(change: suspend () -> Unit, onDone: () -> Unit = {}) {
@@ -278,61 +321,64 @@ internal fun BureaucracyScreen(
                         }
                         val roster = deliveries
                         if (canManage && roster != null) {
-                            item {
-                                Row(
-                                    Modifier.fillMaxWidth().padding(top = AppTheme.Space8),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
-                                ) {
-                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        PracticeSectionTitle("Consegne della classe")
-                                        Text(
-                                            "${roster.count { it.received }} su ${roster.size} consegnate",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = AppTheme.TextMuted
-                                        )
-                                    }
-                                    if (canEdit) {
-                                        AilaTextButton(
-                                            { actionError = null; confirmingArchive = true },
-                                            enabled = !busy
-                                        ) { Text("Archivia") }
-                                    }
-                                }
+                            val deliveredCount = roster.count { it.received }
+                            val pendingCount = roster.size - deliveredCount
+                            val filteredRoster = when (deliveryFilter) {
+                                1 -> roster.filter { !it.received }
+                                2 -> roster.filter { it.received }
+                                else -> roster
                             }
-                            items(roster, key = { it.studentId }) { person ->
-                                val rowModifier = if (!canEdit) Modifier else Modifier.toggleable(
-                                    value = person.received,
-                                    enabled = !busy,
-                                    role = Role.Checkbox,
-                                    onValueChange = { received ->
-                                        save(change = {
-                                            api.put<SetBureaucracyDeliveryDto, SuccessDto>(
-                                                "$PRACTICES/${practice.id}/deliveries/${person.studentId}",
-                                                SetBureaucracyDeliveryDto(received)
-                                            )
-                                        }, onDone = {
-                                            deliveries = deliveries?.map {
-                                                if (it.studentId == person.studentId) it.copy(received = received) else it
-                                            }
-                                        })
-                                    }
+                            item(key = "deliveries_summary") {
+                                DeliveryProgressCard(
+                                    delivered = deliveredCount,
+                                    total = roster.size,
+                                    canArchive = canEdit && !busy,
+                                    onArchive = { actionError = null; confirmingArchive = true }
                                 )
-                                AilaCard {
-                                    AilaListRow(
-                                        title = person.name,
-                                        subtitle = if (person.received) "Consegnata" else "Da consegnare",
-                                        modifier = rowModifier,
-                                        trailing = {
-                                            if (!canEdit) DeliveryMark(person.received)
-                                            else AilaCheckbox(
-                                                checked = person.received,
-                                                enabled = !busy,
-                                                modifier = Modifier.clearAndSetSemantics {},
-                                                onCheckedChange = null
-                                            )
+                            }
+                            item(key = "deliveries_filter") {
+                                AilaSegmentedTabs(
+                                    labels = listOf(
+                                        "Tutti (${roster.size})",
+                                        "Mancanti ($pendingCount)",
+                                        "Consegnate ($deliveredCount)"
+                                    ),
+                                    selectedIndex = deliveryFilter,
+                                    onSelect = { deliveryFilter = it },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                            if (filteredRoster.isEmpty()) {
+                                item(key = "deliveries_empty") {
+                                    AilaEmptyState(
+                                        when (deliveryFilter) {
+                                            1 -> "Tutti gli alunni hanno consegnato!"
+                                            2 -> "Nessuna consegna registrata"
+                                            else -> "Nessun alunno in elenco"
                                         }
                                     )
+                                }
+                            } else {
+                                item(key = "deliveries_list") {
+                                    AilaCard {
+                                        Column(Modifier.fillMaxWidth()) {
+                                            filteredRoster.forEachIndexed { index, person ->
+                                                if (index > 0) {
+                                                    HorizontalDivider(
+                                                        modifier = Modifier.padding(horizontal = 16.dp),
+                                                        color = AppTheme.Hairline
+                                                    )
+                                                }
+                                                DeliveryStudentRow(
+                                                    person = person,
+                                                    canEdit = canEdit,
+                                                    onToggle = { received ->
+                                                        toggleDelivery(practice.id, person.studentId, received)
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         } else if (canManage && loadError == null) {
@@ -694,6 +740,171 @@ private fun PracticeDeadlineField(date: String?, onChange: (String?) -> Unit, en
         AilaDatePickerDialog(state, onDismiss = { picking = false }, confirmLabel = "Scegli") {
             state.selectedDateMillis?.let { onChange(civilFromEpochMillis(it).toIso()) }
             picking = false
+        }
+    }
+}
+
+@Composable
+private fun DeliveryProgressCard(
+    delivered: Int,
+    total: Int,
+    canArchive: Boolean,
+    onArchive: () -> Unit
+) {
+    val progressTarget = if (total > 0) delivered.toFloat() / total.toFloat() else 0f
+    val animatedProgress by animateFloatAsState(targetValue = progressTarget, label = "deliveryProgress")
+    val pct = if (total > 0) (delivered * 100) / total else 0
+    val allDone = total > 0 && delivered == total
+    val accentBg = if (allDone) AppTheme.TintGreen else AppTheme.TintBlue
+    val accentInk = if (allDone) AppTheme.TintGreenInk else AppTheme.TintBlueInk
+
+    AilaCard {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    PracticeSectionTitle("Consegne della classe")
+                    Text(
+                        text = if (allDone) "Tutte le consegne completate ($delivered/$total)"
+                        else "$delivered su $total consegnate · ${total - delivered} mancanti",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTheme.TextMuted
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(accentBg)
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "$pct%",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = accentInk
+                    )
+                }
+                if (canArchive) {
+                    AilaTextButton(onArchive) { Text("Archivia") }
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(AppTheme.Hairline)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(animatedProgress.coerceIn(0f, 1f))
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(accentInk)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DeliveryStudentRow(
+    person: BureaucracyDeliveryDto,
+    canEdit: Boolean,
+    onToggle: (Boolean) -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val avatarBg by animateColorAsState(
+        targetValue = if (person.received) AppTheme.TintGreen else AppTheme.BackgroundLight,
+        label = "avatarBg"
+    )
+    val avatarInk by animateColorAsState(
+        targetValue = if (person.received) AppTheme.TintGreenInk else AppTheme.TextMuted,
+        label = "avatarInk"
+    )
+    val checkBg by animateColorAsState(
+        targetValue = if (person.received) AppTheme.TintGreenInk else Color.Transparent,
+        label = "checkBg"
+    )
+    val checkBorder by animateColorAsState(
+        targetValue = if (person.received) AppTheme.TintGreenInk else AppTheme.TextFaint,
+        label = "checkBorder"
+    )
+    val initials = remember(person.name) {
+        person.name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+            .take(2).joinToString("") { it.first().uppercaseChar().toString() }
+            .ifEmpty { "?" }
+    }
+    val rowModifier = if (!canEdit) {
+        Modifier.fillMaxWidth()
+    } else {
+        Modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = person.received,
+                interactionSource = interactionSource,
+                indication = null,
+                role = Role.Checkbox,
+                onValueChange = onToggle
+            )
+    }
+
+    Row(
+        modifier = rowModifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(avatarBg),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = initials,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = avatarInk
+            )
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = person.name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = AppTheme.TextDark,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = if (person.received) "Consegnata" else "Da consegnare",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (person.received) AppTheme.TintGreenInk else AppTheme.TextMuted
+            )
+        }
+        if (!canEdit) {
+            DeliveryMark(person.received)
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(26.dp)
+                    .clip(CircleShape)
+                    .background(checkBg)
+                    .border(1.5.dp, checkBorder, CircleShape)
+                    .clearAndSetSemantics {},
+                contentAlignment = Alignment.Center
+            ) {
+                if (person.received) {
+                    AppIcons.Check(Modifier.size(15.dp), Color.White)
+                }
+            }
         }
     }
 }

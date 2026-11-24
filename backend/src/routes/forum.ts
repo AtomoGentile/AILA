@@ -5,6 +5,8 @@ import type { Env,JWTPayload } from '../types';
 import { authMiddleware,newUUID,resolveClassId } from '../auth';
 import { inBackground } from '../services/background';
 import { aiPreferences,runAiTask } from '../services/aiRouter';
+import { notifyUsers } from '../services/fcm';
+import { approveDeleteRequest,createDeleteRequest,getClassSigners,getSignerRole,listDeleteRequests,rejectDeleteRequest } from '../services/deleteQuorum';
 import { loadForumThread,joinForumThread,forumSnapshot,notifyForumReply,forumAiContext,type ForumThreadRow,type ForumPostRow } from '../services/forum';
 const forum=new Hono<{Bindings:Env;Variables:{jwtPayload:JWTPayload}}>();forum.use('*',authMiddleware());forum.use('*',bodyLimit({maxSize:256*1024}));
 async function reserveForumWrite(env:Env,userId:string,feature:string,max:number) {
@@ -46,6 +48,51 @@ forum.post('/',async c=>{
  await joinForumThread(c.env,id,user.sub,body.anonymous===true);
  return c.json(await forumSnapshot(c.env,classId,user.sub,id),201);
 });
+forum.get('/delete-requests',async c=>{
+ const user=c.get('jwtPayload');const classId=await resolveClassId(c);
+ const role=await getSignerRole(c.env,user.sub,classId);
+ if(!role)return c.json({error:'Solo Rappresentanti o Guardia di Sicurezza'},403);
+ return c.json({requests:await listDeleteRequests(c.env,classId,['FORUM_THREAD','FORUM_POST'],user.sub)});
+});
+forum.post('/delete-requests',async c=>{
+ const user=c.get('jwtPayload');const classId=await resolveClassId(c);
+ const role=await getSignerRole(c.env,user.sub,classId);
+ if(!role)return c.json({error:'Solo Rappresentanti o Guardia di Sicurezza'},403);
+ const body=await c.req.json<{scope?:string;targetId?:string;reason?:string}>();
+ const reason=clean(body.reason,500);
+ if(!reason||reason.length<5)return c.json({error:'Indica un motivo (almeno 5 caratteri)'},400);
+ if(body.scope!=='FORUM_THREAD'&&body.scope!=='FORUM_POST')return c.json({error:'Tipo contenuto non valido'},400);
+ if(!body.targetId)return c.json({error:'Contenuto non indicato'},400);
+ let preview='';
+ if(body.scope==='FORUM_THREAD'){
+  const t=await c.env.DB.prepare('SELECT title FROM forum_threads WHERE id=? AND class_id=?').bind(body.targetId,classId).first<{title:string}>();
+  if(!t)return c.json({error:'Discussione non trovata'},404);
+  preview=t.title;
+ }else{
+  const p=await c.env.DB.prepare('SELECT p.body,t.title FROM forum_posts p JOIN forum_threads t ON t.id=p.thread_id WHERE p.id=? AND t.class_id=?').bind(body.targetId,classId).first<{body:string;title:string}>();
+  if(!p)return c.json({error:'Messaggio non trovato'},404);
+  preview=p.body||p.title;
+ }
+ const res=await createDeleteRequest(c.env,{classId,scope:body.scope,targetId:body.targetId,targetPreview:preview,reason,requesterId:user.sub,requesterRole:role});
+ if(res.error)return c.json({error:res.error},(res.status??400) as 400);
+ return c.json({id:res.id},201);
+});
+forum.post('/delete-requests/:requestId/approve',async c=>{
+ const user=c.get('jwtPayload');const classId=await resolveClassId(c);
+ const role=await getSignerRole(c.env,user.sub,classId);
+ if(!role)return c.json({error:'Solo Rappresentanti o Guardia di Sicurezza'},403);
+ const res=await approveDeleteRequest(c.env,c.req.param('requestId'),classId,user.sub,role);
+ if(res.error)return c.json({error:res.error},(res.status??400) as 400);
+ return c.json({success:true,executed:!!res.executed});
+});
+forum.post('/delete-requests/:requestId/reject',async c=>{
+ const user=c.get('jwtPayload');const classId=await resolveClassId(c);
+ const role=await getSignerRole(c.env,user.sub,classId);
+ if(!role)return c.json({error:'Solo Rappresentanti o Guardia di Sicurezza'},403);
+ const res=await rejectDeleteRequest(c.env,c.req.param('requestId'),classId);
+ if(res.error)return c.json({error:res.error},(res.status??400) as 400);
+ return c.json({success:true});
+});
 forum.get('/:id',async c=>c.json(await forumSnapshot(c.env,await resolveClassId(c),c.get('jwtPayload').sub,c.req.param('id'),c.req.query('before'))));
 forum.post('/:id/posts',async c=>{
  const user=c.get('jwtPayload');const classId=await resolveClassId(c);const thread=await loadForumThread(c.env,classId,c.req.param('id'));
@@ -70,7 +117,7 @@ forum.post('/:id/posts',async c=>{
  ]);
  const post=await c.env.DB.prepare('SELECT * FROM forum_posts WHERE id=?').bind(id).first<ForumPostRow>();
  if(post)inBackground(c,notifyForumReply(c.env,thread,post));
- return c.json({id,invokePerabot:/@perabot\b/i.test(text??'')},201);
+ return c.json({id,invokePerabot:/@(?:ai|ia|perabot)\b/i.test(text??'')},201);
 });
 forum.put('/:id/subscription',async c=>{
  const user=c.get('jwtPayload');const thread=await loadForumThread(c.env,await resolveClassId(c),c.req.param('id'));
@@ -87,16 +134,29 @@ forum.put('/:id/state',async c=>{
  .bind(body.resolved===undefined?thread.resolved:+body.resolved,'featuredPostId' in body?body.featuredPostId:thread.featured_post_id,thread.id).run();return c.json({success:true});
 });
 forum.post('/:id/reports',async c=>{
- const user=c.get('jwtPayload');const thread=await loadForumThread(c.env,await resolveClassId(c),c.req.param('id'));
+ const user=c.get('jwtPayload');const classId=await resolveClassId(c);const thread=await loadForumThread(c.env,classId,c.req.param('id'));
  const body=await c.req.json<{reason:string;postId?:string}>();const reason=clean(body.reason,1000);if(!reason)return c.json({error:'Indica il motivo'},400);
  if(body.postId&&!await c.env.DB.prepare('SELECT id FROM forum_posts WHERE id=? AND thread_id=?').bind(body.postId,thread.id).first())return c.json({error:'Messaggio non trovato'},404);
  await reserveForumWrite(c.env,user.sub,'FORUM_REPORTS',20);
- const id=newUUID();await c.env.DB.prepare('INSERT INTO forum_reports(id,thread_id,post_id,reported_by,reason) VALUES (?,?,?,?,?)').bind(id,thread.id,body.postId??null,user.sub,reason).run();return c.json({id},201);
+ const id=newUUID();await c.env.DB.prepare('INSERT INTO forum_reports(id,thread_id,post_id,reported_by,reason) VALUES (?,?,?,?,?)').bind(id,thread.id,body.postId??null,user.sub,reason).run();
+ inBackground(c,(async()=>{
+  const signers=(await getClassSigners(c.env,classId)).filter(u=>u!==user.sub);
+  if(signers.length)await notifyUsers(c.env,signers,'Segnalazione in Revisione tra pere',`«${thread.title}»: ${reason.slice(0,120)}`,{action:'forum_report',thread_id:thread.id});
+ })());
+ return c.json({id},201);
 });
 forum.get('/:id/reports',async c=>{
- if(c.get('jwtPayload').role!=='REPRESENTATIVE')return c.json({error:'Solo moderatori'},403);
- const thread=await loadForumThread(c.env,await resolveClassId(c),c.req.param('id'),true);
+ const user=c.get('jwtPayload');const classId=await resolveClassId(c);
+ if(!await getSignerRole(c.env,user.sub,classId))return c.json({error:'Solo moderatori'},403);
+ const thread=await loadForumThread(c.env,classId,c.req.param('id'),true);
  const reports=await c.env.DB.prepare('SELECT id,post_id AS postId,reason,status,created_at AS createdAt FROM forum_reports WHERE thread_id=? ORDER BY created_at DESC').bind(thread.id).all();return c.json({reports:reports.results});
+});
+forum.put('/:id/reports/:reportId/close',async c=>{
+ const user=c.get('jwtPayload');const classId=await resolveClassId(c);
+ if(!await getSignerRole(c.env,user.sub,classId))return c.json({error:'Solo moderatori'},403);
+ const thread=await loadForumThread(c.env,classId,c.req.param('id'),true);
+ await c.env.DB.prepare("UPDATE forum_reports SET status='RESOLVED',resolved_at=CURRENT_TIMESTAMP WHERE id=? AND thread_id=?").bind(c.req.param('reportId'),thread.id).run();
+ return c.json({success:true});
 });
 forum.put('/:id/moderation',async c=>{
  const user=c.get('jwtPayload');const classId=await resolveClassId(c);const thread=await loadForumThread(c.env,classId,c.req.param('id'),true);
@@ -115,7 +175,11 @@ forum.post('/:id/ai',async c=>{
  const body=await c.req.json<{question?:string;publish?:boolean;replyToId?:string;localOnly?:boolean}>();
  if(body.replyToId&&!await c.env.DB.prepare('SELECT id FROM forum_posts WHERE id=? AND thread_id=? AND hidden=0').bind(body.replyToId,thread.id).first())return c.json({error:'Messaggio non trovato'},404);
  const source=await forumAiContext(c.env,classId,user.sub,thread.id,body.question);
- const result=await runAiTask(c.env,user.sub,{feature:body.publish?'PERABOT':'SUMMARIZE',service:'FORUM',question:(body.question??'Riassumi domanda, risposte, punti certi e questioni aperte. Non segnare la discussione come risolta.').slice(0,8000),context:source.context,localOnly:body.localOnly});
+ const statusRule=thread.resolved
+  ?'La discussione è contrassegnata come RISOLTA.'
+  :'IMPORTANTE: la discussione è APERTA (NON RISOLTA). Non scrivere mai che è risolta o conclusa e segnala chiaramente le domande ancora aperte.';
+ const rawQuestion=(body.question??'Riassumi domanda, risposte, punti certi e questioni aperte.').slice(0,7500);
+ const result=await runAiTask(c.env,user.sub,{feature:body.publish?'PERABOT':'SUMMARIZE',service:'FORUM',question:`${rawQuestion}\n\n[ISTRUZIONE DI SISTEMA: ${statusRule} Usa anche gli eventuali allegati (testo, trascrizioni vocali o descrizioni immagini) presenti nel contesto.]`.slice(0,8000),context:source.context,localOnly:body.localOnly});
  let postId:string|null=null;
  if(body.publish===true){
   postId=newUUID();await c.env.DB.batch([

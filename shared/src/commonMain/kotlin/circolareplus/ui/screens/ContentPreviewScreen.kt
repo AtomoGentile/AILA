@@ -1,12 +1,18 @@
 package circolareplus.ui.screens
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import circolareplus.data.AppContainer
 import circolareplus.data.remote.dto.ContentAttachmentDto
@@ -56,6 +62,40 @@ fun ContentPreviewScreen(
             if(loading) circolareplus.design.AilaCircularProgress()
             error?.let { Text(it,color=AppTheme.TintRedInk) }
             file?.let { original ->
+                if (original.mime.startsWith("image/", ignoreCase = true)) {
+                    val imageBitmap = remember(original.bytes) { decodeImageBitmap(original.bytes) }
+                    if (imageBitmap != null) {
+                        Image(
+                            bitmap = imageBitmap,
+                            contentDescription = original.fileName,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 180.dp, max = 460.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(AppTheme.CardSurface)
+                        )
+                    }
+                } else if (original.mime.startsWith("audio/", ignoreCase = true)) {
+                    val player = rememberAudioPlayer(original.bytes, original.mime)
+                    AilaCard {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            AilaPrimaryButton(
+                                text = if (player.isPlaying) "Pausa" else "Riproduci",
+                                onClick = player.togglePlayPause
+                            )
+                            Text(
+                                text = if (player.durationMs > 0) "${player.positionMs / 1000}s / ${player.durationMs / 1000}s" else "Audio pronto",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = AppTheme.TextMuted
+                            )
+                        }
+                    }
+                }
                 circolareplus.design.AilaOutlinedButton(onClick={scope.launch {
                     try { openContentFile(original.bytes,original.fileName,original.mime) }
                     catch(e: CancellationException) { throw e }

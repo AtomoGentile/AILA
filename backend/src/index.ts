@@ -57,7 +57,7 @@ app.use('*', async (c, next) => {
   const allowed = (c.env.WEB_ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean);
   return cors({
     origin: (origin) => (allowed.includes(origin) || origin === BETA_PWA_ORIGIN || LOCALHOST_ORIGIN.test(origin) ? origin : null),
-    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],
     maxAge: 86400,
   })(c, next);

@@ -2504,11 +2504,15 @@ fun MainAppShell(
 
     LaunchedEffect(isInClassRosterScreen, showClassManagement, classRosterRetry, user.id, isRepresentative) {
         if (!isInClassRosterScreen) return@LaunchedEffect
-        isClassRosterLoading = true
-        classRosterError = null
+        val managing = isRepresentative && showClassManagement
+        val hasCachedData = if (managing) classRosterEntries.isNotEmpty() else classDirectory.isNotEmpty()
+        if (!hasCachedData) {
+            isClassRosterLoading = true
+            classRosterError = null
+        }
         classRosterActionError = null
         try {
-            if (isRepresentative && showClassManagement) {
+            if (managing) {
                 classRosterEntries = AppContainer.ratingsRepository.listRatings()
                 // Le valutazioni restano consultabili se il server non restituisce le coppie.
                 disciplinePairs = try {
@@ -2516,15 +2520,18 @@ fun MainAppShell(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) {
-                    emptyList()
+                    disciplinePairs
                 }
             } else {
                 classDirectory = AppContainer.usersRepository.listStudents(offlineCopy = false)
             }
+            classRosterError = null
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            classRosterError = "Impossibile caricare la scheda classe. Riprova."
+            if (!hasCachedData) {
+                classRosterError = "Impossibile caricare la scheda classe. Riprova."
+            }
         } finally {
             isClassRosterLoading = false
         }
@@ -3168,19 +3175,26 @@ fun MainAppShell(
     val twoPane = useRail && maxWidth >= circolareplus.design.TwoPaneMinWidth
     // Circolari e dettaglio affiancati: solo nella sezione Circolari della tab Classe.
     val circularsPane = twoPane && classSection == ClassSection.CIRCULARS && !isClassSearchOpen
-    // Una visita alla sezione segna come viste le notifiche di sondaggi o posti presenti in quel momento.
-    LaunchedEffect(selectedTab,shellRoute,isClassSearchOpen,user.id,circolareplus.platform.AppForeground.isForeground) {
+    // Una visita alla sezione segna come viste le notifiche di sondaggi, posti, bacheca o pere presenti in quel momento.
+    LaunchedEffect(selectedTab,classSection,shellRoute,isClassSearchOpen,user.id,circolareplus.platform.AppForeground.isForeground) {
         if(shellRoute != ShellRoute.TABS || isClassSearchOpen || !circolareplus.platform.AppForeground.isForeground) return@LaunchedEffect
-        val kind=when(selectedTab) {
-            MainTab.POLLS -> circolareplus.data.remote.dto.AilaBriefKind.POLL
-            MainTab.SEATMAP -> circolareplus.data.remote.dto.AilaBriefKind.SEATMAP
+        val kind=when {
+            selectedTab == MainTab.POLLS -> circolareplus.data.remote.dto.AilaBriefKind.POLL
+            selectedTab == MainTab.SEATMAP -> circolareplus.data.remote.dto.AilaBriefKind.SEATMAP
+            selectedTab == MainTab.CLASS && classSection == ClassSection.PERE -> circolareplus.data.remote.dto.AilaBriefKind.FORUM
+            selectedTab == MainTab.CLASS && classSection == ClassSection.BOARD -> circolareplus.data.remote.dto.AilaBriefKind.PROPOSAL
             else -> null
         } ?: return@LaunchedEffect
         val owner=user.id
         coroutineScope.launch {
             try {
-                if(kind == circolareplus.data.remote.dto.AilaBriefKind.POLL) AppContainer.acaRepository.markBriefPollsSeen()
-                else AppContainer.acaRepository.markBriefSeatMapsSeen()
+                when (kind) {
+                    circolareplus.data.remote.dto.AilaBriefKind.POLL -> AppContainer.acaRepository.markBriefPollsSeen()
+                    circolareplus.data.remote.dto.AilaBriefKind.SEATMAP -> AppContainer.acaRepository.markBriefSeatMapsSeen()
+                    circolareplus.data.remote.dto.AilaBriefKind.FORUM -> AppContainer.acaRepository.markBriefForumSeen()
+                    circolareplus.data.remote.dto.AilaBriefKind.PROPOSAL -> AppContainer.acaRepository.markBriefBoardSeen()
+                    else -> {}
+                }
                 if(currentUser?.id == owner) {
                     briefItems=briefItems.filterNot { it.kind == kind || (kind == circolareplus.data.remote.dto.AilaBriefKind.POLL && it.kind == circolareplus.data.remote.dto.AilaBriefKind.RANKING_POLL) }
                     briefRefreshTrigger++
@@ -3606,7 +3620,9 @@ fun MainAppShell(
                                     val markAsSeen = item.kind in setOf(
                                         circolareplus.data.remote.dto.AilaBriefKind.POLL,
                                         circolareplus.data.remote.dto.AilaBriefKind.RANKING_POLL,
-                                        circolareplus.data.remote.dto.AilaBriefKind.SEATMAP
+                                        circolareplus.data.remote.dto.AilaBriefKind.SEATMAP,
+                                        circolareplus.data.remote.dto.AilaBriefKind.FORUM,
+                                        circolareplus.data.remote.dto.AilaBriefKind.PROPOSAL
                                     )
                                     if (markAsSeen) {
                                         val owner = currentUser?.id
@@ -4162,6 +4178,7 @@ fun MainAppShell(
                                             inline = true,
                                             isActive = selectedTab == MainTab.CLASS && shellRoute == ShellRoute.TABS,
                                             isModerator = isRepresentative,
+                                            canSignModeration = canModerateIdentity,
                                             initialThreadId = initialForumThread,
                                             onBack = { initialForumThread = null; classSection = ClassSection.CIRCULARS },
                                             onContextChange = { acaForumContext = it },
@@ -4870,7 +4887,7 @@ fun MainAppShell(
                     )
                 }
                 ShellRoute.FORUM -> {
-                    ForumScreen(onContextChange={acaForumContext=it},isModerator = isRepresentative, initialThreadId = initialForumThread, onBack = { isInForum = false; initialForumThread = null },
+                    ForumScreen(onContextChange={acaForumContext=it},isModerator = isRepresentative, canSignModeration = canModerateIdentity, initialThreadId = initialForumThread, onBack = { isInForum = false; initialForumThread = null },
                         onOpenAttachment = { remoteContent = it; localContent = null },
                         onPrepareCalendar = { text -> isInForum = false; isInAcaHub = false; isInLocalFiles = false; isInAssistantScreen = true; askAssistant("Prepara gli eventi da confermare da questa fonte:\n$text") },
                         onCalendarChanged = { reloadCalendar() },
@@ -5188,6 +5205,18 @@ fun MainAppShell(
                                             throw e
                                         } catch (e: Exception) {
                                             classRosterActionError = "Coppia non salvata: ${e.message}"
+                                        }
+                                    }
+                                },
+                                onUpdateDisciplinePair = { id, studentA, studentB, duration ->
+                                    coroutineScope.launch {
+                                        try {
+                                            AppContainer.ratingsRepository.updateDisciplinePair(id, studentA, studentB, duration)
+                                            disciplinePairs = AppContainer.ratingsRepository.listDisciplinePairs()
+                                        } catch (e: CancellationException) {
+                                            throw e
+                                        } catch (e: Exception) {
+                                            classRosterActionError = "Coppia non aggiornata: ${e.message}"
                                         }
                                     }
                                 },
@@ -7917,9 +7946,10 @@ private fun AddProposalDialog(
     var attachments by remember { mutableStateOf<List<ContentAttachmentDto>>(emptyList()) }
     var uploadError by remember { mutableStateOf<String?>(null) }
     var uploading by remember { mutableStateOf(false) }
+    var recording by remember { mutableStateOf(false) }
     var submitted by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val pickAttachment = rememberContentPicker(onError = { uploadError = it }, onPicked = { file: IncomingContent ->
+    val uploadContent: (IncomingContent) -> Unit = { file: IncomingContent ->
         if (attachments.size >= 5) uploadError = "Puoi allegare al massimo 5 file."
         else scope.launch {
             uploading = true; uploadError = null
@@ -7927,7 +7957,13 @@ private fun AddProposalDialog(
             catch (e: Exception) { uploadError = e.message ?: "Caricamento non riuscito" }
             finally { uploading = false }
         }
-    })
+    }
+    val pickAttachment = rememberContentPicker(onError = { uploadError = it }, onPicked = uploadContent)
+    val voiceRecorder = circolareplus.platform.rememberVoiceRecorder(
+        onRecording = { recording = it },
+        onError = { uploadError = it },
+        onRecorded = uploadContent
+    )
 
     circolareplus.design.AilaOriginSheet(
         originKey = "proposalCreateSheet",
@@ -7971,11 +8007,26 @@ private fun AddProposalDialog(
                 modifier = Modifier.fillMaxWidth().ailaSheetReveal(1)
             )
             Spacer(modifier = Modifier.height(AppTheme.Space8))
-            circolareplus.design.AilaOutlinedButton(
-                onClick = pickAttachment,
-                enabled = !uploading && attachments.size < 5,
-                modifier = Modifier.fillMaxWidth()
-            ) { Text(if (uploading) "Caricamento…" else "Aggiungi allegati${if (attachments.isEmpty()) "" else " (${attachments.size}/5)"}") }
+            if (recording) {
+                circolareplus.ui.screens.VoiceRecordingPanel(
+                    onStop = voiceRecorder.stop,
+                    onCancel = voiceRecorder.cancel,
+                    subtitle = "Il vocale verrà allegato alla proposta."
+                )
+            } else {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                    circolareplus.design.AilaOutlinedButton(
+                        onClick = pickAttachment,
+                        enabled = !uploading && attachments.size < 5,
+                        modifier = Modifier.weight(1f)
+                    ) { Text(if (uploading) "Caricamento…" else "Allega${if (attachments.isEmpty()) "" else " (${attachments.size}/5)"}") }
+                    circolareplus.design.AilaOutlinedButton(
+                        onClick = voiceRecorder.start,
+                        enabled = !uploading && attachments.size < 5,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Vocale") }
+                }
+            }
             attachments.forEach { item ->
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(item.fileName, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted, maxLines = 1)

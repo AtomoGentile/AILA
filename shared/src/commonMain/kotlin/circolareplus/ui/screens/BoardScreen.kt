@@ -2,6 +2,8 @@ package circolareplus.ui.screens
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -66,6 +68,24 @@ fun BoardScreen(
 ) {
     var selectedStatusFilter by remember(focusProposalId) { mutableStateOf<ProposalStatus?>(null) }
     var focusedFilterApplied by remember(focusProposalId) { mutableStateOf(false) }
+    val boardScope = rememberCoroutineScope()
+    var deleteRequests by remember { mutableStateOf<List<circolareplus.data.remote.dto.ContentDeleteRequestDto>>(emptyList()) }
+    var boardReports by remember { mutableStateOf<List<circolareplus.data.remote.dto.ProposalReportDto>>(emptyList()) }
+    var showReportsDialog by remember { mutableStateOf(false) }
+    var feedbackMessage by remember { mutableStateOf<String?>(null) }
+    var reportTarget by remember { mutableStateOf<Pair<String, String?>?>(null) }
+    var deleteRequestTarget by remember { mutableStateOf<Triple<String, String, String>?>(null) }
+
+    suspend fun reloadModeration() {
+        if (!canModerateIdentity) return
+        deleteRequests = runCatching { circolareplus.data.AppContainer.proposalsRepository.listDeleteRequests() }.getOrDefault(deleteRequests)
+        boardReports = runCatching { circolareplus.data.AppContainer.proposalsRepository.listReports() }.getOrDefault(boardReports)
+    }
+
+    LaunchedEffect(canModerateIdentity, proposals.size) {
+        reloadModeration()
+    }
+
     LaunchedEffect(focusProposalId,proposals) {
         if(!focusedFilterApplied && focusProposalId!=null) proposals.firstOrNull {it.id==focusProposalId}?.let {
             selectedStatusFilter=if(it.status==ProposalStatus.CHIUSA) ProposalStatus.CHIUSA else null
@@ -95,6 +115,29 @@ fun BoardScreen(
             onSelect={selectedStatusFilter=statusFilterOptions[it]}
         )
 
+        feedbackMessage?.let { msg ->
+            Spacer(Modifier.height(8.dp))
+            AilaCard(containerColor = AppTheme.TintGreen) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(msg, style = MaterialTheme.typography.bodySmall, color = AppTheme.TintGreenInk, modifier = Modifier.weight(1f))
+                    circolareplus.design.AilaTextButton(onClick = { feedbackMessage = null }) { Text("OK") }
+                }
+            }
+        }
+
+        if (canModerateIdentity) {
+            val openCount = boardReports.count { it.status == "OPEN" }
+            if (openCount > 0) {
+                Spacer(Modifier.height(8.dp))
+                circolareplus.design.AilaTextButton(onClick = { showReportsDialog = true }) {
+                    Text("Segnalazioni aperte ($openCount)")
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(AppTheme.Space16))
 
         // Ricalcolato solo quando cambiano le proposte o il filtro, non a ogni ricomposizione.
@@ -109,11 +152,28 @@ fun BoardScreen(
 
         val contentPadding = PaddingValues(bottom = AppTheme.Space24 + circolareplus.design.LocalBottomBarPadding.current)
         val unlockPanel: @Composable () -> Unit = {
-            UnlockRequestsPanel(
-                requests = unlockRequests,
-                onApprove = onApproveUnlock,
-                onReject = onRejectUnlock
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)) {
+                UnlockRequestsPanel(
+                    requests = unlockRequests,
+                    onApprove = onApproveUnlock,
+                    onReject = onRejectUnlock
+                )
+                if (canModerateIdentity && deleteRequests.isNotEmpty()) {
+                    DeleteRequestsPanel(
+                        requests = deleteRequests,
+                        onApprove = { reqId ->
+                            val executed = circolareplus.data.AppContainer.proposalsRepository.approveDelete(reqId)
+                            reloadModeration()
+                            feedbackMessage = if (executed) "Contenuto eliminato con tutte le firme." else "Firma registrata."
+                        },
+                        onReject = { reqId ->
+                            circolareplus.data.AppContainer.proposalsRepository.rejectDelete(reqId)
+                            reloadModeration()
+                            feedbackMessage = "Richiesta di eliminazione rifiutata."
+                        }
+                    )
+                }
+            }
         }
         val emptyState: @Composable () -> Unit = {
             ForumEmptyState(
@@ -128,7 +188,7 @@ fun BoardScreen(
                 modifier = modifier,
                 proposal = proposal,
                 currentUserId = currentUserId,
-                canDelete = isRepresentative || proposal.authorId == currentUserId,
+                canDelete = proposal.authorId == currentUserId,
                 // Chi può modificare: l'autore la propria proposta, il Rappresentante
                 // qualunque. Prima era riservata al Rappresentante anche sulle proprie, e
                 // per correggere un refuso bisognava cancellare e riscrivere, perdendo voti
@@ -143,7 +203,9 @@ fun BoardScreen(
                 onLoadComments = onLoadComments,
                 onAddComment = onAddComment,
                 onDelete = onDelete,
-                onRequestUnlock = onRequestUnlock
+                onRequestUnlock = onRequestUnlock,
+                onReport = { proposalId, commentId -> reportTarget = proposalId to commentId },
+                onRequestSignedDelete = { scope, targetId, preview -> deleteRequestTarget = Triple(scope, targetId, preview) }
             )
         }
 
@@ -163,7 +225,7 @@ fun BoardScreen(
                 contentPadding = contentPadding,
                 modifier = Modifier.fillMaxSize()
             ) {
-                if (canModerateIdentity && unlockRequests.isNotEmpty()) {
+                if (canModerateIdentity && (unlockRequests.isNotEmpty() || deleteRequests.isNotEmpty())) {
                     item(key = "unlock-requests", span = StaggeredGridItemSpan.FullLine) { unlockPanel() }
                 }
                 if (filtered.isEmpty()) {
@@ -188,7 +250,7 @@ fun BoardScreen(
                 contentPadding = contentPadding,
                 modifier = Modifier.fillMaxSize()
             ) {
-                if (canModerateIdentity && unlockRequests.isNotEmpty()) {
+                if (canModerateIdentity && (unlockRequests.isNotEmpty() || deleteRequests.isNotEmpty())) {
                     item(key = "unlock-requests") { unlockPanel() }
                 }
                 if (filtered.isEmpty()) {
@@ -210,6 +272,79 @@ fun BoardScreen(
         }
     }
 
+    reportTarget?.let { (proposalId, commentId) ->
+        ReportContentDialog(
+            title = if (commentId == null) "Segnala proposta" else "Segnala commento",
+            onDismiss = { reportTarget = null },
+            onSubmit = { reason ->
+                circolareplus.data.AppContainer.proposalsRepository.reportProposal(proposalId, reason, commentId)
+                feedbackMessage = "Segnalazione inviata ai moderatori."
+                reloadModeration()
+            }
+        )
+    }
+
+    deleteRequestTarget?.let { (scope, targetId, preview) ->
+        RequestDeleteDialog(
+            title = if (scope == "BOARD_PROPOSAL") "Richiedi eliminazione proposta" else "Richiedi eliminazione commento",
+            preview = preview,
+            onDismiss = { deleteRequestTarget = null },
+            onSubmit = { reason ->
+                circolareplus.data.AppContainer.proposalsRepository.requestDelete(scope, targetId, reason)
+                reloadModeration()
+                feedbackMessage = "Richiesta di eliminazione inviata (in attesa delle firme)."
+            }
+        )
+    }
+
+    if (showReportsDialog) {
+        circolareplus.design.AilaAlertDialog(
+            onDismissRequest = { showReportsDialog = false },
+            title = { Text("Segnalazioni in Bacheca") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (boardReports.isEmpty()) {
+                        Text("Nessuna segnalazione.", color = AppTheme.TextMuted)
+                    } else {
+                        boardReports.forEach { rep ->
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    "${if (rep.status == "OPEN") "Aperta" else "Chiusa"} · ${rep.proposalTitle}",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = AppTheme.TextDark
+                                )
+                                Text(rep.reason, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
+                                if (rep.status == "OPEN") {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        circolareplus.design.AilaTextButton(onClick = {
+                                            showReportsDialog = false
+                                            deleteRequestTarget = Triple(
+                                                if (rep.commentId != null) "BOARD_COMMENT" else "BOARD_PROPOSAL",
+                                                rep.commentId ?: rep.proposalId,
+                                                rep.proposalTitle
+                                            )
+                                        }) { Text("Elimina (firme)") }
+                                        circolareplus.design.AilaTextButton(onClick = {
+                                            boardScope.launch {
+                                                runCatching { circolareplus.data.AppContainer.proposalsRepository.closeReport(rep.id) }
+                                                reloadModeration()
+                                            }
+                                        }) { Text("Chiudi") }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                circolareplus.design.AilaTextButton(onClick = { showReportsDialog = false }) { Text("Chiudi") }
+            }
+        )
+    }
     }
 }
 
@@ -229,7 +364,9 @@ fun ProposalCardItem(
     onDelete: (String) -> Unit = {},
     onEdit: (String, String, String) -> Unit = { _, _, _ -> },
     onOpenAttachment: (circolareplus.data.remote.dto.ContentAttachmentDto) -> Unit = {},
-    onRequestUnlock: suspend (String, String?, String) -> Unit = { _, _, _ -> }
+    onRequestUnlock: suspend (String, String?, String) -> Unit = { _, _, _ -> },
+    onReport: (proposalId: String, commentId: String?) -> Unit = { _, _ -> },
+    onRequestSignedDelete: (scope: String, targetId: String, preview: String) -> Unit = { _, _, _ -> }
 ) {
     var isExpanded by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -377,6 +514,19 @@ fun ProposalCardItem(
                         ) {
                             AppIcons.Trash(modifier = Modifier.size(21.dp), color = AppTheme.TintRedInk)
                         }
+                    } else if (canModerateIdentity) {
+                        circolareplus.design.AilaIconControl(
+                            onClick = { onRequestSignedDelete("BOARD_PROPOSAL", proposal.id, proposal.title) },
+                            modifier = Modifier.size(44.dp).semantics { contentDescription = "Richiedi eliminazione proposta" }
+                        ) {
+                            AppIcons.Trash(modifier = Modifier.size(21.dp), color = AppTheme.TintRedInk)
+                        }
+                    }
+                    circolareplus.design.AilaIconControl(
+                        onClick = { onReport(proposal.id, null) },
+                        modifier = Modifier.size(44.dp).semantics { contentDescription = "Segnala proposta" }
+                    ) {
+                        AppIcons.Warning(modifier = Modifier.size(19.dp), color = AppTheme.TextMuted)
                     }
                 }
             }
@@ -581,6 +731,16 @@ fun ProposalCardItem(
                                                 showUnlockDialog = true
                                             }
                                         )
+                                    }
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    circolareplus.design.AilaTextButton(onClick = { onReport(proposal.id, comment.id) }) {
+                                        Text("Segnala")
+                                    }
+                                    if (canModerateIdentity) {
+                                        circolareplus.design.AilaTextButton(onClick = { onRequestSignedDelete("BOARD_COMMENT", comment.id, comment.content) }) {
+                                            Text("Elimina (firme)")
+                                        }
                                     }
                                 }
                             }

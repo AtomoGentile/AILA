@@ -79,6 +79,7 @@ internal fun ForumEmptyState(title: String = "Nessuna domanda",
 @Composable
 internal fun ForumNewQuestionSheet(title: String, question: String, anonymous: Boolean, accepted: Boolean, busy: Boolean, error: String?,
     attachments: List<circolareplus.data.remote.dto.ContentAttachmentDto>, onPickAttachment: () -> Unit,
+    recording: Boolean = false, onStartVoice: () -> Unit = {}, onStopVoice: () -> Unit = {}, onCancelVoice: () -> Unit = {},
     onRemoveAttachment: (circolareplus.data.remote.dto.ContentAttachmentDto) -> Unit,
     onTitle: (String) -> Unit, onQuestion: (String) -> Unit, onAnonymous: (Boolean) -> Unit, onAccepted: (Boolean) -> Unit,
     onRules: () -> Unit, onClose: () -> Unit, onPublish: () -> Unit) {
@@ -103,7 +104,18 @@ internal fun ForumNewQuestionSheet(title: String, question: String, anonymous: B
                 }
                 Text(if(anonymous) "Alla classe apparirai come OP. L’identità scelta resterà fissa in questa discussione." else "La classe vedrà il tuo nome. L’identità scelta resterà fissa in questa discussione.",style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
             }
-            circolareplus.design.AilaOutlinedButton(onClick=onPickAttachment,enabled=!busy&&attachments.size<5,modifier=Modifier.fillMaxWidth()) { Text(if(attachments.isEmpty())"Aggiungi allegati" else "Aggiungi allegati (${attachments.size}/5)") }
+            if (recording) {
+                VoiceRecordingPanel(
+                    onStop = onStopVoice,
+                    onCancel = onCancelVoice,
+                    subtitle = "Il vocale verrà allegato alla domanda."
+                )
+            } else {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    circolareplus.design.AilaOutlinedButton(onClick=onPickAttachment,enabled=!busy&&attachments.size<5,modifier=Modifier.weight(1f)) { Text(if(attachments.isEmpty())"Allega file" else "Allega (${attachments.size}/5)") }
+                    circolareplus.design.AilaOutlinedButton(onClick=onStartVoice,enabled=!busy&&attachments.size<5,modifier=Modifier.weight(1f)) { Text("Vocale") }
+                }
+            }
             attachments.forEach { item ->
                 Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                     Text(item.fileName,Modifier.weight(1f),style=MaterialTheme.typography.bodySmall,color=AppTheme.TextDark,maxLines=1)

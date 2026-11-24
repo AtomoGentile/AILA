@@ -7,10 +7,18 @@ import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
 import type { Env, JWTPayload, ProposalStatus } from '../types';
 import { authMiddleware, requireRole, newUUID, resolveClassId } from '../auth';
-import { notifyClass, notifyUser } from '../services/fcm';
+import { notifyClass, notifyUser, notifyUsers } from '../services/fcm';
 import { inBackground } from '../services/background';
 import { fullName } from '../names';
 import { contentJson, type ContentRow } from '../services/content';
+import {
+  approveDeleteRequest,
+  createDeleteRequest,
+  getClassSigners,
+  getSignerRole,
+  listDeleteRequests,
+  rejectDeleteRequest,
+} from '../services/deleteQuorum';
 
 // Quorum per svelare l'autore di una proposta o di un commento anonimi (specifica v3.0, sez. 3.3).
 const QUORUM_REPRESENTATIVES = 2;
@@ -361,9 +369,8 @@ proposals.delete('/:id', async (c) => {
   if (!proposal) return c.json({ error: 'Proposta non trovata' }, 404);
 
   const isAuthor = proposal.author_id === payload.sub;
-  const isRep = payload.role === 'REPRESENTATIVE';
-  if (!isAuthor && !isRep) {
-    return c.json({ error: 'Puoi eliminare solo le tue proposte' }, 403);
+  if (!isAuthor) {
+    return c.json({ error: 'Puoi eliminare direttamente solo le tue proposte. Per eliminare quelle altrui usa la richiesta con firma dei Rappresentanti e della Guardia.' }, 403);
   }
 
   // voti e commenti hanno ON DELETE CASCADE su proposal_id nello schema: basta cancellare la riga.
@@ -737,6 +744,145 @@ proposals.post('/unlock-requests/:requestId/reject', requireSigner, async (c) =>
   ).bind(requestId, await resolveClassId(c)).run();
   if (!closed.meta.changes) return c.json({ error: 'Richiesta non trovata o già chiusa' }, 404);
 
+  return c.json({ success: true });
+});
+
+// ---------------------------------------------------------------------------
+// Richieste di eliminazione con firma (2 Rappresentanti + 1 Guardia) per Bacheca
+// ---------------------------------------------------------------------------
+proposals.get('/delete-requests', requireSigner, async (c) => {
+  const payload = c.get('jwtPayload');
+  const classId = await resolveClassId(c);
+  return c.json({
+    requests: await listDeleteRequests(c.env, classId, ['BOARD_PROPOSAL', 'BOARD_COMMENT'], payload.sub),
+  });
+});
+
+proposals.post('/delete-requests', requireSigner, async (c) => {
+  const payload = c.get('jwtPayload');
+  const classId = await resolveClassId(c);
+  const role = await getSignerRole(c.env, payload.sub, classId);
+  if (!role) return c.json({ error: 'Solo Rappresentanti o Guardia di Sicurezza' }, 403);
+
+  const body = await c.req.json<{ scope?: string; targetId?: string; reason?: string }>();
+  const reason = (body.reason ?? '').trim();
+  if (reason.length < 5 || reason.length > 500) {
+    return c.json({ error: 'Indica un motivo (tra 5 e 500 caratteri)' }, 400);
+  }
+  if (body.scope !== 'BOARD_PROPOSAL' && body.scope !== 'BOARD_COMMENT') {
+    return c.json({ error: 'Tipo contenuto non valido' }, 400);
+  }
+  if (!body.targetId) return c.json({ error: 'Contenuto non indicato' }, 400);
+
+  let preview = '';
+  if (body.scope === 'BOARD_PROPOSAL') {
+    const p = await c.env.DB.prepare('SELECT title FROM proposals WHERE id = ? AND class_id = ?')
+      .bind(body.targetId, classId).first<{ title: string }>();
+    if (!p) return c.json({ error: 'Proposta non trovata' }, 404);
+    preview = p.title;
+  } else {
+    const cm = await c.env.DB.prepare(
+      `SELECT pc.content FROM proposal_comments pc
+       JOIN proposals p ON p.id = pc.proposal_id
+       WHERE pc.id = ? AND p.class_id = ?`
+    ).bind(body.targetId, classId).first<{ content: string }>();
+    if (!cm) return c.json({ error: 'Commento non trovato' }, 404);
+    preview = cm.content;
+  }
+
+  const res = await createDeleteRequest(c.env, {
+    classId,
+    scope: body.scope,
+    targetId: body.targetId,
+    targetPreview: preview,
+    reason,
+    requesterId: payload.sub,
+    requesterRole: role,
+  });
+  if (res.error) return c.json({ error: res.error }, (res.status ?? 400) as 400);
+  return c.json({ id: res.id }, 201);
+});
+
+proposals.post('/delete-requests/:requestId/approve', requireSigner, async (c) => {
+  const payload = c.get('jwtPayload');
+  const classId = await resolveClassId(c);
+  const role = await getSignerRole(c.env, payload.sub, classId);
+  if (!role) return c.json({ error: 'Solo Rappresentanti o Guardia di Sicurezza' }, 403);
+  const res = await approveDeleteRequest(c.env, c.req.param('requestId'), classId, payload.sub, role);
+  if (res.error) return c.json({ error: res.error }, (res.status ?? 400) as 400);
+  return c.json({ success: true, executed: !!res.executed });
+});
+
+proposals.post('/delete-requests/:requestId/reject', requireSigner, async (c) => {
+  const classId = await resolveClassId(c);
+  const res = await rejectDeleteRequest(c.env, c.req.param('requestId'), classId);
+  if (res.error) return c.json({ error: res.error }, (res.status ?? 400) as 400);
+  return c.json({ success: true });
+});
+
+// ---------------------------------------------------------------------------
+// Segnalazioni in Bacheca (proposte e commenti)
+// ---------------------------------------------------------------------------
+proposals.post('/:id/reports', async (c) => {
+  const payload = c.get('jwtPayload');
+  const classId = await resolveClassId(c);
+  const proposalId = c.req.param('id');
+  const body = await c.req.json<{ reason?: string; commentId?: string }>();
+  const reason = (body.reason ?? '').trim();
+  if (!reason || reason.length > 1000) {
+    return c.json({ error: 'Indica il motivo della segnalazione (massimo 1000 caratteri)' }, 400);
+  }
+  const proposal = await c.env.DB.prepare('SELECT id, title FROM proposals WHERE id = ? AND class_id = ?')
+    .bind(proposalId, classId).first<{ id: string; title: string }>();
+  if (!proposal) return c.json({ error: 'Proposta non trovata' }, 404);
+
+  if (body.commentId) {
+    const comment = await c.env.DB.prepare('SELECT id FROM proposal_comments WHERE id = ? AND proposal_id = ?')
+      .bind(body.commentId, proposalId).first<{ id: string }>();
+    if (!comment) return c.json({ error: 'Commento non trovato' }, 404);
+  }
+
+  const id = newUUID();
+  await c.env.DB.prepare(
+    `INSERT INTO proposal_reports (id, class_id, proposal_id, comment_id, reporter_id, reason)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).bind(id, classId, proposalId, body.commentId ?? null, payload.sub, reason).run();
+
+  inBackground(c, (async () => {
+    const signers = (await getClassSigners(c.env, classId)).filter((u) => u !== payload.sub);
+    if (signers.length) {
+      await notifyUsers(
+        c.env,
+        signers,
+        'Segnalazione in Bacheca',
+        `«${proposal.title}»: ${reason.slice(0, 120)}`,
+        { action: 'board_report', proposal_id: proposalId }
+      );
+    }
+  })());
+
+  return c.json({ id }, 201);
+});
+
+proposals.get('/reports', requireSigner, async (c) => {
+  const classId = await resolveClassId(c);
+  const rows = await c.env.DB.prepare(
+    `SELECT r.id, r.proposal_id AS proposalId, r.comment_id AS commentId, r.reason, r.status,
+            r.created_at AS createdAt, p.title AS proposalTitle
+     FROM proposal_reports r
+     JOIN proposals p ON p.id = r.proposal_id
+     WHERE r.class_id = ?
+     ORDER BY CASE WHEN r.status = 'OPEN' THEN 0 ELSE 1 END, r.created_at DESC
+     LIMIT 50`
+  ).bind(classId).all();
+  return c.json({ reports: rows.results });
+});
+
+proposals.put('/reports/:reportId/close', requireSigner, async (c) => {
+  const classId = await resolveClassId(c);
+  await c.env.DB.prepare(
+    `UPDATE proposal_reports SET status = 'RESOLVED' WHERE id = ? AND class_id = ?`
+  ).bind(c.req.param('reportId'), classId).run();
   return c.json({ success: true });
 });
 

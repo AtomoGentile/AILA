@@ -29,9 +29,11 @@ import kotlinx.coroutines.*
 fun ForumScreen(
  isModerator:Boolean,onBack:()->Unit,onOpenAttachment:(ContentAttachmentDto)->Unit,
  onPrepareCalendar:(String)->Unit,onActivity:(AssistantAgentPhase?)->Unit,
- initialThreadId:String?=null,inline:Boolean=false,isActive:Boolean=true,onCalendarChanged:()->Unit={},onContextChange:(String)->Unit={}
+ initialThreadId:String?=null,inline:Boolean=false,isActive:Boolean=true,onCalendarChanged:()->Unit={},onContextChange:(String)->Unit={},
+ canSignModeration:Boolean=isModerator
 ) {
  val scope=rememberCoroutineScope();val repo=AppContainer.forumRepository
+ val currentUserId=AppContainer.settings.currentUserId
  var manualPhase by remember{mutableStateOf<AssistantAgentPhase?>(null)}
  var automaticPhase by remember{mutableStateOf<AssistantAgentPhase?>(null)}
  fun activity(phase:AssistantAgentPhase?){manualPhase=phase}
@@ -48,15 +50,24 @@ fun ForumScreen(
  var focusPostId by rememberSaveable{mutableStateOf<String?>(null)}
  var replyTo by remember{mutableStateOf<ForumPostDto?>(null)}
  var body by rememberSaveable{mutableStateOf("")};var anonymous by rememberSaveable{mutableStateOf(true)}
- var rulesAccepted by rememberSaveable{mutableStateOf(false)};var showRules by remember{mutableStateOf(false)}
+ var rulesAccepted by remember(currentUserId){mutableStateOf(AppContainer.settings.hasAcceptedForumRules(currentUserId))}
+ var showRules by remember{mutableStateOf(false)}
  var creating by remember{mutableStateOf(false)};var createTitle by remember{mutableStateOf("")};var createBody by remember{mutableStateOf("")}
  var error by remember{mutableStateOf<String?>(null)};var busy by remember{mutableStateOf(false)}
+ var uploadingAttachment by remember{mutableStateOf(false)}
+ var feedbackMessage by remember{mutableStateOf<String?>(null)}
+ var deleteRequests by remember{mutableStateOf<List<ContentDeleteRequestDto>>(emptyList())}
+ var deleteRequestTarget by remember{mutableStateOf<Triple<String,String,String>?>(null)}
  var notificationDialog by remember{mutableStateOf(false)};var mentionsDialog by remember{mutableStateOf(false)}
  var menuPost by remember{mutableStateOf<ForumPostDto?>(null)};var reportPost by remember{mutableStateOf<ForumPostDto?>(null)}
- var reportReason by remember{mutableStateOf("")};var reports by remember{mutableStateOf<List<ForumReportDto>?>(null)}
+ var reports by remember{mutableStateOf<List<ForumReportDto>?>(null)}
  var summary by remember{mutableStateOf<AcaAiResultDto?>(null)};var consentRequest by remember{mutableStateOf<ForumAiRequestDto?>(null)}
  var pendingAttachments by remember{mutableStateOf<List<ContentAttachmentDto>>(emptyList())};var recording by remember{mutableStateOf(false)}
  var createAttachments by remember{mutableStateOf<List<ContentAttachmentDto>>(emptyList())}
+ suspend fun reloadDeleteRequests(){
+  if(!canSignModeration)return
+  deleteRequests=runCatching{repo.listDeleteRequests()}.getOrDefault(deleteRequests)
+ }
  suspend fun refresh(older:Boolean=false){
   val id=threadId
   if(id==null){val result=repo.list(filter=threadFilter);if(result.threads!=threads)threads=result.threads;moreThreads=result.hasMore;return}
@@ -74,9 +85,9 @@ fun ForumScreen(
  }
  fun launchWork(block:suspend()->Unit){if(busy)return;busy=true;error=null;scope.launch{try{block()}
   catch(e:CancellationException){throw e}catch(e:Exception){error=e.message?:"Operazione non completata"}finally{busy=false;activity(null)}}}
- LaunchedEffect(threadId,threadFilter){calendarProposals=emptyList();proposalError=null;confirmingProposal=null;snapshot=null;focusPostId=null;replyTo=null;body="";pendingAttachments=emptyList();error=null
-  try{refresh()}catch(e:CancellationException){throw e}catch(e:Exception){error=e.message}
-  while(isActive){delay(15_000);if(AppForeground.isForeground)try{refresh()}catch(e:CancellationException){throw e}catch(_:Exception){}}
+ LaunchedEffect(threadId,threadFilter,canSignModeration){calendarProposals=emptyList();proposalError=null;confirmingProposal=null;snapshot=null;focusPostId=null;replyTo=null;body="";pendingAttachments=emptyList();error=null
+  try{refresh();reloadDeleteRequests()}catch(e:CancellationException){throw e}catch(e:Exception){error=e.message}
+  while(isActive){delay(15_000);if(AppForeground.isForeground)try{refresh();reloadDeleteRequests()}catch(e:CancellationException){throw e}catch(_:Exception){}}
  }
  DisposableEffect(Unit){onDispose{onActivity(null)}}
  val automaticCloudAllowed=policy.cloudConsent&&AppContainer.settings.aiProvider!=circolareplus.ai.AiProvider.ON_DEVICE.id
@@ -91,9 +102,26 @@ fun ForumScreen(
   }
  }
  val addFile:(IncomingContent)->Unit={file->when{
-  creating&&createAttachments.size<5->launchWork{activity(AssistantAgentPhase.READING);createAttachments=createAttachments+AppContainer.acaRepository.upload(file,persistLocal=false)}
+  creating&&createAttachments.size<5->{
+   uploadingAttachment=true;error=null
+   scope.launch{
+    try{activity(AssistantAgentPhase.READING);createAttachments=createAttachments+AppContainer.acaRepository.upload(file,persistLocal=false)}
+    catch(e:CancellationException){throw e}
+    catch(e:Exception){error=e.message?:"Impossibile caricare l'allegato."}
+    finally{uploadingAttachment=false;activity(null)}
+   }
+  }
   creating->error="Puoi allegare al massimo 5 file alla domanda."
-  threadId!=null&&pendingAttachments.size<5->launchWork{activity(AssistantAgentPhase.READING);pendingAttachments=pendingAttachments+AppContainer.acaRepository.upload(file,threadId,persistLocal=false)}
+  threadId!=null&&pendingAttachments.size<5->{
+   val targetThread=threadId!!
+   uploadingAttachment=true;error=null
+   scope.launch{
+    try{activity(AssistantAgentPhase.READING);pendingAttachments=pendingAttachments+AppContainer.acaRepository.upload(file,targetThread,persistLocal=false)}
+    catch(e:CancellationException){throw e}
+    catch(e:Exception){error=e.message?:"Impossibile caricare l'allegato."}
+    finally{uploadingAttachment=false;activity(null)}
+   }
+  }
   else->error="Apri una discussione e allega al massimo 5 file per risposta."
  }}
  val closeCreation:(()->Unit)={if(!busy){
@@ -138,8 +166,51 @@ fun ForumScreen(
  PlatformBackHandler(enabled=isActive&&(!inline||threadId!=null||focusPostId!=null)){goBack()}
   Column(Modifier.fillMaxSize().background(AppTheme.BackgroundLight).then(if(inline)Modifier.padding(bottom=LocalBottomBarPadding.current) else Modifier.windowInsetsPadding(WindowInsets.safeDrawing)).imePadding()){
   if(!inline || threadId!=null)AilaBackBar(title=when{focusPostId!=null->"Conversazione";threadId!=null->"Revisione tra pere";else->"Revisione tra pere"},onBackClick=goBack,
-   action={if(threadId!=null)AilaIconButton("Preferenze della discussione",{notificationDialog=true}){tint->AppIcons.Bell(color=tint)}})
-  error?.let{Text(it,Modifier.padding(16.dp),color=AppTheme.TintRedInk)}
+   action={if(threadId!=null&&rulesAccepted)AilaIconButton("Preferenze della discussione",{notificationDialog=true}){tint->AppIcons.Bell(color=tint)}})
+  if(!rulesAccepted){
+   var checked by remember{mutableStateOf(false)}
+   Column(
+    Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
+    verticalArrangement=Arrangement.spacedBy(16.dp)
+   ){
+    AilaCard{
+     Column(Modifier.padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+      Text("Regole di Revisione tra pere",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.SemiBold,color=AppTheme.TextDark)
+      Text("Prima di entrare e partecipare devi leggere e accettare le regole della classe.",style=MaterialTheme.typography.bodyMedium,color=AppTheme.PrimaryBlue)
+      Text("Le discussioni sono visibili alla tua classe e restano disponibili nel tempo. Scegli nome reale o pseudonimo al primo intervento: l’identità resta fissa in quella discussione. Non pubblicare dati personali o contenuti offensivi. Puoi segnalare gli abusi; i Rappresentanti e la Guardia di Sicurezza possono rimuovere i contenuti con firma congiunta.",style=MaterialTheme.typography.bodyMedium,color=AppTheme.TextDark)
+      Text("Puoi richiamare @ai (o @ia) o chiedere un riassunto esplicitamente. I messaggi condivisi possono essere analizzati anche da altri lettori autorizzati che attivano le proposte automatiche: le proposte sono visibili alla classe e nessun evento viene aggiunto senza conferma. Le risposte AI sono assistenza e possono contenere errori. L’elaborazione cloud richiede il consenso in Impostazioni → AI. Sul server: 90 giorni fino a 3 MB; oltre: 7 giorni. Gli audio durano al massimo 10 minuti.",style=MaterialTheme.typography.bodyMedium,color=AppTheme.TextMuted)
+      Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
+       AilaCheckbox(checked=checked,onCheckedChange={checked=it})
+       Text("Ho letto e accetto le regole e l’informativa",style=MaterialTheme.typography.bodyMedium,color=AppTheme.TextDark,modifier=Modifier.weight(1f))
+      }
+      AilaPrimaryButton(
+       text="Accetta e continua",
+       enabled=checked,
+       fillMaxWidth=true,
+       onClick={
+        AppContainer.settings.setAcceptedForumRules(currentUserId,true)
+        rulesAccepted=true
+       }
+      )
+      if(!inline){
+       AilaTextButton(onClick=onBack,modifier=Modifier.align(Alignment.CenterHorizontally)){Text("Torna indietro")}
+      }
+     }
+    }
+   }
+   return@Column
+  }
+  error?.let{Text(it,Modifier.padding(horizontal=16.dp,vertical=8.dp),color=AppTheme.TintRedInk)}
+  feedbackMessage?.let{msg->
+   Box(Modifier.padding(horizontal=16.dp,vertical=6.dp)){
+    AilaCard(containerColor=AppTheme.TintGreen){
+     Row(Modifier.fillMaxWidth().padding(horizontal=14.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically){
+      Text(msg,style=MaterialTheme.typography.bodySmall,color=AppTheme.TintGreenInk,modifier=Modifier.weight(1f))
+      AilaTextButton(onClick={feedbackMessage=null}){Text("OK")}
+     }
+    }
+   }
+  }
   if(threadId==null){
    Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal=if(AppTheme.isNothing)20.dp else 16.dp).padding(top=16.dp)) {
     ForumIntroduction(busy, onCreate = { creating = true }, onRules = { showRules = true })
@@ -148,6 +219,23 @@ fun ForumScreen(
     AilaFilterBar(labels=listOf("Tutte","Aperte","Risolte","Le mie"),selectedIndex=filters.indexOf(threadFilter),
      onSelect={if(threadFilter!=filters[it]) {threadFilter=filters[it];threads=emptyList();moreThreads=false}})
     Spacer(Modifier.height(16.dp))
+    if(canSignModeration&&deleteRequests.isNotEmpty()){
+     DeleteRequestsPanel(
+      requests=deleteRequests,
+      onApprove={reqId->
+       val executed=repo.approveDelete(reqId)
+       reloadDeleteRequests()
+       refresh()
+       feedbackMessage=if(executed)"Contenuto eliminato con tutte le firme."else"Firma registrata."
+      },
+      onReject={reqId->
+       repo.rejectDelete(reqId)
+       reloadDeleteRequests()
+       feedbackMessage="Richiesta di eliminazione rifiutata."
+      }
+     )
+     Spacer(Modifier.height(12.dp))
+    }
     if(threads.isEmpty()&&!busy) {
      // La card pronta mantiene il ritmo della Bacheca anche mentre arriva la prima risposta
      // del server, evitando che compaia in ritardo rispetto alle altre superfici della pagina.
@@ -183,7 +271,8 @@ fun ForumScreen(
       if(snap.thread.needsResolution)Text("Sei ancora qui? Se hai trovato la risposta, puoi segnare la discussione come risolta.",color=AppTheme.PrimaryBlue)
       Row{circolareplus.design.AilaTextButton(onClick={askAi(ForumAiRequestDto())},enabled=!busy){Text("Riassumi")}
        if(snap.thread.isAuthor||isModerator)circolareplus.design.AilaTextButton(onClick={launchWork{repo.state(snap.thread.id,!snap.thread.resolved,snap.thread.featuredPostId);refresh()}},enabled=!busy){Text(if(snap.thread.resolved)"Riapri"else"Segna risolta")}
-       if(isModerator)circolareplus.design.AilaTextButton(onClick={launchWork{reports=repo.reports(snap.thread.id)}},enabled=!busy){Text("Segnalazioni")}
+       if(canSignModeration)circolareplus.design.AilaTextButton(onClick={launchWork{reports=repo.reports(snap.thread.id)}},enabled=!busy){Text("Segnalazioni")}
+       if(canSignModeration)circolareplus.design.AilaTextButton(onClick={deleteRequestTarget=Triple("FORUM_THREAD",snap.thread.id,snap.thread.title)},enabled=!busy){Text("Elimina (firme)")}
       }
       if(focusPostId!=null)circolareplus.design.AilaTextButton(onClick={focusPostId=null}){Text("Tutta la discussione")}
      }
@@ -228,66 +317,100 @@ fun ForumScreen(
     Column(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){
      replyTo?.let{p->Row(verticalAlignment=Alignment.CenterVertically){Text("Riprendi: ${p.author.label}",Modifier.weight(1f),color=AppTheme.TextMuted);circolareplus.design.AilaTextButton(onClick={replyTo=null}){Text("Annulla")}}}
      if(pendingAttachments.isNotEmpty())Column{pendingAttachments.forEach{a->Row(verticalAlignment=Alignment.CenterVertically){Text(a.fileName,Modifier.weight(1f),color=AppTheme.TextMuted);circolareplus.design.AilaTextButton(onClick={pendingAttachments=pendingAttachments.filterNot{it.id==a.id};scope.launch{try{AppContainer.acaRepository.removeAttachment(a.id)}catch(_:Exception){}}}){Text("Rimuovi")}}}}
-     OutlinedTextField(body,{body=it},modifier=Modifier.fillMaxWidth(),maxLines=4,placeholder={Text("Rispondi · richiama @perabot per chiedere ad AILA")},enabled=!busy)
-     Row(verticalAlignment=Alignment.CenterVertically){
-      circolareplus.design.AilaTextButton(onClick=pickFile,enabled=!busy&&pendingAttachments.size<5){Text("Allega")}
-      circolareplus.design.AilaTextButton(onClick={if(recording)recorder.stop()else recorder.start()},enabled=!busy){Text(if(recording)"Termina"else"Vocale")}
-      circolareplus.design.AilaTextButton(onClick={mentionsDialog=true},enabled=!busy){Text("@")}
-      Spacer(Modifier.weight(1f))
-      circolareplus.design.AilaActionButton(enabled=!busy&&rulesAccepted&&(body.isNotBlank()||pendingAttachments.isNotEmpty()),onClick={
-       val text=body;val parent=replyTo?.id?:focusPostId?:snap.thread.id
-       val mentions=snap.participants.filter{text.contains("@${it.label}")}.map{it.key}
-       launchWork{
-        val sent=repo.reply(snap.thread.id,text,snap.myIdentity?.anonymous?:anonymous,parent,mentions,pendingAttachments.map{it.id})
-        body="";pendingAttachments=emptyList();replyTo=null;refresh()
-        if(sent.invokePerabot){val p=AppContainer.acaRepository.preferences().preferences
-         val request=ForumAiRequestDto(question=text,publish=true,replyToId=sent.id)
-         if(!p.aiEnabled||!p.acaEnabled||"FORUM" !in p.services){error="Attiva AI, ACA e il servizio Forum in Impostazioni → AI.";return@launchWork}
-  if(!p.cloudConsent)consentRequest=request else{activity(AssistantAgentPhase.WRITING);repo.ai(snap.thread.id,text,true,sent.id);refresh()}}
-       }
-      }){Text("Invia")}
+     if(uploadingAttachment)Text("Caricamento allegato…",style=MaterialTheme.typography.bodySmall,color=AppTheme.PrimaryBlue)
+     if(recording){
+      VoiceRecordingPanel(onStop=recorder.stop,onCancel=recorder.cancel,subtitle="Il vocale verrà allegato alla risposta.")
+     }else{
+      OutlinedTextField(body,{body=it},modifier=Modifier.fillMaxWidth(),maxLines=4,placeholder={Text("Rispondi · richiama @ai per chiedere ad AILA")},enabled=!busy)
+      Row(verticalAlignment=Alignment.CenterVertically){
+       circolareplus.design.AilaTextButton(onClick=pickFile,enabled=!busy&&!uploadingAttachment&&pendingAttachments.size<5){Text("Allega")}
+       circolareplus.design.AilaTextButton(onClick=recorder.start,enabled=!busy&&!uploadingAttachment&&pendingAttachments.size<5){Text("Vocale")}
+       circolareplus.design.AilaTextButton(onClick={mentionsDialog=true},enabled=!busy){Text("@")}
+       Spacer(Modifier.weight(1f))
+       circolareplus.design.AilaActionButton(enabled=!busy&&!uploadingAttachment&&rulesAccepted&&(body.isNotBlank()||pendingAttachments.isNotEmpty()),onClick={
+        val text=body;val parent=replyTo?.id?:focusPostId?:snap.thread.id
+        val mentions=snap.participants.filter{text.contains("@${it.label}")}.map{it.key}
+        launchWork{
+         val sent=repo.reply(snap.thread.id,text,snap.myIdentity?.anonymous?:anonymous,parent,mentions,pendingAttachments.map{it.id})
+         body="";pendingAttachments=emptyList();replyTo=null;refresh()
+         if(sent.invokePerabot){val p=AppContainer.acaRepository.preferences().preferences
+          val request=ForumAiRequestDto(question=text,publish=true,replyToId=sent.id)
+          if(!p.aiEnabled||!p.acaEnabled||"FORUM" !in p.services){error="Attiva AI, ACA e il servizio Forum in Impostazioni → AI.";return@launchWork}
+   if(!p.cloudConsent)consentRequest=request else{activity(AssistantAgentPhase.WRITING);repo.ai(snap.thread.id,text,true,sent.id);refresh()}}
+        }
+       }){Text("Invia")}
+      }
      }
-     if(recording)circolareplus.design.AilaTextButton(onClick=recorder.cancel){Text("Annulla registrazione")}
      if(snap.myIdentity==null)Row(verticalAlignment=Alignment.CenterVertically){circolareplus.design.AilaCheckbox(anonymous,{anonymous=it});Text("Partecipa in forma anonima",color=AppTheme.TextMuted)}
      else Text("Identità in questa discussione: ${snap.myIdentity.label}. Rimarrà la stessa.",style=MaterialTheme.typography.labelSmall,color=AppTheme.TextMuted)
-     if(!rulesAccepted)Row(verticalAlignment=Alignment.CenterVertically){circolareplus.design.AilaCheckbox(rulesAccepted,{rulesAccepted=it});circolareplus.design.AilaTextButton(onClick={showRules=true}){Text("Accetto le regole del forum e l’informativa")}}
     }
    }
   }
  }
  if(creating) ForumNewQuestionSheet(
-  title=createTitle,question=createBody,anonymous=anonymous,accepted=rulesAccepted,busy=busy,error=error,
-  attachments=createAttachments,onPickAttachment=pickFile,onRemoveAttachment={item->createAttachments=createAttachments.filterNot{it.id==item.id};scope.launch{try{AppContainer.acaRepository.removeAttachment(item.id)}catch(_:Exception){}}},
-  onTitle={createTitle=it},onQuestion={createBody=it},onAnonymous={anonymous=it},onAccepted={rulesAccepted=it},
+  title=createTitle,question=createBody,anonymous=anonymous,accepted=rulesAccepted,busy=busy||uploadingAttachment,error=error,
+  attachments=createAttachments,onPickAttachment=pickFile,
+  recording=recording,onStartVoice=recorder.start,onStopVoice=recorder.stop,onCancelVoice=recorder.cancel,
+  onRemoveAttachment={item->createAttachments=createAttachments.filterNot{it.id==item.id};scope.launch{try{AppContainer.acaRepository.removeAttachment(item.id)}catch(_:Exception){}}},
+  onTitle={createTitle=it},onQuestion={createBody=it},onAnonymous={anonymous=it},onAccepted={if(it){AppContainer.settings.setAcceptedForumRules(currentUserId,true);rulesAccepted=true}},
   onRules={showRules=true},onClose=closeCreation,onPublish={launchWork{
    val created=repo.create(createTitle,createBody,anonymous,createAttachments.map{it.id});creating=false;createTitle="";createBody="";createAttachments=emptyList();threadId=created.thread.id
   }})
  if(showRules)circolareplus.design.AilaAlertDialog(onDismissRequest={showRules=false},title={Text("Revisione tra pere")},text={Column(Modifier.verticalScroll(rememberScrollState())){
-  Text("Le discussioni sono visibili alla tua classe e restano disponibili nel tempo. Scegli nome reale o pseudonimo al primo intervento: l’identità resta fissa in quella discussione. Non pubblicare dati personali o contenuti offensivi. Puoi segnalare gli abusi; i moderatori possono rimuovere i contenuti.")
-  Spacer(Modifier.height(12.dp));Text("Puoi richiamare @perabot o chiedere un riassunto esplicitamente. I messaggi condivisi possono essere analizzati anche da altri lettori autorizzati che attivano le proposte automatiche: le proposte sono visibili alla classe e nessun evento viene aggiunto senza conferma. Disattivare la tua AI non impedisce l’analisi dei messaggi già condivisi da parte degli altri lettori. Le risposte AI sono assistenza e possono contenere errori. L’elaborazione cloud richiede il consenso in Impostazioni → AI. Sul server: 90 giorni fino a 3 MB; oltre: 7 giorni. Le copie sul dispositivo restano fino alla cancellazione manuale. Gli audio durano al massimo 10 minuti. La scadenza degli allegati non elimina i messaggi.")
- }},confirmButton={circolareplus.design.AilaTextButton(onClick={rulesAccepted=true;showRules=false}){Text("Ho letto e accetto")}})
+  Text("Le discussioni sono visibili alla tua classe e restano disponibili nel tempo. Scegli nome reale o pseudonimo al primo intervento: l’identità resta fissa in quella discussione. Non pubblicare dati personali o contenuti offensivi. Puoi segnalare gli abusi; i Rappresentanti e la Guardia di Sicurezza possono rimuovere i contenuti con firma congiunta.")
+  Spacer(Modifier.height(12.dp));Text("Puoi richiamare @ai (o @ia) o chiedere un riassunto esplicitamente. I messaggi condivisi possono essere analizzati anche da altri lettori autorizzati che attivano le proposte automatiche: le proposte sono visibili alla classe e nessun evento viene aggiunto senza conferma. Disattivare la tua AI non impedisce l’analisi dei messaggi già condivisi da parte degli altri lettori. Le risposte AI sono assistenza e possono contenere errori. L’elaborazione cloud richiede il consenso in Impostazioni → AI. Sul server: 90 giorni fino a 3 MB; oltre: 7 giorni. Le copie sul dispositivo restano fino alla cancellazione manuale. Gli audio durano al massimo 10 minuti. La scadenza degli allegati non elimina i messaggi.")
+ }},confirmButton={circolareplus.design.AilaTextButton(onClick={AppContainer.settings.setAcceptedForumRules(currentUserId,true);rulesAccepted=true;showRules=false}){Text("Ho letto e accetto")}})
  if(notificationDialog)circolareplus.design.AilaAlertDialog(onDismissRequest={notificationDialog=false},title={Text("Notifiche di questa discussione")},text={Column{
   listOf("REPLIES" to "Solo risposte a me","ALL" to "Tutte le risposte","NONE" to "Nessuna notifica").forEach{(value,label)->
    Row(verticalAlignment=Alignment.CenterVertically){circolareplus.design.AilaRadioButton(snapshot?.notificationMode==value,onClick={launchWork{repo.subscribe(threadId!!,value);refresh();notificationDialog=false}});Text(label,color=AppTheme.TextDark)}
   }
  }},confirmButton={circolareplus.design.AilaTextButton(onClick={notificationDialog=false}){Text("Chiudi")}})
  if(mentionsDialog)circolareplus.design.AilaAlertDialog(onDismissRequest={mentionsDialog=false},title={Text("Menziona una persona")},text={Column(Modifier.verticalScroll(rememberScrollState())){
-  circolareplus.design.AilaTextButton(onClick={body+=" @perabot ";mentionsDialog=false}){Text("@perabot · AILA")}
+  circolareplus.design.AilaTextButton(onClick={body+=" @ai ";mentionsDialog=false}){Text("@ai · AILA")}
   snapshot?.participants?.forEach{p->circolareplus.design.AilaTextButton(onClick={body+=" @${p.label} ";mentionsDialog=false}){Text(if(p.isMe)"@Tu"else"@${p.label}")}}
  }},confirmButton={circolareplus.design.AilaTextButton(onClick={mentionsDialog=false}){Text("Chiudi")}})
  menuPost?.let{p->circolareplus.design.AilaAlertDialog(onDismissRequest={menuPost=null},title={Text(p.author.label)},text={Column{
   circolareplus.design.AilaTextButton(onClick={replyTo=p;focusPostId=if(p.id==threadId)null else p.id;menuPost=null}){Text("Riprendi")}
   circolareplus.design.AilaTextButton(onClick={menuPost=null;onPrepareCalendar(p.body)}){Text("Prepara eventi da questo messaggio")}
   if(snapshot?.thread?.isAuthor==true||isModerator)circolareplus.design.AilaTextButton(onClick={menuPost=null;launchWork{val s=snapshot!!;repo.state(s.thread.id,s.thread.resolved,if(s.thread.featuredPostId==p.id)null else p.id);refresh()}}){Text(if(snapshot?.thread?.featuredPostId==p.id)"Togli dall’evidenza"else"Risposta in evidenza")}
-  circolareplus.design.AilaTextButton(onClick={reportPost=p;reportReason="";menuPost=null}){Text("Segnala")}
-  if(isModerator)circolareplus.design.AilaTextButton(onClick={menuPost=null;launchWork{repo.moderate(threadId!!,p.id,!p.hidden);refresh()}}){Text(if(p.hidden)"Ripristina messaggio"else"Rimuovi dalla discussione")}
+  circolareplus.design.AilaTextButton(onClick={reportPost=p;menuPost=null}){Text("Segnala")}
+  if(canSignModeration)circolareplus.design.AilaTextButton(onClick={deleteRequestTarget=Triple(if(p.id==threadId)"FORUM_THREAD"else"FORUM_POST",p.id,p.body.ifBlank{snapshot?.thread?.title.orEmpty()});menuPost=null}){Text("Elimina (firme)")}
+  if(isModerator)circolareplus.design.AilaTextButton(onClick={menuPost=null;launchWork{repo.moderate(threadId!!,p.id,!p.hidden);refresh()}}){Text(if(p.hidden)"Ripristina messaggio"else"Nascondi messaggio")}
  }},confirmButton={circolareplus.design.AilaTextButton(onClick={menuPost=null}){Text("Chiudi")}})}
- reportPost?.let{p->circolareplus.design.AilaAlertDialog(onDismissRequest={reportPost=null},title={Text("Segnala un contenuto")},text={OutlinedTextField(reportReason,{reportReason=it},label={Text("Motivo")},maxLines=5)},
-  confirmButton={circolareplus.design.AilaTextButton(enabled=reportReason.isNotBlank(),onClick={reportPost=null;launchWork{repo.report(threadId!!,p.id,reportReason)}}){Text("Invia segnalazione")}},dismissButton={circolareplus.design.AilaTextButton(onClick={reportPost=null}){Text("Annulla")}})}
- reports?.let{items->circolareplus.design.AilaAlertDialog(onDismissRequest={reports=null},title={Text("Segnalazioni")},text={Column(Modifier.verticalScroll(rememberScrollState())){
+ reportPost?.let{p->
+  ReportContentDialog(
+   title="Segnala un contenuto",
+   onDismiss={reportPost=null},
+   onSubmit={reason->
+    repo.report(threadId!!,p.id,reason)
+    feedbackMessage="Segnalazione inviata ai moderatori."
+   }
+  )
+ }
+ deleteRequestTarget?.let{(scopeType,targetId,preview)->
+  RequestDeleteDialog(
+   title=if(scopeType=="FORUM_THREAD")"Richiedi eliminazione domanda"else"Richiedi eliminazione messaggio",
+   preview=preview,
+   onDismiss={deleteRequestTarget=null},
+   onSubmit={reason->
+    repo.requestDelete(scopeType,targetId,reason)
+    reloadDeleteRequests()
+    feedbackMessage="Richiesta di eliminazione inviata (in attesa delle firme)."
+   }
+  )
+ }
+ reports?.let{items->circolareplus.design.AilaAlertDialog(onDismissRequest={reports=null},title={Text("Segnalazioni")},text={Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)){
   if(items.isEmpty())Text("Nessuna segnalazione.")
-  items.forEach{r->Text("${r.status} · ${r.reason}",color=AppTheme.TextDark)
-   if(r.status=="OPEN")circolareplus.design.AilaTextButton(onClick={reports=null;launchWork{repo.moderate(threadId!!,r.postId,true,r.id);refresh()}}){Text("Rimuovi e chiudi segnalazione")}}
+  items.forEach{r->
+   Column(verticalArrangement=Arrangement.spacedBy(4.dp)){
+    Text("${if(r.status=="OPEN")"Aperta"else"Chiusa"} · ${r.reason}",color=AppTheme.TextDark)
+    if(r.status=="OPEN")Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
+     if(canSignModeration)circolareplus.design.AilaTextButton(onClick={reports=null;deleteRequestTarget=Triple(if(r.postId!=null)"FORUM_POST"else"FORUM_THREAD",r.postId?:threadId!!,r.reason)}){Text("Elimina (firme)")}
+     if(isModerator)circolareplus.design.AilaTextButton(onClick={reports=null;launchWork{repo.moderate(threadId!!,r.postId,true,r.id);refresh()}}){Text("Nascondi")}
+     circolareplus.design.AilaTextButton(onClick={reports=null;launchWork{repo.closeReport(threadId!!,r.id);feedbackMessage="Segnalazione chiusa."}}){Text("Chiudi")}
+    }
+   }
+  }
  }},confirmButton={circolareplus.design.AilaTextButton(onClick={reports=null}){Text("Chiudi")}})}
  summary?.let{r->circolareplus.design.AilaAlertDialog(onDismissRequest={summary=null},title={Text("Riassunto generato da AILA")},text={Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)){
   Text("${r.provider} · ${r.generatedAt}",style=MaterialTheme.typography.labelSmall)
@@ -296,7 +419,7 @@ fun ForumScreen(
   r.sources.take(20).forEach{s->circolareplus.design.AilaTextButton(onClick={focusPostId=s.postId;summary=null}){Text(s.label)}}
  }},confirmButton={circolareplus.design.AilaTextButton(onClick={summary=null}){Text("Chiudi")}})}
  consentRequest?.let{request->circolareplus.design.AilaAlertDialog(onDismissRequest={consentRequest=null},title={Text("Attivare AILA per questa discussione?")},
-  text={Text("Il servizio cloud elaborerà i messaggi visibili alla classe e le fonti AILA autorizzate. ${if(request.publish)"La risposta di Perabot sarà pubblicata nella discussione."else"Il riassunto sarà visibile solo a te."} Nessun evento verrà modificato automaticamente.")},
+  text={Text("Il servizio cloud elaborerà i messaggi visibili alla classe e le fonti AILA autorizzate. ${if(request.publish)"La risposta di AILA (@ai) sarà pubblicata nella discussione."else"Il riassunto sarà visibile solo a te."} Nessun evento verrà modificato automaticamente.")},
   confirmButton={circolareplus.design.AilaTextButton(onClick={consentRequest=null;launchWork{
    val p=AppContainer.acaRepository.preferences().preferences;AppContainer.acaRepository.savePreferences(p.copy(cloudConsent=true));activity(AssistantAgentPhase.WRITING)
    val result=repo.ai(threadId!!,request.question,request.publish,request.replyToId);if(request.publish)refresh()else summary=result
@@ -304,10 +427,5 @@ fun ForumScreen(
 }
 
 @Composable internal fun LocalForumAttachment(item:ContentAttachmentDto,enabled:Boolean,onOpen:()->Unit){
- val revision=AppContainer.localContents.revision
- var local by remember(item.id){mutableStateOf<circolareplus.data.repository.LocalContentEntry?>(null)}
- LaunchedEffect(item.id,revision){try{local=AppContainer.localContents.findByRemote(item.id)}catch(e:CancellationException){throw e}catch(_:Exception){}}
- circolareplus.design.AilaOutlinedButton(onClick=onOpen,enabled=enabled&&(!item.isExpired()||local!=null),modifier=Modifier.fillMaxWidth()){
-  Text(when{local!=null->"${local!!.fileName} · Sul dispositivo";item.isExpired()->"Copia sul server scaduta";else->"${if(item.mime.startsWith("audio/"))"Audio"else"Allegato"}: ${item.fileName}"})
- }
+ InlineAttachmentView(item = item, enabled = enabled, onOpen = onOpen)
 }
