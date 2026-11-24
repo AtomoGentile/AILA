@@ -7,6 +7,7 @@ import circolareplus.platform.AppForeground
 import circolareplus.push.DataRefreshEvents
 import circolareplus.push.PushPreferencesHook
 import circolareplus.ui.PendingDeepLink
+import circolareplus.ui.parsePasswordResetQuery
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -35,6 +36,8 @@ fun installWebLifecycle() {
 
     // Avvio a freddo dal tocco su una notifica: il SW ha aperto la finestra con ?push=...
     consumeLaunchPushParam()?.let { applyNotificationOpen(it) }
+    // Link di recupero password condiviso dal Rappresentante: ?reset=CODICE&u=USERNAME
+    consumeLaunchResetParams()?.let { PendingDeepLink.passwordReset = it }
 
     AppForeground.isForeground = jsIsVisible()
     jsOnVisibilityChange { visible ->
@@ -93,6 +96,16 @@ private fun consumeLaunchPushParam(): JsonObject? {
     return runCatching { messageJson.parseToJsonElement(raw).jsonObject }.getOrNull()
 }
 
+/** Legge ?reset=...&u=... e li rimuove subito dall'indirizzo (codice monouso). */
+private fun consumeLaunchResetParams() =
+    jsConsumeResetParams()?.let { raw ->
+        val obj = runCatching { messageJson.parseToJsonElement(raw).jsonObject }.getOrNull() ?: return@let null
+        parsePasswordResetQuery(
+            resetParam = obj["reset"]?.jsonPrimitive?.contentOrNull,
+            usernameParam = obj["u"]?.jsonPrimitive?.contentOrNull
+        )
+    }
+
 private fun jsIsVisible(): Boolean = js("document.visibilityState !== 'hidden'")
 
 private fun jsOnVisibilityChange(callback: (Boolean) -> Unit): Unit = js(
@@ -107,5 +120,18 @@ private fun jsConsumeLaunchParam(): String? = js(
       url.searchParams.delete('push');
       history.replaceState(history.state, '', url.pathname + url.search + url.hash);
       return value;
+    })()"""
+)
+
+private fun jsConsumeResetParams(): String? = js(
+    """(() => {
+      const url = new URL(location.href);
+      const reset = url.searchParams.get('reset');
+      if (reset === null) return null;
+      const u = url.searchParams.get('u') || '';
+      url.searchParams.delete('reset');
+      url.searchParams.delete('u');
+      history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+      return JSON.stringify({ reset, u });
     })()"""
 )

@@ -269,9 +269,11 @@ auth.post('/register', async (c) => {
 // ---------------------------------------------------------------------------
 auth.post('/login', async (c) => {
   const body = await c.req.json<{ username: string; password: string }>();
-  const { username, password } = body;
+  const rawUsername = body.username;
+  const password = body.password;
+  const username = typeof rawUsername === 'string' ? rawUsername.trim() : '';
 
-  if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
+  if (!username || typeof password !== 'string' || !password) {
     return c.json({ error: 'Username e password richiesti' }, 400);
   }
 

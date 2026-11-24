@@ -39,3 +39,6 @@ expect fun appVersionName(): String
  */
 @androidx.compose.runtime.Composable
 expect fun isReduceMotionEnabled(): Boolean
+
+/** Indirizzo base della PWA usato per generare i link condivisibili (es. recupero password). */
+expect fun pwaBaseUrl(): String

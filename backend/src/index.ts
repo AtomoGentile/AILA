@@ -16,6 +16,7 @@ import { pruneAttempts } from './rateLimit';
 
 // Routes
 import authRoutes from './routes/auth';
+import passkeysRoutes from './routes/passkeys';
 import usersRoutes from './routes/users';
 import circularsRoutes from './routes/circulars';
 import gitaRoutes from './routes/gita';
@@ -71,6 +72,7 @@ app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOStri
 // ---------------------------------------------------------------------------
 // API Routes
 // ---------------------------------------------------------------------------
+app.route('/api/auth/passkeys', passkeysRoutes);
 app.route('/api/auth', authRoutes);
 app.route('/api/users', usersRoutes);
 app.route('/api/circulars', circularsRoutes);
