@@ -79,6 +79,7 @@ internal fun ForumEmptyState(title: String = "Nessuna domanda",
 @Composable
 internal fun ForumNewQuestionSheet(title: String, question: String, anonymous: Boolean, accepted: Boolean, busy: Boolean, error: String?,
     attachments: List<circolareplus.data.remote.dto.ContentAttachmentDto>, onPickAttachment: () -> Unit,
+    onTakePhoto: () -> Unit = {},
     recording: Boolean = false, onStartVoice: () -> Unit = {}, onStopVoice: () -> Unit = {}, onCancelVoice: () -> Unit = {},
     onRemoveAttachment: (circolareplus.data.remote.dto.ContentAttachmentDto) -> Unit,
     onTitle: (String) -> Unit, onQuestion: (String) -> Unit, onAnonymous: (Boolean) -> Unit, onAccepted: (Boolean) -> Unit,
@@ -112,7 +113,8 @@ internal fun ForumNewQuestionSheet(title: String, question: String, anonymous: B
                 )
             } else {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    circolareplus.design.AilaOutlinedButton(onClick=onPickAttachment,enabled=!busy&&attachments.size<5,modifier=Modifier.weight(1f)) { Text(if(attachments.isEmpty())"Allega file" else "Allega (${attachments.size}/5)") }
+                    circolareplus.design.AilaOutlinedButton(onClick=onTakePhoto,enabled=!busy&&attachments.size<5,modifier=Modifier.weight(1f)) { Text("Foto") }
+                    circolareplus.design.AilaOutlinedButton(onClick=onPickAttachment,enabled=!busy&&attachments.size<5,modifier=Modifier.weight(1f)) { Text(if(attachments.isEmpty())"File" else "File (${attachments.size}/5)") }
                     circolareplus.design.AilaOutlinedButton(onClick=onStartVoice,enabled=!busy&&attachments.size<5,modifier=Modifier.weight(1f)) { Text("Vocale") }
                 }
             }

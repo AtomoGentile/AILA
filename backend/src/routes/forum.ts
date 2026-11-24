@@ -24,9 +24,9 @@ forum.get('/',async c=>{
  const condition=filter==='OPEN'?' AND t.resolved=0':filter==='RESOLVED'?' AND t.resolved=1':filter==='MINE'?' AND t.author_id=?':'';
  const rows=await c.env.DB.prepare(`SELECT t.*,(SELECT COUNT(*)-1 FROM forum_posts p WHERE p.thread_id=t.id AND p.hidden=0) replies
  FROM forum_threads t WHERE class_id=? AND hidden=0${condition} ORDER BY last_message_at DESC,id DESC LIMIT 51 OFFSET ?`).bind(classId,...(filter==='MINE'?[c.get('jwtPayload').sub]:[]),offset).all<ForumThreadRow&{replies:number}>();
- return c.json({threads:rows.results.slice(0,50).map(t=>({id:t.id,title:t.title,resolved:!!t.resolved,featuredPostId:t.featured_post_id,replies:Math.max(t.replies,0),
+ return c.json({threads:rows.results.slice(0,50).map(t=>({id:t.id,title:t.title,resolved:Number(t.resolved)===1,featuredPostId:t.featured_post_id,replies:Math.max(t.replies,0),
  createdAt:t.created_at,lastMessageAt:t.last_message_at,isAuthor:t.author_id===c.get('jwtPayload').sub,
- needsResolution:t.author_id===c.get('jwtPayload').sub&&!t.resolved&&Date.parse(t.last_message_at.replace(' ','T')+'Z')<Date.now()-3*86400000})),hasMore:rows.results.length>50});
+ needsResolution:t.author_id===c.get('jwtPayload').sub&&Number(t.resolved)!==1&&Date.parse(t.last_message_at.replace(' ','T')+'Z')<Date.now()-3*86400000})),hasMore:rows.results.length>50});
 });
 forum.post('/',async c=>{
  const user=c.get('jwtPayload');const classId=await resolveClassId(c);
@@ -131,7 +131,7 @@ forum.put('/:id/state',async c=>{
  if(body.resolved!==undefined&&typeof body.resolved!=='boolean')return c.json({error:'Stato non valido'},400);
  if(body.featuredPostId!=null&&!await c.env.DB.prepare('SELECT id FROM forum_posts WHERE id=? AND thread_id=? AND hidden=0').bind(body.featuredPostId,thread.id).first())return c.json({error:'Risposta non trovata'},400);
  await c.env.DB.prepare('UPDATE forum_threads SET resolved=?,featured_post_id=? WHERE id=?')
- .bind(body.resolved===undefined?thread.resolved:+body.resolved,'featuredPostId' in body?body.featuredPostId:thread.featured_post_id,thread.id).run();return c.json({success:true});
+ .bind(body.resolved===undefined?(Number(thread.resolved)===1?1:0):(body.resolved?1:0),'featuredPostId' in body?body.featuredPostId:thread.featured_post_id,thread.id).run();return c.json({success:true});
 });
 forum.post('/:id/reports',async c=>{
  const user=c.get('jwtPayload');const classId=await resolveClassId(c);const thread=await loadForumThread(c.env,classId,c.req.param('id'));

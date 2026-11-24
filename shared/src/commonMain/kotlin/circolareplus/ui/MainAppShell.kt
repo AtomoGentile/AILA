@@ -1373,8 +1373,8 @@ fun MainAppShell(
     var briefPollId by remember { mutableStateOf<String?>(null) }
     var briefRankingId by remember { mutableStateOf<String?>(null) }
     var briefProposalId by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(selectedTab, classSection) {
-        if (selectedTab != MainTab.CLASS || classSection != ClassSection.PERE) initialForumThread = null
+    LaunchedEffect(selectedTab, classSection, isInForum) {
+        if (!isInForum && (selectedTab != MainTab.CLASS || classSection != ClassSection.PERE)) initialForumThread = null
         if (selectedTab != MainTab.CLASS || classSection != ClassSection.BOARD) briefProposalId = null
         if (selectedTab != MainTab.POLLS) { briefPollId = null; briefRankingId = null }
     }
@@ -1802,10 +1802,12 @@ fun MainAppShell(
                 selectedTab = MainTab.CLASS
             }
             NotificationKind.FORUM.key -> {
-                initialForumThread = circolareplus.ui.PendingDeepLink.forumThreadId
+                val targetThread = circolareplus.ui.PendingDeepLink.forumThreadId
+                initialForumThread = targetThread
                 circolareplus.ui.PendingDeepLink.forumThreadId = null
                 classSection = ClassSection.PERE
                 selectedTab = MainTab.CLASS
+                if (targetThread != null) isInForum = true
             }
             NotificationKind.BOARD.key -> {
                 classSection = ClassSection.BOARD
@@ -3649,7 +3651,7 @@ fun MainAppShell(
                                                 }
                                             }
                                         }
-                                        circolareplus.data.remote.dto.AilaBriefKind.FORUM -> { initialForumThread = item.sourceId; classSection = ClassSection.PERE; selectedTab = MainTab.CLASS }
+                                        circolareplus.data.remote.dto.AilaBriefKind.FORUM -> { initialForumThread = item.sourceId; classSection = ClassSection.PERE; selectedTab = MainTab.CLASS; isInForum = true }
                                         circolareplus.data.remote.dto.AilaBriefKind.PROPOSAL -> { briefProposalId = item.sourceId; classSection = ClassSection.BOARD; selectedTab = MainTab.CLASS }
                                         circolareplus.data.remote.dto.AilaBriefKind.POLL -> { briefPollId = item.sourceId; showPollHistory = item.isResult; expandedResultsPollId = if(item.isResult) item.sourceId else null; pollsSection = 0; selectedTab = MainTab.POLLS }
                                         circolareplus.data.remote.dto.AilaBriefKind.RANKING_POLL -> { briefRankingId = item.sourceId; showPollHistory = item.isResult; pollsSection = 1; selectedTab = MainTab.POLLS }
@@ -4126,7 +4128,7 @@ fun MainAppShell(
                                                 } }
                                             }
                                             "BOARD" -> {briefProposalId=hit.id;classSection=ClassSection.BOARD;reloadProposals()}
-                                            "FORUM" -> {initialForumThread=hit.id;classSection=ClassSection.PERE}
+                                            "FORUM" -> {initialForumThread=hit.id;classSection=ClassSection.PERE;isInForum=true}
                                         }
                                     })
                                 }
@@ -4161,7 +4163,11 @@ fun MainAppShell(
                                             isActive = selectedTab == MainTab.CLASS && shellRoute == ShellRoute.TABS,
                                             isModerator = isRepresentative,
                                             canSignModeration = canModerateIdentity,
-                                            initialThreadId = initialForumThread,
+                                            initialThreadId = null,
+                                            onOpenThread = { id ->
+                                                initialForumThread = id
+                                                isInForum = true
+                                            },
                                             onBack = { initialForumThread = null; classSection = ClassSection.CIRCULARS },
                                             onContextChange = { acaForumContext = it },
                                             onOpenAttachment = { remoteContent = it; localContent = null },
@@ -4869,11 +4875,18 @@ fun MainAppShell(
                     )
                 }
                 ShellRoute.FORUM -> {
-                    ForumScreen(onContextChange={acaForumContext=it},isModerator = isRepresentative, canSignModeration = canModerateIdentity, initialThreadId = initialForumThread, onBack = { isInForum = false; initialForumThread = null },
+                    ForumScreen(
+                        onContextChange = { acaForumContext = it },
+                        isModerator = isRepresentative,
+                        canSignModeration = canModerateIdentity,
+                        initialThreadId = initialForumThread,
+                        exitOnBackFromThread = initialForumThread != null,
+                        onBack = { isInForum = false; initialForumThread = null },
                         onOpenAttachment = { remoteContent = it; localContent = null },
                         onPrepareCalendar = { text -> isInForum = false; isInAcaHub = false; isInLocalFiles = false; isInAssistantScreen = true; askAssistant("Prepara gli eventi da confermare da questa fonte:\n$text") },
                         onCalendarChanged = { reloadCalendar() },
-                        onActivity = { contentActivity = it })
+                        onActivity = { contentActivity = it }
+                    )
                 }
                 ShellRoute.CONTENT -> {
                     circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { localContent = null; remoteContent = null }

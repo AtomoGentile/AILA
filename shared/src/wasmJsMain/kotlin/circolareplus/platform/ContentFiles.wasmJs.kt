@@ -8,12 +8,19 @@ import kotlin.js.Promise
 
 @Composable actual fun rememberContentPicker(onError:(String)->Unit,onPicked:(IncomingContent)->Unit,photosOnly:Boolean):()->Unit {
  val error=rememberUpdatedState(onError);val picked=rememberUpdatedState(onPicked)
- return remember(photosOnly){{pickContentFile(CONTENT_MAX_BYTES.toDouble(),photosOnly,{name,mime,data->
+ return remember(photosOnly){{pickContentFile(CONTENT_MAX_BYTES.toDouble(),photosOnly,false,{name,mime,data->
   try{picked.value(IncomingContent(name,mime.ifBlank{contentMime(name)},Base64.decode(data)))}catch(_:Exception){error.value("File non leggibile")}
  },{error.value(it)})}}
 }
-private fun pickContentFile(limit:Double,photosOnly:Boolean,onPicked:(String,String,String)->Unit,onError:(String)->Unit){js("""(function(){
- const input=document.createElement('input');input.type='file';input.accept=photosOnly?'image/jpeg,image/png,image/webp':'.pdf,.docx,.txt,.png,.jpg,.jpeg,.webp,.wav,.m4a,.mp3,.ogg';
+@Composable actual fun rememberCameraPhotoPicker(onError:(String)->Unit,onPicked:(IncomingContent)->Unit):()->Unit {
+ val error=rememberUpdatedState(onError);val picked=rememberUpdatedState(onPicked)
+ return remember{{pickContentFile(CONTENT_MAX_BYTES.toDouble(),true,true,{name,mime,data->
+  try{picked.value(IncomingContent(name.ifBlank{"Foto.jpg"},mime.ifBlank{"image/jpeg"},Base64.decode(data)))}catch(_:Exception){error.value("Foto non leggibile")}
+ },{error.value(it)})}}
+}
+private fun pickContentFile(limit:Double,photosOnly:Boolean,cameraCapture:Boolean,onPicked:(String,String,String)->Unit,onError:(String)->Unit){js("""(function(){
+ const input=document.createElement('input');input.type='file';input.accept=cameraCapture?'image/*':(photosOnly?'image/jpeg,image/png,image/webp':'.pdf,.docx,.txt,.png,.jpg,.jpeg,.webp,.wav,.m4a,.mp3,.ogg');
+ if(cameraCapture)input.setAttribute('capture','environment');
  input.style.display='none';input.onchange=()=>{const f=input.files&&input.files[0];if(!f){input.remove();return;}
  if(!f.size||f.size>limit){onError('Scegli un file non vuoto fino a 20 MB');input.remove();return;}
  const r=new FileReader();r.onload=()=>{onPicked(f.name,f.type,String(r.result).split(',')[1]);input.remove();};r.onerror=()=>{onError('File non leggibile');input.remove();};r.readAsDataURL(f);};

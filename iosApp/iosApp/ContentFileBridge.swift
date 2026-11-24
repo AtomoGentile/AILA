@@ -7,10 +7,12 @@ import UniformTypeIdentifiers
 import shared
 
 /// Files remain local until the user explicitly starts a cloud operation in the preview.
-final class ContentFileBridgeImpl: NSObject, ContentFileBridge, UIDocumentPickerDelegate, PHPickerViewControllerDelegate, AVAudioRecorderDelegate {
+final class ContentFileBridgeImpl: NSObject, ContentFileBridge, UIDocumentPickerDelegate, PHPickerViewControllerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate, AVAudioRecorderDelegate {
     private var pickCallback: ((String?) -> Void)?
     private var photoCallback: ((String?) -> Void)?
     private var photoError: ((String) -> Void)?
+    private var cameraCallback: ((String?) -> Void)?
+    private var cameraError: ((String) -> Void)?
     private var recorder: AVAudioRecorder?
     private var recordCallback: ((String?) -> Void)?
     private var recordError: ((String) -> Void)?
@@ -60,6 +62,73 @@ final class ContentFileBridgeImpl: NSObject, ContentFileBridge, UIDocumentPicker
                 else { failure?("Impossibile leggere la foto selezionata.") }
             }
         }
+    }
+    func takePhoto(onResult: @escaping (String?) -> Void, onError: @escaping (String) -> Void) {
+        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+            onError("Fotocamera non disponibile su questo dispositivo.")
+            return
+        }
+        AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard granted else {
+                    onError("Consenti l’accesso alla fotocamera nelle impostazioni per scattare una foto.")
+                    return
+                }
+                guard let presenter = self.presenter() else {
+                    onError("Fotocamera non disponibile.")
+                    return
+                }
+                self.cameraCallback = onResult
+                self.cameraError = onError
+                let picker = UIImagePickerController()
+                picker.sourceType = .camera
+                picker.mediaTypes = [UTType.image.identifier]
+                picker.delegate = self
+                presenter.present(picker, animated: true)
+            }
+        }
+    }
+    func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+        picker.dismiss(animated: true)
+        let callback = cameraCallback
+        let failure = cameraError
+        cameraCallback = nil
+        cameraError = nil
+        guard let image = info[.originalImage] as? UIImage else {
+            failure?("Impossibile acquisire la foto.")
+            return
+        }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let path = Self.prepareCapturedImage(image)
+            DispatchQueue.main.async {
+                if let path { callback?(path) }
+                else { failure?("Impossibile salvare la foto scattata.") }
+            }
+        }
+    }
+    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+        picker.dismiss(animated: true)
+        let callback = cameraCallback
+        cameraCallback = nil
+        cameraError = nil
+        callback?(nil)
+    }
+    private static func prepareCapturedImage(_ image: UIImage) -> String? {
+        guard let rawData = image.jpegData(compressionQuality: 0.92),
+              let source = CGImageSourceCreateWithData(rawData as CFData, nil),
+              let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                  kCGImageSourceCreateThumbnailFromImageAlways: true,
+                  kCGImageSourceCreateThumbnailWithTransform: true,
+                  kCGImageSourceThumbnailMaxPixelSize: 3000
+              ] as CFDictionary) else { return nil }
+        let target = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Camera-\(UUID().uuidString).jpg")
+        guard let destination = CGImageDestinationCreateWithURL(target as CFURL, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, thumbnail, [kCGImageDestinationLossyCompressionQuality: 0.9] as CFDictionary)
+        if CGImageDestinationFinalize(destination) { return target.path }
+        try? FileManager.default.removeItem(at: target)
+        return nil
     }
     private static func preparePhoto(_ source: URL) -> String? {
         guard let image = CGImageSourceCreateWithURL(source as CFURL, nil),

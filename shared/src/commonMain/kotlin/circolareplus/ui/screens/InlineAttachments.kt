@@ -20,7 +20,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -185,51 +189,57 @@ private fun InlineImageAttachment(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(AppTheme.BackgroundLight)
-            .border(1.dp, AppTheme.Hairline, RoundedCornerShape(16.dp))
-            .padding(10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(AppTheme.BackgroundLight.copy(alpha = 0.72f))
+            .border(1.dp, AppTheme.Hairline, RoundedCornerShape(14.dp))
+            .padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .clickable(enabled = enabled) { minimized = !minimized }
-                .padding(2.dp),
+                .padding(horizontal = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            AilaIconTile(tint = AppTheme.TintBlue, size = 34.dp) {
-                AppIcons.Photo(Modifier.size(18.dp), AppTheme.TintBlueInk)
+            AilaIconTile(tint = AppTheme.TintBlue, size = 30.dp) {
+                AppIcons.Photo(Modifier.size(16.dp), AppTheme.TintBlueInk)
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text(
                     text = item.fileName,
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
                     color = AppTheme.TextDark,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    text = buildString {
-                        append(if (minimized) "Immagine ridotta" else "Foto allegata")
-                        if (sizeLabel.isNotEmpty()) append(" · $sizeLabel")
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AppTheme.TextMuted
-                )
+                if (sizeLabel.isNotEmpty() || minimized) {
+                    Text(
+                        text = buildString {
+                            append(if (minimized) "Immagine nascosta" else "Foto")
+                            if (sizeLabel.isNotEmpty()) append(" · $sizeLabel")
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AppTheme.TextMuted
+                    )
+                }
             }
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
+                    .size(32.dp)
+                    .clip(CircleShape)
                     .background(AppTheme.TintBlue)
-                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                    .clickable(enabled = enabled, role = Role.Button) { minimized = !minimized }
+                    .semantics {
+                        contentDescription = if (minimized) "Mostra immagine" else "Riduci immagine"
+                    },
+                contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = if (minimized) "Mostra" else "Riduci",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
+                AppIcons.ChevronRight(
+                    modifier = Modifier
+                        .size(15.dp)
+                        .graphicsLayer { rotationZ = if (minimized) 90f else -90f },
                     color = AppTheme.TintBlueInk
                 )
             }
@@ -265,9 +275,9 @@ private fun InlineImageAttachment(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 120.dp, max = 230.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(10.dp))
                             .background(Color.Black.copy(alpha = 0.08f))
-                            .clickable(enabled = enabled) { fullscreen = true },
+                            .clickable(enabled = enabled, role = Role.Image) { fullscreen = true },
                         contentAlignment = Alignment.Center
                     ) {
                         Image(
@@ -276,20 +286,6 @@ private fun InlineImageAttachment(
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 230.dp)
                         )
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(8.dp)
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(Color.Black.copy(alpha = 0.65f))
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                "Ingrandisci",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White
-                            )
-                        }
                     }
                 }
             }
@@ -377,26 +373,44 @@ internal fun InlineAudioAttachment(
     }
     val progress = if (totalMs > 0) (player.positionMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f) else 0f
 
+    val waveform = remember(item.id) {
+        val seed = item.id.hashCode()
+        List(28) { idx ->
+            val mixed = ((seed * 31 + idx * 17) xor (idx * 13 + 7)) and 0x7fffffff
+            0.22f + (mixed % 78) / 100f
+        }
+    }
+    val activeColor = AppTheme.PrimaryBlue
+    val inactiveColor = AppTheme.TextFaint.copy(alpha = 0.35f)
+    val durationLabel = when {
+        item.isExpired() && audioBytes == null -> "Vocale scaduto"
+        player.isPlaying || player.positionMs > 0 ->
+            if (totalMs > 0) "${formatDurationMs(player.positionMs)} / ${formatDurationMs(totalMs)}"
+            else formatDurationMs(player.positionMs)
+        totalMs > 0 -> formatDurationMs(totalMs)
+        else -> "Vocale"
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(AppTheme.BackgroundLight)
+            .background(AppTheme.BackgroundLight.copy(alpha = 0.72f))
             .border(1.dp, AppTheme.Hairline, RoundedCornerShape(16.dp))
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Box(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(if (enabled && !item.isExpired()) AppTheme.PrimaryBlue else AppTheme.Hairline)
-                    .clickable(enabled = enabled && !loading && (!item.isExpired() || audioBytes != null)) {
+                    .background(if (enabled && (!item.isExpired() || audioBytes != null)) activeColor else AppTheme.Hairline)
+                    .clickable(enabled = enabled && !loading && (!item.isExpired() || audioBytes != null), role = Role.Button) {
                         if (audioBytes != null) {
                             player.togglePlayPause()
                         } else {
@@ -415,6 +429,9 @@ internal fun InlineAudioAttachment(
                                 }
                             }
                         }
+                    }
+                    .semantics {
+                        contentDescription = if (player.isPlaying) "Metti in pausa vocale" else "Riproduci vocale"
                     },
                 contentAlignment = Alignment.Center
             ) {
@@ -424,38 +441,59 @@ internal fun InlineAudioAttachment(
                     else -> PlayGlyph(Modifier.size(16.dp), Color.White)
                 }
             }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(24.dp)
+                ) {
+                    val count = waveform.size
+                    val step = size.width / count.toFloat()
+                    val barWidth = (step * 0.56f).coerceIn(2.dp.toPx(), 4.dp.toPx())
+                    val centerY = size.height / 2f
+                    waveform.forEachIndexed { index, amp ->
+                        val barProgress = (index + 0.5f) / count.toFloat()
+                        val x = index * step + step / 2f
+                        val halfH = (size.height * amp * 0.46f).coerceAtLeast(2.dp.toPx())
+                        drawLine(
+                            color = if (barProgress <= progress) activeColor else inactiveColor,
+                            start = Offset(x, centerY - halfH),
+                            end = Offset(x, centerY + halfH),
+                            strokeWidth = barWidth,
+                            cap = StrokeCap.Round
+                        )
+                    }
+                    val dotX = (size.width * progress).coerceIn(4.dp.toPx(), size.width - 4.dp.toPx())
+                    drawCircle(
+                        color = activeColor,
+                        radius = 4.dp.toPx(),
+                        center = Offset(dotX, centerY)
+                    )
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = if (item.isExpired() && audioBytes == null) "Vocale scaduto" else "Messaggio vocale",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = AppTheme.TextDark
-                    )
-                    Text(
-                        text = if (totalMs > 0) "${formatDurationMs(player.positionMs)} / ${formatDurationMs(totalMs)}"
-                        else if (player.isPlaying) formatDurationMs(player.positionMs) else "Tocca per ascoltare",
+                        text = durationLabel,
                         style = MaterialTheme.typography.labelSmall,
                         color = AppTheme.TextMuted
                     )
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(5.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(AppTheme.Hairline)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(progress)
-                            .fillMaxHeight()
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(AppTheme.PrimaryBlue)
-                    )
+                    if (!item.transcript.isNullOrBlank()) {
+                        Text(
+                            text = if (showTranscript) "Nascondi testo" else "Trascrizione",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AppTheme.PrimaryBlue,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { showTranscript = !showTranscript }
+                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                        )
+                    }
                 }
             }
         }
@@ -464,27 +502,13 @@ internal fun InlineAudioAttachment(
             Text(err, style = MaterialTheme.typography.bodySmall, color = AppTheme.TintRedInk)
         }
 
-        if (!item.transcript.isNullOrBlank()) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(AppTheme.TintSlate)
-                    .clickable { showTranscript = !showTranscript }
-                    .padding(horizontal = 10.dp, vertical = 5.dp)
-            ) {
-                Text(
-                    text = if (showTranscript) "Nascondi trascrizione" else "Mostra trascrizione",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = AppTheme.TextDark
-                )
-            }
-            AnimatedVisibility(visible = showTranscript) {
-                Text(
-                    text = item.transcript,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AppTheme.TextMuted
-                )
-            }
+        AnimatedVisibility(visible = showTranscript && !item.transcript.isNullOrBlank()) {
+            Text(
+                text = item.transcript.orEmpty(),
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTheme.TextMuted,
+                modifier = Modifier.padding(top = 2.dp)
+            )
         }
     }
 }

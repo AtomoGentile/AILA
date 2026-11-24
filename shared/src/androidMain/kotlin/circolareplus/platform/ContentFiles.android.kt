@@ -82,6 +82,69 @@ private fun normalizePhoto(file: IncomingContent): IncomingContent {
   remember(launcher) { { launcher.launch(arrayOf("application/pdf","text/plain","application/vnd.openxmlformats-officedocument.wordprocessingml.document","image/png","image/jpeg","image/webp","audio/wav","audio/x-wav","audio/mp4","audio/mpeg","audio/ogg")) } }
  }
 }
+@Composable actual fun rememberCameraPhotoPicker(
+ onError: (String) -> Unit, onPicked: (IncomingContent) -> Unit
+): () -> Unit {
+ val context = LocalContext.current
+ val scope = rememberCoroutineScope()
+ val picked by rememberUpdatedState(onPicked)
+ val error by rememberUpdatedState(onError)
+ var pendingFile by remember { mutableStateOf<File?>(null) }
+
+ val takePictureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+  val file = pendingFile
+  pendingFile = null
+  if (!success || file == null) {
+   file?.delete()
+   return@rememberLauncherForActivityResult
+  }
+  scope.launch {
+   try {
+    val content = withContext(Dispatchers.IO) {
+     val bytes = file.readBytes()
+     file.delete()
+     require(bytes.isNotEmpty()) { "La foto è vuota" }
+     normalizePhoto(IncomingContent("Foto.jpg", "image/jpeg", bytes))
+    }
+    picked(content)
+   } catch (e: CancellationException) {
+    throw e
+   } catch (e: Exception) {
+    file.delete()
+    error(e.message ?: "Impossibile acquisire la foto")
+   }
+  }
+ }
+
+ fun launchCamera() {
+  try {
+   val dir = File(context.cacheDir, "camera").apply { mkdirs() }
+   val target = File.createTempFile("aila-cam-", ".jpg", dir)
+   val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", target)
+   pendingFile = target
+   takePictureLauncher.launch(uri)
+  } catch (e: Exception) {
+   pendingFile?.delete()
+   pendingFile = null
+   error(e.message ?: "Fotocamera non disponibile")
+  }
+ }
+
+ val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+  if (granted) launchCamera()
+  else error("Consenti l’accesso alla fotocamera per scattare una foto.")
+ }
+
+ return remember(context, takePictureLauncher, permissionLauncher) {
+  {
+   if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+    launchCamera()
+   } else {
+    permissionLauncher.launch(Manifest.permission.CAMERA)
+   }
+  }
+ }
+}
 actual suspend fun openContentFile(bytes:ByteArray,fileName:String,mime:String){
  val context=AndroidAppContext.require()
  val safe=fileName.substringAfterLast('/').substringAfterLast('\\').replace(Regex("[^\\p{L}\\p{N} ._()-]"),"_").ifBlank{"contenuto"}

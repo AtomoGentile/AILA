@@ -748,13 +748,19 @@ fun ProposalCardItem(
                                         )
                                     }
                                 }
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    circolareplus.design.AilaTextButton(onClick = { onReport(proposal.id, comment.id) }) {
-                                        Text("Segnala")
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    circolareplus.design.AilaIconControl(
+                                        onClick = { onReport(proposal.id, comment.id) },
+                                        modifier = Modifier.size(34.dp).semantics { contentDescription = "Segnala commento" }
+                                    ) {
+                                        AppIcons.Warning(modifier = Modifier.size(16.dp), color = AppTheme.TintAmberInk)
                                     }
                                     if (canModerateIdentity) {
-                                        circolareplus.design.AilaTextButton(onClick = { onRequestSignedDelete("BOARD_COMMENT", comment.id, comment.content) }) {
-                                            Text("Elimina (firme)")
+                                        circolareplus.design.AilaIconControl(
+                                            onClick = { onRequestSignedDelete("BOARD_COMMENT", comment.id, comment.content) },
+                                            modifier = Modifier.size(34.dp).semantics { contentDescription = "Richiedi eliminazione commento" }
+                                        ) {
+                                            AppIcons.Trash(modifier = Modifier.size(16.dp), color = AppTheme.TintRedInk)
                                         }
                                     }
                                 }

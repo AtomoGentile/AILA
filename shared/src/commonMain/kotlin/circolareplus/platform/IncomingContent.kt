@@ -25,6 +25,7 @@ fun contentMime(name:String):String=when(name.substringAfterLast('.').lowercase(
  else->"application/octet-stream"
 }
 @Composable expect fun rememberContentPicker(onError:(String)->Unit,onPicked:(IncomingContent)->Unit, photosOnly:Boolean = false):()->Unit
+@Composable expect fun rememberCameraPhotoPicker(onError:(String)->Unit,onPicked:(IncomingContent)->Unit):()->Unit
 expect suspend fun openContentFile(bytes:ByteArray,fileName:String,mime:String)
 
 class AudioRecorderActions(val start:()->Unit,val stop:()->Unit,val cancel:()->Unit)

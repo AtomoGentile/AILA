@@ -49,8 +49,9 @@ export async function forumSnapshot(env:Env,classId:string,userId:string,threadI
  });
  const subscription=await env.DB.prepare('SELECT mode FROM forum_subscriptions WHERE thread_id=? AND user_id=?').bind(threadId,userId).first<{mode:string}>();
  const mine=people.results.find(p=>p.user_id===userId);
- return {thread:{id:thread.id,title:thread.title,resolved:!!thread.resolved,featuredPostId:thread.featured_post_id,createdAt:thread.created_at,lastMessageAt:thread.last_message_at,isAuthor:thread.author_id===userId,
-  needsResolution:thread.author_id===userId&&!thread.resolved&&Date.parse(thread.last_message_at+'Z')<Date.now()-3*86400000},
+ const isResolved=Number(thread.resolved)===1;
+ return {thread:{id:thread.id,title:thread.title,resolved:isResolved,featuredPostId:thread.featured_post_id,createdAt:thread.created_at,lastMessageAt:thread.last_message_at,isAuthor:thread.author_id===userId,
+  needsResolution:thread.author_id===userId&&!isResolved&&Date.parse(thread.last_message_at.replace(' ','T')+'Z')<Date.now()-3*86400000},
   participants:people.results.map(participantJson),posts,hasMore:rows.results.length>100,
   nextBefore:oldest?`${oldest.created_at}|${oldest.id}`:null,notificationMode:subscription?.mode??'REPLIES',myIdentity:mine?participantJson(mine):null};
 }
