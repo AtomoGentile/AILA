@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -294,10 +295,11 @@ fun AssistantChatScreen(
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(palette.drawerBg)
+            .background(palette.canvasBg)
     ) {
         val drawerWidth = (maxWidth * 0.82f).coerceIn(272.dp, 336.dp)
         val drawerWidthPx = with(density) { drawerWidth.toPx() }
+        val progress = drawerProgress.value
 
         Box(
             modifier = Modifier
@@ -337,58 +339,10 @@ fun AssistantChatScreen(
                     )
                 }
         ) {
-        // Sidebar stile Gemini con iniziali utente in basso a sinistra
-        if (drawerProgress.value > 0.005f) {
-            AssistantLeftDrawer(
-                palette = palette,
-                drawerWidth = drawerWidth,
-                conversations = conversations,
-                activeConversationId = activeConversationId,
-                userInitials = userInitials,
-                userDisplayName = userDisplayName,
-                activeModelLabel = currentModel.title,
-                onSelectConversation = { conv ->
-                    setDrawerOpen(false)
-                    onIncognitoChange(false)
-                    onOpenConversation(conv)
-                },
-                onTogglePin = onTogglePinConversation,
-                onOpenSearch = {
-                    setDrawerOpen(false)
-                    isSearchOpen = true
-                },
-                onNewChat = {
-                    setDrawerOpen(false)
-                    onIncognitoChange(false)
-                    onClearChat()
-                },
-                onOpenAiSettings = {
-                    setDrawerOpen(false)
-                    onOpenAiSettings()
-                },
-                onCloseDrawer = { setDrawerOpen(false) }
-            )
-        }
-
-        // Schermata principale a tutto schermo con sfondo Neural Expressive + bagliore radiale
-        val progress = drawerProgress.value
-        val sheetCorner = (28f * progress).dp
-        val mainClipShape = RoundedCornerShape(topStart = sheetCorner, bottomStart = sheetCorner)
-
+        // Schermata principale della chat: resta SEMPRE ferma immobile mentre il pannello scorre sopra.
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer {
-                    translationX = drawerWidthPx * progress
-                }
-                .then(
-                    if (progress > 0.01f) {
-                        Modifier
-                            .shadow(20.dp * progress, mainClipShape)
-                            .clip(mainClipShape)
-                            .border(1.dp, palette.hairline, mainClipShape)
-                    } else Modifier
-                )
                 .assistantNeuralBackdrop(palette, prominent = showWelcome)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -610,17 +564,64 @@ fun AssistantChatScreen(
                 }
             }
 
-            if (progress > 0.05f) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.25f * progress))
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = { setDrawerOpen(false) }
-                        )
-                        .semantics { contentDescription = "Chiudi menu chat" }
+        }
+
+        // Scrim scuro + pannello cronologia che scorre da sinistra SOPRA la chat immobile
+        if (progress > 0.005f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(9f)
+                    .background(Color.Black.copy(alpha = 0.50f * progress))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { setDrawerOpen(false) }
+                    )
+                    .semantics { contentDescription = "Chiudi menu chat" }
+            )
+
+            val drawerShape = RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .fillMaxHeight()
+                    .zIndex(10f)
+                    .graphicsLayer {
+                        translationX = -drawerWidthPx * (1f - progress)
+                    }
+                    .shadow(24.dp * progress, drawerShape, ambientColor = Color.Black.copy(alpha = 0.5f))
+                    .clip(drawerShape)
+                    .border(1.dp, palette.hairline, drawerShape)
+            ) {
+                AssistantLeftDrawer(
+                    palette = palette,
+                    drawerWidth = drawerWidth,
+                    conversations = conversations,
+                    activeConversationId = activeConversationId,
+                    userInitials = userInitials,
+                    userDisplayName = userDisplayName,
+                    activeModelLabel = currentModel.title,
+                    onSelectConversation = { conv ->
+                        setDrawerOpen(false)
+                        onIncognitoChange(false)
+                        onOpenConversation(conv)
+                    },
+                    onTogglePin = onTogglePinConversation,
+                    onOpenSearch = {
+                        setDrawerOpen(false)
+                        isSearchOpen = true
+                    },
+                    onNewChat = {
+                        setDrawerOpen(false)
+                        onIncognitoChange(false)
+                        onClearChat()
+                    },
+                    onOpenAiSettings = {
+                        setDrawerOpen(false)
+                        onOpenAiSettings()
+                    },
+                    onCloseDrawer = { setDrawerOpen(false) }
                 )
             }
         }

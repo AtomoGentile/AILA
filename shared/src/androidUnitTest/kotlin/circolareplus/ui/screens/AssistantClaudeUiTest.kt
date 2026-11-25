@@ -11,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -139,15 +140,19 @@ class AssistantClaudeUiTest {
         compose.onNodeWithContentDescription("Invia").assertIsEnabled().performClick()
         compose.runOnIdle { assertEquals("Quando è la verifica?", sentPrompt) }
 
-        // Tema scuro + apertura pannello cronologia TRASCINANDO da metà schermo verso destra
+        // Tema scuro + apertura pannello cronologia TRASCINANDO da metà schermo verso destra:
+        // deve muoversi SOLO il pannello a sinistra, mai la chat dietro!
         compose.runOnIdle { AppTheme.isDarkMode = true }
-        screenshot("aila-b4-welcome-dark")
+        val welcomeLeftBefore = compose.onNodeWithText("Da dove iniziamo?").getUnclippedBoundsInRoot().left
+        screenshot("aila-b5-welcome-dark")
         compose.onRoot().performTouchInput { swipeRight(startX = centerX * 0.45f, endX = right * 0.9f) }
         compose.mainClock.advanceTimeBy(500)
         compose.onNodeWithText("Fissate").assertIsDisplayed()
         compose.onNodeWithText("SB").assertIsDisplayed()
         compose.onNodeWithText("Simone Bianchin").assertIsDisplayed()
-        screenshot("aila-b4-drawer-dark")
+        val welcomeLeftAfter = compose.onNodeWithText("Da dove iniziamo?").getUnclippedBoundsInRoot().left
+        assertEquals(welcomeLeftBefore, welcomeLeftAfter, "La chat non deve spostarsi quando si trascina il pannello")
+        screenshot("aila-b5-drawer-dark")
 
         // Ricerca dalla sidebar
         compose.onNodeWithContentDescription("Cerca nelle conversazioni").performClick()
@@ -168,6 +173,7 @@ class AssistantClaudeUiTest {
     @Test fun topBarAnimatedModelPickerAndGrowingEffortPill() {
         var provider by mutableStateOf(AiProvider.AILA_CLOUD.id)
         var effort by mutableIntStateOf(1)
+        var openedAiSettings = false
 
         activity.get().setContent {
             AilaTheme {
@@ -182,6 +188,7 @@ class AssistantClaudeUiTest {
                     onDeleteConversation = {},
                     onOpenSource = {},
                     onAttachContent = {},
+                    onOpenAiSettings = { openedAiSettings = true },
                     selectedAiProvider = provider,
                     onSelectAiProvider = { provider = it },
                     localModelLabel = "Qwen 3 4B",
@@ -199,19 +206,23 @@ class AssistantClaudeUiTest {
         compose.runOnIdle { AppTheme.isDarkMode = true }
         // Apri il picker modelli in alto vicino al menu
         compose.onNodeWithContentDescription("Seleziona modello e ragionamento").performClick()
-        compose.mainClock.advanceTimeBy(350)
+        compose.mainClock.advanceTimeBy(450)
         compose.onNodeWithText("Google Gemini").assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(AiProvider.GOOGLE_AI_STUDIO.id, provider) }
 
-        // Espandi "Livello di ragionamento" e verifica la pillola che aumenta
+        // Espandi "Livello di ragionamento" e verifica la pillola che aumenta + tasto standard Impostazioni AI
         compose.onNodeWithContentDescription("Livello di ragionamento").performClick()
-        compose.mainClock.advanceTimeBy(400)
+        compose.mainClock.advanceTimeBy(450)
         compose.onNodeWithContentDescription("Livello di ragionamento: Medio").assertIsDisplayed()
-        screenshot("aila-b4-model-picker-dark")
+        screenshot("aila-b5-model-picker-dark")
 
         compose.onNodeWithText("Alto").performClick()
         compose.mainClock.advanceTimeBy(300)
         compose.runOnIdle { assertEquals(2, effort) }
+
+        compose.onNodeWithText("Impostazioni AI").assertIsDisplayed().performClick()
+        compose.mainClock.advanceTimeBy(250)
+        compose.runOnIdle { assertTrue(openedAiSettings) }
     }
 
     @Test fun activeConversationRendersCleanHeaderAndProse() {

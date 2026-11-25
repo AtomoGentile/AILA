@@ -119,11 +119,17 @@ object AppContainer {
      */
     fun newAssistant(): AilaAssistant = AilaAssistant(
         classifierFactory = {
-            newAiClassifier(localThinking = settings.assistantThinkingEnabled, answerAttemptTimeoutMs = ASSISTANT_ATTEMPT_MS)
+            val effort = settings.assistantEffortLevel
+            newAiClassifier(
+                localThinking = effort >= 2,
+                effortLevel = effort,
+                answerAttemptTimeoutMs = ASSISTANT_ATTEMPT_MS
+            )
         },
         circularsRepository = circularsRepository,
         pdfTextExtractor = pdfTextExtractor,
-        actionsEnabled = settings.cachedAiPreferences.allows("CALENDAR")
+        actionsEnabled = settings.cachedAiPreferences.allows("CALENDAR"),
+        effortLevelProvider = { settings.assistantEffortLevel }
     )
 
 
@@ -211,10 +217,17 @@ object AppContainer {
         pdfTextLength: Int? = null,
         /** Ragionamento del modello locale: lo passa solo l'assistente, vedi [LocalAiClassifier]. */
         localThinking: Boolean = false,
+        /** Livello di ragionamento dell'assistente (0=Rapido, 1=Medio, 2=Alto, 3=Massimo). */
+        effortLevel: Int = if (localThinking) 2 else 1,
         /** Tetto per ciascun tentativo di risposta (primario e riserva), vedi [ChainedAiClassifier]. */
         answerAttemptTimeoutMs: Long? = null
     ): AiClassifier {
-        val google = ClientSideAiClassifier(userApiKey = settings.userAiApiKey)
+        val clampedEffort = effortLevel.coerceIn(0, 3)
+        val thinkingActive = localThinking || clampedEffort >= 2
+        val google = ClientSideAiClassifier(
+            userApiKey = settings.userAiApiKey,
+            effortLevel = clampedEffort
+        )
         val provider = AiProvider.fromId(settings.aiProvider)
         val format = CompatibleAiFormat.fromId(settings.compatibleAiFormat)
         val effectiveProvider = provider
@@ -223,7 +236,8 @@ object AppContainer {
                 format = format,
                 baseUrl = settings.compatibleAiBaseUrl,
                 apiKey = settings.compatibleAiApiKey,
-                model = settings.compatibleAiModel
+                model = settings.compatibleAiModel,
+                effortLevel = clampedEffort
             )
         } else google
         val cloud: AiClassifier = circolareplus.ai.PolicyAiClassifier(external,"EXTERNAL")
@@ -236,7 +250,7 @@ object AppContainer {
             model = model,
             modelPath = model?.let { localModelStore.installedPath(it) },
             llm = localLlm,
-            enableThinking = localThinking,
+            enableThinking = thinkingActive,
             aiCoreCooldown = aiCoreCooldown,
             noModelReason = if (plan.aiCoreSkipped && model == null) aiCoreCooldown.skipReason() else null
         ),"LOCAL")
@@ -259,7 +273,8 @@ object AppContainer {
                 apiBaseUrl = { api.baseUrl },
                 authToken = { settings.authToken },
                 personal = personal,
-                enableThinking = localThinking,
+                enableThinking = thinkingActive,
+                effortLevel = clampedEffort,
                 attemptTimeoutMs = answerAttemptTimeoutMs
             ),"AILA")
             AiProvider.ON_DEVICE ->

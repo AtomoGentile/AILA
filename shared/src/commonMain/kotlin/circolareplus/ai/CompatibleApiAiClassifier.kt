@@ -38,7 +38,14 @@ private data class CompatibleMessage(val role: String, val content: String)
 private fun isOpenAiReasoningModel(model:String)=Regex("^(gpt-[5-9](?:[.-]|$)|o[1-9](?:[.-]|$))",RegexOption.IGNORE_CASE).containsMatchIn(model)
 
 /** Explicit JSON omits unsupported fields entirely, regardless of HttpClient serializer defaults. */
-internal fun openAiCompatibleBody(endpoint:String,model:String,system:String,user:String,maxTokens:Int):JsonObject {
+internal fun openAiCompatibleBody(
+    endpoint:String,
+    model:String,
+    system:String,
+    user:String,
+    maxTokens:Int,
+    reasoningEffort:String?=null
+):JsonObject {
     val reasoning=isOpenAiReasoningModel(model)
     val official=io.ktor.http.Url(endpoint).host.equals("api.openai.com",ignoreCase=true)
     return buildJsonObject {
@@ -50,6 +57,7 @@ internal fun openAiCompatibleBody(endpoint:String,model:String,system:String,use
         })
         put(if(official||reasoning)"max_completion_tokens"else"max_tokens",JsonPrimitive(maxTokens))
         if(!reasoning)put("temperature",JsonPrimitive(0.2))
+        if(reasoning&&reasoningEffort!=null)put("reasoning_effort",JsonPrimitive(reasoningEffort))
         if(system.contains("JSON",ignoreCase=true))put("response_format",buildJsonObject {
             put("type",JsonPrimitive("json_object"))
         })
@@ -75,10 +83,14 @@ private data class GoogleContent(val role: String? = null, val parts: List<Googl
 private data class GoogleSystemInstruction(val parts: List<GooglePart>)
 
 @Serializable
+private data class GoogleThinkingConfig(val thinkingBudget: Int)
+
+@Serializable
 private data class GoogleGenerationConfig(
     val temperature: Double = 0.2,
     val maxOutputTokens: Int = 2048,
-    val responseMimeType: String? = null
+    val responseMimeType: String? = null,
+    val thinkingConfig: GoogleThinkingConfig? = null
 )
 
 @Serializable
@@ -94,7 +106,9 @@ class CompatibleApiAiClassifier(
     private val baseUrl: String,
     private val apiKey: String,
     private val model: String,
-    private val httpClient: HttpClient = GeminiHttp.client
+    private val httpClient: HttpClient = GeminiHttp.client,
+    /** Livello di ragionamento 0..3 (Rapido, Medio, Alto, Massimo). */
+    private val effortLevel: Int = 1
 ) : AiClassifier {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
@@ -156,7 +170,14 @@ class CompatibleApiAiClassifier(
 
     override suspend fun generateAnswer(prompt: AiPromptBuilder): AiTextResult = try {
         val built = prompt.build(60_000)
-        val answer = request(built.systemPrompt, built.userPrompt, 2048)
+        val clampedEffort = effortLevel.coerceIn(0, 3)
+        val chatMaxTokens = when (clampedEffort) {
+            0 -> 1024
+            1 -> 2048
+            2 -> 3072
+            else -> 4096
+        }
+        val answer = request(built.systemPrompt, built.userPrompt, chatMaxTokens, applyEffort = true)
         AiTextResult.Success(answer, "${format.label} ($model)")
     } catch (e: kotlinx.coroutines.CancellationException) {
         throw e
@@ -173,11 +194,25 @@ class CompatibleApiAiClassifier(
         "Connessione non riuscita: ${e.message ?: "errore sconosciuto"}"
     }
 
-    private suspend fun request(system: String, user: String, maxTokens: Int): String {
+    private suspend fun request(system: String, user: String, maxTokens: Int, applyEffort: Boolean = false): String {
         val effectiveModel = model.trim().ifBlank { if (format == CompatibleAiFormat.GOOGLE) "gemini-4-hydrogen" else "" }
         require(apiKey.isNotBlank()) { "Inserisci la chiave API." }
         require(effectiveModel.isNotBlank()) { "Inserisci il modello." }
         val endpoint = endpointUrl(effectiveModel)
+        val clampedEffort = effortLevel.coerceIn(0, 3)
+        val openAiEffort = if (applyEffort) when (clampedEffort) {
+            0, 1 -> "low"
+            2 -> "medium"
+            else -> "high"
+        } else null
+        val googleThinking = if (applyEffort) GoogleThinkingConfig(
+            thinkingBudget = when (clampedEffort) {
+                0 -> 0
+                1 -> 1024
+                2 -> 4096
+                else -> 8192
+            }
+        ) else null
         val response = httpClient.post(endpoint) {
             contentType(ContentType.Application.Json)
             when (format) {
@@ -195,7 +230,7 @@ class CompatibleApiAiClassifier(
             // Preserve the concrete reified type at each call instead.
             when (format) {
                 CompatibleAiFormat.OPENAI -> setBody<JsonObject>(
-                    openAiCompatibleBody(endpoint, effectiveModel, system, user, maxTokens)
+                    openAiCompatibleBody(endpoint, effectiveModel, system, user, maxTokens, openAiEffort)
                 )
                 CompatibleAiFormat.ANTHROPIC -> setBody<AnthropicCompatibleRequest>(
                     AnthropicCompatibleRequest(
@@ -212,7 +247,8 @@ class CompatibleApiAiClassifier(
                         generationConfig = GoogleGenerationConfig(
                             temperature = 0.2,
                             maxOutputTokens = maxTokens,
-                            responseMimeType = if (system.contains("JSON", ignoreCase = true)) "application/json" else null
+                            responseMimeType = if (system.contains("JSON", ignoreCase = true)) "application/json" else null,
+                            thinkingConfig = googleThinking
                         )
                     )
                 )

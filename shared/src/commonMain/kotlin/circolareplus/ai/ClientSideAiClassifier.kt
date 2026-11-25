@@ -83,7 +83,9 @@ fun cleanGeminiApiKey(raw: String): String =
 class ClientSideAiClassifier(
     userApiKey: String,
     private val model: String = DEFAULT_MODEL,
-    private val httpClient: HttpClient = GeminiHttp.client
+    private val httpClient: HttpClient = GeminiHttp.client,
+    /** Livello di ragionamento 0..3 (Rapido, Medio, Alto, Massimo): regola thinkingBudget su Gemini. */
+    private val effortLevel: Int = 1
 ) : AiClassifier {
     companion object {
         /**
@@ -376,7 +378,10 @@ class ClientSideAiClassifier(
         val built = prompt.build(MAX_PROMPT_CHARS)
         val text = built.systemPrompt + "\n\n" + built.userPrompt
         val candidates = orderedCandidates()
-        val deadline = currentTimeMillis() + CHAT_BUDGET_MS
+        val clampedEffort = effortLevel.coerceIn(0, 3)
+        val chatBudgetMs = if (clampedEffort >= 2) 45_000L else CHAT_BUDGET_MS
+        val chatAttemptMs = if (clampedEffort >= 2) 25_000L else CHAT_ATTEMPT_MS
+        val deadline = currentTimeMillis() + chatBudgetMs
 
         // Tutti i fallimenti in ordine: mostrare solo l'ultimo (es. il 404 di un modello di
         // ripiego) nascondeva perche' i primi modelli non avevano risposto.
@@ -392,7 +397,7 @@ class ClientSideAiClassifier(
             }
             // Mai tutto il tempo a un solo modello: flash-lite deve fare in tempo a rispondere
             // anche quando flash-latest non risponde.
-            val attemptMs = minOf(remaining, CHAT_ATTEMPT_MS)
+            val attemptMs = minOf(remaining, chatAttemptMs)
             val response = try {
                 postChat(candidate, text, attemptMs)
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -503,19 +508,23 @@ class ClientSideAiClassifier(
      */
     private suspend fun postChat(modelName: String, prompt: String, timeoutMs: Long): HttpResponse {
         val startedAt = currentTimeMillis()
-        val withThinkingOff = modelName !in rejectsThinkingConfig
+        val thinkingBudget = when (effortLevel.coerceIn(0, 3)) {
+            0 -> 0
+            1 -> 1024
+            2 -> 4096
+            else -> 8192
+        }
+        val useThinkingConfig = modelName !in rejectsThinkingConfig
         val response = postGenerate(
             modelName,
             prompt,
-            thinking = if (withThinkingOff) GeminiThinkingConfig(thinkingBudget = 0) else null,
+            thinking = if (useThinkingConfig) GeminiThinkingConfig(thinkingBudget = thinkingBudget) else null,
             timeoutMs = timeoutMs,
             allowRetries = false
         )
         // Qualunque 400 con thinkingConfig fa riprovare senza, non solo quelli che nominano
-        // "thinking": gli alias -latest puntano ormai a modelli che rifiutano thinkingBudget = 0
-        // con il messaggio generico "Request contains an invalid argument.", e la chat si
-        // fermava li' con un errore invece di rispondere.
-        if (withThinkingOff && response.status.value == 400) {
+        // "thinking": alcuni modelli o alias rifiutano thinkingBudget con HTTP 400 generico.
+        if (useThinkingConfig && response.status.value == 400) {
             val retried = postGenerate(
                 modelName,
                 prompt,

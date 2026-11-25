@@ -663,33 +663,37 @@ internal fun AssistantModelPickerPopup(
 
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn(ailaFadeSpec(AilaDuration.Quick)),
-        exit = fadeOut(ailaFadeSpec(AilaDuration.Quick)),
+        enter = fadeIn(tween(180)),
+        exit = fadeOut(tween(160)),
         modifier = Modifier.fillMaxSize().zIndex(20f)
     ) {
+        val popupMotion = Modifier.animateEnterExit(
+            enter = scaleIn(
+                animationSpec = spring(dampingRatio = 0.78f, stiffness = 420f),
+                initialScale = 0.84f,
+                transformOrigin = TransformOrigin(0.26f, 0f)
+            ) + slideInVertically(
+                animationSpec = spring(dampingRatio = 0.80f, stiffness = 420f)
+            ) { -36 } + fadeIn(tween(150)),
+            exit = scaleOut(
+                animationSpec = tween(160),
+                targetScale = 0.88f,
+                transformOrigin = TransformOrigin(0.26f, 0f)
+            ) + slideOutVertically(tween(160)) { -24 } + fadeOut(tween(140))
+        )
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.42f))
+                .background(Color.Black.copy(alpha = 0.44f))
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                     onClick = onDismiss
                 )
         ) {
-            AnimatedVisibility(
-                visible = visible,
-                enter = scaleIn(
-                    animationSpec = ailaSpatialSpring(),
-                    initialScale = 0.88f,
-                    transformOrigin = TransformOrigin(0.32f, 0f)
-                ) + slideInVertically(ailaSpatialSpring()) { -it / 6 } + fadeIn(ailaFadeSpec(AilaDuration.Quick)),
-                exit = scaleOut(
-                    animationSpec = tween(160),
-                    targetScale = 0.92f,
-                    transformOrigin = TransformOrigin(0.32f, 0f)
-                ) + fadeOut(tween(140)),
-                modifier = Modifier
+            Box(
+                modifier = popupMotion
                     .align(Alignment.TopStart)
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
                     .padding(top = 62.dp, start = 16.dp, end = 16.dp)
@@ -698,7 +702,7 @@ internal fun AssistantModelPickerPopup(
                     modifier = Modifier
                         .widthIn(min = 280.dp, max = 360.dp)
                         .fillMaxWidth()
-                        .shadow(20.dp, RoundedCornerShape(28.dp), ambientColor = Color.Black.copy(alpha = 0.45f))
+                        .shadow(22.dp, RoundedCornerShape(28.dp), ambientColor = Color.Black.copy(alpha = 0.45f))
                         .clip(RoundedCornerShape(28.dp))
                         .background(palette.elevatedBg)
                         .border(1.dp, palette.hairline, RoundedCornerShape(28.dp))
@@ -710,15 +714,25 @@ internal fun AssistantModelPickerPopup(
                         .animateContentSize(ailaSpatialSpring())
                         .padding(vertical = 10.dp)
                 ) {
-                    // Lista modelli/provider stile Gemini (con spunta animata a sinistra)
+                    // Lista modelli/provider stile Gemini (con spunta e selezione animate)
                     options.forEach { option ->
                         val selected = option.providerId == selectedProviderId
+                        val rowBg by animateColorAsState(
+                            targetValue = if (selected) palette.activeRowBg else Color.Transparent,
+                            animationSpec = tween(180),
+                            label = "modelRowBg"
+                        )
+                        val titleInk by animateColorAsState(
+                            targetValue = if (selected) palette.activeRowInk else palette.ink,
+                            animationSpec = tween(180),
+                            label = "modelRowInk"
+                        )
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 8.dp, vertical = 2.dp)
                                 .clip(RoundedCornerShape(18.dp))
-                                .background(if (selected) palette.activeRowBg else Color.Transparent)
+                                .background(rowBg)
                                 .clickable(role = Role.Button) { onSelectProvider(option.providerId) }
                                 .padding(horizontal = 12.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -740,7 +754,7 @@ internal fun AssistantModelPickerPopup(
                                         fontSize = 15.5.sp,
                                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
                                     ),
-                                    color = if (selected) palette.activeRowInk else palette.ink,
+                                    color = titleInk,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -826,24 +840,30 @@ internal fun AssistantModelPickerPopup(
                         }
                     }
 
-                    // Link rapido Impostazioni AI
+                    // Pulsante standard "Impostazioni AI" (coerente con i tasti AILA)
+                    Spacer(Modifier.height(6.dp))
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 18.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.End
+                            .padding(horizontal = 14.dp, vertical = 4.dp)
+                            .height(46.dp)
+                            .clip(RoundedCornerShape(100.dp))
+                            .background(palette.pillBg)
+                            .border(1.dp, palette.hairline, RoundedCornerShape(100.dp))
+                            .clickable(role = Role.Button) {
+                                onDismiss()
+                                onOpenAiSettings()
+                            }
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
                     ) {
+                        AssistantSettingsGearGlyph(Modifier.size(17.dp), color = palette.inkMuted)
+                        Spacer(Modifier.width(8.dp))
                         Text(
                             text = "Impostazioni AI",
-                            style = TextStyle(fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold),
-                            color = palette.accent,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(100.dp))
-                                .clickable(role = Role.Button) {
-                                    onDismiss()
-                                    onOpenAiSettings()
-                                }
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+                            color = palette.ink
                         )
                     }
                 }

@@ -101,6 +101,8 @@ class AilaCloudClassifier(
     /** Riserva per le circolari e per tutto cio' che il servizio incluso non copre. */
     private val personal: AiClassifier,
     private val enableThinking: Boolean = false,
+    /** Livello di ragionamento 0..3 (Rapido, Medio, Alto, Massimo): regola thinking e budget token. */
+    private val effortLevel: Int = if (enableThinking) 2 else 1,
     /** Tetto per ciascun tentativo al Worker, come fa [ChainedAiClassifier] coi suoi provider. */
     private val attemptTimeoutMs: Long? = null,
     private val httpClient: HttpClient = GeminiHttp.client
@@ -175,13 +177,21 @@ class AilaCloudClassifier(
      */
     override suspend fun generateAnswer(prompt: AiPromptBuilder): AiTextResult {
         val built = prompt.build(MAX_CHAT_PROMPT_CHARS)
+        val clampedEffort = effortLevel.coerceIn(0, 3)
+        val useThinking = enableThinking || clampedEffort >= 2
+        val chatMaxTokens = when (clampedEffort) {
+            0 -> 700
+            1 -> 1400
+            else -> 2048
+        }
         val first = chatOrTimeout(
             AilaChatRequest(
                 messages = listOf(
                     AilaChatMessage("system", built.systemPrompt),
                     AilaChatMessage("user", built.userPrompt)
                 ),
-                thinking = enableThinking,
+                thinking = useThinking,
+                maxTokens = chatMaxTokens,
                 feature = prompt.feature.name,
                 attachmentServices = prompt.attachmentServices.toList()
             )

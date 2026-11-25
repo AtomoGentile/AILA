@@ -196,7 +196,8 @@ A un saluto ("ciao", "buongiorno") rispondi con un saluto breve e chiedi come pu
         searchQuery: String = question,
         mode: AssistantMode = AssistantMode.GENERAL,
         readsAllowed: Boolean = true,
-        reviewDraft: String? = null
+        reviewDraft: String? = null,
+        effortLevel: Int = 1
     ): AiPromptBuilder = circolareplus.ai.aiPromptBuilder(
         if (AssistantContext.normalize(question).let { "piano" in it && ("studio" in it || "ripasso" in it) })
             circolareplus.ai.AiFeature.STUDY_PLAN else circolareplus.ai.AiFeature.CHAT
@@ -207,7 +208,7 @@ A un saluto ("ciao", "buongiorno") rispondi con un saluto breve e chiedi come pu
             calendarEvents=knowledge.calendarEvents.filter{it.isStudyRelevantFor(knowledge.user)},
             circulars=knowledge.circulars.filter{knowledge.classifications[it.number]?.badge==circolareplus.domain.model.CircularRelevanceBadge.RELEVANT}
         )else knowledge
-        val prompt=build(if(study)maxChars-400 else maxChars, source, history, question, deepTexts, searchQuery, mode, readsAllowed, reviewDraft)
+        val prompt=build(if(study)maxChars-400 else maxChars, source, history, question, deepTexts, searchQuery, mode, readsAllowed, reviewDraft, effortLevel)
         if(study)prompt.copy(systemPrompt=prompt.systemPrompt+"\nPIANO DI RIPASSO: usa solo gli impegni destinati all’utente e quelli comuni alla classe. Ignora interrogazioni altrui e vecchi piani della chat. Se non ci sono impegni chiedi materia e obiettivo. I blocchi di studio sono suggerimenti, non creare eventi né fingere di averli creati.")else prompt
     }
 
@@ -246,16 +247,23 @@ MODALITA' SOLO MATERIALE: questa chat e' aperta dalla sezione Gita. Non usare co
         searchQuery: String = question,
         mode: AssistantMode = AssistantMode.GENERAL,
         readsAllowed: Boolean = true,
-        reviewDraft: String? = null
+        reviewDraft: String? = null,
+        effortLevel: Int = 1
     ): AiPrompt {
         val basePrompt = if (maxChars < COMPACT_THRESHOLD) COMPACT_SYSTEM_PROMPT else SYSTEM_PROMPT
+        val effortGuidance = when (effortLevel.coerceIn(0, 3)) {
+            0 -> "\nLIVELLO DI RAGIONAMENTO: RAPIDO. Dai una risposta brevissima, diretta ed essenziale, senza approfondimenti non richiesti."
+            2 -> "\nLIVELLO DI RAGIONAMENTO: ALTO. Ragiona con cura su ogni dettaglio della richiesta: per spiegazioni, studio, calcoli o confronti mostra i passaggi chiave e segnala eventuali casi limite (senza mai inventare dati del CONTESTO)."
+            3 -> "\nLIVELLO DI RAGIONAMENTO: MASSIMO. Fai un'analisi approfondita, rigorosa e strutturata: scomponi il problema passo per passo, giustifica ogni passaggio, evidenzia eccezioni o alternative utili e verifica con attenzione ogni dettaglio (senza mai inventare dati del CONTESTO)."
+            else -> ""
+        }
         val systemPrompt = (when {
             maxChars < COMPACT_THRESHOLD && mode == AssistantMode.GITA_ONLY -> basePrompt + COMPACT_GITA_RULE + GITA_ONLY_RULES
             maxChars < COMPACT_THRESHOLD -> if (knowledge.gita.isEmpty()) basePrompt else basePrompt + COMPACT_GITA_RULE
             knowledge.gita.isEmpty() && mode == AssistantMode.GENERAL -> basePrompt
             mode == AssistantMode.GITA_ONLY -> basePrompt + GITA_RULES + GITA_ONLY_RULES
             else -> basePrompt + GITA_RULES
-        }) + (if (mode == AssistantMode.GENERAL) "\n" + (if (maxChars < COMPACT_THRESHOLD) AssistantReadTools.COMPACT_INSTRUCTIONS else AssistantReadTools.INSTRUCTIONS) +
+        }) + effortGuidance + (if (mode == AssistantMode.GENERAL) "\n" + (if (maxChars < COMPACT_THRESHOLD) AssistantReadTools.COMPACT_INSTRUCTIONS else AssistantReadTools.INSTRUCTIONS) +
             if (readsAllowed) "\nPuoi richiedere letture prima della risposta finale."
             else "\nUltimo giro: non richiedere altre letture. Rispondi dai risultati e dichiara eventuali limiti."
         else "") + if (reviewDraft != null && maxChars < COMPACT_THRESHOLD) """

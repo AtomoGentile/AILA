@@ -24,14 +24,22 @@ class AilaAssistant internal constructor(
     private val classifierFactory: () -> AiClassifier,
     private val downloadPdf: suspend (String) -> ByteArray,
     private val extractPdf: suspend (ByteArray) -> String,
-    private val actionsEnabled: Boolean = false
+    private val actionsEnabled: Boolean = false,
+    private val effortLevelProvider: () -> Int = { 1 }
 ) {
     constructor(
         classifierFactory: () -> AiClassifier,
         circularsRepository: CircularsRepository,
         pdfTextExtractor: PdfTextExtractor,
-        actionsEnabled: Boolean = false
-    ) : this(classifierFactory, circularsRepository::downloadPdfBytes, pdfTextExtractor::extractText, actionsEnabled)
+        actionsEnabled: Boolean = false,
+        effortLevelProvider: () -> Int = { 1 }
+    ) : this(
+        classifierFactory,
+        circularsRepository::downloadPdfBytes,
+        pdfTextExtractor::extractText,
+        actionsEnabled,
+        effortLevelProvider
+    )
 
     companion object {
         /** Domande di esempio mostrate a chat vuota: servono a far capire cosa si puo' chiedere. */
@@ -125,7 +133,9 @@ class AilaAssistant internal constructor(
         val sourceCalendarRequest = mode == AssistantMode.GENERAL && !studyOnly &&
             knowledge.attachedSources.isNotEmpty() && AssistantActionIntent.matches(question, history)
         val explicitCalendarRequest = missingDatesRequest != null || sourceCalendarRequest
-        var reviewAttempted = false
+        val effortLevel = effortLevelProvider().coerceIn(0, 3)
+        // Su "Rapido" (0) salta il secondo giro di auto-verifica per dimezzare i tempi di risposta.
+        var reviewAttempted = effortLevel == 0
         var readsAfterReview = false
         var reviewIncomplete = false
         var partialCandidate: AssistantReply? = null
@@ -137,7 +147,7 @@ class AilaAssistant internal constructor(
             val canRead = round < AssistantReadTools.MAX_ROUNDS - 1
             onAgentPhase(AssistantAgentPhase.WRITING)
             var result = classifier.generateAnswer(
-                AssistantPrompt.builderFor(known, history, question, texts, searchQuery, mode, canRead)
+                AssistantPrompt.builderFor(known, history, question, texts, searchQuery, mode, canRead, effortLevel = effortLevel)
                     .withAttachmentServices(known.attachedSources.map { it.file.service }.toSet())
             )
             if (result is AiTextResult.Failure) return partialCandidate?.copy(readContext = known.readContext)
@@ -159,7 +169,7 @@ class AilaAssistant internal constructor(
                 val candidate = partialReply(parsed, result.modelLabel)
                 partialCandidate = candidate
                 result = classifier.generateAnswer(
-                    AssistantPrompt.builderFor(known, history, question, texts, searchQuery, mode, canRead, result.text)
+                    AssistantPrompt.builderFor(known, history, question, texts, searchQuery, mode, canRead, result.text, effortLevel = effortLevel)
                         .withAttachmentServices(known.attachedSources.map { it.file.service }.toSet())
                 )
                 if (result is AiTextResult.Failure) return candidate
