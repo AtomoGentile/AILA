@@ -8,15 +8,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.click
 import circolareplus.ai.AiProvider
 import circolareplus.ai.assistant.AssistantAuthor
 import circolareplus.ai.assistant.AssistantConversation
@@ -81,17 +82,6 @@ class AssistantClaudeUiTest {
                 AssistantMessage("u3", AssistantAuthor.USER, "Quando è la verifica di storia?"),
                 AssistantMessage("a3", AssistantAuthor.ASSISTANT, "Lunedì alla terza ora.")
             )
-        ),
-        AssistantConversation(
-            id = "c4",
-            title = "Dove sono seduto nella nuova mappa",
-            createdAtMillis = now - 52 * 3600_000L,
-            updatedAtMillis = now - 52 * 3600_000L,
-            pinned = false,
-            messages = listOf(
-                AssistantMessage("u4", AssistantAuthor.USER, "Dove sono seduto?"),
-                AssistantMessage("a4", AssistantAuthor.ASSISTANT, "Seconda fila, banco centrale.")
-            )
         )
     )
 
@@ -109,10 +99,11 @@ class AssistantClaudeUiTest {
         AppTheme.isDarkMode = false
     }
 
-    @Test fun welcomeIncognitoDrawerAndSearchFlow() {
+    @Test fun welcomeComposerTypingSingleMicDrawerAndSearchFlow() {
         var incognito by mutableStateOf(false)
         var openedConversationId: String? = null
-        var selectedTab: MainTab? = null
+        var sentPrompt: String? = null
+        var wentBack = false
 
         activity.get().setContent {
             AilaTheme {
@@ -120,61 +111,69 @@ class AssistantClaudeUiTest {
                     messages = emptyList(),
                     isThinking = false,
                     conversations = sampleConversations,
-                    onSend = {},
-                    onBackClick = {},
+                    onSend = { sentPrompt = it },
+                    onBackClick = { wentBack = true },
                     onClearChat = {},
                     onOpenConversation = { openedConversationId = it.id },
                     onDeleteConversation = {},
                     onOpenSource = {},
                     onAttachContent = {},
                     isIncognito = incognito,
-                    onIncognitoChange = { incognito = it },
-                    unreadTabs = setOf(MainTab.CLASS, MainTab.POLLS),
-                    onSelectMainTab = { selectedTab = it }
+                    onIncognitoChange = { incognito = it }
                 )
             }
         }
 
         compose.onNodeWithText("Come posso aiutarti oggi?").assertIsDisplayed()
-        screenshot("claude-welcome-light")
+        // Nessuna barra tab inferiore, nessuna ricerca in alto a destra, un solo microfono
+        compose.onNodeWithContentDescription("Cerca nelle chat").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Avvia voce").assertDoesNotExist()
+        compose.onAllNodesWithContentDescription("Registra vocale").assertCountEquals(1)
+        compose.onNodeWithContentDescription("Seleziona modello e ragionamento").assertIsDisplayed()
+        screenshot("aila-assistant-welcome-light")
+
+        // Verifica che si possa scrivere subito senza perdere il focus e inviare
+        compose.onNode(hasSetTextAction()).performTextInput("Quando è la verifica?")
+        compose.onNodeWithContentDescription("Invia").assertIsEnabled().performClick()
+        compose.runOnIdle { assertEquals("Quando è la verifica?", sentPrompt) }
 
         // Tema scuro
         compose.runOnIdle { AppTheme.isDarkMode = true }
-        screenshot("claude-welcome-dark")
+        screenshot("aila-assistant-welcome-dark")
         compose.runOnIdle { AppTheme.isDarkMode = false }
 
-        // Attiva modalità incognito
+        // Modalità incognito
         compose.onNodeWithContentDescription("Chat in incognito").performClick()
-        compose.mainClock.advanceTimeBy(400)
+        compose.mainClock.advanceTimeBy(350)
         compose.onNodeWithText("Questa conversazione non viene salvata nello storico del telefono.").assertIsDisplayed()
-        screenshot("claude-incognito")
         compose.onNodeWithContentDescription("Esci dalla chat in incognito").performClick()
-        compose.mainClock.advanceTimeBy(400)
+        compose.mainClock.advanceTimeBy(350)
 
-        // Apri cassetto laterale sinistro
+        // Apri cassetto laterale: nessuna scorciatoia inutile ("Piano di studio" / "Scorciatoie")
         compose.onNodeWithContentDescription("Apri menu chat").performClick()
         compose.mainClock.advanceTimeBy(500)
-        compose.onNodeWithText("AILA").assertIsDisplayed()
         compose.onNodeWithText("Fissate").assertIsDisplayed()
         compose.onNodeWithText("Recenti").assertIsDisplayed()
-        screenshot("claude-drawer")
+        compose.onNodeWithText("Scorciatoie").assertDoesNotExist()
+        compose.onNodeWithText("Piano di studio").assertDoesNotExist()
+        screenshot("aila-assistant-drawer")
 
-        // Apri ricerca dal footer del cassetto e cerca "verifica"
+        // Ricerca dal footer del cassetto
         compose.onNodeWithContentDescription("Cerca nelle conversazioni").performClick()
         compose.mainClock.advanceTimeBy(300)
         compose.onNodeWithContentDescription("Campo ricerca chat").performTextInput("verifica")
         compose.mainClock.advanceTimeBy(200)
         compose.onNodeWithText("Verifica di storia lunedì", substring = true).assertIsDisplayed()
-        screenshot("claude-search")
+        screenshot("aila-assistant-search")
         compose.onNodeWithText("Verifica di storia lunedì", substring = true).performClick()
         compose.runOnIdle { assertEquals("c3", openedConversationId) }
 
-        // Tocca una tab di AILA nella barra inferiore stile Claude
-        compose.onNodeWithContentDescription("Calendario").performTouchInput { click() }
-        compose.runOnIdle { assertEquals(MainTab.CALENDAR, selectedTab) }
+        // Pulsante Indietro in alto a sinistra
+        compose.onNodeWithContentDescription("Indietro").performClick()
+        compose.runOnIdle { assertTrue(wentBack) }
     }
 
-    @Test fun modelAndEffortBottomSheetUpdatesProviderAndLevel() {
+    @Test fun modelAndProviderPickerAlwaysAccessibleAndUpdatesSelection() {
         var provider by mutableStateOf(AiProvider.AILA_CLOUD.id)
         var effort by mutableIntStateOf(1)
 
@@ -184,7 +183,6 @@ class AssistantClaudeUiTest {
                     messages = emptyList(),
                     isThinking = false,
                     conversations = emptyList(),
-                    initialDraft = "Spiegami il moto parabolico",
                     onSend = {},
                     onBackClick = {},
                     onClearChat = {},
@@ -195,40 +193,40 @@ class AssistantClaudeUiTest {
                     selectedAiProvider = provider,
                     onSelectAiProvider = { provider = it },
                     localModelLabel = "Qwen 3 4B",
+                    hasGoogleKey = true,
+                    hasCompatibleConfig = false,
+                    localModelInstalled = true,
                     effortLevel = effort,
-                    onEffortLevelChange = { effort = it },
-                    onSelectMainTab = {}
+                    onEffortLevelChange = { effort = it }
                 )
             }
         }
 
-        // Composer espanso mostra la pillola modello/ragionamento
+        // Il selettore modello/provider è visibile subito anche a campo vuoto
         compose.onNodeWithContentDescription("Seleziona modello e ragionamento").assertIsDisplayed().performClick()
         compose.mainClock.advanceTimeBy(300)
-        compose.onNodeWithText("Modello").assertIsDisplayed()
+        compose.onNodeWithText("Modello e provider").assertIsDisplayed()
         compose.onNodeWithText("Google Gemini").assertIsDisplayed()
-        screenshot("claude-model-sheet")
+        screenshot("aila-assistant-model-sheet")
 
-        // Cambia modello in Google Gemini
         compose.onNodeWithText("Google Gemini").performClick()
         compose.runOnIdle { assertEquals(AiProvider.GOOGLE_AI_STUDIO.id, provider) }
 
-        // Entra nella schermata Ragionamento
         compose.onNodeWithContentDescription("Modifica livello di ragionamento").performClick()
         compose.mainClock.advanceTimeBy(350)
         compose.onNodeWithText("Ragionamento").assertIsDisplayed()
         compose.onNodeWithContentDescription("Livello di ragionamento: Medio").assertIsDisplayed()
-        screenshot("claude-effort-sheet")
+        screenshot("aila-assistant-effort-sheet")
     }
 
-    @Test fun activeConversationRendersEditorialProseActionsAndToast() {
+    @Test fun activeConversationShowsModelInHeaderAndCleanActionRow() {
         var toastOpened = false
         val chatMessages = listOf(
             AssistantMessage("u1", AssistantAuthor.USER, "Preparami una scaletta veloce per ripassare fisica stasera"),
             AssistantMessage(
                 id = "a1",
                 author = AssistantAuthor.ASSISTANT,
-                text = "Una sessione leggera funziona meglio se dividi teoria ed esercizi.\n\n## Piano di ripasso\n- **Inizia facile:** Rileggi le formule di cinematica e i grafici spazio-tempo.\n- **Blocco centrale:** Fai 3 esercizi guidati su moto uniformemente accelerato e caduta libera.\n- **Chiusura rapida:** Scrivi su un foglio i 4 passaggi che ti confondono di più.\n\nVuoi che prepari anche 5 domande di autoverifica?",
+                text = "Una sessione leggera funziona meglio se dividi teoria ed esercizi.\n\n## Piano di ripasso\n- **Inizia facile:** Rileggi le formule di cinematica e i grafici spazio-tempo.\n- **Blocco centrale:** Fai 3 esercizi guidati su moto uniformemente accelerato.\n- **Chiusura rapida:** Scrivi su un foglio i passaggi che ti confondono di più.\n\nVuoi che prepari anche 5 domande di autoverifica?",
                 sources = listOf(
                     AssistantSource(AssistantSourceKind.CALENDAR, "Verifica di Fisica · Domani"),
                     AssistantSource(AssistantSourceKind.CIRCULAR, "Circolare n. 214", 214)
@@ -251,8 +249,6 @@ class AssistantClaudeUiTest {
                     onDeleteConversation = {},
                     onOpenSource = {},
                     onAttachContent = {},
-                    unreadTabs = setOf(MainTab.CLASS),
-                    onSelectMainTab = {},
                     finishedToastConversation = sampleConversations[1],
                     onDismissFinishedToast = {}
                 )
@@ -260,13 +256,14 @@ class AssistantClaudeUiTest {
         }
 
         compose.mainClock.advanceTimeBy(1200)
+        // Il nome del modello è nell'intestazione sotto il titolo, una sola volta
+        compose.onNodeWithText("AILA Cloud · Gemma 4").assertIsDisplayed()
         compose.onNodeWithText("Piano di ripasso", substring = true).assertIsDisplayed()
-        compose.onNodeWithText("Risposta pronta").assertIsDisplayed()
         compose.onNodeWithContentDescription("Copia risposta").assertIsDisplayed()
-        screenshot("claude-chat-light")
+        screenshot("aila-assistant-chat-light")
 
         compose.runOnIdle { AppTheme.isDarkMode = true }
-        screenshot("claude-chat-dark")
+        screenshot("aila-assistant-chat-dark")
 
         compose.onNodeWithText("Risposta pronta").performClick()
         compose.runOnIdle { assertTrue(toastOpened) }

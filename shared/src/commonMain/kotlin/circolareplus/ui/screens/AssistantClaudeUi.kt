@@ -4,20 +4,10 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -27,8 +17,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
@@ -46,8 +34,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -68,7 +56,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -80,7 +67,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -88,13 +74,10 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -106,7 +89,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -114,26 +96,25 @@ import circolareplus.ai.AiProvider
 import circolareplus.ai.assistant.AssistantAttachedFile
 import circolareplus.ai.assistant.AssistantAuthor
 import circolareplus.ai.assistant.AssistantConversation
-import circolareplus.design.AilaAssistantMark
 import circolareplus.design.AilaDuration
+import circolareplus.design.AilaLogoTile
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
+import circolareplus.design.GlassBase
 import circolareplus.design.ailaFadeSpec
 import circolareplus.design.ailaNavigationSpring
 import circolareplus.design.ailaSpatialSpring
 import kotlinx.coroutines.delay
 import kotlin.math.PI
 import kotlin.math.cos
-import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /**
- * Token visivi fedeli al nuovo design editoriale di Claude (chiaro e scuro).
- *
- * Tutti i colori sono caldi e neutri: foglio bianco arrotondato su guscio pietra chiaro in tema
- * chiaro, antracite caldo in tema scuro, con accento terracotta solo sul marchio vivo.
+ * Palette dell'Assistant interamente derivata dai token di [AppTheme]: rispetta tema chiaro/scuro,
+ * stile grafico (Expressive, Liquid Glass, Nothing) e colore accento scelto dall'utente, mantenendo
+ * la gerarchia pulita foglio-su-guscio.
  */
-internal data class ClaudePalette(
+internal data class AssistantSurfacePalette(
     val shellBg: Color,
     val sheetBg: Color,
     val headerBtnBg: Color,
@@ -142,181 +123,128 @@ internal data class ClaudePalette(
     val inkFaint: Color,
     val pillBg: Color,
     val activeRowBg: Color,
+    val activeRowInk: Color,
     val userBubbleBg: Color,
+    val userBubbleInk: Color,
     val composerBg: Color,
     val composerBorder: Color,
     val hairline: Color,
-    val coral: Color,
-    val tooltipBg: Color,
-    val tooltipInk: Color,
-    val notifBlue: Color,
+    val accentFill: Color,
+    val onAccentFill: Color,
     val toastBg: Color,
     val dangerBg: Color,
     val dangerInk: Color
 )
 
-internal fun claudePalette(dark: Boolean = AppTheme.isDarkMode): ClaudePalette =
-    if (dark) {
-        ClaudePalette(
-            shellBg = Color(0xFF191917),
-            sheetBg = Color(0xFF21211F),
-            headerBtnBg = Color(0xFF2C2C29),
-            ink = Color(0xFFF3F2EC),
-            inkMuted = Color(0xFFA4A39D),
-            inkFaint = Color(0xFF73726C),
-            pillBg = Color(0xFF2E2E2B),
-            activeRowBg = Color(0xFF353531),
-            userBubbleBg = Color(0xFF28323D),
-            composerBg = Color(0xFF292926),
-            composerBorder = Color(0xFF3A3A35),
-            hairline = Color(0xFF33332E),
-            coral = Color(0xFFE38869),
-            tooltipBg = Color(0xFFF3F2EC),
-            tooltipInk = Color(0xFF141413),
-            notifBlue = AppTheme.PrimaryBlue,
-            toastBg = Color(0xFF2B2B28),
-            dangerBg = Color(0xFF3A2022),
-            dangerInk = Color(0xFFFCA5A5)
-        )
-    } else {
-        ClaudePalette(
-            shellBg = Color(0xFFF3F3F1),
-            sheetBg = Color(0xFFFFFFFF),
-            headerBtnBg = Color(0xFFFFFFFF),
-            ink = Color(0xFF141413),
-            inkMuted = Color(0xFF6B6B67),
-            inkFaint = Color(0xFF9B9A94),
-            pillBg = Color(0xFFF0F0ED),
-            activeRowBg = Color(0xFFE7E7E3),
-            userBubbleBg = Color(0xFFEDF2F7),
-            composerBg = Color(0xFFFFFFFF),
-            composerBorder = Color(0xFFE5E5E1),
-            hairline = Color(0xFFE8E7E3),
-            coral = Color(0xFFD97757),
-            tooltipBg = Color(0xFF141413),
-            tooltipInk = Color(0xFFFFFFFF),
-            notifBlue = AppTheme.PrimaryBlue,
-            toastBg = Color(0xFFF7F7F5),
-            dangerBg = Color(0xFFFEF2F2),
-            dangerInk = Color(0xFF991B1B)
-        )
+internal fun assistantSurfacePalette(): AssistantSurfacePalette {
+    val dark = AppTheme.isDarkMode
+    val glass = AppTheme.isGlass
+    val nothing = AppTheme.isNothing
+
+    val shell = when {
+        nothing -> AppTheme.BackgroundLight
+        glass -> AppTheme.GlassBase
+        dark -> AppTheme.BackgroundLight
+        else -> AppTheme.CardSurface
+    }
+    val sheet = when {
+        nothing -> AppTheme.SurfaceWhite
+        glass -> AppTheme.SurfaceWhite
+        dark -> AppTheme.SurfaceWhite
+        else -> AppTheme.SurfaceWhite
+    }
+    val pill = when {
+        nothing -> AppTheme.TrackFill
+        glass -> if (dark) Color(0xFF282A30) else Color(0xFFECEFF6)
+        else -> AppTheme.TrackFill
+    }
+    val hairline = when {
+        nothing -> AppTheme.Hairline
+        dark -> AppTheme.FieldOutline.copy(alpha = 0.45f)
+        else -> AppTheme.FieldOutline.copy(alpha = 0.35f)
     }
 
-internal val ClaudeEffortLabels = listOf("Rapido", "Medio", "Alto", "Massimo")
+    return AssistantSurfacePalette(
+        shellBg = shell,
+        sheetBg = sheet,
+        headerBtnBg = AppTheme.SurfaceWhite,
+        ink = AppTheme.TextDark,
+        inkMuted = AppTheme.TextMuted,
+        inkFaint = AppTheme.TextFaint,
+        pillBg = pill,
+        activeRowBg = AppTheme.SelectionContainer,
+        activeRowInk = AppTheme.OnSelection,
+        userBubbleBg = AppTheme.TintBlue,
+        userBubbleInk = AppTheme.TintBlueInk,
+        composerBg = AppTheme.SurfaceWhite,
+        composerBorder = AppTheme.FieldOutline.copy(alpha = if (dark) 0.55f else 0.45f),
+        hairline = hairline,
+        accentFill = if (nothing) AppTheme.TextDark else AppTheme.PrimaryBlue,
+        onAccentFill = if (nothing) AppTheme.BackgroundLight else AppTheme.OnPrimaryButton,
+        toastBg = if (dark) AppTheme.SurfaceContainerHighest else AppTheme.CardSurface,
+        dangerBg = AppTheme.TintRed,
+        dangerInk = AppTheme.TintRedInk
+    )
+}
 
-internal data class ClaudeModelOption(
+internal val AssistantEffortLabels = listOf("Rapido", "Medio", "Alto", "Massimo")
+
+internal data class AssistantModelOption(
     val providerId: String,
     val title: String,
     val shortLabel: String,
-    val description: String
+    val description: String,
+    val statusNote: String? = null
 )
 
-internal fun claudeModelOptions(localModelLabel: String): List<ClaudeModelOption> {
+internal fun assistantModelOptions(
+    localModelLabel: String,
+    hasGoogleKey: Boolean = true,
+    hasCompatibleConfig: Boolean = true,
+    compatibleModelName: String = "",
+    localModelInstalled: Boolean = true
+): List<AssistantModelOption> {
     val cleanLocal = localModelLabel.trim().ifBlank { "AI locale" }
     val shortLocal = cleanLocal.substringBefore("(").trim().take(16).ifBlank { "Locale" }
+    val compatTitle = compatibleModelName.trim().takeIf { it.isNotBlank() }?.let { "API · ${it.take(18)}" } ?: "API compatibile"
     return listOf(
-        ClaudeModelOption(
+        AssistantModelOption(
             providerId = AiProvider.AILA_CLOUD.id,
             title = "AILA Cloud",
             shortLabel = "AILA Cloud",
             description = "Gemma 4 incluso in AILA: per lavoro quotidiano, circolari e studio senza chiavi."
         ),
-        ClaudeModelOption(
+        AssistantModelOption(
             providerId = AiProvider.GOOGLE_AI_STUDIO.id,
             title = "Google Gemini",
             shortLabel = "Gemini",
-            description = "Gemini via API key personale di Google AI Studio, ideale per compiti complessi."
+            description = "Gemini via API key personale di Google AI Studio, ideale per compiti complessi.",
+            statusNote = if (hasGoogleKey) null else "Chiave API da configurare"
         ),
-        ClaudeModelOption(
+        AssistantModelOption(
             providerId = AiProvider.ON_DEVICE.id,
             title = cleanLocal,
             shortLabel = shortLocal,
-            description = "Modello sul dispositivo: funziona anche offline e nessun dato esce dal telefono."
+            description = "Modello sul dispositivo: funziona anche offline e nessun dato esce dal telefono.",
+            statusNote = if (localModelInstalled) null else "Modello da scaricare"
         ),
-        ClaudeModelOption(
+        AssistantModelOption(
             providerId = AiProvider.COMPATIBLE_API.id,
-            title = "API compatibile",
+            title = compatTitle,
             shortLabel = "API",
-            description = "Collega un endpoint personalizzato compatibile con OpenAI o Anthropic."
+            description = "Endpoint personalizzato compatibile con OpenAI o Anthropic.",
+            statusNote = if (hasCompatibleConfig) null else "Endpoint da configurare"
         )
     )
 }
 
 // =================================================================================================
-// Glifi vettoriali KMP-safe (nessun drawArc / addArc / drawRoundRect: solo Path, drawLine, drawCircle)
+// Glifi vettoriali KMP-safe (solo Path, drawLine, drawCircle — nessun drawArc / drawRoundRect)
 // =================================================================================================
 
-/** Marchio starburst terracotta: 11 raggi affusolati, ruota e respira dolcemente quando attivo. */
+/** Due linee orizzontali asimmetriche del pulsante menu del cassetto. */
 @Composable
-internal fun ClaudeSparkMark(
-    modifier: Modifier = Modifier,
-    size: Dp = 38.dp,
-    color: Color = claudePalette().coral,
-    active: Boolean = false
-) {
-    val animate = active && !AppTheme.reduceMotion && !AppTheme.liteEffects
-    val transition = if (animate) rememberInfiniteTransition(label = "claudeSpark") else null
-    val spin by (transition?.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(tween(4200, easing = LinearEasing)),
-        label = "sparkSpin"
-    ) ?: remember { mutableFloatStateOf(0f) })
-    val pulse by (transition?.animateFloat(
-        initialValue = 0.92f,
-        targetValue = 1.07f,
-        animationSpec = infiniteRepeatable(tween(1100, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "sparkPulse"
-    ) ?: remember { mutableFloatStateOf(1f) })
-
-    Canvas(
-        modifier = modifier
-            .size(size)
-            .graphicsLayer {
-                if (animate) {
-                    rotationZ = spin
-                    scaleX = pulse
-                    scaleY = pulse
-                }
-            }
-    ) {
-        val cx = this.size.width / 2f
-        val cy = this.size.height / 2f
-        val rMax = this.size.minDimension * 0.48f
-        val rInner = rMax * 0.22f
-        val rays = 11
-        val lengths = floatArrayOf(1.0f, 0.88f, 0.98f, 0.85f, 1.0f, 0.89f, 0.97f, 0.86f, 1.0f, 0.88f, 0.95f)
-        for (i in 0 until rays) {
-            val angle = (i * (2.0 * PI / rays) - PI / 2.0).toFloat()
-            val len = rMax * lengths[i % lengths.size]
-            val perp = angle + (PI / 2.0).toFloat()
-            val baseHalf = rMax * 0.088f
-            val tipHalf = rMax * 0.048f
-            val sx = cx + cos(angle) * rInner
-            val sy = cy + sin(angle) * rInner
-            val ex = cx + cos(angle) * len
-            val ey = cy + sin(angle) * len
-            val p = Path().apply {
-                moveTo(sx + cos(perp) * baseHalf, sy + sin(perp) * baseHalf)
-                lineTo(ex + cos(perp) * tipHalf, ey + sin(perp) * tipHalf)
-                quadraticBezierTo(
-                    ex + cos(angle) * tipHalf * 1.4f,
-                    ey + sin(angle) * tipHalf * 1.4f,
-                    ex - cos(perp) * tipHalf,
-                    ey - sin(perp) * tipHalf
-                )
-                lineTo(sx - cos(perp) * baseHalf, sy - sin(perp) * baseHalf)
-                close()
-            }
-            drawPath(p, color)
-        }
-        drawCircle(color = color, radius = rInner * 1.15f, center = Offset(cx, cy))
-    }
-}
-
-/** Due linee orizzontali asimmetriche del pulsante menu in alto a sinistra. */
-@Composable
-internal fun ClaudeMenuGlyph(modifier: Modifier = Modifier.size(18.dp), color: Color) {
+internal fun AssistantMenuGlyph(modifier: Modifier = Modifier.size(19.dp), color: Color) {
     Canvas(modifier) {
         val stroke = (size.minDimension * 0.11f).coerceAtLeast(1.8.dp.toPx())
         drawLine(
@@ -338,8 +266,8 @@ internal fun ClaudeMenuGlyph(modifier: Modifier = Modifier.size(18.dp), color: C
 
 /** Fantasmino minimale per la modalità incognito (contorno o pieno). */
 @Composable
-internal fun ClaudeGhostGlyph(
-    modifier: Modifier = Modifier.size(20.dp),
+internal fun AssistantGhostGlyph(
+    modifier: Modifier = Modifier.size(21.dp),
     color: Color,
     filled: Boolean = false,
     eyeCutoutColor: Color = Color.White
@@ -353,9 +281,9 @@ internal fun ClaudeGhostGlyph(
             lineTo(w * 0.20f, h * 0.45f)
             cubicTo(w * 0.20f, h * 0.14f, w * 0.80f, h * 0.14f, w * 0.80f, h * 0.45f)
             lineTo(w * 0.80f, h * 0.80f)
-            quadraticBezierTo(w * 0.70f, h * 0.88f, w * 0.62f, h * 0.79f)
-            quadraticBezierTo(w * 0.50f, h * 0.88f, w * 0.38f, h * 0.79f)
-            quadraticBezierTo(w * 0.30f, h * 0.88f, w * 0.20f, h * 0.80f)
+            quadraticTo(w * 0.70f, h * 0.88f, w * 0.62f, h * 0.79f)
+            quadraticTo(w * 0.50f, h * 0.88f, w * 0.38f, h * 0.79f)
+            quadraticTo(w * 0.30f, h * 0.88f, w * 0.20f, h * 0.80f)
             close()
         }
         if (filled) {
@@ -370,29 +298,9 @@ internal fun ClaudeGhostGlyph(
     }
 }
 
-/** Quattro barre verticali arrotondate per il tasto vocale / onda nel composer. */
-@Composable
-internal fun ClaudeWaveformGlyph(modifier: Modifier = Modifier.size(18.dp), color: Color) {
-    Canvas(modifier) {
-        val stroke = (size.width * 0.115f).coerceAtLeast(1.8.dp.toPx())
-        val bars = listOf(0.24f to 0.30f, 0.42f to 0.68f, 0.58f to 0.46f, 0.76f to 0.26f)
-        bars.forEach { (xFrac, hFrac) ->
-            val half = size.height * hFrac / 2f
-            val cy = size.height / 2f
-            drawLine(
-                color = color,
-                start = Offset(size.width * xFrac, cy - half),
-                end = Offset(size.width * xFrac, cy + half),
-                strokeWidth = stroke,
-                cap = StrokeCap.Round
-            )
-        }
-    }
-}
-
 /** Puntina minimale per le chat fissate. */
 @Composable
-internal fun ClaudePinGlyph(modifier: Modifier = Modifier.size(15.dp), color: Color, filled: Boolean = false) {
+internal fun AssistantPinGlyph(modifier: Modifier = Modifier.size(16.dp), color: Color, filled: Boolean = false) {
     Canvas(modifier) {
         val w = size.width
         val h = size.height
@@ -420,7 +328,7 @@ internal fun ClaudePinGlyph(modifier: Modifier = Modifier.size(15.dp), color: Co
 
 /** Doppia pagina minimale per copiare il testo. */
 @Composable
-internal fun ClaudeCopyGlyph(modifier: Modifier = Modifier.size(17.dp), color: Color) {
+internal fun AssistantCopyGlyph(modifier: Modifier = Modifier.size(18.dp), color: Color) {
     Canvas(modifier) {
         val w = size.width
         val h = size.height
@@ -446,7 +354,7 @@ internal fun ClaudeCopyGlyph(modifier: Modifier = Modifier.size(17.dp), color: C
 
 /** Tre puntini verticali (⋮). */
 @Composable
-internal fun ClaudeOverflowGlyph(modifier: Modifier = Modifier.size(18.dp), color: Color) {
+internal fun AssistantOverflowGlyph(modifier: Modifier = Modifier.size(19.dp), color: Color) {
     Canvas(modifier) {
         val r = (size.minDimension * 0.085f).coerceAtLeast(1.5.dp.toPx())
         val cx = size.width / 2f
@@ -456,9 +364,9 @@ internal fun ClaudeOverflowGlyph(modifier: Modifier = Modifier.size(18.dp), colo
     }
 }
 
-/** Ingranaggio minimale per il pulsante Impostazioni nel cassetto. */
+/** Ingranaggio minimale per il pulsante Impostazioni AI nel cassetto. */
 @Composable
-internal fun ClaudeSettingsGearGlyph(modifier: Modifier = Modifier.size(18.dp), color: Color) {
+internal fun AssistantSettingsGearGlyph(modifier: Modifier = Modifier.size(19.dp), color: Color) {
     Canvas(modifier) {
         val cx = size.width / 2f
         val cy = size.height / 2f
@@ -480,41 +388,9 @@ internal fun ClaudeSettingsGearGlyph(modifier: Modifier = Modifier.size(18.dp), 
     }
 }
 
-/** Doppia nuvoletta chat stile tab Chat del nuovo Claude. */
-@Composable
-internal fun ClaudeChatTabGlyph(modifier: Modifier = Modifier.size(21.dp), color: Color, filled: Boolean) {
-    Canvas(modifier) {
-        val w = size.width
-        val h = size.height
-        val stroke = (w * 0.09f).coerceAtLeast(1.6.dp.toPx())
-        val main = Path().apply {
-            moveTo(w * 0.14f, h * 0.44f)
-            cubicTo(w * 0.14f, h * 0.20f, w * 0.70f, h * 0.20f, w * 0.70f, h * 0.44f)
-            cubicTo(w * 0.70f, h * 0.66f, w * 0.44f, h * 0.68f, w * 0.30f, h * 0.66f)
-            lineTo(w * 0.16f, h * 0.74f)
-            lineTo(w * 0.20f, h * 0.59f)
-            cubicTo(w * 0.16f, h * 0.55f, w * 0.14f, h * 0.50f, w * 0.14f, h * 0.44f)
-            close()
-        }
-        val secondary = Path().apply {
-            moveTo(w * 0.50f, h * 0.68f)
-            cubicTo(w * 0.58f, h * 0.80f, w * 0.82f, h * 0.78f, w * 0.88f, h * 0.82f)
-            lineTo(w * 0.85f, h * 0.69f)
-            cubicTo(w * 0.90f, h * 0.62f, w * 0.88f, h * 0.44f, w * 0.74f, h * 0.40f)
-        }
-        if (filled) {
-            drawPath(main, color)
-            drawPath(secondary, color.copy(alpha = 0.75f), style = Stroke(stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
-        } else {
-            drawPath(main, color, style = Stroke(stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
-            drawPath(secondary, color, style = Stroke(stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
-        }
-    }
-}
-
 /** Piccola chevron verso il basso o verso l'alto. */
 @Composable
-internal fun ClaudeChevronGlyph(
+internal fun AssistantChevronGlyph(
     modifier: Modifier = Modifier.size(14.dp),
     color: Color,
     pointUp: Boolean = false
@@ -532,9 +408,9 @@ internal fun ClaudeChevronGlyph(
     }
 }
 
-/** Freccia sinistra pulita (←) per Ricerca e foglio Ragionamento. */
+/** Freccia sinistra pulita (←). */
 @Composable
-internal fun ClaudeArrowLeftGlyph(modifier: Modifier = Modifier.size(18.dp), color: Color) {
+internal fun AssistantArrowLeftGlyph(modifier: Modifier = Modifier.size(19.dp), color: Color) {
     Canvas(modifier) {
         val stroke = (size.minDimension * 0.105f).coerceAtLeast(1.7.dp.toPx())
         val cy = size.height / 2f
@@ -548,11 +424,36 @@ internal fun ClaudeArrowLeftGlyph(modifier: Modifier = Modifier.size(18.dp), col
     }
 }
 
+/** Microfono KMP-safe senza drawRoundRect/drawArc. */
+@Composable
+internal fun AssistantMicGlyph(modifier: Modifier = Modifier.size(20.dp), color: Color) {
+    Canvas(modifier) {
+        val w = size.width
+        val h = size.height
+        val stroke = (w * 0.09f).coerceAtLeast(1.6.dp.toPx())
+        val cap = Path().apply {
+            moveTo(w * 0.36f, h * 0.24f)
+            cubicTo(w * 0.36f, h * 0.08f, w * 0.64f, h * 0.08f, w * 0.64f, h * 0.24f)
+            lineTo(w * 0.64f, h * 0.48f)
+            cubicTo(w * 0.64f, h * 0.64f, w * 0.36f, h * 0.64f, w * 0.36f, h * 0.48f)
+            close()
+        }
+        drawPath(cap, color, style = Stroke(stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        val cradle = Path().apply {
+            moveTo(w * 0.22f, h * 0.46f)
+            cubicTo(w * 0.22f, h * 0.78f, w * 0.78f, h * 0.78f, w * 0.78f, h * 0.46f)
+        }
+        drawPath(cradle, color, style = Stroke(stroke, cap = StrokeCap.Round))
+        drawLine(color, Offset(w * 0.50f, h * 0.71f), Offset(w * 0.50f, h * 0.88f), stroke, StrokeCap.Round)
+        drawLine(color, Offset(w * 0.36f, h * 0.88f), Offset(w * 0.64f, h * 0.88f), stroke, StrokeCap.Round)
+    }
+}
+
 /** Indicatore compatto a 4 tacche per il livello di ragionamento nel selettore Modello. */
 @Composable
-internal fun ClaudeEffortDots(
+internal fun AssistantEffortDots(
     level: Int,
-    palette: ClaudePalette,
+    palette: AssistantSurfacePalette,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -560,30 +461,33 @@ internal fun ClaudeEffortDots(
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        for (i in 0 until ClaudeEffortLabels.size) {
-            val selected = i == level.coerceIn(0, ClaudeEffortLabels.lastIndex)
+        for (i in 0 until AssistantEffortLabels.size) {
+            val selected = i == level.coerceIn(0, AssistantEffortLabels.lastIndex)
             Box(
                 modifier = Modifier
                     .width(if (selected) 2.5.dp else 3.dp)
                     .height(if (selected) 12.dp else 3.dp)
                     .clip(CircleShape)
-                    .background(if (selected) palette.ink else palette.inkFaint.copy(alpha = 0.65f))
+                    .background(if (selected) palette.accentFill else palette.inkFaint.copy(alpha = 0.65f))
             )
         }
     }
 }
 
 // =================================================================================================
-// Header bar su guscio pietra chiaro con bottoni circolari bianchi e pillola raggruppata a destra
+// Header bar: Indietro + Menu cassetto a sinistra, Titolo + Modello al centro, Incognito / Azioni a destra
 // =================================================================================================
 
 @Composable
-internal fun ClaudeHeaderBar(
-    palette: ClaudePalette,
+internal fun AssistantHeaderBar(
+    palette: AssistantSurfacePalette,
     hasMessages: Boolean,
+    isThinking: Boolean,
     conversationTitle: String?,
+    modelSubtitle: String?,
     isIncognito: Boolean,
     isPinned: Boolean,
+    onBackClick: () -> Unit,
     onOpenDrawer: () -> Unit,
     onOpenSearch: () -> Unit,
     onToggleIncognito: () -> Unit,
@@ -598,48 +502,83 @@ internal fun ClaudeHeaderBar(
             .fillMaxWidth()
             .background(palette.shellBg)
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Sinistra: bottone circolare bianco con icona menu a due linee
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(palette.headerBtnBg)
-                .border(0.75.dp, palette.hairline, CircleShape)
-                .clickable(role = Role.Button, onClick = onOpenDrawer)
-                .semantics { contentDescription = "Apri menu chat" },
-            contentAlignment = Alignment.Center
-        ) {
-            ClaudeMenuGlyph(color = palette.ink)
+        // Sinistra: Indietro (44dp) + Menu cassetto (44dp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(palette.headerBtnBg)
+                    .border(0.75.dp, palette.hairline, CircleShape)
+                    .clickable(role = Role.Button, onClick = onBackClick)
+                    .semantics { contentDescription = "Indietro" },
+                contentAlignment = Alignment.Center
+            ) {
+                AssistantArrowLeftGlyph(color = palette.ink)
+            }
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(palette.headerBtnBg)
+                    .border(0.75.dp, palette.hairline, CircleShape)
+                    .clickable(role = Role.Button, onClick = onOpenDrawer)
+                    .semantics { contentDescription = "Apri menu chat" },
+                contentAlignment = Alignment.Center
+            ) {
+                AssistantMenuGlyph(color = palette.ink)
+            }
         }
 
         Spacer(Modifier.width(12.dp))
 
-        // Centro: titolo conversazione oppure etichetta discreta "Chat in incognito"
+        // Centro: titolo chat + nome del modello sotto (al posto giusto!) oppure "Chat in incognito"
         Box(
             modifier = Modifier.weight(1f),
             contentAlignment = if (hasMessages) Alignment.CenterStart else Alignment.Center
         ) {
             when {
                 hasMessages -> {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (isIncognito) {
-                            ClaudeGhostGlyph(Modifier.size(16.dp), color = palette.inkMuted)
+                    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (isIncognito) {
+                                AssistantGhostGlyph(Modifier.size(15.dp), color = palette.inkMuted)
+                            }
+                            Text(
+                                text = if (isIncognito) "Chat in incognito" else (conversationTitle ?: "AILA Assistant"),
+                                style = TextStyle(
+                                    fontFamily = FontFamily.Default,
+                                    fontSize = 15.sp,
+                                    lineHeight = 19.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                ),
+                                color = palette.ink,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
-                        Text(
-                            text = if (isIncognito) "Chat in incognito" else (conversationTitle ?: "AILA Assistant"),
-                            style = TextStyle(
-                                fontFamily = FontFamily.Default,
-                                fontSize = 15.sp,
-                                lineHeight = 20.sp,
-                                fontWeight = FontWeight.Medium
-                            ),
-                            color = palette.ink,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        val sub = when {
+                            isThinking -> "Sto elaborando…"
+                            !modelSubtitle.isNullOrBlank() -> modelSubtitle
+                            else -> null
+                        }
+                        if (sub != null) {
+                            Text(
+                                text = sub,
+                                style = TextStyle(
+                                    fontFamily = FontFamily.Default,
+                                    fontSize = 12.sp,
+                                    lineHeight = 15.sp,
+                                    fontWeight = FontWeight.Normal
+                                ),
+                                color = if (isThinking) palette.accentFill else palette.inkMuted,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
                 isIncognito -> {
@@ -647,7 +586,7 @@ internal fun ClaudeHeaderBar(
                         text = "Chat in incognito",
                         style = TextStyle(
                             fontFamily = FontFamily.Default,
-                            fontSize = 13.5.sp,
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.Medium
                         ),
                         color = palette.inkMuted,
@@ -659,62 +598,55 @@ internal fun ClaudeHeaderBar(
 
         Spacer(Modifier.width(10.dp))
 
-        // Destra: pillola bianca con due azioni (Ricerca + Incognito a chat vuota; Nuova chat + ⋮ in conversazione)
+        // Destra: a chat vuota solo Incognito (44dp); in conversazione pillola Nuova chat + ⋮ (44dp)
         Box {
-            Row(
-                modifier = Modifier
-                    .height(40.dp)
-                    .clip(RoundedCornerShape(100.dp))
-                    .background(palette.headerBtnBg)
-                    .border(0.75.dp, palette.hairline, RoundedCornerShape(100.dp)),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (hasMessages) {
+            if (hasMessages) {
+                Row(
+                    modifier = Modifier
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(100.dp))
+                        .background(palette.headerBtnBg)
+                        .border(0.75.dp, palette.hairline, RoundedCornerShape(100.dp)),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Box(
                         modifier = Modifier
-                            .size(width = 42.dp, height = 40.dp)
+                            .size(width = 46.dp, height = 44.dp)
                             .clickable(role = Role.Button, onClick = onNewChat)
                             .semantics { contentDescription = "Nuova chat" },
                         contentAlignment = Alignment.Center
                     ) {
-                        AppIcons.NewChat(Modifier.size(18.dp), color = palette.ink)
+                        AppIcons.NewChat(Modifier.size(19.dp), color = palette.ink)
                     }
-                    Box(Modifier.width(0.75.dp).height(18.dp).background(palette.hairline))
+                    Box(Modifier.width(0.75.dp).height(20.dp).background(palette.hairline))
                     Box(
                         modifier = Modifier
-                            .size(width = 40.dp, height = 40.dp)
+                            .size(width = 44.dp, height = 44.dp)
                             .clickable(role = Role.Button, onClick = { overflowOpen = true })
                             .semantics { contentDescription = "Altre opzioni chat" },
                         contentAlignment = Alignment.Center
                     ) {
-                        ClaudeOverflowGlyph(color = palette.ink)
+                        AssistantOverflowGlyph(color = palette.ink)
                     }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(width = 42.dp, height = 40.dp)
-                            .clickable(role = Role.Button, onClick = onOpenSearch)
-                            .semantics { contentDescription = "Cerca nelle chat" },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        AppIcons.Search(Modifier.size(18.dp), color = palette.ink)
-                    }
-                    Box(Modifier.width(0.75.dp).height(18.dp).background(palette.hairline))
-                    Box(
-                        modifier = Modifier
-                            .size(width = 42.dp, height = 40.dp)
-                            .clickable(role = Role.Button, onClick = onToggleIncognito)
-                            .semantics {
-                                contentDescription = if (isIncognito) "Esci dalla chat in incognito" else "Chat in incognito"
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Crossfade(targetState = isIncognito, animationSpec = ailaFadeSpec(AilaDuration.Quick), label = "incognitoBtn") { inc ->
-                            if (inc) {
-                                AppIcons.Close(Modifier.size(17.dp), color = palette.ink)
-                            } else {
-                                ClaudeGhostGlyph(Modifier.size(19.dp), color = palette.ink)
-                            }
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(palette.headerBtnBg)
+                        .border(0.75.dp, palette.hairline, CircleShape)
+                        .clickable(role = Role.Button, onClick = onToggleIncognito)
+                        .semantics {
+                            contentDescription = if (isIncognito) "Esci dalla chat in incognito" else "Chat in incognito"
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Crossfade(targetState = isIncognito, animationSpec = ailaFadeSpec(AilaDuration.Quick), label = "incognitoBtn") { inc ->
+                        if (inc) {
+                            AppIcons.Close(Modifier.size(18.dp), color = palette.ink)
+                        } else {
+                            AssistantGhostGlyph(Modifier.size(20.dp), color = palette.ink)
                         }
                     }
                 }
@@ -728,7 +660,7 @@ internal fun ClaudeHeaderBar(
                 if (!isIncognito) {
                     DropdownMenuItem(
                         text = { Text(if (isPinned) "Rimuovi dai fissati" else "Fissa conversazione", color = palette.ink) },
-                        leadingIcon = { ClaudePinGlyph(Modifier.size(16.dp), color = palette.inkMuted, filled = isPinned) },
+                        leadingIcon = { AssistantPinGlyph(Modifier.size(16.dp), color = palette.inkMuted, filled = isPinned) },
                         onClick = { overflowOpen = false; onTogglePin() }
                     )
                 }
@@ -739,7 +671,7 @@ internal fun ClaudeHeaderBar(
                 )
                 DropdownMenuItem(
                     text = { Text(if (isIncognito) "Esci da incognito" else "Nuova chat in incognito", color = palette.ink) },
-                    leadingIcon = { ClaudeGhostGlyph(Modifier.size(16.dp), color = palette.inkMuted) },
+                    leadingIcon = { AssistantGhostGlyph(Modifier.size(16.dp), color = palette.inkMuted) },
                     onClick = { overflowOpen = false; onToggleIncognito() }
                 )
                 if (!isIncognito) {
@@ -755,12 +687,12 @@ internal fun ClaudeHeaderBar(
 }
 
 // =================================================================================================
-// Cassetto laterale sinistro (Slide-Over Drawer fedele a Claude)
+// Cassetto laterale sinistro: solo Fissate, Recenti e footer Impostazioni AI / Cerca / Nuova chat
 // =================================================================================================
 
 @Composable
-internal fun ClaudeLeftDrawer(
-    palette: ClaudePalette,
+internal fun AssistantLeftDrawer(
+    palette: AssistantSurfacePalette,
     drawerWidth: Dp,
     conversations: List<AssistantConversation>,
     activeConversationId: String?,
@@ -768,12 +700,7 @@ internal fun ClaudeLeftDrawer(
     onTogglePin: (String) -> Unit,
     onOpenSearch: () -> Unit,
     onNewChat: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onOpenProfile: () -> Unit,
-    onOpenFiles: () -> Unit,
-    onStudyPlan: () -> Unit,
-    onOpenBureaucracy: () -> Unit,
-    onOpenGita: () -> Unit
+    onOpenAiSettings: () -> Unit
 ) {
     var pinnedExpanded by remember { mutableStateOf(true) }
     var showAllRecents by remember { mutableStateOf(false) }
@@ -784,7 +711,7 @@ internal fun ClaudeLeftDrawer(
     val recents = remember(conversations) {
         conversations.filterNot { it.pinned }.sortedByDescending { it.updatedAtMillis }
     }
-    val visibleRecents = if (showAllRecents) recents else recents.take(8)
+    val visibleRecents = if (showAllRecents) recents else recents.take(10)
 
     Column(
         modifier = Modifier
@@ -796,49 +723,55 @@ internal fun ClaudeLeftDrawer(
     ) {
         Spacer(Modifier.height(14.dp))
 
-        // Wordmark editoriale Serif "AILA"
-        Text(
-            text = "AILA",
-            style = TextStyle(
-                fontFamily = FontFamily.Serif,
-                fontSize = 26.sp,
-                lineHeight = 32.sp,
-                fontWeight = FontWeight.Medium,
-                letterSpacing = (-0.4).sp
-            ),
-            color = palette.ink,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp)
-        )
+        // Intestazione con vero marchio AILA
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            AilaLogoTile(size = 30.dp)
+            Text(
+                text = "AILA",
+                style = TextStyle(
+                    fontFamily = FontFamily.Serif,
+                    fontSize = 24.sp,
+                    lineHeight = 30.sp,
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = (-0.3).sp
+                ),
+                color = palette.ink
+            )
+        }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(10.dp))
 
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             contentPadding = PaddingValues(bottom = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+            verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             if (pinned.isNotEmpty()) {
                 item(key = "header-pinned") {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(12.dp))
                             .clickable { pinnedExpanded = !pinnedExpanded }
-                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                            .padding(horizontal = 10.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = "Fissate",
-                            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
+                            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
                             color = palette.inkMuted,
                             modifier = Modifier.weight(1f)
                         )
-                        ClaudeChevronGlyph(color = palette.inkMuted, pointUp = pinnedExpanded)
+                        AssistantChevronGlyph(color = palette.inkMuted, pointUp = pinnedExpanded)
                     }
                 }
                 if (pinnedExpanded) {
                     items(pinned, key = { "pin-${it.id}" }) { conv ->
-                        ClaudeDrawerConversationRow(
+                        AssistantDrawerConversationRow(
                             conversation = conv,
                             active = conv.id == activeConversationId,
                             showLeadingPin = true,
@@ -854,9 +787,9 @@ internal fun ClaudeLeftDrawer(
             item(key = "header-recents") {
                 Text(
                     text = "Recenti",
-                    style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
+                    style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
                     color = palette.inkMuted,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
                 )
             }
 
@@ -866,12 +799,12 @@ internal fun ClaudeLeftDrawer(
                         text = "Nessuna conversazione salvata",
                         style = TextStyle(fontSize = 14.sp),
                         color = palette.inkFaint,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp)
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 12.dp)
                     )
                 }
             } else {
                 items(visibleRecents, key = { "rec-${it.id}" }) { conv ->
-                    ClaudeDrawerConversationRow(
+                    AssistantDrawerConversationRow(
                         conversation = conv,
                         active = conv.id == activeConversationId,
                         showLeadingPin = false,
@@ -880,101 +813,61 @@ internal fun ClaudeLeftDrawer(
                         onTogglePin = { onTogglePin(conv.id) }
                     )
                 }
-                if (!showAllRecents && recents.size > 8) {
+                if (!showAllRecents && recents.size > 10) {
                     item(key = "show-more") {
                         Text(
                             text = "Mostra altre",
                             style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
-                            color = palette.inkMuted,
+                            color = palette.accentFill,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
                                 .clickable { showAllRecents = true }
-                                .padding(horizontal = 10.dp, vertical = 10.dp)
+                                .padding(horizontal = 10.dp, vertical = 11.dp)
                         )
                     }
                 }
             }
-
-            // Scorciatoie AILA (profilo, file, piano di studio, burocrazia, gita)
-            item(key = "header-shortcuts") {
-                Column {
-                    Spacer(Modifier.height(14.dp))
-                    Box(Modifier.fillMaxWidth().padding(horizontal = 8.dp).height(0.75.dp).background(palette.hairline))
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        text = "Scorciatoie",
-                        style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
-                        color = palette.inkMuted,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
-                    )
-                }
-            }
-            item(key = "shortcut-profile") {
-                ClaudeDrawerShortcutRow("Profilo", palette, onOpenProfile) {
-                    AppIcons.Profile(Modifier.size(16.dp), color = palette.inkMuted)
-                }
-            }
-            item(key = "shortcut-study") {
-                ClaudeDrawerShortcutRow("Piano di studio", palette, onStudyPlan) {
-                    AppIcons.Sparkle(Modifier.size(16.dp), color = palette.inkMuted)
-                }
-            }
-            item(key = "shortcut-files") {
-                ClaudeDrawerShortcutRow("File salvati", palette, onOpenFiles) {
-                    AppIcons.Document(Modifier.size(16.dp), color = palette.inkMuted)
-                }
-            }
-            item(key = "shortcut-bureaucracy") {
-                ClaudeDrawerShortcutRow("Burocrazia", palette, onOpenBureaucracy) {
-                    AppIcons.Check(Modifier.size(16.dp), color = palette.inkMuted)
-                }
-            }
-            item(key = "shortcut-gita") {
-                ClaudeDrawerShortcutRow("Gita", palette, onOpenGita) {
-                    AppIcons.Bus(Modifier.size(16.dp), color = palette.inkMuted)
-                }
-            }
         }
 
-        // Footer esatto di Claude: Impostazioni (cerchio) | Cerca (pillola) | Nuova chat (cerchio pieno)
+        // Footer comodo (46dp): Impostazioni AI | Cerca | Nuova chat
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 8.dp, bottom = 12.dp),
+                .padding(top = 8.dp, bottom = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(46.dp)
                     .clip(CircleShape)
                     .background(palette.headerBtnBg)
                     .border(0.75.dp, palette.hairline, CircleShape)
-                    .clickable(role = Role.Button, onClick = onOpenSettings)
-                    .semantics { contentDescription = "Impostazioni" },
+                    .clickable(role = Role.Button, onClick = onOpenAiSettings)
+                    .semantics { contentDescription = "Impostazioni AI" },
                 contentAlignment = Alignment.Center
             ) {
-                ClaudeSettingsGearGlyph(color = palette.ink)
+                AssistantSettingsGearGlyph(color = palette.ink)
             }
 
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .height(42.dp)
+                    .height(46.dp)
                     .clip(RoundedCornerShape(100.dp))
                     .background(palette.headerBtnBg)
                     .border(0.75.dp, palette.hairline, RoundedCornerShape(100.dp))
                     .clickable(role = Role.Button, onClick = onOpenSearch)
-                    .padding(horizontal = 14.dp)
+                    .padding(horizontal = 16.dp)
                     .semantics { contentDescription = "Cerca nelle conversazioni" },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                AppIcons.Search(Modifier.size(16.dp), color = palette.inkFaint)
+                AppIcons.Search(Modifier.size(17.dp), color = palette.inkMuted)
                 Text(
                     text = "Cerca",
-                    style = TextStyle(fontSize = 14.5.sp),
+                    style = TextStyle(fontSize = 15.sp),
                     color = palette.inkFaint,
                     maxLines = 1
                 )
@@ -982,25 +875,25 @@ internal fun ClaudeLeftDrawer(
 
             Box(
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(46.dp)
                     .clip(CircleShape)
-                    .background(palette.ink)
+                    .background(palette.accentFill)
                     .clickable(role = Role.Button, onClick = onNewChat)
                     .semantics { contentDescription = "Nuova chat dal menu" },
                 contentAlignment = Alignment.Center
             ) {
-                AppIcons.NewChat(Modifier.size(18.dp), color = palette.sheetBg)
+                AppIcons.NewChat(Modifier.size(19.dp), color = palette.onAccentFill)
             }
         }
     }
 }
 
 @Composable
-private fun ClaudeDrawerConversationRow(
+private fun AssistantDrawerConversationRow(
     conversation: AssistantConversation,
     active: Boolean,
     showLeadingPin: Boolean,
-    palette: ClaudePalette,
+    palette: AssistantSurfacePalette,
     onClick: () -> Unit,
     onTogglePin: () -> Unit
 ) {
@@ -1010,23 +903,28 @@ private fun ClaudeDrawerConversationRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 46.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(if (active) palette.activeRowBg else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 10.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         if (showLeadingPin) {
             Box(
                 modifier = Modifier
-                    .size(22.dp)
+                    .size(32.dp)
                     .clip(CircleShape)
                     .clickable(role = Role.Button, onClick = onTogglePin)
                     .semantics { contentDescription = "Rimuovi dai fissati" },
                 contentAlignment = Alignment.Center
             ) {
-                ClaudePinGlyph(Modifier.size(14.dp), color = palette.inkMuted, filled = true)
+                AssistantPinGlyph(
+                    Modifier.size(15.dp),
+                    color = if (active) palette.activeRowInk else palette.accentFill,
+                    filled = true
+                )
             }
         }
         Text(
@@ -1034,28 +932,28 @@ private fun ClaudeDrawerConversationRow(
             style = TextStyle(
                 fontSize = 14.5.sp,
                 lineHeight = 19.sp,
-                fontWeight = if (active) FontWeight.Medium else FontWeight.Normal
+                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal
             ),
-            color = palette.ink,
+            color = if (active) palette.activeRowInk else palette.ink,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
         if (hasAttachmentsOrSources) {
-            AppIcons.Document(Modifier.size(13.dp), color = palette.inkFaint)
+            AppIcons.Document(Modifier.size(14.dp), color = if (active) palette.activeRowInk.copy(alpha = 0.7f) else palette.inkFaint)
         }
         if (!showLeadingPin) {
             Box(
                 modifier = Modifier
-                    .size(26.dp)
+                    .size(34.dp)
                     .clip(CircleShape)
                     .clickable(role = Role.Button, onClick = onTogglePin)
                     .semantics { contentDescription = "Fissa" },
                 contentAlignment = Alignment.Center
             ) {
-                ClaudePinGlyph(
-                    Modifier.size(13.dp),
-                    color = palette.inkFaint.copy(alpha = 0.45f),
+                AssistantPinGlyph(
+                    Modifier.size(14.dp),
+                    color = palette.inkFaint.copy(alpha = 0.55f),
                     filled = false
                 )
             }
@@ -1063,40 +961,13 @@ private fun ClaudeDrawerConversationRow(
     }
 }
 
-@Composable
-private fun ClaudeDrawerShortcutRow(
-    label: String,
-    palette: ClaudePalette,
-    onClick: () -> Unit,
-    icon: @Composable () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        icon()
-        Text(
-            text = label,
-            style = TextStyle(fontSize = 14.5.sp, fontWeight = FontWeight.Normal),
-            color = palette.ink,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
 // =================================================================================================
-// Schermata di ricerca dedicata (fedele a Video 1 00:06–00:11)
+// Schermata di ricerca dedicata (accessibile dal cassetto laterale e dal menu ⋮)
 // =================================================================================================
 
 @Composable
-internal fun ClaudeSearchOverlay(
-    palette: ClaudePalette,
+internal fun AssistantSearchOverlay(
+    palette: AssistantSurfacePalette,
     conversations: List<AssistantConversation>,
     onClose: () -> Unit,
     onSelectConversation: (AssistantConversation) -> Unit
@@ -1123,18 +994,17 @@ internal fun ClaudeSearchOverlay(
             .fillMaxSize()
             .background(palette.shellBg)
     ) {
-        // Barra superiore ricerca
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(44.dp)
                     .clip(CircleShape)
                     .background(palette.headerBtnBg)
                     .border(0.75.dp, palette.hairline, CircleShape)
@@ -1142,13 +1012,13 @@ internal fun ClaudeSearchOverlay(
                     .semantics { contentDescription = "Chiudi ricerca chat" },
                 contentAlignment = Alignment.Center
             ) {
-                ClaudeArrowLeftGlyph(color = palette.ink)
+                AssistantArrowLeftGlyph(color = palette.ink)
             }
 
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .height(42.dp)
+                    .height(44.dp)
                     .clip(RoundedCornerShape(100.dp))
                     .background(palette.headerBtnBg)
                     .border(0.75.dp, palette.hairline, RoundedCornerShape(100.dp))
@@ -1156,7 +1026,7 @@ internal fun ClaudeSearchOverlay(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                AppIcons.Search(Modifier.size(17.dp), color = palette.inkMuted)
+                AppIcons.Search(Modifier.size(18.dp), color = palette.inkMuted)
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                     if (query.isEmpty()) {
                         Text(
@@ -1174,7 +1044,7 @@ internal fun ClaudeSearchOverlay(
                             color = palette.ink,
                             fontFamily = FontFamily.Default
                         ),
-                        cursorBrush = SolidColor(palette.ink),
+                        cursorBrush = SolidColor(palette.accentFill),
                         modifier = Modifier
                             .fillMaxWidth()
                             .focusRequester(focusRequester)
@@ -1184,19 +1054,18 @@ internal fun ClaudeSearchOverlay(
                 if (query.isNotEmpty()) {
                     Box(
                         modifier = Modifier
-                            .size(28.dp)
+                            .size(36.dp)
                             .clip(CircleShape)
                             .clickable(role = Role.Button, onClick = { query = "" })
                             .semantics { contentDescription = "Svuota ricerca" },
                         contentAlignment = Alignment.Center
                     ) {
-                        AppIcons.Close(Modifier.size(15.dp), color = palette.inkMuted)
+                        AppIcons.Close(Modifier.size(16.dp), color = palette.inkMuted)
                     }
                 }
             }
         }
 
-        // Foglio bianco arrotondato con lista piatta e match in grassetto
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -1263,13 +1132,13 @@ internal fun ClaudeSearchOverlay(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 if (conv.pinned) {
-                                    ClaudePinGlyph(Modifier.size(13.dp), color = palette.inkFaint, filled = true)
+                                    AssistantPinGlyph(Modifier.size(13.dp), color = palette.accentFill, filled = true)
                                 }
                                 if (hasDocs) {
                                     AppIcons.Document(Modifier.size(13.dp), color = palette.inkFaint)
                                 }
                                 Text(
-                                    text = claudeCompactTimeLabel(conv.updatedAtMillis),
+                                    text = assistantCompactTimeLabel(conv.updatedAtMillis),
                                     style = TextStyle(fontSize = 13.sp),
                                     color = palette.inkFaint
                                 )
@@ -1304,12 +1173,13 @@ internal fun highlightSearchMatch(text: String, query: String, baseColor: Color)
 }
 
 // =================================================================================================
-// Composer espandibile (1 riga a riposo → 2 righe con selettore Modello/Ragionamento al focus)
+// Composer unificato: UN SOLO BasicTextField sempre montato (zero perdita focus),
+// pillola Modello/Provider sempre visibile, UN SOLO microfono e bersagli touch >= 44dp
 // =================================================================================================
 
 @Composable
-internal fun ClaudeComposer(
-    palette: ClaudePalette,
+internal fun AssistantComposer(
+    palette: AssistantSurfacePalette,
     draft: String,
     onDraftChange: (String) -> Unit,
     isThinking: Boolean,
@@ -1325,22 +1195,14 @@ internal fun ClaudeComposer(
     onOpenModelSheet: () -> Unit,
     onOpenAttachments: (() -> Unit)?,
     onStartVoice: (() -> Unit)?,
-    onSend: () -> Unit,
-    onFocusedChange: (Boolean) -> Unit = {}
+    onSend: () -> Unit
 ) {
-    var focused by remember { mutableStateOf(false) }
     val hasDraft = draft.isNotBlank() || attachedFiles.isNotEmpty()
     val canSend = hasDraft && !isThinking
-    val expanded = focused || draft.isNotEmpty() || attachedFiles.isNotEmpty()
-    val cornerRadius by animateDpAsState(
-        targetValue = if (expanded) 24.dp else 28.dp,
-        animationSpec = ailaSpatialSpring(),
-        label = "composerRadius"
-    )
     val placeholderText = if (isIncognito) "Chiedi in incognito" else "Chiedi ad AILA"
     var placeholderIndex by remember { mutableIntStateOf(-1) }
-    LaunchedEffect(hasMessages, expanded, AppTheme.reduceMotion, AppTheme.liteEffects) {
-        if (hasMessages || expanded || AppTheme.reduceMotion || AppTheme.liteEffects || rotatingPlaceholders.isEmpty()) {
+    LaunchedEffect(hasMessages, draft.isEmpty(), AppTheme.reduceMotion, AppTheme.liteEffects) {
+        if (hasMessages || draft.isNotEmpty() || AppTheme.reduceMotion || AppTheme.liteEffects || rotatingPlaceholders.isEmpty()) {
             placeholderIndex = -1
             return@LaunchedEffect
         }
@@ -1353,8 +1215,11 @@ internal fun ClaudeComposer(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+            .background(palette.sheetBg)
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .padding(horizontal = 14.dp)
+            .padding(top = 6.dp, bottom = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         if (attachedFiles.isNotEmpty()) {
             Row(
@@ -1364,16 +1229,16 @@ internal fun ClaudeComposer(
                 attachedFiles.forEach { file ->
                     Row(
                         modifier = Modifier
-                            .widthIn(min = 170.dp, max = 240.dp)
+                            .widthIn(min = 176.dp, max = 250.dp)
                             .clip(RoundedCornerShape(16.dp))
                             .background(palette.pillBg)
                             .border(0.75.dp, palette.hairline, RoundedCornerShape(16.dp))
                             .clickable { onOpenAttachedFile(file) }
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        AppIcons.Document(Modifier.size(16.dp), color = palette.inkMuted)
+                        AppIcons.Document(Modifier.size(16.dp), color = palette.accentFill)
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = file.name,
@@ -1390,13 +1255,13 @@ internal fun ClaudeComposer(
                         }
                         Box(
                             modifier = Modifier
-                                .size(24.dp)
+                                .size(32.dp)
                                 .clip(CircleShape)
                                 .clickable(enabled = !isThinking) { onRemoveAttachedFile(file.localId) }
                                 .semantics { contentDescription = "Rimuovi allegato ${file.name}" },
                             contentAlignment = Alignment.Center
                         ) {
-                            AppIcons.Close(Modifier.size(13.dp), color = palette.inkMuted)
+                            AppIcons.Close(Modifier.size(14.dp), color = palette.inkMuted)
                         }
                     }
                 }
@@ -1412,12 +1277,12 @@ internal fun ClaudeComposer(
             )
         }
 
-        val shape = RoundedCornerShape(cornerRadius)
+        val shape = RoundedCornerShape(24.dp)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .shadow(
-                    elevation = if (AppTheme.isDarkMode) 0.dp else 2.dp,
+                    elevation = if (AppTheme.isDarkMode || AppTheme.isNothing) 0.dp else 2.dp,
                     shape = shape,
                     ambientColor = Color(0x14000000),
                     spotColor = Color(0x14000000)
@@ -1426,205 +1291,126 @@ internal fun ClaudeComposer(
                 .background(palette.composerBg)
                 .border(1.dp, palette.composerBorder, shape)
                 .animateContentSize(ailaSpatialSpring())
-                .padding(
-                    start = if (expanded) 14.dp else 8.dp,
-                    end = 8.dp,
-                    top = if (expanded) 12.dp else 7.dp,
-                    bottom = 7.dp
-                )
+                .padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 8.dp)
         ) {
-            if (expanded) {
-                // Riga 1: campo testo multilinea
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(end = 6.dp, bottom = 10.dp),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    if (draft.isEmpty()) {
+            // Riga 1: UN SOLO BasicTextField sempre montato -> focus e tastiera non cadono mai
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 34.dp)
+                    .padding(end = 6.dp, bottom = 8.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                if (draft.isEmpty()) {
+                    Crossfade(
+                        targetState = placeholderIndex,
+                        animationSpec = ailaFadeSpec(AilaDuration.Slow),
+                        label = "assistantPlaceholder"
+                    ) { idx ->
                         Text(
-                            text = placeholderText,
+                            text = if (idx < 0 || rotatingPlaceholders.isEmpty()) placeholderText
+                            else rotatingPlaceholders[idx],
                             style = TextStyle(fontSize = 16.sp, lineHeight = 22.sp),
-                            color = palette.inkFaint
-                        )
-                    }
-                    BasicTextField(
-                        value = draft,
-                        onValueChange = onDraftChange,
-                        enabled = true,
-                        maxLines = 5,
-                        textStyle = TextStyle(
-                            fontSize = 16.sp,
-                            lineHeight = 22.sp,
-                            color = palette.ink,
-                            fontFamily = FontFamily.Default
-                        ),
-                        cursorBrush = SolidColor(palette.ink),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .onFocusChanged {
-                                focused = it.isFocused
-                                onFocusedChange(it.isFocused)
-                            }
-                    )
-                }
-
-                // Riga 2: + | pillola Modello & Ragionamento | Mic | Invia / Onda
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (onOpenAttachments != null) {
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(CircleShape)
-                                .background(palette.pillBg)
-                                .clickable(role = Role.Button, onClick = onOpenAttachments)
-                                .semantics { contentDescription = "Menu allegati" },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            AppIcons.Plus(Modifier.size(18.dp), color = palette.ink)
-                        }
-                        Spacer(Modifier.width(8.dp))
-                    }
-
-                    // Pillola selettore Modello + Ragionamento (come "Opus 5.5 | High ⌄")
-                    Row(
-                        modifier = Modifier
-                            .height(34.dp)
-                            .clip(RoundedCornerShape(100.dp))
-                            .background(palette.pillBg)
-                            .clickable(role = Role.Button, onClick = onOpenModelSheet)
-                            .padding(horizontal = 12.dp)
-                            .semantics { contentDescription = "Seleziona modello e ragionamento" },
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = modelShortLabel,
-                            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
-                            color = palette.ink,
+                            color = palette.inkFaint,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Box(Modifier.width(1.dp).height(12.dp).background(palette.hairline))
-                        Text(
-                            text = effortLabel,
-                            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Normal),
-                            color = palette.inkMuted,
-                            maxLines = 1
-                        )
-                        ClaudeChevronGlyph(Modifier.size(11.dp), color = palette.inkMuted)
                     }
-
-                    Spacer(Modifier.weight(1f))
-
-                    if (onStartVoice != null) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .clickable(enabled = !isThinking, role = Role.Button, onClick = onStartVoice)
-                                .semantics { contentDescription = "Registra vocale" },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            ClaudeMicGlyph(Modifier.size(19.dp), color = palette.inkMuted)
-                        }
-                        Spacer(Modifier.width(4.dp))
-                    }
-
-                    ClaudeSendOrWaveButton(
-                        palette = palette,
-                        showSendArrow = hasDraft || onStartVoice == null,
-                        canSend = canSend,
-                        isThinking = isThinking,
-                        onSend = onSend,
-                        onVoiceFallback = { onStartVoice?.invoke() }
-                    )
                 }
-            } else {
-                // Stato compatto a 1 riga (identico a Video 1 00:00 e 00:14)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (onOpenAttachments != null) {
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(CircleShape)
-                                .background(palette.pillBg)
-                                .clickable(role = Role.Button, onClick = onOpenAttachments)
-                                .semantics { contentDescription = "Menu allegati" },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            AppIcons.Plus(Modifier.size(18.dp), color = palette.ink)
-                        }
-                        Spacer(Modifier.width(10.dp))
-                    }
+                BasicTextField(
+                    value = draft,
+                    onValueChange = onDraftChange,
+                    maxLines = 5,
+                    textStyle = TextStyle(
+                        fontSize = 16.sp,
+                        lineHeight = 22.sp,
+                        color = palette.ink,
+                        fontFamily = FontFamily.Default
+                    ),
+                    cursorBrush = SolidColor(palette.accentFill),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
 
+            // Riga 2: + (44dp) | Pillola Modello/Provider (44dp, sempre visibile) | 1 solo Mic (44dp) | Invia (44dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (onOpenAttachments != null) {
                     Box(
-                        modifier = Modifier.weight(1f).padding(vertical = 6.dp),
-                        contentAlignment = Alignment.CenterStart
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(palette.pillBg)
+                            .clickable(role = Role.Button, onClick = onOpenAttachments)
+                            .semantics { contentDescription = "Menu allegati" },
+                        contentAlignment = Alignment.Center
                     ) {
-                        if (draft.isEmpty()) {
-                            Crossfade(
-                                targetState = placeholderIndex,
-                                animationSpec = ailaFadeSpec(AilaDuration.Slow),
-                                label = "claudePlaceholder"
-                            ) { idx ->
-                                Text(
-                                    text = if (idx < 0 || rotatingPlaceholders.isEmpty()) placeholderText
-                                    else rotatingPlaceholders[idx],
-                                    style = TextStyle(fontSize = 15.5.sp, lineHeight = 20.sp),
-                                    color = palette.inkFaint,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                        BasicTextField(
-                            value = draft,
-                            onValueChange = onDraftChange,
-                            singleLine = true,
-                            textStyle = TextStyle(
-                                fontSize = 15.5.sp,
-                                lineHeight = 20.sp,
-                                color = palette.ink,
-                                fontFamily = FontFamily.Default
-                            ),
-                            cursorBrush = SolidColor(palette.ink),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .onFocusChanged {
-                                    focused = it.isFocused
-                                    onFocusedChange(it.isFocused)
-                                }
-                        )
+                        AppIcons.Plus(Modifier.size(20.dp), color = palette.ink)
                     }
+                    Spacer(Modifier.width(8.dp))
+                }
 
-                    if (onStartVoice != null) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .clickable(enabled = !isThinking, role = Role.Button, onClick = onStartVoice)
-                                .semantics { contentDescription = "Registra vocale" },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            ClaudeMicGlyph(Modifier.size(19.dp), color = palette.inkMuted)
-                        }
-                        Spacer(Modifier.width(4.dp))
+                // Selettore Modello / Provider sempre raggiungibile in 1 tap
+                Row(
+                    modifier = Modifier
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(100.dp))
+                        .background(palette.pillBg)
+                        .clickable(role = Role.Button, onClick = onOpenModelSheet)
+                        .padding(horizontal = 14.dp)
+                        .semantics { contentDescription = "Seleziona modello e ragionamento" },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    Text(
+                        text = modelShortLabel,
+                        style = TextStyle(fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold),
+                        color = palette.ink,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Box(Modifier.width(1.dp).height(14.dp).background(palette.hairline))
+                    Text(
+                        text = effortLabel,
+                        style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Normal),
+                        color = palette.inkMuted,
+                        maxLines = 1
+                    )
+                    AssistantChevronGlyph(Modifier.size(12.dp), color = palette.inkMuted)
+                }
+
+                Spacer(Modifier.weight(1f))
+
+                // Un solo microfono (nessun secondo tasto onda duplicato)
+                if (onStartVoice != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .clickable(enabled = !isThinking, role = Role.Button, onClick = onStartVoice)
+                            .semantics { contentDescription = "Registra vocale" },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AssistantMicGlyph(Modifier.size(20.dp), color = palette.inkMuted)
                     }
+                    Spacer(Modifier.width(6.dp))
+                }
 
-                    ClaudeSendOrWaveButton(
-                        palette = palette,
-                        showSendArrow = hasDraft || onStartVoice == null,
-                        canSend = canSend,
-                        isThinking = isThinking,
-                        onSend = onSend,
-                        onVoiceFallback = { onStartVoice?.invoke() }
+                // Un solo pulsante Invia (44dp)
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(if (canSend) palette.accentFill else palette.pillBg)
+                        .clickable(enabled = canSend, role = Role.Button, onClick = onSend)
+                        .semantics { contentDescription = "Invia" },
+                    contentAlignment = Alignment.Center
+                ) {
+                    AppIcons.ArrowUp(
+                        Modifier.size(20.dp),
+                        color = if (canSend) palette.onAccentFill else palette.inkFaint
                     )
                 }
             }
@@ -1632,82 +1418,14 @@ internal fun ClaudeComposer(
     }
 }
 
-@Composable
-private fun ClaudeSendOrWaveButton(
-    palette: ClaudePalette,
-    showSendArrow: Boolean,
-    canSend: Boolean,
-    isThinking: Boolean,
-    onSend: () -> Unit,
-    onVoiceFallback: () -> Unit
-) {
-    val active = if (showSendArrow) canSend else !isThinking
-    val bg = if (showSendArrow) {
-        if (canSend) palette.ink else palette.pillBg
-    } else {
-        palette.ink
-    }
-    val fg = if (showSendArrow) {
-        if (canSend) palette.sheetBg else palette.inkFaint
-    } else {
-        palette.sheetBg
-    }
-    Box(
-        modifier = Modifier
-            .size(36.dp)
-            .clip(CircleShape)
-            .background(bg)
-            .clickable(
-                enabled = active,
-                role = Role.Button,
-                onClick = { if (showSendArrow) onSend() else onVoiceFallback() }
-            )
-            .semantics { contentDescription = if (showSendArrow) "Invia" else "Avvia voce" },
-        contentAlignment = Alignment.Center
-    ) {
-        if (showSendArrow) {
-            AppIcons.ArrowUp(Modifier.size(18.dp), color = fg)
-        } else {
-            ClaudeWaveformGlyph(Modifier.size(17.dp), color = fg)
-        }
-    }
-}
-
-/** Microfono KMP-safe senza drawRoundRect/drawArc. */
-@Composable
-internal fun ClaudeMicGlyph(modifier: Modifier = Modifier.size(20.dp), color: Color) {
-    Canvas(modifier) {
-        val w = size.width
-        val h = size.height
-        val stroke = (w * 0.09f).coerceAtLeast(1.6.dp.toPx())
-        // Capsula microfono con bezier
-        val cap = Path().apply {
-            moveTo(w * 0.36f, h * 0.24f)
-            cubicTo(w * 0.36f, h * 0.08f, w * 0.64f, h * 0.08f, w * 0.64f, h * 0.24f)
-            lineTo(w * 0.64f, h * 0.48f)
-            cubicTo(w * 0.64f, h * 0.64f, w * 0.36f, h * 0.64f, w * 0.36f, h * 0.48f)
-            close()
-        }
-        drawPath(cap, color, style = Stroke(stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
-        // Culla inferiore curva
-        val cradle = Path().apply {
-            moveTo(w * 0.22f, h * 0.46f)
-            cubicTo(w * 0.22f, h * 0.78f, w * 0.78f, h * 0.78f, w * 0.78f, h * 0.46f)
-        }
-        drawPath(cradle, color, style = Stroke(stroke, cap = StrokeCap.Round))
-        drawLine(color, Offset(w * 0.50f, h * 0.71f), Offset(w * 0.50f, h * 0.88f), stroke, StrokeCap.Round)
-        drawLine(color, Offset(w * 0.36f, h * 0.88f), Offset(w * 0.64f, h * 0.88f), stroke, StrokeCap.Round)
-    }
-}
-
 // =================================================================================================
-// Foglio Modello + Ragionamento (fedele a Video 1 00:16–00:23)
+// Foglio Modello / Provider + Ragionamento (con colori AILA e bersagli touch >= 44dp)
 // =================================================================================================
 
 @Composable
-internal fun ClaudeModelAndEffortSheet(
-    palette: ClaudePalette,
-    options: List<ClaudeModelOption>,
+internal fun AssistantModelAndEffortSheet(
+    palette: AssistantSurfacePalette,
+    options: List<AssistantModelOption>,
     selectedProviderId: String,
     effortLevel: Int,
     onSelectProvider: (String) -> Unit,
@@ -1722,7 +1440,7 @@ internal fun ClaudeModelAndEffortSheet(
         modifier = Modifier
             .fillMaxSize()
             .zIndex(20f)
-            .background(Color.Black.copy(alpha = 0.34f))
+            .background(Color.Black.copy(alpha = 0.36f))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -1743,13 +1461,12 @@ internal fun ClaudeModelAndEffortSheet(
                 )
                 .windowInsetsPadding(WindowInsets.navigationBars)
                 .padding(horizontal = 20.dp, vertical = 14.dp)
-                .padding(bottom = 10.dp),
+                .padding(bottom = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Piccola maniglia superiore
             Box(
                 modifier = Modifier
-                    .width(36.dp)
+                    .width(38.dp)
                     .height(4.dp)
                     .clip(CircleShape)
                     .background(palette.hairline)
@@ -1767,109 +1484,126 @@ internal fun ClaudeModelAndEffortSheet(
                             (slideOutHorizontally(ailaNavigationSpring()) { it / 4 } + fadeOut(ailaFadeSpec(AilaDuration.Quick)))
                     }
                 },
-                label = "claudeModelEffortPage"
+                label = "assistantModelEffortPage"
             ) { isEffort ->
                 if (!isEffort) {
-                    // Pagina 1: Selettore Modello a ruota/pillola centrata
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        Box(modifier = Modifier.fillMaxWidth().height(40.dp)) {
+                        Box(modifier = Modifier.fillMaxWidth().height(44.dp)) {
                             Box(
                                 modifier = Modifier
                                     .align(Alignment.CenterStart)
-                                    .size(36.dp)
+                                    .size(44.dp)
                                     .clip(CircleShape)
                                     .background(palette.pillBg)
                                     .clickable(role = Role.Button, onClick = onDismiss)
                                     .semantics { contentDescription = "Chiudi selettore modello" },
                                 contentAlignment = Alignment.Center
                             ) {
-                                AppIcons.Close(Modifier.size(16.dp), color = palette.ink)
+                                AppIcons.Close(Modifier.size(18.dp), color = palette.ink)
                             }
                             Text(
-                                text = "Modello",
-                                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                                text = "Modello e provider",
+                                style = TextStyle(fontSize = 16.5.sp, fontWeight = FontWeight.SemiBold),
                                 color = palette.ink,
                                 modifier = Modifier.align(Alignment.Center)
                             )
                         }
 
-                        Spacer(Modifier.height(22.dp))
+                        Spacer(Modifier.height(18.dp))
 
                         val selectedIdx = options.indexOfFirst { it.providerId == selectedOption.providerId }.coerceAtLeast(0)
                         Column(
                             modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             options.forEachIndexed { index, option ->
                                 val isSelected = index == selectedIdx
-                                val distance = kotlin.math.abs(index - selectedIdx)
-                                val rowAlpha by animateFloatAsState(
-                                    targetValue = when {
-                                        isSelected -> 1f
-                                        distance == 1 -> 0.56f
-                                        else -> 0.28f
-                                    },
-                                    animationSpec = ailaFadeSpec(AilaDuration.Quick),
-                                    label = "modelRowAlpha"
-                                )
                                 if (isSelected) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .height(54.dp)
+                                            .heightIn(min = 58.dp)
                                             .clip(RoundedCornerShape(100.dp))
-                                            .background(palette.pillBg)
-                                            .padding(start = 20.dp, end = 16.dp),
+                                            .background(palette.activeRowBg)
+                                            .padding(start = 20.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text(
-                                            text = option.title,
-                                            style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Medium),
-                                            color = palette.ink,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.weight(1f)
-                                        )
+                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text(
+                                                text = option.title,
+                                                style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+                                                color = palette.activeRowInk,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            option.statusNote?.let { note ->
+                                                Text(
+                                                    text = note,
+                                                    style = TextStyle(fontSize = 11.5.sp),
+                                                    color = palette.activeRowInk.copy(alpha = 0.75f),
+                                                    maxLines = 1
+                                                )
+                                            }
+                                        }
                                         Row(
                                             modifier = Modifier
+                                                .height(40.dp)
                                                 .clip(RoundedCornerShape(100.dp))
+                                                .background(palette.sheetBg.copy(alpha = 0.72f))
                                                 .clickable(role = Role.Button) { showEffortPage = true }
-                                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                                                .padding(horizontal = 12.dp)
                                                 .semantics { contentDescription = "Modifica livello di ragionamento" },
                                             verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            ClaudeEffortDots(level = effortLevel, palette = palette)
+                                            AssistantEffortDots(level = effortLevel, palette = palette)
                                             Text(
-                                                text = ClaudeEffortLabels[effortLevel.coerceIn(0, ClaudeEffortLabels.lastIndex)],
-                                                style = TextStyle(fontSize = 14.5.sp, fontWeight = FontWeight.Normal),
-                                                color = palette.inkMuted
+                                                text = AssistantEffortLabels[effortLevel.coerceIn(0, AssistantEffortLabels.lastIndex)],
+                                                style = TextStyle(fontSize = 13.5.sp, fontWeight = FontWeight.Medium),
+                                                color = palette.ink
                                             )
                                             AppIcons.ChevronRight(Modifier.size(13.dp), color = palette.inkMuted)
                                         }
                                     }
                                 } else {
-                                    Box(
+                                    val distance = kotlin.math.abs(index - selectedIdx)
+                                    val rowAlpha by animateFloatAsState(
+                                        targetValue = if (distance == 1) 0.78f else 0.52f,
+                                        animationSpec = ailaFadeSpec(AilaDuration.Quick),
+                                        label = "modelRowAlpha"
+                                    )
+                                    Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
+                                            .heightIn(min = 48.dp)
                                             .clip(RoundedCornerShape(100.dp))
                                             .clickable(role = Role.Button) { onSelectProvider(option.providerId) }
                                             .padding(horizontal = 20.dp, vertical = 10.dp)
-                                            .alpha(rowAlpha)
+                                            .alpha(rowAlpha),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
                                             text = option.title,
-                                            style = TextStyle(fontSize = 16.5.sp, fontWeight = FontWeight.Normal),
+                                            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Normal),
                                             color = palette.ink,
                                             maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
                                         )
+                                        option.statusNote?.let { note ->
+                                            Text(
+                                                text = note,
+                                                style = TextStyle(fontSize = 12.sp),
+                                                color = palette.inkMuted,
+                                                maxLines = 1
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
 
-                        Spacer(Modifier.height(22.dp))
+                        Spacer(Modifier.height(18.dp))
 
                         Text(
                             text = selectedOption.description,
@@ -1881,60 +1615,70 @@ internal fun ClaudeModelAndEffortSheet(
                         Spacer(Modifier.height(14.dp))
 
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
-                            horizontalArrangement = Arrangement.End
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Impostazioni AI",
-                                style = TextStyle(fontSize = 13.5.sp, fontWeight = FontWeight.Medium),
-                                color = palette.ink,
+                                text = "Configura in Impostazioni AI",
+                                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+                                color = palette.accentFill,
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(100.dp))
                                     .clickable(role = Role.Button) {
                                         onDismiss()
                                         onOpenAiSettings()
                                     }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                                    .padding(horizontal = 10.dp, vertical = 10.dp)
+                            )
+                            Text(
+                                text = "Fatto",
+                                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+                                color = palette.onAccentFill,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(100.dp))
+                                    .background(palette.accentFill)
+                                    .clickable(role = Role.Button, onClick = onDismiss)
+                                    .padding(horizontal = 20.dp, vertical = 10.dp)
                             )
                         }
                     }
                 } else {
-                    // Pagina 2: Slider tattile a pillola nera "Ragionamento" (Video 1 00:20–00:22)
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Box(modifier = Modifier.fillMaxWidth().height(40.dp)) {
+                        Box(modifier = Modifier.fillMaxWidth().height(44.dp)) {
                             Box(
                                 modifier = Modifier
                                     .align(Alignment.CenterStart)
-                                    .size(36.dp)
+                                    .size(44.dp)
                                     .clip(CircleShape)
                                     .background(palette.pillBg)
                                     .clickable(role = Role.Button) { showEffortPage = false }
                                     .semantics { contentDescription = "Torna ai modelli" },
                                 contentAlignment = Alignment.Center
                             ) {
-                                ClaudeArrowLeftGlyph(Modifier.size(16.dp), color = palette.ink)
+                                AssistantArrowLeftGlyph(Modifier.size(18.dp), color = palette.ink)
                             }
                             Text(
                                 text = "Ragionamento",
-                                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                                style = TextStyle(fontSize = 16.5.sp, fontWeight = FontWeight.SemiBold),
                                 color = palette.ink,
                                 modifier = Modifier.align(Alignment.Center)
                             )
                         }
 
-                        Spacer(Modifier.height(26.dp))
+                        Spacer(Modifier.height(24.dp))
 
                         Crossfade(
-                            targetState = ClaudeEffortLabels[effortLevel.coerceIn(0, ClaudeEffortLabels.lastIndex)],
+                            targetState = AssistantEffortLabels[effortLevel.coerceIn(0, AssistantEffortLabels.lastIndex)],
                             animationSpec = ailaFadeSpec(AilaDuration.Quick),
                             label = "effortTitle"
                         ) { label ->
                             Text(
                                 text = label,
-                                style = TextStyle(fontSize = 21.sp, fontWeight = FontWeight.Medium),
+                                style = TextStyle(fontSize = 21.sp, fontWeight = FontWeight.SemiBold),
                                 color = palette.ink,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
@@ -1943,14 +1687,14 @@ internal fun ClaudeModelAndEffortSheet(
 
                         Spacer(Modifier.height(20.dp))
 
-                        ClaudeEffortSlider(
+                        AssistantEffortSlider(
                             level = effortLevel,
-                            steps = ClaudeEffortLabels.size,
+                            steps = AssistantEffortLabels.size,
                             palette = palette,
                             onLevelChange = onSelectEffort
                         )
 
-                        Spacer(Modifier.height(34.dp))
+                        Spacer(Modifier.height(30.dp))
 
                         Text(
                             text = "Un ragionamento più alto produce risposte più approfondite e ponderate, ma può richiedere più tempo.",
@@ -1966,12 +1710,12 @@ internal fun ClaudeModelAndEffortSheet(
     }
 }
 
-/** Slider a pillola piena scura con pallini discreti e stanghetta bianca, trascinabile e cliccabile. */
+/** Slider tattile a pillola nel colore primario di AILA, trascinabile e cliccabile. */
 @Composable
-private fun ClaudeEffortSlider(
+private fun AssistantEffortSlider(
     level: Int,
     steps: Int,
-    palette: ClaudePalette,
+    palette: AssistantSurfacePalette,
     onLevelChange: (Int) -> Unit
 ) {
     var widthPx by remember { mutableIntStateOf(1) }
@@ -1991,8 +1735,8 @@ private fun ClaudeEffortSlider(
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
-            .clip(RoundedCornerShape(28.dp))
+            .height(58.dp)
+            .clip(RoundedCornerShape(29.dp))
             .background(palette.pillBg)
             .onSizeChanged { widthPx = it.width }
             .pointerInput(steps) {
@@ -2007,30 +1751,27 @@ private fun ClaudeEffortSlider(
                 }
             }
             .semantics {
-                contentDescription = "Livello di ragionamento: ${ClaudeEffortLabels[clamped]}"
+                contentDescription = "Livello di ragionamento: ${AssistantEffortLabels[clamped]}"
             }
     ) {
         val fillWidth = maxWidth * animatedFraction
-        // Pillola nera che cresce fino allo step scelto
         Box(
             modifier = Modifier
                 .width(fillWidth)
                 .fillMaxHeight()
-                .clip(RoundedCornerShape(28.dp))
-                .background(palette.ink)
+                .clip(RoundedCornerShape(29.dp))
+                .background(palette.accentFill)
         ) {
-            // Stanghetta bianca verticale vicino al bordo destro del cursore
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .padding(end = 12.dp)
+                    .padding(end = 13.dp)
                     .width(3.dp)
                     .height(22.dp)
                     .clip(CircleShape)
-                    .background(palette.sheetBg.copy(alpha = 0.9f))
+                    .background(palette.onAccentFill.copy(alpha = 0.92f))
             )
         }
-        // Pallini discreti dei livelli
         Row(
             modifier = Modifier.fillMaxSize(),
             verticalAlignment = Alignment.CenterVertically
@@ -2047,7 +1788,7 @@ private fun ClaudeEffortSlider(
                                 .size(if (insideFill) 5.dp else 4.5.dp)
                                 .clip(CircleShape)
                                 .background(
-                                    if (insideFill) palette.sheetBg.copy(alpha = 0.42f)
+                                    if (insideFill) palette.onAccentFill.copy(alpha = 0.48f)
                                     else palette.inkFaint.copy(alpha = 0.55f)
                                 )
                         )
@@ -2059,172 +1800,13 @@ private fun ClaudeEffortSlider(
 }
 
 // =================================================================================================
-// Barra inferiore minimalista con pillola scorrevole e tooltip nero fluttuante al trascinamento
-// (Fedele a Video 1 00:00 e Video 2 00:09–00:18 + tutte le tab di AILA)
-// =================================================================================================
-
-internal data class ClaudeNavTabItem(
-    val key: String,
-    val label: String,
-    val mainTab: MainTab?,
-    val hasUnread: Boolean
-)
-
-@Composable
-internal fun ClaudeBottomNavBar(
-    palette: ClaudePalette,
-    unreadTabs: Set<MainTab>,
-    onSelectMainTab: (MainTab) -> Unit
-) {
-    val items = remember(unreadTabs) {
-        listOf(
-            ClaudeNavTabItem("aila", "AILA", null, false),
-            ClaudeNavTabItem("calendar", MainTab.CALENDAR.title, MainTab.CALENDAR, MainTab.CALENDAR in unreadTabs),
-            ClaudeNavTabItem("class", MainTab.CLASS.title, MainTab.CLASS, MainTab.CLASS in unreadTabs),
-            ClaudeNavTabItem("home", MainTab.HOME.title, MainTab.HOME, MainTab.HOME in unreadTabs),
-            ClaudeNavTabItem("polls", MainTab.POLLS.title, MainTab.POLLS, MainTab.POLLS in unreadTabs),
-            ClaudeNavTabItem("seatmap", MainTab.SEATMAP.title, MainTab.SEATMAP, MainTab.SEATMAP in unreadTabs)
-        )
-    }
-
-    var hoveredIndex by remember { mutableStateOf<Int?>(null) }
-    var barWidthPx by remember { mutableIntStateOf(1) }
-    val density = LocalDensity.current
-
-    val activeIndex = hoveredIndex ?: 0
-    val animatedIndex by animateFloatAsState(
-        targetValue = activeIndex.toFloat(),
-        animationSpec = spring(dampingRatio = 0.82f, stiffness = 500f),
-        label = "claudeTabHighlight"
-    )
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(palette.sheetBg)
-            .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(horizontal = 10.dp, vertical = 6.dp)
-    ) {
-        // Tooltip nero fluttuante sopra la tab mentre si tiene premuto o si trascina (Video 2 00:10–00:13)
-        val tipIndex = hoveredIndex
-        if (tipIndex != null && tipIndex in items.indices) {
-            val slotW = barWidthPx.toFloat() / items.size.toFloat()
-            val centerPx = slotW * (tipIndex + 0.5f)
-            val estHalfPx = with(density) { 46.dp.toPx() }
-            val xPx = (centerPx - estHalfPx).coerceIn(4f, (barWidthPx - estHalfPx * 2f).coerceAtLeast(4f))
-            Box(
-                modifier = Modifier
-                    .zIndex(10f)
-                    .offset { IntOffset(xPx.roundToInt(), (-44.dp).roundToPx()) }
-                    .shadow(4.dp, RoundedCornerShape(100.dp))
-                    .clip(RoundedCornerShape(100.dp))
-                    .background(palette.tooltipBg)
-                    .padding(horizontal = 14.dp, vertical = 7.dp)
-            ) {
-                Text(
-                    text = items[tipIndex].label,
-                    style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
-                    color = palette.tooltipInk,
-                    maxLines = 1
-                )
-            }
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(44.dp)
-                .onSizeChanged { barWidthPx = it.width }
-                .pointerInput(items) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        val count = items.size
-                        fun indexAt(x: Float): Int =
-                            ((x / size.width.coerceAtLeast(1)) * count).toInt().coerceIn(0, count - 1)
-                        var current = indexAt(down.position.x)
-                        hoveredIndex = current
-                        var pointerId = down.id
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull { it.id == pointerId } ?: break
-                            if (!change.pressed) {
-                                val target = items[current].mainTab
-                                hoveredIndex = null
-                                if (target != null) onSelectMainTab(target)
-                                break
-                            }
-                            current = indexAt(change.position.x)
-                            hoveredIndex = current
-                        }
-                    }
-                }
-        ) {
-            // Pillola morbida scorrevole dietro l'icona attiva / puntata
-            val slotWidthDp = with(density) { (barWidthPx.toFloat() / items.size.toFloat()).toDp() }
-            val pillWidth = 48.dp.coerceAtMost(slotWidthDp - 4.dp).coerceAtLeast(36.dp)
-            val pillOffsetX = slotWidthDp * animatedIndex + (slotWidthDp - pillWidth) / 2f
-            Box(
-                modifier = Modifier
-                    .offset(x = pillOffsetX)
-                    .align(Alignment.CenterStart)
-                    .width(pillWidth)
-                    .height(36.dp)
-                    .clip(RoundedCornerShape(100.dp))
-                    .background(palette.pillBg)
-            )
-
-            Row(
-                modifier = Modifier.fillMaxSize(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                items.forEachIndexed { index, item ->
-                    val selected = index == activeIndex
-                    val iconColor = if (selected) palette.ink else palette.inkMuted
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .semantics {
-                                contentDescription = item.label
-                                role = Role.Tab
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            when (item.mainTab) {
-                                null -> ClaudeChatTabGlyph(Modifier.size(20.dp), color = iconColor, filled = selected)
-                                MainTab.CALENDAR -> AppIcons.Calendar(Modifier.size(19.dp), color = iconColor)
-                                MainTab.CLASS -> AppIcons.Document(Modifier.size(19.dp), color = iconColor)
-                                MainTab.HOME -> AppIcons.Home(Modifier.size(19.dp), color = iconColor)
-                                MainTab.POLLS -> AppIcons.Poll(Modifier.size(19.dp), color = iconColor)
-                                MainTab.SEATMAP -> AppIcons.Chair(Modifier.size(19.dp), color = iconColor)
-                            }
-                            if (item.hasUnread) {
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .offset(x = 4.dp, y = (-3).dp)
-                                        .size(6.dp)
-                                        .clip(CircleShape)
-                                        .background(palette.notifBlue)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// =================================================================================================
-// Toast fluttuante "Risposta pronta" (Video 2 00:16–00:17)
+// Toast fluttuante "Risposta pronta" per conversazioni terminate in background
 // =================================================================================================
 
 @Composable
-internal fun ClaudeFinishedToast(
+internal fun AssistantFinishedToast(
     conversation: AssistantConversation?,
-    palette: ClaudePalette,
+    palette: AssistantSurfacePalette,
     onOpen: (AssistantConversation) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
@@ -2244,7 +1826,7 @@ internal fun ClaudeFinishedToast(
         conversation?.let { conv ->
             Column(
                 modifier = Modifier
-                    .widthIn(min = 180.dp, max = 260.dp)
+                    .widthIn(min = 184.dp, max = 264.dp)
                     .shadow(4.dp, RoundedCornerShape(18.dp), ambientColor = Color(0x18000000), spotColor = Color(0x18000000))
                     .clip(RoundedCornerShape(18.dp))
                     .background(palette.toastBg)
@@ -2257,7 +1839,7 @@ internal fun ClaudeFinishedToast(
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    AilaAssistantMark(size = 13.dp)
+                    AilaLogoTile(size = 16.dp)
                     Text(
                         text = conversationDisplayTitle(conv),
                         style = TextStyle(fontSize = 12.sp),
@@ -2268,7 +1850,7 @@ internal fun ClaudeFinishedToast(
                 }
                 Text(
                     text = "Risposta pronta",
-                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
                     color = palette.ink
                 )
             }
@@ -2284,8 +1866,8 @@ internal fun conversationDisplayTitle(conversation: AssistantConversation): Stri
         ?.takeIf { it.isNotBlank() }
         ?: conversation.title
 
-/** Formato compatto stile Claude: "ora", "12m", "3h", "1g". */
-internal fun claudeCompactTimeLabel(atMillis: Long): String {
+/** Formato compatto: "ora", "12m", "3h", "1g". */
+internal fun assistantCompactTimeLabel(atMillis: Long): String {
     val diffMillis = (circolareplus.platform.currentTimeMillis() - atMillis).coerceAtLeast(0L)
     val minutes = diffMillis / 60_000L
     val hours = minutes / 60L

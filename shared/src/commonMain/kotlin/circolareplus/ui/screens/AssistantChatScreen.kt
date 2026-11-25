@@ -24,17 +24,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -67,7 +63,6 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -96,30 +91,26 @@ import circolareplus.ai.assistant.AssistantConversation
 import circolareplus.ai.assistant.AssistantMessage
 import circolareplus.ai.assistant.AssistantSource
 import circolareplus.ai.assistant.AssistantSourceKind
-import circolareplus.design.AilaAssistantMark
 import circolareplus.design.AilaAssistantWave
 import circolareplus.design.AilaDuration
+import circolareplus.design.AilaLogoTile
 import circolareplus.design.AilaResponseText
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
 import circolareplus.design.ailaBubbleEnter
 import circolareplus.design.ailaFadeSpec
-import circolareplus.design.ailaGlassSurface
 import circolareplus.design.ailaMoveSpec
 import circolareplus.design.ailaPressable
 import circolareplus.design.ailaPulse
 import circolareplus.design.ailaRevealEnter
 import circolareplus.design.ailaSheetReveal
-import circolareplus.design.ailaSpatialSpring
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * La chat con AILA Assistant, ridisegnata con estetica editoriale minimale fedele al nuovo Claude:
- * foglio bianco arrotondato su guscio pietra caldo, cassetto laterale scorrevole (Fissate, Recenti,
- * Scorciatoie, footer Impostazioni/Cerca/Nuova chat), ricerca dedicata con match in grassetto,
- * modalità incognito, composer espandibile con selettore Modello + Ragionamento e barra inferiore
- * con pillola scorrevole e tooltip fluttuante sulle tab di AILA.
+ * La chat con AILA Assistant: palette 100% coerente con [AppTheme], marchio reale AILA,
+ * cassetto laterale scorrevole per Fissate/Recenti/Ricerca, modalità incognito, composer
+ * unificato con selettore Modello/Provider e Ragionamento sempre accessibile e bersagli touch >= 44dp.
  */
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -151,7 +142,7 @@ fun AssistantChatScreen(
     attachedFiles: List<AssistantAttachedFile> = emptyList(),
     onRemoveAttachedFile: (String) -> Unit = {},
     onOpenAttachedFile: (AssistantAttachedFile) -> Unit = {},
-    // --- Estensioni interfaccia Claude beta ---
+    // --- Estensioni beta ---
     activeConversationId: String? = null,
     isIncognito: Boolean = false,
     onIncognitoChange: (Boolean) -> Unit = {},
@@ -159,18 +150,16 @@ fun AssistantChatScreen(
     selectedAiProvider: String = AiProvider.AILA_CLOUD.id,
     onSelectAiProvider: (String) -> Unit = {},
     localModelLabel: String = "AI locale",
+    hasGoogleKey: Boolean = true,
+    hasCompatibleConfig: Boolean = true,
+    compatibleModelName: String = "",
+    localModelInstalled: Boolean = true,
     effortLevel: Int = if (thinkingEnabled) 2 else 1,
     onEffortLevelChange: (Int) -> Unit = { onThinkingChange(it >= 2) },
-    unreadTabs: Set<MainTab> = emptySet(),
-    onSelectMainTab: ((MainTab) -> Unit)? = null,
-    onOpenProfile: () -> Unit = {},
-    onOpenSettings: () -> Unit = onOpenAiSettings,
-    onOpenBureaucracy: () -> Unit = {},
-    onOpenGita: () -> Unit = {},
     finishedToastConversation: AssistantConversation? = null,
     onDismissFinishedToast: () -> Unit = {}
 ) {
-    val palette = claudePalette(AppTheme.isDarkMode)
+    val palette = assistantSurfacePalette()
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val clipboard = LocalClipboardManager.current
@@ -184,9 +173,7 @@ fun AssistantChatScreen(
     var fileSources by remember { mutableStateOf(false) }
     var attachmentError by remember { mutableStateOf<String?>(null) }
     var recording by remember { mutableStateOf(false) }
-    var composerFocused by remember { mutableStateOf(false) }
 
-    // Stato cassetto laterale scorrevole (0f = chiuso, 1f = aperto)
     val drawerProgress = remember { Animatable(0f) }
     fun setDrawerOpen(open: Boolean) {
         scope.launch {
@@ -201,7 +188,6 @@ fun AssistantChatScreen(
         }
     }
 
-    // Back interno: chiude fogli/ricerca/cassetto prima di uscire dalla schermata
     circolareplus.platform.PlatformBackHandler(
         enabled = isModelSheetOpen || isSearchOpen || drawerProgress.value > 0.05f
     ) {
@@ -241,7 +227,7 @@ fun AssistantChatScreen(
     } else null
 
     val listState = rememberLazyListState()
-    val feedbackMap = remember { mutableStateMapOf<String, Int>() } // +1 = up, -1 = down
+    val feedbackMap = remember { mutableStateMapOf<String, Int>() }
     var copiedMessageId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(copiedMessageId) {
         if (copiedMessageId != null) {
@@ -282,24 +268,35 @@ fun AssistantChatScreen(
         activeConversation?.let(::conversationDisplayTitle)
             ?: AssistantConversation.titleFrom(messages).takeIf { messages.isNotEmpty() }
     }
-    val modelOptions = remember(localModelLabel) { claudeModelOptions(localModelLabel) }
+    val modelOptions = remember(localModelLabel, hasGoogleKey, hasCompatibleConfig, compatibleModelName, localModelInstalled) {
+        assistantModelOptions(
+            localModelLabel = localModelLabel,
+            hasGoogleKey = hasGoogleKey,
+            hasCompatibleConfig = hasCompatibleConfig,
+            compatibleModelName = compatibleModelName,
+            localModelInstalled = localModelInstalled
+        )
+    }
     val currentModel = remember(modelOptions, selectedAiProvider) {
         modelOptions.firstOrNull { it.providerId == selectedAiProvider } ?: modelOptions.first()
     }
-    val currentEffortLabel = ClaudeEffortLabels[effortLevel.coerceIn(0, ClaudeEffortLabels.lastIndex)]
-    val imeVisible = WindowInsets.ime.getBottom(density) > 0
+    val currentEffortLabel = AssistantEffortLabels[effortLevel.coerceIn(0, AssistantEffortLabels.lastIndex)]
+    val headerModelSubtitle = remember(messages, currentModel) {
+        messages.lastOrNull { it.author != AssistantAuthor.USER && !it.isError }?.modelLabel
+            ?: currentModel.title
+    }
 
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(palette.shellBg)
     ) {
-        val drawerWidth = (maxWidth * 0.82f).coerceIn(264.dp, 326.dp)
+        val drawerWidth = (maxWidth * 0.82f).coerceIn(268.dp, 328.dp)
         val drawerWidthPx = with(density) { drawerWidth.toPx() }
 
-        // Strato sottostante: Cassetto laterale sinistro (rivelato quando il foglio scorre a destra)
+        // Strato sottostante: Cassetto laterale sinistro (Fissate, Recenti, Impostazioni AI, Cerca, Nuova chat)
         if (drawerProgress.value > 0.005f) {
-            ClaudeLeftDrawer(
+            AssistantLeftDrawer(
                 palette = palette,
                 drawerWidth = drawerWidth,
                 conversations = conversations,
@@ -319,35 +316,14 @@ fun AssistantChatScreen(
                     onIncognitoChange(false)
                     onClearChat()
                 },
-                onOpenSettings = {
+                onOpenAiSettings = {
                     setDrawerOpen(false)
-                    onOpenSettings()
-                },
-                onOpenProfile = {
-                    setDrawerOpen(false)
-                    onOpenProfile()
-                },
-                onOpenFiles = {
-                    setDrawerOpen(false)
-                    onOpenFiles()
-                },
-                onStudyPlan = {
-                    setDrawerOpen(false)
-                    onIncognitoChange(false)
-                    onStudyPlan()
-                },
-                onOpenBureaucracy = {
-                    setDrawerOpen(false)
-                    onOpenBureaucracy()
-                },
-                onOpenGita = {
-                    setDrawerOpen(false)
-                    onOpenGita()
+                    onOpenAiSettings()
                 }
             )
         }
 
-        // Strato principale: Shell Chat che scorre a destra con angoli arrotondati quando il cassetto si apre
+        // Strato principale: foglio chat che scorre a destra quando il cassetto è aperto
         val progress = drawerProgress.value
         val sheetCorner = (28f * progress).dp
         val mainClipShape = RoundedCornerShape(topStart = sheetCorner, bottomStart = sheetCorner)
@@ -371,7 +347,6 @@ fun AssistantChatScreen(
                     var draggingDrawer = false
                     detectHorizontalDragGestures(
                         onDragStart = { start ->
-                            // Apre scorrendo dal bordo sinistro, oppure chiude da ovunque se aperto
                             draggingDrawer = drawerProgress.value > 0.05f || start.x <= 48.dp.toPx()
                         },
                         onHorizontalDrag = { _, dragAmount ->
@@ -393,13 +368,16 @@ fun AssistantChatScreen(
                 }
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // Header superiore sul guscio pietra
-                ClaudeHeaderBar(
+                // Header: Indietro + Menu cassetto | Titolo + Modello | Incognito / Nuova chat + ⋮
+                AssistantHeaderBar(
                     palette = palette,
                     hasMessages = messages.isNotEmpty() || isThinking,
+                    isThinking = isThinking,
                     conversationTitle = headerTitle,
+                    modelSubtitle = headerModelSubtitle,
                     isIncognito = isIncognito,
                     isPinned = activeConversation?.pinned == true,
+                    onBackClick = onBackClick,
                     onOpenDrawer = { setDrawerOpen(drawerProgress.value < 0.5f) },
                     onOpenSearch = { isSearchOpen = true },
                     onToggleIncognito = {
@@ -419,7 +397,7 @@ fun AssistantChatScreen(
                     }
                 )
 
-                // Foglio bianco arrotondato con contenuto, composer e barra inferiore
+                // Foglio arrotondato con contenuto e composer
                 Column(
                     modifier = Modifier
                         .weight(1f)
@@ -442,10 +420,10 @@ fun AssistantChatScreen(
                                         fadeOut(ailaFadeSpec(AilaDuration.Quick))
                                 }
                             },
-                            label = "claudeAssistantContent"
+                            label = "assistantMainContent"
                         ) { welcome ->
                             if (welcome) {
-                                ClaudeWelcomeCanvas(
+                                AssistantWelcomeCanvas(
                                     palette = palette,
                                     isIncognito = isIncognito
                                 )
@@ -468,18 +446,18 @@ fun AssistantChatScreen(
                                         ) {
                                             Column {
                                                 when {
-                                                    message.author == AssistantAuthor.USER -> ClaudeUserBubble(
+                                                    message.author == AssistantAuthor.USER -> AssistantUserBubble(
                                                         text = message.text,
                                                         palette = palette,
                                                         animateSend = message.id == sentHolder[0],
                                                         onShown = { if (sentHolder[0] == message.id) sentHolder[0] = null }
                                                     )
-                                                    message.isError -> ClaudeErrorBubble(message.text, palette)
+                                                    message.isError -> AssistantErrorCard(message.text, palette)
                                                     else -> {
                                                         val previousPrompt = remember(displayed, index) {
                                                             displayed.take(index).lastOrNull { it.author == AssistantAuthor.USER }?.text
                                                         }
-                                                        ClaudeAssistantResponse(
+                                                        AssistantResponseBlock(
                                                             message = message,
                                                             palette = palette,
                                                             showDisclaimer = index == lastAssistantIndex && !isThinking,
@@ -520,7 +498,7 @@ fun AssistantChatScreen(
                                                         verticalAlignment = Alignment.CenterVertically,
                                                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                                                     ) {
-                                                        AppIcons.Document(Modifier.size(18.dp), palette.inkMuted)
+                                                        AppIcons.Document(Modifier.size(18.dp), palette.accentFill)
                                                         Column(Modifier.weight(1f)) {
                                                             Text(
                                                                 text = file.name,
@@ -552,16 +530,15 @@ fun AssistantChatScreen(
                                     }
 
                                     if (isThinking) {
-                                        item(key = "claude-thinking") {
-                                            ClaudeThinkingRow(agentPhase, palette)
+                                        item(key = "assistant-thinking") {
+                                            AssistantThinkingRow(agentPhase, palette)
                                         }
                                     }
                                 }
                             }
                         }
 
-                        // Toast fluttuante "Risposta pronta" per conversazioni terminate in background
-                        ClaudeFinishedToast(
+                        AssistantFinishedToast(
                             conversation = finishedToastConversation,
                             palette = palette,
                             onOpen = { conv ->
@@ -575,21 +552,20 @@ fun AssistantChatScreen(
                         )
                     }
 
-                    // Composer (o pannello registrazione vocale)
                     val send = {
                         val question = draft.trim().ifBlank { "Riassumi gli allegati di questo messaggio." }
                         draft = ""
                         onSend(question)
                     }
                     if (recording) {
-                        Box(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)) {
+                        Box(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
                             VoiceRecordingPanel(
                                 onStop = { recorder?.stop() },
                                 onCancel = { recorder?.cancel() }
                             )
                         }
                     } else {
-                        ClaudeComposer(
+                        AssistantComposer(
                             palette = palette,
                             draft = draft,
                             onDraftChange = { draft = it },
@@ -609,23 +585,8 @@ fun AssistantChatScreen(
                                 attachmentError = null
                                 recorder.start()
                             }) else null,
-                            onSend = send,
-                            onFocusedChange = { composerFocused = it }
+                            onSend = send
                         )
-                    }
-
-                    // Barra inferiore stile Claude con tutte le tab di AILA + tooltip nero trascinabile
-                    val showBottomBar = onSelectMainTab != null && !imeVisible && !recording
-                    if (showBottomBar) {
-                        ClaudeBottomNavBar(
-                            palette = palette,
-                            unreadTabs = unreadTabs,
-                            onSelectMainTab = { tab ->
-                                onSelectMainTab?.invoke(tab)
-                            }
-                        )
-                    } else {
-                        Spacer(Modifier.windowInsetsPadding(WindowInsets.navigationBars).height(4.dp))
                     }
                 }
             }
@@ -646,14 +607,14 @@ fun AssistantChatScreen(
             }
         }
 
-        // Schermata di ricerca dedicata a tutto schermo (Video 1 00:06–00:11)
+        // Ricerca dedicata nelle chat (dal cassetto o dal menu ⋮)
         AnimatedVisibility(
             visible = isSearchOpen,
             enter = fadeIn(ailaFadeSpec(AilaDuration.Quick)),
             exit = fadeOut(ailaFadeSpec(AilaDuration.Quick)),
             modifier = Modifier.fillMaxSize().zIndex(15f)
         ) {
-            ClaudeSearchOverlay(
+            AssistantSearchOverlay(
                 palette = palette,
                 conversations = conversations,
                 onClose = { isSearchOpen = false },
@@ -665,14 +626,14 @@ fun AssistantChatScreen(
             )
         }
 
-        // Foglio Modello + Ragionamento (Video 1 00:16–00:23)
+        // Foglio Modello / Provider + Ragionamento
         AnimatedVisibility(
             visible = isModelSheetOpen,
             enter = fadeIn(ailaFadeSpec(AilaDuration.Quick)),
             exit = fadeOut(ailaFadeSpec(AilaDuration.Quick)),
             modifier = Modifier.fillMaxSize().zIndex(20f)
         ) {
-            ClaudeModelAndEffortSheet(
+            AssistantModelAndEffortSheet(
                 palette = palette,
                 options = modelOptions,
                 selectedProviderId = currentModel.providerId,
@@ -688,7 +649,7 @@ fun AssistantChatScreen(
         }
     }
 
-    // Foglio allegati (mantiene Fotocamera / Foto / File su una sola riga e tutte le semantics esistenti)
+    // Foglio allegati (mantiene Fotocamera / Foto / File su una riga e tutte le semantics esistenti)
     if (onAttachContent != null && attachmentsMenu) {
         circolareplus.design.AilaBottomSheet(onDismissRequest = { attachmentsMenu = false }) {
             Column(
@@ -708,13 +669,13 @@ fun AssistantChatScreen(
                     )
                     IconButton(
                         onClick = { attachmentsMenu = false },
-                        modifier = Modifier.size(36.dp).semantics { contentDescription = "Chiudi allegati" }
+                        modifier = Modifier.size(44.dp).semantics { contentDescription = "Chiudi allegati" }
                     ) {
-                        AppIcons.Close(Modifier.size(18.dp), palette.inkMuted)
+                        AppIcons.Close(Modifier.size(19.dp), palette.inkMuted)
                     }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    ClaudeAttachmentTile(
+                    AssistantAttachmentTile(
                         title = "Fotocamera",
                         subtitle = "Scatta foto",
                         palette = palette,
@@ -728,7 +689,7 @@ fun AssistantChatScreen(
                     ) {
                         CameraGlyph(Modifier.size(22.dp), it)
                     }
-                    ClaudeAttachmentTile(
+                    AssistantAttachmentTile(
                         title = "Foto",
                         subtitle = "Galleria",
                         palette = palette,
@@ -741,7 +702,7 @@ fun AssistantChatScreen(
                     ) {
                         AppIcons.Photo(Modifier.size(22.dp), it)
                     }
-                    ClaudeAttachmentTile(
+                    AssistantAttachmentTile(
                         title = "File",
                         subtitle = "Documenti",
                         palette = palette,
@@ -762,7 +723,7 @@ fun AssistantChatScreen(
                         color = palette.inkMuted
                     )
                     TextButton(onClick = { attachmentsMenu = false; onOpenAiSettings() }) {
-                        Text("Impostazioni AI", style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium), color = palette.ink)
+                        Text("Impostazioni AI", style = TextStyle(fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold), color = palette.accentFill)
                     }
                 }
             }
@@ -779,12 +740,12 @@ fun AssistantChatScreen(
                         title = "Importa dal dispositivo",
                         subtitle = "Scegli un file dal dispositivo",
                         onClick = { fileSources = false; attachmentsMenu = false; picker?.invoke() }
-                    ) { AppIcons.Document(Modifier.size(22.dp), palette.ink) }
+                    ) { AppIcons.Document(Modifier.size(22.dp), palette.accentFill) }
                     AttachmentMenuRow(
                         title = "Copie già salvate",
                         subtitle = "Riapri un file conservato da AILA",
                         onClick = { fileSources = false; attachmentsMenu = false; onOpenFiles() }
-                    ) { AppIcons.Download(Modifier.size(22.dp), palette.ink) }
+                    ) { AppIcons.Download(Modifier.size(22.dp), palette.accentFill) }
                 }
             },
             confirmButton = { TextButton(onClick = { fileSources = false }) { Text("Chiudi") } }
@@ -793,12 +754,12 @@ fun AssistantChatScreen(
 }
 
 // =================================================================================================
-// Schermata vuota centrata: marchio terracotta + titolo editoriale Serif (o fantasmino incognito)
+// Schermata vuota centrata: vero logo AILA (AilaLogoTile) + saluto pulito (o incognito)
 // =================================================================================================
 
 @Composable
-private fun ClaudeWelcomeCanvas(
-    palette: ClaudePalette,
+private fun AssistantWelcomeCanvas(
+    palette: AssistantSurfacePalette,
     isIncognito: Boolean
 ) {
     Box(
@@ -815,15 +776,15 @@ private fun ClaudeWelcomeCanvas(
                     (fadeOut(ailaFadeSpec(AilaDuration.Quick)) +
                         scaleOut(ailaFadeSpec(AilaDuration.Quick), targetScale = 0.9f))
             },
-            label = "claudeWelcomeMode"
+            label = "assistantWelcomeMode"
         ) { incognito ->
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
                 if (incognito) {
-                    ClaudeGhostGlyph(
-                        modifier = Modifier.size(44.dp),
+                    AssistantGhostGlyph(
+                        modifier = Modifier.size(46.dp),
                         color = palette.ink,
                         filled = true,
                         eyeCutoutColor = palette.sheetBg
@@ -850,12 +811,8 @@ private fun ClaudeWelcomeCanvas(
                         modifier = Modifier.widthIn(max = 260.dp)
                     )
                 } else {
-                    AilaAssistantWave(
-                        active = false,
-                        size = 42.dp,
-                        intro = true
-                    )
-                    Spacer(Modifier.height(14.dp))
+                    AilaLogoTile(size = 54.dp)
+                    Spacer(Modifier.height(16.dp))
                     Text(
                         text = "Come posso aiutarti oggi?",
                         style = TextStyle(
@@ -875,13 +832,13 @@ private fun ClaudeWelcomeCanvas(
 }
 
 // =================================================================================================
-// Bolla utente (pillola azzurro-ghiaccio) e risposta assistente (testo libero + barra azioni)
+// Bolla utente (tinta AILA) e risposta assistente (testo libero + barra azioni pulita 40dp)
 // =================================================================================================
 
 @Composable
-private fun ClaudeUserBubble(
+private fun AssistantUserBubble(
     text: String,
-    palette: ClaudePalette,
+    palette: AssistantSurfacePalette,
     animateSend: Boolean = false,
     onShown: () -> Unit = {}
 ) {
@@ -904,16 +861,16 @@ private fun ClaudeUserBubble(
                     lineHeight = 22.sp,
                     fontWeight = FontWeight.Normal
                 ),
-                color = palette.ink
+                color = palette.userBubbleInk
             )
         }
     }
 }
 
 @Composable
-private fun ClaudeAssistantResponse(
+private fun AssistantResponseBlock(
     message: AssistantMessage,
-    palette: ClaudePalette,
+    palette: AssistantSurfacePalette,
     showDisclaimer: Boolean,
     feedback: Int,
     copied: Boolean,
@@ -969,72 +926,62 @@ private fun ClaudeAssistantResponse(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             message.sources.forEach { source ->
-                                ClaudeSourcePill(source = source, palette = palette, onClick = { onOpenSource(source) })
+                                AssistantSourcePill(source = source, palette = palette, onClick = { onOpenSource(source) })
                             }
                         }
                     }
 
-                    // Riga azioni monocromatiche identica a Video 1 00:32–00:33 (pollice su/giù, copia, rigenera)
-                    Spacer(Modifier.height(10.dp))
+                    // Azioni pulite (40dp) senza nome modello schiacciato accanto
+                    Spacer(Modifier.height(8.dp))
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .then(if (arriving) Modifier.ailaSheetReveal(5) else Modifier),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        ClaudeActionIconButton(
+                        AssistantActionIconButton(
                             contentDescription = "Risposta utile",
                             onClick = onThumbUp
                         ) {
                             AppIcons.ThumbUp(
-                                modifier = Modifier.size(16.dp),
-                                color = if (feedback == 1) palette.ink else palette.inkFaint,
+                                modifier = Modifier.size(18.dp),
+                                color = if (feedback == 1) palette.accentFill else palette.inkFaint,
                                 filled = feedback == 1
                             )
                         }
-                        ClaudeActionIconButton(
+                        AssistantActionIconButton(
                             contentDescription = "Risposta non utile",
                             onClick = onThumbDown
                         ) {
                             AppIcons.ThumbDown(
-                                modifier = Modifier.size(16.dp),
-                                color = if (feedback == -1) palette.ink else palette.inkFaint,
+                                modifier = Modifier.size(18.dp),
+                                color = if (feedback == -1) palette.accentFill else palette.inkFaint,
                                 filled = feedback == -1
                             )
                         }
-                        ClaudeActionIconButton(
+                        AssistantActionIconButton(
                             contentDescription = if (copied) "Testo copiato" else "Copia risposta",
                             onClick = onCopy
                         ) {
                             if (copied) {
-                                AppIcons.Check(Modifier.size(16.dp), color = palette.ink)
+                                AppIcons.Check(Modifier.size(18.dp), color = palette.accentFill)
                             } else {
-                                ClaudeCopyGlyph(Modifier.size(16.dp), color = palette.inkFaint)
+                                AssistantCopyGlyph(Modifier.size(18.dp), color = palette.inkFaint)
                             }
                         }
                         if (onRegenerate != null) {
-                            ClaudeActionIconButton(
+                            AssistantActionIconButton(
                                 contentDescription = "Rigenera risposta",
                                 onClick = onRegenerate
                             ) {
-                                AppIcons.Refresh(Modifier.size(16.dp), color = palette.inkFaint)
+                                AppIcons.Refresh(Modifier.size(18.dp), color = palette.inkFaint)
                             }
-                        }
-                        Spacer(Modifier.weight(1f))
-                        message.modelLabel?.let { label ->
-                            Text(
-                                text = label,
-                                style = TextStyle(fontSize = 11.5.sp),
-                                color = palette.inkFaint,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
                         }
                     }
 
                     if (showDisclaimer) {
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(6.dp))
                         Text(
                             text = "AILA può commettere errori. Per le cose importanti apri la circolare.",
                             style = TextStyle(fontSize = 11.5.sp, lineHeight = 16.sp),
@@ -1048,14 +995,14 @@ private fun ClaudeAssistantResponse(
 }
 
 @Composable
-private fun ClaudeActionIconButton(
+private fun AssistantActionIconButton(
     contentDescription: String,
     onClick: () -> Unit,
     icon: @Composable () -> Unit
 ) {
     Box(
         modifier = Modifier
-            .size(34.dp)
+            .size(40.dp)
             .clip(CircleShape)
             .clickable(role = Role.Button, onClick = onClick)
             .semantics { this.contentDescription = contentDescription },
@@ -1066,9 +1013,9 @@ private fun ClaudeActionIconButton(
 }
 
 @Composable
-private fun ClaudeSourcePill(
+private fun AssistantSourcePill(
     source: AssistantSource,
-    palette: ClaudePalette,
+    palette: AssistantSurfacePalette,
     onClick: () -> Unit
 ) {
     Row(
@@ -1077,25 +1024,25 @@ private fun ClaudeSourcePill(
             .background(palette.pillBg)
             .border(0.75.dp, palette.hairline, RoundedCornerShape(100.dp))
             .ailaPressable(pressedScale = 0.96f, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 7.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        source.kind.Icon(palette.inkMuted, 13.dp)
+        source.kind.Icon(palette.accentFill, 14.dp)
         Text(
             text = source.label,
-            style = TextStyle(fontSize = 12.5.sp, fontWeight = FontWeight.Medium),
+            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
             color = palette.ink,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.widthIn(max = 200.dp)
         )
-        AppIcons.ChevronRight(Modifier.size(11.dp), color = palette.inkFaint)
+        AppIcons.ChevronRight(Modifier.size(12.dp), color = palette.inkFaint)
     }
 }
 
 @Composable
-private fun ClaudeThinkingRow(phase: AssistantAgentPhase?, palette: ClaudePalette) {
+private fun AssistantThinkingRow(phase: AssistantAgentPhase?, palette: AssistantSurfacePalette) {
     val phaseLabel = when (phase) {
         AssistantAgentPhase.READING -> "Leggo il contesto degli eventi…"
         AssistantAgentPhase.PLANNING -> "Preparo l'anteprima…"
@@ -1122,7 +1069,7 @@ private fun ClaudeThinkingRow(phase: AssistantAgentPhase?, palette: ClaudePalett
 }
 
 @Composable
-private fun ClaudeErrorBubble(text: String, palette: ClaudePalette) {
+private fun AssistantErrorCard(text: String, palette: AssistantSurfacePalette) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1149,10 +1096,10 @@ private fun ClaudeErrorBubble(text: String, palette: ClaudePalette) {
 }
 
 @Composable
-private fun ClaudeAttachmentTile(
+private fun AssistantAttachmentTile(
     title: String,
     subtitle: String,
-    palette: ClaudePalette,
+    palette: AssistantSurfacePalette,
     enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1171,12 +1118,12 @@ private fun ClaudeAttachmentTile(
     ) {
         Box(
             modifier = Modifier
-                .size(36.dp)
+                .size(38.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(palette.sheetBg),
             contentAlignment = Alignment.Center
         ) {
-            icon(palette.ink)
+            icon(palette.accentFill)
         }
         Text(title, style = TextStyle(fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold), color = palette.ink)
         Text(subtitle, minLines = 2, style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp), color = palette.inkMuted)
@@ -1242,9 +1189,6 @@ internal fun CameraGlyph(modifier: Modifier = Modifier.size(24.dp), tint: Color)
     }
 }
 
-private fun Modifier.chatSurface(shape: Shape): Modifier =
-    if (AppTheme.isGlass) ailaGlassSurface(shape) else clip(shape).background(AppTheme.CardSurface)
-
 /** Reviewable, persisted plan. Only this explicit confirmation can start a calendar write. */
 @Composable
 internal fun AssistantActionPreview(
@@ -1255,7 +1199,7 @@ internal fun AssistantActionPreview(
     onRecover: () -> Unit
 ) {
     val plan = message.actionPlan ?: return
-    val palette = claudePalette(AppTheme.isDarkMode)
+    val palette = assistantSurfacePalette()
     Column(
         Modifier
             .fillMaxWidth()
@@ -1315,8 +1259,8 @@ internal fun AssistantActionPreview(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(100.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = palette.ink,
-                        contentColor = palette.sheetBg
+                        containerColor = palette.accentFill,
+                        contentColor = palette.onAccentFill
                     )
                 ) {
                     Text("Conferma le azioni")
@@ -1354,7 +1298,6 @@ internal fun AssistantActionPreview(
     }
 }
 
-/** Esempi di domande nel campo di testo, finché la chat è vuota. */
 private val ExamplePlaceholders = listOf(
     "Quando è la prossima verifica?",
     "Cosa c'è da pagare questo mese?",

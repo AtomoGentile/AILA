@@ -4834,7 +4834,7 @@ fun MainAppShell(
                     // lato (vedi glassSlide e ailaUnderlayShift).
                     .then(
                         when {
-                            route == ShellRoute.ASSISTANT -> Modifier.background(claudePalette(AppTheme.isDarkMode).shellBg)
+                            route == ShellRoute.ASSISTANT -> Modifier.background(assistantSurfacePalette().shellBg)
                             AppTheme.isGlass -> Modifier
                             else -> Modifier.background(AppTheme.BackgroundLight)
                         }
@@ -5356,7 +5356,13 @@ fun MainAppShell(
                     }
                     circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { assistantBack() }
                     val currentAssistantProvider = remember(apiKeyRevision) { AppContainer.settings.aiProvider }
-                    val currentLocalModelName = remember(apiKeyRevision) { AppContainer.selectedLocalModel().displayName }
+                    val currentLocalModel = remember(apiKeyRevision) { AppContainer.selectedLocalModel() }
+                    val currentHasGoogleKey = remember(apiKeyRevision) { AppContainer.settings.userAiApiKey.isNotBlank() }
+                    val currentHasCompatible = remember(apiKeyRevision) {
+                        AppContainer.settings.compatibleAiBaseUrl.isNotBlank() && AppContainer.settings.compatibleAiModel.isNotBlank()
+                    }
+                    val currentCompatibleModel = remember(apiKeyRevision) { AppContainer.settings.compatibleAiModel }
+                    val currentLocalInstalled = remember(apiKeyRevision) { AppContainer.localModelStore.isInstalled(currentLocalModel) }
                     androidx.compose.runtime.key(assistantConversationId) {
                     AssistantChatScreen(
                         messages = assistantMessages,
@@ -5384,7 +5390,7 @@ fun MainAppShell(
                         onCancelAction = { cancelAssistantAction(it) },
                         onRecoverAction = { recoverAssistantAction(it) },
                         thinkingEnabled = assistantThinking,
-                        thinkingAvailable = AppContainer.selectedLocalModel().supportsThinking,
+                        thinkingAvailable = currentLocalModel.supportsThinking,
                         onThinkingChange = { enabled ->
                             AppContainer.settings.assistantThinkingEnabled = enabled
                             assistantThinking = enabled
@@ -5392,17 +5398,10 @@ fun MainAppShell(
                         },
                         onBackClick = { assistantBack() },
                         onClearChat = {
-                            // "Nuova chat" archivia, non cancella: quella di prima e' gia' nello
-                            // storico, qui basta ripartire con un id nuovo.
                             assistantMessages.clear()
                             assistantConversationId = "c${currentTimeMillis()}"
-                            // I dati raccolti restano: sono gli stessi di un minuto fa e
-                            // ricaricarli vorrebbe dire far aspettare la prima domanda della
-                            // chat nuova per niente.
                         },
                         onOpenConversation = { conversation ->
-                            // Si puo' aprire anche con una risposta in arrivo: la risposta e'
-                            // instradata per id, non per "chat attualmente a schermo".
                             assistantIncognito = false
                             assistantMessages.clear()
                             assistantMessages.addAll(conversation.messages)
@@ -5411,9 +5410,6 @@ fun MainAppShell(
                         onDeleteConversation = { id ->
                             AppContainer.settings.deleteAssistantConversation(id)
                             assistantConversations = AppContainer.settings.listAssistantConversations()
-                            // Se era quella aperta, la chat torna vuota: lasciarla a schermo
-                            // significherebbe che il primo messaggio nuovo la fa riapparire
-                            // nello storico appena cancellata.
                             if (id == assistantConversationId) {
                                 assistantMessages.clear()
                                 assistantConversationId = "c${currentTimeMillis()}"
@@ -5436,35 +5432,16 @@ fun MainAppShell(
                             AppContainer.settings.aiProvider = providerId
                             apiKeyRevision++
                         },
-                        localModelLabel = currentLocalModelName,
+                        localModelLabel = currentLocalModel.displayName,
+                        hasGoogleKey = currentHasGoogleKey,
+                        hasCompatibleConfig = currentHasCompatible,
+                        compatibleModelName = currentCompatibleModel,
+                        localModelInstalled = currentLocalInstalled,
                         effortLevel = assistantEffort,
                         onEffortLevelChange = { level ->
                             AppContainer.settings.assistantEffortLevel = level
                             assistantEffort = AppContainer.settings.assistantEffortLevel
                             assistantThinking = AppContainer.settings.assistantThinkingEnabled
-                        },
-                        unreadTabs = unreadTabs,
-                        onSelectMainTab = { tab ->
-                            isInAssistantScreen = false
-                            isInAcaHub = false
-                            selectedTab = tab
-                        },
-                        onOpenProfile = {
-                            isInAssistantScreen = false
-                            isInAcaHub = false
-                            isInProfileScreen = true
-                        },
-                        onOpenSettings = {
-                            isInSettingsScreen = true
-                            isInAiSettings = false
-                        },
-                        onOpenBureaucracy = {
-                            isInAssistantScreen = false
-                            isInAcaHub = false
-                            isInBureaucracy = true
-                        },
-                        onOpenGita = {
-                            isInGitaScreen = true
                         },
                         finishedToastConversation = assistantFinishedToast,
                         onDismissFinishedToast = { assistantFinishedToast = null },
