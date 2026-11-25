@@ -1373,8 +1373,8 @@ fun MainAppShell(
     var briefPollId by remember { mutableStateOf<String?>(null) }
     var briefRankingId by remember { mutableStateOf<String?>(null) }
     var briefProposalId by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(selectedTab, classSection) {
-        if (selectedTab != MainTab.CLASS || classSection != ClassSection.PERE) initialForumThread = null
+    LaunchedEffect(selectedTab, classSection, isInForum) {
+        if (!isInForum && (selectedTab != MainTab.CLASS || classSection != ClassSection.PERE)) initialForumThread = null
         if (selectedTab != MainTab.CLASS || classSection != ClassSection.BOARD) briefProposalId = null
         if (selectedTab != MainTab.POLLS) { briefPollId = null; briefRankingId = null }
     }
@@ -1802,10 +1802,12 @@ fun MainAppShell(
                 selectedTab = MainTab.CLASS
             }
             NotificationKind.FORUM.key -> {
-                initialForumThread = circolareplus.ui.PendingDeepLink.forumThreadId
+                val targetThread = circolareplus.ui.PendingDeepLink.forumThreadId
+                initialForumThread = targetThread
                 circolareplus.ui.PendingDeepLink.forumThreadId = null
                 classSection = ClassSection.PERE
                 selectedTab = MainTab.CLASS
+                if (targetThread != null) isInForum = true
             }
             NotificationKind.BOARD.key -> {
                 classSection = ClassSection.BOARD
@@ -2492,11 +2494,15 @@ fun MainAppShell(
 
     LaunchedEffect(isInClassRosterScreen, showClassManagement, classRosterRetry, user.id, isRepresentative) {
         if (!isInClassRosterScreen) return@LaunchedEffect
-        isClassRosterLoading = true
-        classRosterError = null
+        val managing = isRepresentative && showClassManagement
+        val hasCachedData = if (managing) classRosterEntries.isNotEmpty() else classDirectory.isNotEmpty()
+        if (!hasCachedData) {
+            isClassRosterLoading = true
+            classRosterError = null
+        }
         classRosterActionError = null
         try {
-            if (isRepresentative && showClassManagement) {
+            if (managing) {
                 classRosterEntries = AppContainer.ratingsRepository.listRatings()
                 // Le valutazioni restano consultabili se il server non restituisce le coppie.
                 disciplinePairs = try {
@@ -2504,15 +2510,18 @@ fun MainAppShell(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) {
-                    emptyList()
+                    disciplinePairs
                 }
             } else {
                 classDirectory = AppContainer.usersRepository.listStudents(offlineCopy = false)
             }
+            classRosterError = null
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            classRosterError = "Impossibile caricare la scheda classe. Riprova."
+            if (!hasCachedData) {
+                classRosterError = "Impossibile caricare la scheda classe. Riprova."
+            }
         } finally {
             isClassRosterLoading = false
         }
@@ -3156,19 +3165,26 @@ fun MainAppShell(
     val twoPane = useRail && maxWidth >= circolareplus.design.TwoPaneMinWidth
     // Circolari e dettaglio affiancati: solo nella sezione Circolari della tab Classe.
     val circularsPane = twoPane && classSection == ClassSection.CIRCULARS && !isClassSearchOpen
-    // Una visita alla sezione segna come viste le notifiche di sondaggi o posti presenti in quel momento.
-    LaunchedEffect(selectedTab,shellRoute,isClassSearchOpen,user.id,circolareplus.platform.AppForeground.isForeground) {
+    // Una visita alla sezione segna come viste le notifiche di sondaggi, posti, bacheca o pere presenti in quel momento.
+    LaunchedEffect(selectedTab,classSection,shellRoute,isClassSearchOpen,user.id,circolareplus.platform.AppForeground.isForeground) {
         if(shellRoute != ShellRoute.TABS || isClassSearchOpen || !circolareplus.platform.AppForeground.isForeground) return@LaunchedEffect
-        val kind=when(selectedTab) {
-            MainTab.POLLS -> circolareplus.data.remote.dto.AilaBriefKind.POLL
-            MainTab.SEATMAP -> circolareplus.data.remote.dto.AilaBriefKind.SEATMAP
+        val kind=when {
+            selectedTab == MainTab.POLLS -> circolareplus.data.remote.dto.AilaBriefKind.POLL
+            selectedTab == MainTab.SEATMAP -> circolareplus.data.remote.dto.AilaBriefKind.SEATMAP
+            selectedTab == MainTab.CLASS && classSection == ClassSection.PERE -> circolareplus.data.remote.dto.AilaBriefKind.FORUM
+            selectedTab == MainTab.CLASS && classSection == ClassSection.BOARD -> circolareplus.data.remote.dto.AilaBriefKind.PROPOSAL
             else -> null
         } ?: return@LaunchedEffect
         val owner=user.id
         coroutineScope.launch {
             try {
-                if(kind == circolareplus.data.remote.dto.AilaBriefKind.POLL) AppContainer.acaRepository.markBriefPollsSeen()
-                else AppContainer.acaRepository.markBriefSeatMapsSeen()
+                when (kind) {
+                    circolareplus.data.remote.dto.AilaBriefKind.POLL -> AppContainer.acaRepository.markBriefPollsSeen()
+                    circolareplus.data.remote.dto.AilaBriefKind.SEATMAP -> AppContainer.acaRepository.markBriefSeatMapsSeen()
+                    circolareplus.data.remote.dto.AilaBriefKind.FORUM -> AppContainer.acaRepository.markBriefForumSeen()
+                    circolareplus.data.remote.dto.AilaBriefKind.PROPOSAL -> AppContainer.acaRepository.markBriefBoardSeen()
+                    else -> {}
+                }
                 if(currentUser?.id == owner) {
                     briefItems=briefItems.filterNot { it.kind == kind || (kind == circolareplus.data.remote.dto.AilaBriefKind.POLL && it.kind == circolareplus.data.remote.dto.AilaBriefKind.RANKING_POLL) }
                     briefRefreshTrigger++
@@ -3596,7 +3612,9 @@ fun MainAppShell(
                                     val markAsSeen = item.kind in setOf(
                                         circolareplus.data.remote.dto.AilaBriefKind.POLL,
                                         circolareplus.data.remote.dto.AilaBriefKind.RANKING_POLL,
-                                        circolareplus.data.remote.dto.AilaBriefKind.SEATMAP
+                                        circolareplus.data.remote.dto.AilaBriefKind.SEATMAP,
+                                        circolareplus.data.remote.dto.AilaBriefKind.FORUM,
+                                        circolareplus.data.remote.dto.AilaBriefKind.PROPOSAL
                                     )
                                     if (markAsSeen) {
                                         val owner = currentUser?.id
@@ -3633,7 +3651,7 @@ fun MainAppShell(
                                                 }
                                             }
                                         }
-                                        circolareplus.data.remote.dto.AilaBriefKind.FORUM -> { initialForumThread = item.sourceId; classSection = ClassSection.PERE; selectedTab = MainTab.CLASS }
+                                        circolareplus.data.remote.dto.AilaBriefKind.FORUM -> { initialForumThread = item.sourceId; classSection = ClassSection.PERE; selectedTab = MainTab.CLASS; isInForum = true }
                                         circolareplus.data.remote.dto.AilaBriefKind.PROPOSAL -> { briefProposalId = item.sourceId; classSection = ClassSection.BOARD; selectedTab = MainTab.CLASS }
                                         circolareplus.data.remote.dto.AilaBriefKind.POLL -> { briefPollId = item.sourceId; showPollHistory = item.isResult; expandedResultsPollId = if(item.isResult) item.sourceId else null; pollsSection = 0; selectedTab = MainTab.POLLS }
                                         circolareplus.data.remote.dto.AilaBriefKind.RANKING_POLL -> { briefRankingId = item.sourceId; showPollHistory = item.isResult; pollsSection = 1; selectedTab = MainTab.POLLS }
@@ -4110,7 +4128,7 @@ fun MainAppShell(
                                                 } }
                                             }
                                             "BOARD" -> {briefProposalId=hit.id;classSection=ClassSection.BOARD;reloadProposals()}
-                                            "FORUM" -> {initialForumThread=hit.id;classSection=ClassSection.PERE}
+                                            "FORUM" -> {initialForumThread=hit.id;classSection=ClassSection.PERE;isInForum=true}
                                         }
                                     })
                                 }
@@ -4144,7 +4162,12 @@ fun MainAppShell(
                                             inline = true,
                                             isActive = selectedTab == MainTab.CLASS && shellRoute == ShellRoute.TABS,
                                             isModerator = isRepresentative,
-                                            initialThreadId = initialForumThread,
+                                            canSignModeration = canModerateIdentity,
+                                            initialThreadId = null,
+                                            onOpenThread = { id ->
+                                                initialForumThread = id
+                                                isInForum = true
+                                            },
                                             onBack = { initialForumThread = null; classSection = ClassSection.CIRCULARS },
                                             onContextChange = { acaForumContext = it },
                                             onOpenAttachment = { remoteContent = it; localContent = null },
@@ -4852,11 +4875,33 @@ fun MainAppShell(
                     )
                 }
                 ShellRoute.FORUM -> {
-                    ForumScreen(onContextChange={acaForumContext=it},isModerator = isRepresentative, initialThreadId = initialForumThread, onBack = { isInForum = false; initialForumThread = null },
+                    ForumScreen(
+                        onContextChange = { acaForumContext = it },
+                        isModerator = isRepresentative,
+                        canSignModeration = canModerateIdentity,
+                        initialThreadId = initialForumThread,
+                        exitOnBackFromThread = initialForumThread != null,
+                        onBack = { isInForum = false; initialForumThread = null },
                         onOpenAttachment = { remoteContent = it; localContent = null },
-                        onPrepareCalendar = { text -> isInForum = false; isInAcaHub = false; isInLocalFiles = false; isInAssistantScreen = true; askAssistant("Prepara gli eventi da confermare da questa fonte:\n$text") },
+                        onOpenAca = { prompt ->
+                            assistantMode = AssistantMode.GENERAL
+                            acaOverlayStart = assistantMessages.size
+                            acaResponsePresented = false
+                            acaOverlay = true
+                            if (!prompt.isNullOrBlank()) {
+                                askAssistant(prompt, acaForumContext)
+                            }
+                        },
+                        onPrepareCalendar = { text ->
+                            assistantMode = AssistantMode.GENERAL
+                            acaOverlayStart = assistantMessages.size
+                            acaResponsePresented = false
+                            acaOverlay = true
+                            askAssistant("Prepara gli eventi da confermare da questa fonte:\n$text", acaForumContext)
+                        },
                         onCalendarChanged = { reloadCalendar() },
-                        onActivity = { contentActivity = it })
+                        onActivity = { contentActivity = it }
+                    )
                 }
                 ShellRoute.CONTENT -> {
                     circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { localContent = null; remoteContent = null }
@@ -5170,6 +5215,18 @@ fun MainAppShell(
                                             throw e
                                         } catch (e: Exception) {
                                             classRosterActionError = "Coppia non salvata: ${e.message}"
+                                        }
+                                    }
+                                },
+                                onUpdateDisciplinePair = { id, studentA, studentB, duration ->
+                                    coroutineScope.launch {
+                                        try {
+                                            AppContainer.ratingsRepository.updateDisciplinePair(id, studentA, studentB, duration)
+                                            disciplinePairs = AppContainer.ratingsRepository.listDisciplinePairs()
+                                        } catch (e: CancellationException) {
+                                            throw e
+                                        } catch (e: Exception) {
+                                            classRosterActionError = "Coppia non aggiornata: ${e.message}"
                                         }
                                     }
                                 },
@@ -5865,8 +5922,9 @@ fun MainAppShell(
         }
         val acaPageContext=("Schermata: $shellRoute; sezione: $selectedTab / $classSection\n"+
             (selectedCircularForDetail?:paneCircular)?.let{"Circolare ${it.number}: ${it.title}\n${classifications[it.number]?.personalSummary.orEmpty()}"}.orEmpty()+
-            eventDetailToShow?.toString().orEmpty()+when { shellRoute == ShellRoute.FORUM || (shellRoute == ShellRoute.TABS && selectedTab == MainTab.CLASS && classSection == ClassSection.PERE) -> acaForumContext; shellRoute == ShellRoute.CONTENT -> acaDocumentContext; else -> "" }).take(6000)
+            eventDetailToShow?.toString().orEmpty()+when { shellRoute == ShellRoute.FORUM || (shellRoute == ShellRoute.TABS && selectedTab == MainTab.CLASS && classSection == ClassSection.PERE) -> acaForumContext; shellRoute == ShellRoute.CONTENT -> acaDocumentContext; else -> "" }).take(12_000)
         val acaHasDocument = shellRoute == ShellRoute.CONTENT || selectedCircularForDetail != null || paneCircular != null
+        val acaAutoContext = acaHasDocument || shellRoute == ShellRoute.FORUM || (shellRoute == ShellRoute.TABS && selectedTab == MainTab.CLASS && classSection == ClassSection.PERE)
         val acaContextPermitted = circolareplus.ai.AcaPolicyState.preferences.let { p ->
             when {
                 shellRoute == ShellRoute.CONTENT -> p.allows("DOCUMENTS") && p.attachmentConsent
@@ -5903,7 +5961,7 @@ fun MainAppShell(
             onOpenChat={draft,includeContext->
                 acaChatOpening=true
                 acaChatDraft=draft
-                acaChatContext=if((includeContext || acaHasDocument) && acaContextPermitted)acaPageContext else ""
+                acaChatContext=if((includeContext || acaAutoContext) && acaContextPermitted)acaPageContext else ""
                 acaOverlay=false;selectedCircularForDetail=null;paneCircular=null;eventDetailToShow=null
                 isInSettingsScreen=false;isInBackgroundDebugScreen=false;isInProfileScreen=false;isInClassRosterScreen=false
                 localContent=null;remoteContent=null;isInForum=false;isInAcaHub=false;isInLocalFiles=false
@@ -5912,7 +5970,7 @@ fun MainAppShell(
             onSend={question,includeContext->
                 acaOverlayStart=assistantMessages.size
                 acaResponsePresented=false
-                val useContext=includeContext || acaHasDocument
+                val useContext=includeContext || acaAutoContext
                 if(!useContext || acaContextPermitted)askAssistant(question,if(useContext)acaPageContext else "")
                 else appendAssistantMessage(assistantConversationId,AssistantMessage("context-${currentTimeMillis()}",AssistantAuthor.ASSISTANT,"Attiva il servizio e i consensi per questo contesto nelle impostazioni AI.",isError=true))
             }
@@ -7869,9 +7927,10 @@ private fun AddProposalDialog(
     var attachments by remember { mutableStateOf<List<ContentAttachmentDto>>(emptyList()) }
     var uploadError by remember { mutableStateOf<String?>(null) }
     var uploading by remember { mutableStateOf(false) }
+    var recording by remember { mutableStateOf(false) }
     var submitted by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val pickAttachment = rememberContentPicker(onError = { uploadError = it }, onPicked = { file: IncomingContent ->
+    val uploadContent: (IncomingContent) -> Unit = { file: IncomingContent ->
         if (attachments.size >= 5) uploadError = "Puoi allegare al massimo 5 file."
         else scope.launch {
             uploading = true; uploadError = null
@@ -7879,7 +7938,13 @@ private fun AddProposalDialog(
             catch (e: Exception) { uploadError = e.message ?: "Caricamento non riuscito" }
             finally { uploading = false }
         }
-    })
+    }
+    val pickAttachment = rememberContentPicker(onError = { uploadError = it }, onPicked = uploadContent)
+    val voiceRecorder = circolareplus.platform.rememberVoiceRecorder(
+        onRecording = { recording = it },
+        onError = { uploadError = it },
+        onRecorded = uploadContent
+    )
 
     circolareplus.design.AilaOriginSheet(
         originKey = "proposalCreateSheet",
@@ -7923,11 +7988,26 @@ private fun AddProposalDialog(
                 modifier = Modifier.fillMaxWidth().ailaSheetReveal(1)
             )
             Spacer(modifier = Modifier.height(AppTheme.Space8))
-            circolareplus.design.AilaOutlinedButton(
-                onClick = pickAttachment,
-                enabled = !uploading && attachments.size < 5,
-                modifier = Modifier.fillMaxWidth()
-            ) { Text(if (uploading) "Caricamento…" else "Aggiungi allegati${if (attachments.isEmpty()) "" else " (${attachments.size}/5)"}") }
+            if (recording) {
+                circolareplus.ui.screens.VoiceRecordingPanel(
+                    onStop = voiceRecorder.stop,
+                    onCancel = voiceRecorder.cancel,
+                    subtitle = "Il vocale verrà allegato alla proposta."
+                )
+            } else {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
+                    circolareplus.design.AilaOutlinedButton(
+                        onClick = pickAttachment,
+                        enabled = !uploading && attachments.size < 5,
+                        modifier = Modifier.weight(1f)
+                    ) { Text(if (uploading) "Caricamento…" else "Allega${if (attachments.isEmpty()) "" else " (${attachments.size}/5)"}") }
+                    circolareplus.design.AilaOutlinedButton(
+                        onClick = voiceRecorder.start,
+                        enabled = !uploading && attachments.size < 5,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Vocale") }
+                }
+            }
             attachments.forEach { item ->
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(item.fileName, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted, maxLines = 1)

@@ -53,6 +53,7 @@ fun ClassRosterScreen(
     disciplinePairs: List<DisciplinePairDto> = emptyList(),
     /** `duration`: MONTH, QUARTER o SCHOOL_YEAR. */
     onAddDisciplinePair: (studentA: String, studentB: String, duration: String) -> Unit = { _, _, _ -> },
+    onUpdateDisciplinePair: (id: String, studentA: String, studentB: String, duration: String) -> Unit = { _, _, _, _ -> },
     onRemoveDisciplinePair: (id: String) -> Unit = {}
 ) {
     Column(
@@ -112,6 +113,7 @@ fun ClassRosterScreen(
                         entries = displayEntries,
                         pairs = disciplinePairs,
                         onAdd = onAddDisciplinePair,
+                        onUpdate = onUpdateDisciplinePair,
                         onRemove = onRemoveDisciplinePair
                     )
                 }
@@ -702,9 +704,11 @@ private fun DisciplinePairsCard(
     entries: List<RatingEntryDto>,
     pairs: List<DisciplinePairDto>,
     onAdd: (String, String, String) -> Unit,
+    onUpdate: (String, String, String, String) -> Unit,
     onRemove: (String) -> Unit
 ) {
     var showDialog by remember { mutableStateOf(false) }
+    var editingPair by remember { mutableStateOf<DisciplinePairDto?>(null) }
     val names = remember(entries) { entries.associate { it.studentId to "${it.firstName} ${it.lastName}" } }
 
     AilaCard {
@@ -742,6 +746,10 @@ private fun DisciplinePairsCard(
                         )
                     }
                     AilaIconButton(
+                        contentDescription = "Modifica la coppia",
+                        onClick = { editingPair = pair }
+                    ) { tint -> AppIcons.Pencil(modifier = Modifier.size(18.dp), color = tint) }
+                    AilaIconButton(
                         contentDescription = "Rimuovi la coppia",
                         onClick = { onRemove(pair.id) }
                     ) { tint -> AppIcons.Trash(modifier = Modifier.size(18.dp), color = tint) }
@@ -768,22 +776,45 @@ private fun DisciplinePairsCard(
             }
         )
     }
+
+    editingPair?.let { pair ->
+        AddDisciplinePairDialog(
+            entries = entries,
+            initialStudentA = pair.studentA,
+            initialStudentB = pair.studentB,
+            title = "Modifica coppia da separare",
+            onDismiss = { editingPair = null },
+            onConfirm = { a, b, duration ->
+                val id = pair.id
+                editingPair = null
+                onUpdate(id, a, b, duration)
+            }
+        )
+    }
 }
 
 @Composable
 private fun AddDisciplinePairDialog(
     entries: List<RatingEntryDto>,
+    initialStudentA: String? = null,
+    initialStudentB: String? = null,
+    title: String = "Coppia da separare",
     onDismiss: () -> Unit,
     onConfirm: (String, String, String) -> Unit
 ) {
-    val selected = remember { mutableStateListOf<String>() }
+    val selected = remember(initialStudentA, initialStudentB) {
+        mutableStateListOf<String>().apply {
+            initialStudentA?.let { add(it) }
+            initialStudentB?.takeIf { it != initialStudentA }?.let { add(it) }
+        }
+    }
     var durationIndex by remember { mutableStateOf(0) }
 
     circolareplus.design.AilaAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = AppTheme.SurfaceWhite,
         shape = RoundedCornerShape(AppTheme.CardCornerRadius),
-        title = { Text("Coppia da separare") },
+        title = { Text(title) },
         text = {
             Column {
                 Text(

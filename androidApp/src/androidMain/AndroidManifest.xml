@@ -11,6 +11,8 @@
     <uses-permission android:name="com.nothing.ketchum.permission.ENABLE" />
     <queries><package android:name="com.nothing.thirdparty" /></queries>
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Aggiornamento dall'app: scarica l'APK dell'ultima release di GitHub e apre l'installazione
          di sistema (vedi circolareplus.update.AppUpdateManager). Android chiede comunque all'utente

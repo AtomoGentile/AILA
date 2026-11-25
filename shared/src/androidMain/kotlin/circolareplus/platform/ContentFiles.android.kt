@@ -3,6 +3,7 @@ package circolareplus.platform
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
@@ -12,6 +13,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.*
 import java.io.ByteArrayOutputStream
@@ -80,6 +82,69 @@ private fun normalizePhoto(file: IncomingContent): IncomingContent {
   remember(launcher) { { launcher.launch(arrayOf("application/pdf","text/plain","application/vnd.openxmlformats-officedocument.wordprocessingml.document","image/png","image/jpeg","image/webp","audio/wav","audio/x-wav","audio/mp4","audio/mpeg","audio/ogg")) } }
  }
 }
+@Composable actual fun rememberCameraPhotoPicker(
+ onError: (String) -> Unit, onPicked: (IncomingContent) -> Unit
+): () -> Unit {
+ val context = LocalContext.current
+ val scope = rememberCoroutineScope()
+ val picked by rememberUpdatedState(onPicked)
+ val error by rememberUpdatedState(onError)
+ var pendingFile by remember { mutableStateOf<File?>(null) }
+
+ val takePictureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+  val file = pendingFile
+  pendingFile = null
+  if (!success || file == null) {
+   file?.delete()
+   return@rememberLauncherForActivityResult
+  }
+  scope.launch {
+   try {
+    val content = withContext(Dispatchers.IO) {
+     val bytes = file.readBytes()
+     file.delete()
+     require(bytes.isNotEmpty()) { "La foto è vuota" }
+     normalizePhoto(IncomingContent("Foto.jpg", "image/jpeg", bytes))
+    }
+    picked(content)
+   } catch (e: CancellationException) {
+    throw e
+   } catch (e: Exception) {
+    file.delete()
+    error(e.message ?: "Impossibile acquisire la foto")
+   }
+  }
+ }
+
+ fun launchCamera() {
+  try {
+   val dir = File(context.cacheDir, "camera").apply { mkdirs() }
+   val target = File.createTempFile("aila-cam-", ".jpg", dir)
+   val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", target)
+   pendingFile = target
+   takePictureLauncher.launch(uri)
+  } catch (e: Exception) {
+   pendingFile?.delete()
+   pendingFile = null
+   error(e.message ?: "Fotocamera non disponibile")
+  }
+ }
+
+ val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+  if (granted) launchCamera()
+  else error("Consenti l’accesso alla fotocamera per scattare una foto.")
+ }
+
+ return remember(context, takePictureLauncher, permissionLauncher) {
+  {
+   if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+    launchCamera()
+   } else {
+    permissionLauncher.launch(Manifest.permission.CAMERA)
+   }
+  }
+ }
+}
 actual suspend fun openContentFile(bytes:ByteArray,fileName:String,mime:String){
  val context=AndroidAppContext.require()
  val safe=fileName.substringAfterLast('/').substringAfterLast('\\').replace(Regex("[^\\p{L}\\p{N} ._()-]"),"_").ifBlank{"contenuto"}
@@ -126,7 +191,15 @@ suspend fun readIncomingContent(context:Context,intent:Intent):IncomingContent?=
    r.prepare();r.start();recording(true)
   }catch(e:Exception){recorder?.release();recorder=null;file?.delete();file=null;recording(false);error("Microfono non disponibile: ${e.message.orEmpty()}")}
  }
- val launcher=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){granted->if(alive&&wantsRecording){if(granted)startRecording()else error("Consenti il microfono per registrare un vocale. Puoi comunque scegliere un file audio.")}}
+ val launcher=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){granted->if(alive&&wantsRecording){if(granted)startRecording()else{wantsRecording=false;error("Consenti il microfono per registrare un vocale. Puoi comunque scegliere un file audio.")}}}
  DisposableEffect(Unit){alive=true;onDispose{alive=false;wantsRecording=false;recorder?.let{r->try{r.stop()}catch(_:Exception){};r.release()};recorder=null;file?.delete();file=null}}
- return AudioRecorderActions(start={wantsRecording=true;launcher.launch(Manifest.permission.RECORD_AUDIO)},stop={wantsRecording=false;finish(false)},cancel={wantsRecording=false;finish(true)})
+ return AudioRecorderActions(
+  start={
+   wantsRecording=true
+   if(ContextCompat.checkSelfPermission(context,Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)startRecording()
+   else launcher.launch(Manifest.permission.RECORD_AUDIO)
+  },
+  stop={wantsRecording=false;finish(false)},
+  cancel={wantsRecording=false;finish(true)}
+ )
 }

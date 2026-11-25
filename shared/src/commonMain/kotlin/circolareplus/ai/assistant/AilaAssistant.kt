@@ -53,11 +53,11 @@ class AilaAssistant internal constructor(
         /** Tempo concesso ai PDF letti prima della domanda: il resto va al modello. */
         private const val PREFETCH_BUDGET_MS = 4_000L
 
-        /** Circolari lette per intero prima di chiedere al modello: le due piu' attinenti. */
-        private const val PREFETCHED_CIRCULARS = 2
+        /** Circolari lette per intero prima di chiedere al modello: le piu' attinenti. */
+        private const val PREFETCHED_CIRCULARS = 4
 
         /** Circolari portate al secondo giro da una ricerca dell'assistente nel testo integrale. */
-        private const val MAX_SEARCHED_CIRCULARS = 2
+        private const val MAX_SEARCHED_CIRCULARS = 4
 
         // The UI creates an assistant per turn. Keep complete documents across turns.
         private val textCache = linkedMapOf<Circular, String>()
@@ -150,6 +150,12 @@ class AilaAssistant internal constructor(
                 !explicitCalendarRequest && !parsed.incomplete && parsed.answer.isNotBlank() && parsed.actionRequest.isBlank() &&
                 parsed.calendarQueries.isEmpty() && parsed.needsCircularText.isEmpty() && parsed.searches.isEmpty()) {
                 reviewAttempted = true
+                val verifiedCandidate = AssistantReply(
+                    parsed.answer,
+                    sources = checkedSources(parsed, searchQuery, known),
+                    modelLabel = result.modelLabel,
+                    readContext = known.readContext
+                )
                 val candidate = partialReply(parsed, result.modelLabel)
                 partialCandidate = candidate
                 result = classifier.generateAnswer(
@@ -169,10 +175,12 @@ class AilaAssistant internal constructor(
                     known = known.copy(readContext = AssistantReadTools.boundedEvidence(observations.joinToString("\n\n")))
                     continue
                 }
-                // `verified` is advisory, never an execution permission or a required schema
-                // field: ordinary valid JSON/plain-text replies must remain usable.
+                // Se la verifica conferma esplicitamente `verified=true` senza riscrivere `answer`,
+                // la prima risposta è completa e va restituita senza avviso parziale.
                 if (parsed.answer.isBlank() && parsed.actionRequest.isBlank() &&
-                    parsed.calendarQueries.isEmpty() && parsed.needsCircularText.isEmpty() && parsed.searches.isEmpty()) return candidate
+                    parsed.calendarQueries.isEmpty() && parsed.needsCircularText.isEmpty() && parsed.searches.isEmpty()) {
+                    return if (parsed.verified == true) verifiedCandidate else candidate
+                }
             }
             if (parsed.incomplete) return partialCandidate?.copy(readContext = known.readContext) ?: AssistantReply(
                 "La risposta è incompleta. Riprova: nessuna nuova azione è stata eseguita.", isError = true,

@@ -164,7 +164,7 @@ fun AcaContextOverlay(
                                 onConfirm = { if(isInteractive) onConfirm() }, onCancel = { if(isInteractive) onCancel() }, onRecover = {})
                         } else answer?.let {
                             AilaResponseText(
-                                text=androidx.compose.ui.text.AnnotatedString(it),
+                                text=formatAilaMarkdown(it),
                                 responseId=action?.id ?: it,
                                 onComplete={ answerPresented=true; onAnswerPresented() }
                             )

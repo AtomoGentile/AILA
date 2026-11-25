@@ -78,6 +78,14 @@ it('isolates class deliveries, permits concurrent practices and freezes the arch
   expect((await call(rep, 'PUT', deadline, { dueDate: '2026-02-29' })).status).toBe(400);
   expect((await call(rep, 'PUT', deadline, { dueDate: null })).status).toBe(200);
   expect((await call(rep, 'PUT', deadline, { dueDate: '2026-12-09' })).status).toBe(200);
+  expect((await call(student, 'PUT', '/' + id, { title: 'Altro', description: 'Test' })).status).toBe(403);
+  expect((await call(outsider, 'PUT', '/' + id, { title: 'Altro', description: 'Test' })).status).toBe(404);
+  expect((await call(rep, 'PUT', '/' + id, { title: '  ', description: 'Test' })).status).toBe(400);
+  expect((await call(rep, 'PUT', '/' + id, { title: 'Ricevuta aggiornata', description: 'Consegna in segreteria.' })).status).toBe(200);
+  expect((await call(rep)).data).toMatchObject({ practices: expect.arrayContaining([
+    expect.objectContaining({ id, title: 'Ricevuta aggiornata', description: 'Consegna in segreteria.' })
+  ]) });
+  expect((await call(rep, 'PUT', '/' + id, { title: 'Ricevuta', description: 'Porta la stampa.' })).status).toBe(200);
   expect((await call(student, 'GET', deliveries)).status).toBe(403);
   expect((await call(student, 'PUT', archive)).status).toBe(403);
   expect((await call(outsider, 'GET', deliveries)).status).toBe(404);

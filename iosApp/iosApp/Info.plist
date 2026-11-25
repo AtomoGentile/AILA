@@ -63,6 +63,8 @@
 	<string>Trascrive i vocali sul dispositivo quando il motore locale è disponibile.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Registra un vocale solo quando lo richiedi. Puoi ascoltarlo e scegliere se condividerlo o trascriverlo.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Scatta una foto con la fotocamera per allegarla direttamente alle discussioni o alla chat.</string>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
 	<key>CFBundleDocumentTypes</key>

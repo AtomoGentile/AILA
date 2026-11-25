@@ -88,6 +88,21 @@ bureaucracy.post('/', representativeOnly, async (c) => {
   return c.json({ id }, 201);
 });
 
+bureaucracy.put('/:id', representativeOnly, async (c) => {
+  const body = await c.req.json<{ title?: unknown; description?: unknown } | null>().catch(() => null);
+  const title = typeof body?.title === 'string' ? body.title.trim() : '';
+  const description = typeof body?.description === 'string' ? body.description.trim() : '';
+  if (!title || title.length > 120) return c.json({ error: 'Il titolo deve contenere da 1 a 120 caratteri.' }, 400);
+  if (description.length > 1000 || (body?.description !== undefined && typeof body.description !== 'string')) {
+    return c.json({ error: 'Le istruzioni possono contenere al massimo 1000 caratteri.' }, 400);
+  }
+  const updated = await c.env.DB.prepare(
+    'UPDATE bureaucracy_practices SET title = ?, description = ? WHERE id = ? AND class_id = ? AND archived_at IS NULL'
+  ).bind(title, description, c.req.param('id'), await resolveClassId(c)).run();
+  if (!updated.meta.changes) return c.json({ error: 'Pratica attiva non trovata.' }, 404);
+  return c.json({ success: true });
+});
+
 bureaucracy.put('/:id/deadline', representativeOnly, async (c) => {
   const body = await c.req.json<{ dueDate?: unknown } | null>().catch(() => null);
   const dueDate = body?.dueDate;

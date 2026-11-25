@@ -146,6 +146,12 @@ fun AssistantChatScreen(
             photosOnly = true
         )
     }
+    val cameraPicker = receiveFile?.let {
+        circolareplus.platform.rememberCameraPhotoPicker(
+            onError = { message -> attachmentsMenu = false; attachmentError = message },
+            onPicked = it
+        )
+    }
     val recorder=if(onAttachContent!=null)circolareplus.platform.rememberVoiceRecorder({recording=it},{attachmentError=it}){file->attachmentsMenu=false;(onVoiceContent?:onAttachContent)(file)}else null
 
     val listState = rememberLazyListState()
@@ -433,9 +439,13 @@ fun AssistantChatScreen(
                     }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AttachmentMenuTile("File", "Documenti e audio", AppTheme.TintViolet, AppTheme.TintVioletInk,
-                        enabled = !isThinking && !recording, onClick = { fileSources = true }, modifier = Modifier.weight(1f)) {
-                        AppIcons.Document(Modifier.size(24.dp), it)
+                    AttachmentMenuTile("Fotocamera", "Scatta foto", AppTheme.TintGreen, AppTheme.TintGreenInk,
+                        enabled = !isThinking && !recording, onClick = {
+                            attachmentError = null
+                            attachmentsMenu = false
+                            cameraPicker?.invoke()
+                        }, modifier = Modifier.weight(1f)) {
+                        CameraGlyph(Modifier.size(24.dp), it)
                     }
                     AttachmentMenuTile("Foto", "Galleria", AppTheme.TintBlue, AppTheme.TintBlueInk,
                         enabled = !isThinking && !recording, onClick = {
@@ -443,6 +453,10 @@ fun AssistantChatScreen(
                             photoPicker?.invoke()
                         }, modifier = Modifier.weight(1f)) {
                         AppIcons.Photo(Modifier.size(24.dp), it)
+                    }
+                    AttachmentMenuTile("File", "Documenti", AppTheme.TintViolet, AppTheme.TintVioletInk,
+                        enabled = !isThinking && !recording, onClick = { fileSources = true }, modifier = Modifier.weight(1f)) {
+                        AppIcons.Document(Modifier.size(24.dp), it)
                     }
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -512,6 +526,38 @@ private fun AttachmentMenuRow(
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
         }
         AppIcons.ChevronRight(Modifier.size(18.dp), AppTheme.TextMuted)
+    }
+}
+
+@Composable
+internal fun CameraGlyph(modifier: Modifier = Modifier.size(24.dp), tint: Color) {
+    androidx.compose.foundation.Canvas(modifier) {
+        val w = size.width
+        val h = size.height
+        val stroke = (w * 0.085f).coerceAtLeast(1.5.dp.toPx())
+        // Corpo fotocamera
+        drawRoundRect(
+            color = tint,
+            topLeft = androidx.compose.ui.geometry.Offset(w * 0.12f, h * 0.28f),
+            size = androidx.compose.ui.geometry.Size(w * 0.76f, h * 0.54f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.12f),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(stroke)
+        )
+        // Mirino superiore
+        drawRoundRect(
+            color = tint,
+            topLeft = androidx.compose.ui.geometry.Offset(w * 0.34f, h * 0.16f),
+            size = androidx.compose.ui.geometry.Size(w * 0.32f, h * 0.12f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.05f),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(stroke)
+        )
+        // Obiettivo centrale
+        drawCircle(
+            color = tint,
+            radius = w * 0.16f,
+            center = androidx.compose.ui.geometry.Offset(w * 0.50f, h * 0.55f),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(stroke)
+        )
     }
 }
 
@@ -1435,48 +1481,4 @@ private fun AssistantSourceKind.Icon(color: Color, iconSize: androidx.compose.ui
  * arriva a video piena di asterischi — che l'utente legge come un difetto dell'app, non come
  * una convenzione di formattazione.
  */
-private fun formatAssistantText(raw: String): AnnotatedString = buildAnnotatedString {
-    val lines = raw.trim().lines()
-    fun isBullet(line: String) = line.trimStart().let { it.startsWith("- ") || it.startsWith("* ") }
-
-    fun appendLine(line: String) {
-        var index = 0
-        var bold = false
-        while (index < line.length) {
-            val marker = line.indexOf("**", index)
-            if (marker < 0) {
-                appendStyled(line.substring(index), bold)
-                break
-            }
-            appendStyled(line.substring(index, marker), bold)
-            bold = !bold
-            index = marker + 2
-        }
-    }
-
-    lines.forEachIndexed { lineIndex, line ->
-        if (isBullet(line)) {
-            // Il punto elenco e' un paragrafo a se' con l'andata a capo "appesa": la seconda riga
-            // parte sotto il testo e non sotto il pallino. Un paragrafo va a capo da solo, quindi
-            // niente "\n" dopo (ne' prima di un altro paragrafo).
-            val body = line.trimStart().substring(2)
-            withStyle(ParagraphStyle(textIndent = TextIndent(firstLine = 0.sp, restLine = 14.sp))) {
-                append("•  ")
-                appendLine(body)
-            }
-        } else {
-            appendLine(line)
-            val next = lines.getOrNull(lineIndex + 1)
-            if (next != null && !isBullet(next)) append("\n")
-        }
-    }
-}
-
-private fun androidx.compose.ui.text.AnnotatedString.Builder.appendStyled(text: String, bold: Boolean) {
-    if (text.isEmpty()) return
-    if (bold) {
-        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(text) }
-    } else {
-        append(text)
-    }
-}
+private fun formatAssistantText(raw: String): AnnotatedString = circolareplus.design.formatAilaMarkdown(raw)

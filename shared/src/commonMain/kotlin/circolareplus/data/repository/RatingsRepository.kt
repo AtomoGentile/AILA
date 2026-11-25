@@ -37,6 +37,13 @@ class RatingsRepository(private val api: ApiClient) {
         )
     }
 
+    suspend fun updateDisciplinePair(id: String, studentA: String, studentB: String, duration: String) {
+        api.put<AddDisciplinePairRequestDto, SuccessDto>(
+            "/api/ratings/pairs/$id",
+            AddDisciplinePairRequestDto(studentA, studentB, duration)
+        )
+    }
+
     suspend fun removeDisciplinePair(id: String) {
         api.delete<SuccessDto>("/api/ratings/pairs/$id")
     }

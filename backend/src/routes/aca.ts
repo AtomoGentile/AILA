@@ -90,6 +90,8 @@ const markBriefKindsSeen=async(c:Context<{Bindings:Env;Variables:{jwtPayload:JWT
 };
 aca.post('/brief/polls/seen',c=>markBriefKindsSeen(c,['POLL','RANKING_POLL']));
 aca.post('/brief/seatmaps/seen',c=>markBriefKindsSeen(c,['SEATMAP']));
+aca.post('/brief/forum/seen',c=>markBriefKindsSeen(c,['FORUM']));
+aca.post('/brief/board/seen',c=>markBriefKindsSeen(c,['PROPOSAL']));
 aca.post('/brief/:id/dismiss',async c=>{
  const user=c.get('jwtPayload');const p=await aiPreferences(c.env,user.sub);
  if(!p.aiEnabled||!p.acaEnabled||!p.nudgesEnabled||!p.services.includes('NOW_NUDGE'))return c.json({error:'AILA brief è disattivato'},403);
