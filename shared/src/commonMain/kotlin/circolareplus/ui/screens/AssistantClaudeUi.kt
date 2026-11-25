@@ -4,6 +4,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -384,27 +387,23 @@ internal fun AssistantOverflowGlyph(modifier: Modifier = Modifier.size(20.dp), c
     }
 }
 
+/**
+ * Molla Material 3 Expressive con leggero scattino elastico finale (overshoot controllato),
+ * che si spegne automaticamente quando è attivo "Riduci animazioni".
+ */
+internal fun <T> ailaExpressiveBounceSpring(
+    damping: Float = 0.66f,
+    stiffness: Float = 440f
+): SpringSpec<T> = if (AppTheme.reduceMotion) {
+    spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh)
+} else {
+    spring(dampingRatio = damping, stiffness = stiffness)
+}
+
 @Composable
 internal fun AssistantSettingsGearGlyph(modifier: Modifier = Modifier.size(20.dp), color: Color) {
-    Canvas(modifier) {
-        val cx = size.width / 2f
-        val cy = size.height / 2f
-        val rOuter = size.minDimension * 0.36f
-        val rInner = size.minDimension * 0.15f
-        val stroke = (size.minDimension * 0.095f).coerceAtLeast(1.5.dp.toPx())
-        drawCircle(color, radius = rOuter * 0.72f, center = Offset(cx, cy), style = Stroke(stroke))
-        drawCircle(color, radius = rInner, center = Offset(cx, cy), style = Stroke(stroke))
-        for (i in 0 until 8) {
-            val a = (i * PI / 4.0).toFloat()
-            drawLine(
-                color = color,
-                start = Offset(cx + cos(a) * rOuter * 0.78f, cy + sin(a) * rOuter * 0.78f),
-                end = Offset(cx + cos(a) * rOuter * 1.12f, cy + sin(a) * rOuter * 1.12f),
-                strokeWidth = stroke,
-                cap = StrokeCap.Round
-            )
-        }
-    }
+    // Usa l'icona ufficiale a cursori di AILA: pulita, geometrica e coerente col resto dell'app.
+    AppIcons.Sliders(modifier = modifier, color = color)
 }
 
 @Composable
@@ -491,8 +490,18 @@ internal fun AssistantHeaderBar(
     var overflowOpen by remember { mutableStateOf(false) }
     val chevronRotation by animateFloatAsState(
         targetValue = if (isModelPickerOpen) 180f else 0f,
-        animationSpec = ailaSpatialSpring(),
+        animationSpec = ailaExpressiveBounceSpring(damping = 0.62f, stiffness = 460f),
         label = "modelPickerChevron"
+    )
+    val pickerPillScale by animateFloatAsState(
+        targetValue = if (isModelPickerOpen) 1.03f else 1f,
+        animationSpec = ailaExpressiveBounceSpring(damping = 0.64f, stiffness = 480f),
+        label = "modelPickerPillScale"
+    )
+    val pickerPillBg by animateColorAsState(
+        targetValue = if (isModelPickerOpen) palette.pillBg else Color.Transparent,
+        animationSpec = tween(180),
+        label = "modelPickerPillBg"
     )
 
     Row(
@@ -520,8 +529,12 @@ internal fun AssistantHeaderBar(
         Row(
             modifier = Modifier
                 .height(44.dp)
+                .graphicsLayer {
+                    scaleX = pickerPillScale
+                    scaleY = pickerPillScale
+                }
                 .clip(RoundedCornerShape(100.dp))
-                .background(if (isModelPickerOpen) palette.pillBg else Color.Transparent)
+                .background(pickerPillBg)
                 .clickable(role = Role.Button, onClick = onToggleModelPicker)
                 .padding(horizontal = 12.dp)
                 .semantics { contentDescription = "Seleziona modello e ragionamento" },
@@ -657,29 +670,31 @@ internal fun AssistantModelPickerPopup(
     var effortExpanded by remember(visible) { mutableStateOf(false) }
     val effortChevronRot by animateFloatAsState(
         targetValue = if (effortExpanded) 180f else 0f,
-        animationSpec = ailaSpatialSpring(),
+        animationSpec = ailaExpressiveBounceSpring(damping = 0.62f, stiffness = 460f),
         label = "effortChevron"
     )
 
     AnimatedVisibility(
         visible = visible,
         enter = fadeIn(tween(180)),
-        exit = fadeOut(tween(160)),
+        exit = fadeOut(tween(260)),
         modifier = Modifier.fillMaxSize().zIndex(20f)
     ) {
         val popupMotion = Modifier.animateEnterExit(
             enter = scaleIn(
-                animationSpec = spring(dampingRatio = 0.78f, stiffness = 420f),
-                initialScale = 0.84f,
-                transformOrigin = TransformOrigin(0.26f, 0f)
+                animationSpec = ailaExpressiveBounceSpring(damping = 0.66f, stiffness = 420f),
+                initialScale = 0.80f,
+                transformOrigin = TransformOrigin(0.24f, 0f)
             ) + slideInVertically(
-                animationSpec = spring(dampingRatio = 0.80f, stiffness = 420f)
-            ) { -36 } + fadeIn(tween(150)),
+                animationSpec = ailaExpressiveBounceSpring(damping = 0.68f, stiffness = 420f)
+            ) { -44 } + fadeIn(tween(140)),
             exit = scaleOut(
-                animationSpec = tween(160),
-                targetScale = 0.88f,
-                transformOrigin = TransformOrigin(0.26f, 0f)
-            ) + slideOutVertically(tween(160)) { -24 } + fadeOut(tween(140))
+                animationSpec = tween(230, easing = FastOutSlowInEasing),
+                targetScale = 0.72f,
+                transformOrigin = TransformOrigin(0.24f, 0f)
+            ) + slideOutVertically(
+                animationSpec = tween(230, easing = FastOutSlowInEasing)
+            ) { -54 } + fadeOut(tween(170, delayMillis = 55))
         )
 
         Box(
@@ -741,7 +756,7 @@ internal fun AssistantModelPickerPopup(
                             Box(modifier = Modifier.size(22.dp), contentAlignment = Alignment.Center) {
                                 androidx.compose.animation.AnimatedVisibility(
                                     visible = selected,
-                                    enter = scaleIn(ailaSpatialSpring()) + fadeIn(ailaFadeSpec(AilaDuration.Quick)),
+                                    enter = scaleIn(ailaExpressiveBounceSpring(damping = 0.58f, stiffness = 480f)) + fadeIn(ailaFadeSpec(AilaDuration.Quick)),
                                     exit = scaleOut(tween(120)) + fadeOut(tween(120))
                                 ) {
                                     AppIcons.Check(Modifier.size(18.dp), color = palette.accent)
@@ -801,11 +816,11 @@ internal fun AssistantModelPickerPopup(
                         }
                     }
 
-                    // Slider tattile "pillola che aumenta" con animazione molleggiata
+                    // Slider tattile "pillola che aumenta" con scattino Material Expressive
                     AnimatedVisibility(
                         visible = effortExpanded,
-                        enter = expandVertically(ailaSpatialSpring()) + fadeIn(ailaFadeSpec(AilaDuration.Quick)),
-                        exit = shrinkVertically(ailaSpatialSpring()) + fadeOut(tween(120))
+                        enter = expandVertically(ailaExpressiveBounceSpring(damping = 0.68f, stiffness = 420f)) + fadeIn(ailaFadeSpec(AilaDuration.Quick)),
+                        exit = shrinkVertically(tween(200, easing = FastOutSlowInEasing)) + fadeOut(tween(140))
                     ) {
                         Column(
                             modifier = Modifier
@@ -885,7 +900,7 @@ internal fun AssistantEffortPillSlider(
     val targetFraction = (clamped + 1f) / steps.toFloat()
     val animatedFraction by animateFloatAsState(
         targetValue = targetFraction.coerceIn(0.24f, 1f),
-        animationSpec = spring(dampingRatio = 0.78f, stiffness = 420f),
+        animationSpec = ailaExpressiveBounceSpring(damping = 0.64f, stiffness = 460f),
         label = "effortPillGrow"
     )
 
@@ -1517,6 +1532,11 @@ internal fun AssistantComposer(
         animationSpec = tween(if (AppTheme.reduceMotion) 60 else 160),
         label = "assistantSendFg"
     )
+    val sendScale by animateFloatAsState(
+        targetValue = if (canSend) 1f else 0.90f,
+        animationSpec = ailaExpressiveBounceSpring(damping = 0.56f, stiffness = 500f),
+        label = "assistantSendScale"
+    )
 
     Column(
         modifier = Modifier
@@ -1532,6 +1552,7 @@ internal fun AssistantComposer(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 attachedFiles.forEach { file ->
+                    val isAudio = file.service.equals("AUDIO", ignoreCase = true)
                     Row(
                         modifier = Modifier
                             .widthIn(min = 180.dp, max = 256.dp)
@@ -1543,17 +1564,21 @@ internal fun AssistantComposer(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        AppIcons.Document(Modifier.size(18.dp), color = palette.accent)
+                        if (isAudio) {
+                            AssistantMicGlyph(Modifier.size(18.dp), color = palette.accent)
+                        } else {
+                            AppIcons.Document(Modifier.size(18.dp), color = palette.accent)
+                        }
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = file.name,
+                                text = if (isAudio) "Messaggio vocale" else file.name,
                                 style = TextStyle(fontSize = 13.5.sp, fontWeight = FontWeight.Medium),
                                 color = palette.ink,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "Pronto per l'invio",
+                                text = if (isAudio) "Vocale pronto per l'invio" else "Pronto per l'invio",
                                 style = TextStyle(fontSize = 11.5.sp),
                                 color = palette.inkFaint
                             )
@@ -1676,6 +1701,10 @@ internal fun AssistantComposer(
             Box(
                 modifier = Modifier
                     .size(48.dp)
+                    .graphicsLayer {
+                        scaleX = sendScale
+                        scaleY = sendScale
+                    }
                     .clip(sendShape)
                     .background(sendBg)
                     .clickable(

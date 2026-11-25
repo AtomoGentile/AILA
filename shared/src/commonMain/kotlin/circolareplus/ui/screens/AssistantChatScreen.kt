@@ -65,7 +65,10 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -108,8 +111,10 @@ import circolareplus.design.ailaPulse
 import circolareplus.design.ailaRevealEnter
 import circolareplus.design.ailaSheetReveal
 import circolareplus.design.ailaTopicSurface
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * AILA Assistant in stile Neural Expressive / Gemini: neri profondi OLED in tema scuro con
@@ -188,7 +193,7 @@ fun AssistantChatScreen(
             } else {
                 drawerProgress.animateTo(
                     targetValue = if (open) 1f else 0f,
-                    animationSpec = spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow)
+                    animationSpec = spring(dampingRatio = 0.78f, stiffness = 360f)
                 )
             }
         }
@@ -451,40 +456,57 @@ fun AssistantChatScreen(
                                                 }
                                             }
                                             message.attachedFiles.forEach { file ->
-                                                Row(
-                                                    modifier = Modifier
-                                                        .padding(top = 8.dp)
-                                                        .align(if (message.author == AssistantAuthor.USER) Alignment.End else Alignment.Start)
-                                                        .widthIn(max = 296.dp)
-                                                        .clip(RoundedCornerShape(18.dp))
-                                                        .background(palette.elevatedBg)
-                                                        .border(1.dp, palette.hairline, RoundedCornerShape(18.dp))
-                                                        .clickable { onOpenAttachedFile(file) }
-                                                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                                ) {
-                                                    Box(
-                                                        Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(AppTheme.TintViolet),
-                                                        contentAlignment = Alignment.Center
+                                                val isAudio = file.service.equals("AUDIO", ignoreCase = true) ||
+                                                    file.name.lowercase().let { n ->
+                                                        n.endsWith(".m4a") || n.endsWith(".mp3") || n.endsWith(".wav") ||
+                                                            n.endsWith(".ogg") || n.endsWith(".webm")
+                                                    }
+                                                if (isAudio) {
+                                                    AssistantVoiceBubble(
+                                                        file = file,
+                                                        isUser = message.author == AssistantAuthor.USER,
+                                                        palette = palette,
+                                                        onOpenDetails = { onOpenAttachedFile(file) },
+                                                        modifier = Modifier
+                                                            .padding(top = 8.dp)
+                                                            .align(if (message.author == AssistantAuthor.USER) Alignment.End else Alignment.Start)
+                                                    )
+                                                } else {
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .padding(top = 8.dp)
+                                                            .align(if (message.author == AssistantAuthor.USER) Alignment.End else Alignment.Start)
+                                                            .widthIn(max = 296.dp)
+                                                            .clip(RoundedCornerShape(18.dp))
+                                                            .background(palette.elevatedBg)
+                                                            .border(1.dp, palette.hairline, RoundedCornerShape(18.dp))
+                                                            .clickable { onOpenAttachedFile(file) }
+                                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                                                     ) {
-                                                        AppIcons.Document(Modifier.size(18.dp), AppTheme.TintVioletInk)
+                                                        Box(
+                                                            Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(AppTheme.TintViolet),
+                                                            contentAlignment = Alignment.Center
+                                                        ) {
+                                                            AppIcons.Document(Modifier.size(18.dp), AppTheme.TintVioletInk)
+                                                        }
+                                                        Column(Modifier.weight(1f)) {
+                                                            Text(
+                                                                text = file.name,
+                                                                maxLines = 2,
+                                                                overflow = TextOverflow.Ellipsis,
+                                                                style = TextStyle(fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold),
+                                                                color = palette.ink
+                                                            )
+                                                            Text(
+                                                                text = if (file.generated) file.processingLabel ?: "Testo elaborato da AILA" else "Apri l’originale",
+                                                                style = TextStyle(fontSize = 11.5.sp),
+                                                                color = palette.inkMuted
+                                                            )
+                                                        }
+                                                        AppIcons.ChevronRight(Modifier.size(16.dp), palette.inkFaint)
                                                     }
-                                                    Column(Modifier.weight(1f)) {
-                                                        Text(
-                                                            text = file.name,
-                                                            maxLines = 2,
-                                                            overflow = TextOverflow.Ellipsis,
-                                                            style = TextStyle(fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold),
-                                                            color = palette.ink
-                                                        )
-                                                        Text(
-                                                            text = if (file.generated) file.processingLabel ?: "Testo elaborato da AILA" else "Apri l’originale",
-                                                            style = TextStyle(fontSize = 11.5.sp),
-                                                            color = palette.inkMuted
-                                                        )
-                                                    }
-                                                    AppIcons.ChevronRight(Modifier.size(16.dp), palette.inkFaint)
                                                 }
                                             }
                                             if (message.actionPlan != null) {
@@ -528,39 +550,49 @@ fun AssistantChatScreen(
                     draft = ""
                     onSend(question)
                 }
-                if (recording) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.navigationBars)
-                            .padding(horizontal = 14.dp)
-                            .padding(top = 6.dp, bottom = 12.dp)
-                    ) {
-                        ChatVoiceRecordingBar(
-                            onSend = { recorder?.stop() },
-                            onCancel = { recorder?.cancel() }
+                AnimatedContent(
+                    targetState = recording,
+                    transitionSpec = {
+                        (scaleIn(ailaExpressiveBounceSpring(damping = 0.68f, stiffness = 440f), initialScale = 0.94f) +
+                            fadeIn(tween(150))) togetherWith
+                            (scaleOut(tween(130), targetScale = 0.96f) + fadeOut(tween(110)))
+                    },
+                    label = "assistantVoiceBarSwitch"
+                ) { isRec ->
+                    if (isRec) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.navigationBars)
+                                .padding(horizontal = 14.dp)
+                                .padding(top = 6.dp, bottom = 12.dp)
+                        ) {
+                            ChatVoiceRecordingBar(
+                                onSend = { recorder?.stop() },
+                                onCancel = { recorder?.cancel() }
+                            )
+                        }
+                    } else {
+                        AssistantComposer(
+                            palette = palette,
+                            draft = draft,
+                            onDraftChange = { draft = it },
+                            isThinking = isThinking,
+                            isIncognito = isIncognito,
+                            hasMessages = messages.isNotEmpty(),
+                            rotatingPlaceholders = if (messages.isEmpty()) ExamplePlaceholders else emptyList(),
+                            attachedFiles = attachedFiles,
+                            onRemoveAttachedFile = onRemoveAttachedFile,
+                            onOpenAttachedFile = onOpenAttachedFile,
+                            attachmentError = attachmentError,
+                            onOpenAttachments = if (onAttachContent != null) ({ attachmentsMenu = true }) else null,
+                            onStartVoice = if (recorder != null) ({
+                                attachmentError = null
+                                recorder.start()
+                            }) else null,
+                            onSend = send
                         )
                     }
-                } else {
-                    AssistantComposer(
-                        palette = palette,
-                        draft = draft,
-                        onDraftChange = { draft = it },
-                        isThinking = isThinking,
-                        isIncognito = isIncognito,
-                        hasMessages = messages.isNotEmpty(),
-                        rotatingPlaceholders = if (messages.isEmpty()) ExamplePlaceholders else emptyList(),
-                        attachedFiles = attachedFiles,
-                        onRemoveAttachedFile = onRemoveAttachedFile,
-                        onOpenAttachedFile = onOpenAttachedFile,
-                        attachmentError = attachmentError,
-                        onOpenAttachments = if (onAttachContent != null) ({ attachmentsMenu = true }) else null,
-                        onStartVoice = if (recorder != null) ({
-                            attachmentError = null
-                            recorder.start()
-                        }) else null,
-                        onSend = send
-                    )
                 }
             }
 
@@ -1377,3 +1409,190 @@ private fun AssistantSourceKind.Icon(color: Color, iconSize: Dp = 14.dp) {
 }
 
 private fun formatAssistantText(raw: String): AnnotatedString = circolareplus.design.formatAilaMarkdown(raw)
+
+/**
+ * Bolla vocale inline con la stessa estetica dei vocali in Pere (`InlineAudioAttachment`):
+ * pulsante Play/Pause circolare, waveform a 28 barre con cursore che avanza, durata e link Apri.
+ */
+@Composable
+private fun AssistantVoiceBubble(
+    file: AssistantAttachedFile,
+    isUser: Boolean,
+    palette: AssistantSurfacePalette,
+    onOpenDetails: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scope = rememberCoroutineScope()
+    var audioBytes by remember(file.localId) { mutableStateOf<ByteArray?>(null) }
+    var audioMime by remember(file.localId) { mutableStateOf("audio/mp4") }
+    var loading by remember(file.localId) { mutableStateOf(false) }
+    var pendingAutoPlay by remember(file.localId) { mutableStateOf(false) }
+
+    val player = circolareplus.platform.rememberAudioPlayer(audioBytes, audioMime)
+
+    LaunchedEffect(audioBytes, pendingAutoPlay) {
+        if (pendingAutoPlay && audioBytes != null) {
+            pendingAutoPlay = false
+            player.togglePlayPause()
+        }
+    }
+
+    val totalMs = player.durationMs
+    val progress = if (totalMs > 0) (player.positionMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f) else 0f
+    val waveform = remember(file.localId) {
+        val seed = file.localId.hashCode()
+        List(28) { idx ->
+            val mixed = ((seed * 31 + idx * 17) xor (idx * 13 + 7)) and 0x7fffffff
+            0.22f + (mixed % 78) / 100f
+        }
+    }
+    val activeColor = palette.accent
+    val inactiveColor = palette.inkFaint.copy(alpha = 0.40f)
+    val durationLabel = when {
+        player.isPlaying || player.positionMs > 0 ->
+            if (totalMs > 0) "${formatVoiceMs(player.positionMs)} / ${formatVoiceMs(totalMs)}"
+            else formatVoiceMs(player.positionMs)
+        totalMs > 0 -> formatVoiceMs(totalMs)
+        else -> "Vocale"
+    }
+
+    val bubbleShape = RoundedCornerShape(
+        topStart = 22.dp,
+        topEnd = 22.dp,
+        bottomStart = if (isUser) 22.dp else 6.dp,
+        bottomEnd = if (isUser) 6.dp else 22.dp
+    )
+
+    Row(
+        modifier = modifier
+            .widthIn(min = 224.dp, max = 290.dp)
+            .clip(bubbleShape)
+            .background(if (isUser) palette.userBubbleBg else palette.elevatedBg)
+            .border(1.dp, palette.hairline, bubbleShape)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(activeColor)
+                .clickable(enabled = !loading, role = Role.Button) {
+                    if (audioBytes != null) {
+                        player.togglePlayPause()
+                    } else {
+                        loading = true
+                        scope.launch {
+                            val loaded = withContext(Dispatchers.Default) {
+                                runCatching {
+                                    val archive = circolareplus.data.AppContainer.localContents
+                                    val entry = archive.entry(file.localId)
+                                    entry?.let { archive.read(it) }
+                                }.getOrNull()
+                            }
+                            loading = false
+                            if (loaded != null && loaded.bytes.isNotEmpty()) {
+                                audioMime = loaded.mime.ifBlank { "audio/mp4" }
+                                audioBytes = loaded.bytes
+                                pendingAutoPlay = true
+                            } else {
+                                onOpenDetails()
+                            }
+                        }
+                    }
+                }
+                .semantics {
+                    contentDescription = if (player.isPlaying) "Metti in pausa vocale" else "Riproduci vocale"
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            when {
+                loading -> circolareplus.design.AilaCircularProgress(Modifier.size(18.dp), color = palette.onAccent, strokeWidth = 2.dp)
+                player.isPlaying -> AssistantPauseGlyph(Modifier.size(16.dp), palette.onAccent)
+                else -> AssistantPlayGlyph(Modifier.size(16.dp), palette.onAccent)
+            }
+        }
+
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(26.dp)
+            ) {
+                val count = waveform.size
+                val step = size.width / count.toFloat()
+                val barWidth = (step * 0.52f).coerceIn(2.dp.toPx(), 3.4.dp.toPx())
+                val centerY = size.height / 2f
+                waveform.forEachIndexed { index, amp ->
+                    val barProgress = (index + 0.5f) / count.toFloat()
+                    val x = index * step + step / 2f
+                    val halfH = (size.height * amp * 0.44f).coerceAtLeast(2.dp.toPx())
+                    drawLine(
+                        color = if (barProgress <= progress) activeColor else inactiveColor,
+                        start = Offset(x, centerY - halfH),
+                        end = Offset(x, centerY + halfH),
+                        strokeWidth = barWidth,
+                        cap = StrokeCap.Round
+                    )
+                }
+                val dotX = (size.width * progress).coerceIn(4.dp.toPx(), size.width - 4.dp.toPx())
+                drawCircle(
+                    color = activeColor,
+                    radius = 4.2.dp.toPx(),
+                    center = Offset(dotX, centerY)
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = durationLabel,
+                    style = TextStyle(fontSize = 11.5.sp, fontWeight = FontWeight.Medium),
+                    color = palette.inkMuted
+                )
+                Text(
+                    text = "Apri",
+                    style = TextStyle(fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold),
+                    color = activeColor,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable(role = Role.Button, onClick = onOpenDetails)
+                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                )
+            }
+        }
+    }
+}
+
+private fun formatVoiceMs(ms: Int): String {
+    val totalSec = (ms / 1000).coerceAtLeast(0)
+    val min = totalSec / 60
+    val sec = totalSec % 60
+    return "$min:${sec.toString().padStart(2, '0')}"
+}
+
+@Composable
+private fun AssistantPlayGlyph(modifier: Modifier, color: Color) {
+    Canvas(modifier) {
+        val path = Path().apply {
+            moveTo(size.width * 0.24f, size.height * 0.16f)
+            lineTo(size.width * 0.86f, size.height * 0.50f)
+            lineTo(size.width * 0.24f, size.height * 0.84f)
+            close()
+        }
+        drawPath(path, color)
+    }
+}
+
+@Composable
+private fun AssistantPauseGlyph(modifier: Modifier, color: Color) {
+    Canvas(modifier) {
+        val stroke = (size.width * 0.22f).coerceAtLeast(2.dp.toPx())
+        drawLine(color, Offset(size.width * 0.30f, size.height * 0.18f), Offset(size.width * 0.30f, size.height * 0.82f), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(color, Offset(size.width * 0.70f, size.height * 0.18f), Offset(size.width * 0.70f, size.height * 0.82f), strokeWidth = stroke, cap = StrokeCap.Round)
+    }
+}

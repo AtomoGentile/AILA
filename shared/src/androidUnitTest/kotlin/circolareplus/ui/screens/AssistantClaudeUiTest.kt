@@ -214,7 +214,7 @@ class AssistantClaudeUiTest {
         compose.onNodeWithContentDescription("Livello di ragionamento").performClick()
         compose.mainClock.advanceTimeBy(450)
         compose.onNodeWithContentDescription("Livello di ragionamento: Medio").assertIsDisplayed()
-        screenshot("aila-b5-model-picker-dark")
+        screenshot("aila-b6-model-picker-dark")
 
         compose.onNodeWithText("Alto").performClick()
         compose.mainClock.advanceTimeBy(300)
@@ -228,7 +228,18 @@ class AssistantClaudeUiTest {
     @Test fun activeConversationRendersCleanHeaderAndProse() {
         var toastOpened = false
         val chatMessages = listOf(
-            AssistantMessage("u1", AssistantAuthor.USER, "Preparami una scaletta veloce per ripassare fisica stasera"),
+            AssistantMessage(
+                id = "u1",
+                author = AssistantAuthor.USER,
+                text = "Preparami una scaletta veloce per ripassare fisica stasera",
+                attachedFiles = listOf(
+                    circolareplus.ai.assistant.AssistantAttachedFile(
+                        localId = "voice-1",
+                        name = "vocale_fisica.m4a",
+                        service = "AUDIO"
+                    )
+                )
+            ),
             AssistantMessage(
                 id = "a1",
                 author = AssistantAuthor.ASSISTANT,
@@ -269,10 +280,11 @@ class AssistantClaudeUiTest {
         compose.onNodeWithText("Chat in incognito").assertDoesNotExist()
         compose.onNodeWithText("Piano di ripasso", substring = true).assertIsDisplayed()
         compose.onNodeWithContentDescription("Copia risposta").assertIsDisplayed()
-        screenshot("aila-b4-chat-light")
+        compose.onNodeWithContentDescription("Riproduci vocale").assertIsDisplayed()
+        screenshot("aila-b6-chat-voice-light")
 
         compose.runOnIdle { AppTheme.isDarkMode = true }
-        screenshot("aila-b4-chat-dark")
+        screenshot("aila-b6-chat-voice-dark")
 
         compose.onNodeWithText("Risposta pronta").performClick()
         compose.runOnIdle { assertTrue(toastOpened) }
