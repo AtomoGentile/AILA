@@ -5443,6 +5443,8 @@ fun MainAppShell(
                             assistantEffort = AppContainer.settings.assistantEffortLevel
                             assistantThinking = AppContainer.settings.assistantThinkingEnabled
                         },
+                        userInitials = "${user.firstName.take(1)}${user.lastName.take(1)}".uppercase().ifBlank { "AI" },
+                        userDisplayName = listOf(user.firstName, user.lastName).filter { it.isNotBlank() }.joinToString(" "),
                         finishedToastConversation = assistantFinishedToast,
                         onDismissFinishedToast = { assistantFinishedToast = null },
                         onOpenSource = { source ->

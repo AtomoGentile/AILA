@@ -27,10 +27,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -157,6 +159,8 @@ fun AssistantChatScreen(
     localModelInstalled: Boolean = true,
     effortLevel: Int = if (thinkingEnabled) 2 else 1,
     onEffortLevelChange: (Int) -> Unit = { onThinkingChange(it >= 2) },
+    userInitials: String = "AI",
+    userDisplayName: String = "",
     finishedToastConversation: AssistantConversation? = null,
     onDismissFinishedToast: () -> Unit = {}
 ) {
@@ -295,13 +299,53 @@ fun AssistantChatScreen(
         val drawerWidth = (maxWidth * 0.82f).coerceIn(272.dp, 336.dp)
         val drawerWidthPx = with(density) { drawerWidth.toPx() }
 
-        // Sidebar stile Gemini
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(drawerWidthPx, isSearchOpen, isModelSheetOpen) {
+                    if (isSearchOpen || isModelSheetOpen) return@pointerInput
+                    var activeDrag = false
+                    var lastVelocityDir = 0f
+                    detectHorizontalDragGestures(
+                        onDragStart = {
+                            activeDrag = true
+                            lastVelocityDir = 0f
+                        },
+                        onHorizontalDrag = { _, dragAmount ->
+                            if (!activeDrag) return@detectHorizontalDragGestures
+                            // Se il cassetto è chiuso e l'utente trascina verso sinistra, non fare nulla
+                            if (drawerProgress.value <= 0.001f && dragAmount < 0f) return@detectHorizontalDragGestures
+                            lastVelocityDir = dragAmount
+                            val next = (drawerProgress.value + dragAmount / drawerWidthPx).coerceIn(0f, 1f)
+                            scope.launch { drawerProgress.snapTo(next) }
+                        },
+                        onDragEnd = {
+                            if (activeDrag) {
+                                val shouldOpen = when {
+                                    lastVelocityDir > 6f -> true
+                                    lastVelocityDir < -6f -> false
+                                    else -> drawerProgress.value >= 0.30f
+                                }
+                                setDrawerOpen(shouldOpen)
+                            }
+                            activeDrag = false
+                        },
+                        onDragCancel = {
+                            if (activeDrag) setDrawerOpen(drawerProgress.value >= 0.30f)
+                            activeDrag = false
+                        }
+                    )
+                }
+        ) {
+        // Sidebar stile Gemini con iniziali utente in basso a sinistra
         if (drawerProgress.value > 0.005f) {
             AssistantLeftDrawer(
                 palette = palette,
                 drawerWidth = drawerWidth,
                 conversations = conversations,
                 activeConversationId = activeConversationId,
+                userInitials = userInitials,
+                userDisplayName = userDisplayName,
                 activeModelLabel = currentModel.title,
                 onSelectConversation = { conv ->
                     setDrawerOpen(false)
@@ -346,40 +390,19 @@ fun AssistantChatScreen(
                     } else Modifier
                 )
                 .assistantNeuralBackdrop(palette, prominent = showWelcome)
-                .pointerInput(drawerWidthPx) {
-                    var draggingDrawer = false
-                    detectHorizontalDragGestures(
-                        onDragStart = { start ->
-                            draggingDrawer = drawerProgress.value > 0.05f || start.x <= 48.dp.toPx()
-                        },
-                        onHorizontalDrag = { _, dragAmount ->
-                            if (!draggingDrawer) return@detectHorizontalDragGestures
-                            val next = (drawerProgress.value + dragAmount / drawerWidthPx).coerceIn(0f, 1f)
-                            scope.launch { drawerProgress.snapTo(next) }
-                        },
-                        onDragEnd = {
-                            if (draggingDrawer) setDrawerOpen(drawerProgress.value >= 0.35f)
-                            draggingDrawer = false
-                        },
-                        onDragCancel = {
-                            if (draggingDrawer) setDrawerOpen(drawerProgress.value >= 0.35f)
-                            draggingDrawer = false
-                        }
-                    )
-                }
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 AssistantHeaderBar(
                     palette = palette,
                     hasMessages = messages.isNotEmpty() || isThinking,
                     isThinking = isThinking,
-                    conversationTitle = headerTitle,
-                    modelSubtitle = headerModelSubtitle,
+                    modelShortLabel = currentModel.shortLabel,
+                    effortLabel = currentEffortLabel,
+                    isModelPickerOpen = isModelSheetOpen,
                     isIncognito = isIncognito,
                     isPinned = activeConversation?.pinned == true,
-                    onBackClick = onBackClick,
                     onOpenDrawer = { setDrawerOpen(drawerProgress.value < 0.5f) },
-                    onOpenModelSheet = { isModelSheetOpen = true },
+                    onToggleModelPicker = { isModelSheetOpen = !isModelSheetOpen },
                     onOpenSearch = { isSearchOpen = true },
                     onToggleIncognito = {
                         val next = !isIncognito
@@ -552,9 +575,15 @@ fun AssistantChatScreen(
                     onSend(question)
                 }
                 if (recording) {
-                    Box(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
-                        VoiceRecordingPanel(
-                            onStop = { recorder?.stop() },
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.navigationBars)
+                            .padding(horizontal = 14.dp)
+                            .padding(top = 6.dp, bottom = 12.dp)
+                    ) {
+                        ChatVoiceRecordingBar(
+                            onSend = { recorder?.stop() },
                             onCancel = { recorder?.cancel() }
                         )
                     }
@@ -571,9 +600,6 @@ fun AssistantChatScreen(
                         onRemoveAttachedFile = onRemoveAttachedFile,
                         onOpenAttachedFile = onOpenAttachedFile,
                         attachmentError = attachmentError,
-                        modelShortLabel = currentModel.shortLabel,
-                        effortLabel = currentEffortLabel,
-                        onOpenModelSheet = { isModelSheetOpen = true },
                         onOpenAttachments = if (onAttachContent != null) ({ attachmentsMenu = true }) else null,
                         onStartVoice = if (recorder != null) ({
                             attachmentError = null
@@ -617,25 +643,21 @@ fun AssistantChatScreen(
             )
         }
 
-        AnimatedVisibility(
+        // Picker modelli/ragionamento animato ancorato in alto come Gemini
+        AssistantModelPickerPopup(
             visible = isModelSheetOpen,
-            enter = fadeIn(ailaFadeSpec(AilaDuration.Quick)),
-            exit = fadeOut(ailaFadeSpec(AilaDuration.Quick)),
-            modifier = Modifier.fillMaxSize().zIndex(20f)
-        ) {
-            AssistantModelAndEffortSheet(
-                palette = palette,
-                options = modelOptions,
-                selectedProviderId = currentModel.providerId,
-                effortLevel = effortLevel,
-                onSelectProvider = onSelectAiProvider,
-                onSelectEffort = { level ->
-                    onEffortLevelChange(level)
-                    onThinkingChange(level >= 2)
-                },
-                onOpenAiSettings = onOpenAiSettings,
-                onDismiss = { isModelSheetOpen = false }
-            )
+            palette = palette,
+            options = modelOptions,
+            selectedProviderId = currentModel.providerId,
+            effortLevel = effortLevel,
+            onSelectProvider = onSelectAiProvider,
+            onSelectEffort = { level ->
+                onEffortLevelChange(level)
+                onThinkingChange(level >= 2)
+            },
+            onOpenAiSettings = onOpenAiSettings,
+            onDismiss = { isModelSheetOpen = false }
+        )
         }
     }
 

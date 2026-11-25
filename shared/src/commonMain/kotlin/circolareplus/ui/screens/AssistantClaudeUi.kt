@@ -4,19 +4,28 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -42,7 +51,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -56,7 +64,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
@@ -70,7 +77,11 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -108,10 +119,8 @@ import kotlin.math.sin
 
 /**
  * Palette AILA Neural Expressive ispirata a Gemini e coerente con ACA:
- * - Dark mode: neri profondi OLED (`#07080D`) con bagliore blu/indaco radiale, superfici elevate
- *   (`#13151C`, `#1B1E28`) e colori vivi dell'accento scelto dall'utente.
- * - Light mode: fondo luminoso AILA (`#F7F9FF`) con alone soffuso del brand, superfici tonali
- *   piene (`#FFFFFF`, `#EDF1FC`) e bersagli touch grandi (48dp).
+ * neri profondi OLED in dark mode con bagliore radiale blu/indaco del brand,
+ * tema chiaro luminoso coordinato e bersagli touch grandi (48dp).
  */
 internal data class AssistantSurfacePalette(
     val canvasBg: Color,
@@ -157,7 +166,7 @@ internal fun assistantSurfacePalette(): AssistantSurfacePalette {
             ink = Color(0xFFF3F5FA),
             inkMuted = Color(0xFFA6AEC2),
             inkFaint = Color(0xFF737C91),
-            hairline = Color.White.copy(alpha = 0.08f),
+            hairline = Color.White.copy(alpha = 0.09f),
             accent = accent,
             onAccent = onAccent,
             secondaryAccent = secondary,
@@ -195,7 +204,7 @@ internal fun assistantSurfacePalette(): AssistantSurfacePalette {
     }
 }
 
-/** Bagliore radiale ambientale stile Gemini / AILA Neural Expressive sul fondo della schermata iniziale. */
+/** Bagliore radiale ambientale stile Gemini / AILA Neural Expressive. */
 internal fun Modifier.assistantNeuralBackdrop(palette: AssistantSurfacePalette, prominent: Boolean): Modifier =
     this
         .background(palette.canvasBg)
@@ -252,28 +261,25 @@ internal fun assistantModelOptions(
             providerId = AiProvider.AILA_CLOUD.id,
             title = "AILA Cloud",
             shortLabel = "AILA Cloud",
-            description = "Gemma 4 incluso in AILA: pronto subito, nessuna chiave da configurare."
+            description = "Gemma 4 incluso in AILA"
         ),
         AssistantModelOption(
             providerId = AiProvider.GOOGLE_AI_STUDIO.id,
             title = "Google Gemini",
             shortLabel = "Gemini",
-            description = "Gemini con la tua chiave personale di Google AI Studio.",
-            statusNote = if (hasGoogleKey) "Pronto" else "Chiave API da configurare"
+            description = if (hasGoogleKey) "API key personale attiva" else "Chiave API da configurare"
         ),
         AssistantModelOption(
             providerId = AiProvider.ON_DEVICE.id,
             title = cleanLocal,
             shortLabel = shortLocal,
-            description = "Gira sul dispositivo anche offline, nessun dato esce dal telefono.",
-            statusNote = if (localModelInstalled) "Installato" else "Da scaricare"
+            description = if (localModelInstalled) "Modello locale offline" else "Modello locale da scaricare"
         ),
         AssistantModelOption(
             providerId = AiProvider.COMPATIBLE_API.id,
             title = compatTitle,
             shortLabel = "API",
-            description = "Endpoint personalizzato compatibile con OpenAI o Anthropic.",
-            statusNote = if (hasCompatibleConfig) "Pronto" else "Da configurare"
+            description = if (hasCompatibleConfig) "Endpoint personalizzato" else "Endpoint da configurare"
         )
     )
 }
@@ -283,12 +289,11 @@ internal fun assistantModelOptions(
 // =================================================================================================
 
 @Composable
-internal fun AssistantMenuGlyph(modifier: Modifier = Modifier.size(22.dp), color: Color) {
+internal fun AssistantMenuGlyph(modifier: Modifier = Modifier.size(21.dp), color: Color) {
     Canvas(modifier) {
-        val stroke = (size.minDimension * 0.095f).coerceAtLeast(1.8.dp.toPx())
-        drawLine(color, Offset(size.width * 0.14f, size.height * 0.28f), Offset(size.width * 0.86f, size.height * 0.28f), stroke, StrokeCap.Round)
-        drawLine(color, Offset(size.width * 0.14f, size.height * 0.50f), Offset(size.width * 0.86f, size.height * 0.50f), stroke, StrokeCap.Round)
-        drawLine(color, Offset(size.width * 0.14f, size.height * 0.72f), Offset(size.width * 0.62f, size.height * 0.72f), stroke, StrokeCap.Round)
+        val stroke = (size.minDimension * 0.10f).coerceAtLeast(1.8.dp.toPx())
+        drawLine(color, Offset(size.width * 0.14f, size.height * 0.36f), Offset(size.width * 0.86f, size.height * 0.36f), stroke, StrokeCap.Round)
+        drawLine(color, Offset(size.width * 0.14f, size.height * 0.64f), Offset(size.width * 0.86f, size.height * 0.64f), stroke, StrokeCap.Round)
     }
 }
 
@@ -461,7 +466,8 @@ internal fun AssistantMicGlyph(modifier: Modifier = Modifier.size(22.dp), color:
 }
 
 // =================================================================================================
-// Top bar trasparente sul fondo Neural Expressive con tasti grandi (48dp)
+// Top bar stile Gemini mobile: Menu lista chat + Selettore modello subito accanto, NIENTE tasto
+// indietro (ci sono le gesture), NIENTE scritta "Incognito" in alto
 // =================================================================================================
 
 @Composable
@@ -469,13 +475,13 @@ internal fun AssistantHeaderBar(
     palette: AssistantSurfacePalette,
     hasMessages: Boolean,
     isThinking: Boolean,
-    conversationTitle: String?,
-    modelSubtitle: String?,
+    modelShortLabel: String,
+    effortLabel: String,
+    isModelPickerOpen: Boolean,
     isIncognito: Boolean,
     isPinned: Boolean,
-    onBackClick: () -> Unit,
     onOpenDrawer: () -> Unit,
-    onOpenModelSheet: () -> Unit,
+    onToggleModelPicker: () -> Unit,
     onOpenSearch: () -> Unit,
     onToggleIncognito: () -> Unit,
     onNewChat: () -> Unit,
@@ -483,6 +489,11 @@ internal fun AssistantHeaderBar(
     onDeleteCurrent: () -> Unit
 ) {
     var overflowOpen by remember { mutableStateOf(false) }
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (isModelPickerOpen) 180f else 0f,
+        animationSpec = ailaSpatialSpring(),
+        label = "modelPickerChevron"
+    )
 
     Row(
         modifier = Modifier
@@ -491,129 +502,79 @@ internal fun AssistantHeaderBar(
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Sinistra: Indietro (48dp) + Menu cassetto (48dp)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(palette.elevatedBg.copy(alpha = 0.82f))
-                    .border(1.dp, palette.hairline, CircleShape)
-                    .clickable(role = Role.Button, onClick = onBackClick)
-                    .semantics { contentDescription = "Indietro" },
-                contentAlignment = Alignment.Center
-            ) {
-                AssistantArrowLeftGlyph(color = palette.ink)
-            }
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(palette.elevatedBg.copy(alpha = 0.82f))
-                    .border(1.dp, palette.hairline, CircleShape)
-                    .clickable(role = Role.Button, onClick = onOpenDrawer)
-                    .semantics { contentDescription = "Apri menu chat" },
-                contentAlignment = Alignment.Center
-            ) {
-                AssistantMenuGlyph(color = palette.ink)
-            }
-        }
-
-        Spacer(Modifier.width(12.dp))
-
-        // Centro: titolo + modello cliccabile (oppure "AILA" / "Chat in incognito" a chat vuota)
+        // Sinistra: Menu cronologia chat (48dp)
         Box(
-            modifier = Modifier.weight(1f),
-            contentAlignment = if (hasMessages) Alignment.CenterStart else Alignment.Center
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .clickable(role = Role.Button, onClick = onOpenDrawer)
+                .semantics { contentDescription = "Apri menu chat" },
+            contentAlignment = Alignment.Center
         ) {
-            if (hasMessages) {
-                Column(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable(role = Role.Button, onClick = onOpenModelSheet)
-                        .padding(horizontal = 4.dp, vertical = 2.dp),
-                    verticalArrangement = Arrangement.spacedBy(1.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (isIncognito) {
-                            AssistantGhostGlyph(Modifier.size(15.dp), color = palette.inkMuted)
-                        }
-                        Text(
-                            text = if (isIncognito) "Chat in incognito" else (conversationTitle ?: "AILA Assistant"),
-                            style = TextStyle(
-                                fontFamily = FontFamily.Default,
-                                fontSize = 15.5.sp,
-                                lineHeight = 20.sp,
-                                fontWeight = FontWeight.SemiBold
-                            ),
-                            color = palette.ink,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    val sub = when {
-                        isThinking -> "Sto elaborando…"
-                        !modelSubtitle.isNullOrBlank() -> modelSubtitle
-                        else -> null
-                    }
-                    if (sub != null) {
-                        Text(
-                            text = sub,
-                            style = TextStyle(
-                                fontFamily = FontFamily.Default,
-                                fontSize = 12.5.sp,
-                                lineHeight = 16.sp,
-                                fontWeight = FontWeight.Medium
-                            ),
-                            color = if (isThinking) palette.accent else palette.inkMuted,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            } else if (isIncognito) {
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(100.dp))
-                        .background(palette.pillBg)
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    AssistantGhostGlyph(Modifier.size(15.dp), color = palette.ink)
-                    Text(
-                        text = "Incognito",
-                        style = TextStyle(fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold),
-                        color = palette.ink
-                    )
-                }
+            AssistantMenuGlyph(color = palette.ink)
+        }
+
+        Spacer(Modifier.width(4.dp))
+
+        // Subito vicino al menu: Selettore Modello + Ragionamento come "Hydrogen Media ⌄" di Gemini!
+        Row(
+            modifier = Modifier
+                .height(44.dp)
+                .clip(RoundedCornerShape(100.dp))
+                .background(if (isModelPickerOpen) palette.pillBg else Color.Transparent)
+                .clickable(role = Role.Button, onClick = onToggleModelPicker)
+                .padding(horizontal = 12.dp)
+                .semantics { contentDescription = "Seleziona modello e ragionamento" },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = modelShortLabel,
+                style = TextStyle(
+                    fontFamily = FontFamily.Default,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = (-0.3).sp
+                ),
+                color = palette.ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = if (isThinking) "…" else effortLabel,
+                style = TextStyle(
+                    fontFamily = FontFamily.Default,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Normal
+                ),
+                color = if (isThinking) palette.accent else palette.inkMuted,
+                maxLines = 1
+            )
+            Box(modifier = Modifier.graphicsLayer { rotationZ = chevronRotation }) {
+                AssistantChevronGlyph(Modifier.size(14.dp), color = palette.inkMuted)
             }
         }
 
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.weight(1f))
 
-        // Destra: a chat vuota Incognito (48dp); in chat Nuova chat (48dp) + ⋮ (48dp)
+        // Destra: a chat vuota Incognito (48dp); in conversazione Nuova chat + ⋮ (48dp)
         Box {
             if (hasMessages) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
                             .size(48.dp)
                             .clip(CircleShape)
-                            .background(palette.elevatedBg.copy(alpha = 0.82f))
-                            .border(1.dp, palette.hairline, CircleShape)
                             .clickable(role = Role.Button, onClick = onNewChat)
                             .semantics { contentDescription = "Nuova chat" },
                         contentAlignment = Alignment.Center
                     ) {
-                        AppIcons.NewChat(Modifier.size(20.dp), color = palette.ink)
+                        AppIcons.NewChat(Modifier.size(21.dp), color = palette.ink)
                     }
                     Box(
                         modifier = Modifier
                             .size(48.dp)
                             .clip(CircleShape)
-                            .background(palette.elevatedBg.copy(alpha = 0.82f))
-                            .border(1.dp, palette.hairline, CircleShape)
                             .clickable(role = Role.Button, onClick = { overflowOpen = true })
                             .semantics { contentDescription = "Altre opzioni chat" },
                         contentAlignment = Alignment.Center
@@ -626,8 +587,7 @@ internal fun AssistantHeaderBar(
                     modifier = Modifier
                         .size(48.dp)
                         .clip(CircleShape)
-                        .background(if (isIncognito) palette.accent else palette.elevatedBg.copy(alpha = 0.82f))
-                        .border(1.dp, if (isIncognito) palette.accent else palette.hairline, CircleShape)
+                        .background(if (isIncognito) palette.accent else Color.Transparent)
                         .clickable(role = Role.Button, onClick = onToggleIncognito)
                         .semantics {
                             contentDescription = if (isIncognito) "Esci dalla chat in incognito" else "Chat in incognito"
@@ -638,7 +598,7 @@ internal fun AssistantHeaderBar(
                         if (inc) {
                             AppIcons.Close(Modifier.size(20.dp), color = palette.onAccent)
                         } else {
-                            AssistantGhostGlyph(Modifier.size(21.dp), color = palette.ink)
+                            AssistantGhostGlyph(Modifier.size(22.dp), color = palette.ink)
                         }
                     }
                 }
@@ -679,7 +639,305 @@ internal fun AssistantHeaderBar(
 }
 
 // =================================================================================================
-// Sidebar stile Gemini (scuro profondo #12141B, pillola "Nuova chat", Fissate/Tutte, footer AI)
+// Menu fluttuante animato Modello + Effort con pillola che aumenta (ancorato in alto come Gemini!)
+// =================================================================================================
+
+@Composable
+internal fun AssistantModelPickerPopup(
+    visible: Boolean,
+    palette: AssistantSurfacePalette,
+    options: List<AssistantModelOption>,
+    selectedProviderId: String,
+    effortLevel: Int,
+    onSelectProvider: (String) -> Unit,
+    onSelectEffort: (Int) -> Unit,
+    onOpenAiSettings: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var effortExpanded by remember(visible) { mutableStateOf(false) }
+    val effortChevronRot by animateFloatAsState(
+        targetValue = if (effortExpanded) 180f else 0f,
+        animationSpec = ailaSpatialSpring(),
+        label = "effortChevron"
+    )
+
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(ailaFadeSpec(AilaDuration.Quick)),
+        exit = fadeOut(ailaFadeSpec(AilaDuration.Quick)),
+        modifier = Modifier.fillMaxSize().zIndex(20f)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.42f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss
+                )
+        ) {
+            AnimatedVisibility(
+                visible = visible,
+                enter = scaleIn(
+                    animationSpec = ailaSpatialSpring(),
+                    initialScale = 0.88f,
+                    transformOrigin = TransformOrigin(0.32f, 0f)
+                ) + slideInVertically(ailaSpatialSpring()) { -it / 6 } + fadeIn(ailaFadeSpec(AilaDuration.Quick)),
+                exit = scaleOut(
+                    animationSpec = tween(160),
+                    targetScale = 0.92f,
+                    transformOrigin = TransformOrigin(0.32f, 0f)
+                ) + fadeOut(tween(140)),
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+                    .padding(top = 62.dp, start = 16.dp, end = 16.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .widthIn(min = 280.dp, max = 360.dp)
+                        .fillMaxWidth()
+                        .shadow(20.dp, RoundedCornerShape(28.dp), ambientColor = Color.Black.copy(alpha = 0.45f))
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(palette.elevatedBg)
+                        .border(1.dp, palette.hairline, RoundedCornerShape(28.dp))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = {}
+                        )
+                        .animateContentSize(ailaSpatialSpring())
+                        .padding(vertical = 10.dp)
+                ) {
+                    // Lista modelli/provider stile Gemini (con spunta animata a sinistra)
+                    options.forEach { option ->
+                        val selected = option.providerId == selectedProviderId
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(if (selected) palette.activeRowBg else Color.Transparent)
+                                .clickable(role = Role.Button) { onSelectProvider(option.providerId) }
+                                .padding(horizontal = 12.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Box(modifier = Modifier.size(22.dp), contentAlignment = Alignment.Center) {
+                                androidx.compose.animation.AnimatedVisibility(
+                                    visible = selected,
+                                    enter = scaleIn(ailaSpatialSpring()) + fadeIn(ailaFadeSpec(AilaDuration.Quick)),
+                                    exit = scaleOut(tween(120)) + fadeOut(tween(120))
+                                ) {
+                                    AppIcons.Check(Modifier.size(18.dp), color = palette.accent)
+                                }
+                            }
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(
+                                    text = option.title,
+                                    style = TextStyle(
+                                        fontSize = 15.5.sp,
+                                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
+                                    ),
+                                    color = if (selected) palette.activeRowInk else palette.ink,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = option.description,
+                                    style = TextStyle(fontSize = 13.sp, lineHeight = 17.sp),
+                                    color = if (selected) palette.activeRowInk.copy(alpha = 0.78f) else palette.inkMuted,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+
+                    // Divisore + riga "Livello di ragionamento" che espande la pillola che aumenta!
+                    Spacer(Modifier.height(6.dp))
+                    Box(Modifier.fillMaxWidth().padding(horizontal = 18.dp).height(1.dp).background(palette.hairline))
+                    Spacer(Modifier.height(4.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .clickable(role = Role.Button) { effortExpanded = !effortExpanded }
+                            .padding(start = 46.dp, end = 16.dp, top = 12.dp, bottom = 12.dp)
+                            .semantics { contentDescription = "Livello di ragionamento" },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = "Livello di ragionamento",
+                                style = TextStyle(fontSize = 15.5.sp, fontWeight = FontWeight.Medium),
+                                color = palette.ink
+                            )
+                            Text(
+                                text = AssistantEffortLabels[effortLevel.coerceIn(0, AssistantEffortLabels.lastIndex)],
+                                style = TextStyle(fontSize = 13.sp),
+                                color = palette.accent
+                            )
+                        }
+                        Box(modifier = Modifier.graphicsLayer { rotationZ = effortChevronRot }) {
+                            AssistantChevronGlyph(Modifier.size(16.dp), color = palette.inkMuted)
+                        }
+                    }
+
+                    // Slider tattile "pillola che aumenta" con animazione molleggiata
+                    AnimatedVisibility(
+                        visible = effortExpanded,
+                        enter = expandVertically(ailaSpatialSpring()) + fadeIn(ailaFadeSpec(AilaDuration.Quick)),
+                        exit = shrinkVertically(ailaSpatialSpring()) + fadeOut(tween(120))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 18.dp)
+                                .padding(top = 6.dp, bottom = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            AssistantEffortPillSlider(
+                                level = effortLevel,
+                                steps = AssistantEffortLabels.size,
+                                palette = palette,
+                                onLevelChange = onSelectEffort
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                AssistantEffortLabels.forEachIndexed { idx, label ->
+                                    val active = idx == effortLevel.coerceIn(0, AssistantEffortLabels.lastIndex)
+                                    Text(
+                                        text = label,
+                                        style = TextStyle(
+                                            fontSize = 12.sp,
+                                            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal
+                                        ),
+                                        color = if (active) palette.accent else palette.inkFaint,
+                                        modifier = Modifier.clickable { onSelectEffort(idx) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Link rapido Impostazioni AI
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 18.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        Text(
+                            text = "Impostazioni AI",
+                            style = TextStyle(fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold),
+                            color = palette.accent,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(100.dp))
+                                .clickable(role = Role.Button) {
+                                    onDismiss()
+                                    onOpenAiSettings()
+                                }
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Pillola tattile che cresce fluidamente da sinistra verso destra al tocco o al trascinamento. */
+@Composable
+internal fun AssistantEffortPillSlider(
+    level: Int,
+    steps: Int,
+    palette: AssistantSurfacePalette,
+    onLevelChange: (Int) -> Unit
+) {
+    var widthPx by remember { mutableIntStateOf(1) }
+    val clamped = level.coerceIn(0, steps - 1)
+    val targetFraction = (clamped + 1f) / steps.toFloat()
+    val animatedFraction by animateFloatAsState(
+        targetValue = targetFraction.coerceIn(0.24f, 1f),
+        animationSpec = spring(dampingRatio = 0.78f, stiffness = 420f),
+        label = "effortPillGrow"
+    )
+
+    fun stepFromX(x: Float): Int {
+        val ratio = (x / widthPx.coerceAtLeast(1)).coerceIn(0f, 0.999f)
+        return (ratio * steps).toInt().coerceIn(0, steps - 1)
+    }
+
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .clip(RoundedCornerShape(26.dp))
+            .background(palette.pillBg)
+            .onSizeChanged { widthPx = it.width }
+            .pointerInput(steps) {
+                detectTapGestures { offset -> onLevelChange(stepFromX(offset.x)) }
+            }
+            .pointerInput(steps) {
+                detectHorizontalDragGestures { change, _ ->
+                    change.consume()
+                    onLevelChange(stepFromX(change.position.x))
+                }
+            }
+            .semantics {
+                contentDescription = "Livello di ragionamento: ${AssistantEffortLabels[clamped]}"
+            }
+    ) {
+        val fillWidth = maxWidth * animatedFraction
+        Box(
+            modifier = Modifier
+                .width(fillWidth)
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(26.dp))
+                .background(palette.accent)
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 11.dp)
+                    .width(3.dp)
+                    .height(20.dp)
+                    .clip(CircleShape)
+                    .background(palette.onAccent.copy(alpha = 0.92f))
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            for (i in 0 until steps) {
+                val insideFill = i <= clamped
+                Box(modifier = Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                    if (i != clamped) {
+                        Box(
+                            modifier = Modifier
+                                .size(if (insideFill) 5.dp else 4.5.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (insideFill) palette.onAccent.copy(alpha = 0.45f)
+                                    else palette.inkFaint.copy(alpha = 0.55f)
+                                )
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// =================================================================================================
+// Sidebar laterale stile Gemini con avatar INIZIALI del nome in basso a sinistra + Impostazioni AI
 // =================================================================================================
 
 @Composable
@@ -688,6 +946,8 @@ internal fun AssistantLeftDrawer(
     drawerWidth: Dp,
     conversations: List<AssistantConversation>,
     activeConversationId: String?,
+    userInitials: String,
+    userDisplayName: String,
     activeModelLabel: String,
     onSelectConversation: (AssistantConversation) -> Unit,
     onTogglePin: (String) -> Unit,
@@ -717,7 +977,7 @@ internal fun AssistantLeftDrawer(
     ) {
         Spacer(Modifier.height(10.dp))
 
-        // Intestazione sidebar stile Gemini: logo AILA + nome a sinistra, Cerca + Chiudi (44dp) a destra
+        // Intestazione sidebar: logo AILA + nome, Cerca + Chiudi (44dp)
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -763,7 +1023,7 @@ internal fun AssistantLeftDrawer(
 
         Spacer(Modifier.height(14.dp))
 
-        // Pulsante primario "Nuova chat" a pillola grande (50dp), stile Gemini
+        // Pulsante grande "Nuova chat" (50dp)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -871,7 +1131,7 @@ internal fun AssistantLeftDrawer(
             }
         }
 
-        // Footer sidebar stile Gemini: stato AI + bottone grande Impostazioni AI (48dp)
+        // Footer sidebar: iniziali del nome dell'utente in basso a sinistra + nome/modello + ingranaggio AI a destra
         Box(Modifier.fillMaxWidth().height(1.dp).background(palette.hairline))
         Row(
             modifier = Modifier
@@ -879,26 +1139,32 @@ internal fun AssistantLeftDrawer(
                 .padding(top = 10.dp, bottom = 12.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .clickable(role = Role.Button, onClick = onOpenAiSettings)
-                .padding(horizontal = 8.dp, vertical = 8.dp)
+                .padding(horizontal = 6.dp, vertical = 6.dp)
                 .semantics { contentDescription = "Impostazioni AI" },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(42.dp)
                     .clip(CircleShape)
-                    .background(palette.pillBg),
+                    .background(palette.accent),
                 contentAlignment = Alignment.Center
             ) {
-                AssistantSettingsGearGlyph(color = palette.ink)
+                Text(
+                    text = userInitials.ifBlank { "AI" },
+                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold),
+                    color = palette.onAccent,
+                    maxLines = 1
+                )
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Impostazioni AI",
-                    style = TextStyle(fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold),
+                    text = userDisplayName.ifBlank { "Impostazioni AI" },
+                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
                     color = palette.ink,
-                    maxLines = 1
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = activeModelLabel,
@@ -908,7 +1174,12 @@ internal fun AssistantLeftDrawer(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            AppIcons.ChevronRight(Modifier.size(16.dp), color = palette.inkFaint)
+            Box(
+                modifier = Modifier.size(40.dp).clip(CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                AssistantSettingsGearGlyph(Modifier.size(20.dp), color = palette.inkMuted)
+            }
         }
     }
 }
@@ -1178,8 +1449,7 @@ internal fun highlightSearchMatch(text: String, query: String, baseColor: Color)
 }
 
 // =================================================================================================
-// Composer Neural Expressive stile Gemini: pillola grande, anello luminoso al focus,
-// UN SOLO BasicTextField sempre montato, pillola Modello sempre accessibile e tasti da 48dp
+// Composer pulito stile Gemini mobile (1 pillola ampia: + | Chiedi ad AILA | Mic | Invia 48dp)
 // =================================================================================================
 
 @Composable
@@ -1195,9 +1465,6 @@ internal fun AssistantComposer(
     onRemoveAttachedFile: (String) -> Unit,
     onOpenAttachedFile: (AssistantAttachedFile) -> Unit,
     attachmentError: String?,
-    modelShortLabel: String,
-    effortLabel: String,
-    onOpenModelSheet: () -> Unit,
     onOpenAttachments: (() -> Unit)?,
     onStartVoice: (() -> Unit)?,
     onSend: () -> Unit
@@ -1295,14 +1562,15 @@ internal fun AssistantComposer(
             )
         }
 
-        val shape = RoundedCornerShape(28.dp)
+        val shape = RoundedCornerShape(30.dp)
         val borderBrush = if (focused && !AppTheme.isNothing) {
             Brush.linearGradient(listOf(AilaAssistantViolet, AilaAssistantBlue, AilaAssistantTeal))
         } else {
             SolidColor(palette.composerBorder)
         }
 
-        Column(
+        // Pillola unica elegante stile Gemini mobile (1 BasicTextField fisso, tasti grandi 48dp)
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .shadow(
@@ -1315,14 +1583,28 @@ internal fun AssistantComposer(
                 .background(palette.composerBg)
                 .border(if (focused) 1.5.dp else 1.dp, borderBrush, shape)
                 .animateContentSize(ailaSpatialSpring())
-                .padding(start = 16.dp, end = 10.dp, top = 14.dp, bottom = 10.dp)
+                .padding(horizontal = 8.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Un solo BasicTextField sempre montato: il focus non si perde mai
+            if (onOpenAttachments != null) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .clickable(role = Role.Button, onClick = onOpenAttachments)
+                        .semantics { contentDescription = "Menu allegati" },
+                    contentAlignment = Alignment.Center
+                ) {
+                    AppIcons.Plus(Modifier.size(23.dp), color = palette.ink)
+                }
+            } else {
+                Spacer(Modifier.width(10.dp))
+            }
+
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 36.dp)
-                    .padding(end = 6.dp, bottom = 10.dp),
+                    .weight(1f)
+                    .padding(horizontal = 6.dp, vertical = 8.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
                 if (draft.isEmpty()) {
@@ -1334,7 +1616,7 @@ internal fun AssistantComposer(
                         Text(
                             text = if (idx < 0 || rotatingPlaceholders.isEmpty()) placeholderText
                             else rotatingPlaceholders[idx],
-                            style = TextStyle(fontSize = 16.5.sp, lineHeight = 22.sp),
+                            style = TextStyle(fontSize = 16.sp, lineHeight = 22.sp),
                             color = palette.inkFaint,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -1346,8 +1628,8 @@ internal fun AssistantComposer(
                     onValueChange = onDraftChange,
                     maxLines = 5,
                     textStyle = TextStyle(
-                        fontSize = 16.5.sp,
-                        lineHeight = 23.sp,
+                        fontSize = 16.sp,
+                        lineHeight = 22.sp,
                         color = palette.ink,
                         fontFamily = FontFamily.Default
                     ),
@@ -1358,330 +1640,42 @@ internal fun AssistantComposer(
                 )
             }
 
-            // Barra controlli grandi (48dp): + | Modello ⌄ | 1 solo Mic | Invia Expressive
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (onOpenAttachments != null) {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(palette.pillBg)
-                            .clickable(role = Role.Button, onClick = onOpenAttachments)
-                            .semantics { contentDescription = "Menu allegati" },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        AppIcons.Plus(Modifier.size(22.dp), color = palette.ink)
-                    }
-                    Spacer(Modifier.width(8.dp))
-                }
-
-                // Pillola modello stile "Hydrogen ⌄" di Gemini, grande e leggibile (44dp)
-                Row(
-                    modifier = Modifier
-                        .height(44.dp)
-                        .clip(RoundedCornerShape(100.dp))
-                        .background(palette.pillBg)
-                        .clickable(role = Role.Button, onClick = onOpenModelSheet)
-                        .padding(horizontal = 14.dp)
-                        .semantics { contentDescription = "Seleziona modello e ragionamento" },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(7.dp)
-                ) {
-                    Text(
-                        text = modelShortLabel,
-                        style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
-                        color = palette.ink,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = "· $effortLabel",
-                        style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Normal),
-                        color = palette.inkMuted,
-                        maxLines = 1
-                    )
-                    AssistantChevronGlyph(Modifier.size(12.dp), color = palette.inkMuted)
-                }
-
-                Spacer(Modifier.weight(1f))
-
-                if (onStartVoice != null) {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .clickable(enabled = !isThinking, role = Role.Button, onClick = onStartVoice)
-                            .semantics { contentDescription = "Registra vocale" },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        AssistantMicGlyph(Modifier.size(22.dp), color = palette.inkMuted)
-                    }
-                    Spacer(Modifier.width(6.dp))
-                }
-
+            if (onStartVoice != null) {
                 Box(
                     modifier = Modifier
                         .size(48.dp)
-                        .clip(sendShape)
-                        .background(sendBg)
-                        .clickable(
-                            interactionSource = sendInteraction,
-                            indication = null,
-                            enabled = canSend,
-                            role = Role.Button,
-                            onClick = onSend
-                        )
-                        .semantics { contentDescription = "Invia" },
+                        .clip(CircleShape)
+                        .clickable(enabled = !isThinking, role = Role.Button, onClick = onStartVoice)
+                        .semantics { contentDescription = "Registra vocale" },
                     contentAlignment = Alignment.Center
                 ) {
-                    AppIcons.ArrowUp(Modifier.size(22.dp), color = sendFg)
+                    AssistantMicGlyph(Modifier.size(22.dp), color = palette.inkMuted)
                 }
             }
-        }
-    }
-}
 
-// =================================================================================================
-// Foglio Modello, Provider e Ragionamento — Card Neural Expressive grandi e chiare in 1 schermata
-// =================================================================================================
-
-@Composable
-internal fun AssistantModelAndEffortSheet(
-    palette: AssistantSurfacePalette,
-    options: List<AssistantModelOption>,
-    selectedProviderId: String,
-    effortLevel: Int,
-    onSelectProvider: (String) -> Unit,
-    onSelectEffort: (Int) -> Unit,
-    onOpenAiSettings: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .zIndex(20f)
-            .background(Color.Black.copy(alpha = 0.56f))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onDismiss
-            ),
-        contentAlignment = Alignment.BottomCenter
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .widthIn(max = 540.dp)
-                .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
-                .background(palette.drawerBg)
-                .border(1.dp, palette.hairline, RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = {}
-                )
-                .windowInsetsPadding(WindowInsets.navigationBars)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 14.dp)
-                .padding(bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
             Box(
                 modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .width(40.dp)
-                    .height(4.dp)
-                    .clip(CircleShape)
-                    .background(palette.hairline)
-            )
-
-            // Titolo + chiudi grande (44dp)
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "Modello e provider",
-                    style = TextStyle(fontSize = 19.sp, fontWeight = FontWeight.Bold),
-                    color = palette.ink,
-                    modifier = Modifier.weight(1f)
-                )
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(palette.pillBg)
-                        .clickable(role = Role.Button, onClick = onDismiss)
-                        .semantics { contentDescription = "Chiudi selettore modello" },
-                    contentAlignment = Alignment.Center
-                ) {
-                    AppIcons.Close(Modifier.size(18.dp), color = palette.ink)
-                }
-            }
-
-            // Card grandi e cliccabili per ogni provider AI
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                options.forEach { option ->
-                    val selected = option.providerId == selectedProviderId
-                    val cardShape = RoundedCornerShape(20.dp)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(cardShape)
-                            .background(if (selected) palette.activeRowBg else palette.elevatedBg)
-                            .border(
-                                width = if (selected) 1.5.dp else 1.dp,
-                                color = if (selected) palette.accent else palette.hairline,
-                                shape = cardShape
-                            )
-                            .clickable(role = Role.Button) { onSelectProvider(option.providerId) }
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(if (selected) palette.accent else palette.pillBg),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            when (option.providerId) {
-                                AiProvider.AILA_CLOUD.id -> AppIcons.Sparkle(Modifier.size(20.dp), color = if (selected) palette.onAccent else palette.accent)
-                                AiProvider.GOOGLE_AI_STUDIO.id -> AppIcons.Bolt(Modifier.size(20.dp), color = if (selected) palette.onAccent else palette.accent)
-                                AiProvider.ON_DEVICE.id -> AppIcons.Shield(Modifier.size(20.dp), color = if (selected) palette.onAccent else palette.accent)
-                                else -> AppIcons.Sliders(Modifier.size(20.dp), color = if (selected) palette.onAccent else palette.accent)
-                            }
-                        }
-                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(
-                                    text = option.title,
-                                    style = TextStyle(fontSize = 15.5.sp, fontWeight = FontWeight.SemiBold),
-                                    color = if (selected) palette.activeRowInk else palette.ink,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                option.statusNote?.let { note ->
-                                    Text(
-                                        text = note,
-                                        style = TextStyle(fontSize = 11.5.sp, fontWeight = FontWeight.Medium),
-                                        color = if (selected) palette.activeRowInk.copy(alpha = 0.8f) else palette.inkMuted,
-                                        maxLines = 1
-                                    )
-                                }
-                            }
-                            Text(
-                                text = option.description,
-                                style = TextStyle(fontSize = 12.5.sp, lineHeight = 17.sp),
-                                color = if (selected) palette.activeRowInk.copy(alpha = 0.85f) else palette.inkMuted,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                        if (selected) {
-                            Box(
-                                modifier = Modifier
-                                    .size(26.dp)
-                                    .clip(CircleShape)
-                                    .background(palette.accent),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                AppIcons.Check(Modifier.size(14.dp), color = palette.onAccent)
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Selettore Ragionamento diretto in 1 tap (4 segmenti grandi 46dp)
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = "Ragionamento",
-                    style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
-                    color = palette.ink
-                )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(100.dp))
-                        .background(palette.elevatedBg)
-                        .border(1.dp, palette.hairline, RoundedCornerShape(100.dp))
-                        .padding(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    AssistantEffortLabels.forEachIndexed { idx, label ->
-                        val active = idx == effortLevel.coerceIn(0, AssistantEffortLabels.lastIndex)
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(42.dp)
-                                .clip(RoundedCornerShape(100.dp))
-                                .background(if (active) palette.accent else Color.Transparent)
-                                .clickable(role = Role.Button) { onSelectEffort(idx) }
-                                .semantics { contentDescription = "Ragionamento: $label" },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = label,
-                                style = TextStyle(
-                                    fontSize = 13.sp,
-                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Medium
-                                ),
-                                color = if (active) palette.onAccent else palette.inkMuted,
-                                maxLines = 1
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Azioni inferiori grandi (48dp)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .size(48.dp)
+                    .clip(sendShape)
+                    .background(sendBg)
+                    .clickable(
+                        interactionSource = sendInteraction,
+                        indication = null,
+                        enabled = canSend,
+                        role = Role.Button,
+                        onClick = onSend
+                    )
+                    .semantics { contentDescription = "Invia" },
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp)
-                        .clip(RoundedCornerShape(100.dp))
-                        .background(palette.pillBg)
-                        .clickable(role = Role.Button) {
-                            onDismiss()
-                            onOpenAiSettings()
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Impostazioni AI",
-                        style = TextStyle(fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold),
-                        color = palette.ink
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp)
-                        .clip(RoundedCornerShape(100.dp))
-                        .background(palette.accent)
-                        .clickable(role = Role.Button, onClick = onDismiss),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Fatto",
-                        style = TextStyle(fontSize = 14.5.sp, fontWeight = FontWeight.Bold),
-                        color = palette.onAccent
-                    )
-                }
+                AppIcons.ArrowUp(Modifier.size(21.dp), color = sendFg)
             }
         }
     }
 }
 
 // =================================================================================================
-// Toast fluttuante "Risposta pronta" per conversazioni terminate in background
+// Toast fluttuante "Risposta pronta"
 // =================================================================================================
 
 @Composable
