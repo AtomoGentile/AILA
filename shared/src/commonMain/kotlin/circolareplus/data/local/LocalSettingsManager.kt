@@ -64,6 +64,7 @@ class LocalSettingsManager(
         private const val KEY_LOCAL_AI_ENABLED = "local_ai_enabled"
         private const val KEY_LOCAL_AI_MODEL = "local_ai_model_id"
         private const val KEY_ASSISTANT_THINKING = "assistant_thinking_enabled"
+        private const val KEY_ASSISTANT_EFFORT = "assistant_effort_level"
         private const val KEY_BOARD_NOTIFICATIONS_ENABLED = "board_notifications_enabled"
         private const val KEY_SYSTEM_NOTIFICATIONS_ENABLED = "system_notifications_enabled"
         private const val KEY_SEATMAP_DUMMIES_MENU_ENABLED = "seatmap_dummies_menu_enabled"
@@ -234,6 +235,15 @@ class LocalSettingsManager(
     var assistantThinkingEnabled: Boolean
         get() = settings.getBoolean(KEY_ASSISTANT_THINKING, false)
         set(value) = settings.putBoolean(KEY_ASSISTANT_THINKING, value)
+
+    /** Livello di ragionamento scelto nell'Assistant (0 = Rapido, 1 = Medio, 2 = Alto, 3 = Massimo). */
+    var assistantEffortLevel: Int
+        get() = settings.getInt(KEY_ASSISTANT_EFFORT, if (assistantThinkingEnabled) 2 else 1).coerceIn(0, 3)
+        set(value) {
+            val clamped = value.coerceIn(0, 3)
+            settings.putInt(KEY_ASSISTANT_EFFORT, clamped)
+            settings.putBoolean(KEY_ASSISTANT_THINKING, clamped >= 2)
+        }
 
     var isBoardNotificationEnabled: Boolean
         get() = settings.getBoolean(KEY_BOARD_NOTIFICATIONS_ENABLED, true)
@@ -631,13 +641,24 @@ class LocalSettingsManager(
      */
     fun saveAssistantConversation(conversation: AssistantConversation) {
         if (conversation.messages.isEmpty()) return
+        val existingList = readAssistantConversations()
+        val previousPinned = existingList.firstOrNull { it.id == conversation.id }?.pinned ?: false
         val trimmed = conversation.copy(
-            messages = conversation.messages.takeLast(MAX_ASSISTANT_MESSAGES)
+            messages = conversation.messages.takeLast(MAX_ASSISTANT_MESSAGES),
+            pinned = conversation.pinned || previousPinned
         )
-        val others = readAssistantConversations().filter { it.id != trimmed.id }
-        val updated = (listOf(trimmed) + others)
-            .sortedByDescending { it.updatedAtMillis }
-            .take(MAX_ASSISTANT_CONVERSATIONS)
+        val others = existingList.filter { it.id != trimmed.id }
+        val combined = (listOf(trimmed) + others)
+        val pinned = combined.filter { it.pinned }.sortedByDescending { it.updatedAtMillis }
+        val unpinned = combined.filterNot { it.pinned }.sortedByDescending { it.updatedAtMillis }
+        val updated = (pinned + unpinned).take(MAX_ASSISTANT_CONVERSATIONS)
+        writeAssistantConversations(updated)
+    }
+
+    fun setAssistantConversationPinned(id: String, pinned: Boolean) {
+        val updated = readAssistantConversations().map {
+            if (it.id == id) it.copy(pinned = pinned) else it
+        }
         writeAssistantConversations(updated)
     }
 

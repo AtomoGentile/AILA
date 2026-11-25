@@ -1224,6 +1224,9 @@ fun MainAppShell(
     // Ragionamento del modello locale: la scelta e' salvata nelle impostazioni, qui se ne tiene
     // una copia perche' l'interruttore deve muoversi al tocco.
     var assistantThinking by remember { mutableStateOf(AppContainer.settings.assistantThinkingEnabled) }
+    var assistantEffort by remember { mutableStateOf(AppContainer.settings.assistantEffortLevel) }
+    var assistantIncognito by rememberSaveable { mutableStateOf(false) }
+    var assistantFinishedToast by remember { mutableStateOf<AssistantConversation?>(null) }
     var assistantConversations by remember {
         mutableStateOf(AppContainer.settings.listAssistantConversations())
     }
@@ -1442,6 +1445,7 @@ fun MainAppShell(
      * proprio quella che serviva.
      */
     fun saveAssistantConversation() {
+        if (assistantIncognito) return
         val messages = assistantMessages.toList()
         // Niente domande dell'utente = nessuna conversazione da ricordare (es. si e' aperta la
         // chat, si e' letto il benvenuto e si e' usciti).
@@ -1454,7 +1458,8 @@ fun MainAppShell(
                 title = existing?.title ?: AssistantConversation.titleFrom(messages),
                 createdAtMillis = existing?.createdAtMillis ?: now,
                 updatedAtMillis = now,
-                messages = messages
+                messages = messages,
+                pinned = existing?.pinned ?: false
             )
         )
         assistantConversations = AppContainer.settings.listAssistantConversations()
@@ -1475,13 +1480,15 @@ fun MainAppShell(
             .firstOrNull { it.id == conversationId }
             // Cancellata nel frattempo dallo storico: la risposta non ha piu' dove andare.
             ?: return
-        AppContainer.settings.saveAssistantConversation(
-            stored.copy(
-                updatedAtMillis = currentTimeMillis(),
-                messages = (stored.messages + message).distinctBy { it.id }
-            )
+        val updatedConversation = stored.copy(
+            updatedAtMillis = currentTimeMillis(),
+            messages = (stored.messages + message).distinctBy { it.id }
         )
+        AppContainer.settings.saveAssistantConversation(updatedConversation)
         assistantConversations = AppContainer.settings.listAssistantConversations()
+        if (message.author == AssistantAuthor.ASSISTANT && !message.isError) {
+            assistantFinishedToast = updatedConversation
+        }
     }
 
     fun updateAssistantMessage(conversationId: String, messageId: String, update: (AssistantMessage) -> AssistantMessage) {
@@ -4825,7 +4832,13 @@ fun MainAppShell(
                     // Material: fondo pieno, copre le tab sotto. Liquid Glass: pagina trasparente
                     // che scorre sullo sfondo fermo dell'app, mentre quella di prima esce dall'altro
                     // lato (vedi glassSlide e ailaUnderlayShift).
-                    .then(if (AppTheme.isGlass) Modifier else Modifier.background(AppTheme.BackgroundLight))
+                    .then(
+                        when {
+                            route == ShellRoute.ASSISTANT -> Modifier.background(claudePalette(AppTheme.isDarkMode).shellBg)
+                            AppTheme.isGlass -> Modifier
+                            else -> Modifier.background(AppTheme.BackgroundLight)
+                        }
+                    )
                     .then(
                         if (glassSlide != null) Modifier.graphicsLayer {
                             val v = glassSlide.value
@@ -4839,7 +4852,10 @@ fun MainAppShell(
                             }
                         } else Modifier
                     )
-                    .appSafeDrawingPadding()
+                    .then(
+                        if (route == ShellRoute.ASSISTANT) Modifier.appImePadding()
+                        else Modifier.appSafeDrawingPadding()
+                    )
                     // Prende i tocchi: sotto c'e' lo Scaffold con le tab, che non deve riceverli.
                     .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
             ) {
@@ -5339,6 +5355,8 @@ fun MainAppShell(
                         }
                     }
                     circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { assistantBack() }
+                    val currentAssistantProvider = remember(apiKeyRevision) { AppContainer.settings.aiProvider }
+                    val currentLocalModelName = remember(apiKeyRevision) { AppContainer.selectedLocalModel().displayName }
                     androidx.compose.runtime.key(assistantConversationId) {
                     AssistantChatScreen(
                         messages = assistantMessages,
@@ -5370,6 +5388,7 @@ fun MainAppShell(
                         onThinkingChange = { enabled ->
                             AppContainer.settings.assistantThinkingEnabled = enabled
                             assistantThinking = enabled
+                            assistantEffort = AppContainer.settings.assistantEffortLevel
                         },
                         onBackClick = { assistantBack() },
                         onClearChat = {
@@ -5384,6 +5403,7 @@ fun MainAppShell(
                         onOpenConversation = { conversation ->
                             // Si puo' aprire anche con una risposta in arrivo: la risposta e'
                             // instradata per id, non per "chat attualmente a schermo".
+                            assistantIncognito = false
                             assistantMessages.clear()
                             assistantMessages.addAll(conversation.messages)
                             assistantConversationId = conversation.id
@@ -5399,6 +5419,55 @@ fun MainAppShell(
                                 assistantConversationId = "c${currentTimeMillis()}"
                             }
                         },
+                        activeConversationId = assistantConversationId,
+                        isIncognito = assistantIncognito,
+                        onIncognitoChange = { inc ->
+                            assistantIncognito = inc
+                        },
+                        onTogglePinConversation = { id ->
+                            val current = assistantConversations.firstOrNull { it.id == id }
+                            if (current != null) {
+                                AppContainer.settings.setAssistantConversationPinned(id, !current.pinned)
+                                assistantConversations = AppContainer.settings.listAssistantConversations()
+                            }
+                        },
+                        selectedAiProvider = currentAssistantProvider,
+                        onSelectAiProvider = { providerId ->
+                            AppContainer.settings.aiProvider = providerId
+                            apiKeyRevision++
+                        },
+                        localModelLabel = currentLocalModelName,
+                        effortLevel = assistantEffort,
+                        onEffortLevelChange = { level ->
+                            AppContainer.settings.assistantEffortLevel = level
+                            assistantEffort = AppContainer.settings.assistantEffortLevel
+                            assistantThinking = AppContainer.settings.assistantThinkingEnabled
+                        },
+                        unreadTabs = unreadTabs,
+                        onSelectMainTab = { tab ->
+                            isInAssistantScreen = false
+                            isInAcaHub = false
+                            selectedTab = tab
+                        },
+                        onOpenProfile = {
+                            isInAssistantScreen = false
+                            isInAcaHub = false
+                            isInProfileScreen = true
+                        },
+                        onOpenSettings = {
+                            isInSettingsScreen = true
+                            isInAiSettings = false
+                        },
+                        onOpenBureaucracy = {
+                            isInAssistantScreen = false
+                            isInAcaHub = false
+                            isInBureaucracy = true
+                        },
+                        onOpenGita = {
+                            isInGitaScreen = true
+                        },
+                        finishedToastConversation = assistantFinishedToast,
+                        onDismissFinishedToast = { assistantFinishedToast = null },
                         onOpenSource = { source ->
                             when (source.kind) {
                                 AssistantSourceKind.CIRCULAR -> {

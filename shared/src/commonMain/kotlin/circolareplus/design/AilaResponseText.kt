@@ -29,6 +29,8 @@ fun AilaResponseText(
     responseId: String,
     modifier: Modifier = Modifier,
     animate: Boolean = true,
+    color: androidx.compose.ui.graphics.Color = AppTheme.TextDark,
+    style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyLarge,
     onComplete: () -> Unit = {}
 ) {
     val reduceMotion = AppTheme.reduceMotion
@@ -63,8 +65,8 @@ fun AilaResponseText(
     val descent = with(LocalDensity.current) { 14.dp.toPx() }
     Text(
         text = text.subSequence(0, visibleCharacters.coerceAtMost(text.length)),
-        style = MaterialTheme.typography.bodyLarge,
-        color = AppTheme.TextDark,
+        style = style,
+        color = color,
         modifier = modifier.graphicsLayer {
             alpha = entrance
             translationY = -descent * (1f - entrance)
@@ -145,8 +147,9 @@ fun formatAilaMarkdown(raw: String): AnnotatedString = buildAnnotatedString {
         val numbered = numberedRegex.matchEntire(line)
         when {
             heading != null -> {
-                withStyle(ParagraphStyle(lineHeight = 22.sp)) {
-                    withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) {
+                if (idx > 0) append("\n")
+                withStyle(ParagraphStyle(lineHeight = 26.sp)) {
+                    withStyle(SpanStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold)) {
                         appendInline(heading.groupValues[1].trim())
                     }
                 }

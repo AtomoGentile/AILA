@@ -1,99 +1,125 @@
 package circolareplus.ui.screens
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.border
-import androidx.compose.ui.graphics.Brush
-import circolareplus.design.AilaAssistantTeal
-import circolareplus.design.AilaAssistantViolet
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.text.ParagraphStyle
-import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import circolareplus.design.AilaAssistantHalo
-import circolareplus.design.AilaIconTile
-import circolareplus.design.ailaPulse
-import circolareplus.design.ailaTopicSurface
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import circolareplus.ai.assistant.AssistantAuthor
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
+import circolareplus.ai.AiProvider
 import circolareplus.ai.assistant.AssistantActionStatus
 import circolareplus.ai.assistant.AssistantAgentPhase
+import circolareplus.ai.assistant.AssistantAttachedFile
+import circolareplus.ai.assistant.AssistantAuthor
 import circolareplus.ai.assistant.AssistantConversation
 import circolareplus.ai.assistant.AssistantMessage
 import circolareplus.ai.assistant.AssistantSource
 import circolareplus.ai.assistant.AssistantSourceKind
-import circolareplus.design.AilaResponseText
 import circolareplus.design.AilaAssistantMark
+import circolareplus.design.AilaAssistantWave
 import circolareplus.design.AilaDuration
-import circolareplus.design.AilaBackBar
-import circolareplus.design.AilaIconButton
+import circolareplus.design.AilaResponseText
 import circolareplus.design.AppIcons
 import circolareplus.design.AppTheme
-import circolareplus.design.ailaAppear
+import circolareplus.design.ailaBubbleEnter
 import circolareplus.design.ailaFadeSpec
 import circolareplus.design.ailaGlassSurface
-import circolareplus.design.ailaMorphShape
 import circolareplus.design.ailaMoveSpec
 import circolareplus.design.ailaPressable
-import circolareplus.design.AilaAssistantWave
-import circolareplus.design.ailaBubbleEnter
-import circolareplus.design.ailaNavigationSpring
+import circolareplus.design.ailaPulse
 import circolareplus.design.ailaRevealEnter
-import circolareplus.design.ailaSelectionPop
 import circolareplus.design.ailaSheetReveal
 import circolareplus.design.ailaSpatialSpring
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.togetherWith
-import androidx.compose.animation.animateContentSize
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.lerp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
- * La chat con l'assistente globale: una domanda in italiano, una risposta costruita su circolari,
- * calendario, bacheca, sondaggi e mappa posti.
- *
- * La schermata non sa niente di AI: riceve i messaggi e segnala quando l'utente ne manda uno.
- * Tutto il lavoro (raccolta dati, chiamata al modello, secondo giro sui PDF) sta in
- * [circolareplus.ai.assistant.AilaAssistant], chiamato da `MainAppShell` — cosi' la
- * conversazione sopravvive all'uscita dalla schermata e una risposta lunga non viene annullata
- * se si torna indietro un attimo.
+ * La chat con AILA Assistant, ridisegnata con estetica editoriale minimale fedele al nuovo Claude:
+ * foglio bianco arrotondato su guscio pietra caldo, cassetto laterale scorrevole (Fissate, Recenti,
+ * Scorciatoie, footer Impostazioni/Cerca/Nuova chat), ricerca dedicata con match in grassetto,
+ * modalità incognito, composer espandibile con selettore Modello + Ragionamento e barra inferiore
+ * con pillola scorrevole e tooltip fluttuante sulle tab di AILA.
  */
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -119,18 +145,73 @@ fun AssistantChatScreen(
     onRecoverAction: (String) -> Unit = {},
     onAttachContent: ((circolareplus.platform.IncomingContent) -> Unit)? = null,
     onVoiceContent: ((circolareplus.platform.IncomingContent) -> Unit)? = null,
-    onOpenFiles:()->Unit={},onStudyPlan:()->Unit={},onOpenAiSettings:()->Unit={},
-    attachedFiles: List<circolareplus.ai.assistant.AssistantAttachedFile> = emptyList(),
+    onOpenFiles: () -> Unit = {},
+    onStudyPlan: () -> Unit = {},
+    onOpenAiSettings: () -> Unit = {},
+    attachedFiles: List<AssistantAttachedFile> = emptyList(),
     onRemoveAttachedFile: (String) -> Unit = {},
-    onOpenAttachedFile: (circolareplus.ai.assistant.AssistantAttachedFile) -> Unit = {}
+    onOpenAttachedFile: (AssistantAttachedFile) -> Unit = {},
+    // --- Estensioni interfaccia Claude beta ---
+    activeConversationId: String? = null,
+    isIncognito: Boolean = false,
+    onIncognitoChange: (Boolean) -> Unit = {},
+    onTogglePinConversation: (String) -> Unit = {},
+    selectedAiProvider: String = AiProvider.AILA_CLOUD.id,
+    onSelectAiProvider: (String) -> Unit = {},
+    localModelLabel: String = "AI locale",
+    effortLevel: Int = if (thinkingEnabled) 2 else 1,
+    onEffortLevelChange: (Int) -> Unit = { onThinkingChange(it >= 2) },
+    unreadTabs: Set<MainTab> = emptySet(),
+    onSelectMainTab: ((MainTab) -> Unit)? = null,
+    onOpenProfile: () -> Unit = {},
+    onOpenSettings: () -> Unit = onOpenAiSettings,
+    onOpenBureaucracy: () -> Unit = {},
+    onOpenGita: () -> Unit = {},
+    finishedToastConversation: AssistantConversation? = null,
+    onDismissFinishedToast: () -> Unit = {}
 ) {
+    val palette = claudePalette(AppTheme.isDarkMode)
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val clipboard = LocalClipboardManager.current
+
     var draft by remember { mutableStateOf(initialDraft) }
-    LaunchedEffect(initialDraft) { if(initialDraft.isNotBlank())draft=initialDraft }
-    var isHistoryOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(initialDraft) { if (initialDraft.isNotBlank()) draft = initialDraft }
+
+    var isSearchOpen by remember { mutableStateOf(false) }
+    var isModelSheetOpen by remember { mutableStateOf(false) }
     var attachmentsMenu by remember { mutableStateOf(false) }
     var fileSources by remember { mutableStateOf(false) }
     var attachmentError by remember { mutableStateOf<String?>(null) }
     var recording by remember { mutableStateOf(false) }
+    var composerFocused by remember { mutableStateOf(false) }
+
+    // Stato cassetto laterale scorrevole (0f = chiuso, 1f = aperto)
+    val drawerProgress = remember { Animatable(0f) }
+    fun setDrawerOpen(open: Boolean) {
+        scope.launch {
+            if (AppTheme.reduceMotion) {
+                drawerProgress.snapTo(if (open) 1f else 0f)
+            } else {
+                drawerProgress.animateTo(
+                    targetValue = if (open) 1f else 0f,
+                    animationSpec = spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow)
+                )
+            }
+        }
+    }
+
+    // Back interno: chiude fogli/ricerca/cassetto prima di uscire dalla schermata
+    circolareplus.platform.PlatformBackHandler(
+        enabled = isModelSheetOpen || isSearchOpen || drawerProgress.value > 0.05f
+    ) {
+        when {
+            isModelSheetOpen -> isModelSheetOpen = false
+            isSearchOpen -> isSearchOpen = false
+            drawerProgress.value > 0.05f -> setDrawerOpen(false)
+        }
+    }
+
     val receiveFile = onAttachContent?.let { attach ->
         { file: circolareplus.platform.IncomingContent ->
             attachmentError = null
@@ -152,15 +233,23 @@ fun AssistantChatScreen(
             onPicked = it
         )
     }
-    val recorder=if(onAttachContent!=null)circolareplus.platform.rememberVoiceRecorder({recording=it},{attachmentError=it}){file->attachmentsMenu=false;(onVoiceContent?:onAttachContent)(file)}else null
+    val recorder = if (onAttachContent != null) {
+        circolareplus.platform.rememberVoiceRecorder({ recording = it }, { attachmentError = it }) { file ->
+            attachmentsMenu = false
+            (onVoiceContent ?: onAttachContent)(file)
+        }
+    } else null
 
     val listState = rememberLazyListState()
+    val feedbackMap = remember { mutableStateMapOf<String, Int>() } // +1 = up, -1 = down
+    var copiedMessageId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(copiedMessageId) {
+        if (copiedMessageId != null) {
+            delay(1800)
+            copiedMessageId = null
+        }
+    }
 
-    // Ogni messaggio nuovo (e l'indicatore "sto pensando") porta la lista in fondo: in una chat
-    // la riga che conta e' sempre l'ultima.
-    // Risposta appena arrivata: quando l'attesa finisce, l'ultimo messaggio dell'assistente entra
-    // con l'animazione (vedi AssistantBubble). Deciso qui, nella stessa composizione in cui sparisce
-    // l'indicatore, cosi' non c'e' un fotogramma col messaggio gia' fermo.
     val wasThinking = remember { arrayOf(isThinking) }
     val arrivalHolder = remember { arrayOf<String?>(null) }
     if (wasThinking[0] && !isThinking) {
@@ -169,9 +258,6 @@ fun AssistantChatScreen(
     }
     wasThinking[0] = isThinking
 
-    // Domanda appena mandata: e' l'unico messaggio nuovo rispetto alla composizione precedente ed
-    // e' dell'utente. Aprendo una conversazione dallo storico i messaggi nuovi sono tanti insieme,
-    // quindi nessuno entra con l'animazione: si vede la conversazione gia' al suo posto.
     val seenIds = remember { messages.mapTo(HashSet()) { it.id } }
     val sentHolder = remember { arrayOf<String?>(null) }
     val newMessages = messages.filter { it.id !in seenIds }
@@ -181,346 +267,940 @@ fun AssistantChatScreen(
     newMessages.forEach { seenIds.add(it.id) }
 
     val showWelcome = messages.isEmpty() && !isThinking
-    // Mentre la conversazione svanisce (indietro alla schermata iniziale) i messaggi sono gia'
-    // stati svuotati: la lista che esce deve poter mostrare ancora gli ultimi che c'erano.
     val lastShown = remember { arrayOf(emptyList<AssistantMessage>()) }
     if (messages.isNotEmpty()) lastShown[0] = messages.toList()
 
     LaunchedEffect(messages.size, isThinking, showWelcome) {
-        // Il benvenuto occupa la lista solo quando non c'e' nient'altro, quindi quando c'e'
-        // qualcosa da scorrere gli elementi sono esattamente i messaggi piu' l'indicatore.
         val itemCount = messages.size + if (isThinking) 1 else 0
         if (itemCount > 0) listState.animateScrollToItem(itemCount - 1)
     }
 
-    Column(
+    val activeConversation = remember(conversations, activeConversationId) {
+        activeConversationId?.let { id -> conversations.firstOrNull { it.id == id } }
+    }
+    val headerTitle = remember(activeConversation, messages) {
+        activeConversation?.let(::conversationDisplayTitle)
+            ?: AssistantConversation.titleFrom(messages).takeIf { messages.isNotEmpty() }
+    }
+    val modelOptions = remember(localModelLabel) { claudeModelOptions(localModelLabel) }
+    val currentModel = remember(modelOptions, selectedAiProvider) {
+        modelOptions.firstOrNull { it.providerId == selectedAiProvider } ?: modelOptions.first()
+    }
+    val currentEffortLabel = ClaudeEffortLabels[effortLevel.coerceIn(0, ClaudeEffortLabels.lastIndex)]
+    val imeVisible = WindowInsets.ime.getBottom(density) > 0
+
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(AppTheme.BackgroundLight)
+            .background(palette.shellBg)
     ) {
-        AssistantHeader(
-            isThinking = isThinking,
-            hasMessages = messages.isNotEmpty(),
-            statusLabel = messages.lastOrNull { it.author != AssistantAuthor.USER && !it.isError }?.modelLabel,
-            onBackClick = onBackClick,
-            // Lo storico resta raggiungibile anche a chat vuota: e' proprio quando non c'e'
-            // niente a schermo che si va a cercare la conversazione di ieri.
-            onHistoryClick = if (conversations.isNotEmpty()) ({ isHistoryOpen = true }) else null,
-            onNewChatClick = if (messages.isNotEmpty()) onClearChat else null
-        )
+        val drawerWidth = (maxWidth * 0.82f).coerceIn(264.dp, 326.dp)
+        val drawerWidthPx = with(density) { drawerWidth.toPx() }
 
-        // Schermata iniziale e conversazione sono due "pagine" della stessa schermata. Tornando
-        // dalla conversazione alla schermata iniziale la conversazione si rimpicciolisce e svanisce
-        // e quella iniziale arriva da un poco piu' grande (come un indietro fra pagine, ma breve);
-        // dall'iniziale alla conversazione solo una dissolvenza rapida: lo sposta il fumetto che
-        // sale dal campo di testo.
-        androidx.compose.animation.AnimatedContent(
-            targetState = showWelcome,
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            transitionSpec = {
-                if (targetState) {
-                    (androidx.compose.animation.fadeIn(ailaFadeSpec(AilaDuration.Standard, delayMillis = 40)) +
-                        androidx.compose.animation.scaleIn(ailaMoveSpec(AilaDuration.Standard), initialScale = 1.05f)) togetherWith
-                        (androidx.compose.animation.fadeOut(ailaFadeSpec(AilaDuration.Quick)) +
-                            androidx.compose.animation.scaleOut(ailaMoveSpec(AilaDuration.Quick), targetScale = 0.95f))
-                } else {
-                    androidx.compose.animation.fadeIn(ailaFadeSpec(AilaDuration.Quick)) togetherWith
-                        androidx.compose.animation.fadeOut(ailaFadeSpec(AilaDuration.Quick))
+        // Strato sottostante: Cassetto laterale sinistro (rivelato quando il foglio scorre a destra)
+        if (drawerProgress.value > 0.005f) {
+            ClaudeLeftDrawer(
+                palette = palette,
+                drawerWidth = drawerWidth,
+                conversations = conversations,
+                activeConversationId = activeConversationId,
+                onSelectConversation = { conv ->
+                    setDrawerOpen(false)
+                    onIncognitoChange(false)
+                    onOpenConversation(conv)
+                },
+                onTogglePin = onTogglePinConversation,
+                onOpenSearch = {
+                    setDrawerOpen(false)
+                    isSearchOpen = true
+                },
+                onNewChat = {
+                    setDrawerOpen(false)
+                    onIncognitoChange(false)
+                    onClearChat()
+                },
+                onOpenSettings = {
+                    setDrawerOpen(false)
+                    onOpenSettings()
+                },
+                onOpenProfile = {
+                    setDrawerOpen(false)
+                    onOpenProfile()
+                },
+                onOpenFiles = {
+                    setDrawerOpen(false)
+                    onOpenFiles()
+                },
+                onStudyPlan = {
+                    setDrawerOpen(false)
+                    onIncognitoChange(false)
+                    onStudyPlan()
+                },
+                onOpenBureaucracy = {
+                    setDrawerOpen(false)
+                    onOpenBureaucracy()
+                },
+                onOpenGita = {
+                    setDrawerOpen(false)
+                    onOpenGita()
                 }
-            },
-            label = "assistantContent"
-        ) { welcome ->
-        if (welcome) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(AppTheme.Space16)
-            ) {
-                AssistantWelcome(
-                    conversations = conversations,
-                    onOpenConversation = onOpenConversation,
-                    onOpenSource = onOpenSource
+            )
+        }
+
+        // Strato principale: Shell Chat che scorre a destra con angoli arrotondati quando il cassetto si apre
+        val progress = drawerProgress.value
+        val sheetCorner = (28f * progress).dp
+        val mainClipShape = RoundedCornerShape(topStart = sheetCorner, bottomStart = sheetCorner)
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    translationX = drawerWidthPx * progress
+                }
+                .then(
+                    if (progress > 0.01f) {
+                        Modifier
+                            .shadow(16.dp * progress, mainClipShape)
+                            .clip(mainClipShape)
+                            .border(0.75.dp, palette.hairline, mainClipShape)
+                    } else Modifier
                 )
-            }
-        } else LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(AppTheme.Space16),
-            // Material: le risposte sono testo libero, serve piu' aria fra un turno e l'altro.
-            verticalArrangement = Arrangement.spacedBy(if (AppTheme.isGlass) AppTheme.Space12 else AppTheme.Space20)
+                .background(palette.shellBg)
+                .pointerInput(drawerWidthPx) {
+                    var draggingDrawer = false
+                    detectHorizontalDragGestures(
+                        onDragStart = { start ->
+                            // Apre scorrendo dal bordo sinistro, oppure chiude da ovunque se aperto
+                            draggingDrawer = drawerProgress.value > 0.05f || start.x <= 48.dp.toPx()
+                        },
+                        onHorizontalDrag = { _, dragAmount ->
+                            if (!draggingDrawer) return@detectHorizontalDragGestures
+                            val next = (drawerProgress.value + dragAmount / drawerWidthPx).coerceIn(0f, 1f)
+                            scope.launch { drawerProgress.snapTo(next) }
+                        },
+                        onDragEnd = {
+                            if (draggingDrawer) {
+                                setDrawerOpen(drawerProgress.value >= 0.35f)
+                            }
+                            draggingDrawer = false
+                        },
+                        onDragCancel = {
+                            if (draggingDrawer) setDrawerOpen(drawerProgress.value >= 0.35f)
+                            draggingDrawer = false
+                        }
+                    )
+                }
         ) {
-            items(if (messages.isEmpty()) lastShown[0] else messages, key = { it.id }) { message ->
-                Box(
-                    modifier = Modifier.animateItem(
-                        fadeInSpec = null,
-                        placementSpec = null,
-                        fadeOutSpec = ailaFadeSpec(AilaDuration.Quick)
-                    )
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Header superiore sul guscio pietra
+                ClaudeHeaderBar(
+                    palette = palette,
+                    hasMessages = messages.isNotEmpty() || isThinking,
+                    conversationTitle = headerTitle,
+                    isIncognito = isIncognito,
+                    isPinned = activeConversation?.pinned == true,
+                    onOpenDrawer = { setDrawerOpen(drawerProgress.value < 0.5f) },
+                    onOpenSearch = { isSearchOpen = true },
+                    onToggleIncognito = {
+                        val next = !isIncognito
+                        onIncognitoChange(next)
+                        if (next && messages.isNotEmpty()) onClearChat()
+                    },
+                    onNewChat = {
+                        onIncognitoChange(false)
+                        onClearChat()
+                    },
+                    onTogglePin = {
+                        activeConversationId?.let(onTogglePinConversation)
+                    },
+                    onDeleteCurrent = {
+                        activeConversationId?.let(onDeleteConversation) ?: onClearChat()
+                    }
+                )
+
+                // Foglio bianco arrotondato con contenuto, composer e barra inferiore
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                        .background(palette.sheetBg)
                 ) {
-                Column {
-                when {
-                    message.author == AssistantAuthor.USER -> UserBubble(
-                        text = message.text,
-                        animateSend = message.id == sentHolder[0],
-                        onShown = { if (sentHolder[0] == message.id) sentHolder[0] = null }
-                    )
-                    message.isError -> AssistantErrorBubble(message.text)
-                    else -> AssistantBubble(
-                        message = message,
-                        onOpenSource = onOpenSource,
-                        // La risposta appena arrivata "nasce" dall'indicatore di attesa: l'onda
-                        // si calma nell'icona di AILA Assistant e il messaggio compare.
-                        animateArrival = message.id == arrivalHolder[0],
-                        onArrived = {
-                            if (arrivalHolder[0] == message.id) {
-                                arrivalHolder[0] = null
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        AnimatedContent(
+                            targetState = showWelcome,
+                            modifier = Modifier.fillMaxSize(),
+                            transitionSpec = {
+                                if (targetState) {
+                                    (fadeIn(ailaFadeSpec(AilaDuration.Standard, delayMillis = 30)) +
+                                        scaleIn(ailaMoveSpec(AilaDuration.Standard), initialScale = 1.03f)) togetherWith
+                                        (fadeOut(ailaFadeSpec(AilaDuration.Quick)) +
+                                            scaleOut(ailaMoveSpec(AilaDuration.Quick), targetScale = 0.97f))
+                                } else {
+                                    fadeIn(ailaFadeSpec(AilaDuration.Quick)) togetherWith
+                                        fadeOut(ailaFadeSpec(AilaDuration.Quick))
+                                }
+                            },
+                            label = "claudeAssistantContent"
+                        ) { welcome ->
+                            if (welcome) {
+                                ClaudeWelcomeCanvas(
+                                    palette = palette,
+                                    isIncognito = isIncognito
+                                )
+                            } else {
+                                val displayed = if (messages.isEmpty()) lastShown[0] else messages
+                                val lastAssistantIndex = displayed.indexOfLast { it.author != AssistantAuthor.USER && !it.isError }
+                                LazyColumn(
+                                    state = listState,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
+                                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                                ) {
+                                    itemsIndexed(displayed, key = { _, msg -> msg.id }) { index, message ->
+                                        Box(
+                                            modifier = Modifier.animateItem(
+                                                fadeInSpec = null,
+                                                placementSpec = null,
+                                                fadeOutSpec = ailaFadeSpec(AilaDuration.Quick)
+                                            )
+                                        ) {
+                                            Column {
+                                                when {
+                                                    message.author == AssistantAuthor.USER -> ClaudeUserBubble(
+                                                        text = message.text,
+                                                        palette = palette,
+                                                        animateSend = message.id == sentHolder[0],
+                                                        onShown = { if (sentHolder[0] == message.id) sentHolder[0] = null }
+                                                    )
+                                                    message.isError -> ClaudeErrorBubble(message.text, palette)
+                                                    else -> {
+                                                        val previousPrompt = remember(displayed, index) {
+                                                            displayed.take(index).lastOrNull { it.author == AssistantAuthor.USER }?.text
+                                                        }
+                                                        ClaudeAssistantResponse(
+                                                            message = message,
+                                                            palette = palette,
+                                                            showDisclaimer = index == lastAssistantIndex && !isThinking,
+                                                            feedback = feedbackMap[message.id] ?: 0,
+                                                            copied = copiedMessageId == message.id,
+                                                            onThumbUp = {
+                                                                feedbackMap[message.id] = if (feedbackMap[message.id] == 1) 0 else 1
+                                                            },
+                                                            onThumbDown = {
+                                                                feedbackMap[message.id] = if (feedbackMap[message.id] == -1) 0 else -1
+                                                            },
+                                                            onCopy = {
+                                                                clipboard.setText(AnnotatedString(message.text))
+                                                                copiedMessageId = message.id
+                                                            },
+                                                            onRegenerate = previousPrompt?.let { prompt ->
+                                                                { if (!isThinking) onSend(prompt) }
+                                                            },
+                                                            onOpenSource = onOpenSource,
+                                                            animateArrival = message.id == arrivalHolder[0],
+                                                            onArrived = {
+                                                                if (arrivalHolder[0] == message.id) arrivalHolder[0] = null
+                                                            }
+                                                        )
+                                                    }
+                                                }
+                                                message.attachedFiles.forEach { file ->
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .padding(top = 6.dp)
+                                                            .align(if (message.author == AssistantAuthor.USER) Alignment.End else Alignment.Start)
+                                                            .widthIn(max = 290.dp)
+                                                            .clip(RoundedCornerShape(16.dp))
+                                                            .background(palette.pillBg)
+                                                            .border(0.75.dp, palette.hairline, RoundedCornerShape(16.dp))
+                                                            .clickable { onOpenAttachedFile(file) }
+                                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                                    ) {
+                                                        AppIcons.Document(Modifier.size(18.dp), palette.inkMuted)
+                                                        Column(Modifier.weight(1f)) {
+                                                            Text(
+                                                                text = file.name,
+                                                                maxLines = 2,
+                                                                overflow = TextOverflow.Ellipsis,
+                                                                style = TextStyle(fontSize = 13.5.sp, fontWeight = FontWeight.Medium),
+                                                                color = palette.ink
+                                                            )
+                                                            Text(
+                                                                text = if (file.generated) file.processingLabel ?: "Testo elaborato da AILA" else "Apri l’originale",
+                                                                style = TextStyle(fontSize = 11.5.sp),
+                                                                color = palette.inkMuted
+                                                            )
+                                                        }
+                                                        AppIcons.ChevronRight(Modifier.size(15.dp), palette.inkFaint)
+                                                    }
+                                                }
+                                                if (message.actionPlan != null) {
+                                                    AssistantActionPreview(
+                                                        message = message,
+                                                        isBusy = isThinking,
+                                                        onConfirm = { onConfirmAction(message.id) },
+                                                        onCancel = { onCancelAction(message.id) },
+                                                        onRecover = { onRecoverAction(message.id) }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    if (isThinking) {
+                                        item(key = "claude-thinking") {
+                                            ClaudeThinkingRow(agentPhase, palette)
+                                        }
+                                    }
+                                }
                             }
                         }
-                    )
-                }
-                message.attachedFiles.forEach { file ->
-                    Row(Modifier.padding(top = 6.dp).widthIn(max = 300.dp).clip(RoundedCornerShape(20.dp))
-                        .background(AppTheme.CardSurface).border(1.dp, AppTheme.PrimaryBlue.copy(alpha = .15f), RoundedCornerShape(20.dp))
-                        .clickable { onOpenAttachedFile(file) }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(36.dp).background(AppTheme.TintViolet, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) { AppIcons.Document(Modifier.size(20.dp), AppTheme.TintVioletInk) }
-                        Spacer(Modifier.width(10.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(file.name, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge, color = AppTheme.TextDark)
-                            Text(if(file.generated) file.processingLabel ?: "Testo elaborato da AILA" else "Apri l’originale", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
-                        }
-                        AppIcons.ChevronRight(Modifier.size(17.dp), AppTheme.TextMuted)
-                    }
-                }
-                if (message.actionPlan != null) AssistantActionPreview(
-                    message = message, isBusy = isThinking,
-                    onConfirm = { onConfirmAction(message.id) },
-                    onCancel = { onCancelAction(message.id) },
-                    onRecover = { onRecoverAction(message.id) }
-                )
-                }
-                }
-            }
 
-            if (isThinking) {
-                item { ThinkingBubble(agentPhase) }
-            }
-        }
-        }
-
-        // Barra per scrivere. Glass: niente fascia piena ne' riga divisoria, solo una capsula di
-        // vetro che galleggia sullo sfondo e il tondo blu per mandare, come Messaggi su iOS 26.
-        // Material: nessun divisore (la separazione la danno i toni), campo "pillola" pieno e
-        // pulsante di invio che si deforma alla pressione, come gli altri pulsanti Expressive.
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = AppTheme.Space12)
-                .padding(top = AppTheme.Space8, bottom = AppTheme.Space12)
-        ) {
-            if (thinkingAvailable) Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = AppTheme.Space8)
-                    .chatSurface(RoundedCornerShape(AppTheme.SmallElementRadius))
-                    .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // La spiegazione cambia in dissolvenza e il riquadro segue la nuova altezza con
-                // una molla, invece di scattare di una riga quando si accende l'interruttore.
-                Column(modifier = Modifier.weight(1f).animateContentSize(ailaSpatialSpring())) {
-                    Text(
-                        text = "Modalità ragionamento",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = AppTheme.TextDark
-                    )
-                    Crossfade(
-                        targetState = thinkingEnabled,
-                        animationSpec = ailaNavigationSpring(),
-                        label = "thinkingModeHint"
-                    ) { enabled ->
-                        Text(
-                            text = if (enabled) {
-                                "Attiva: risposte più ponderate, ma più lente. Vale per l'AI sul telefono."
-                            } else {
-                                "Spenta: risposte rapide. Vale per l'AI sul telefono."
+                        // Toast fluttuante "Risposta pronta" per conversazioni terminate in background
+                        ClaudeFinishedToast(
+                            conversation = finishedToastConversation,
+                            palette = palette,
+                            onOpen = { conv ->
+                                onIncognitoChange(false)
+                                onOpenConversation(conv)
                             },
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Normal,
-                            color = AppTheme.TextMuted
+                            onDismiss = onDismissFinishedToast,
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(end = 16.dp, bottom = 10.dp)
                         )
                     }
-                }
-                circolareplus.design.AilaSwitch(
-                    checked = thinkingEnabled,
-                    onCheckedChange = onThinkingChange
-                )
-            }
 
-            val hasDraft = draft.isNotBlank() || attachedFiles.isNotEmpty()
-            val canSend = hasDraft && !isThinking
-            val send = {
-                val question = draft.trim().ifBlank{"Riassumi gli allegati di questo messaggio."}
-                draft = ""
-                onSend(question)
-            }
-            if(attachedFiles.isNotEmpty()) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                attachedFiles.forEach { file ->
-                    Row(Modifier.width(242.dp).clip(RoundedCornerShape(20.dp)).background(AppTheme.CardSurface)
-                        .border(1.dp, AppTheme.PrimaryBlue.copy(alpha = .20f), RoundedCornerShape(20.dp))
-                        .clickable { onOpenAttachedFile(file) }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(36.dp).background(AppTheme.TintViolet, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                            AppIcons.Document(Modifier.size(20.dp), AppTheme.TintVioletInk)
+                    // Composer (o pannello registrazione vocale)
+                    val send = {
+                        val question = draft.trim().ifBlank { "Riassumi gli allegati di questo messaggio." }
+                        draft = ""
+                        onSend(question)
+                    }
+                    if (recording) {
+                        Box(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)) {
+                            VoiceRecordingPanel(
+                                onStop = { recorder?.stop() },
+                                onCancel = { recorder?.cancel() }
+                            )
                         }
-                        Spacer(Modifier.width(10.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(file.name, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, color = AppTheme.TextDark)
-                            Text("Pronto per l’invio", style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
-                        }
-                        androidx.compose.material3.IconButton(onClick = { onRemoveAttachedFile(file.localId) }, enabled = !isThinking,
-                            modifier = Modifier.size(32.dp).semantics { contentDescription = "Rimuovi allegato ${file.name}" }) {
-                            AppIcons.Close(Modifier.size(16.dp), AppTheme.TextMuted)
-                        }
+                    } else {
+                        ClaudeComposer(
+                            palette = palette,
+                            draft = draft,
+                            onDraftChange = { draft = it },
+                            isThinking = isThinking,
+                            isIncognito = isIncognito,
+                            hasMessages = messages.isNotEmpty(),
+                            rotatingPlaceholders = if (messages.isEmpty()) ExamplePlaceholders else emptyList(),
+                            attachedFiles = attachedFiles,
+                            onRemoveAttachedFile = onRemoveAttachedFile,
+                            onOpenAttachedFile = onOpenAttachedFile,
+                            attachmentError = attachmentError,
+                            modelShortLabel = currentModel.shortLabel,
+                            effortLabel = currentEffortLabel,
+                            onOpenModelSheet = { isModelSheetOpen = true },
+                            onOpenAttachments = if (onAttachContent != null) ({ attachmentsMenu = true }) else null,
+                            onStartVoice = if (recorder != null) ({
+                                attachmentError = null
+                                recorder.start()
+                            }) else null,
+                            onSend = send,
+                            onFocusedChange = { composerFocused = it }
+                        )
+                    }
+
+                    // Barra inferiore stile Claude con tutte le tab di AILA + tooltip nero trascinabile
+                    val showBottomBar = onSelectMainTab != null && !imeVisible && !recording
+                    if (showBottomBar) {
+                        ClaudeBottomNavBar(
+                            palette = palette,
+                            unreadTabs = unreadTabs,
+                            onSelectMainTab = { tab ->
+                                onSelectMainTab?.invoke(tab)
+                            }
+                        )
+                    } else {
+                        Spacer(Modifier.windowInsetsPadding(WindowInsets.navigationBars).height(4.dp))
                     }
                 }
             }
-            attachmentError?.let{Text(it,color=AppTheme.TintRedInk,style=MaterialTheme.typography.bodySmall)}
-            if(recording) VoiceRecordingPanel(onStop={recorder?.stop()},onCancel={recorder?.cancel()})
-            else Row(Modifier.fillMaxWidth().background(AppTheme.CardSurface,RoundedCornerShape(28.dp))
-                .padding(horizontal = 12.dp, vertical = 6.dp),verticalAlignment = Alignment.CenterVertically) {
-                if(onAttachContent!=null){
-                    AilaIconButton(contentDescription="Menu allegati",onClick={attachmentsMenu=true}){tint->AppIcons.Plus(Modifier.size(24.dp),tint)}
-                    Spacer(Modifier.width(4.dp))
-                }
-                // Input senza un secondo contorno: allegati, testo e invio condividono una sola superficie.
-                circolareplus.design.AilaPillTextField(
-                    value = draft,
-                    onValueChange = { draft = it },
-                    placeholder = "Chiedi qualsiasi cosa…",
-                    rotatingPlaceholders = if (messages.isEmpty()) ExamplePlaceholders else emptyList(),
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(24.dp),
-                    containerColor = Color.Transparent,
-                    maxLines = 4,
-                    integrated = true
-                )
-                Spacer(modifier = Modifier.width(AppTheme.Space8))
-                if (recorder != null) {
-                    AilaIconButton(contentDescription = "Registra vocale", enabled = !isThinking, onClick = {
-                        attachmentError = null
-                        recorder.start()
-                    }) { tint -> MicrophoneGlyph(tint) }
-                }
-                if (hasDraft || recorder == null) {
-                    SendButton(enabled = canSend, onClick = send)
-                }
-            }
 
-            Spacer(modifier = Modifier.height(AppTheme.Space8))
-            Text(
-                text = "Usa i dati di AILA per la scuola e le sue conoscenze per il resto. Può " +
-                    "sbagliare: per le cose importanti apri la circolare.",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Normal,
-                color = AppTheme.TextFaint,
-                modifier = Modifier.padding(horizontal = AppTheme.Space8)
+            // Velo cliccabile sul bordo destro del foglio quando il cassetto è aperto
+            if (progress > 0.05f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.08f * progress))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = { setDrawerOpen(false) }
+                        )
+                        .semantics { contentDescription = "Chiudi menu chat" }
+                )
+            }
+        }
+
+        // Schermata di ricerca dedicata a tutto schermo (Video 1 00:06–00:11)
+        AnimatedVisibility(
+            visible = isSearchOpen,
+            enter = fadeIn(ailaFadeSpec(AilaDuration.Quick)),
+            exit = fadeOut(ailaFadeSpec(AilaDuration.Quick)),
+            modifier = Modifier.fillMaxSize().zIndex(15f)
+        ) {
+            ClaudeSearchOverlay(
+                palette = palette,
+                conversations = conversations,
+                onClose = { isSearchOpen = false },
+                onSelectConversation = { conv ->
+                    isSearchOpen = false
+                    onIncognitoChange(false)
+                    onOpenConversation(conv)
+                }
+            )
+        }
+
+        // Foglio Modello + Ragionamento (Video 1 00:16–00:23)
+        AnimatedVisibility(
+            visible = isModelSheetOpen,
+            enter = fadeIn(ailaFadeSpec(AilaDuration.Quick)),
+            exit = fadeOut(ailaFadeSpec(AilaDuration.Quick)),
+            modifier = Modifier.fillMaxSize().zIndex(20f)
+        ) {
+            ClaudeModelAndEffortSheet(
+                palette = palette,
+                options = modelOptions,
+                selectedProviderId = currentModel.providerId,
+                effortLevel = effortLevel,
+                onSelectProvider = onSelectAiProvider,
+                onSelectEffort = { level ->
+                    onEffortLevelChange(level)
+                    onThinkingChange(level >= 2)
+                },
+                onOpenAiSettings = onOpenAiSettings,
+                onDismiss = { isModelSheetOpen = false }
             )
         }
     }
 
-    if(onAttachContent!=null){
-        if(attachmentsMenu)circolareplus.design.AilaBottomSheet(onDismissRequest={attachmentsMenu=false}){
-            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+    // Foglio allegati (mantiene Fotocamera / Foto / File su una sola riga e tutte le semantics esistenti)
+    if (onAttachContent != null && attachmentsMenu) {
+        circolareplus.design.AilaBottomSheet(onDismissRequest = { attachmentsMenu = false }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp)
+            ) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Aggiungi alla chat", modifier = Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.SemiBold, color = AppTheme.TextDark)
-                    androidx.compose.material3.IconButton(onClick = { attachmentsMenu = false }, modifier = Modifier.size(36.dp).semantics { contentDescription = "Chiudi allegati" }) {
-                        AppIcons.Close(Modifier.size(19.dp), AppTheme.TextMuted)
+                    Text(
+                        text = "Aggiungi alla chat",
+                        modifier = Modifier.weight(1f),
+                        style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold),
+                        color = palette.ink
+                    )
+                    IconButton(
+                        onClick = { attachmentsMenu = false },
+                        modifier = Modifier.size(36.dp).semantics { contentDescription = "Chiudi allegati" }
+                    ) {
+                        AppIcons.Close(Modifier.size(18.dp), palette.inkMuted)
                     }
                 }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AttachmentMenuTile("Fotocamera", "Scatta foto", AppTheme.TintGreen, AppTheme.TintGreenInk,
-                        enabled = !isThinking && !recording, onClick = {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ClaudeAttachmentTile(
+                        title = "Fotocamera",
+                        subtitle = "Scatta foto",
+                        palette = palette,
+                        enabled = !isThinking && !recording,
+                        onClick = {
                             attachmentError = null
                             attachmentsMenu = false
                             cameraPicker?.invoke()
-                        }, modifier = Modifier.weight(1f)) {
-                        CameraGlyph(Modifier.size(24.dp), it)
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        CameraGlyph(Modifier.size(22.dp), it)
                     }
-                    AttachmentMenuTile("Foto", "Galleria", AppTheme.TintBlue, AppTheme.TintBlueInk,
-                        enabled = !isThinking && !recording, onClick = {
+                    ClaudeAttachmentTile(
+                        title = "Foto",
+                        subtitle = "Galleria",
+                        palette = palette,
+                        enabled = !isThinking && !recording,
+                        onClick = {
                             attachmentError = null
                             photoPicker?.invoke()
-                        }, modifier = Modifier.weight(1f)) {
-                        AppIcons.Photo(Modifier.size(24.dp), it)
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        AppIcons.Photo(Modifier.size(22.dp), it)
                     }
-                    AttachmentMenuTile("File", "Documenti", AppTheme.TintViolet, AppTheme.TintVioletInk,
-                        enabled = !isThinking && !recording, onClick = { fileSources = true }, modifier = Modifier.weight(1f)) {
-                        AppIcons.Document(Modifier.size(24.dp), it)
+                    ClaudeAttachmentTile(
+                        title = "File",
+                        subtitle = "Documenti",
+                        palette = palette,
+                        enabled = !isThinking && !recording,
+                        onClick = { fileSources = true },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        AppIcons.Document(Modifier.size(22.dp), it)
                     }
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    AppIcons.Shield(Modifier.size(16.dp), AppTheme.TextMuted)
+                    AppIcons.Shield(Modifier.size(15.dp), palette.inkMuted)
                     Spacer(Modifier.width(8.dp))
-                    Text("Le azioni richiedono la tua conferma.", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = AppTheme.TextMuted)
-                    androidx.compose.material3.TextButton(onClick = { attachmentsMenu = false; onOpenAiSettings() }) { Text("Impostazioni AI", style = MaterialTheme.typography.labelMedium) }
+                    Text(
+                        text = "Le azioni richiedono la tua conferma.",
+                        modifier = Modifier.weight(1f),
+                        style = TextStyle(fontSize = 12.sp),
+                        color = palette.inkMuted
+                    )
+                    TextButton(onClick = { attachmentsMenu = false; onOpenAiSettings() }) {
+                        Text("Impostazioni AI", style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium), color = palette.ink)
+                    }
                 }
             }
         }
     }
-    if(fileSources) circolareplus.design.AilaAlertDialog(
-        onDismissRequest = { fileSources = false },
-        title = { Text("File") },
-        text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            AttachmentMenuRow("Importa dal dispositivo", "Scegli un file dal dispositivo", onClick = { fileSources = false; attachmentsMenu = false; picker?.invoke() }) { AppIcons.Document(Modifier.size(22.dp), AppTheme.TintVioletInk) }
-            AttachmentMenuRow("Copie già salvate", "Riapri un file conservato da AILA", onClick = { fileSources = false; attachmentsMenu = false; onOpenFiles() }) { AppIcons.Download(Modifier.size(22.dp), AppTheme.PrimaryBlue) }
-        } },
-        confirmButton = { androidx.compose.material3.TextButton(onClick = { fileSources = false }) { Text("Chiudi") } }
-    )
-    if (isHistoryOpen) {
-        AssistantHistorySheet(
-            conversations = conversations,
-            canOpen = true,
-            onPick = { conversation ->
-                isHistoryOpen = false
-                onOpenConversation(conversation)
+
+    if (fileSources) {
+        circolareplus.design.AilaAlertDialog(
+            onDismissRequest = { fileSources = false },
+            title = { Text("File") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AttachmentMenuRow(
+                        title = "Importa dal dispositivo",
+                        subtitle = "Scegli un file dal dispositivo",
+                        onClick = { fileSources = false; attachmentsMenu = false; picker?.invoke() }
+                    ) { AppIcons.Document(Modifier.size(22.dp), palette.ink) }
+                    AttachmentMenuRow(
+                        title = "Copie già salvate",
+                        subtitle = "Riapri un file conservato da AILA",
+                        onClick = { fileSources = false; attachmentsMenu = false; onOpenFiles() }
+                    ) { AppIcons.Download(Modifier.size(22.dp), palette.ink) }
+                }
             },
-            onDelete = onDeleteConversation,
-            onNewChat = if (messages.isNotEmpty()) ({ isHistoryOpen = false; onClearChat() }) else null,
-            onDismiss = { isHistoryOpen = false }
+            confirmButton = { TextButton(onClick = { fileSources = false }) { Text("Chiudi") } }
+        )
+    }
+}
+
+// =================================================================================================
+// Schermata vuota centrata: marchio terracotta + titolo editoriale Serif (o fantasmino incognito)
+// =================================================================================================
+
+@Composable
+private fun ClaudeWelcomeCanvas(
+    palette: ClaudePalette,
+    isIncognito: Boolean
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        AnimatedContent(
+            targetState = isIncognito,
+            transitionSpec = {
+                (fadeIn(ailaFadeSpec(AilaDuration.Standard)) +
+                    scaleIn(spring(dampingRatio = 0.72f, stiffness = 360f), initialScale = 0.85f)) togetherWith
+                    (fadeOut(ailaFadeSpec(AilaDuration.Quick)) +
+                        scaleOut(ailaFadeSpec(AilaDuration.Quick), targetScale = 0.9f))
+            },
+            label = "claudeWelcomeMode"
+        ) { incognito ->
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                if (incognito) {
+                    ClaudeGhostGlyph(
+                        modifier = Modifier.size(44.dp),
+                        color = palette.ink,
+                        filled = true,
+                        eyeCutoutColor = palette.sheetBg
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        text = "Chat in incognito",
+                        style = TextStyle(
+                            fontFamily = FontFamily.Serif,
+                            fontSize = 24.sp,
+                            lineHeight = 31.sp,
+                            fontWeight = FontWeight.Normal,
+                            letterSpacing = (-0.3).sp
+                        ),
+                        color = palette.ink,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "Questa conversazione non viene salvata nello storico del telefono.",
+                        style = TextStyle(fontSize = 13.5.sp, lineHeight = 19.sp),
+                        color = palette.inkMuted,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.widthIn(max = 260.dp)
+                    )
+                } else {
+                    AilaAssistantWave(
+                        active = false,
+                        size = 42.dp,
+                        intro = true
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        text = "Come posso aiutarti oggi?",
+                        style = TextStyle(
+                            fontFamily = FontFamily.Serif,
+                            fontSize = 24.sp,
+                            lineHeight = 31.sp,
+                            fontWeight = FontWeight.Normal,
+                            letterSpacing = (-0.3).sp
+                        ),
+                        color = palette.ink,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+}
+
+// =================================================================================================
+// Bolla utente (pillola azzurro-ghiaccio) e risposta assistente (testo libero + barra azioni)
+// =================================================================================================
+
+@Composable
+private fun ClaudeUserBubble(
+    text: String,
+    palette: ClaudePalette,
+    animateSend: Boolean = false,
+    onShown: () -> Unit = {}
+) {
+    val sending = remember { animateSend }
+    if (sending) LaunchedEffect(Unit) { onShown() }
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        Box(
+            modifier = Modifier
+                .ailaBubbleEnter(enabled = sending, fromEnd = true)
+                .widthIn(max = 292.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(palette.userBubbleBg)
+                .padding(horizontal = 16.dp, vertical = 11.dp)
+        ) {
+            Text(
+                text = text,
+                style = TextStyle(
+                    fontFamily = FontFamily.Default,
+                    fontSize = 15.5.sp,
+                    lineHeight = 22.sp,
+                    fontWeight = FontWeight.Normal
+                ),
+                color = palette.ink
+            )
+        }
+    }
+}
+
+@Composable
+private fun ClaudeAssistantResponse(
+    message: AssistantMessage,
+    palette: ClaudePalette,
+    showDisclaimer: Boolean,
+    feedback: Int,
+    copied: Boolean,
+    onThumbUp: () -> Unit,
+    onThumbDown: () -> Unit,
+    onCopy: () -> Unit,
+    onRegenerate: (() -> Unit)?,
+    onOpenSource: (AssistantSource) -> Unit,
+    animateArrival: Boolean = false,
+    onArrived: () -> Unit = {}
+) {
+    val arriving = remember(message.id) { animateArrival }
+    var revealed by remember(message.id) { mutableStateOf(!arriving || AppTheme.reduceMotion) }
+    var textComplete by remember(message.id) { mutableStateOf(!arriving || AppTheme.reduceMotion) }
+    val formattedText = remember(message.text) { formatAssistantText(message.text) }
+
+    if (arriving) {
+        LaunchedEffect(message.id) {
+            if (!AppTheme.reduceMotion) delay(90)
+            revealed = true
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        AnimatedVisibility(
+            visible = revealed,
+            enter = ailaRevealEnter(),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                AilaResponseText(
+                    text = formattedText,
+                    responseId = message.id,
+                    animate = arriving,
+                    color = palette.ink,
+                    style = TextStyle(
+                        fontFamily = FontFamily.Default,
+                        fontSize = 15.5.sp,
+                        lineHeight = 24.sp,
+                        fontWeight = FontWeight.Normal
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    onComplete = { textComplete = true; onArrived() }
+                )
+
+                if (textComplete) {
+                    if (message.sources.isNotEmpty()) {
+                        Spacer(Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier
+                                .then(if (arriving) Modifier.ailaSheetReveal(3) else Modifier)
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            message.sources.forEach { source ->
+                                ClaudeSourcePill(source = source, palette = palette, onClick = { onOpenSource(source) })
+                            }
+                        }
+                    }
+
+                    // Riga azioni monocromatiche identica a Video 1 00:32–00:33 (pollice su/giù, copia, rigenera)
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(if (arriving) Modifier.ailaSheetReveal(5) else Modifier),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        ClaudeActionIconButton(
+                            contentDescription = "Risposta utile",
+                            onClick = onThumbUp
+                        ) {
+                            AppIcons.ThumbUp(
+                                modifier = Modifier.size(16.dp),
+                                color = if (feedback == 1) palette.ink else palette.inkFaint,
+                                filled = feedback == 1
+                            )
+                        }
+                        ClaudeActionIconButton(
+                            contentDescription = "Risposta non utile",
+                            onClick = onThumbDown
+                        ) {
+                            AppIcons.ThumbDown(
+                                modifier = Modifier.size(16.dp),
+                                color = if (feedback == -1) palette.ink else palette.inkFaint,
+                                filled = feedback == -1
+                            )
+                        }
+                        ClaudeActionIconButton(
+                            contentDescription = if (copied) "Testo copiato" else "Copia risposta",
+                            onClick = onCopy
+                        ) {
+                            if (copied) {
+                                AppIcons.Check(Modifier.size(16.dp), color = palette.ink)
+                            } else {
+                                ClaudeCopyGlyph(Modifier.size(16.dp), color = palette.inkFaint)
+                            }
+                        }
+                        if (onRegenerate != null) {
+                            ClaudeActionIconButton(
+                                contentDescription = "Rigenera risposta",
+                                onClick = onRegenerate
+                            ) {
+                                AppIcons.Refresh(Modifier.size(16.dp), color = palette.inkFaint)
+                            }
+                        }
+                        Spacer(Modifier.weight(1f))
+                        message.modelLabel?.let { label ->
+                            Text(
+                                text = label,
+                                style = TextStyle(fontSize = 11.5.sp),
+                                color = palette.inkFaint,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    if (showDisclaimer) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "AILA può commettere errori. Per le cose importanti apri la circolare.",
+                            style = TextStyle(fontSize = 11.5.sp, lineHeight = 16.sp),
+                            color = palette.inkFaint
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ClaudeActionIconButton(
+    contentDescription: String,
+    onClick: () -> Unit,
+    icon: @Composable () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { this.contentDescription = contentDescription },
+        contentAlignment = Alignment.Center
+    ) {
+        icon()
+    }
+}
+
+@Composable
+private fun ClaudeSourcePill(
+    source: AssistantSource,
+    palette: ClaudePalette,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(100.dp))
+            .background(palette.pillBg)
+            .border(0.75.dp, palette.hairline, RoundedCornerShape(100.dp))
+            .ailaPressable(pressedScale = 0.96f, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        source.kind.Icon(palette.inkMuted, 13.dp)
+        Text(
+            text = source.label,
+            style = TextStyle(fontSize = 12.5.sp, fontWeight = FontWeight.Medium),
+            color = palette.ink,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(max = 200.dp)
+        )
+        AppIcons.ChevronRight(Modifier.size(11.dp), color = palette.inkFaint)
+    }
+}
+
+@Composable
+private fun ClaudeThinkingRow(phase: AssistantAgentPhase?, palette: ClaudePalette) {
+    val phaseLabel = when (phase) {
+        AssistantAgentPhase.READING -> "Leggo il contesto degli eventi…"
+        AssistantAgentPhase.PLANNING -> "Preparo l'anteprima…"
+        AssistantAgentPhase.EXECUTING -> "Salvo e verifico nel calendario…"
+        AssistantAgentPhase.WRITING -> "Elaboro la risposta…"
+        AssistantAgentPhase.TRANSCRIBING -> "Trascrivo l’audio…"
+        null -> "Sto cercando in AILA…"
+    }
+    Row(
+        modifier = Modifier
+            .padding(vertical = 6.dp)
+            .semantics { contentDescription = phaseLabel },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        AilaAssistantWave(active = true, size = 22.dp)
+        Text(
+            text = phaseLabel,
+            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Normal),
+            color = palette.inkMuted,
+            modifier = Modifier.ailaPulse().clearAndSetSemantics { }
         )
     }
 }
 
 @Composable
-private fun AttachmentMenuTile(title: String, subtitle: String, fill: Color, ink: Color,
-    enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, icon: @Composable (Color) -> Unit) {
-    val shape = RoundedCornerShape(26.dp)
-    val textColor = if (AppTheme.isGlass) AppTheme.TextDark else ink
-    val iconColor = if (AppTheme.isGlass) AppTheme.PrimaryBlue else ink
-    Column(modifier.then(
-        if (AppTheme.isGlass) Modifier.ailaGlassSurface(shape)
-        else Modifier.clip(shape).background(fill)
-    ).alpha(if(enabled) 1f else .45f)
-        .clickable(enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
-        .padding(horizontal = 10.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(Modifier.size(38.dp).background(iconColor.copy(alpha = .10f), RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) { icon(iconColor) }
-        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = textColor)
-        Text(subtitle, minLines = 2, style = MaterialTheme.typography.labelMedium, color = if (AppTheme.isGlass) AppTheme.TextMuted else ink.copy(alpha = .8f))
+private fun ClaudeErrorBubble(text: String, palette: ClaudePalette) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(palette.dangerBg)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        AppIcons.Warning(Modifier.size(18.dp).padding(top = 2.dp), color = palette.dangerInk)
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(
+                text = "Non sono riuscito a rispondere",
+                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+                color = palette.dangerInk
+            )
+            Text(
+                text = text,
+                style = TextStyle(fontSize = 13.5.sp, lineHeight = 19.sp),
+                color = palette.dangerInk
+            )
+        }
+    }
+}
+
+@Composable
+private fun ClaudeAttachmentTile(
+    title: String,
+    subtitle: String,
+    palette: ClaudePalette,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: @Composable (Color) -> Unit
+) {
+    val shape = RoundedCornerShape(22.dp)
+    Column(
+        modifier = modifier
+            .clip(shape)
+            .background(palette.pillBg)
+            .border(0.75.dp, palette.hairline, shape)
+            .alpha(if (enabled) 1f else 0.45f)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(palette.sheetBg),
+            contentAlignment = Alignment.Center
+        ) {
+            icon(palette.ink)
+        }
+        Text(title, style = TextStyle(fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold), color = palette.ink)
+        Text(subtitle, minLines = 2, style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp), color = palette.inkMuted)
     }
 }
 
 @Composable
 private fun AttachmentMenuRow(
-    title: String, subtitle: String, onClick: () -> Unit, enabled: Boolean = true, icon: @Composable () -> Unit
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    icon: @Composable () -> Unit
 ) {
     Row(
-        Modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.5f)
-            .clickable(enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
-            .padding(16.dp),
+        Modifier
+            .fillMaxWidth()
+            .alpha(if (enabled) 1f else 0.5f)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        icon(); Spacer(Modifier.width(12.dp))
+        icon()
+        Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(title, style = MaterialTheme.typography.titleSmall, color = AppTheme.TextDark)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
@@ -529,702 +1209,41 @@ private fun AttachmentMenuRow(
     }
 }
 
+// =================================================================================================
+// Componenti condivisi con altri file (ForumScreen, AcaContextOverlay) — firme mantenute invariate
+// =================================================================================================
+
 @Composable
 internal fun CameraGlyph(modifier: Modifier = Modifier.size(24.dp), tint: Color) {
-    androidx.compose.foundation.Canvas(modifier) {
+    Canvas(modifier) {
         val w = size.width
         val h = size.height
         val stroke = (w * 0.085f).coerceAtLeast(1.5.dp.toPx())
-        // Corpo fotocamera
         drawRoundRect(
             color = tint,
-            topLeft = androidx.compose.ui.geometry.Offset(w * 0.12f, h * 0.28f),
-            size = androidx.compose.ui.geometry.Size(w * 0.76f, h * 0.54f),
-            cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.12f),
-            style = androidx.compose.ui.graphics.drawscope.Stroke(stroke)
+            topLeft = Offset(w * 0.12f, h * 0.28f),
+            size = Size(w * 0.76f, h * 0.54f),
+            cornerRadius = CornerRadius(w * 0.12f),
+            style = Stroke(stroke)
         )
-        // Mirino superiore
         drawRoundRect(
             color = tint,
-            topLeft = androidx.compose.ui.geometry.Offset(w * 0.34f, h * 0.16f),
-            size = androidx.compose.ui.geometry.Size(w * 0.32f, h * 0.12f),
-            cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.05f),
-            style = androidx.compose.ui.graphics.drawscope.Stroke(stroke)
+            topLeft = Offset(w * 0.34f, h * 0.16f),
+            size = Size(w * 0.32f, h * 0.12f),
+            cornerRadius = CornerRadius(w * 0.05f),
+            style = Stroke(stroke)
         )
-        // Obiettivo centrale
         drawCircle(
             color = tint,
             radius = w * 0.16f,
-            center = androidx.compose.ui.geometry.Offset(w * 0.50f, h * 0.55f),
-            style = androidx.compose.ui.graphics.drawscope.Stroke(stroke)
+            center = Offset(w * 0.50f, h * 0.55f),
+            style = Stroke(stroke)
         )
     }
 }
 
-@Composable
-private fun MicrophoneGlyph(tint: Color) {
-    androidx.compose.foundation.Canvas(Modifier.size(24.dp)) {
-        drawRoundRect(tint, androidx.compose.ui.geometry.Offset(size.width * .35f, size.height * .1f), androidx.compose.ui.geometry.Size(size.width * .3f, size.height * .55f), androidx.compose.ui.geometry.CornerRadius(size.width * .15f))
-        drawArc(tint, 0f, 180f, false, androidx.compose.ui.geometry.Offset(size.width * .2f, size.height * .3f), androidx.compose.ui.geometry.Size(size.width * .6f, size.height * .5f), style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
-        drawLine(tint, androidx.compose.ui.geometry.Offset(size.width * .5f, size.height * .8f), androidx.compose.ui.geometry.Offset(size.width * .5f, size.height * .95f), 2.dp.toPx())
-    }
-}
-
-/**
- * Fondo delle superfici della chat (fumetti dell'assistente, domande suggerite, riquadro del
- * ragionamento): vetro in Liquid Glass, superficie tonale in Material. Prima erano superfici
- * piene bianche (o grigio scuro), che in Glass sembravano un pezzo di un'altra app.
- */
 private fun Modifier.chatSurface(shape: Shape): Modifier =
     if (AppTheme.isGlass) ailaGlassSurface(shape) else clip(shape).background(AppTheme.CardSurface)
-
-/**
- * Pulsante di invio. Glass: tondo blu con la freccia in su, come Messaggi di iOS; spento e' un
- * tondo di vetro. Material: primario pieno, tondo che alla pressione si squadra, freccia a destra.
- */
-@Composable
-private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val glass = AppTheme.isGlass
-    val shape = if (glass) CircleShape else ailaMorphShape(interactionSource)
-    // Il blu si accende in dissolvenza appena c'e' qualcosa da mandare (prima scattava al primo
-    // carattere) e la freccia fa un piccolo "pop": il pulsante dice "ora puoi" senza scritte.
-    val on by animateFloatAsState(
-        targetValue = if (enabled) 1f else 0f,
-        animationSpec = ailaNavigationSpring(),
-        label = "sendButtonOn"
-    )
-    val fill = AppTheme.PrimaryGradient
-    Box(
-        modifier = Modifier
-            .size(48.dp)
-            // Sotto, il pulsante spento (vetro o pillola tonale); sopra, il blu con l'opacita'
-            // che segue `on`.
-            .then(
-                if (glass) Modifier.ailaGlassSurface(shape)
-                else Modifier.clip(shape).background(AppTheme.TrackFill)
-            )
-            .clip(shape)
-            .drawBehind { drawRect(fill, alpha = on) }
-            .clickable(interactionSource = interactionSource, indication = null, enabled = enabled) { onClick() }
-            .semantics { contentDescription = "Invia" },
-        contentAlignment = Alignment.Center
-    ) {
-        AppIcons.ArrowUp(
-            modifier = Modifier
-                .size(22.dp)
-                .ailaSelectionPop(enabled)
-                .graphicsLayer { rotationZ = if (glass || AppTheme.isNothing) 0f else 90f },
-            color = lerp(AppTheme.TextFaint, if(AppTheme.isNothing) AppTheme.BackgroundLight else Color.White, on)
-        )
-    }
-}
-
-/**
- * Lo storico delle conversazioni: raggruppate per quanto sono recenti, con la prima domanda come
- * titolo, un'anteprima dell'ultima risposta e il cestino per buttarne una. Da sei in su si puo'
- * cercare.
- *
- * Material: righe "a gruppo" come le liste di Material 3 Expressive (angoli grandi solo in cima e
- * in fondo al gruppo, quasi squadrati in mezzo). Glass: righe di vetro separate e tonde.
- *
- * Le conversazioni arrivano dal dispositivo, non dal server — vedi
- * [circolareplus.data.local.LocalSettingsManager.listAssistantConversations].
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun AssistantHistorySheet(
-    conversations: List<AssistantConversation>,
-    canOpen: Boolean,
-    onPick: (AssistantConversation) -> Unit,
-    onDelete: (String) -> Unit,
-    onNewChat: (() -> Unit)?,
-    onDismiss: () -> Unit
-) {
-    var query by remember { mutableStateOf("") }
-    // Scelta fatta nel foglio (apri una conversazione, nuova chat): si esegue a foglio chiuso, cosi'
-    // il foglio rientra nel pulsante e poi cambia la chat, invece di sparire di colpo.
-    var pending by remember { mutableStateOf<(() -> Unit)?>(null) }
-    val trimmed = query.trim()
-    val groups = remember(conversations, trimmed) {
-        val now = circolareplus.platform.currentTimeMillis()
-        conversations
-            .filter { c ->
-                trimmed.isEmpty() || c.title.contains(trimmed, ignoreCase = true) ||
-                    c.messages.any { it.text.contains(trimmed, ignoreCase = true) }
-            }
-            .sortedByDescending { it.updatedAtMillis }
-            .groupBy { c ->
-                val hours = (now - c.updatedAtMillis).coerceAtLeast(0) / (60L * 60 * 1000)
-                when {
-                    hours < 24 -> "Ultime 24 ore"
-                    hours < 24 * 7 -> "Questa settimana"
-                    else -> "Prima"
-                }
-            }
-            .toList()
-    }
-
-    circolareplus.design.AilaOriginSheet(
-        originKey = "assistantHistory",
-        onDismiss = {
-            onDismiss()
-            pending?.invoke()
-        }
-    ) { close ->
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = AppTheme.Space20)
-                .padding(bottom = AppTheme.Space32)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Conversazioni",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = AppTheme.TextDark
-                    )
-                    Spacer(modifier = Modifier.height(AppTheme.Space4))
-                    Text(
-                        text = "${conversations.size} su questo telefono, non passano dal server della classe.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = AppTheme.TextMuted
-                    )
-                }
-                if (onNewChat != null) {
-                    Spacer(modifier = Modifier.width(AppTheme.Space12))
-                    circolareplus.design.AilaPrimaryButton(
-                        text = "Nuova",
-                        onClick = { pending = onNewChat; close() },
-                        compact = true,
-                        icon = { color -> AppIcons.NewChat(modifier = Modifier.size(16.dp), color = color) }
-                    )
-                }
-            }
-            if (conversations.size >= 6) {
-                Spacer(modifier = Modifier.height(AppTheme.Space16))
-                circolareplus.design.AilaPillTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    placeholder = "Cerca nelle conversazioni",
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    leadingIcon = { AppIcons.Search(modifier = Modifier.size(18.dp), color = AppTheme.TextFaint) }
-                )
-            }
-            Spacer(modifier = Modifier.height(AppTheme.Space8))
-
-            if (groups.isEmpty()) {
-                Text(
-                    text = "Nessuna conversazione contiene \"$trimmed\".",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = AppTheme.TextMuted,
-                    modifier = Modifier.padding(vertical = AppTheme.Space24)
-                )
-            }
-
-            // Il foglio non deve crescere oltre lo schermo quando le conversazioni sono venti:
-            // scorre da solo, con l'altezza limitata.
-            LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
-                groups.forEach { (label, group) ->
-                    item(key = "header-$label") {
-                        Text(
-                            text = label.uppercase(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = AppTheme.TextFaint,
-                            modifier = Modifier.padding(top = AppTheme.Space12, bottom = AppTheme.Space8, start = AppTheme.Space4)
-                        )
-                    }
-                    itemsIndexed(group, key = { _, c -> c.id }) { index, conversation ->
-                        ConversationRow(
-                            conversation = conversation,
-                            position = when {
-                                group.size == 1 -> RowPosition.Single
-                                index == 0 -> RowPosition.First
-                                index == group.lastIndex -> RowPosition.Last
-                                else -> RowPosition.Middle
-                            },
-                            canOpen = canOpen,
-                            onPick = { picked -> pending = { onPick(picked) }; close() },
-                            onDelete = onDelete,
-                            modifier = Modifier.animateItem(
-                                fadeInSpec = null,
-                                placementSpec = ailaNavigationSpring(),
-                                fadeOutSpec = ailaNavigationSpring()
-                            )
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-private enum class RowPosition { Single, First, Middle, Last }
-
-@Composable
-private fun ConversationRow(
-    conversation: AssistantConversation,
-    position: RowPosition,
-    canOpen: Boolean,
-    onPick: (AssistantConversation) -> Unit,
-    onDelete: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val glass = AppTheme.isGlass
-    val big = AppTheme.CardCornerRadius
-    val small = 6.dp
-    val shape = if (glass) RoundedCornerShape(AppTheme.CardCornerRadius) else when (position) {
-        RowPosition.Single -> RoundedCornerShape(big)
-        RowPosition.First -> RoundedCornerShape(topStart = big, topEnd = big, bottomStart = small, bottomEnd = small)
-        RowPosition.Middle -> RoundedCornerShape(small)
-        RowPosition.Last -> RoundedCornerShape(topStart = small, topEnd = small, bottomStart = big, bottomEnd = big)
-    }
-    val preview = remember(conversation) { conversationPreview(conversation) }
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            // Glass: righe di vetro separate (dietro l'app e' sfocata, vedi AilaSheetBackdrop).
-            // Material: gruppo di righe tonali, separate da un filo di fondo.
-            .padding(bottom = if (glass) AppTheme.Space8 else 2.dp)
-            .then(
-                if (glass) Modifier.ailaGlassSurface(shape)
-                else Modifier.clip(shape).background(AppTheme.TrackFill)
-            )
-            .then(
-                if (canOpen) Modifier.ailaPressable(pressedScale = 0.98f) { onPick(conversation) }
-                else Modifier.alpha(0.5f)
-            )
-            .padding(start = AppTheme.Space12, end = AppTheme.Space4, top = AppTheme.Space12, bottom = AppTheme.Space12),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        circolareplus.design.AilaIconTile(tint = AppTheme.TintBlue, size = 44.dp) {
-            AilaAssistantMark(size = 22.dp)
-        }
-        Spacer(modifier = Modifier.width(AppTheme.Space12))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = conversation.messages.firstOrNull { it.author == AssistantAuthor.USER }?.text
-                                ?.takeIf { it.startsWith("Prepara gli eventi da inserire nel calendario:") }
-                                ?.removePrefix("Prepara gli eventi da inserire nel calendario:")?.trim()?.takeIf { it.isNotBlank() }
-                                ?: conversation.title,
-                style = MaterialTheme.typography.titleSmall,
-                color = AppTheme.TextDark,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (preview.isNotEmpty()) {
-                Text(
-                    text = preview,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = AppTheme.TextMuted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Spacer(modifier = Modifier.height(AppTheme.Space4))
-            Text(
-                text = "${relativeTimeLabel(conversation.updatedAtMillis)} \u2022 ${conversation.messages.size} messaggi",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Normal,
-                color = AppTheme.TextFaint
-            )
-        }
-        Box(
-            modifier = Modifier
-                // 44dp di tocco: il cestino sta accanto alla riga che apre la conversazione,
-                // mancarlo voleva dire aprirla.
-                .size(44.dp)
-                .clip(CircleShape)
-                .ailaPressable(pressedScale = 0.9f) { onDelete(conversation.id) }
-                .padding(AppTheme.Space12)
-                .semantics { contentDescription = "Elimina conversazione" },
-            contentAlignment = Alignment.Center
-        ) {
-            AppIcons.Trash(modifier = Modifier.size(18.dp), color = AppTheme.TextFaint)
-        }
-    }
-}
-
-/** La prima riga dell'ultima risposta, senza i simboli del markdown: e' l'anteprima della riga. */
-private fun conversationPreview(conversation: AssistantConversation): String {
-    val answer = conversation.messages.lastOrNull { it.author != AssistantAuthor.USER && !it.isError } ?: return ""
-    return answer.text.lines()
-        .map { it.trim().removePrefix("- ").removePrefix("* ").replace("**", "") }
-        .firstOrNull { it.isNotEmpty() }
-        .orEmpty()
-        .take(90)
-}
-
-/** "adesso", "X min fa", "X h fa", "X g fa": come nello storico notifiche, senza librerie data/ora. */
-private fun relativeTimeLabel(atMillis: Long): String {
-    val diffMillis = (circolareplus.platform.currentTimeMillis() - atMillis).coerceAtLeast(0)
-    val minutes = diffMillis / (60 * 1000)
-    val hours = minutes / 60
-    val days = hours / 24
-    return when {
-        minutes < 1 -> "adesso"
-        minutes < 60 -> "$minutes min fa"
-        hours < 24 -> "$hours h fa"
-        else -> "$days g fa"
-    }
-}
-
-/**
- * Schermata vuota. Niente domande suggerite (erano frasi uguali per tutti, che nessuno toccava):
- * mostra cio' che e' vero per chi la apre — le sue ultime conversazioni, da riprendere — e da
- * dove l'Assistant prende le risposte. Gli esempi di domande stanno nel campo di testo, come
- * suggerimento che ruota, non come pulsanti.
- */
-@Composable
-private fun AssistantWelcome(
-    conversations: List<AssistantConversation>,
-    onOpenConversation: (AssistantConversation) -> Unit,
-    onOpenSource: (AssistantSource) -> Unit
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(top = AppTheme.Space12),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp))
-            .background(Brush.linearGradient(listOf(AppTheme.CardSurface, AppTheme.TintViolet.copy(alpha = .55f))))
-            .border(1.dp, AppTheme.PrimaryBlue.copy(alpha = .12f), RoundedCornerShape(28.dp)).padding(18.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            AilaAssistantHalo(size = 56.dp, intro = true)
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Come posso aiutarti?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = AppTheme.TextDark)
-                Text("Troviamo risposte nella tua scuola e prepariamo insieme le azioni.", style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
-            }
-        }
-        val recent = conversations.sortedByDescending { it.updatedAtMillis }.take(3)
-        if (recent.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(AppTheme.Space24))
-            WelcomeLabel("Conversazioni recenti")
-            recent.forEach { conversation ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = AppTheme.Space8)
-                        .chatSurface(RoundedCornerShape(AppTheme.CardCornerRadius))
-                        .ailaPressable(pressedScale = 0.98f) { onOpenConversation(conversation) }
-                        .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    AilaAssistantMark(size = 20.dp)
-                    Spacer(modifier = Modifier.width(AppTheme.Space12))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = conversation.messages.firstOrNull { it.author == AssistantAuthor.USER }?.text
-                                ?.takeIf { it.startsWith("Prepara gli eventi da inserire nel calendario:") }
-                                ?.removePrefix("Prepara gli eventi da inserire nel calendario:")?.trim()?.takeIf { it.isNotBlank() }
-                                ?: conversation.title,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = AppTheme.TextDark,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = relativeTimeLabel(conversation.updatedAtMillis),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Normal,
-                            color = AppTheme.TextFaint
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(AppTheme.Space8))
-                    AppIcons.ChevronRight(modifier = Modifier.size(16.dp), color = AppTheme.TextFaint)
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(AppTheme.Space16))
-        WelcomeLabel("Esplora le fonti")
-        WelcomeSources.chunked(2).forEach { pair ->
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = AppTheme.Space8),
-                horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
-            ) {
-                pair.forEach { (kind, label) ->
-                    Row(
-                        modifier = Modifier
-                            .weight(1f)
-                            .chatSurface(RoundedCornerShape(20.dp))
-                            .border(1.dp, kind.ink().copy(alpha = .12f), RoundedCornerShape(20.dp))
-                            .ailaPressable(pressedScale = 0.98f) {
-                                onOpenSource(AssistantSource(kind = kind, label = label))
-                            }
-                            .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space8),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(Modifier.size(30.dp).background(kind.tint(), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) { kind.Icon(kind.ink(), 16.dp) }
-                        Spacer(modifier = Modifier.width(AppTheme.Space8))
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = AppTheme.TextDark,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-        }
-        Text(
-            text = "Per tutto il resto risponde con le sue conoscenze.",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Normal,
-            color = AppTheme.TextFaint,
-            textAlign = TextAlign.Center
-        )
-    }
-}
-
-@Composable
-private fun WelcomeLabel(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelSmall,
-        color = AppTheme.TextFaint,
-        modifier = Modifier.fillMaxWidth().padding(start = AppTheme.Space4, bottom = AppTheme.Space8)
-    )
-}
-
-private val WelcomeSources = listOf(
-    AssistantSourceKind.CIRCULAR to "Circolari",
-    AssistantSourceKind.CALENDAR to "Calendario",
-    AssistantSourceKind.BOARD to "Bacheca",
-    AssistantSourceKind.POLL to "Sondaggi",
-    AssistantSourceKind.SEAT_MAP to "Mappa posti",
-    AssistantSourceKind.GITA to "Gita"
-)
-
-/** Esempi di domande nel campo di testo, finche' la chat e' vuota. */
-private val ExamplePlaceholders = listOf(
-    "Quando è la prossima verifica?",
-    "Cosa c'è da pagare questo mese?",
-    "Riassumi l'ultima circolare",
-    "Dove sono seduto in aula?",
-    "Ci sono sondaggi ancora aperti?"
-)
-
-/**
- * Intestazione della chat: indietro, il marchio (che "parla" mentre l'Assistant lavora), nome e una
- * riga di stato — "Sto cercando…" in attesa, altrimenti il modello che ha risposto — e le azioni.
- * Il marchio compare con la prima domanda: a chat vuota c'e' gia' quello grande del benvenuto.
- */
-@Composable
-private fun AssistantHeader(
-    isThinking: Boolean,
-    hasMessages: Boolean,
-    statusLabel: String?,
-    onBackClick: () -> Unit,
-    onHistoryClick: (() -> Unit)?,
-    onNewChatClick: (() -> Unit)?
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = AppTheme.Space12, end = AppTheme.Space16, top = AppTheme.Space20, bottom = AppTheme.Space12),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        AilaIconButton(contentDescription = "Indietro", onClick = onBackClick) { tint ->
-            AppIcons.ChevronLeft(modifier = Modifier.size(19.dp), color = tint)
-        }
-        Spacer(modifier = Modifier.width(AppTheme.Space12))
-        androidx.compose.animation.AnimatedVisibility(
-            visible = hasMessages || isThinking,
-            enter = androidx.compose.animation.fadeIn(ailaFadeSpec()) +
-                androidx.compose.animation.expandHorizontally(ailaSpatialSpring())
-        ) {
-            Row {
-                AilaAssistantWave(active = isThinking, size = 30.dp)
-                Spacer(modifier = Modifier.width(AppTheme.Space12))
-            }
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "AILA Assistant",
-                style = MaterialTheme.typography.titleMedium,
-                color = AppTheme.TextDark,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Crossfade(
-                targetState = when {
-                    isThinking -> "Sto cercando…"
-                    hasMessages && statusLabel != null -> statusLabel
-                    else -> "Circolari, calendario, bacheca e altro"
-                },
-                animationSpec = ailaFadeSpec(),
-                label = "assistantStatus"
-            ) { status ->
-                Text(
-                    text = status,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Normal,
-                    color = if (isThinking) AppTheme.PrimaryBlue else AppTheme.TextFaint,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-        Spacer(modifier = Modifier.width(AppTheme.Space8))
-        Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)) {
-            if (onHistoryClick != null) {
-                AilaIconButton(contentDescription = "Cronologia chat", onClick = onHistoryClick, opensPage = true) { tint ->
-                    AppIcons.History(modifier = Modifier.size(20.dp), color = tint)
-                }
-            }
-            if (onNewChatClick != null) {
-                AilaIconButton(contentDescription = "Nuova chat", onClick = onNewChatClick) { tint ->
-                    AppIcons.NewChat(modifier = Modifier.size(20.dp), color = tint)
-                }
-            }
-        }
-    }
-}
-
-/** Angoli dei fumetti: tondi, con l'angolo verso chi parla appena accennato. */
-private val BubbleRadius get() = if (AppTheme.isGlass) 24.dp else 28.dp
-private val BubbleTail get() = if (AppTheme.isGlass) 6.dp else 6.dp
-
-@Composable
-private fun UserBubble(text: String, animateSend: Boolean = false, onShown: () -> Unit = {}) {
-    // Deciso una volta sola: se il fumetto esce dallo schermo e ci torna non deve rientrare.
-    val sending = remember { animateSend }
-    if (sending) LaunchedEffect(Unit) { onShown() }
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-        Box(
-            modifier = Modifier
-                // La domanda appena mandata sale dal campo di testo e si allarga dall'angolo in
-                // basso a destra, quello della "coda" del fumetto.
-                .ailaBubbleEnter(enabled = sending, fromEnd = true)
-                .widthIn(max = 300.dp)
-                .clip(
-                    RoundedCornerShape(
-                        topStart = BubbleRadius,
-                        topEnd = BubbleRadius,
-                        bottomStart = BubbleRadius,
-                        bottomEnd = BubbleTail
-                    )
-                )
-                // Glass: blu col gradiente dei pulsanti e un riflesso chiaro in alto (vetro
-                // colorato). Material: "primary container", tonale; il blu pieno e' del pulsante
-                // di invio.
-                .then(
-                    if (AppTheme.isGlass) {
-                        Modifier
-                            .background(AppTheme.PrimaryGradient)
-                            .background(Brush.verticalGradient(0f to Color.White.copy(alpha = 0.18f), 0.5f to Color.Transparent))
-                    } else Modifier.background(AppTheme.TintBlue)
-                )
-                .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12)
-        ) {
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (AppTheme.isGlass) Color.White else AppTheme.TintBlueInk
-            )
-        }
-    }
-}
-
-@Composable
-private fun AssistantBubble(
-    message: AssistantMessage,
-    onOpenSource: (AssistantSource) -> Unit,
-    animateArrival: Boolean = false,
-    onArrived: () -> Unit = {}
-) {
-    // Arrivo: l'icona parte come onda in movimento, la stessa dell'attesa (ThinkingBubble), e si
-    // calma fino al marchio fermo mentre la risposta si apre sotto. E' un solo segno che smette
-    // di parlare, in entrambi gli stili.
-    val arriving = remember(message.id) { animateArrival }
-    var revealed by remember(message.id) { mutableStateOf(!arriving || AppTheme.reduceMotion) }
-    var textComplete by remember(message.id) { mutableStateOf(!arriving || AppTheme.reduceMotion) }
-    val formattedText = remember(message.text) { formatAssistantText(message.text) }
-    if (arriving) {
-        LaunchedEffect(message.id) {
-            // Un attimo di onda ancora attiva: senza, l'indicatore spariva e la risposta compariva
-            // nello stesso fotogramma e il passaggio non si vedeva.
-            if(!AppTheme.reduceMotion)delay(120)
-            revealed = true
-        }
-    }
-    if (AppTheme.isGlass) {
-        // Liquid Glass: marchio accanto e risposta in una lastra di vetro, col filo di luce del
-        // marchio (viola in alto a sinistra, verde acqua in basso a destra) sul bordo.
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-            AilaAssistantWave(active = !revealed, size = 26.dp, modifier = Modifier.padding(top = 4.dp))
-            Spacer(modifier = Modifier.width(AppTheme.Space8))
-            androidx.compose.animation.AnimatedVisibility(
-                visible = revealed,
-                enter = ailaRevealEnter(),
-                modifier = Modifier.weight(1f)
-            ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    val shape = RoundedCornerShape(
-                        topStart = BubbleTail,
-                        topEnd = BubbleRadius,
-                        bottomStart = BubbleRadius,
-                        bottomEnd = BubbleRadius
-                    )
-                    Box(
-                        modifier = Modifier
-                            .chatSurface(shape)
-                            .border(
-                                1.dp,
-                                Brush.linearGradient(
-                                    0f to AilaAssistantViolet.copy(alpha = 0.55f),
-                                    0.45f to Color.Transparent,
-                                    0.75f to Color.Transparent,
-                                    1f to AilaAssistantTeal.copy(alpha = 0.45f)
-                                ),
-                                shape
-                            )
-                            .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12)
-                    ) {
-                        AilaResponseText(
-                            text = formattedText, responseId = message.id, animate = arriving,
-                            onComplete = { textComplete = true; onArrived() }
-                        )
-                    }
-                    if(textComplete)AnswerExtras(message, arriving, onOpenSource)
-                }
-            }
-        }
-    } else {
-        // Material Expressive: la risposta non sta in un fumetto ma e' testo libero a tutta
-        // larghezza, come un documento (piu' leggibile quando e' lunga); solo la domanda
-        // dell'utente e' in un contenitore tonale. Il marchio sta sopra, con il nome.
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(modifier = Modifier.padding(top = AppTheme.Space4), verticalAlignment = Alignment.CenterVertically) {
-                AilaAssistantWave(active = !revealed, size = 22.dp)
-                Spacer(modifier = Modifier.width(AppTheme.Space8))
-                Text(
-                    text = "AILA Assistant",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = AppTheme.TextMuted
-                )
-            }
-            androidx.compose.animation.AnimatedVisibility(
-                visible = revealed,
-                enter = ailaRevealEnter(),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.fillMaxWidth().padding(top = AppTheme.Space8)) {
-                    AilaResponseText(
-                        text = formattedText, responseId = message.id, animate = arriving,
-                        modifier = Modifier.padding(horizontal = AppTheme.Space4),
-                        onComplete = { textComplete = true; onArrived() }
-                    )
-                    if(textComplete)AnswerExtras(message, arriving, onOpenSource)
-                }
-            }
-        }
-    }
-}
 
 /** Reviewable, persisted plan. Only this explicit confirmation can start a calendar write. */
 @Composable
@@ -1236,45 +1255,82 @@ internal fun AssistantActionPreview(
     onRecover: () -> Unit
 ) {
     val plan = message.actionPlan ?: return
+    val palette = claudePalette(AppTheme.isDarkMode)
     Column(
-        Modifier.fillMaxWidth().padding(top = AppTheme.Space12)
-            .chatSurface(RoundedCornerShape(AppTheme.SmallElementRadius))
-            .padding(AppTheme.Space16),
-        verticalArrangement = Arrangement.spacedBy(AppTheme.Space12)
+        Modifier
+            .fillMaxWidth()
+            .padding(top = AppTheme.Space12)
+            .clip(RoundedCornerShape(20.dp))
+            .background(palette.pillBg)
+            .border(0.75.dp, palette.hairline, RoundedCornerShape(20.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Azioni sul calendario · ${plan.actions.size}", style = MaterialTheme.typography.titleMedium, color = AppTheme.TextDark)
+        Text(
+            text = "Azioni sul calendario · ${plan.actions.size}",
+            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+            color = palette.ink
+        )
         plan.actions.forEach { action ->
-            Column(verticalArrangement = Arrangement.spacedBy(AppTheme.Space4)) {
-                Text("${when(action.tool){"calendar.delete"->"Elimina";"calendar.update"->"Modifica";else->"Aggiungi"}}: ${action.title}", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = AppTheme.TextDark)
-                if(action.tool=="calendar.update"&&action.previousTitle!=null)Text(
-                    "Prima: ${action.previousTitle} · ${action.previousDate.orEmpty()} ${action.previousTime.orEmpty()}",
-                    style=MaterialTheme.typography.bodySmall,color=AppTheme.TextMuted)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    "${circolareplus.util.formatItalianDateWithWeekday(action.date)} ${action.date.take(4)} · ${action.time ?: "Orario non specificato"}",
-                    style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextDark
+                    text = "${when (action.tool) { "calendar.delete" -> "Elimina"; "calendar.update" -> "Modifica"; else -> "Aggiungi" }}: ${action.title}",
+                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                    color = palette.ink
+                )
+                if (action.tool == "calendar.update" && action.previousTitle != null) {
+                    Text(
+                        text = "Prima: ${action.previousTitle} · ${action.previousDate.orEmpty()} ${action.previousTime.orEmpty()}",
+                        style = TextStyle(fontSize = 12.5.sp),
+                        color = palette.inkMuted
+                    )
+                }
+                Text(
+                    text = "${circolareplus.util.formatItalianDateWithWeekday(action.date)} ${action.date.take(4)} · ${action.time ?: "Orario non specificato"}",
+                    style = TextStyle(fontSize = 13.5.sp),
+                    color = palette.ink
                 )
                 Text(
-                    "${action.audienceLabel ?: if (action.visibility == "CLASS") "Tutta la classe" else "Solo tu"} · ${action.category.name.lowercase().replace('_', ' ')}" +
+                    text = "${action.audienceLabel ?: if (action.visibility == "CLASS") "Tutta la classe" else "Solo tu"} · ${action.category.name.lowercase().replace('_', ' ')}" +
                         action.circularNumber?.let { " · Circolare n. $it" }.orEmpty(),
-                    style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted
+                    style = TextStyle(fontSize = 12.5.sp),
+                    color = palette.inkMuted
                 )
                 action.notes?.takeIf(String::isNotBlank)?.let {
-                    Text(it, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TextMuted)
+                    Text(it, style = TextStyle(fontSize = 13.sp), color = palette.inkMuted)
                 }
             }
         }
         when (message.actionStatus) {
             AssistantActionStatus.AWAITING_CONFIRMATION -> {
-                Text(if(plan.operationId==null)"Anteprima precedente: invia una nuova richiesta per confermare."else"Nessuna modifica è stata ancora effettuata.", style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted)
-                androidx.compose.material3.Button(onClick = onConfirm, enabled = !isBusy&&plan.operationId!=null, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = if (plan.operationId == null) "Anteprima precedente: invia una nuova richiesta per confermare."
+                    else "Nessuna modifica è stata ancora effettuata.",
+                    style = TextStyle(fontSize = 12.5.sp),
+                    color = palette.inkMuted
+                )
+                Button(
+                    onClick = onConfirm,
+                    enabled = !isBusy && plan.operationId != null,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(100.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = palette.ink,
+                        contentColor = palette.sheetBg
+                    )
+                ) {
                     Text("Conferma le azioni")
                 }
-                androidx.compose.material3.TextButton(onClick = onCancel, enabled = !isBusy, modifier = Modifier.fillMaxWidth()) {
-                    Text("Annulla")
+                TextButton(
+                    onClick = onCancel,
+                    enabled = !isBusy,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Annulla", color = palette.inkMuted)
                 }
             }
             else -> Text(
-                when (message.actionStatus) {
+                text = when (message.actionStatus) {
                     AssistantActionStatus.RUNNING -> if (isBusy) "Inserimento in corso…" else "Operazione interrotta: verifica il calendario."
                     AssistantActionStatus.COMPLETED -> "Elaborazione terminata: leggi l'esito qui sotto."
                     AssistantActionStatus.PARTIAL -> "Operazione completata in parte: leggi gli esiti qui sotto."
@@ -1282,185 +1338,33 @@ internal fun AssistantActionPreview(
                     AssistantActionStatus.ERROR -> "Operazione interrotta: verifica il calendario."
                     else -> "Anteprima annullata. Nessuna nuova azione da questa anteprima."
                 },
-                style = MaterialTheme.typography.bodySmall, color = AppTheme.TextMuted
+                style = TextStyle(fontSize = 12.5.sp),
+                color = palette.inkMuted
             )
         }
-        if(message.actionStatus in setOf(AssistantActionStatus.ERROR,AssistantActionStatus.RUNNING)&&!isBusy&&plan.operationId!=null)
-            androidx.compose.material3.OutlinedButton(onClick=onRecover,modifier=Modifier.fillMaxWidth()){Text("Verifica l’esito sul server")}
-    }
-}
-
-/** Sotto la risposta: da dove viene (le fonti) e quale modello l'ha scritta. */
-@Composable
-private fun AnswerExtras(
-    message: AssistantMessage,
-    arriving: Boolean,
-    onOpenSource: (AssistantSource) -> Unit
-) {
-    if (message.sources.isNotEmpty()) {
-        Spacer(modifier = Modifier.height(AppTheme.Space12))
-        Row(
-            modifier = Modifier
-                // Le fonti salgono subito dopo la risposta: prima la risposta, poi da dove viene.
-                // Solo all'arrivo, non riaprendo una conversazione.
-                .then(if (arriving) Modifier.ailaSheetReveal(4) else Modifier)
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(AppTheme.Space8)
-        ) {
-            message.sources.forEach { source ->
-                SourceChip(source = source, onClick = { onOpenSource(source) })
-            }
-        }
-    }
-    message.modelLabel?.let { label ->
-        Spacer(modifier = Modifier.height(AppTheme.Space8))
-        Row(
-            modifier = (if (arriving) Modifier.ailaSheetReveal(6) else Modifier)
-                .padding(horizontal = AppTheme.Space4),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AppIcons.Sparkle(modifier = Modifier.size(11.dp), color = AppTheme.TextFaint)
-            Spacer(modifier = Modifier.width(AppTheme.Space4))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Normal,
-                color = AppTheme.TextFaint,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-private fun AssistantErrorBubble(text: String) {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        AppIcons.Warning(
-            modifier = Modifier.size(20.dp).padding(top = 6.dp),
-            color = AppTheme.TintRedInk
-        )
-        Spacer(modifier = Modifier.width(AppTheme.Space8))
-        Column(modifier = Modifier.weight(1f)) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(BubbleRadius))
-                    .background(AppTheme.TintRed)
-                    .padding(horizontal = AppTheme.Space16, vertical = AppTheme.Space12)
+        if (message.actionStatus in setOf(AssistantActionStatus.ERROR, AssistantActionStatus.RUNNING) && !isBusy && plan.operationId != null) {
+            OutlinedButton(
+                onClick = onRecover,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(100.dp)
             ) {
-                Column {
-                    Text(
-                        text = "Non sono riuscito a rispondere",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = AppTheme.TintRedInk
-                    )
-                    Spacer(modifier = Modifier.height(AppTheme.Space4))
-                    // Il motivo vero, non una frase generica: quasi sempre e' una chiave AI
-                    // mancante o una quota esaurita, cioe' qualcosa che l'utente puo' sistemare
-                    // dalle Impostazioni — ma solo se gli si dice quale dei due.
-                    Text(text = text, style = MaterialTheme.typography.bodyMedium, color = AppTheme.TintRedInk)
-                }
+                Text("Verifica l’esito sul server", color = palette.ink)
             }
         }
     }
 }
 
-/**
- * Mentre il modello lavora: il marchio di AILA Assistant che "parla" (l'onda in movimento). Quando
- * arriva la risposta la stessa onda si calma nella sua icona (vedi AssistantBubble), alla stessa
- * posizione: per questo qui la riga e' costruita come quella dell'intestazione della risposta.
- */
-@Composable
-private fun ThinkingBubble(phase: AssistantAgentPhase? = null) {
-    val glass = AppTheme.isGlass
-    val phaseLabel = when (phase) {
-        AssistantAgentPhase.READING -> "Leggo il contesto degli eventi…"
-        AssistantAgentPhase.PLANNING -> "Preparo l'anteprima…"
-        AssistantAgentPhase.EXECUTING -> "Salvo e verifico nel calendario…"
-        AssistantAgentPhase.WRITING -> "Elaboro la risposta…"
-        AssistantAgentPhase.TRANSCRIBING -> "Trascrivo l’audio…"
-        null -> "Sto cercando in AILA…"
-    }
-    Row(
-        modifier = Modifier
-            .padding(top = if (glass) 4.dp else AppTheme.Space4)
-            .semantics { contentDescription = phaseLabel },
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        AilaAssistantWave(active = true, size = if (glass) 26.dp else 22.dp)
-        Spacer(modifier = Modifier.width(AppTheme.Space8))
-        // Una sola frase, onesta: non finge i passaggi (leggo le circolari, controllo il
-        // calendario…) che il modello fa tutti insieme. Solo respira, come l'onda. Glass: in una
-        // capsula di vetro, come un avviso di iOS; Material: solo testo accanto all'onda.
-        Text(
-            text = phaseLabel,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Normal,
-            color = AppTheme.TextMuted,
-            modifier = Modifier
-                .then(
-                    if (glass) {
-                        Modifier
-                            .ailaGlassSurface(RoundedCornerShape(AppTheme.ButtonCornerRadius))
-                            .padding(horizontal = AppTheme.Space12, vertical = AppTheme.Space4)
-                    } else Modifier
-                )
-                .ailaPulse()
-                .clearAndSetSemantics { }
-        )
-    }
-}
+/** Esempi di domande nel campo di testo, finché la chat è vuota. */
+private val ExamplePlaceholders = listOf(
+    "Quando è la prossima verifica?",
+    "Cosa c'è da pagare questo mese?",
+    "Riassumi l'ultima circolare",
+    "Dove sono seduto in aula?",
+    "Ci sono sondaggi ancora aperti?"
+)
 
 @Composable
-private fun SourceChip(source: AssistantSource, onClick: () -> Unit) {
-    val tint = source.kind.tint()
-    val ink = source.kind.ink()
-    Row(
-        modifier = Modifier
-            .ailaTopicSurface(RoundedCornerShape(AppTheme.ButtonCornerRadius), tint, ink)
-            .ailaPressable(pressedScale = 0.95f) { onClick() }
-            .padding(start = AppTheme.Space12, end = AppTheme.Space12, top = AppTheme.Space8, bottom = AppTheme.Space8),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        source.kind.Icon(ink)
-        Spacer(modifier = Modifier.width(AppTheme.Space8))
-        // Il titolo lungo non esce piu' dallo schermo con il fondo tagliato: sta in un massimo
-        // di larghezza e finisce con i puntini.
-        Text(
-            text = source.label,
-            style = MaterialTheme.typography.labelMedium,
-            color = ink,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.widthIn(max = 200.dp)
-        )
-        Spacer(modifier = Modifier.width(AppTheme.Space4))
-        AppIcons.ChevronRight(modifier = Modifier.size(12.dp), color = ink)
-    }
-}
-
-private fun AssistantSourceKind.tint(): Color = when (this) {
-    AssistantSourceKind.CIRCULAR -> AppTheme.TintBlue
-    AssistantSourceKind.CALENDAR -> AppTheme.TintAmber
-    AssistantSourceKind.BOARD -> AppTheme.TintViolet
-    AssistantSourceKind.POLL -> AppTheme.TintGreen
-    AssistantSourceKind.SEAT_MAP -> AppTheme.TintSlate
-    AssistantSourceKind.CLASS -> AppTheme.TintSlate
-    AssistantSourceKind.GITA -> AppTheme.TintAmber
-}
-
-private fun AssistantSourceKind.ink(): Color = when (this) {
-    AssistantSourceKind.CIRCULAR -> AppTheme.TintBlueInk
-    AssistantSourceKind.CALENDAR -> AppTheme.TintAmberInk
-    AssistantSourceKind.BOARD -> AppTheme.TintVioletInk
-    AssistantSourceKind.POLL -> AppTheme.TintGreenInk
-    AssistantSourceKind.SEAT_MAP -> AppTheme.TintSlateInk
-    AssistantSourceKind.CLASS -> AppTheme.TintSlateInk
-    AssistantSourceKind.GITA -> AppTheme.TintAmberInk
-}
-
-@Composable
-private fun AssistantSourceKind.Icon(color: Color, iconSize: androidx.compose.ui.unit.Dp = 14.dp) {
+private fun AssistantSourceKind.Icon(color: Color, iconSize: Dp = 14.dp) {
     val size = Modifier.size(iconSize)
     when (this) {
         AssistantSourceKind.CIRCULAR -> AppIcons.Document(modifier = size, color = color)
@@ -1473,12 +1377,4 @@ private fun AssistantSourceKind.Icon(color: Color, iconSize: androidx.compose.ui
     }
 }
 
-/**
- * Rende leggibile quel poco di markdown che i modelli infilano comunque nella risposta.
- *
- * Non e' un renderer markdown: gestisce solo il grassetto `**cosi'**` e trasforma i trattini a
- * inizio riga in punti elenco. Serve perche' senza, una risposta ben formattata dal modello
- * arriva a video piena di asterischi — che l'utente legge come un difetto dell'app, non come
- * una convenzione di formattazione.
- */
 private fun formatAssistantText(raw: String): AnnotatedString = circolareplus.design.formatAilaMarkdown(raw)
