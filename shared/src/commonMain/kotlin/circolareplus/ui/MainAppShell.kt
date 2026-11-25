@@ -4834,7 +4834,7 @@ fun MainAppShell(
                     // lato (vedi glassSlide e ailaUnderlayShift).
                     .then(
                         when {
-                            route == ShellRoute.ASSISTANT -> Modifier.background(assistantSurfacePalette().shellBg)
+                            route == ShellRoute.ASSISTANT -> Modifier.background(assistantSurfacePalette().canvasBg)
                             AppTheme.isGlass -> Modifier
                             else -> Modifier.background(AppTheme.BackgroundLight)
                         }

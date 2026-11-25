@@ -124,22 +124,42 @@ class AssistantClaudeUiTest {
             }
         }
 
-        compose.onNodeWithText("Come posso aiutarti oggi?").assertIsDisplayed()
+        compose.onNodeWithText("Da dove iniziamo?").assertIsDisplayed()
         // Nessuna barra tab inferiore, nessuna ricerca in alto a destra, un solo microfono
         compose.onNodeWithContentDescription("Cerca nelle chat").assertDoesNotExist()
         compose.onNodeWithContentDescription("Avvia voce").assertDoesNotExist()
         compose.onAllNodesWithContentDescription("Registra vocale").assertCountEquals(1)
         compose.onNodeWithContentDescription("Seleziona modello e ragionamento").assertIsDisplayed()
-        screenshot("aila-assistant-welcome-light")
+        screenshot("aila-gemini-welcome-light")
 
         // Verifica che si possa scrivere subito senza perdere il focus e inviare
         compose.onNode(hasSetTextAction()).performTextInput("Quando è la verifica?")
         compose.onNodeWithContentDescription("Invia").assertIsEnabled().performClick()
         compose.runOnIdle { assertEquals("Quando è la verifica?", sentPrompt) }
 
-        // Tema scuro
+        // Tema scuro OLED
         compose.runOnIdle { AppTheme.isDarkMode = true }
-        screenshot("aila-assistant-welcome-dark")
+        screenshot("aila-gemini-welcome-dark")
+
+        // Apri cassetto laterale in dark mode
+        compose.onNodeWithContentDescription("Apri menu chat").performClick()
+        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithText("Fissate").assertIsDisplayed()
+        compose.onNodeWithText("Tutte").assertIsDisplayed()
+        compose.onNodeWithText("Nuova chat").assertIsDisplayed()
+        compose.onNodeWithText("Scorciatoie").assertDoesNotExist()
+        compose.onNodeWithText("Piano di studio").assertDoesNotExist()
+        screenshot("aila-gemini-drawer-dark")
+
+        // Ricerca dalla barra del cassetto
+        compose.onNodeWithContentDescription("Cerca nelle conversazioni").performClick()
+        compose.mainClock.advanceTimeBy(300)
+        compose.onNodeWithContentDescription("Campo ricerca chat").performTextInput("verifica")
+        compose.mainClock.advanceTimeBy(200)
+        compose.onNodeWithText("Verifica di storia lunedì", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Verifica di storia lunedì", substring = true).performClick()
+        compose.runOnIdle { assertEquals("c3", openedConversationId) }
+
         compose.runOnIdle { AppTheme.isDarkMode = false }
 
         // Modalità incognito
@@ -148,25 +168,6 @@ class AssistantClaudeUiTest {
         compose.onNodeWithText("Questa conversazione non viene salvata nello storico del telefono.").assertIsDisplayed()
         compose.onNodeWithContentDescription("Esci dalla chat in incognito").performClick()
         compose.mainClock.advanceTimeBy(350)
-
-        // Apri cassetto laterale: nessuna scorciatoia inutile ("Piano di studio" / "Scorciatoie")
-        compose.onNodeWithContentDescription("Apri menu chat").performClick()
-        compose.mainClock.advanceTimeBy(500)
-        compose.onNodeWithText("Fissate").assertIsDisplayed()
-        compose.onNodeWithText("Recenti").assertIsDisplayed()
-        compose.onNodeWithText("Scorciatoie").assertDoesNotExist()
-        compose.onNodeWithText("Piano di studio").assertDoesNotExist()
-        screenshot("aila-assistant-drawer")
-
-        // Ricerca dal footer del cassetto
-        compose.onNodeWithContentDescription("Cerca nelle conversazioni").performClick()
-        compose.mainClock.advanceTimeBy(300)
-        compose.onNodeWithContentDescription("Campo ricerca chat").performTextInput("verifica")
-        compose.mainClock.advanceTimeBy(200)
-        compose.onNodeWithText("Verifica di storia lunedì", substring = true).assertIsDisplayed()
-        screenshot("aila-assistant-search")
-        compose.onNodeWithText("Verifica di storia lunedì", substring = true).performClick()
-        compose.runOnIdle { assertEquals("c3", openedConversationId) }
 
         // Pulsante Indietro in alto a sinistra
         compose.onNodeWithContentDescription("Indietro").performClick()
@@ -203,20 +204,18 @@ class AssistantClaudeUiTest {
         }
 
         // Il selettore modello/provider è visibile subito anche a campo vuoto
+        compose.runOnIdle { AppTheme.isDarkMode = true }
         compose.onNodeWithContentDescription("Seleziona modello e ragionamento").assertIsDisplayed().performClick()
         compose.mainClock.advanceTimeBy(300)
         compose.onNodeWithText("Modello e provider").assertIsDisplayed()
         compose.onNodeWithText("Google Gemini").assertIsDisplayed()
-        screenshot("aila-assistant-model-sheet")
+        screenshot("aila-gemini-model-sheet-dark")
 
         compose.onNodeWithText("Google Gemini").performClick()
         compose.runOnIdle { assertEquals(AiProvider.GOOGLE_AI_STUDIO.id, provider) }
 
-        compose.onNodeWithContentDescription("Modifica livello di ragionamento").performClick()
-        compose.mainClock.advanceTimeBy(350)
-        compose.onNodeWithText("Ragionamento").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Livello di ragionamento: Medio").assertIsDisplayed()
-        screenshot("aila-assistant-effort-sheet")
+        compose.onNodeWithContentDescription("Ragionamento: Alto").performClick()
+        compose.runOnIdle { assertEquals(2, effort) }
     }
 
     @Test fun activeConversationShowsModelInHeaderAndCleanActionRow() {

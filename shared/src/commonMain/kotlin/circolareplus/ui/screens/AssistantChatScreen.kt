@@ -104,13 +104,15 @@ import circolareplus.design.ailaPressable
 import circolareplus.design.ailaPulse
 import circolareplus.design.ailaRevealEnter
 import circolareplus.design.ailaSheetReveal
+import circolareplus.design.ailaTopicSurface
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * La chat con AILA Assistant: palette 100% coerente con [AppTheme], marchio reale AILA,
- * cassetto laterale scorrevole per Fissate/Recenti/Ricerca, modalità incognito, composer
- * unificato con selettore Modello/Provider e Ragionamento sempre accessibile e bersagli touch >= 44dp.
+ * AILA Assistant in stile Neural Expressive / Gemini: neri profondi OLED in tema scuro con
+ * bagliore radiale del brand, colori AILA vivi, tasti grandi (48dp), sidebar laterale pulita
+ * (Nuova chat, Fissate, Tutte, Ricerca, Impostazioni AI) e selettore Modello/Provider +
+ * Ragionamento in 1 tap.
  */
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -142,7 +144,6 @@ fun AssistantChatScreen(
     attachedFiles: List<AssistantAttachedFile> = emptyList(),
     onRemoveAttachedFile: (String) -> Unit = {},
     onOpenAttachedFile: (AssistantAttachedFile) -> Unit = {},
-    // --- Estensioni beta ---
     activeConversationId: String? = null,
     isIncognito: Boolean = false,
     onIncognitoChange: (Boolean) -> Unit = {},
@@ -289,18 +290,19 @@ fun AssistantChatScreen(
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(palette.shellBg)
+            .background(palette.drawerBg)
     ) {
-        val drawerWidth = (maxWidth * 0.82f).coerceIn(268.dp, 328.dp)
+        val drawerWidth = (maxWidth * 0.82f).coerceIn(272.dp, 336.dp)
         val drawerWidthPx = with(density) { drawerWidth.toPx() }
 
-        // Strato sottostante: Cassetto laterale sinistro (Fissate, Recenti, Impostazioni AI, Cerca, Nuova chat)
+        // Sidebar stile Gemini
         if (drawerProgress.value > 0.005f) {
             AssistantLeftDrawer(
                 palette = palette,
                 drawerWidth = drawerWidth,
                 conversations = conversations,
                 activeConversationId = activeConversationId,
+                activeModelLabel = currentModel.title,
                 onSelectConversation = { conv ->
                     setDrawerOpen(false)
                     onIncognitoChange(false)
@@ -319,11 +321,12 @@ fun AssistantChatScreen(
                 onOpenAiSettings = {
                     setDrawerOpen(false)
                     onOpenAiSettings()
-                }
+                },
+                onCloseDrawer = { setDrawerOpen(false) }
             )
         }
 
-        // Strato principale: foglio chat che scorre a destra quando il cassetto è aperto
+        // Schermata principale a tutto schermo con sfondo Neural Expressive + bagliore radiale
         val progress = drawerProgress.value
         val sheetCorner = (28f * progress).dp
         val mainClipShape = RoundedCornerShape(topStart = sheetCorner, bottomStart = sheetCorner)
@@ -337,12 +340,12 @@ fun AssistantChatScreen(
                 .then(
                     if (progress > 0.01f) {
                         Modifier
-                            .shadow(16.dp * progress, mainClipShape)
+                            .shadow(20.dp * progress, mainClipShape)
                             .clip(mainClipShape)
-                            .border(0.75.dp, palette.hairline, mainClipShape)
+                            .border(1.dp, palette.hairline, mainClipShape)
                     } else Modifier
                 )
-                .background(palette.shellBg)
+                .assistantNeuralBackdrop(palette, prominent = showWelcome)
                 .pointerInput(drawerWidthPx) {
                     var draggingDrawer = false
                     detectHorizontalDragGestures(
@@ -355,9 +358,7 @@ fun AssistantChatScreen(
                             scope.launch { drawerProgress.snapTo(next) }
                         },
                         onDragEnd = {
-                            if (draggingDrawer) {
-                                setDrawerOpen(drawerProgress.value >= 0.35f)
-                            }
+                            if (draggingDrawer) setDrawerOpen(drawerProgress.value >= 0.35f)
                             draggingDrawer = false
                         },
                         onDragCancel = {
@@ -368,7 +369,6 @@ fun AssistantChatScreen(
                 }
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // Header: Indietro + Menu cassetto | Titolo + Modello | Incognito / Nuova chat + ⋮
                 AssistantHeaderBar(
                     palette = palette,
                     hasMessages = messages.isNotEmpty() || isThinking,
@@ -379,6 +379,7 @@ fun AssistantChatScreen(
                     isPinned = activeConversation?.pinned == true,
                     onBackClick = onBackClick,
                     onOpenDrawer = { setDrawerOpen(drawerProgress.value < 0.5f) },
+                    onOpenModelSheet = { isModelSheetOpen = true },
                     onOpenSearch = { isSearchOpen = true },
                     onToggleIncognito = {
                         val next = !isIncognito
@@ -389,214 +390,205 @@ fun AssistantChatScreen(
                         onIncognitoChange(false)
                         onClearChat()
                     },
-                    onTogglePin = {
-                        activeConversationId?.let(onTogglePinConversation)
-                    },
-                    onDeleteCurrent = {
-                        activeConversationId?.let(onDeleteConversation) ?: onClearChat()
-                    }
+                    onTogglePin = { activeConversationId?.let(onTogglePinConversation) },
+                    onDeleteCurrent = { activeConversationId?.let(onDeleteConversation) ?: onClearChat() }
                 )
 
-                // Foglio arrotondato con contenuto e composer
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                        .background(palette.sheetBg)
-                ) {
-                    Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                        AnimatedContent(
-                            targetState = showWelcome,
-                            modifier = Modifier.fillMaxSize(),
-                            transitionSpec = {
-                                if (targetState) {
-                                    (fadeIn(ailaFadeSpec(AilaDuration.Standard, delayMillis = 30)) +
-                                        scaleIn(ailaMoveSpec(AilaDuration.Standard), initialScale = 1.03f)) togetherWith
-                                        (fadeOut(ailaFadeSpec(AilaDuration.Quick)) +
-                                            scaleOut(ailaMoveSpec(AilaDuration.Quick), targetScale = 0.97f))
-                                } else {
-                                    fadeIn(ailaFadeSpec(AilaDuration.Quick)) togetherWith
-                                        fadeOut(ailaFadeSpec(AilaDuration.Quick))
-                                }
-                            },
-                            label = "assistantMainContent"
-                        ) { welcome ->
-                            if (welcome) {
-                                AssistantWelcomeCanvas(
-                                    palette = palette,
-                                    isIncognito = isIncognito
-                                )
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    AnimatedContent(
+                        targetState = showWelcome,
+                        modifier = Modifier.fillMaxSize(),
+                        transitionSpec = {
+                            if (targetState) {
+                                (fadeIn(ailaFadeSpec(AilaDuration.Standard, delayMillis = 30)) +
+                                    scaleIn(ailaMoveSpec(AilaDuration.Standard), initialScale = 1.03f)) togetherWith
+                                    (fadeOut(ailaFadeSpec(AilaDuration.Quick)) +
+                                        scaleOut(ailaMoveSpec(AilaDuration.Quick), targetScale = 0.97f))
                             } else {
-                                val displayed = if (messages.isEmpty()) lastShown[0] else messages
-                                val lastAssistantIndex = displayed.indexOfLast { it.author != AssistantAuthor.USER && !it.isError }
-                                LazyColumn(
-                                    state = listState,
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
-                                    verticalArrangement = Arrangement.spacedBy(18.dp)
-                                ) {
-                                    itemsIndexed(displayed, key = { _, msg -> msg.id }) { index, message ->
-                                        Box(
-                                            modifier = Modifier.animateItem(
-                                                fadeInSpec = null,
-                                                placementSpec = null,
-                                                fadeOutSpec = ailaFadeSpec(AilaDuration.Quick)
-                                            )
-                                        ) {
-                                            Column {
-                                                when {
-                                                    message.author == AssistantAuthor.USER -> AssistantUserBubble(
-                                                        text = message.text,
-                                                        palette = palette,
-                                                        animateSend = message.id == sentHolder[0],
-                                                        onShown = { if (sentHolder[0] == message.id) sentHolder[0] = null }
-                                                    )
-                                                    message.isError -> AssistantErrorCard(message.text, palette)
-                                                    else -> {
-                                                        val previousPrompt = remember(displayed, index) {
-                                                            displayed.take(index).lastOrNull { it.author == AssistantAuthor.USER }?.text
-                                                        }
-                                                        AssistantResponseBlock(
-                                                            message = message,
-                                                            palette = palette,
-                                                            showDisclaimer = index == lastAssistantIndex && !isThinking,
-                                                            feedback = feedbackMap[message.id] ?: 0,
-                                                            copied = copiedMessageId == message.id,
-                                                            onThumbUp = {
-                                                                feedbackMap[message.id] = if (feedbackMap[message.id] == 1) 0 else 1
-                                                            },
-                                                            onThumbDown = {
-                                                                feedbackMap[message.id] = if (feedbackMap[message.id] == -1) 0 else -1
-                                                            },
-                                                            onCopy = {
-                                                                clipboard.setText(AnnotatedString(message.text))
-                                                                copiedMessageId = message.id
-                                                            },
-                                                            onRegenerate = previousPrompt?.let { prompt ->
-                                                                { if (!isThinking) onSend(prompt) }
-                                                            },
-                                                            onOpenSource = onOpenSource,
-                                                            animateArrival = message.id == arrivalHolder[0],
-                                                            onArrived = {
-                                                                if (arrivalHolder[0] == message.id) arrivalHolder[0] = null
-                                                            }
-                                                        )
+                                fadeIn(ailaFadeSpec(AilaDuration.Quick)) togetherWith
+                                    fadeOut(ailaFadeSpec(AilaDuration.Quick))
+                            }
+                        },
+                        label = "assistantMainContent"
+                    ) { welcome ->
+                        if (welcome) {
+                            AssistantWelcomeCanvas(
+                                palette = palette,
+                                isIncognito = isIncognito
+                            )
+                        } else {
+                            val displayed = if (messages.isEmpty()) lastShown[0] else messages
+                            val lastAssistantIndex = displayed.indexOfLast { it.author != AssistantAuthor.USER && !it.isError }
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+                                verticalArrangement = Arrangement.spacedBy(20.dp)
+                            ) {
+                                itemsIndexed(displayed, key = { _, msg -> msg.id }) { index, message ->
+                                    Box(
+                                        modifier = Modifier.animateItem(
+                                            fadeInSpec = null,
+                                            placementSpec = null,
+                                            fadeOutSpec = ailaFadeSpec(AilaDuration.Quick)
+                                        )
+                                    ) {
+                                        Column {
+                                            when {
+                                                message.author == AssistantAuthor.USER -> AssistantUserBubble(
+                                                    text = message.text,
+                                                    palette = palette,
+                                                    animateSend = message.id == sentHolder[0],
+                                                    onShown = { if (sentHolder[0] == message.id) sentHolder[0] = null }
+                                                )
+                                                message.isError -> AssistantErrorCard(message.text, palette)
+                                                else -> {
+                                                    val previousPrompt = remember(displayed, index) {
+                                                        displayed.take(index).lastOrNull { it.author == AssistantAuthor.USER }?.text
                                                     }
-                                                }
-                                                message.attachedFiles.forEach { file ->
-                                                    Row(
-                                                        modifier = Modifier
-                                                            .padding(top = 6.dp)
-                                                            .align(if (message.author == AssistantAuthor.USER) Alignment.End else Alignment.Start)
-                                                            .widthIn(max = 290.dp)
-                                                            .clip(RoundedCornerShape(16.dp))
-                                                            .background(palette.pillBg)
-                                                            .border(0.75.dp, palette.hairline, RoundedCornerShape(16.dp))
-                                                            .clickable { onOpenAttachedFile(file) }
-                                                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                                    ) {
-                                                        AppIcons.Document(Modifier.size(18.dp), palette.accentFill)
-                                                        Column(Modifier.weight(1f)) {
-                                                            Text(
-                                                                text = file.name,
-                                                                maxLines = 2,
-                                                                overflow = TextOverflow.Ellipsis,
-                                                                style = TextStyle(fontSize = 13.5.sp, fontWeight = FontWeight.Medium),
-                                                                color = palette.ink
-                                                            )
-                                                            Text(
-                                                                text = if (file.generated) file.processingLabel ?: "Testo elaborato da AILA" else "Apri l’originale",
-                                                                style = TextStyle(fontSize = 11.5.sp),
-                                                                color = palette.inkMuted
-                                                            )
-                                                        }
-                                                        AppIcons.ChevronRight(Modifier.size(15.dp), palette.inkFaint)
-                                                    }
-                                                }
-                                                if (message.actionPlan != null) {
-                                                    AssistantActionPreview(
+                                                    AssistantResponseBlock(
                                                         message = message,
-                                                        isBusy = isThinking,
-                                                        onConfirm = { onConfirmAction(message.id) },
-                                                        onCancel = { onCancelAction(message.id) },
-                                                        onRecover = { onRecoverAction(message.id) }
+                                                        palette = palette,
+                                                        showDisclaimer = index == lastAssistantIndex && !isThinking,
+                                                        feedback = feedbackMap[message.id] ?: 0,
+                                                        copied = copiedMessageId == message.id,
+                                                        onThumbUp = {
+                                                            feedbackMap[message.id] = if (feedbackMap[message.id] == 1) 0 else 1
+                                                        },
+                                                        onThumbDown = {
+                                                            feedbackMap[message.id] = if (feedbackMap[message.id] == -1) 0 else -1
+                                                        },
+                                                        onCopy = {
+                                                            clipboard.setText(AnnotatedString(message.text))
+                                                            copiedMessageId = message.id
+                                                        },
+                                                        onRegenerate = previousPrompt?.let { prompt ->
+                                                            { if (!isThinking) onSend(prompt) }
+                                                        },
+                                                        onOpenSource = onOpenSource,
+                                                        animateArrival = message.id == arrivalHolder[0],
+                                                        onArrived = {
+                                                            if (arrivalHolder[0] == message.id) arrivalHolder[0] = null
+                                                        }
                                                     )
                                                 }
                                             }
+                                            message.attachedFiles.forEach { file ->
+                                                Row(
+                                                    modifier = Modifier
+                                                        .padding(top = 8.dp)
+                                                        .align(if (message.author == AssistantAuthor.USER) Alignment.End else Alignment.Start)
+                                                        .widthIn(max = 296.dp)
+                                                        .clip(RoundedCornerShape(18.dp))
+                                                        .background(palette.elevatedBg)
+                                                        .border(1.dp, palette.hairline, RoundedCornerShape(18.dp))
+                                                        .clickable { onOpenAttachedFile(file) }
+                                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                                ) {
+                                                    Box(
+                                                        Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(AppTheme.TintViolet),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        AppIcons.Document(Modifier.size(18.dp), AppTheme.TintVioletInk)
+                                                    }
+                                                    Column(Modifier.weight(1f)) {
+                                                        Text(
+                                                            text = file.name,
+                                                            maxLines = 2,
+                                                            overflow = TextOverflow.Ellipsis,
+                                                            style = TextStyle(fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold),
+                                                            color = palette.ink
+                                                        )
+                                                        Text(
+                                                            text = if (file.generated) file.processingLabel ?: "Testo elaborato da AILA" else "Apri l’originale",
+                                                            style = TextStyle(fontSize = 11.5.sp),
+                                                            color = palette.inkMuted
+                                                        )
+                                                    }
+                                                    AppIcons.ChevronRight(Modifier.size(16.dp), palette.inkFaint)
+                                                }
+                                            }
+                                            if (message.actionPlan != null) {
+                                                AssistantActionPreview(
+                                                    message = message,
+                                                    isBusy = isThinking,
+                                                    onConfirm = { onConfirmAction(message.id) },
+                                                    onCancel = { onCancelAction(message.id) },
+                                                    onRecover = { onRecoverAction(message.id) }
+                                                )
+                                            }
                                         }
                                     }
+                                }
 
-                                    if (isThinking) {
-                                        item(key = "assistant-thinking") {
-                                            AssistantThinkingRow(agentPhase, palette)
-                                        }
+                                if (isThinking) {
+                                    item(key = "assistant-thinking") {
+                                        AssistantThinkingRow(agentPhase, palette)
                                     }
                                 }
                             }
                         }
-
-                        AssistantFinishedToast(
-                            conversation = finishedToastConversation,
-                            palette = palette,
-                            onOpen = { conv ->
-                                onIncognitoChange(false)
-                                onOpenConversation(conv)
-                            },
-                            onDismiss = onDismissFinishedToast,
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(end = 16.dp, bottom = 10.dp)
-                        )
                     }
 
-                    val send = {
-                        val question = draft.trim().ifBlank { "Riassumi gli allegati di questo messaggio." }
-                        draft = ""
-                        onSend(question)
-                    }
-                    if (recording) {
-                        Box(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
-                            VoiceRecordingPanel(
-                                onStop = { recorder?.stop() },
-                                onCancel = { recorder?.cancel() }
-                            )
-                        }
-                    } else {
-                        AssistantComposer(
-                            palette = palette,
-                            draft = draft,
-                            onDraftChange = { draft = it },
-                            isThinking = isThinking,
-                            isIncognito = isIncognito,
-                            hasMessages = messages.isNotEmpty(),
-                            rotatingPlaceholders = if (messages.isEmpty()) ExamplePlaceholders else emptyList(),
-                            attachedFiles = attachedFiles,
-                            onRemoveAttachedFile = onRemoveAttachedFile,
-                            onOpenAttachedFile = onOpenAttachedFile,
-                            attachmentError = attachmentError,
-                            modelShortLabel = currentModel.shortLabel,
-                            effortLabel = currentEffortLabel,
-                            onOpenModelSheet = { isModelSheetOpen = true },
-                            onOpenAttachments = if (onAttachContent != null) ({ attachmentsMenu = true }) else null,
-                            onStartVoice = if (recorder != null) ({
-                                attachmentError = null
-                                recorder.start()
-                            }) else null,
-                            onSend = send
+                    AssistantFinishedToast(
+                        conversation = finishedToastConversation,
+                        palette = palette,
+                        onOpen = { conv ->
+                            onIncognitoChange(false)
+                            onOpenConversation(conv)
+                        },
+                        onDismiss = onDismissFinishedToast,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 16.dp, bottom = 10.dp)
+                    )
+                }
+
+                val send = {
+                    val question = draft.trim().ifBlank { "Riassumi gli allegati di questo messaggio." }
+                    draft = ""
+                    onSend(question)
+                }
+                if (recording) {
+                    Box(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
+                        VoiceRecordingPanel(
+                            onStop = { recorder?.stop() },
+                            onCancel = { recorder?.cancel() }
                         )
                     }
+                } else {
+                    AssistantComposer(
+                        palette = palette,
+                        draft = draft,
+                        onDraftChange = { draft = it },
+                        isThinking = isThinking,
+                        isIncognito = isIncognito,
+                        hasMessages = messages.isNotEmpty(),
+                        rotatingPlaceholders = if (messages.isEmpty()) ExamplePlaceholders else emptyList(),
+                        attachedFiles = attachedFiles,
+                        onRemoveAttachedFile = onRemoveAttachedFile,
+                        onOpenAttachedFile = onOpenAttachedFile,
+                        attachmentError = attachmentError,
+                        modelShortLabel = currentModel.shortLabel,
+                        effortLabel = currentEffortLabel,
+                        onOpenModelSheet = { isModelSheetOpen = true },
+                        onOpenAttachments = if (onAttachContent != null) ({ attachmentsMenu = true }) else null,
+                        onStartVoice = if (recorder != null) ({
+                            attachmentError = null
+                            recorder.start()
+                        }) else null,
+                        onSend = send
+                    )
                 }
             }
 
-            // Velo cliccabile sul bordo destro del foglio quando il cassetto è aperto
             if (progress > 0.05f) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.08f * progress))
+                        .background(Color.Black.copy(alpha = 0.25f * progress))
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
@@ -607,7 +599,6 @@ fun AssistantChatScreen(
             }
         }
 
-        // Ricerca dedicata nelle chat (dal cassetto o dal menu ⋮)
         AnimatedVisibility(
             visible = isSearchOpen,
             enter = fadeIn(ailaFadeSpec(AilaDuration.Quick)),
@@ -626,7 +617,6 @@ fun AssistantChatScreen(
             )
         }
 
-        // Foglio Modello / Provider + Ragionamento
         AnimatedVisibility(
             visible = isModelSheetOpen,
             enter = fadeIn(ailaFadeSpec(AilaDuration.Quick)),
@@ -649,7 +639,7 @@ fun AssistantChatScreen(
         }
     }
 
-    // Foglio allegati (mantiene Fotocamera / Foto / File su una riga e tutte le semantics esistenti)
+    // Foglio allegati (mantiene Fotocamera / Foto / File su una sola riga e i colori AILA vivi)
     if (onAttachContent != null && attachmentsMenu) {
         circolareplus.design.AilaBottomSheet(onDismissRequest = { attachmentsMenu = false }) {
             Column(
@@ -664,21 +654,22 @@ fun AssistantChatScreen(
                     Text(
                         text = "Aggiungi alla chat",
                         modifier = Modifier.weight(1f),
-                        style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold),
+                        style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold),
                         color = palette.ink
                     )
                     IconButton(
                         onClick = { attachmentsMenu = false },
-                        modifier = Modifier.size(44.dp).semantics { contentDescription = "Chiudi allegati" }
+                        modifier = Modifier.size(48.dp).semantics { contentDescription = "Chiudi allegati" }
                     ) {
-                        AppIcons.Close(Modifier.size(19.dp), palette.inkMuted)
+                        AppIcons.Close(Modifier.size(20.dp), palette.inkMuted)
                     }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     AssistantAttachmentTile(
                         title = "Fotocamera",
                         subtitle = "Scatta foto",
-                        palette = palette,
+                        fill = AppTheme.TintGreen,
+                        ink = AppTheme.TintGreenInk,
                         enabled = !isThinking && !recording,
                         onClick = {
                             attachmentError = null
@@ -687,12 +678,13 @@ fun AssistantChatScreen(
                         },
                         modifier = Modifier.weight(1f)
                     ) {
-                        CameraGlyph(Modifier.size(22.dp), it)
+                        CameraGlyph(Modifier.size(24.dp), it)
                     }
                     AssistantAttachmentTile(
                         title = "Foto",
                         subtitle = "Galleria",
-                        palette = palette,
+                        fill = AppTheme.TintBlue,
+                        ink = AppTheme.TintBlueInk,
                         enabled = !isThinking && !recording,
                         onClick = {
                             attachmentError = null
@@ -700,30 +692,31 @@ fun AssistantChatScreen(
                         },
                         modifier = Modifier.weight(1f)
                     ) {
-                        AppIcons.Photo(Modifier.size(22.dp), it)
+                        AppIcons.Photo(Modifier.size(24.dp), it)
                     }
                     AssistantAttachmentTile(
                         title = "File",
                         subtitle = "Documenti",
-                        palette = palette,
+                        fill = AppTheme.TintViolet,
+                        ink = AppTheme.TintVioletInk,
                         enabled = !isThinking && !recording,
                         onClick = { fileSources = true },
                         modifier = Modifier.weight(1f)
                     ) {
-                        AppIcons.Document(Modifier.size(22.dp), it)
+                        AppIcons.Document(Modifier.size(24.dp), it)
                     }
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    AppIcons.Shield(Modifier.size(15.dp), palette.inkMuted)
+                    AppIcons.Shield(Modifier.size(16.dp), palette.inkMuted)
                     Spacer(Modifier.width(8.dp))
                     Text(
                         text = "Le azioni richiedono la tua conferma.",
                         modifier = Modifier.weight(1f),
-                        style = TextStyle(fontSize = 12.sp),
+                        style = TextStyle(fontSize = 12.5.sp),
                         color = palette.inkMuted
                     )
                     TextButton(onClick = { attachmentsMenu = false; onOpenAiSettings() }) {
-                        Text("Impostazioni AI", style = TextStyle(fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold), color = palette.accentFill)
+                        Text("Impostazioni AI", style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold), color = palette.accent)
                     }
                 }
             }
@@ -740,12 +733,12 @@ fun AssistantChatScreen(
                         title = "Importa dal dispositivo",
                         subtitle = "Scegli un file dal dispositivo",
                         onClick = { fileSources = false; attachmentsMenu = false; picker?.invoke() }
-                    ) { AppIcons.Document(Modifier.size(22.dp), palette.accentFill) }
+                    ) { AppIcons.Document(Modifier.size(22.dp), AppTheme.TintVioletInk) }
                     AttachmentMenuRow(
                         title = "Copie già salvate",
                         subtitle = "Riapri un file conservato da AILA",
                         onClick = { fileSources = false; attachmentsMenu = false; onOpenFiles() }
-                    ) { AppIcons.Download(Modifier.size(22.dp), palette.accentFill) }
+                    ) { AppIcons.Download(Modifier.size(22.dp), palette.accent) }
                 }
             },
             confirmButton = { TextButton(onClick = { fileSources = false }) { Text("Chiudi") } }
@@ -754,7 +747,7 @@ fun AssistantChatScreen(
 }
 
 // =================================================================================================
-// Schermata vuota centrata: vero logo AILA (AilaLogoTile) + saluto pulito (o incognito)
+// Schermata iniziale stile Gemini / AILA Neural Expressive: logo AILA luminoso + "Da dove iniziamo?"
 // =================================================================================================
 
 @Composable
@@ -765,16 +758,16 @@ private fun AssistantWelcomeCanvas(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 32.dp),
+            .padding(horizontal = 28.dp),
         contentAlignment = Alignment.Center
     ) {
         AnimatedContent(
             targetState = isIncognito,
             transitionSpec = {
                 (fadeIn(ailaFadeSpec(AilaDuration.Standard)) +
-                    scaleIn(spring(dampingRatio = 0.72f, stiffness = 360f), initialScale = 0.85f)) togetherWith
+                    scaleIn(spring(dampingRatio = 0.72f, stiffness = 360f), initialScale = 0.88f)) togetherWith
                     (fadeOut(ailaFadeSpec(AilaDuration.Quick)) +
-                        scaleOut(ailaFadeSpec(AilaDuration.Quick), targetScale = 0.9f))
+                        scaleOut(ailaFadeSpec(AilaDuration.Quick), targetScale = 0.92f))
             },
             label = "assistantWelcomeMode"
         ) { incognito ->
@@ -783,21 +776,29 @@ private fun AssistantWelcomeCanvas(
                 verticalArrangement = Arrangement.Center
             ) {
                 if (incognito) {
-                    AssistantGhostGlyph(
-                        modifier = Modifier.size(46.dp),
-                        color = palette.ink,
-                        filled = true,
-                        eyeCutoutColor = palette.sheetBg
-                    )
-                    Spacer(Modifier.height(14.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(palette.pillBg),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AssistantGhostGlyph(
+                            modifier = Modifier.size(34.dp),
+                            color = palette.ink,
+                            filled = true,
+                            eyeCutoutColor = palette.pillBg
+                        )
+                    }
+                    Spacer(Modifier.height(18.dp))
                     Text(
                         text = "Chat in incognito",
                         style = TextStyle(
-                            fontFamily = FontFamily.Serif,
-                            fontSize = 24.sp,
-                            lineHeight = 31.sp,
-                            fontWeight = FontWeight.Normal,
-                            letterSpacing = (-0.3).sp
+                            fontFamily = FontFamily.Default,
+                            fontSize = 27.sp,
+                            lineHeight = 34.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = (-0.5).sp
                         ),
                         color = palette.ink,
                         textAlign = TextAlign.Center
@@ -805,22 +806,22 @@ private fun AssistantWelcomeCanvas(
                     Spacer(Modifier.height(8.dp))
                     Text(
                         text = "Questa conversazione non viene salvata nello storico del telefono.",
-                        style = TextStyle(fontSize = 13.5.sp, lineHeight = 19.sp),
+                        style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
                         color = palette.inkMuted,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.widthIn(max = 260.dp)
+                        modifier = Modifier.widthIn(max = 280.dp)
                     )
                 } else {
-                    AilaLogoTile(size = 54.dp)
-                    Spacer(Modifier.height(16.dp))
+                    AilaLogoTile(size = 60.dp, glow = !AppTheme.isNothing)
+                    Spacer(Modifier.height(14.dp))
                     Text(
-                        text = "Come posso aiutarti oggi?",
+                        text = "Da dove iniziamo?",
                         style = TextStyle(
-                            fontFamily = FontFamily.Serif,
-                            fontSize = 24.sp,
-                            lineHeight = 31.sp,
-                            fontWeight = FontWeight.Normal,
-                            letterSpacing = (-0.3).sp
+                            fontFamily = FontFamily.Default,
+                            fontSize = 29.sp,
+                            lineHeight = 36.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = (-0.5).sp
                         ),
                         color = palette.ink,
                         textAlign = TextAlign.Center
@@ -832,7 +833,7 @@ private fun AssistantWelcomeCanvas(
 }
 
 // =================================================================================================
-// Bolla utente (tinta AILA) e risposta assistente (testo libero + barra azioni pulita 40dp)
+// Bolla utente (tonale AILA) e risposta assistente (onda AILA + testo nitido + fonti colorate + azioni 44dp)
 // =================================================================================================
 
 @Composable
@@ -848,10 +849,10 @@ private fun AssistantUserBubble(
         Box(
             modifier = Modifier
                 .ailaBubbleEnter(enabled = sending, fromEnd = true)
-                .widthIn(max = 292.dp)
-                .clip(RoundedCornerShape(20.dp))
+                .widthIn(max = 300.dp)
+                .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp, bottomStart = 24.dp, bottomEnd = 6.dp))
                 .background(palette.userBubbleBg)
-                .padding(horizontal = 16.dp, vertical = 11.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
             Text(
                 text = text,
@@ -895,6 +896,19 @@ private fun AssistantResponseBlock(
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            AilaAssistantWave(active = !revealed, size = 20.dp)
+            Text(
+                text = "AILA",
+                style = TextStyle(fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold),
+                color = palette.inkMuted
+            )
+        }
+
         AnimatedVisibility(
             visible = revealed,
             enter = ailaRevealEnter(),
@@ -908,7 +922,7 @@ private fun AssistantResponseBlock(
                     color = palette.ink,
                     style = TextStyle(
                         fontFamily = FontFamily.Default,
-                        fontSize = 15.5.sp,
+                        fontSize = 16.sp,
                         lineHeight = 24.sp,
                         fontWeight = FontWeight.Normal
                     ),
@@ -926,12 +940,12 @@ private fun AssistantResponseBlock(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             message.sources.forEach { source ->
-                                AssistantSourcePill(source = source, palette = palette, onClick = { onOpenSource(source) })
+                                AssistantSourcePill(source = source, onClick = { onOpenSource(source) })
                             }
                         }
                     }
 
-                    // Azioni pulite (40dp) senza nome modello schiacciato accanto
+                    // Azioni grandi (44dp)
                     Spacer(Modifier.height(8.dp))
                     Row(
                         modifier = Modifier
@@ -945,8 +959,8 @@ private fun AssistantResponseBlock(
                             onClick = onThumbUp
                         ) {
                             AppIcons.ThumbUp(
-                                modifier = Modifier.size(18.dp),
-                                color = if (feedback == 1) palette.accentFill else palette.inkFaint,
+                                modifier = Modifier.size(19.dp),
+                                color = if (feedback == 1) palette.accent else palette.inkFaint,
                                 filled = feedback == 1
                             )
                         }
@@ -955,8 +969,8 @@ private fun AssistantResponseBlock(
                             onClick = onThumbDown
                         ) {
                             AppIcons.ThumbDown(
-                                modifier = Modifier.size(18.dp),
-                                color = if (feedback == -1) palette.accentFill else palette.inkFaint,
+                                modifier = Modifier.size(19.dp),
+                                color = if (feedback == -1) palette.accent else palette.inkFaint,
                                 filled = feedback == -1
                             )
                         }
@@ -965,9 +979,9 @@ private fun AssistantResponseBlock(
                             onClick = onCopy
                         ) {
                             if (copied) {
-                                AppIcons.Check(Modifier.size(18.dp), color = palette.accentFill)
+                                AppIcons.Check(Modifier.size(19.dp), color = palette.accent)
                             } else {
-                                AssistantCopyGlyph(Modifier.size(18.dp), color = palette.inkFaint)
+                                AssistantCopyGlyph(Modifier.size(19.dp), color = palette.inkFaint)
                             }
                         }
                         if (onRegenerate != null) {
@@ -975,7 +989,7 @@ private fun AssistantResponseBlock(
                                 contentDescription = "Rigenera risposta",
                                 onClick = onRegenerate
                             ) {
-                                AppIcons.Refresh(Modifier.size(18.dp), color = palette.inkFaint)
+                                AppIcons.Refresh(Modifier.size(19.dp), color = palette.inkFaint)
                             }
                         }
                     }
@@ -1002,7 +1016,7 @@ private fun AssistantActionIconButton(
 ) {
     Box(
         modifier = Modifier
-            .size(40.dp)
+            .size(44.dp)
             .clip(CircleShape)
             .clickable(role = Role.Button, onClick = onClick)
             .semantics { this.contentDescription = contentDescription },
@@ -1015,29 +1029,28 @@ private fun AssistantActionIconButton(
 @Composable
 private fun AssistantSourcePill(
     source: AssistantSource,
-    palette: AssistantSurfacePalette,
     onClick: () -> Unit
 ) {
+    val tint = source.kind.tint()
+    val ink = source.kind.ink()
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(100.dp))
-            .background(palette.pillBg)
-            .border(0.75.dp, palette.hairline, RoundedCornerShape(100.dp))
+            .ailaTopicSurface(RoundedCornerShape(100.dp), tint, ink)
             .ailaPressable(pressedScale = 0.96f, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 13.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(7.dp)
     ) {
-        source.kind.Icon(palette.accentFill, 14.dp)
+        source.kind.Icon(ink, 14.dp)
         Text(
             text = source.label,
-            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
-            color = palette.ink,
+            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
+            color = ink,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.widthIn(max = 200.dp)
         )
-        AppIcons.ChevronRight(Modifier.size(12.dp), color = palette.inkFaint)
+        AppIcons.ChevronRight(Modifier.size(12.dp), color = ink)
     }
 }
 
@@ -1053,15 +1066,15 @@ private fun AssistantThinkingRow(phase: AssistantAgentPhase?, palette: Assistant
     }
     Row(
         modifier = Modifier
-            .padding(vertical = 6.dp)
+            .padding(vertical = 8.dp)
             .semantics { contentDescription = phaseLabel },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        AilaAssistantWave(active = true, size = 22.dp)
+        AilaAssistantWave(active = true, size = 24.dp)
         Text(
             text = phaseLabel,
-            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Normal),
+            style = TextStyle(fontSize = 14.5.sp, fontWeight = FontWeight.Medium),
             color = palette.inkMuted,
             modifier = Modifier.ailaPulse().clearAndSetSemantics { }
         )
@@ -1073,17 +1086,17 @@ private fun AssistantErrorCard(text: String, palette: AssistantSurfacePalette) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(20.dp))
             .background(palette.dangerBg)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        AppIcons.Warning(Modifier.size(18.dp).padding(top = 2.dp), color = palette.dangerInk)
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        AppIcons.Warning(Modifier.size(20.dp).padding(top = 2.dp), color = palette.dangerInk)
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 text = "Non sono riuscito a rispondere",
-                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+                style = TextStyle(fontSize = 14.5.sp, fontWeight = FontWeight.Bold),
                 color = palette.dangerInk
             )
             Text(
@@ -1099,34 +1112,34 @@ private fun AssistantErrorCard(text: String, palette: AssistantSurfacePalette) {
 private fun AssistantAttachmentTile(
     title: String,
     subtitle: String,
-    palette: AssistantSurfacePalette,
+    fill: Color,
+    ink: Color,
     enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     icon: @Composable (Color) -> Unit
 ) {
-    val shape = RoundedCornerShape(22.dp)
+    val shape = RoundedCornerShape(24.dp)
     Column(
         modifier = modifier
             .clip(shape)
-            .background(palette.pillBg)
-            .border(0.75.dp, palette.hairline, shape)
+            .background(fill)
             .alpha(if (enabled) 1f else 0.45f)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 14.dp),
+            .padding(horizontal = 12.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Box(
             modifier = Modifier
-                .size(38.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(palette.sheetBg),
+                .size(40.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(ink.copy(alpha = 0.12f)),
             contentAlignment = Alignment.Center
         ) {
-            icon(palette.accentFill)
+            icon(ink)
         }
-        Text(title, style = TextStyle(fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold), color = palette.ink)
-        Text(subtitle, minLines = 2, style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp), color = palette.inkMuted)
+        Text(title, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold), color = ink)
+        Text(subtitle, minLines = 2, style = TextStyle(fontSize = 12.5.sp, lineHeight = 16.sp), color = ink.copy(alpha = 0.82f))
     }
 }
 
@@ -1204,15 +1217,15 @@ internal fun AssistantActionPreview(
         Modifier
             .fillMaxWidth()
             .padding(top = AppTheme.Space12)
-            .clip(RoundedCornerShape(20.dp))
-            .background(palette.pillBg)
-            .border(0.75.dp, palette.hairline, RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(22.dp))
+            .background(palette.elevatedBg)
+            .border(1.dp, palette.hairline, RoundedCornerShape(22.dp))
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
             text = "Azioni sul calendario · ${plan.actions.size}",
-            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold),
             color = palette.ink
         )
         plan.actions.forEach { action ->
@@ -1256,11 +1269,11 @@ internal fun AssistantActionPreview(
                 Button(
                     onClick = onConfirm,
                     enabled = !isBusy && plan.operationId != null,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(100.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = palette.accentFill,
-                        contentColor = palette.onAccentFill
+                        containerColor = palette.accent,
+                        contentColor = palette.onAccent
                     )
                 ) {
                     Text("Conferma le azioni")
@@ -1289,7 +1302,7 @@ internal fun AssistantActionPreview(
         if (message.actionStatus in setOf(AssistantActionStatus.ERROR, AssistantActionStatus.RUNNING) && !isBusy && plan.operationId != null) {
             OutlinedButton(
                 onClick = onRecover,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().height(48.dp),
                 shape = RoundedCornerShape(100.dp)
             ) {
                 Text("Verifica l’esito sul server", color = palette.ink)
@@ -1305,6 +1318,26 @@ private val ExamplePlaceholders = listOf(
     "Dove sono seduto in aula?",
     "Ci sono sondaggi ancora aperti?"
 )
+
+private fun AssistantSourceKind.tint(): Color = when (this) {
+    AssistantSourceKind.CIRCULAR -> AppTheme.TintBlue
+    AssistantSourceKind.CALENDAR -> AppTheme.TintAmber
+    AssistantSourceKind.BOARD -> AppTheme.TintViolet
+    AssistantSourceKind.POLL -> AppTheme.TintGreen
+    AssistantSourceKind.SEAT_MAP -> AppTheme.TintSlate
+    AssistantSourceKind.CLASS -> AppTheme.TintSlate
+    AssistantSourceKind.GITA -> AppTheme.TintAmber
+}
+
+private fun AssistantSourceKind.ink(): Color = when (this) {
+    AssistantSourceKind.CIRCULAR -> AppTheme.TintBlueInk
+    AssistantSourceKind.CALENDAR -> AppTheme.TintAmberInk
+    AssistantSourceKind.BOARD -> AppTheme.TintVioletInk
+    AssistantSourceKind.POLL -> AppTheme.TintGreenInk
+    AssistantSourceKind.SEAT_MAP -> AppTheme.TintSlateInk
+    AssistantSourceKind.CLASS -> AppTheme.TintSlateInk
+    AssistantSourceKind.GITA -> AppTheme.TintAmberInk
+}
 
 @Composable
 private fun AssistantSourceKind.Icon(color: Color, iconSize: Dp = 14.dp) {
