@@ -1,5 +1,7 @@
 package circolareplus.ui.screens
 
+import circolareplus.ai.AiProvider
+import circolareplus.ai.CompatibleAiFormat
 import circolareplus.ai.providerName
 
 import circolareplus.domain.model.isStudyRelevantFor
@@ -5360,17 +5362,19 @@ fun MainAppShell(
                     circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { assistantBack() }
                     val assistantSettings = AppContainer.settings
                     val currentAssistantProvider = remember(apiKeyRevision) {
-                        circolareplus.ai.AiProvider.fromId(assistantSettings.aiProvider)
+                        AiProvider.fromId(assistantSettings.aiProvider)
                     }
                     val currentLocalModel = remember(apiKeyRevision, assistantSelectionRevision) { AppContainer.selectedLocalModel() }
                     val currentHasGoogleKey = remember(apiKeyRevision) { assistantSettings.userAiApiKey.isNotBlank() }
-                    val compatibleFormat = remember(apiKeyRevision) {
-                        circolareplus.ai.CompatibleAiFormat.fromId(assistantSettings.compatibleAiFormat)
-                    }
-                    val currentHasCompatible = remember(apiKeyRevision) {
-                        assistantSettings.compatibleAiApiKey.isNotBlank() &&
-                            (compatibleFormat != circolareplus.ai.CompatibleAiFormat.GOOGLE ||
-                                assistantSettings.compatibleAiBaseUrl.isNotBlank())
+                    val compatibleFormat = remember(apiKeyRevision) { assistantSettings.compatibleAiFormat }
+                    val configuredProviders = remember(apiKeyRevision) {
+                        CompatibleAiFormat.entries.mapNotNull { format ->
+                            val endpoint = assistantSettings.compatibleAiBaseUrlFor(format.id)
+                            val hasKey = assistantSettings.compatibleAiApiKeyFor(format.id).isNotBlank()
+                            if (hasKey && (format != CompatibleAiFormat.GOOGLE || endpoint.isNotBlank())) {
+                                format.id to format.providerName(endpoint)
+                            } else null
+                        }.toMap()
                     }
                     val modelId = remember(currentAssistantProvider, apiKeyRevision, assistantSelectionRevision) {
                         AppContainer.assistantModelId(currentAssistantProvider)
@@ -5438,31 +5442,36 @@ fun MainAppShell(
                         },
                         selectedAiProvider = currentAssistantProvider.id,
                         onSelectAiProvider = { providerId ->
-                            AppContainer.settings.aiProvider = providerId
+                            if (providerId in configuredProviders) {
+                                assistantSettings.compatibleAiFormat = providerId
+                                assistantSettings.aiProvider = AiProvider.COMPATIBLE_API.id
+                            } else {
+                                assistantSettings.aiProvider = providerId
+                            }
                             apiKeyRevision++
                         },
                         localModelLabel = currentLocalModel.displayName,
                         hasGoogleKey = currentHasGoogleKey,
-                        hasCompatibleConfig = currentHasCompatible,
-                        compatibleProviderName = compatibleFormat.providerName(assistantSettings.compatibleAiBaseUrl),
+                        compatibleProviders = configuredProviders,
+                        selectedCompatibleFormat = compatibleFormat,
                         showLocalAi = circolareplus.ai.isOnDeviceAiOfferedHere(),
                         localModelInstalled = currentLocalInstalled,
                         selectedModelId = modelId,
                         selectedReasoning = reasoning,
-                        binaryThinkingAvailable = currentAssistantProvider == circolareplus.ai.AiProvider.AILA_CLOUD ||
-                            (currentAssistantProvider == circolareplus.ai.AiProvider.ON_DEVICE &&
+                        binaryThinkingAvailable = currentAssistantProvider == AiProvider.AILA_CLOUD ||
+                            (currentAssistantProvider == AiProvider.ON_DEVICE &&
                                 currentLocalInstalled && currentLocalModel.supportsThinking),
                         providerConfigRevision = apiKeyRevision,
                         loadModels = AppContainer::assistantProviderModels,
                         onSelectModel = { id ->
                             when (currentAssistantProvider) {
-                                circolareplus.ai.AiProvider.GOOGLE_AI_STUDIO -> assistantSettings.assistantGoogleModel = id
-                                circolareplus.ai.AiProvider.COMPATIBLE_API -> assistantSettings.compatibleAiModel = id
-                                circolareplus.ai.AiProvider.ON_DEVICE -> {
+                                AiProvider.GOOGLE_AI_STUDIO -> assistantSettings.assistantGoogleModel = id
+                                AiProvider.COMPATIBLE_API -> assistantSettings.compatibleAiModel = id
+                                AiProvider.ON_DEVICE -> {
                                     assistantSettings.localAiModelId = id
                                     AppContainer.localLlm.unload()
                                 }
-                                circolareplus.ai.AiProvider.AILA_CLOUD -> Unit
+                                AiProvider.AILA_CLOUD -> Unit
                             }
                             assistantSelectionRevision++
                         },

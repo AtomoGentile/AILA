@@ -197,7 +197,7 @@ class AssistantClaudeUiTest {
                     onSelectAiProvider = { provider = it },
                     localModelLabel = "Qwen 3 4B",
                     hasGoogleKey = true,
-                    hasCompatibleConfig = false,
+                    compatibleProviders = mapOf("OPENAI" to "OpenAI", "ANTHROPIC" to "Anthropic"),
                     localModelInstalled = true,
                     selectedModelId = model,
                     selectedReasoning = effort,
@@ -214,6 +214,9 @@ class AssistantClaudeUiTest {
         // Apri il picker modelli in alto vicino al menu
         compose.onNodeWithContentDescription("Seleziona modello e ragionamento").performClick()
         compose.mainClock.advanceTimeBy(450)
+        compose.onNodeWithText("OpenAI").assertIsDisplayed()
+        compose.onNodeWithText("Anthropic").assertIsDisplayed()
+        compose.onNodeWithText("Endpoint da configurare").assertDoesNotExist()
         compose.onNodeWithText("Google Gemini").assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(AiProvider.GOOGLE_AI_STUDIO.id, provider) }
 

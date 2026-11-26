@@ -258,8 +258,7 @@ internal data class AssistantModelOption(
 internal fun assistantModelOptions(
     localModelLabel: String,
     hasGoogleKey: Boolean = true,
-    hasCompatibleConfig: Boolean = true,
-    compatibleProviderName: String = "API personale",
+    compatibleProviders: Map<String, String> = emptyMap(),
     showLocalApi: Boolean = true,
     localModelInstalled: Boolean = true
 ): List<AssistantModelOption> {
@@ -279,13 +278,10 @@ internal fun assistantModelOptions(
             providerId = AiProvider.ON_DEVICE.id,
             title = cleanLocal,
             description = if (localModelInstalled) "Modello locale offline" else "Modello locale da scaricare"
-        ).takeIf { showLocalApi },
-        AssistantModelOption(
-            providerId = AiProvider.COMPATIBLE_API.id,
-            title = compatibleProviderName,
-            description = "Chiave API personale attiva"
-        ).takeIf { hasCompatibleConfig }
-    )
+        ).takeIf { showLocalApi }
+    ) + compatibleProviders.map { (formatId, name) ->
+        AssistantModelOption(formatId, name, "Chiave API personale attiva")
+    }
 }
 
 // =================================================================================================

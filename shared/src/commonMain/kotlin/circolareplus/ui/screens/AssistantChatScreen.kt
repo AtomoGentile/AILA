@@ -158,8 +158,8 @@ fun AssistantChatScreen(
     onSelectAiProvider: (String) -> Unit = {},
     localModelLabel: String = "AI locale",
     hasGoogleKey: Boolean = true,
-    hasCompatibleConfig: Boolean = false,
-    compatibleProviderName: String = "API personale",
+    compatibleProviders: Map<String, String> = emptyMap(),
+    selectedCompatibleFormat: String = "",
     showLocalAi: Boolean = true,
     localModelInstalled: Boolean = true,
     selectedModelId: String = "",
@@ -284,14 +284,14 @@ fun AssistantChatScreen(
             ?: AssistantConversation.titleFrom(messages).takeIf { messages.isNotEmpty() }
     }
     val modelOptions = assistantModelOptions(
-        localModelLabel, hasGoogleKey, hasCompatibleConfig, compatibleProviderName, showLocalAi, localModelInstalled
+        localModelLabel, hasGoogleKey, compatibleProviders, showLocalAi, localModelInstalled
     )
     val provider = AiProvider.fromId(selectedAiProvider)
     val google = provider == AiProvider.GOOGLE_AI_STUDIO
     val external = google || provider == AiProvider.COMPATIBLE_API
     val available = when (provider) {
         AiProvider.GOOGLE_AI_STUDIO -> hasGoogleKey
-        AiProvider.COMPATIBLE_API -> hasCompatibleConfig
+        AiProvider.COMPATIBLE_API -> selectedCompatibleFormat in compatibleProviders
         AiProvider.ON_DEVICE -> showLocalAi
         AiProvider.AILA_CLOUD -> true
     }
@@ -717,7 +717,7 @@ fun AssistantChatScreen(
             visible = isModelSheetOpen,
             palette = palette,
             options = modelOptions,
-            selectedProviderId = provider.id,
+            selectedProviderId = if (provider == AiProvider.COMPATIBLE_API) selectedCompatibleFormat else provider.id,
             modelLabel = modelLabel,
             models = if (google && (catalogModels.isNotEmpty() || selectedModelId.isNotBlank())) {
                 listOf(AssistantProviderModel("", "Automatico")) + catalogModels

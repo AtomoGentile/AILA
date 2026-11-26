@@ -194,8 +194,7 @@ class LocalSettingsManager(
         }
 
     var compatibleAiBaseUrl: String
-        get() = settings.getString(compatibleKey(KEY_COMPATIBLE_AI_BASE_URL),
-            if (!settings.getBoolean(KEY_COMPATIBLE_AI_CONFIGS_MIGRATED, false) && compatibleAiFormat == settings.getString(KEY_COMPATIBLE_AI_FORMAT, "OPENAI")) settings.getString(KEY_COMPATIBLE_AI_BASE_URL, "") else "")
+        get() = compatibleAiBaseUrlFor(compatibleAiFormat)
         set(value) = settings.putString(compatibleKey(KEY_COMPATIBLE_AI_BASE_URL), value.trim())
 
     var compatibleAiModel: String
@@ -204,12 +203,24 @@ class LocalSettingsManager(
         set(value) = settings.putString(compatibleKey(KEY_COMPATIBLE_AI_MODEL), value.trim())
 
     var compatibleAiApiKey: String
-        get() = readSecret(compatibleKey(KEY_COMPATIBLE_AI_API_KEY)).ifBlank {
-            if (!settings.getBoolean(KEY_COMPATIBLE_AI_CONFIGS_MIGRATED, false) && compatibleAiFormat == settings.getString(KEY_COMPATIBLE_AI_FORMAT, "OPENAI")) readSecret(KEY_COMPATIBLE_AI_API_KEY) else ""
-        }
+        get() = compatibleAiApiKeyFor(compatibleAiFormat)
         set(value) = writeSecret(compatibleKey(KEY_COMPATIBLE_AI_API_KEY), value.trim())
 
-    private fun compatibleKey(base: String): String = "${base}_${compatibleAiFormat.lowercase()}"
+    fun compatibleAiBaseUrlFor(format: String): String = settings.getString(
+        compatibleKey(KEY_COMPATIBLE_AI_BASE_URL, format),
+        if (hasLegacyCompatibleConfig(format)) settings.getString(KEY_COMPATIBLE_AI_BASE_URL, "") else ""
+    )
+
+    fun compatibleAiApiKeyFor(format: String): String =
+        readSecret(compatibleKey(KEY_COMPATIBLE_AI_API_KEY, format)).ifBlank {
+            if (hasLegacyCompatibleConfig(format)) readSecret(KEY_COMPATIBLE_AI_API_KEY) else ""
+        }
+
+    private fun hasLegacyCompatibleConfig(format: String): Boolean =
+        format == compatibleAiFormat && !settings.getBoolean(KEY_COMPATIBLE_AI_CONFIGS_MIGRATED, false)
+
+    private fun compatibleKey(base: String, format: String = compatibleAiFormat): String =
+        "${base}_${format.lowercase()}"
 
     var assistantGoogleModel: String
         get() = settings.getString("assistant_google_model", "")

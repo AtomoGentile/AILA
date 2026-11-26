@@ -48,8 +48,9 @@ internal fun openAiCompatibleBody(
     maxTokens:Int,
     reasoningEffort:String?=null
 ):JsonObject {
-    val reasoning = reasoningEffort != null || isOpenAiReasoningModel(model)
-    val official=io.ktor.http.Url(endpoint).host.equals("api.openai.com",ignoreCase=true)
+    val official = io.ktor.http.Url(endpoint).host.equals("api.openai.com", ignoreCase = true)
+    val supportedEffort = reasoningEffort?.takeIf { !official || it in openAiReasoningLevels(model) }
+    val reasoning = supportedEffort != null || isOpenAiReasoningModel(model)
     return buildJsonObject {
         put("model",JsonPrimitive(model))
         put("messages",buildJsonArray {
@@ -59,7 +60,7 @@ internal fun openAiCompatibleBody(
         })
         put(if(official||reasoning)"max_completion_tokens"else"max_tokens",JsonPrimitive(maxTokens))
         if(!reasoning)put("temperature",JsonPrimitive(0.2))
-        if(reasoningEffort!=null)put("reasoning_effort",JsonPrimitive(reasoningEffort))
+        supportedEffort?.let { put("reasoning_effort", JsonPrimitive(it)) }
         if(system.contains("JSON",ignoreCase=true))put("response_format",buildJsonObject {
             put("type",JsonPrimitive("json_object"))
         })

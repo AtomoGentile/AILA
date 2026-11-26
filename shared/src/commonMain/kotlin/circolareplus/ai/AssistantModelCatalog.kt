@@ -41,7 +41,7 @@ private fun geminiReasoningLevels(id: String): List<String> = when {
 
 // The standard OpenAI Models endpoint does not return supported effort values.
 // Use only documented Chat Completions model IDs, including their dated snapshots.
-private fun openAiReasoningLevels(id: String): List<String> {
+internal fun openAiReasoningLevels(id: String): List<String> {
     val model = id.replace(Regex("-\\d{4}-\\d{2}-\\d{2}$"), "")
     return when (model) {
         "gpt-5", "gpt-5-mini", "gpt-5-nano" -> listOf("minimal") + standardEffort
