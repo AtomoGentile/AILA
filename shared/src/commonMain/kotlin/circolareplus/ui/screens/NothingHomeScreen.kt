@@ -108,7 +108,7 @@ internal fun NothingHomeScreen(
                             verticalArrangement=Arrangement.spacedBy(6.dp)) {
                             if(subjectColorsEnabled && item.kind==AilaBriefKind.EVENT) {
                                 SubjectColors.choiceForSubject(item.title,subjectColorOverrides)?.let { choice ->
-                                    val marker = if (choice.key == "black" && AppTheme.isDarkMode) SubjectColors.darkBlackOutline
+                                    val marker = if (choice.key == "black" && AppTheme.isDarkMode) SubjectColors.darkBlackInk
                                         else choice.color
                                     Box(Modifier.size(6.dp).background(marker, CircleShape))
                                 }

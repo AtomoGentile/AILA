@@ -22,11 +22,17 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -62,6 +68,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -81,7 +88,13 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -94,6 +107,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -115,6 +129,7 @@ import circolareplus.design.ailaSpatialSpring
 import kotlinx.coroutines.delay
 import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /**
@@ -729,7 +744,6 @@ internal fun AssistantModelPickerPopup(
                         .verticalScroll(rememberScrollState())
                         .padding(vertical = 10.dp)
                 ) {
-                    // Lista modelli/provider stile Gemini (con spunta e selezione animate)
                     options.forEach { option ->
                         val selected = option.providerId == selectedProviderId
                         val rowBg by animateColorAsState(
@@ -748,8 +762,8 @@ internal fun AssistantModelPickerPopup(
                                 .padding(horizontal = 8.dp, vertical = 2.dp)
                                 .clip(RoundedCornerShape(18.dp))
                                 .background(rowBg)
-                                .clickable(role = Role.Button) { onSelectProvider(option.providerId) }
-                                .padding(horizontal = 12.dp, vertical = 12.dp),
+                                .selectable(selected = selected, role = Role.RadioButton) { onSelectProvider(option.providerId) }
+                                .padding(horizontal = 12.dp, vertical = 9.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
@@ -788,32 +802,18 @@ internal fun AssistantModelPickerPopup(
                     Box(Modifier.fillMaxWidth().padding(horizontal = 18.dp).height(1.dp).background(palette.hairline))
 
                     val canPickModel = onSelectModel != null && models.isNotEmpty()
-                    Box {
-                        AssistantPickerField("Modello", modelLabel, palette, canPickModel) {
-                            modelsExpanded = true
-                        }
-                        DropdownMenu(
-                            expanded = modelsExpanded && canPickModel,
-                            onDismissRequest = { modelsExpanded = false },
-                            modifier = Modifier.widthIn(max = 330.dp).heightIn(max = 380.dp)
-                        ) {
-                            models.forEach { model ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Column {
-                                            Text(model.name)
-                                            if (model.name != model.id) Text(model.id, style = MaterialTheme.typography.labelSmall)
-                                        }
-                                    },
-                                    leadingIcon = if (model.id == selectedModelId) {
-                                        { AppIcons.Check(Modifier.size(18.dp), color = palette.accent) }
-                                    } else null,
-                                    onClick = {
-                                        onSelectModel?.invoke(model.id)
-                                        modelsExpanded = false
-                                    }
-                                )
-                            }
+                    AssistantPickerField("Modello", modelLabel, palette, canPickModel, modelsExpanded) {
+                        modelsExpanded = !modelsExpanded
+                        if (modelsExpanded) effortExpanded = false
+                    }
+                    AnimatedVisibility(
+                        visible = modelsExpanded && canPickModel,
+                        enter = expandVertically(ailaSpatialSpring()) + fadeIn(tween(140)),
+                        exit = shrinkVertically(ailaSpatialSpring()) + fadeOut(tween(120))
+                    ) {
+                        AssistantModelList(models, selectedModelId, palette) { id ->
+                            onSelectModel?.invoke(id)
+                            modelsExpanded = false
                         }
                     }
                     modelStatus?.let { status ->
@@ -829,24 +829,22 @@ internal fun AssistantModelPickerPopup(
                     }
 
                     if (reasoningOptions.isNotEmpty()) {
-                        Box {
-                            AssistantPickerField(
-                                "Livello di ragionamento", assistantReasoningLabel(selectedReasoning), palette, true
-                            ) { effortExpanded = true }
-                            DropdownMenu(expanded = effortExpanded, onDismissRequest = { effortExpanded = false }) {
-                                reasoningOptions.forEach { value ->
-                                    DropdownMenuItem(
-                                        text = { Text(assistantReasoningLabel(value)) },
-                                        leadingIcon = if (value == selectedReasoning) {
-                                            { AppIcons.Check(Modifier.size(18.dp), color = palette.accent) }
-                                        } else null,
-                                        onClick = {
-                                            onSelectReasoning(value)
-                                            effortExpanded = false
-                                        }
-                                    )
-                                }
-                            }
+                        AssistantPickerField(
+                            "Livello di ragionamento",
+                            assistantReasoningLabel(selectedReasoning),
+                            palette,
+                            enabled = true,
+                            expanded = effortExpanded
+                        ) {
+                            effortExpanded = !effortExpanded
+                            if (effortExpanded) modelsExpanded = false
+                        }
+                        AnimatedVisibility(
+                            visible = effortExpanded,
+                            enter = expandVertically(ailaSpatialSpring()) + fadeIn(tween(140)),
+                            exit = shrinkVertically(ailaSpatialSpring()) + fadeOut(tween(120))
+                        ) {
+                            AssistantEffortPicker(reasoningOptions, selectedReasoning, palette, onSelectReasoning)
                         }
                     }
 
@@ -888,22 +886,211 @@ private fun AssistantPickerField(
     value: String,
     palette: AssistantSurfacePalette,
     enabled: Boolean,
+    expanded: Boolean,
     onClick: () -> Unit
 ) {
+    val rotation by animateFloatAsState(if (expanded && enabled) 180f else 0f, ailaSpatialSpring())
     Row(
         modifier = Modifier.fillMaxWidth()
-            .padding(horizontal = 8.dp)
-            .clip(RoundedCornerShape(18.dp))
+            .padding(horizontal = 14.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (enabled) palette.pillBg else Color.Transparent)
             .then(if (enabled) Modifier.clickable(role = Role.Button, onClick = onClick)
-                .semantics { contentDescription = label } else Modifier)
-            .padding(start = 38.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+                .semantics {
+                    contentDescription = label
+                    stateDescription = if (expanded) "$value, aperto" else value
+                } else Modifier)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(label, color = palette.ink, fontSize = 15.5.sp, fontWeight = FontWeight.Medium)
-            Text(value, color = palette.accent, fontSize = 13.sp)
+            Text(label, color = palette.inkMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            Text(value, color = palette.ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
         }
-        if (enabled) AssistantChevronGlyph(Modifier.size(16.dp), color = palette.inkMuted)
+        if (enabled) {
+            AssistantChevronGlyph(
+                Modifier.size(16.dp).graphicsLayer { rotationZ = rotation },
+                color = if (expanded) palette.accent else palette.inkMuted
+            )
+        }
+    }
+}
+
+@Composable
+private fun AssistantModelList(
+    models: List<AssistantProviderModel>,
+    selectedModelId: String,
+    palette: AssistantSurfacePalette,
+    onSelect: (String) -> Unit
+) {
+    var query by remember { mutableStateOf("") }
+    val filtered = remember(models, query) {
+        val term = query.trim()
+        models.filter { it.name.contains(term, ignoreCase = true) || it.id.contains(term, ignoreCase = true) }
+    }
+    Column(
+        Modifier.fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(palette.drawerBg)
+            .border(1.dp, palette.hairline, RoundedCornerShape(18.dp))
+            .padding(6.dp)
+    ) {
+        if (models.size > 6) {
+            Row(
+                Modifier.fillMaxWidth().height(44.dp)
+                    .clip(RoundedCornerShape(12.dp)).background(palette.pillBg)
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                AppIcons.Search(Modifier.size(16.dp), color = palette.inkMuted)
+                Box(Modifier.weight(1f)) {
+                    if (query.isEmpty()) Text("Cerca un modello", color = palette.inkMuted, fontSize = 14.sp)
+                    BasicTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        singleLine = true,
+                        textStyle = TextStyle(color = palette.ink, fontSize = 14.sp),
+                        cursorBrush = SolidColor(palette.accent),
+                        modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Cerca un modello" }
+                    )
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+        }
+        if (filtered.isEmpty()) {
+            Text("Nessun modello trovato", Modifier.padding(12.dp), color = palette.inkMuted, fontSize = 13.sp)
+        } else {
+            LazyColumn(
+                Modifier.fillMaxWidth().heightIn(max = 202.dp).selectableGroup(),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                items(filtered, key = { it.id }) { model ->
+                    val selected = model.id == selectedModelId
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 44.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (selected) palette.activeRowBg else Color.Transparent)
+                            .selectable(selected = selected, role = Role.RadioButton) { onSelect(model.id) }
+                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(model.name, color = if (selected) palette.activeRowInk else palette.ink,
+                                fontSize = 14.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
+                            if (model.id.isNotBlank() && model.name != model.id) {
+                                Text(model.id, color = palette.inkMuted, fontSize = 11.sp)
+                            }
+                        }
+                        if (selected) AppIcons.Check(Modifier.padding(start = 6.dp).size(18.dp), color = palette.accent)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun AssistantEffortPicker(
+    options: List<String>,
+    selection: String,
+    palette: AssistantSurfacePalette,
+    onSelect: (String) -> Unit
+) {
+    val level = options.indexOf(selection).coerceAtLeast(0)
+    val latestLevel by rememberUpdatedState(level)
+    val latestOnSelect by rememberUpdatedState(onSelect)
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val fraction by animateFloatAsState(
+        targetValue = (level + 1f) / options.size,
+        animationSpec = ailaExpressiveBounceSpring(damping = 0.64f, stiffness = 460f),
+        label = "effortPillGrow"
+    )
+
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)) {
+        BoxWithConstraints(
+            Modifier.fillMaxWidth().height(52.dp)
+                .clip(RoundedCornerShape(26.dp)).background(palette.pillBg)
+                .pointerInput(options, rtl) {
+                    detectTapGestures { offset ->
+                        val position = if (rtl) size.width - offset.x else offset.x
+                        val target = (position / size.width * options.size).toInt().coerceIn(options.indices)
+                        if (target != latestLevel) latestOnSelect(options[target])
+                    }
+                }
+                .pointerInput(options, rtl) {
+                    var dragLevel = -1
+                    detectHorizontalDragGestures(
+                        onDragStart = { dragLevel = latestLevel }
+                    ) { change, _ ->
+                        change.consume()
+                        val position = if (rtl) size.width - change.position.x else change.position.x
+                        val target = (position / size.width * options.size).toInt().coerceIn(options.indices)
+                        if (target != dragLevel) {
+                            dragLevel = target
+                            latestOnSelect(options[target])
+                        }
+                    }
+                }
+                .semantics {
+                    contentDescription = "Pillola del ragionamento"
+                    stateDescription = assistantReasoningLabel(options[level])
+                    if (options.size > 1) {
+                        progressBarRangeInfo = ProgressBarRangeInfo(
+                            level.toFloat(), 0f..options.lastIndex.toFloat(), options.size - 2
+                        )
+                        setProgress { requested ->
+                            val target = requested.roundToInt().coerceIn(options.indices)
+                            if (target != level) onSelect(options[target])
+                            target != level
+                        }
+                    }
+                }
+        ) {
+            Box(
+                Modifier.width(maxWidth * fraction.coerceIn(0f, 1f)).fillMaxHeight()
+                    .clip(RoundedCornerShape(26.dp)).background(palette.accent)
+            ) {
+                Box(
+                    Modifier.align(Alignment.CenterEnd).padding(end = 11.dp)
+                        .width(3.dp).height(20.dp).clip(CircleShape)
+                        .background(palette.onAccent.copy(alpha = 0.92f))
+                )
+            }
+            Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                options.forEachIndexed { index, _ ->
+                    Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                        if (index != level) {
+                            Box(Modifier.size(5.dp).clip(CircleShape).background(
+                                if (index < level) palette.onAccent.copy(alpha = .45f)
+                                else palette.inkMuted.copy(alpha = .6f)
+                            ))
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        FlowRow(
+            Modifier.fillMaxWidth().selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            options.forEachIndexed { index, value ->
+                val active = level == index
+                Box(
+                    Modifier.heightIn(min = 38.dp).clip(CircleShape)
+                        .background(if (active) palette.activeRowBg else Color.Transparent)
+                        .selectable(selected = active, role = Role.RadioButton) { onSelect(value) }
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(assistantReasoningLabel(value), color = if (active) palette.activeRowInk else palette.inkMuted,
+                        fontSize = 12.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal)
+                }
+            }
+        }
     }
 }
 

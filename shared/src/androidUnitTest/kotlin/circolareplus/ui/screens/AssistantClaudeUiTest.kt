@@ -18,6 +18,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeRight
@@ -220,21 +221,24 @@ class AssistantClaudeUiTest {
         compose.onNodeWithText("Google Gemini").assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(AiProvider.GOOGLE_AI_STUDIO.id, provider) }
 
-        compose.onNodeWithContentDescription("Modello").performClick()
+        compose.onNodeWithContentDescription("Modello").performScrollTo().performClick()
         compose.mainClock.advanceTimeBy(450)
         compose.onNodeWithText("Gemini 4 Hydrogen").performClick()
         compose.runOnIdle { assertEquals(hydrogen.id, model) }
 
         compose.onNodeWithContentDescription("Livello di ragionamento").performClick()
         compose.mainClock.advanceTimeBy(450)
-        compose.onNodeWithText("Molto alto").assertIsDisplayed()
+        val pill = compose.onNodeWithContentDescription("Pillola del ragionamento")
+        pill.performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Massimo").assertDoesNotExist()
-        compose.onNodeWithText("Molto alto").performClick()
+        compose.onNodeWithText("Basso").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals("low", effort) }
+        pill.performScrollTo().performTouchInput { swipeRight() }
         compose.mainClock.advanceTimeBy(300)
         compose.runOnIdle { assertEquals("xhigh", effort) }
         screenshot("aila-provider-model-picker-dark")
 
-        compose.onNodeWithText("Impostazioni AI").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Impostazioni AI").performScrollTo().assertIsDisplayed().performClick()
         compose.mainClock.advanceTimeBy(250)
         compose.runOnIdle { assertTrue(openedAiSettings) }
     }

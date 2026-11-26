@@ -96,7 +96,7 @@ internal fun AilaBriefCard(
                 val tint = if (item.kind == AilaBriefKind.CIRCULAR && !item.isActive) AppTheme.TextMuted else subjectColor?.let {
                     when {
                         it.key == "white" -> if (dark) Color.White else Color(0xFF667085)
-                        it.key == "black" && dark -> SubjectColors.darkBlackOutline
+                        it.key == "black" && dark -> SubjectColors.darkBlackInk
                         else -> it.color
                     }
                 } ?: if (AppTheme.isNothing) AppTheme.TextDark else when(item.kind) {
@@ -139,7 +139,7 @@ internal fun AilaBriefCard(
                 } else {
                     Brush.horizontalGradient(listOf(tint.copy(alpha = if (dark) .34f else .20f), tint.copy(alpha = if (dark) .22f else .14f)))
                 }
-                val itemBorderColor = if (subjectColor?.key == "black" && dark) tint.copy(alpha = .65f)
+                val itemBorderColor = if (subjectColor?.key == "black" && dark) SubjectColors.darkBlackOutline
                     else if (subjectColor?.key == "white") AppTheme.TextMuted.copy(alpha = .62f)
                     else tint.copy(alpha = if (dark) .42f else .28f)
                 val itemBorderBrush = if (AppTheme.isNothing) Brush.horizontalGradient(listOf(AppTheme.Hairline, AppTheme.Hairline)) else if (subjectColor?.key == "rainbow") {

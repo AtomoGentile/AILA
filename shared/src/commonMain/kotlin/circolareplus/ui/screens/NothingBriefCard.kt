@@ -76,7 +76,7 @@ internal fun NothingBriefCard(
                             Text(nothingBriefLabel(item), Modifier.weight(1f), color = AppTheme.TextMuted, style = mono)
                             if(subjectColorsEnabled && item.kind == AilaBriefKind.EVENT) {
                                 val subject = SubjectColors.choiceForSubject(item.title, subjectColorOverrides)
-                                val marker = if (subject?.key == "black" && AppTheme.isDarkMode) SubjectColors.darkBlackOutline
+                                val marker = if (subject?.key == "black" && AppTheme.isDarkMode) SubjectColors.darkBlackInk
                                     else subject?.color ?: AppTheme.TextMuted
                                 Box(Modifier.width(3.dp).height(20.dp).background(marker, CircleShape))
                             }
