@@ -64,7 +64,6 @@ class LocalSettingsManager(
         private const val KEY_LOCAL_AI_ENABLED = "local_ai_enabled"
         private const val KEY_LOCAL_AI_MODEL = "local_ai_model_id"
         private const val KEY_ASSISTANT_THINKING = "assistant_thinking_enabled"
-        private const val KEY_ASSISTANT_EFFORT = "assistant_effort_level"
         private const val KEY_BOARD_NOTIFICATIONS_ENABLED = "board_notifications_enabled"
         private const val KEY_SYSTEM_NOTIFICATIONS_ENABLED = "system_notifications_enabled"
         private const val KEY_SEATMAP_DUMMIES_MENU_ENABLED = "seatmap_dummies_menu_enabled"
@@ -212,6 +211,21 @@ class LocalSettingsManager(
 
     private fun compatibleKey(base: String): String = "${base}_${compatibleAiFormat.lowercase()}"
 
+    var assistantGoogleModel: String
+        get() = settings.getString("assistant_google_model", "")
+        set(value) = settings.putString("assistant_google_model", value.trim().removePrefix("models/"))
+
+    fun assistantReasoning(provider: String, model: String): String =
+        settings.getString("assistant_reasoning:$provider:$model",
+            if (provider in listOf("AILA_CLOUD", "ON_DEVICE")) {
+                if (settings.getBoolean(KEY_ASSISTANT_THINKING, false)) "on" else "off"
+            } else ""
+        )
+
+    fun setAssistantReasoning(provider: String, model: String, value: String) {
+        settings.putString("assistant_reasoning:$provider:$model", value)
+    }
+
     var isLocalAiEnabled: Boolean
         get() = settings.getBoolean(KEY_LOCAL_AI_ENABLED, true)
         set(value) = settings.putBoolean(KEY_LOCAL_AI_ENABLED, value)
@@ -226,24 +240,6 @@ class LocalSettingsManager(
     var localAiModelId: String
         get() = settings.getString(KEY_LOCAL_AI_MODEL, "")
         set(value) = settings.putString(KEY_LOCAL_AI_MODEL, value)
-
-    /**
-     * Se l'assistente, quando gira sul modello locale, puo' "ragionare" prima di rispondere
-     * (modalita' thinking di Qwen/Gemma). Spento di default: le risposte sono molto piu' rapide;
-     * acceso sono piu' ponderate ma su un telefono possono voler dire minuti.
-     */
-    var assistantThinkingEnabled: Boolean
-        get() = settings.getBoolean(KEY_ASSISTANT_THINKING, false)
-        set(value) = settings.putBoolean(KEY_ASSISTANT_THINKING, value)
-
-    /** Livello di ragionamento scelto nell'Assistant (0 = Rapido, 1 = Medio, 2 = Alto, 3 = Massimo). */
-    var assistantEffortLevel: Int
-        get() = settings.getInt(KEY_ASSISTANT_EFFORT, if (assistantThinkingEnabled) 2 else 1).coerceIn(0, 3)
-        set(value) {
-            val clamped = value.coerceIn(0, 3)
-            settings.putInt(KEY_ASSISTANT_EFFORT, clamped)
-            settings.putBoolean(KEY_ASSISTANT_THINKING, clamped >= 2)
-        }
 
     var isBoardNotificationEnabled: Boolean
         get() = settings.getBoolean(KEY_BOARD_NOTIFICATIONS_ENABLED, true)

@@ -76,7 +76,9 @@ internal fun NothingBriefCard(
                             Text(nothingBriefLabel(item), Modifier.weight(1f), color = AppTheme.TextMuted, style = mono)
                             if(subjectColorsEnabled && item.kind == AilaBriefKind.EVENT) {
                                 val subject = SubjectColors.choiceForSubject(item.title, subjectColorOverrides)
-                                Box(Modifier.width(3.dp).height(20.dp).background(subject?.color ?: AppTheme.TextMuted, CircleShape))
+                                val marker = if (subject?.key == "black" && AppTheme.isDarkMode) SubjectColors.darkBlackOutline
+                                    else subject?.color ?: AppTheme.TextMuted
+                                Box(Modifier.width(3.dp).height(20.dp).background(marker, CircleShape))
                             }
                             AilaIconButton("Non ora: ${item.title}", { onDismiss(item) }) {
                                 AppIcons.Close(Modifier.size(16.dp), AppTheme.TextMuted)

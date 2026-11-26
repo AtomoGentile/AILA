@@ -1,5 +1,7 @@
 package circolareplus.ui.screens
 
+import circolareplus.ai.providerName
+
 import circolareplus.domain.model.isStudyRelevantFor
 
 import androidx.compose.animation.core.tween
@@ -1223,8 +1225,7 @@ fun MainAppShell(
     var assistantMessageCounter by remember { mutableStateOf(0) }
     // Ragionamento del modello locale: la scelta e' salvata nelle impostazioni, qui se ne tiene
     // una copia perche' l'interruttore deve muoversi al tocco.
-    var assistantThinking by remember { mutableStateOf(AppContainer.settings.assistantThinkingEnabled) }
-    var assistantEffort by remember { mutableStateOf(AppContainer.settings.assistantEffortLevel) }
+    var assistantSelectionRevision by remember { mutableStateOf(0) }
     var assistantIncognito by rememberSaveable { mutableStateOf(false) }
     var assistantFinishedToast by remember { mutableStateOf<AssistantConversation?>(null) }
     var assistantConversations by remember {
@@ -5073,13 +5074,15 @@ fun MainAppShell(
                         localModels = remember {
                             circolareplus.ai.LocalAiCatalog.selectableFor(circolareplus.ai.totalDeviceRamMb())
                         },
-                        selectedLocalModelId = remember { AppContainer.selectedLocalModel().id },
+                        selectedLocalModelId = remember(assistantSelectionRevision) { AppContainer.selectedLocalModel().id },
                         onSelectLocalModel = { model ->
                             AppContainer.settings.localAiModelId = model.id
                             // Il motore tiene in memoria il modello caricato in precedenza: se
                             // non lo si scarica, la prima classificazione dopo il cambio userebbe
                             // ancora quello vecchio.
                             AppContainer.localLlm.unload()
+                            assistantSelectionRevision++
+                            apiKeyRevision++
                         },
                         isLocalModelInstalled = { model ->
                             AppContainer.localModelStore.isInstalled(model)
@@ -5355,14 +5358,27 @@ fun MainAppShell(
                         }
                     }
                     circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { assistantBack() }
-                    val currentAssistantProvider = remember(apiKeyRevision) { AppContainer.settings.aiProvider }
-                    val currentLocalModel = remember(apiKeyRevision) { AppContainer.selectedLocalModel() }
-                    val currentHasGoogleKey = remember(apiKeyRevision) { AppContainer.settings.userAiApiKey.isNotBlank() }
-                    val currentHasCompatible = remember(apiKeyRevision) {
-                        AppContainer.settings.compatibleAiBaseUrl.isNotBlank() && AppContainer.settings.compatibleAiModel.isNotBlank()
+                    val assistantSettings = AppContainer.settings
+                    val currentAssistantProvider = remember(apiKeyRevision) {
+                        circolareplus.ai.AiProvider.fromId(assistantSettings.aiProvider)
                     }
-                    val currentCompatibleModel = remember(apiKeyRevision) { AppContainer.settings.compatibleAiModel }
-                    val currentLocalInstalled = remember(apiKeyRevision) { AppContainer.localModelStore.isInstalled(currentLocalModel) }
+                    val currentLocalModel = remember(apiKeyRevision, assistantSelectionRevision) { AppContainer.selectedLocalModel() }
+                    val currentHasGoogleKey = remember(apiKeyRevision) { assistantSettings.userAiApiKey.isNotBlank() }
+                    val compatibleFormat = remember(apiKeyRevision) {
+                        circolareplus.ai.CompatibleAiFormat.fromId(assistantSettings.compatibleAiFormat)
+                    }
+                    val currentHasCompatible = remember(apiKeyRevision) {
+                        assistantSettings.compatibleAiApiKey.isNotBlank() &&
+                            (compatibleFormat != circolareplus.ai.CompatibleAiFormat.GOOGLE ||
+                                assistantSettings.compatibleAiBaseUrl.isNotBlank())
+                    }
+                    val modelId = remember(currentAssistantProvider, apiKeyRevision, assistantSelectionRevision) {
+                        AppContainer.assistantModelId(currentAssistantProvider)
+                    }
+                    val reasoning = remember(currentAssistantProvider, apiKeyRevision, assistantSelectionRevision) {
+                        AppContainer.assistantReasoning(currentAssistantProvider)
+                    }
+                    val currentLocalInstalled = remember(apiKeyRevision, currentLocalModel) { AppContainer.localModelStore.isInstalled(currentLocalModel) }
                     androidx.compose.runtime.key(assistantConversationId) {
                     AssistantChatScreen(
                         messages = assistantMessages,
@@ -5389,13 +5405,6 @@ fun MainAppShell(
                         agentPhase = assistantAgentPhases[assistantConversationId],
                         onCancelAction = { cancelAssistantAction(it) },
                         onRecoverAction = { recoverAssistantAction(it) },
-                        thinkingEnabled = assistantThinking,
-                        thinkingAvailable = currentLocalModel.supportsThinking,
-                        onThinkingChange = { enabled ->
-                            AppContainer.settings.assistantThinkingEnabled = enabled
-                            assistantThinking = enabled
-                            assistantEffort = AppContainer.settings.assistantEffortLevel
-                        },
                         onBackClick = { assistantBack() },
                         onClearChat = {
                             assistantMessages.clear()
@@ -5427,7 +5436,7 @@ fun MainAppShell(
                                 assistantConversations = AppContainer.settings.listAssistantConversations()
                             }
                         },
-                        selectedAiProvider = currentAssistantProvider,
+                        selectedAiProvider = currentAssistantProvider.id,
                         onSelectAiProvider = { providerId ->
                             AppContainer.settings.aiProvider = providerId
                             apiKeyRevision++
@@ -5435,13 +5444,33 @@ fun MainAppShell(
                         localModelLabel = currentLocalModel.displayName,
                         hasGoogleKey = currentHasGoogleKey,
                         hasCompatibleConfig = currentHasCompatible,
-                        compatibleModelName = currentCompatibleModel,
+                        compatibleProviderName = compatibleFormat.providerName(assistantSettings.compatibleAiBaseUrl),
+                        showLocalAi = circolareplus.ai.isOnDeviceAiOfferedHere(),
                         localModelInstalled = currentLocalInstalled,
-                        effortLevel = assistantEffort,
-                        onEffortLevelChange = { level ->
-                            AppContainer.settings.assistantEffortLevel = level
-                            assistantEffort = AppContainer.settings.assistantEffortLevel
-                            assistantThinking = AppContainer.settings.assistantThinkingEnabled
+                        selectedModelId = modelId,
+                        selectedReasoning = reasoning,
+                        binaryThinkingAvailable = currentAssistantProvider == circolareplus.ai.AiProvider.AILA_CLOUD ||
+                            (currentAssistantProvider == circolareplus.ai.AiProvider.ON_DEVICE &&
+                                currentLocalInstalled && currentLocalModel.supportsThinking),
+                        providerConfigRevision = apiKeyRevision,
+                        loadModels = AppContainer::assistantProviderModels,
+                        onSelectModel = { id ->
+                            when (currentAssistantProvider) {
+                                circolareplus.ai.AiProvider.GOOGLE_AI_STUDIO -> assistantSettings.assistantGoogleModel = id
+                                circolareplus.ai.AiProvider.COMPATIBLE_API -> assistantSettings.compatibleAiModel = id
+                                circolareplus.ai.AiProvider.ON_DEVICE -> {
+                                    assistantSettings.localAiModelId = id
+                                    AppContainer.localLlm.unload()
+                                }
+                                circolareplus.ai.AiProvider.AILA_CLOUD -> Unit
+                            }
+                            assistantSelectionRevision++
+                        },
+                        onSelectReasoning = { value ->
+                            assistantSettings.setAssistantReasoning(
+                                AppContainer.assistantReasoningScope(currentAssistantProvider), modelId, value
+                            )
+                            assistantSelectionRevision++
                         },
                         userInitials = "${user.firstName.take(1)}${user.lastName.take(1)}".uppercase().ifBlank { "AI" },
                         userDisplayName = listOf(user.firstName, user.lastName).filter { it.isNotBlank() }.joinToString(" "),

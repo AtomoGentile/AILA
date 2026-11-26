@@ -147,9 +147,11 @@ internal fun TimetableTimeline(
                     Text(if (lesson.fromHour == lesson.toHour) "${lesson.fromHour}ª" else "${lesson.fromHour}ª–${lesson.toHour}ª",
                         style = MaterialTheme.typography.labelLarge, color = AppTheme.AccentCyan,
                         modifier = Modifier.widthIn(min = 52.dp))
+                    val markerBorder = if (subjectColor?.key == "black" && AppTheme.isDarkMode) SubjectColors.darkBlackOutline
+                        else AppTheme.Hairline
                     Box(Modifier.width(16.dp).height(76.dp), contentAlignment = Alignment.Center) {
                         Box(Modifier.width(1.dp).fillMaxHeight().background(lineBrush))
-                        Box(Modifier.size(7.dp).clip(RoundedCornerShape(50)).background(markerBrush).border(1.dp, AppTheme.Hairline, RoundedCornerShape(50)))
+                        Box(Modifier.size(7.dp).clip(RoundedCornerShape(50)).background(markerBrush).border(1.dp, markerBorder, RoundedCornerShape(50)))
                     }
                     Column(Modifier.weight(1f).padding(start = 12.dp, top = 10.dp, bottom = 10.dp)) {
                         Text(if (lesson.subject.length <= 4) lesson.subject else lesson.subject.lowercase().replaceFirstChar { it.uppercase() },

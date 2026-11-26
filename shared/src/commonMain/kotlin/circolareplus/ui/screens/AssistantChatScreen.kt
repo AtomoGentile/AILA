@@ -54,6 +54,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -89,6 +90,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import circolareplus.ai.AiProvider
+import circolareplus.ai.AssistantProviderModel
 import circolareplus.ai.assistant.AssistantActionStatus
 import circolareplus.ai.assistant.AssistantAgentPhase
 import circolareplus.ai.assistant.AssistantAttachedFile
@@ -111,6 +113,7 @@ import circolareplus.design.ailaPulse
 import circolareplus.design.ailaRevealEnter
 import circolareplus.design.ailaSheetReveal
 import circolareplus.design.ailaTopicSurface
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -135,11 +138,6 @@ fun AssistantChatScreen(
     onOpenConversation: (AssistantConversation) -> Unit,
     onDeleteConversation: (String) -> Unit,
     onOpenSource: (AssistantSource) -> Unit,
-    /** Ragionamento del modello locale (modalita' thinking): piu' ponderato ma molto piu' lento. */
-    thinkingEnabled: Boolean = false,
-    onThinkingChange: (Boolean) -> Unit = {},
-    /** `false` quando il modello locale scelto non ha un ragionamento (Phi): niente interruttore. */
-    thinkingAvailable: Boolean = true,
     onConfirmAction: (String) -> Unit = {},
     onCancelAction: (String) -> Unit = {},
     agentPhase: AssistantAgentPhase? = null,
@@ -160,11 +158,17 @@ fun AssistantChatScreen(
     onSelectAiProvider: (String) -> Unit = {},
     localModelLabel: String = "AI locale",
     hasGoogleKey: Boolean = true,
-    hasCompatibleConfig: Boolean = true,
-    compatibleModelName: String = "",
+    hasCompatibleConfig: Boolean = false,
+    compatibleProviderName: String = "API personale",
+    showLocalAi: Boolean = true,
     localModelInstalled: Boolean = true,
-    effortLevel: Int = if (thinkingEnabled) 2 else 1,
-    onEffortLevelChange: (Int) -> Unit = { onThinkingChange(it >= 2) },
+    selectedModelId: String = "",
+    selectedReasoning: String = "",
+    binaryThinkingAvailable: Boolean = false,
+    providerConfigRevision: Int = 0,
+    loadModels: (suspend (AiProvider) -> List<AssistantProviderModel>)? = null,
+    onSelectModel: (String) -> Unit = {},
+    onSelectReasoning: (String) -> Unit = {},
     userInitials: String = "AI",
     userDisplayName: String = "",
     finishedToastConversation: AssistantConversation? = null,
@@ -279,22 +283,53 @@ fun AssistantChatScreen(
         activeConversation?.let(::conversationDisplayTitle)
             ?: AssistantConversation.titleFrom(messages).takeIf { messages.isNotEmpty() }
     }
-    val modelOptions = remember(localModelLabel, hasGoogleKey, hasCompatibleConfig, compatibleModelName, localModelInstalled) {
-        assistantModelOptions(
-            localModelLabel = localModelLabel,
-            hasGoogleKey = hasGoogleKey,
-            hasCompatibleConfig = hasCompatibleConfig,
-            compatibleModelName = compatibleModelName,
-            localModelInstalled = localModelInstalled
-        )
+    val modelOptions = assistantModelOptions(
+        localModelLabel, hasGoogleKey, hasCompatibleConfig, compatibleProviderName, showLocalAi, localModelInstalled
+    )
+    val provider = AiProvider.fromId(selectedAiProvider)
+    val google = provider == AiProvider.GOOGLE_AI_STUDIO
+    val external = google || provider == AiProvider.COMPATIBLE_API
+    val available = when (provider) {
+        AiProvider.GOOGLE_AI_STUDIO -> hasGoogleKey
+        AiProvider.COMPATIBLE_API -> hasCompatibleConfig
+        AiProvider.ON_DEVICE -> showLocalAi
+        AiProvider.AILA_CLOUD -> true
     }
-    val currentModel = remember(modelOptions, selectedAiProvider) {
-        modelOptions.firstOrNull { it.providerId == selectedAiProvider } ?: modelOptions.first()
+    var modelRetry by remember { mutableStateOf(0) }
+    // Keep the resolved names and capabilities when the menu closes or the model changes.
+    val catalog = androidx.compose.runtime.key(provider, providerConfigRevision, modelRetry) {
+        produceState<Result<List<AssistantProviderModel>>?>(null, isModelSheetOpen) {
+            if (isModelSheetOpen && value == null && available && loadModels != null && provider != AiProvider.AILA_CLOUD) {
+                value = try {
+                    Result.success(loadModels(provider))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Result.failure(e)
+                }
+            }
+        }.value
     }
-    val currentEffortLabel = AssistantEffortLabels[effortLevel.coerceIn(0, AssistantEffortLabels.lastIndex)]
-    val headerModelSubtitle = remember(messages, currentModel) {
-        messages.lastOrNull { it.author != AssistantAuthor.USER && !it.isError }?.modelLabel
-            ?: currentModel.title
+    val catalogModels = catalog?.getOrNull().orEmpty()
+    val activeModel = catalogModels.firstOrNull { it.id == selectedModelId }
+    val modelLabel = activeModel?.name ?: when (provider) {
+        AiProvider.AILA_CLOUD -> "Gemma 4 26B A4B"
+        AiProvider.ON_DEVICE -> localModelLabel
+        AiProvider.GOOGLE_AI_STUDIO -> selectedModelId.ifBlank { "Automatico" }
+        AiProvider.COMPATIBLE_API -> selectedModelId.ifBlank { "Seleziona un modello" }
+    }
+    val headerModelLabel = if (google && selectedModelId.isBlank()) "Gemini · Auto" else modelLabel
+    val supportedReasoning = if (external) activeModel?.reasoning.orEmpty()
+        else if (binaryThinkingAvailable) listOf("off", "on") else emptyList()
+    val reasoningOptions = if (external && supportedReasoning.isNotEmpty()) listOf("") + supportedReasoning
+        else supportedReasoning
+    val visibleReasoning = selectedReasoning.takeIf { it in reasoningOptions } ?: reasoningOptions.firstOrNull()
+    val modelStatus = when {
+        !available && external -> "Aggiungi una chiave nelle Impostazioni AI."
+        catalog?.isFailure == true -> catalog.exceptionOrNull()?.message ?: "Catalogo non disponibile"
+        catalog?.isSuccess == true && external && catalogModels.isEmpty() -> "Nessun modello disponibile"
+        catalog == null && external && loadModels != null -> "Caricamento modelli…"
+        else -> null
     }
 
     BoxWithConstraints(
@@ -355,8 +390,9 @@ fun AssistantChatScreen(
                     palette = palette,
                     hasMessages = messages.isNotEmpty() || isThinking,
                     isThinking = isThinking,
-                    modelShortLabel = currentModel.shortLabel,
-                    effortLabel = currentEffortLabel,
+                    modelShortLabel = headerModelLabel,
+                    effortLabel = (visibleReasoning ?: selectedReasoning.takeIf { external && it.isNotBlank() })
+                        ?.let(::assistantReasoningLabel),
                     isModelPickerOpen = isModelSheetOpen,
                     isIncognito = isIncognito,
                     isPinned = activeConversation?.pinned == true,
@@ -633,7 +669,7 @@ fun AssistantChatScreen(
                     activeConversationId = activeConversationId,
                     userInitials = userInitials,
                     userDisplayName = userDisplayName,
-                    activeModelLabel = currentModel.title,
+                    activeModelLabel = headerModelLabel,
                     onSelectConversation = { conv ->
                         setDrawerOpen(false)
                         onIncognitoChange(false)
@@ -681,13 +717,19 @@ fun AssistantChatScreen(
             visible = isModelSheetOpen,
             palette = palette,
             options = modelOptions,
-            selectedProviderId = currentModel.providerId,
-            effortLevel = effortLevel,
+            selectedProviderId = provider.id,
+            modelLabel = modelLabel,
+            models = if (google && (catalogModels.isNotEmpty() || selectedModelId.isNotBlank())) {
+                listOf(AssistantProviderModel("", "Automatico")) + catalogModels
+            } else catalogModels,
+            selectedModelId = selectedModelId,
+            modelStatus = modelStatus,
+            onSelectModel = onSelectModel.takeIf { available && provider != AiProvider.AILA_CLOUD },
+            onRetryModels = { modelRetry++ },
+            reasoningOptions = reasoningOptions,
+            selectedReasoning = visibleReasoning.orEmpty(),
             onSelectProvider = onSelectAiProvider,
-            onSelectEffort = { level ->
-                onEffortLevelChange(level)
-                onThinkingChange(level >= 2)
-            },
+            onSelectReasoning = onSelectReasoning,
             onOpenAiSettings = onOpenAiSettings,
             onDismiss = { isModelSheetOpen = false }
         )
@@ -962,6 +1004,9 @@ private fun AssistantResponseBlock(
                 style = TextStyle(fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold),
                 color = palette.inkMuted
             )
+            message.modelLabel?.takeIf { it.isNotBlank() }?.let { model ->
+                Text(model, color = palette.inkMuted, fontSize = 12.sp)
+            }
         }
 
         AnimatedVisibility(

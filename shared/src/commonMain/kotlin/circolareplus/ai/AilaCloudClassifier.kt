@@ -62,7 +62,7 @@ internal data class AilaChatRequest(
 
 /** Esito di una chiamata verso il Worker: fine quota e' un flag esplicito, non da indovinare. */
 internal sealed class AilaChatResult {
-    data class Success(val text: String) : AilaChatResult()
+    data class Success(val text: String, val model: String? = null) : AilaChatResult()
 
     /**
      * [isDailyQuota] separa la fine della quota (riserva sensata, messaggio dedicato) da
@@ -197,7 +197,7 @@ class AilaCloudClassifier(
             )
         )
         val firstReason = when (first) {
-            is AilaChatResult.Success -> return AiTextResult.Success(first.text, MODEL_LABEL)
+            is AilaChatResult.Success -> return AiTextResult.Success(first.text, first.model?.let { "AILA Cloud ($it)" } ?: MODEL_LABEL)
             is AilaChatResult.Failure -> first.reason
         }
 
@@ -296,15 +296,16 @@ class AilaCloudClassifier(
         }
         val body = try { response.bodyAsText() } catch (e: Exception) { "" }
         if (response.status.isSuccess()) {
-            val text = try {
-                json.parseToJsonElement(body).jsonObject["text"]?.jsonPrimitive?.contentOrNull
+            val result = try {
+                json.parseToJsonElement(body).jsonObject
             } catch (e: Exception) {
                 null
             }
+            val text = result?.get("text")?.jsonPrimitive?.contentOrNull
             return if (text.isNullOrBlank()) {
                 AilaChatResult.Failure("Il servizio di AILA ha risposto senza contenuti.", false)
             } else {
-                AilaChatResult.Success(text)
+                AilaChatResult.Success(text, result?.get("model")?.jsonPrimitive?.contentOrNull)
             }
         }
         val parsed = try { json.parseToJsonElement(body).jsonObject } catch (e: Exception) { null }

@@ -5,7 +5,6 @@ import android.graphics.Canvas
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
@@ -23,6 +22,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeRight
 import circolareplus.ai.AiProvider
+import circolareplus.ai.AssistantProviderModel
 import circolareplus.ai.assistant.AssistantAuthor
 import circolareplus.ai.assistant.AssistantConversation
 import circolareplus.ai.assistant.AssistantMessage
@@ -170,9 +170,13 @@ class AssistantClaudeUiTest {
         compose.onNodeWithContentDescription("Esci dalla chat in incognito").performClick()
     }
 
-    @Test fun topBarAnimatedModelPickerAndGrowingEffortPill() {
+    @Test fun pickerUsesTheSelectedModelsReasoningOptions() {
         var provider by mutableStateOf(AiProvider.AILA_CLOUD.id)
-        var effort by mutableIntStateOf(1)
+        var model by mutableStateOf("")
+        var effort by mutableStateOf("")
+        val hydrogen = AssistantProviderModel(
+            "gemini-4-hydrogen", "Gemini 4 Hydrogen", listOf("low", "medium", "high", "xhigh")
+        )
         var openedAiSettings = false
 
         activity.get().setContent {
@@ -195,8 +199,11 @@ class AssistantClaudeUiTest {
                     hasGoogleKey = true,
                     hasCompatibleConfig = false,
                     localModelInstalled = true,
-                    effortLevel = effort,
-                    onEffortLevelChange = { effort = it },
+                    selectedModelId = model,
+                    selectedReasoning = effort,
+                    loadModels = { listOf(hydrogen) },
+                    onSelectModel = { model = it },
+                    onSelectReasoning = { effort = it },
                     userInitials = "SB",
                     userDisplayName = "Simone Bianchin"
                 )
@@ -210,15 +217,19 @@ class AssistantClaudeUiTest {
         compose.onNodeWithText("Google Gemini").assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(AiProvider.GOOGLE_AI_STUDIO.id, provider) }
 
-        // Espandi "Livello di ragionamento" e verifica la pillola che aumenta + tasto standard Impostazioni AI
+        compose.onNodeWithContentDescription("Modello").performClick()
+        compose.mainClock.advanceTimeBy(450)
+        compose.onNodeWithText("Gemini 4 Hydrogen").performClick()
+        compose.runOnIdle { assertEquals(hydrogen.id, model) }
+
         compose.onNodeWithContentDescription("Livello di ragionamento").performClick()
         compose.mainClock.advanceTimeBy(450)
-        compose.onNodeWithContentDescription("Livello di ragionamento: Medio").assertIsDisplayed()
-        screenshot("aila-b6-model-picker-dark")
-
-        compose.onNodeWithText("Alto").performClick()
+        compose.onNodeWithText("Molto alto").assertIsDisplayed()
+        compose.onNodeWithText("Massimo").assertDoesNotExist()
+        compose.onNodeWithText("Molto alto").performClick()
         compose.mainClock.advanceTimeBy(300)
-        compose.runOnIdle { assertEquals(2, effort) }
+        compose.runOnIdle { assertEquals("xhigh", effort) }
+        screenshot("aila-provider-model-picker-dark")
 
         compose.onNodeWithText("Impostazioni AI").assertIsDisplayed().performClick()
         compose.mainClock.advanceTimeBy(250)

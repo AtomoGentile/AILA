@@ -7,6 +7,9 @@ import circolareplus.ai.AilaCloudClassifier
 import circolareplus.ai.assistant.AilaAssistant
 import circolareplus.ai.assistant.AssistantKnowledgeLoader
 import circolareplus.ai.AiProvider
+import circolareplus.ai.AssistantProviderModel
+import circolareplus.ai.effectiveBaseUrl
+import circolareplus.ai.loadAssistantProviderModels
 import circolareplus.ai.AiRoutePlan
 import circolareplus.ai.ChainedAiClassifier
 import circolareplus.ai.ClientSideAiClassifier
@@ -117,19 +120,46 @@ object AppContainer {
      * provider, chiave e modello locale vanno riletti dalle impostazioni a ogni domanda, cosi'
      * cambiarli durante una conversazione ha effetto dal messaggio successivo.
      */
+    internal fun assistantReasoningScope(provider: AiProvider): String =
+        if (provider == AiProvider.COMPATIBLE_API) {
+            val format = CompatibleAiFormat.fromId(settings.compatibleAiFormat)
+            "${format.id}:${format.effectiveBaseUrl(settings.compatibleAiBaseUrl)}"
+        } else provider.id
+
+    internal fun assistantModelId(provider: AiProvider): String = when (provider) {
+        AiProvider.GOOGLE_AI_STUDIO -> settings.assistantGoogleModel
+        AiProvider.COMPATIBLE_API -> settings.compatibleAiModel
+        AiProvider.ON_DEVICE -> selectedLocalModel().id
+        AiProvider.AILA_CLOUD -> AilaCloudClassifier.MODEL_LABEL
+    }
+
+    internal fun assistantReasoning(provider: AiProvider): String = settings.assistantReasoning(
+        assistantReasoningScope(provider), assistantModelId(provider)
+    )
+
+    internal suspend fun assistantProviderModels(provider: AiProvider): List<AssistantProviderModel> = when (provider) {
+        AiProvider.GOOGLE_AI_STUDIO ->
+            loadAssistantProviderModels(CompatibleAiFormat.GOOGLE, "", settings.userAiApiKey)
+        AiProvider.COMPATIBLE_API -> loadAssistantProviderModels(
+            CompatibleAiFormat.fromId(settings.compatibleAiFormat),
+            settings.compatibleAiBaseUrl,
+            settings.compatibleAiApiKey
+        )
+        AiProvider.ON_DEVICE -> LocalAiCatalog.all.filter {
+            it.id == selectedLocalModel().id || localModelStore.isInstalled(it)
+        }.map { AssistantProviderModel(it.id, it.displayName, if (it.supportsThinking) listOf("off", "on") else emptyList()) }
+        AiProvider.AILA_CLOUD -> listOf(AssistantProviderModel(
+            AilaCloudClassifier.MODEL_LABEL, "Gemma 4 26B A4B", listOf("off", "on")
+        ))
+    }
+
     fun newAssistant(): AilaAssistant = AilaAssistant(
         classifierFactory = {
-            val effort = settings.assistantEffortLevel
-            newAiClassifier(
-                localThinking = effort >= 2,
-                effortLevel = effort,
-                answerAttemptTimeoutMs = ASSISTANT_ATTEMPT_MS
-            )
+            newAiClassifier(answerAttemptTimeoutMs = ASSISTANT_ATTEMPT_MS, forAssistant = true)
         },
         circularsRepository = circularsRepository,
         pdfTextExtractor = pdfTextExtractor,
-        actionsEnabled = settings.cachedAiPreferences.allows("CALENDAR"),
-        effortLevelProvider = { settings.assistantEffortLevel }
+        actionsEnabled = settings.cachedAiPreferences.allows("CALENDAR")
     )
 
 
@@ -217,18 +247,18 @@ object AppContainer {
         pdfTextLength: Int? = null,
         /** Ragionamento del modello locale: lo passa solo l'assistente, vedi [LocalAiClassifier]. */
         localThinking: Boolean = false,
-        /** Livello di ragionamento dell'assistente (0=Rapido, 1=Medio, 2=Alto, 3=Massimo). */
-        effortLevel: Int = if (localThinking) 2 else 1,
         /** Tetto per ciascun tentativo di risposta (primario e riserva), vedi [ChainedAiClassifier]. */
-        answerAttemptTimeoutMs: Long? = null
+        answerAttemptTimeoutMs: Long? = null,
+        forAssistant: Boolean = false
     ): AiClassifier {
-        val clampedEffort = effortLevel.coerceIn(0, 3)
-        val thinkingActive = localThinking || clampedEffort >= 2
+        val provider = AiProvider.fromId(settings.aiProvider)
+        val googleModel = settings.assistantGoogleModel.takeIf { forAssistant }.orEmpty()
         val google = ClientSideAiClassifier(
             userApiKey = settings.userAiApiKey,
-            effortLevel = clampedEffort
+            assistantModel = googleModel,
+            assistantReasoning = assistantReasoning(AiProvider.GOOGLE_AI_STUDIO)
+                .takeIf { forAssistant && it.isNotBlank() }
         )
-        val provider = AiProvider.fromId(settings.aiProvider)
         val format = CompatibleAiFormat.fromId(settings.compatibleAiFormat)
         val effectiveProvider = provider
         val external: AiClassifier = if (effectiveProvider == AiProvider.COMPATIBLE_API) {
@@ -237,7 +267,7 @@ object AppContainer {
                 baseUrl = settings.compatibleAiBaseUrl,
                 apiKey = settings.compatibleAiApiKey,
                 model = settings.compatibleAiModel,
-                effortLevel = clampedEffort
+                assistantReasoning = assistantReasoning(effectiveProvider).takeIf { forAssistant && it.isNotBlank() }
             )
         } else google
         val cloud: AiClassifier = circolareplus.ai.PolicyAiClassifier(external,"EXTERNAL")
@@ -250,7 +280,8 @@ object AppContainer {
             model = model,
             modelPath = model?.let { localModelStore.installedPath(it) },
             llm = localLlm,
-            enableThinking = thinkingActive,
+            enableThinking = localThinking || (forAssistant && model?.supportsThinking == true &&
+                model.id == assistantModelId(AiProvider.ON_DEVICE) && assistantReasoning(AiProvider.ON_DEVICE) == "on"),
             aiCoreCooldown = aiCoreCooldown,
             noModelReason = if (plan.aiCoreSkipped && model == null) aiCoreCooldown.skipReason() else null
         ),"LOCAL")
@@ -261,7 +292,9 @@ object AppContainer {
         val personal = ChainedAiClassifier(
             primary = cloud,
             secondary = local,
-            escalateToSecondary = allowLocalFallback && settings.isLocalAiEnabled,
+            escalateToSecondary = allowLocalFallback && settings.isLocalAiEnabled &&
+                !(forAssistant && ((provider == AiProvider.GOOGLE_AI_STUDIO && googleModel.isNotBlank()) ||
+                    provider == AiProvider.COMPATIBLE_API)),
             answerAttemptTimeoutMs = answerAttemptTimeoutMs
         )
 
@@ -273,8 +306,7 @@ object AppContainer {
                 apiBaseUrl = { api.baseUrl },
                 authToken = { settings.authToken },
                 personal = personal,
-                enableThinking = thinkingActive,
-                effortLevel = clampedEffort,
+                enableThinking = forAssistant && assistantReasoning(AiProvider.AILA_CLOUD) == "on",
                 attemptTimeoutMs = answerAttemptTimeoutMs
             ),"AILA")
             AiProvider.ON_DEVICE ->

@@ -22,13 +22,10 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -51,6 +48,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -83,8 +81,6 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -102,6 +98,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import circolareplus.ai.AiProvider
+import circolareplus.ai.AssistantProviderModel
 import circolareplus.ai.assistant.AssistantAttachedFile
 import circolareplus.ai.assistant.AssistantAuthor
 import circolareplus.ai.assistant.AssistantConversation
@@ -239,51 +236,55 @@ internal fun Modifier.assistantNeuralBackdrop(palette: AssistantSurfacePalette, 
             }
         }
 
-internal val AssistantEffortLabels = listOf("Rapido", "Medio", "Alto", "Massimo")
+internal fun assistantReasoningLabel(value: String): String = when (value) {
+    "" -> "Predefinito"
+    "none", "off" -> "Disattivato"
+    "on" -> "Attivato"
+    "minimal" -> "Minimo"
+    "low" -> "Basso"
+    "medium" -> "Medio"
+    "high" -> "Alto"
+    "xhigh" -> "Molto alto"
+    "max" -> "Massimo"
+    else -> value
+}
 
 internal data class AssistantModelOption(
     val providerId: String,
     val title: String,
-    val shortLabel: String,
-    val description: String,
-    val statusNote: String? = null
+    val description: String
 )
 
 internal fun assistantModelOptions(
     localModelLabel: String,
     hasGoogleKey: Boolean = true,
     hasCompatibleConfig: Boolean = true,
-    compatibleModelName: String = "",
+    compatibleProviderName: String = "API personale",
+    showLocalApi: Boolean = true,
     localModelInstalled: Boolean = true
 ): List<AssistantModelOption> {
     val cleanLocal = localModelLabel.trim().ifBlank { "AI locale" }
-    val shortLocal = cleanLocal.substringBefore("(").trim().take(16).ifBlank { "Locale" }
-    val compatTitle = compatibleModelName.trim().takeIf { it.isNotBlank() }?.let { "API · ${it.take(18)}" } ?: "API compatibile"
-    return listOf(
+    return listOfNotNull(
         AssistantModelOption(
             providerId = AiProvider.AILA_CLOUD.id,
             title = "AILA Cloud",
-            shortLabel = "AILA Cloud",
             description = "Gemma 4 incluso in AILA"
         ),
         AssistantModelOption(
             providerId = AiProvider.GOOGLE_AI_STUDIO.id,
             title = "Google Gemini",
-            shortLabel = "Gemini",
-            description = if (hasGoogleKey) "API key personale attiva" else "Chiave API da configurare"
+            description = if (hasGoogleKey) "Chiave API personale attiva" else "Chiave API da configurare"
         ),
         AssistantModelOption(
             providerId = AiProvider.ON_DEVICE.id,
             title = cleanLocal,
-            shortLabel = shortLocal,
             description = if (localModelInstalled) "Modello locale offline" else "Modello locale da scaricare"
-        ),
+        ).takeIf { showLocalApi },
         AssistantModelOption(
             providerId = AiProvider.COMPATIBLE_API.id,
-            title = compatTitle,
-            shortLabel = "API",
-            description = if (hasCompatibleConfig) "Endpoint personalizzato" else "Endpoint da configurare"
-        )
+            title = compatibleProviderName,
+            description = "Chiave API personale attiva"
+        ).takeIf { hasCompatibleConfig }
     )
 }
 
@@ -475,7 +476,7 @@ internal fun AssistantHeaderBar(
     hasMessages: Boolean,
     isThinking: Boolean,
     modelShortLabel: String,
-    effortLabel: String,
+    effortLabel: String?,
     isModelPickerOpen: Boolean,
     isIncognito: Boolean,
     isPinned: Boolean,
@@ -525,50 +526,50 @@ internal fun AssistantHeaderBar(
 
         Spacer(Modifier.width(4.dp))
 
-        // Subito vicino al menu: Selettore Modello + Ragionamento come "Hydrogen Media ⌄" di Gemini!
-        Row(
-            modifier = Modifier
-                .height(44.dp)
-                .graphicsLayer {
-                    scaleX = pickerPillScale
-                    scaleY = pickerPillScale
+        Box(modifier = Modifier.weight(1f)) {
+            Row(
+                modifier = Modifier
+                    .height(44.dp)
+                    .graphicsLayer {
+                        scaleX = pickerPillScale
+                        scaleY = pickerPillScale
+                    }
+                    .clip(RoundedCornerShape(100.dp))
+                    .background(pickerPillBg)
+                    .clickable(role = Role.Button, onClick = onToggleModelPicker)
+                    .padding(horizontal = 12.dp)
+                    .semantics { contentDescription = "Seleziona modello e ragionamento" },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = modelShortLabel,
+                    style = TextStyle(
+                        fontFamily = FontFamily.Default,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = (-0.3).sp
+                    ),
+                    modifier = Modifier.weight(1f, fill = false),
+                    color = palette.ink,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (isThinking || effortLabel != null) Text(
+                    text = if (isThinking) "…" else effortLabel.orEmpty(),
+                    style = TextStyle(
+                        fontFamily = FontFamily.Default,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Normal
+                    ),
+                    color = if (isThinking) palette.accent else palette.inkMuted,
+                    maxLines = 1
+                )
+                Box(modifier = Modifier.graphicsLayer { rotationZ = chevronRotation }) {
+                    AssistantChevronGlyph(Modifier.size(14.dp), color = palette.inkMuted)
                 }
-                .clip(RoundedCornerShape(100.dp))
-                .background(pickerPillBg)
-                .clickable(role = Role.Button, onClick = onToggleModelPicker)
-                .padding(horizontal = 12.dp)
-                .semantics { contentDescription = "Seleziona modello e ragionamento" },
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                text = modelShortLabel,
-                style = TextStyle(
-                    fontFamily = FontFamily.Default,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = (-0.3).sp
-                ),
-                color = palette.ink,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = if (isThinking) "…" else effortLabel,
-                style = TextStyle(
-                    fontFamily = FontFamily.Default,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Normal
-                ),
-                color = if (isThinking) palette.accent else palette.inkMuted,
-                maxLines = 1
-            )
-            Box(modifier = Modifier.graphicsLayer { rotationZ = chevronRotation }) {
-                AssistantChevronGlyph(Modifier.size(14.dp), color = palette.inkMuted)
             }
         }
-
-        Spacer(Modifier.weight(1f))
 
         // Destra: a chat vuota Incognito (48dp); in conversazione Nuova chat + ⋮ (48dp)
         Box {
@@ -652,7 +653,7 @@ internal fun AssistantHeaderBar(
 }
 
 // =================================================================================================
-// Menu fluttuante animato Modello + Effort con pillola che aumenta (ancorato in alto come Gemini!)
+// Menu per provider, modello e ragionamento
 // =================================================================================================
 
 @Composable
@@ -661,19 +662,21 @@ internal fun AssistantModelPickerPopup(
     palette: AssistantSurfacePalette,
     options: List<AssistantModelOption>,
     selectedProviderId: String,
-    effortLevel: Int,
+    modelLabel: String,
+    models: List<AssistantProviderModel>,
+    selectedModelId: String,
+    modelStatus: String?,
+    onSelectModel: ((String) -> Unit)?,
+    onRetryModels: () -> Unit,
+    reasoningOptions: List<String>,
+    selectedReasoning: String,
     onSelectProvider: (String) -> Unit,
-    onSelectEffort: (Int) -> Unit,
+    onSelectReasoning: (String) -> Unit,
     onOpenAiSettings: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    var effortExpanded by remember(visible) { mutableStateOf(false) }
-    val effortChevronRot by animateFloatAsState(
-        targetValue = if (effortExpanded) 180f else 0f,
-        animationSpec = ailaExpressiveBounceSpring(damping = 0.62f, stiffness = 460f),
-        label = "effortChevron"
-    )
-
+    var modelsExpanded by remember(visible, selectedProviderId) { mutableStateOf(false) }
+    var effortExpanded by remember(visible, selectedProviderId, selectedModelId) { mutableStateOf(false) }
     AnimatedVisibility(
         visible = visible,
         enter = fadeIn(tween(180)),
@@ -710,8 +713,8 @@ internal fun AssistantModelPickerPopup(
             Box(
                 modifier = popupMotion
                     .align(Alignment.TopStart)
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
-                    .padding(top = 62.dp, start = 16.dp, end = 16.dp)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Bottom))
+                    .padding(top = 62.dp, start = 16.dp, end = 16.dp, bottom = 12.dp)
             ) {
                 Column(
                     modifier = Modifier
@@ -727,6 +730,7 @@ internal fun AssistantModelPickerPopup(
                             onClick = {}
                         )
                         .animateContentSize(ailaSpatialSpring())
+                        .verticalScroll(rememberScrollState())
                         .padding(vertical = 10.dp)
                 ) {
                     // Lista modelli/provider stile Gemini (con spunta e selezione animate)
@@ -784,71 +788,66 @@ internal fun AssistantModelPickerPopup(
                         }
                     }
 
-                    // Divisore + riga "Livello di ragionamento" che espande la pillola che aumenta!
                     Spacer(Modifier.height(6.dp))
                     Box(Modifier.fillMaxWidth().padding(horizontal = 18.dp).height(1.dp).background(palette.hairline))
-                    Spacer(Modifier.height(4.dp))
 
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp)
-                            .clip(RoundedCornerShape(18.dp))
-                            .clickable(role = Role.Button) { effortExpanded = !effortExpanded }
-                            .padding(start = 46.dp, end = 16.dp, top = 12.dp, bottom = 12.dp)
-                            .semantics { contentDescription = "Livello di ragionamento" },
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(
-                                text = "Livello di ragionamento",
-                                style = TextStyle(fontSize = 15.5.sp, fontWeight = FontWeight.Medium),
-                                color = palette.ink
-                            )
-                            Text(
-                                text = AssistantEffortLabels[effortLevel.coerceIn(0, AssistantEffortLabels.lastIndex)],
-                                style = TextStyle(fontSize = 13.sp),
-                                color = palette.accent
-                            )
+                    val canPickModel = onSelectModel != null && models.isNotEmpty()
+                    Box {
+                        AssistantPickerField("Modello", modelLabel, palette, canPickModel) {
+                            modelsExpanded = true
                         }
-                        Box(modifier = Modifier.graphicsLayer { rotationZ = effortChevronRot }) {
-                            AssistantChevronGlyph(Modifier.size(16.dp), color = palette.inkMuted)
+                        DropdownMenu(
+                            expanded = modelsExpanded && canPickModel,
+                            onDismissRequest = { modelsExpanded = false },
+                            modifier = Modifier.widthIn(max = 330.dp).heightIn(max = 380.dp)
+                        ) {
+                            models.forEach { model ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(model.name)
+                                            if (model.name != model.id) Text(model.id, style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    },
+                                    leadingIcon = if (model.id == selectedModelId) {
+                                        { AppIcons.Check(Modifier.size(18.dp), color = palette.accent) }
+                                    } else null,
+                                    onClick = {
+                                        onSelectModel?.invoke(model.id)
+                                        modelsExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    modelStatus?.let { status ->
+                        Row(
+                            Modifier.fillMaxWidth().padding(start = 46.dp, end = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(status, Modifier.weight(1f), color = palette.inkMuted, fontSize = 13.sp)
+                            if (onSelectModel != null && status != "Caricamento modelli…") {
+                                androidx.compose.material3.TextButton(onClick = onRetryModels) { Text("Riprova") }
+                            }
                         }
                     }
 
-                    // Slider tattile "pillola che aumenta" con scattino Material Expressive
-                    AnimatedVisibility(
-                        visible = effortExpanded,
-                        enter = expandVertically(ailaExpressiveBounceSpring(damping = 0.68f, stiffness = 420f)) + fadeIn(ailaFadeSpec(AilaDuration.Quick)),
-                        exit = shrinkVertically(tween(200, easing = FastOutSlowInEasing)) + fadeOut(tween(140))
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 18.dp)
-                                .padding(top = 6.dp, bottom = 12.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            AssistantEffortPillSlider(
-                                level = effortLevel,
-                                steps = AssistantEffortLabels.size,
-                                palette = palette,
-                                onLevelChange = onSelectEffort
-                            )
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                AssistantEffortLabels.forEachIndexed { idx, label ->
-                                    val active = idx == effortLevel.coerceIn(0, AssistantEffortLabels.lastIndex)
-                                    Text(
-                                        text = label,
-                                        style = TextStyle(
-                                            fontSize = 12.sp,
-                                            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal
-                                        ),
-                                        color = if (active) palette.accent else palette.inkFaint,
-                                        modifier = Modifier.clickable { onSelectEffort(idx) }
+                    if (reasoningOptions.isNotEmpty()) {
+                        Box {
+                            AssistantPickerField(
+                                "Livello di ragionamento", assistantReasoningLabel(selectedReasoning), palette, true
+                            ) { effortExpanded = true }
+                            DropdownMenu(expanded = effortExpanded, onDismissRequest = { effortExpanded = false }) {
+                                reasoningOptions.forEach { value ->
+                                    DropdownMenuItem(
+                                        text = { Text(assistantReasoningLabel(value)) },
+                                        leadingIcon = if (value == selectedReasoning) {
+                                            { AppIcons.Check(Modifier.size(18.dp), color = palette.accent) }
+                                        } else null,
+                                        onClick = {
+                                            onSelectReasoning(value)
+                                            effortExpanded = false
+                                        }
                                     )
                                 }
                             }
@@ -887,87 +886,28 @@ internal fun AssistantModelPickerPopup(
     }
 }
 
-/** Pillola tattile che cresce fluidamente da sinistra verso destra al tocco o al trascinamento. */
 @Composable
-internal fun AssistantEffortPillSlider(
-    level: Int,
-    steps: Int,
+private fun AssistantPickerField(
+    label: String,
+    value: String,
     palette: AssistantSurfacePalette,
-    onLevelChange: (Int) -> Unit
+    enabled: Boolean,
+    onClick: () -> Unit
 ) {
-    var widthPx by remember { mutableIntStateOf(1) }
-    val clamped = level.coerceIn(0, steps - 1)
-    val targetFraction = (clamped + 1f) / steps.toFloat()
-    val animatedFraction by animateFloatAsState(
-        targetValue = targetFraction.coerceIn(0.24f, 1f),
-        animationSpec = ailaExpressiveBounceSpring(damping = 0.64f, stiffness = 460f),
-        label = "effortPillGrow"
-    )
-
-    fun stepFromX(x: Float): Int {
-        val ratio = (x / widthPx.coerceAtLeast(1)).coerceIn(0f, 0.999f)
-        return (ratio * steps).toInt().coerceIn(0, steps - 1)
-    }
-
-    BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(52.dp)
-            .clip(RoundedCornerShape(26.dp))
-            .background(palette.pillBg)
-            .onSizeChanged { widthPx = it.width }
-            .pointerInput(steps) {
-                detectTapGestures { offset -> onLevelChange(stepFromX(offset.x)) }
-            }
-            .pointerInput(steps) {
-                detectHorizontalDragGestures { change, _ ->
-                    change.consume()
-                    onLevelChange(stepFromX(change.position.x))
-                }
-            }
-            .semantics {
-                contentDescription = "Livello di ragionamento: ${AssistantEffortLabels[clamped]}"
-            }
+    Row(
+        modifier = Modifier.fillMaxWidth()
+            .padding(horizontal = 8.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .then(if (enabled) Modifier.clickable(role = Role.Button, onClick = onClick)
+                .semantics { contentDescription = label } else Modifier)
+            .padding(start = 38.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        val fillWidth = maxWidth * animatedFraction
-        Box(
-            modifier = Modifier
-                .width(fillWidth)
-                .fillMaxHeight()
-                .clip(RoundedCornerShape(26.dp))
-                .background(palette.accent)
-        ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 11.dp)
-                    .width(3.dp)
-                    .height(20.dp)
-                    .clip(CircleShape)
-                    .background(palette.onAccent.copy(alpha = 0.92f))
-            )
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(label, color = palette.ink, fontSize = 15.5.sp, fontWeight = FontWeight.Medium)
+            Text(value, color = palette.accent, fontSize = 13.sp)
         }
-        Row(
-            modifier = Modifier.fillMaxSize(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            for (i in 0 until steps) {
-                val insideFill = i <= clamped
-                Box(modifier = Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
-                    if (i != clamped) {
-                        Box(
-                            modifier = Modifier
-                                .size(if (insideFill) 5.dp else 4.5.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (insideFill) palette.onAccent.copy(alpha = 0.45f)
-                                    else palette.inkFaint.copy(alpha = 0.55f)
-                                )
-                        )
-                    }
-                }
-            }
-        }
+        if (enabled) AssistantChevronGlyph(Modifier.size(16.dp), color = palette.inkMuted)
     }
 }
 
