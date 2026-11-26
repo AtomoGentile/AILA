@@ -1034,7 +1034,7 @@ private fun AssistantEffortPicker(
                         }
                     }
                 }
-                .semantics {
+                .semantics(mergeDescendants = true) {
                     contentDescription = "Pillola del ragionamento"
                     stateDescription = assistantReasoningLabel(options[level])
                     if (options.size > 1) {

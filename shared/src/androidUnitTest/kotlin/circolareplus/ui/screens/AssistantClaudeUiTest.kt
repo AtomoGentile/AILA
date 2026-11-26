@@ -226,9 +226,9 @@ class AssistantClaudeUiTest {
         compose.onNodeWithText("Gemini 4 Hydrogen").performClick()
         compose.runOnIdle { assertEquals(hydrogen.id, model) }
 
-        compose.onNodeWithContentDescription("Livello di ragionamento").performClick()
+        compose.onNodeWithContentDescription("Livello di ragionamento").performScrollTo().performClick()
         compose.mainClock.advanceTimeBy(450)
-        val pill = compose.onNodeWithContentDescription("Pillola del ragionamento")
+        val pill = compose.onNodeWithContentDescription("Pillola del ragionamento", useUnmergedTree = true)
         pill.performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Massimo").assertDoesNotExist()
         compose.onNodeWithText("Basso").performScrollTo().performClick()
