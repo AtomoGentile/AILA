@@ -32,7 +32,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -989,7 +988,6 @@ private fun AssistantModelList(
     }
 }
 
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun AssistantEffortPicker(
     options: List<String>,
@@ -1050,17 +1048,16 @@ private fun AssistantEffortPicker(
             Box(
                 Modifier.width(maxWidth * fraction.coerceIn(0f, 1f)).fillMaxHeight()
                     .clip(RoundedCornerShape(26.dp)).background(palette.accent)
-            ) {
-                Box(
-                    Modifier.align(Alignment.CenterEnd).padding(end = 11.dp)
-                        .width(3.dp).height(20.dp).clip(CircleShape)
-                        .background(palette.onAccent.copy(alpha = 0.92f))
-                )
-            }
+            )
             Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
                 options.forEachIndexed { index, _ ->
                     Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
-                        if (index != level) {
+                        if (index == level) {
+                            Box(
+                                Modifier.width(3.dp).height(20.dp).clip(CircleShape)
+                                    .background(palette.onAccent.copy(alpha = .92f))
+                            )
+                        } else {
                             Box(Modifier.size(5.dp).clip(CircleShape).background(
                                 if (index < level) palette.onAccent.copy(alpha = .45f)
                                 else palette.inkMuted.copy(alpha = .6f)
@@ -1071,21 +1068,27 @@ private fun AssistantEffortPicker(
             }
         }
         Spacer(Modifier.height(4.dp))
-        FlowRow(
+        Row(
             Modifier.fillMaxWidth().selectableGroup(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            verticalAlignment = Alignment.CenterVertically
         ) {
             options.forEachIndexed { index, value ->
                 val active = level == index
                 Box(
-                    Modifier.heightIn(min = 38.dp).clip(CircleShape)
+                    Modifier.weight(1f).heightIn(min = 38.dp).padding(horizontal = 1.dp)
+                        .clip(RoundedCornerShape(14.dp))
                         .background(if (active) palette.activeRowBg else Color.Transparent)
                         .selectable(selected = active, role = Role.RadioButton) { onSelect(value) }
-                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                        .padding(horizontal = 1.dp, vertical = 5.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(assistantReasoningLabel(value), color = if (active) palette.activeRowInk else palette.inkMuted,
-                        fontSize = 12.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal)
+                    Text(
+                        assistantReasoningLabel(value),
+                        color = if (active) palette.activeRowInk else palette.inkMuted,
+                        fontSize = 12.sp,
+                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                        textAlign = TextAlign.Center
+                    )
                 }
             }
         }

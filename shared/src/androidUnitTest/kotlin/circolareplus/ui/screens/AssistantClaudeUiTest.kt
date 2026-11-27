@@ -43,6 +43,7 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
+import kotlin.math.abs
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -241,6 +242,13 @@ class AssistantClaudeUiTest {
         pill.performScrollTo().performTouchInput { swipeRight() }
         compose.mainClock.advanceTimeBy(300)
         compose.runOnIdle { assertEquals("xhigh", effort) }
+        val track = pill.getUnclippedBoundsInRoot()
+        listOf("Basso", "Medio", "Alto").forEachIndexed { index, label ->
+            val bounds = compose.onNodeWithText(label).getUnclippedBoundsInRoot()
+            val expectedCenter = track.left + track.width * ((index + .5f) / 4f)
+            val actualCenter = (bounds.left + bounds.right) / 2f
+            assertTrue(abs((actualCenter - expectedCenter).value) <= 1f, "$label must align with its tick")
+        }
         screenshot("aila-provider-model-picker-dark")
 
         compose.onNodeWithText("Impostazioni AI").performScrollTo().assertIsDisplayed().performClick()
