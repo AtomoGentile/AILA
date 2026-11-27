@@ -245,7 +245,7 @@ class AssistantClaudeUiTest {
         val track = pill.getUnclippedBoundsInRoot()
         listOf("Basso", "Medio", "Alto").forEachIndexed { index, label ->
             val bounds = compose.onNodeWithText(label).getUnclippedBoundsInRoot()
-            val expectedCenter = track.left + track.width * ((index + .5f) / 4f)
+            val expectedCenter = track.left + (track.right - track.left) * ((index + .5f) / 4f)
             val actualCenter = (bounds.left + bounds.right) / 2f
             assertTrue(abs((actualCenter - expectedCenter).value) <= 1f, "$label must align with its tick")
         }
