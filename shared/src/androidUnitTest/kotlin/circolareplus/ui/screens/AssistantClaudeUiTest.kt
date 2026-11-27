@@ -174,9 +174,9 @@ class AssistantClaudeUiTest {
     @Test fun pickerUsesTheSelectedModelsReasoningOptions() {
         var provider by mutableStateOf(AiProvider.AILA_CLOUD.id)
         var model by mutableStateOf("")
-        var effort by mutableStateOf("")
+        var effort by mutableStateOf("none")
         val hydrogen = AssistantProviderModel(
-            "gemini-4-hydrogen", "Gemini 4 Hydrogen", listOf("low", "medium", "high", "xhigh")
+            "gemini-4-hydrogen", "Gemini 4 Hydrogen", listOf("", "none", "low", "medium", "high", "xhigh")
         )
         var openedAiSettings = false
 
@@ -224,15 +224,20 @@ class AssistantClaudeUiTest {
         compose.onNodeWithContentDescription("Modello").performScrollTo().performClick()
         compose.mainClock.advanceTimeBy(450)
         compose.onNodeWithText("Gemini 4 Hydrogen").performClick()
-        compose.runOnIdle { assertEquals(hydrogen.id, model) }
+        compose.runOnIdle {
+            assertEquals(hydrogen.id, model)
+            assertEquals("low", effort)
+        }
 
         compose.onNodeWithContentDescription("Livello di ragionamento").performScrollTo().performClick()
         compose.mainClock.advanceTimeBy(450)
         val pill = compose.onNodeWithContentDescription("Pillola del ragionamento", useUnmergedTree = true)
         pill.performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Massimo").assertDoesNotExist()
-        compose.onNodeWithText("Basso").performScrollTo().performClick()
-        compose.runOnIdle { assertEquals("low", effort) }
+        compose.onNodeWithText("Predefinito").assertDoesNotExist()
+        compose.onNodeWithText("Disattivato").assertDoesNotExist()
+        compose.onNodeWithText("Medio").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals("medium", effort) }
         pill.performScrollTo().performTouchInput { swipeRight() }
         compose.mainClock.advanceTimeBy(300)
         compose.runOnIdle { assertEquals("xhigh", effort) }

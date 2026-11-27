@@ -26,10 +26,13 @@ data class AssistantProviderModel(
 @Serializable
 internal data class GeminiThinkingConfig(val thinkingLevel: String)
 
+internal fun isAssistantEffort(value: String): Boolean =
+    value.isNotBlank() && value !in setOf("default", "none", "off", "disabled")
+
 private val standardEffort = listOf("low", "medium", "high")
 private val effortValues = listOf("none", "minimal", "low", "medium", "high", "xhigh", "max")
 
-private fun geminiReasoningLevels(id: String): List<String> = when {
+internal fun geminiReasoningLevels(id: String): List<String> = when {
     id == "gemini-3.1-flash-lite-image" -> listOf("minimal", "high")
     id.matches(Regex("gemini-4-(hydrogen|neon)(?:-.*)?")) -> standardEffort + "xhigh"
     id.matches(Regex("gemini-(4-(carbon|argon)|3\\.[78]-flash|3\\.1-pro-preview)(?:-.*)?")) -> standardEffort

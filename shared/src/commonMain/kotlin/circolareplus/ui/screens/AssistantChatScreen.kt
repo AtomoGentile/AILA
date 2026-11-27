@@ -91,6 +91,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import circolareplus.ai.AiProvider
 import circolareplus.ai.AssistantProviderModel
+import circolareplus.ai.isAssistantEffort
 import circolareplus.ai.assistant.AssistantActionStatus
 import circolareplus.ai.assistant.AssistantAgentPhase
 import circolareplus.ai.assistant.AssistantAttachedFile
@@ -319,11 +320,18 @@ fun AssistantChatScreen(
         AiProvider.COMPATIBLE_API -> selectedModelId.ifBlank { "Seleziona un modello" }
     }
     val headerModelLabel = if (google && selectedModelId.isBlank()) "Gemini · Auto" else modelLabel
-    val supportedReasoning = if (external) activeModel?.reasoning.orEmpty()
-        else if (binaryThinkingAvailable) listOf("off", "on") else emptyList()
-    val reasoningOptions = if (external && supportedReasoning.isNotEmpty()) listOf("") + supportedReasoning
-        else supportedReasoning
+    val reasoningOptions = when {
+        external -> activeModel?.reasoning.orEmpty().filter(::isAssistantEffort)
+        binaryThinkingAvailable -> listOf("on")
+        else -> emptyList()
+    }
     val visibleReasoning = selectedReasoning.takeIf { it in reasoningOptions } ?: reasoningOptions.firstOrNull()
+    // A provider may report options only after its catalog loads. Keep the selection used by requests in sync.
+    LaunchedEffect(provider, selectedModelId, reasoningOptions, selectedReasoning) {
+        if (external && visibleReasoning != null && visibleReasoning != selectedReasoning) {
+            onSelectReasoning(visibleReasoning)
+        }
+    }
     val modelStatus = when {
         !available && external -> "Aggiungi una chiave nelle Impostazioni AI."
         catalog?.isFailure == true -> catalog.exceptionOrNull()?.message ?: "Catalogo non disponibile"
@@ -391,7 +399,9 @@ fun AssistantChatScreen(
                     hasMessages = messages.isNotEmpty() || isThinking,
                     isThinking = isThinking,
                     modelShortLabel = headerModelLabel,
-                    effortLabel = (visibleReasoning ?: selectedReasoning.takeIf { external && it.isNotBlank() })
+                    effortLabel = (visibleReasoning ?: selectedReasoning.takeIf {
+                        external && catalog?.isSuccess != true && isAssistantEffort(it)
+                    })
                         ?.let(::assistantReasoningLabel),
                     isModelPickerOpen = isModelSheetOpen,
                     isIncognito = isIncognito,

@@ -252,8 +252,6 @@ internal fun Modifier.assistantNeuralBackdrop(palette: AssistantSurfacePalette, 
         }
 
 internal fun assistantReasoningLabel(value: String): String = when (value) {
-    "" -> "Predefinito"
-    "none", "off" -> "Disattivato"
     "on" -> "Attivato"
     "minimal" -> "Minimo"
     "low" -> "Basso"
@@ -833,14 +831,14 @@ internal fun AssistantModelPickerPopup(
                             "Livello di ragionamento",
                             assistantReasoningLabel(selectedReasoning),
                             palette,
-                            enabled = true,
+                            enabled = reasoningOptions.size > 1,
                             expanded = effortExpanded
                         ) {
                             effortExpanded = !effortExpanded
                             if (effortExpanded) modelsExpanded = false
                         }
                         AnimatedVisibility(
-                            visible = effortExpanded,
+                            visible = effortExpanded && reasoningOptions.size > 1,
                             enter = expandVertically(ailaSpatialSpring()) + fadeIn(tween(140)),
                             exit = shrinkVertically(ailaSpatialSpring()) + fadeOut(tween(120))
                         ) {

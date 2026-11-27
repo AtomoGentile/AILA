@@ -10,6 +10,10 @@ import circolareplus.ai.AiProvider
 import circolareplus.ai.AssistantProviderModel
 import circolareplus.ai.effectiveBaseUrl
 import circolareplus.ai.loadAssistantProviderModels
+import circolareplus.ai.geminiReasoningLevels
+import circolareplus.ai.isAssistantEffort
+import circolareplus.ai.openAiReasoningLevels
+import io.ktor.http.Url
 import circolareplus.ai.AiRoutePlan
 import circolareplus.ai.ChainedAiClassifier
 import circolareplus.ai.ClientSideAiClassifier
@@ -133,9 +137,27 @@ object AppContainer {
         AiProvider.AILA_CLOUD -> AilaCloudClassifier.MODEL_LABEL
     }
 
-    internal fun assistantReasoning(provider: AiProvider): String = settings.assistantReasoning(
-        assistantReasoningScope(provider), assistantModelId(provider)
-    )
+    internal fun assistantReasoning(provider: AiProvider): String {
+        if (provider == AiProvider.AILA_CLOUD || provider == AiProvider.ON_DEVICE) return "on"
+
+        val modelId = assistantModelId(provider)
+        val saved = settings.assistantReasoning(assistantReasoningScope(provider), modelId)
+        val levels = when (provider) {
+            AiProvider.GOOGLE_AI_STUDIO -> geminiReasoningLevels(modelId)
+            AiProvider.COMPATIBLE_API -> {
+                val format = CompatibleAiFormat.fromId(settings.compatibleAiFormat)
+                val host = runCatching { Url(format.effectiveBaseUrl(settings.compatibleAiBaseUrl)).host }.getOrNull()
+                when {
+                    format == CompatibleAiFormat.OPENAI && host == "api.openai.com" -> openAiReasoningLevels(modelId)
+                    format == CompatibleAiFormat.GOOGLE && host == "generativelanguage.googleapis.com" -> geminiReasoningLevels(modelId)
+                    else -> emptyList()
+                }
+            }
+            else -> emptyList()
+        }
+        return saved.takeIf { isAssistantEffort(it) && (levels.isEmpty() || it in levels) }
+            ?: levels.firstOrNull(::isAssistantEffort).orEmpty()
+    }
 
     internal suspend fun assistantProviderModels(provider: AiProvider): List<AssistantProviderModel> = when (provider) {
         AiProvider.GOOGLE_AI_STUDIO ->
@@ -147,9 +169,9 @@ object AppContainer {
         )
         AiProvider.ON_DEVICE -> LocalAiCatalog.all.filter {
             it.id == selectedLocalModel().id || localModelStore.isInstalled(it)
-        }.map { AssistantProviderModel(it.id, it.displayName, if (it.supportsThinking) listOf("off", "on") else emptyList()) }
+        }.map { AssistantProviderModel(it.id, it.displayName, if (it.supportsThinking) listOf("on") else emptyList()) }
         AiProvider.AILA_CLOUD -> listOf(AssistantProviderModel(
-            AilaCloudClassifier.MODEL_LABEL, "Gemma 4 26B A4B", listOf("off", "on")
+            AilaCloudClassifier.MODEL_LABEL, "Gemma 4 26B A4B", listOf("on")
         ))
     }
 
