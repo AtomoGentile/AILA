@@ -139,7 +139,7 @@ internal fun AilaBriefCard(
                 } else {
                     Brush.horizontalGradient(listOf(tint.copy(alpha = if (dark) .34f else .20f), tint.copy(alpha = if (dark) .22f else .14f)))
                 }
-                val itemBorderColor = if (subjectColor?.key == "black") Color.White
+                val itemBorderColor = if (subjectColor?.key == "black") Color(0xFF0B0B0E)
                     else if (subjectColor?.key == "white") AppTheme.TextMuted.copy(alpha = .62f)
                     else tint.copy(alpha = if (dark) .42f else .28f)
                 val itemBorderBrush = if (AppTheme.isNothing) Brush.horizontalGradient(listOf(AppTheme.Hairline, AppTheme.Hairline)) else if (subjectColor?.key == "rainbow") {
