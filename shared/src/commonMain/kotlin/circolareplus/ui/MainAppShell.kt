@@ -1,5 +1,9 @@
 package circolareplus.ui.screens
 
+import circolareplus.ai.AiProvider
+import circolareplus.ai.CompatibleAiFormat
+import circolareplus.ai.providerName
+
 import circolareplus.domain.model.isStudyRelevantFor
 
 import androidx.compose.animation.core.tween
@@ -1223,7 +1227,9 @@ fun MainAppShell(
     var assistantMessageCounter by remember { mutableStateOf(0) }
     // Ragionamento del modello locale: la scelta e' salvata nelle impostazioni, qui se ne tiene
     // una copia perche' l'interruttore deve muoversi al tocco.
-    var assistantThinking by remember { mutableStateOf(AppContainer.settings.assistantThinkingEnabled) }
+    var assistantSelectionRevision by remember { mutableStateOf(0) }
+    var assistantIncognito by rememberSaveable { mutableStateOf(false) }
+    var assistantFinishedToast by remember { mutableStateOf<AssistantConversation?>(null) }
     var assistantConversations by remember {
         mutableStateOf(AppContainer.settings.listAssistantConversations())
     }
@@ -1442,6 +1448,7 @@ fun MainAppShell(
      * proprio quella che serviva.
      */
     fun saveAssistantConversation() {
+        if (assistantIncognito) return
         val messages = assistantMessages.toList()
         // Niente domande dell'utente = nessuna conversazione da ricordare (es. si e' aperta la
         // chat, si e' letto il benvenuto e si e' usciti).
@@ -1454,7 +1461,8 @@ fun MainAppShell(
                 title = existing?.title ?: AssistantConversation.titleFrom(messages),
                 createdAtMillis = existing?.createdAtMillis ?: now,
                 updatedAtMillis = now,
-                messages = messages
+                messages = messages,
+                pinned = existing?.pinned ?: false
             )
         )
         assistantConversations = AppContainer.settings.listAssistantConversations()
@@ -1475,13 +1483,15 @@ fun MainAppShell(
             .firstOrNull { it.id == conversationId }
             // Cancellata nel frattempo dallo storico: la risposta non ha piu' dove andare.
             ?: return
-        AppContainer.settings.saveAssistantConversation(
-            stored.copy(
-                updatedAtMillis = currentTimeMillis(),
-                messages = (stored.messages + message).distinctBy { it.id }
-            )
+        val updatedConversation = stored.copy(
+            updatedAtMillis = currentTimeMillis(),
+            messages = (stored.messages + message).distinctBy { it.id }
         )
+        AppContainer.settings.saveAssistantConversation(updatedConversation)
         assistantConversations = AppContainer.settings.listAssistantConversations()
+        if (message.author == AssistantAuthor.ASSISTANT && !message.isError) {
+            assistantFinishedToast = updatedConversation
+        }
     }
 
     fun updateAssistantMessage(conversationId: String, messageId: String, update: (AssistantMessage) -> AssistantMessage) {
@@ -4825,7 +4835,13 @@ fun MainAppShell(
                     // Material: fondo pieno, copre le tab sotto. Liquid Glass: pagina trasparente
                     // che scorre sullo sfondo fermo dell'app, mentre quella di prima esce dall'altro
                     // lato (vedi glassSlide e ailaUnderlayShift).
-                    .then(if (AppTheme.isGlass) Modifier else Modifier.background(AppTheme.BackgroundLight))
+                    .then(
+                        when {
+                            route == ShellRoute.ASSISTANT -> Modifier.background(assistantSurfacePalette().canvasBg)
+                            AppTheme.isGlass -> Modifier
+                            else -> Modifier.background(AppTheme.BackgroundLight)
+                        }
+                    )
                     .then(
                         if (glassSlide != null) Modifier.graphicsLayer {
                             val v = glassSlide.value
@@ -4839,7 +4855,10 @@ fun MainAppShell(
                             }
                         } else Modifier
                     )
-                    .appSafeDrawingPadding()
+                    .then(
+                        if (route == ShellRoute.ASSISTANT) Modifier.appImePadding()
+                        else Modifier.appSafeDrawingPadding()
+                    )
                     // Prende i tocchi: sotto c'e' lo Scaffold con le tab, che non deve riceverli.
                     .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
             ) {
@@ -5057,13 +5076,15 @@ fun MainAppShell(
                         localModels = remember {
                             circolareplus.ai.LocalAiCatalog.selectableFor(circolareplus.ai.totalDeviceRamMb())
                         },
-                        selectedLocalModelId = remember { AppContainer.selectedLocalModel().id },
+                        selectedLocalModelId = remember(assistantSelectionRevision) { AppContainer.selectedLocalModel().id },
                         onSelectLocalModel = { model ->
                             AppContainer.settings.localAiModelId = model.id
                             // Il motore tiene in memoria il modello caricato in precedenza: se
                             // non lo si scarica, la prima classificazione dopo il cambio userebbe
                             // ancora quello vecchio.
                             AppContainer.localLlm.unload()
+                            assistantSelectionRevision++
+                            apiKeyRevision++
                         },
                         isLocalModelInstalled = { model ->
                             AppContainer.localModelStore.isInstalled(model)
@@ -5339,6 +5360,29 @@ fun MainAppShell(
                         }
                     }
                     circolareplus.platform.PlatformBackHandler(enabled = route == shellRoute) { assistantBack() }
+                    val assistantSettings = AppContainer.settings
+                    val currentAssistantProvider = remember(apiKeyRevision) {
+                        AiProvider.fromId(assistantSettings.aiProvider)
+                    }
+                    val currentLocalModel = remember(apiKeyRevision, assistantSelectionRevision) { AppContainer.selectedLocalModel() }
+                    val currentHasGoogleKey = remember(apiKeyRevision) { assistantSettings.userAiApiKey.isNotBlank() }
+                    val compatibleFormat = remember(apiKeyRevision) { assistantSettings.compatibleAiFormat }
+                    val configuredProviders = remember(apiKeyRevision) {
+                        CompatibleAiFormat.entries.mapNotNull { format ->
+                            val endpoint = assistantSettings.compatibleAiBaseUrlFor(format.id)
+                            val hasKey = assistantSettings.compatibleAiApiKeyFor(format.id).isNotBlank()
+                            if (hasKey && (format != CompatibleAiFormat.GOOGLE || endpoint.isNotBlank())) {
+                                format.id to format.providerName(endpoint)
+                            } else null
+                        }.toMap()
+                    }
+                    val modelId = remember(currentAssistantProvider, apiKeyRevision, assistantSelectionRevision) {
+                        AppContainer.assistantModelId(currentAssistantProvider)
+                    }
+                    val reasoning = remember(currentAssistantProvider, apiKeyRevision, assistantSelectionRevision) {
+                        AppContainer.assistantReasoning(currentAssistantProvider)
+                    }
+                    val currentLocalInstalled = remember(apiKeyRevision, currentLocalModel) { AppContainer.localModelStore.isInstalled(currentLocalModel) }
                     androidx.compose.runtime.key(assistantConversationId) {
                     AssistantChatScreen(
                         messages = assistantMessages,
@@ -5365,25 +5409,13 @@ fun MainAppShell(
                         agentPhase = assistantAgentPhases[assistantConversationId],
                         onCancelAction = { cancelAssistantAction(it) },
                         onRecoverAction = { recoverAssistantAction(it) },
-                        thinkingEnabled = assistantThinking,
-                        thinkingAvailable = AppContainer.selectedLocalModel().supportsThinking,
-                        onThinkingChange = { enabled ->
-                            AppContainer.settings.assistantThinkingEnabled = enabled
-                            assistantThinking = enabled
-                        },
                         onBackClick = { assistantBack() },
                         onClearChat = {
-                            // "Nuova chat" archivia, non cancella: quella di prima e' gia' nello
-                            // storico, qui basta ripartire con un id nuovo.
                             assistantMessages.clear()
                             assistantConversationId = "c${currentTimeMillis()}"
-                            // I dati raccolti restano: sono gli stessi di un minuto fa e
-                            // ricaricarli vorrebbe dire far aspettare la prima domanda della
-                            // chat nuova per niente.
                         },
                         onOpenConversation = { conversation ->
-                            // Si puo' aprire anche con una risposta in arrivo: la risposta e'
-                            // instradata per id, non per "chat attualmente a schermo".
+                            assistantIncognito = false
                             assistantMessages.clear()
                             assistantMessages.addAll(conversation.messages)
                             assistantConversationId = conversation.id
@@ -5391,14 +5423,68 @@ fun MainAppShell(
                         onDeleteConversation = { id ->
                             AppContainer.settings.deleteAssistantConversation(id)
                             assistantConversations = AppContainer.settings.listAssistantConversations()
-                            // Se era quella aperta, la chat torna vuota: lasciarla a schermo
-                            // significherebbe che il primo messaggio nuovo la fa riapparire
-                            // nello storico appena cancellata.
                             if (id == assistantConversationId) {
                                 assistantMessages.clear()
                                 assistantConversationId = "c${currentTimeMillis()}"
                             }
                         },
+                        activeConversationId = assistantConversationId,
+                        isIncognito = assistantIncognito,
+                        onIncognitoChange = { inc ->
+                            assistantIncognito = inc
+                        },
+                        onTogglePinConversation = { id ->
+                            val current = assistantConversations.firstOrNull { it.id == id }
+                            if (current != null) {
+                                AppContainer.settings.setAssistantConversationPinned(id, !current.pinned)
+                                assistantConversations = AppContainer.settings.listAssistantConversations()
+                            }
+                        },
+                        selectedAiProvider = currentAssistantProvider.id,
+                        onSelectAiProvider = { providerId ->
+                            if (providerId in configuredProviders) {
+                                assistantSettings.compatibleAiFormat = providerId
+                                assistantSettings.aiProvider = AiProvider.COMPATIBLE_API.id
+                            } else {
+                                assistantSettings.aiProvider = providerId
+                            }
+                            apiKeyRevision++
+                        },
+                        localModelLabel = currentLocalModel.displayName,
+                        hasGoogleKey = currentHasGoogleKey,
+                        compatibleProviders = configuredProviders,
+                        selectedCompatibleFormat = compatibleFormat,
+                        showLocalAi = circolareplus.ai.isOnDeviceAiOfferedHere(),
+                        localModelInstalled = currentLocalInstalled,
+                        selectedModelId = modelId,
+                        selectedReasoning = reasoning,
+                        binaryThinkingAvailable = currentAssistantProvider == AiProvider.AILA_CLOUD ||
+                            (currentAssistantProvider == AiProvider.ON_DEVICE &&
+                                currentLocalInstalled && currentLocalModel.supportsThinking),
+                        providerConfigRevision = apiKeyRevision,
+                        loadModels = AppContainer::assistantProviderModels,
+                        onSelectModel = { id ->
+                            when (currentAssistantProvider) {
+                                AiProvider.GOOGLE_AI_STUDIO -> assistantSettings.assistantGoogleModel = id
+                                AiProvider.COMPATIBLE_API -> assistantSettings.compatibleAiModel = id
+                                AiProvider.ON_DEVICE -> {
+                                    assistantSettings.localAiModelId = id
+                                    AppContainer.localLlm.unload()
+                                }
+                                AiProvider.AILA_CLOUD -> Unit
+                            }
+                            assistantSelectionRevision++
+                        },
+                        onSelectReasoning = { value ->
+                            assistantSettings.setAssistantReasoning(
+                                AppContainer.assistantReasoningScope(currentAssistantProvider), modelId, value
+                            )
+                            assistantSelectionRevision++
+                        },
+                        userInitials = "${user.firstName.take(1)}${user.lastName.take(1)}".uppercase().ifBlank { "AI" },
+                        userDisplayName = listOf(user.firstName, user.lastName).filter { it.isNotBlank() }.joinToString(" "),
+                        finishedToastConversation = assistantFinishedToast,
+                        onDismissFinishedToast = { assistantFinishedToast = null },
                         onOpenSource = { source ->
                             when (source.kind) {
                                 AssistantSourceKind.CIRCULAR -> {

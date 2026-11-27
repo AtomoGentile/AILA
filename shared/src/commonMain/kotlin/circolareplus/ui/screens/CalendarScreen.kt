@@ -716,9 +716,12 @@ private fun DayCell(
                             Modifier.size(5.dp).clip(CircleShape).background(choice.brush)
                                 .border(
                                     0.5.dp,
-                                    if (choice.key == "white") AppTheme.TextMuted.copy(alpha = 0.8f)
-                                    else if (isSelected && choice.key == "yellow") Color(0xFF8A7900)
-                                    else Color.Transparent,
+                                    when {
+                                        choice.key == "black" && AppTheme.isDarkMode -> SubjectColors.darkBlackOutline
+                                        choice.key == "white" -> AppTheme.TextMuted.copy(alpha = 0.8f)
+                                        isSelected && choice.key == "yellow" -> Color(0xFF8A7900)
+                                        else -> Color.Transparent
+                                    },
                                     CircleShape
                                 )
                                 .semantics { contentDescription = "Evento ${index + 1}: ${choice.label}" }
@@ -765,18 +768,23 @@ fun CalendarEventCard(
                 CalendarEventCategory.AVVISO -> AppTheme.TintRed to AppTheme.TintRedInk
                 else -> AppTheme.TintSlate to AppTheme.TintSlateInk
             }
+            val subjectInk = when (subjectColor?.key) {
+                "white" -> Color(0xFF212121)
+                "black" -> Color(0xFFEEEEF2)
+                else -> subjectColor?.color ?: ink
+            }
             AilaIconTile(tint = subjectColor?.color ?: tint) {
                 when (event.category) {
                     CalendarEventCategory.VERIFICA ->
-                        AppIcons.Pencil(modifier = Modifier.size(20.dp), color = subjectColor?.let { if (it.key == "white") AppTheme.TextDark else it.color } ?: ink)
+                        AppIcons.Pencil(modifier = Modifier.size(20.dp), color = subjectInk)
                     CalendarEventCategory.PAGAMENTO ->
-                        AppIcons.Card(modifier = Modifier.size(20.dp), color = subjectColor?.let { if (it.key == "white") AppTheme.TextDark else it.color } ?: ink)
+                        AppIcons.Card(modifier = Modifier.size(20.dp), color = subjectInk)
                     CalendarEventCategory.USCITA_DIDATTICA ->
-                        AppIcons.Bus(modifier = Modifier.size(20.dp), color = subjectColor?.let { if (it.key == "white") AppTheme.TextDark else it.color } ?: ink)
+                        AppIcons.Bus(modifier = Modifier.size(20.dp), color = subjectInk)
                     CalendarEventCategory.AVVISO ->
-                        AppIcons.Bell(modifier = Modifier.size(20.dp), color = subjectColor?.let { if (it.key == "white") AppTheme.TextDark else it.color } ?: ink)
+                        AppIcons.Bell(modifier = Modifier.size(20.dp), color = subjectInk)
                     else ->
-                        AppIcons.Calendar(modifier = Modifier.size(20.dp), color = subjectColor?.let { if (it.key == "white") AppTheme.TextDark else it.color } ?: ink)
+                        AppIcons.Calendar(modifier = Modifier.size(20.dp), color = subjectInk)
                 }
             }
 

@@ -554,7 +554,7 @@ fun SettingsScreen(
                             Text(
                                 text = when (selectedAiProvider) {
                                     "AILA_CLOUD" -> "AILA è incluso: la chat usa il servizio dell'app, senza chiave personale."
-                                    "COMPATIBLE_API" -> "Configura formato, endpoint, modello e chiave nella sezione Chiavi AI."
+                                    "COMPATIBLE_API" -> "Configura la chiave del provider nella sezione Chiavi AI."
                                     "ON_DEVICE" -> "L'AI locale gira su questo dispositivo."
                                     else -> "Google AI usa la chiave personale qui sotto."
                                 },
@@ -613,7 +613,7 @@ fun SettingsScreen(
                                 OutlinedTextField(
                                     value = compatibleBaseUrl,
                                     onValueChange = { compatibleBaseUrl = it; compatibleStatus = null },
-                                    label = { Text("Endpoint base") },
+                                    label = { Text("Endpoint personalizzato (facoltativo)") },
                                     placeholder = { Text(endpointPlaceholder) },
                                     singleLine = true,
                                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
@@ -624,7 +624,7 @@ fun SettingsScreen(
                                 Spacer(modifier = Modifier.height(AppTheme.Space8))
                             } else {
                                 Text(
-                                    "Google AI Studio usa solo la chiave personale, senza endpoint o modello.",
+                                    "Inserisci la chiave di Google AI Studio. Puoi scegliere il modello nel menu dell’Assistant.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = AppTheme.TextMuted
                                 )
@@ -639,7 +639,7 @@ fun SettingsScreen(
                                 OutlinedTextField(
                                     value = compatibleModel,
                                     onValueChange = { compatibleModel = it; compatibleStatus = null },
-                                    label = { Text("Modello") },
+                                    label = { Text("ID modello (selezionabile anche in chat)") },
                                     placeholder = { Text(modelPlaceholder) },
                                     singleLine = true,
                                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),

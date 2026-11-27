@@ -5,6 +5,9 @@ import androidx.compose.ui.graphics.Color
 
 /** Local subject color rules shared by the timetable and Brief. */
 object SubjectColors {
+    internal val darkBlackInk = Color(0xFFB8BBC5)
+    internal val darkBlackOutline = Color(0xFF555762)
+
     data class Subject(val key: String, val label: String, val defaultColor: String)
     data class Choice(val key: String, val label: String, val colors: List<Color>) {
         val color: Color get() = colors.first()

@@ -16,7 +16,8 @@ data class AssistantConversation(
     val title: String,
     val createdAtMillis: Long,
     val updatedAtMillis: Long,
-    val messages: List<AssistantMessage>
+    val messages: List<AssistantMessage>,
+    val pinned: Boolean = false
 ) {
     companion object {
         /** Oltre questa lunghezza il titolo non entra comunque nella riga della lista. */

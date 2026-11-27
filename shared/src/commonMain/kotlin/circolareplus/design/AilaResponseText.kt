@@ -29,6 +29,8 @@ fun AilaResponseText(
     responseId: String,
     modifier: Modifier = Modifier,
     animate: Boolean = true,
+    color: androidx.compose.ui.graphics.Color = AppTheme.TextDark,
+    style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyLarge,
     onComplete: () -> Unit = {}
 ) {
     val reduceMotion = AppTheme.reduceMotion
@@ -60,11 +62,30 @@ fun AilaResponseText(
         }
         completed()
     }
-    val descent = with(LocalDensity.current) { 14.dp.toPx() }
+    val descent = with(LocalDensity.current) { 10.dp.toPx() }
+    val displayText = remember(text, visibleCharacters, color) {
+        val cut = visibleCharacters.coerceIn(0, text.length)
+        if (cut >= text.length) {
+            text
+        } else {
+            buildAnnotatedString {
+                append(text)
+                // Mantiene il layout e tutti i ParagraphStyle stabili dal primo frame:
+                // zero salti di riga, zero artefatti su elenchi puntati o grassetti.
+                val fadeWindow = 6
+                val fadeStart = (cut - fadeWindow).coerceAtLeast(0)
+                for (i in fadeStart until cut) {
+                    val alpha = ((cut - i).toFloat() / (fadeWindow + 1).toFloat()).coerceIn(0.18f, 1f)
+                    addStyle(SpanStyle(color = color.copy(alpha = color.alpha * alpha)), i, i + 1)
+                }
+                addStyle(SpanStyle(color = androidx.compose.ui.graphics.Color.Transparent), cut, text.length)
+            }
+        }
+    }
     Text(
-        text = text.subSequence(0, visibleCharacters.coerceAtMost(text.length)),
-        style = MaterialTheme.typography.bodyLarge,
-        color = AppTheme.TextDark,
+        text = displayText,
+        style = style,
+        color = color,
         modifier = modifier.graphicsLayer {
             alpha = entrance
             translationY = -descent * (1f - entrance)
@@ -78,13 +99,9 @@ fun AilaResponseText(
  * e ben leggibile senza asterischi grezzi.
  */
 fun formatAilaMarkdown(raw: String): AnnotatedString = buildAnnotatedString {
-    val lines = raw.trim().lines()
     val bulletRegex = Regex("^\\s*[-*•]\\s+(.*)$")
     val numberedRegex = Regex("^\\s*(\\d+\\.)\\s+(.*)$")
     val headingRegex = Regex("^\\s*#{1,3}\\s+(.*)$")
-
-    fun isListOrHeading(line: String) =
-        bulletRegex.matches(line) || numberedRegex.matches(line) || headingRegex.matches(line)
 
     fun AnnotatedString.Builder.appendInline(text: String) {
         var i = 0
@@ -139,26 +156,68 @@ fun formatAilaMarkdown(raw: String): AnnotatedString = buildAnnotatedString {
         }
     }
 
-    lines.forEachIndexed { idx, line ->
+    val normalizedLines = buildList {
+        var previousBlank = false
+        for (rawLine in raw.trim().replace("\r\n", "\n").lines()) {
+            val blank = rawLine.isBlank()
+            if (blank) {
+                if (!previousBlank && isNotEmpty()) add("")
+                previousBlank = true
+            } else {
+                add(rawLine)
+                previousBlank = false
+            }
+        }
+    }
+    val bodyLineHeight = 24.sp
+    val spacerLineHeight = 8.sp
+
+    normalizedLines.forEachIndexed { idx, line ->
+        if (line.isBlank()) {
+            withStyle(ParagraphStyle(lineHeight = spacerLineHeight)) {
+                append("\u200B")
+            }
+            return@forEachIndexed
+        }
         val heading = headingRegex.matchEntire(line)
         val bullet = bulletRegex.matchEntire(line)
         val numbered = numberedRegex.matchEntire(line)
+        val prev = normalizedLines.getOrNull(idx - 1)
         when {
             heading != null -> {
-                withStyle(ParagraphStyle(lineHeight = 22.sp)) {
-                    withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) {
+                if (prev != null && prev.isNotBlank()) {
+                    withStyle(ParagraphStyle(lineHeight = spacerLineHeight)) { append("\u200B") }
+                }
+                withStyle(ParagraphStyle(lineHeight = 28.sp)) {
+                    withStyle(SpanStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold)) {
                         appendInline(heading.groupValues[1].trim())
                     }
                 }
             }
             bullet != null -> {
-                withStyle(ParagraphStyle(textIndent = TextIndent(firstLine = 0.sp, restLine = 14.sp))) {
+                if (prev != null && prev.isNotBlank() && !bulletRegex.matches(prev)) {
+                    withStyle(ParagraphStyle(lineHeight = 6.sp)) { append("\u200B") }
+                }
+                withStyle(
+                    ParagraphStyle(
+                        lineHeight = bodyLineHeight,
+                        textIndent = TextIndent(firstLine = 0.sp, restLine = 16.sp)
+                    )
+                ) {
                     append("•  ")
                     appendInline(bullet.groupValues[1].trim())
                 }
             }
             numbered != null -> {
-                withStyle(ParagraphStyle(textIndent = TextIndent(firstLine = 0.sp, restLine = 18.sp))) {
+                if (prev != null && prev.isNotBlank() && !numberedRegex.matches(prev)) {
+                    withStyle(ParagraphStyle(lineHeight = 6.sp)) { append("\u200B") }
+                }
+                withStyle(
+                    ParagraphStyle(
+                        lineHeight = bodyLineHeight,
+                        textIndent = TextIndent(firstLine = 0.sp, restLine = 20.sp)
+                    )
+                ) {
                     withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) {
                         append("${numbered.groupValues[1]} ")
                     }
@@ -166,9 +225,9 @@ fun formatAilaMarkdown(raw: String): AnnotatedString = buildAnnotatedString {
                 }
             }
             else -> {
-                appendInline(line)
-                val next = lines.getOrNull(idx + 1)
-                if (next != null && !isListOrHeading(next)) append("\n")
+                withStyle(ParagraphStyle(lineHeight = bodyLineHeight)) {
+                    appendInline(line.trimEnd())
+                }
             }
         }
     }

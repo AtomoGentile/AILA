@@ -94,7 +94,11 @@ internal fun AilaBriefCard(
                     SubjectColors.choiceForSubject(item.title, subjectColorOverrides)
                 } else null
                 val tint = if (item.kind == AilaBriefKind.CIRCULAR && !item.isActive) AppTheme.TextMuted else subjectColor?.let {
-                    if (it.key == "white") if (dark) Color.White else Color(0xFF667085) else it.color
+                    when {
+                        it.key == "white" -> if (dark) Color.White else Color(0xFF667085)
+                        it.key == "black" && dark -> SubjectColors.darkBlackInk
+                        else -> it.color
+                    }
                 } ?: if (AppTheme.isNothing) AppTheme.TextDark else when(item.kind) {
                     AilaBriefKind.EVENT, AilaBriefKind.CIRCULAR, AilaBriefKind.BUREAUCRACY -> AppTheme.PrimaryBlue
                     AilaBriefKind.POLL, AilaBriefKind.RANKING_POLL -> if(dark) Color(0xFFC9B9FF) else Color(0xFF6D28D9)
@@ -121,6 +125,8 @@ internal fun AilaBriefCard(
                 val fillAlpha = if (dark) .17f else .10f
                 val itemFillBrush = if (AppTheme.isNothing) Brush.horizontalGradient(listOf(AppTheme.CardSurface, AppTheme.CardSurface)) else if (subjectColor?.key == "rainbow") {
                     Brush.horizontalGradient(subjectColor.colors.map { it.copy(alpha = fillAlpha) })
+                } else if (subjectColor?.key == "black" && dark) {
+                    Brush.horizontalGradient(listOf(Color(0xFF212121), Color(0xFF16171A)))
                 } else if (subjectColor?.key == "white") {
                     Brush.horizontalGradient(listOf(Color.White.copy(alpha = if (dark) .18f else .72f), Color.White.copy(alpha = if (dark) .10f else .50f)))
                 } else {
@@ -133,7 +139,8 @@ internal fun AilaBriefCard(
                 } else {
                     Brush.horizontalGradient(listOf(tint.copy(alpha = if (dark) .34f else .20f), tint.copy(alpha = if (dark) .22f else .14f)))
                 }
-                val itemBorderColor = if (subjectColor?.key == "white") AppTheme.TextMuted.copy(alpha = .62f)
+                val itemBorderColor = if (subjectColor?.key == "black") Color(0xFF0B0B0E)
+                    else if (subjectColor?.key == "white") AppTheme.TextMuted.copy(alpha = .62f)
                     else tint.copy(alpha = if (dark) .42f else .28f)
                 val itemBorderBrush = if (AppTheme.isNothing) Brush.horizontalGradient(listOf(AppTheme.Hairline, AppTheme.Hairline)) else if (subjectColor?.key == "rainbow") {
                     Brush.horizontalGradient(subjectColor.colors.map { it.copy(alpha = if (dark) .68f else .52f) })
@@ -145,7 +152,7 @@ internal fun AilaBriefCard(
                         verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             if (subjectColor != null) {
-                                Box(Modifier.width(3.dp).height(22.dp).background(subjectColor.color, RoundedCornerShape(2.dp)))
+                                Box(Modifier.width(3.dp).height(22.dp).background(if (subjectColor.key == "black" && dark) tint else subjectColor.color, RoundedCornerShape(2.dp)))
                                 Spacer(Modifier.width(10.dp))
                             }
                             Text(label, Modifier.weight(1f), color = AppTheme.TextMuted,
@@ -169,7 +176,7 @@ internal fun AilaBriefCard(
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (AppTheme.isNothing && subjectColor != null) {
-                            Box(Modifier.width(3.dp).height(36.dp).background(subjectColor.color, RoundedCornerShape(2.dp)))
+                            Box(Modifier.width(3.dp).height(36.dp).background(if (subjectColor.key == "black" && dark) tint else subjectColor.color, RoundedCornerShape(2.dp)))
                             Spacer(Modifier.width(10.dp))
                         }
                         Box(

@@ -62,7 +62,7 @@ internal data class AilaChatRequest(
 
 /** Esito di una chiamata verso il Worker: fine quota e' un flag esplicito, non da indovinare. */
 internal sealed class AilaChatResult {
-    data class Success(val text: String) : AilaChatResult()
+    data class Success(val text: String, val model: String? = null) : AilaChatResult()
 
     /**
      * [isDailyQuota] separa la fine della quota (riserva sensata, messaggio dedicato) da
@@ -101,6 +101,8 @@ class AilaCloudClassifier(
     /** Riserva per le circolari e per tutto cio' che il servizio incluso non copre. */
     private val personal: AiClassifier,
     private val enableThinking: Boolean = false,
+    /** Livello di ragionamento 0..3 (Rapido, Medio, Alto, Massimo): regola thinking e budget token. */
+    private val effortLevel: Int = if (enableThinking) 2 else 1,
     /** Tetto per ciascun tentativo al Worker, come fa [ChainedAiClassifier] coi suoi provider. */
     private val attemptTimeoutMs: Long? = null,
     private val httpClient: HttpClient = GeminiHttp.client
@@ -175,19 +177,27 @@ class AilaCloudClassifier(
      */
     override suspend fun generateAnswer(prompt: AiPromptBuilder): AiTextResult {
         val built = prompt.build(MAX_CHAT_PROMPT_CHARS)
+        val clampedEffort = effortLevel.coerceIn(0, 3)
+        val useThinking = enableThinking || clampedEffort >= 2
+        val chatMaxTokens = when (clampedEffort) {
+            0 -> 700
+            1 -> 1400
+            else -> 2048
+        }
         val first = chatOrTimeout(
             AilaChatRequest(
                 messages = listOf(
                     AilaChatMessage("system", built.systemPrompt),
                     AilaChatMessage("user", built.userPrompt)
                 ),
-                thinking = enableThinking,
+                thinking = useThinking,
+                maxTokens = chatMaxTokens,
                 feature = prompt.feature.name,
                 attachmentServices = prompt.attachmentServices.toList()
             )
         )
         val firstReason = when (first) {
-            is AilaChatResult.Success -> return AiTextResult.Success(first.text, MODEL_LABEL)
+            is AilaChatResult.Success -> return AiTextResult.Success(first.text, first.model?.let { "AILA Cloud ($it)" } ?: MODEL_LABEL)
             is AilaChatResult.Failure -> first.reason
         }
 
@@ -286,15 +296,16 @@ class AilaCloudClassifier(
         }
         val body = try { response.bodyAsText() } catch (e: Exception) { "" }
         if (response.status.isSuccess()) {
-            val text = try {
-                json.parseToJsonElement(body).jsonObject["text"]?.jsonPrimitive?.contentOrNull
+            val result = try {
+                json.parseToJsonElement(body).jsonObject
             } catch (e: Exception) {
                 null
             }
+            val text = result?.get("text")?.jsonPrimitive?.contentOrNull
             return if (text.isNullOrBlank()) {
                 AilaChatResult.Failure("Il servizio di AILA ha risposto senza contenuti.", false)
             } else {
-                AilaChatResult.Success(text)
+                AilaChatResult.Success(text, result?.get("model")?.jsonPrimitive?.contentOrNull)
             }
         }
         val parsed = try { json.parseToJsonElement(body).jsonObject } catch (e: Exception) { null }

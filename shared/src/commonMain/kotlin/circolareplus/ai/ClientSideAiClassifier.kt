@@ -42,13 +42,9 @@ private data class GeminiInlineData(val mimeType: String, val data: String)
 private data class GeminiContent(val parts: List<GeminiPart>)
 
 @Serializable
-private data class GeminiThinkingConfig(val thinkingBudget: Int)
-
-@Serializable
 private data class GeminiGenerationConfig(
     val temperature: Double = 0.2,
     val responseMimeType: String = "application/json",
-    /** Solo per la chat: `thinkingBudget = 0` spegne il ragionamento, che da solo costa secondi. */
     val thinkingConfig: GeminiThinkingConfig? = null
 )
 
@@ -83,7 +79,9 @@ fun cleanGeminiApiKey(raw: String): String =
 class ClientSideAiClassifier(
     userApiKey: String,
     private val model: String = DEFAULT_MODEL,
-    private val httpClient: HttpClient = GeminiHttp.client
+    private val httpClient: HttpClient = GeminiHttp.client,
+    private val assistantModel: String = "",
+    private val assistantReasoning: String? = null
 ) : AiClassifier {
     companion object {
         /**
@@ -154,9 +152,6 @@ class ClientSideAiClassifier(
          */
         private val busyUntil = mutableMapOf<String, Long>()
         private const val BUSY_COOLDOWN_MS = 3 * 60_000L
-
-        /** Modelli che hanno rifiutato `thinkingConfig` (es. i "pro", dove non si spegne). */
-        private val rejectsThinkingConfig = mutableSetOf<String>()
 
         /**
          * Tempo totale per una risposta in chat, scaletta compresa. Con 15 s flash-latest che
@@ -375,8 +370,11 @@ class ClientSideAiClassifier(
 
         val built = prompt.build(MAX_PROMPT_CHARS)
         val text = built.systemPrompt + "\n\n" + built.userPrompt
-        val candidates = orderedCandidates()
-        val deadline = currentTimeMillis() + CHAT_BUDGET_MS
+        val candidates = if (assistantModel.isBlank()) orderedCandidates() else listOf(assistantModel)
+        val longerReasoning = assistantReasoning in listOf("high", "xhigh")
+        val chatBudgetMs = if (longerReasoning) 45_000L else CHAT_BUDGET_MS
+        val chatAttemptMs = if (assistantModel.isNotBlank()) chatBudgetMs else CHAT_ATTEMPT_MS
+        val deadline = currentTimeMillis() + chatBudgetMs
 
         // Tutti i fallimenti in ordine: mostrare solo l'ultimo (es. il 404 di un modello di
         // ripiego) nascondeva perche' i primi modelli non avevano risposto.
@@ -392,7 +390,7 @@ class ClientSideAiClassifier(
             }
             // Mai tutto il tempo a un solo modello: flash-lite deve fare in tempo a rispondere
             // anche quando flash-latest non risponde.
-            val attemptMs = minOf(remaining, CHAT_ATTEMPT_MS)
+            val attemptMs = minOf(remaining, chatAttemptMs)
             val response = try {
                 postChat(candidate, text, attemptMs)
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -413,14 +411,17 @@ class ClientSideAiClassifier(
                 )
             }
             if (response.status.isSuccess()) {
-                resolvedModel = candidate
+                if (assistantModel.isBlank()) resolvedModel = candidate
                 busyUntil.remove(candidate)
                 val raw = response.bodyAsText()
-                try { requireCompletedGeneration(json.parseToJsonElement(raw).jsonObject, CompatibleAiFormat.GOOGLE) }
+                val root = try {
+                    json.parseToJsonElement(raw).jsonObject.also { requireCompletedGeneration(it, CompatibleAiFormat.GOOGLE) }
+                }
                 catch (e: Exception) { return AiTextResult.Failure(e.message ?: "Google ha interrotto la risposta.") }
                 val answer = extractGeneratedText(raw)
                     ?: return AiTextResult.Failure("Google ha risposto senza contenuto utilizzabile.")
-                return AiTextResult.Success(answer, "Google Gemini ($candidate)")
+                val actualModel = root["modelVersion"]?.jsonPrimitive?.contentOrNull ?: candidate
+                return AiTextResult.Success(answer, "Google Gemini ($actualModel)")
             }
             val body = try { response.bodyAsText() } catch (e: Exception) { "" }
             val code = response.status.value
@@ -494,40 +495,15 @@ class ClientSideAiClassifier(
             "${lastFailure ?: "sconosciuto"}"
     }
 
-    /**
-     * Una generateContent per la chat: ragionamento spento e tempo massimo piu' corto di quello
-     * della classificazione. Chi guarda la chat aspetta la risposta; il ragionamento di Flash
-     * su una domanda come "cosa ho questa settimana" aggiunge secondi senza cambiare la risposta.
-     * Se il modello rifiuta `thinkingConfig` (i "pro" non lo lasciano spegnere) si riprova
-     * senza, e lo si ricorda per le domande successive.
-     */
-    private suspend fun postChat(modelName: String, prompt: String, timeoutMs: Long): HttpResponse {
-        val startedAt = currentTimeMillis()
-        val withThinkingOff = modelName !in rejectsThinkingConfig
-        val response = postGenerate(
+    private suspend fun postChat(modelName: String, prompt: String, timeoutMs: Long): HttpResponse =
+        postGenerate(
             modelName,
             prompt,
-            thinking = if (withThinkingOff) GeminiThinkingConfig(thinkingBudget = 0) else null,
+            thinking = assistantReasoning?.takeIf { modelName == assistantModel }
+                ?.let { GeminiThinkingConfig(thinkingLevel = it.uppercase()) },
             timeoutMs = timeoutMs,
             allowRetries = false
         )
-        // Qualunque 400 con thinkingConfig fa riprovare senza, non solo quelli che nominano
-        // "thinking": gli alias -latest puntano ormai a modelli che rifiutano thinkingBudget = 0
-        // con il messaggio generico "Request contains an invalid argument.", e la chat si
-        // fermava li' con un errore invece di rispondere.
-        if (withThinkingOff && response.status.value == 400) {
-            val retried = postGenerate(
-                modelName,
-                prompt,
-                thinking = null,
-                timeoutMs = (timeoutMs - (currentTimeMillis() - startedAt)).coerceAtLeast(1_000L),
-                allowRetries = false
-            )
-            if (retried.status.isSuccess()) rejectsThinkingConfig += modelName
-            return retried
-        }
-        return response
-    }
 
     internal suspend fun transcribeImage(mime: String, bytes: ByteArray, instruction: String): String {
         check(userApiKey.isNotBlank()) { "Configura la chiave Google AI Studio nelle impostazioni AI." }

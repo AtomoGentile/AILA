@@ -107,8 +107,10 @@ internal fun NothingHomeScreen(
                         Column(Modifier.weight(1f).clickable(role=Role.Button) {onOpenBrief(item)}.padding(vertical=8.dp),
                             verticalArrangement=Arrangement.spacedBy(6.dp)) {
                             if(subjectColorsEnabled && item.kind==AilaBriefKind.EVENT) {
-                                SubjectColors.choiceForSubject(item.title,subjectColorOverrides)?.let { color ->
-                                    Box(Modifier.size(6.dp).background(color.color,CircleShape))
+                                SubjectColors.choiceForSubject(item.title,subjectColorOverrides)?.let { choice ->
+                                    val marker = if (choice.key == "black" && AppTheme.isDarkMode) SubjectColors.darkBlackInk
+                                        else choice.color
+                                    Box(Modifier.size(6.dp).background(marker, CircleShape))
                                 }
                             }
                             Text(when(item.kind) { AilaBriefKind.EVENT -> item.date?.let {circolareplus.util.formatItalianDateWithWeekday(it)} ?: "CALENDARIO"; AilaBriefKind.CIRCULAR -> "CIRCOLARE N. ${item.sourceId}"; AilaBriefKind.BUREAUCRACY -> nothingBriefLabel(item); else -> item.actionLabel.uppercase() },

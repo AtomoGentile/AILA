@@ -194,8 +194,7 @@ class LocalSettingsManager(
         }
 
     var compatibleAiBaseUrl: String
-        get() = settings.getString(compatibleKey(KEY_COMPATIBLE_AI_BASE_URL),
-            if (!settings.getBoolean(KEY_COMPATIBLE_AI_CONFIGS_MIGRATED, false) && compatibleAiFormat == settings.getString(KEY_COMPATIBLE_AI_FORMAT, "OPENAI")) settings.getString(KEY_COMPATIBLE_AI_BASE_URL, "") else "")
+        get() = compatibleAiBaseUrlFor(compatibleAiFormat)
         set(value) = settings.putString(compatibleKey(KEY_COMPATIBLE_AI_BASE_URL), value.trim())
 
     var compatibleAiModel: String
@@ -204,12 +203,39 @@ class LocalSettingsManager(
         set(value) = settings.putString(compatibleKey(KEY_COMPATIBLE_AI_MODEL), value.trim())
 
     var compatibleAiApiKey: String
-        get() = readSecret(compatibleKey(KEY_COMPATIBLE_AI_API_KEY)).ifBlank {
-            if (!settings.getBoolean(KEY_COMPATIBLE_AI_CONFIGS_MIGRATED, false) && compatibleAiFormat == settings.getString(KEY_COMPATIBLE_AI_FORMAT, "OPENAI")) readSecret(KEY_COMPATIBLE_AI_API_KEY) else ""
-        }
+        get() = compatibleAiApiKeyFor(compatibleAiFormat)
         set(value) = writeSecret(compatibleKey(KEY_COMPATIBLE_AI_API_KEY), value.trim())
 
-    private fun compatibleKey(base: String): String = "${base}_${compatibleAiFormat.lowercase()}"
+    fun compatibleAiBaseUrlFor(format: String): String = settings.getString(
+        compatibleKey(KEY_COMPATIBLE_AI_BASE_URL, format),
+        if (hasLegacyCompatibleConfig(format)) settings.getString(KEY_COMPATIBLE_AI_BASE_URL, "") else ""
+    )
+
+    fun compatibleAiApiKeyFor(format: String): String =
+        readSecret(compatibleKey(KEY_COMPATIBLE_AI_API_KEY, format)).ifBlank {
+            if (hasLegacyCompatibleConfig(format)) readSecret(KEY_COMPATIBLE_AI_API_KEY) else ""
+        }
+
+    private fun hasLegacyCompatibleConfig(format: String): Boolean =
+        format == compatibleAiFormat && !settings.getBoolean(KEY_COMPATIBLE_AI_CONFIGS_MIGRATED, false)
+
+    private fun compatibleKey(base: String, format: String = compatibleAiFormat): String =
+        "${base}_${format.lowercase()}"
+
+    var assistantGoogleModel: String
+        get() = settings.getString("assistant_google_model", "")
+        set(value) = settings.putString("assistant_google_model", value.trim().removePrefix("models/"))
+
+    fun assistantReasoning(provider: String, model: String): String =
+        settings.getString("assistant_reasoning:$provider:$model",
+            if (provider in listOf("AILA_CLOUD", "ON_DEVICE")) {
+                if (settings.getBoolean(KEY_ASSISTANT_THINKING, false)) "on" else "off"
+            } else ""
+        )
+
+    fun setAssistantReasoning(provider: String, model: String, value: String) {
+        settings.putString("assistant_reasoning:$provider:$model", value)
+    }
 
     var isLocalAiEnabled: Boolean
         get() = settings.getBoolean(KEY_LOCAL_AI_ENABLED, true)
@@ -225,15 +251,6 @@ class LocalSettingsManager(
     var localAiModelId: String
         get() = settings.getString(KEY_LOCAL_AI_MODEL, "")
         set(value) = settings.putString(KEY_LOCAL_AI_MODEL, value)
-
-    /**
-     * Se l'assistente, quando gira sul modello locale, puo' "ragionare" prima di rispondere
-     * (modalita' thinking di Qwen/Gemma). Spento di default: le risposte sono molto piu' rapide;
-     * acceso sono piu' ponderate ma su un telefono possono voler dire minuti.
-     */
-    var assistantThinkingEnabled: Boolean
-        get() = settings.getBoolean(KEY_ASSISTANT_THINKING, false)
-        set(value) = settings.putBoolean(KEY_ASSISTANT_THINKING, value)
 
     var isBoardNotificationEnabled: Boolean
         get() = settings.getBoolean(KEY_BOARD_NOTIFICATIONS_ENABLED, true)
@@ -631,13 +648,24 @@ class LocalSettingsManager(
      */
     fun saveAssistantConversation(conversation: AssistantConversation) {
         if (conversation.messages.isEmpty()) return
+        val existingList = readAssistantConversations()
+        val previousPinned = existingList.firstOrNull { it.id == conversation.id }?.pinned ?: false
         val trimmed = conversation.copy(
-            messages = conversation.messages.takeLast(MAX_ASSISTANT_MESSAGES)
+            messages = conversation.messages.takeLast(MAX_ASSISTANT_MESSAGES),
+            pinned = conversation.pinned || previousPinned
         )
-        val others = readAssistantConversations().filter { it.id != trimmed.id }
-        val updated = (listOf(trimmed) + others)
-            .sortedByDescending { it.updatedAtMillis }
-            .take(MAX_ASSISTANT_CONVERSATIONS)
+        val others = existingList.filter { it.id != trimmed.id }
+        val combined = (listOf(trimmed) + others)
+        val pinned = combined.filter { it.pinned }.sortedByDescending { it.updatedAtMillis }
+        val unpinned = combined.filterNot { it.pinned }.sortedByDescending { it.updatedAtMillis }
+        val updated = (pinned + unpinned).take(MAX_ASSISTANT_CONVERSATIONS)
+        writeAssistantConversations(updated)
+    }
+
+    fun setAssistantConversationPinned(id: String, pinned: Boolean) {
+        val updated = readAssistantConversations().map {
+            if (it.id == id) it.copy(pinned = pinned) else it
+        }
         writeAssistantConversations(updated)
     }
 
